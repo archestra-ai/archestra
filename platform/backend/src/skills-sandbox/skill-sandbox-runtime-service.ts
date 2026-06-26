@@ -13,6 +13,7 @@ import {
 import * as metrics from "@/observability/metrics";
 import {
   SandboxRuntimeError,
+  type SandboxRuntimeStatus,
   sandboxRuntimeService,
 } from "@/sandbox-runtime/sandbox-runtime-service";
 import { assertMountedSkillsReadable } from "@/skills/assert-mounted-skills-readable";
@@ -82,6 +83,13 @@ class SkillSandboxRuntimeService {
 
   get isReady(): boolean {
     return sandboxRuntimeService.isReady;
+  }
+
+  // Underlying Dagger runtime boot status for the /ready healthcheck. The skill
+  // feature flag and the runtime flag are coupled (config.ts), so the runtime's
+  // own status is the authoritative signal of whether the sandbox can run.
+  get bootStatus(): SandboxRuntimeStatus {
+    return sandboxRuntimeService.bootStatus;
   }
 
   async init(): Promise<void> {
@@ -673,6 +681,11 @@ class SkillSandboxRuntimeService {
           return new SkillSandboxError(
             "the skill sandbox runtime is not enabled",
           );
+        case "ARCHESTRA_SANDBOX_HISTORY_LIMIT":
+          // The replay log is too long to re-materialize. Surface the native
+          // message verbatim so the model knows to start a fresh sandbox; this
+          // is a per-session dead end, not an engine outage.
+          return new SkillSandboxError(error.message);
         case "ARCHESTRA_ENGINE_UNREACHABLE":
         case "ARCHESTRA_INTERNAL":
           logger.error({ err: error }, "[SkillSandbox] runtime error");
@@ -1085,4 +1098,5 @@ export const __internals = {
   planAttachmentStaging,
   assignAttachmentPaths,
   sanitizeAttachmentName,
+  shouldRecordOnFailure,
 };

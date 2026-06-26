@@ -122,6 +122,7 @@ export const TOOL_PERMISSIONS: Record<
   artifact_write: null,
   swap_agent: { resource: "agent", action: "read" },
   swap_to_default_agent: null,
+  create_project_from_conversation: { resource: "project", action: "create" },
 
   // Meta — permission is enforced on the target tool, not on run_tool itself
   search_tools: null,
@@ -157,6 +158,9 @@ export const TOOL_PERMISSIONS: Record<
   render_app: { resource: "app", action: "read" },
   read_app: { resource: "app", action: "read" },
   edit_app: { resource: "app", action: "update" },
+  // set_app_tools replaces an app's assigned tool set; assertCallerMayModifyApp
+  // is the real authority, app:update is the floor (mirrors edit_app).
+  set_app_tools: { resource: "app", action: "update" },
   // validate_app only reads the head html and reports static findings.
   validate_app: { resource: "app", action: "read" },
   // publish_app changes the app's visibility scope; the scope-promotion gate

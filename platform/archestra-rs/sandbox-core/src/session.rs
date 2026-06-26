@@ -627,6 +627,18 @@ mod tests {
     }
 
     #[test]
+    fn history_limit_is_terminal_for_every_operation() {
+        // the overlay history limit is a per-call dead end: a fresh sandbox is
+        // required, so retrying the same log on a new session can't recover it.
+        let err = SandboxError::HistoryLimitReached {
+            message: "sandbox command history is too long to replay".to_string(),
+        };
+        assert_eq!(retry_reason(SessionOperation::Run, &err), None);
+        assert_eq!(retry_reason(SessionOperation::ReadArtifact, &err), None);
+        assert_eq!(retry_reason(SessionOperation::CheckSession, &err), None);
+    }
+
+    #[test]
     fn panic_to_error_retags_recovered_engine_fault_for_retry() {
         // dagger-sdk panics (instead of returning a typed error) on a
         // stale-attachables timeout; the recovered fault must re-enter the

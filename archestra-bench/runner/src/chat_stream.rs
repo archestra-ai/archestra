@@ -9,6 +9,8 @@ use futures::Stream;
 use reqwest::Response;
 use serde_json::Value as JsonValue;
 
+use crate::interactions::RunUsage;
+
 #[derive(Debug, Clone, Default)]
 pub struct ChatRunResult {
     pub text: String,
@@ -16,9 +18,27 @@ pub struct ChatRunResult {
     pub tool_invocations: Vec<HashMap<String, JsonValue>>,
     pub turn_count: usize,
     pub finish_reason: Option<String>,
-    pub total_tokens: Option<i64>,
-    pub stage_tokens: Option<i64>,
+    /// Billable token usage, summed post-run from the persisted LLM-proxy interaction rows (one per
+    /// agentic step). Sourced from the rows rather than the chat SSE `data-token-usage` event, whose
+    /// final value reports only the last step of a multi-step turn.
+    pub usage: RunUsage,
+    /// Set when fetching a conversation's interaction rows failed, so a turn-taking rollout's usage is
+    /// incomplete and must be reported as unpriceable rather than silently under-summed.
+    pub usage_fetch_failed: bool,
     pub stream_error: Option<String>,
+}
+
+impl ChatRunResult {
+    /// Usage trustworthy enough to publish as token totals: spend occurred, every conversation's rows
+    /// were fetched, and no chat row had a telemetry gap. Incomplete usage is reported as no
+    /// measurement (`None`) rather than a partial count masquerading as a complete one — the same
+    /// "loud, never silent" discipline the cost classification follows.
+    pub fn reliable_usage(&self) -> Option<&RunUsage> {
+        (self.usage.had_spend()
+            && !self.usage_fetch_failed
+            && self.usage.rows_with_null_tokens == 0)
+            .then_some(&self.usage)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -65,13 +85,6 @@ pub fn apply_chat_event(result: &mut ChatRunResult, event: &HashMap<String, Json
         Some("finish") | Some("finish-step") => {
             if let Some(reason) = event.get("finishReason").and_then(|v| v.as_str()) {
                 result.finish_reason = Some(reason.to_string());
-            }
-        }
-        Some("data-token-usage") => {
-            if let Some(data) = event.get("data").and_then(|v| v.as_object())
-                && let Some(total) = data.get("totalTokens").and_then(|v| v.as_i64())
-            {
-                result.stage_tokens = Some(total);
             }
         }
         Some("error") => {

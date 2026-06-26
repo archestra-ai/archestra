@@ -24,6 +24,7 @@ import {
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
 import {
+  AppModel,
   EnvironmentModel,
   InternalMcpCatalogModel,
   McpCatalogLabelModel,
@@ -32,6 +33,7 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
 import {
   assertCanAssignEnvironment,
   assertRemoteServerUrlAllowedByNetworkPolicy,
@@ -82,6 +84,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetInternalMcpCatalog,
         description: "Get all Internal MCP catalog items",
         tags: ["MCP Catalog"],
+        querystring: z.object({
+          // Apps are hidden from the registry but assignable to a gateway, so the
+          // capabilities picker opts in to their backing catalogs here.
+          includeApps: z.coerce.boolean().optional(),
+        }),
         response: constructResponseSchema(
           z.array(ListInternalMcpCatalogSchema),
         ),
@@ -93,13 +100,35 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       // Don't expand secrets for list view
+      const opts = {
+        expandSecrets: false,
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+      };
+      // App backings are gated by `app:read`, not this route's `mcpRegistry:read`,
+      // so only surface them to callers who could see them on the Apps page.
+      const includeApps =
+        request.query.includeApps === true &&
+        (await hasPermission({ app: ["read"] }, request.headers)).success;
+      if (!includeApps) {
+        return reply.send(await InternalMcpCatalogModel.findAll(opts));
+      }
+      // App backings carry an `appId` so the registry can link/manage the app.
+      // Only the (few) serverType:"app" rows need the lookup, so the default
+      // path above never pays for it.
+      const items = await InternalMcpCatalogModel.findAllWithApps(opts);
+      const appCatalogIds = items
+        .filter((item) => item.serverType === "app")
+        .map((item) => item.id);
+      const appIdByCatalog =
+        await AppModel.getAppIdsByCatalogIds(appCatalogIds);
       return reply.send(
-        await InternalMcpCatalogModel.findAll({
-          expandSecrets: false,
-          userId: request.user.id,
-          isAdmin,
-          organizationId: request.organizationId,
-        }),
+        items.map((item) =>
+          item.serverType === "app"
+            ? { ...item, appId: appIdByCatalog.get(item.id) ?? null }
+            : item,
+        ),
       );
     },
   );
@@ -136,6 +165,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Downstream secret extraction removes plaintext values from the payload
       // before persistence, so work on a cloned object instead of the request body.
       const restBody = structuredClone(restBodyInput);
+
+      // serverType:"app" catalogs are created and owned by the Apps flow
+      // (their app row, version store, and connector identity live in `apps`).
+      // Reject them here so the generic registry can't mint an orphan app
+      // catalog with no backing app.
+      if (restBody.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App catalog entities are managed via the Apps API.",
+        );
+      }
 
       // Secret FK columns are server-managed: clients submit secret values, never
       // ids. Trusting an inbound id would let a caller point the row at another
@@ -540,6 +580,36 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!originalCatalogItem) {
         throw new ApiError(404, "Catalog item not found");
+      }
+
+      // App backing catalogs are owned by the Apps flow. Through this generic
+      // endpoint, only visibility (scope/teams) and environment may change: lock
+      // the server type to "app" and drop every deploy/credential field so the
+      // catalog can't be flipped to a deployable type or have an install command
+      // injected (then later installed). The normal scope/team/environment
+      // authorization below still applies; the change is propagated to the linked
+      // app + server after the update.
+      const isAppCatalog = originalCatalogItem.serverType === "app";
+      // A non-app catalog cannot be converted into an app (the inverse of the
+      // create guard): an "app" catalog only makes sense when an actual app row
+      // and the `open` launch tool back it, which this path can't create.
+      if (!isAppCatalog && restBody.serverType === "app") {
+        throw new ApiError(400, "Catalog items cannot be converted to apps.");
+      }
+      if (isAppCatalog) {
+        restBody.serverType = "app";
+        // Name is app-owned (edited via /api/apps, which syncs it here) — never
+        // changed through the generic catalog endpoint.
+        restBody.name = undefined;
+        restBody.localConfig = undefined;
+        restBody.installationCommand = undefined;
+        restBody.oauthConfig = undefined;
+        restBody.enterpriseManagedConfig = undefined;
+        restBody.serverUrl = undefined;
+        restBody.userConfig = undefined;
+        restBody.authFields = undefined;
+        restBody.requiresAuth = undefined;
+        restBody.deploymentSpecYaml = undefined;
       }
 
       // A second copy of the same row WITHOUT expanded secret values, used
@@ -1019,6 +1089,15 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Note: Tools are NOT deleted - they are synced during reinstall to preserve
       // policies and profile assignments
 
+      // Keep an app's linked row + backing server in sync with the catalog edit.
+      if (isAppCatalog) {
+        await propagateAppCatalogChange(id, {
+          scope: catalogItem.scope,
+          environmentId: catalogItem.environmentId,
+          description: catalogItem.description,
+        });
+      }
+
       return reply.send(catalogItem);
     },
   );
@@ -1201,6 +1280,15 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
+      // App-backed catalogs are created and removed through the Apps lifecycle;
+      // deleting one here would orphan its app. (Mirrors the install/create guards.)
+      if (catalogItem.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App-backed catalog items are managed through the Apps API and cannot be deleted here.",
+        );
+      }
+
       // Enforce ownership: non-admins can only delete own personal items
       if (
         !isAdmin &&
@@ -1244,6 +1332,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (isBuiltInCatalogId(catalogItem.id)) {
         throw new ApiError(403, "Built-in catalog items cannot be deleted");
+      }
+
+      // App-backed catalogs are managed through the Apps lifecycle (see above).
+      if (catalogItem.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App-backed catalog items are managed through the Apps API and cannot be deleted here.",
+        );
       }
 
       // Enforce ownership: non-admins can only delete own personal items

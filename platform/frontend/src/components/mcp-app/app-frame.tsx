@@ -1,19 +1,21 @@
 "use client";
 
 import { getArchestraAppResourceUri } from "@archestra/shared";
-import type { ReactNode } from "react";
-import { useInlineCeiling } from "@/components/mcp-app/app-height";
+import { type ReactNode, useState } from "react";
+import { AppEditModelContextDialog } from "@/components/mcp-app/app-edit-model-context-dialog.lazy";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
   McpAppAddressPill,
+  McpAppEditButton,
   McpAppFullscreenExitButton,
   McpAppRefreshButton,
   McpAppTopBar,
-  McpAppVersionBar,
 } from "@/components/mcp-app/mcp-app-chrome";
+import { McpAppMetaBar } from "@/components/mcp-app/mcp-app-meta-bar";
 import { McpAppRuntime } from "@/components/mcp-app/mcp-app-view";
 import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
 import { useApp } from "@/lib/app.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils";
 
 /** Stable no-op size reporter: page surfaces fill their own layout. */
@@ -59,7 +61,6 @@ export function AppFrame({
   /** When false, render the bare runtime with no card/chrome (external run page). */
   chrome?: boolean;
 }) {
-  const inlineCeiling = useInlineCeiling();
   const {
     displayMode,
     setDisplayMode,
@@ -72,9 +73,16 @@ export function AppFrame({
 
   const appId = endpoint.kind === "app" ? endpoint.appId : null;
   const { data: app } = useApp(appId);
+  const { data: canEdit } = useHasPermissions({ app: ["update"] });
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const resolvedResourceUri = appId
     ? getArchestraAppResourceUri(appId)
     : resourceUri;
+
+  let editPencil: ReactNode = null;
+  if (appId && canEdit) {
+    editPencil = <McpAppEditButton onClick={() => setEditDialogOpen(true)} />;
+  }
 
   const runtime = resolvedResourceUri ? (
     <McpAppRuntime
@@ -114,11 +122,10 @@ export function AppFrame({
         <McpAppCard
           displayMode={displayMode}
           onToggleFullscreen={toggleFullscreen}
-          size={null}
-          inlineCeiling={inlineCeiling}
           fillContainer={fillContainer}
           topBar={
             <McpAppTopBar
+              left={<McpAppRefreshButton onClick={reload} />}
               right={
                 displayMode === "fullscreen" ? (
                   <McpAppFullscreenExitButton onClick={toggleFullscreen} />
@@ -127,23 +134,24 @@ export function AppFrame({
             >
               <McpAppAddressPill
                 label={label ?? app.name}
-                actions={
-                  <>
-                    <McpAppRefreshButton onClick={reload} />
-                    {actions}
-                  </>
-                }
+                leading={editPencil}
+                actions={actions}
               />
             </McpAppTopBar>
           }
           bottomBar={
-            appId && app.latestVersion != null ? (
-              <McpAppVersionBar appId={appId} version={app.latestVersion} />
-            ) : undefined
+            <McpAppMetaBar app={app} version={app.latestVersion ?? null} />
           }
         >
           {runtime}
         </McpAppCard>
+      )}
+      {editDialogOpen && app && (
+        <AppEditModelContextDialog
+          app={app}
+          open
+          onOpenChange={setEditDialogOpen}
+        />
       )}
       {resourceState === "empty" && EMPTY_MESSAGE}
     </div>

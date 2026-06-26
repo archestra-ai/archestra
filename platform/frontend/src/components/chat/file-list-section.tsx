@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
 /** One row of a file list: a previewable item with a byte endpoint. */
@@ -39,6 +40,8 @@ export function FileSection({
   selectedId,
   onSelect,
   renderActions,
+  leading,
+  selection,
 }: {
   title?: string;
   items: FileListItem[];
@@ -46,11 +49,25 @@ export function FileSection({
   onSelect: (id: string) => void;
   /**
    * Custom trailing actions per row; return null/undefined to keep the
-   * default download link for that row.
+   * default download link for that row. Hidden while selecting.
    */
   renderActions?: (item: FileListItem) => ReactNode;
+  /** A pinned first row inside the card (e.g. the instructions entry). */
+  leading?: ReactNode;
+  /**
+   * When set, selectable rows show a checkbox and a row click toggles selection
+   * instead of opening; trailing actions are hidden while selecting. Rows for
+   * which `isSelectable` returns false get no checkbox and stay openable.
+   * Selection state lives in the caller — this component only renders it.
+   */
+  selection?: {
+    selectedIds: Set<string>;
+    onToggle: (id: string) => void;
+    isSelectable?: (id: string) => boolean;
+  };
 }) {
-  if (items.length === 0) return null;
+  if (items.length === 0 && !leading) return null;
+  const selecting = selection != null;
   return (
     <div className="mb-4">
       {title && (
@@ -59,42 +76,64 @@ export function FileSection({
         </p>
       )}
       <div className="overflow-hidden rounded-md border">
+        {leading}
         {items.map((item, i) => {
           const customActions = renderActions?.(item) ?? null;
           const isSelected = item.id === selectedId;
+          // Only selectable rows participate in selection mode; others (e.g. the
+          // in-memory artifact) keep their normal open-on-click behavior.
+          const rowSelectable =
+            selecting && (selection.isSelectable?.(item.id) ?? true);
+          const isChecked = selection?.selectedIds.has(item.id) ?? false;
           return (
             <div
               key={item.id}
               className={cn(
                 "flex items-center text-sm",
-                i > 0 && "border-t",
-                isSelected
-                  ? "bg-accent font-medium text-accent-foreground"
-                  : "hover:bg-muted/50",
+                (leading != null || i > 0) && "border-t",
+                rowSelectable && isChecked
+                  ? "bg-accent/60"
+                  : !selecting && isSelected
+                    ? "bg-accent font-medium text-accent-foreground"
+                    : "hover:bg-muted/50",
               )}
             >
-              {/* Clicking the row body opens the preview; the trailing actions
-                  are siblings, so we never nest interactive elements. */}
+              {rowSelectable && (
+                <Checkbox
+                  checked={isChecked}
+                  onCheckedChange={() => selection.onToggle(item.id)}
+                  aria-label={`Select ${item.name}`}
+                  className="ml-3"
+                />
+              )}
+              {/* Clicking the row body opens the preview (or toggles selection);
+                  the trailing actions are siblings, so we never nest
+                  interactive elements. */}
               <button
                 type="button"
-                onClick={() => onSelect(item.id)}
+                onClick={() =>
+                  rowSelectable
+                    ? selection.onToggle(item.id)
+                    : onSelect(item.id)
+                }
                 className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
               >
                 <FileRowIcon name={item.name} mimeType={item.mimeType} />
                 <span className="min-w-0 flex-1 truncate">{item.name}</span>
               </button>
-              {customActions ??
-                (item.contentUrl && (
-                  <a
-                    href={item.contentUrl}
-                    download={item.name}
-                    title={`Download ${item.name}`}
-                    className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    <Download className="h-4 w-4" />
-                    <span className="sr-only">Download {item.name}</span>
-                  </a>
-                ))}
+              {!selecting &&
+                (customActions ??
+                  (item.contentUrl && (
+                    <a
+                      href={item.contentUrl}
+                      download={item.name}
+                      title={`Download ${item.name}`}
+                      className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span className="sr-only">Download {item.name}</span>
+                    </a>
+                  )))}
             </div>
           );
         })}

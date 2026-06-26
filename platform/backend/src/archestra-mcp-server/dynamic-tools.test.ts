@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import config from "@/config";
 import { KnowledgeBaseConnectorModel, ToolModel } from "@/models";
+import McpServerUserModel from "@/models/mcp-server-user";
 import {
   afterAll,
   beforeAll,
@@ -72,6 +73,7 @@ describe("resolveDynamicTool", () => {
 
   test("resolves an accessible catalog tool when the agent allows dynamic access", async ({
     makeInternalMcpCatalog,
+    makeMcpServer,
     makeTool,
   }) => {
     const catalog = await makeInternalMcpCatalog({ organizationId });
@@ -79,6 +81,7 @@ describe("resolveDynamicTool", () => {
       name: "github__search_repositories",
       catalogId: catalog.id,
     });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
 
     const tool = await resolveDynamicTool({
       toolName: "github__search_repositories",
@@ -94,6 +97,7 @@ describe("resolveDynamicTool", () => {
   test("resolves for a user who cannot modify the agent (no agent mutation involved)", async ({
     makeCustomRole,
     makeInternalMcpCatalog,
+    makeMcpServer,
     makeMember,
     makeTool,
     makeUser,
@@ -108,6 +112,7 @@ describe("resolveDynamicTool", () => {
       name: "github__search_repositories",
       catalogId: catalog.id,
     });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
 
     const tool = await resolveDynamicTool({
       toolName: "github__search_repositories",
@@ -448,6 +453,7 @@ describe("getUnassignedDiscoverableTools", () => {
 
   test("includes accessible catalog tools that are not assigned", async ({
     makeInternalMcpCatalog,
+    makeMcpServer,
     makeTool,
   }) => {
     const catalog = await makeInternalMcpCatalog({ organizationId });
@@ -456,6 +462,7 @@ describe("getUnassignedDiscoverableTools", () => {
       catalogId: catalog.id,
     });
     await makeTool({ name: "github__create_issue", catalogId: catalog.id });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
 
     const tools = await getUnassignedDiscoverableTools({
       assignedToolNames: new Set(["github__create_issue"]),
@@ -540,5 +547,222 @@ describe("getUnassignedDiscoverableTools", () => {
       getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME),
     );
     expect(names).not.toContain("agent__leaked_artifact");
+  });
+});
+
+// Catalog visibility is not install access: an org-scoped catalog is visible to
+// every member, but its tools must only be discoverable/runnable by users who
+// have an accessible install of it (own personal, team, or org) — never via
+// another user's personal install.
+describe("dynamic discovery is scoped to the caller's own installs", () => {
+  let agent: Agent;
+  let organizationId: string;
+  let userId: string;
+
+  beforeEach(async ({ makeAgent, makeMember, makeOrganization, makeUser }) => {
+    const org = await makeOrganization();
+    organizationId = org.id;
+    const user = await makeUser();
+    userId = user.id;
+    await makeMember(user.id, org.id, { role: "admin" });
+    agent = await makeAgent({
+      name: "Dynamic Agent",
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+  });
+
+  test("getUnassignedDiscoverableTools excludes a tool whose only install is another user's personal server", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+    makeUser,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      scope: "org",
+    });
+    await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+    const otherUser = await makeUser();
+    const otherInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "personal",
+      ownerId: otherUser.id,
+    });
+    await McpServerUserModel.assignUserToMcpServer(
+      otherInstall.id,
+      otherUser.id,
+    );
+
+    const tools = await getUnassignedDiscoverableTools({
+      assignedToolNames: new Set(),
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tools.map((tool) => tool.name)).not.toContain(
+      "github__search_repositories",
+    );
+  });
+
+  test("resolveDynamicTool returns null for a tool whose only install is another user's personal server", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+    makeUser,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      scope: "org",
+    });
+    await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+    const otherUser = await makeUser();
+    const otherInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "personal",
+      ownerId: otherUser.id,
+    });
+    await McpServerUserModel.assignUserToMcpServer(
+      otherInstall.id,
+      otherUser.id,
+    );
+
+    const tool = await resolveDynamicTool({
+      toolName: "github__search_repositories",
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tool).toBeNull();
+  });
+
+  test("includes a tool the caller has their own personal install of", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      scope: "org",
+    });
+    await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+    const ownInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "personal",
+      ownerId: userId,
+    });
+    await McpServerUserModel.assignUserToMcpServer(ownInstall.id, userId);
+
+    const tools = await getUnassignedDiscoverableTools({
+      assignedToolNames: new Set(),
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tools.map((tool) => tool.name)).toContain(
+      "github__search_repositories",
+    );
+  });
+
+  test("includes a tool backed by an org-scoped install", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      scope: "org",
+    });
+    await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+    const tools = await getUnassignedDiscoverableTools({
+      assignedToolNames: new Set(),
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tools.map((tool) => tool.name)).toContain(
+      "github__search_repositories",
+    );
+  });
+
+  test("includes a tool backed by an install for a team the caller belongs to", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+  }) => {
+    const team = await makeTeam(organizationId, userId);
+    await makeTeamMember(team.id, userId);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      scope: "org",
+    });
+    await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+    await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "team",
+      teamId: team.id,
+    });
+
+    const tools = await getUnassignedDiscoverableTools({
+      assignedToolNames: new Set(),
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tools.map((tool) => tool.name)).toContain(
+      "github__search_repositories",
+    );
+  });
+
+  test("excludes a visible catalog that has no install at all, even for an admin caller", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    // The caller is an org admin (see beforeEach): catalog visibility is broad,
+    // but admins do not bypass the install requirement. With no install of the
+    // catalog, its tools must not enter the discovery space.
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      scope: "org",
+    });
+    await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+
+    const tools = await getUnassignedDiscoverableTools({
+      assignedToolNames: new Set(),
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tools.map((tool) => tool.name)).not.toContain(
+      "github__search_repositories",
+    );
   });
 });

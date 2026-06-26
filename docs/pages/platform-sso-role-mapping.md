@@ -17,6 +17,8 @@ Identity Providers index.
 
 Archestra supports automatic role assignment based on user attributes from your identity provider using [Handlebars](https://handlebarsjs.com/) templates. This lets you map SSO groups, roles, or other claims to Archestra roles (Admin, Member, or any custom role you have defined).
 
+> **Enterprise feature** — see the [Pricing Model](/docs/platform-pricing-model).
+
 ## How role mapping works
 
 1. When a user authenticates via SSO, Archestra receives user attributes from the identity provider's ID token (for OIDC) or SAML assertions

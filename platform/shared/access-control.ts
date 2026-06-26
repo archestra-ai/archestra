@@ -57,7 +57,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete", "admin"],
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -380,6 +380,8 @@ export const permissionDescriptions: Record<string, string> = {
   "project:create": "Create projects",
   "project:update": "Edit project descriptions, instructions, and sharing",
   "project:delete": "Delete projects",
+  "project:admin":
+    "Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role).",
   "log:read": "View LLM proxy and MCP tool call logs",
 
   // Administration
@@ -799,6 +801,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatAttachmentContent]: {
     chat: ["read"],
   },
+  [RouteId.DeleteChatAttachment]: {
+    chat: ["update"],
+  },
   [RouteId.GetChatAgentMcpTools]: {
     agent: ["read"],
   },
@@ -818,6 +823,11 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteChatConversation]: {
     chat: ["delete"],
+  },
+  // Clearing a conversation's recorded chat errors is a chat-content edit, not a
+  // conversation deletion — same gate as compact / message edit.
+  [RouteId.ClearChatConversationErrors]: {
+    chat: ["update"],
   },
   [RouteId.CompactChatConversation]: {
     chat: ["update"],
@@ -1313,6 +1323,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSkillSandboxArtifact]: { sandbox: ["execute"] },
   [RouteId.GetSkillSandboxConversationArtifacts]: { sandbox: ["execute"] },
   [RouteId.CreateProject]: { project: ["create"] },
+  // Owner-scoped: a caller may only convert their own chat, so `project:create`
+  // is the capability gate (matching the create_project_from_conversation MCP
+  // tool's RBAC). The owner can always read their own chat.
+  [RouteId.CreateProjectFromConversation]: { project: ["create"] },
   [RouteId.GetProjects]: { project: ["read"] },
   [RouteId.GetProject]: { project: ["read"] },
   [RouteId.UpdateProject]: { project: ["update"] },

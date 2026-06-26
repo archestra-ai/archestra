@@ -75,7 +75,7 @@ def main() -> None:
     out = Path(__file__).resolve().parent.parent / "inputs" / "salaries.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", newline="", encoding="utf-8") as handle:
-        csv.writer(handle).writerows(rows)
+        csv.writer(handle, lineterminator="\n").writerows(rows)
     print(f"wrote {out}")
 
 

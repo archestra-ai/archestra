@@ -10,12 +10,13 @@ lastUpdated: 2026-06-18
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-The LLM Proxy supports direct provider API keys, virtual API keys, OAuth access tokens, and JWKS via an external identity provider.
+The LLM Proxy supports direct provider API keys, virtual API keys, passthrough virtual keys, OAuth access tokens, and JWKS via an external identity provider.
 
 | Method | Best for | Model Router | Notes |
 | --- | --- | --- | --- |
 | Direct provider key | Simple provider-specific proxy calls | No | Sends the raw provider key with each request. |
 | Virtual API key | Provider-specific LLM clients, generic Model Router clients, and individual developers | Yes | Works as a provider key replacement on provider-specific proxy routes, or as the `apiKey` for Model Router clients. |
+| Passthrough virtual key | Authenticating proxy user while passing provider credentials through (e.g. a Claude Code subscription) | N/A | Sent in the `X-Archestra-Virtual-Key` header alongside another credential; carries no provider key of its own. |
 | LLM OAuth client access token | Backend services, production apps, and external bots | Yes | OAuth `client_credentials` grant; the client brings its own provider keys. |
 | User OAuth access token | Apps acting for an individual user | Yes | Authorization code flow with the `llm:proxy` scope; the app can self-register or be pre-registered (confidential) on the OAuth Clients page. Resolves the user's own provider keys. |
 | JWKS | Enterprise IdP JWT callers | Provider routes | Resolves a user from an external IdP JWT. |
@@ -83,6 +84,40 @@ curl -X POST "https://archestra.example.com/v1/model-router/{proxyId}/responses"
   -H "Content-Type: application/json" \
   -d '{"model": "anthropic:claude-haiku-4-5-20251001", "input": "Hello"}'
 ```
+
+## Passthrough Virtual Keys
+
+Passthrough virtual keys authenticates an Archestra user to LLM Proxy. They cover the case where a client passes a provider or subscription token straight through — for example, Claude Code forwarding a Claude Max subscription token. The proxy forwards that token upstream, while the passthrough key tells Archestra which user made the call.
+
+Unlike the unauthenticated `X-Archestra-User-Id` header, a passthrough key is a secret bound to a user, so the attribution is authenticated. This lets you attribute and access-control requests per user even when the provider credential is opaque.
+
+### Properties
+
+- **Personal only**: a passthrough key belongs to one user. Admins can create one on behalf of another member; non-admins only for themselves.
+- **No provider keys**: it never maps a provider API key and cannot be used as a provider credential in the `Authorization` header.
+- **Proxy access**: select the LLM proxies the key may use. Leave the selection empty to allow any LLM proxy the owner can already access.
+- **Expirable**: set an optional expiration like any virtual key.
+
+### Creating Passthrough Virtual Keys
+
+1. Go to **LLM Proxies > Credentials > Virtual Keys**
+2. Create a virtual key and choose the **Passthrough** type
+3. As an admin, optionally pick the owner, then optionally select the allowed LLM proxies
+4. Copy the generated token (shown only once)
+
+### Using
+
+Send the passthrough key in the `X-Archestra-Virtual-Key` header, alongside whatever credential authenticates the upstream provider call:
+
+```bash
+curl -X POST "https://archestra.example.com/v1/anthropic/{proxyId}/v1/messages" \
+  -H "Authorization: Bearer sk-ant-your-subscription-token" \
+  -H "X-Archestra-Virtual-Key: arch_abc123def456..." \
+  -H "Content-Type: application/json" \
+  -d '{"model": "claude-haiku-4-5-20251001", "max_tokens": 64, "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+The interaction is attributed to the key's owner. A valid passthrough key authorizes the request at the proxy, but it does not by itself satisfy the upstream provider — that still needs its own credential. If the key does not grant access to the target proxy, the request is rejected with `403`.
 
 ## LLM OAuth Clients
 
@@ -206,6 +241,7 @@ When the Archestra Chat, JWKS auth, or user OAuth Model Router auth resolves a p
 Each LLM API key can have an optional **Base URL** that overrides the [environment-variable default](/docs/platform-deployment#llm-provider-configuration). This is configured when creating or editing an API key in Provider Settings.
 
 Use cases:
+
 - Self-hosted Ollama at a non-default address
 - OpenAI-compatible proxies
 - Regional endpoints

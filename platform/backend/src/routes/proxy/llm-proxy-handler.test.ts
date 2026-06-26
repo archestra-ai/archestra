@@ -10,6 +10,7 @@ import {
   CHAT_API_KEY_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -17,6 +18,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import {
   LlmProviderApiKeyModel,
@@ -272,6 +274,49 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
           value: expect.any(Number),
         }),
       );
+    });
+
+    test("passthrough virtual key attributes the interaction to its owner", async ({
+      makeUser,
+    }) => {
+      const owner = await makeUser();
+      const { value: passthroughToken, virtualKey } =
+        await VirtualApiKeyModel.create({
+          organizationId: testAgent.organizationId,
+          name: "pt-attribution",
+          keyType: "passthrough",
+          scope: "personal",
+          authorId: owner.id,
+          allowedLlmProxyIds: [testAgent.id],
+        });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          // Raw provider key forwarded upstream; passthrough key attributes the user.
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": passthroughToken,
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: false,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const [interaction] = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+
+      expect(interaction.userId).toBe(owner.id);
+      expect(interaction.passthroughVirtualKeyId).toBe(virtualKey.id);
+      expect(interaction.virtualKeyId).toBeNull();
+      expect(interaction.authMethod).toBe("passthrough_virtual_key");
     });
 
     test.skip("non-streaming request increments token metrics", async () => {

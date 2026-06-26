@@ -166,7 +166,70 @@ class ProjectShareModel {
     }
     const projects = [...byId.values()];
 
-    // attach visibility in one query so the list can show share state
+    return (await ProjectShareModel.attachVisibility(projects)).sort((a, b) => {
+      const aOwn = a.userId === params.userId ? 0 : 1;
+      const bOwn = b.userId === params.userId ? 0 : 1;
+      if (aOwn !== bOwn) return aOwn - bOwn;
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
+  }
+
+  /**
+   * Every project in the org, with share visibility attached — newest first.
+   * Backs the admin filter base set (a `project:admin` can see/oversee any
+   * project); the service derives each project's viewerRole from the caller's
+   * real access path.
+   */
+  static async listAllOrgProjects(params: {
+    organizationId: string;
+  }): Promise<(Project & { visibility: ProjectShareVisibility | null })[]> {
+    const projects = await db
+      .select()
+      .from(schema.projectsTable)
+      .where(eq(schema.projectsTable.organizationId, params.organizationId));
+    return (await ProjectShareModel.attachVisibility(projects)).sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+    );
+  }
+
+  /**
+   * Teams (id + name) each project is shared with, keyed by project id
+   * (team-shared projects only). One query; backs both the `scope=team` +
+   * `teamIds` filter and the owner's team-name visibility badge.
+   */
+  static async getShareTeamsForProjects(
+    projectIds: string[],
+  ): Promise<Map<string, { id: string; name: string }[]>> {
+    if (projectIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        projectId: schema.projectSharesTable.projectId,
+        teamId: schema.teamsTable.id,
+        teamName: schema.teamsTable.name,
+      })
+      .from(schema.projectSharesTable)
+      .innerJoin(
+        schema.projectShareTeamsTable,
+        eq(schema.projectSharesTable.id, schema.projectShareTeamsTable.shareId),
+      )
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.projectShareTeamsTable.teamId, schema.teamsTable.id),
+      )
+      .where(inArray(schema.projectSharesTable.projectId, projectIds));
+    const byProject = new Map<string, { id: string; name: string }[]>();
+    for (const { projectId, teamId, teamName } of rows) {
+      const list = byProject.get(projectId) ?? [];
+      list.push({ id: teamId, name: teamName });
+      byProject.set(projectId, list);
+    }
+    return byProject;
+  }
+
+  /** Attach each project's share visibility (null = unshared) in one query. */
+  private static async attachVisibility(
+    projects: Project[],
+  ): Promise<(Project & { visibility: ProjectShareVisibility | null })[]> {
     const shares =
       projects.length === 0
         ? []
@@ -185,18 +248,10 @@ class ProjectShareModel {
     const visibilityByProject = new Map(
       shares.map((s) => [s.projectId, s.visibility]),
     );
-
-    return projects
-      .map((p) => ({
-        ...p,
-        visibility: visibilityByProject.get(p.id) ?? null,
-      }))
-      .sort((a, b) => {
-        const aOwn = a.userId === params.userId ? 0 : 1;
-        const bOwn = b.userId === params.userId ? 0 : 1;
-        if (aOwn !== bOwn) return aOwn - bOwn;
-        return b.createdAt.getTime() - a.createdAt.getTime();
-      });
+    return projects.map((p) => ({
+      ...p,
+      visibility: visibilityByProject.get(p.id) ?? null,
+    }));
   }
 }
 

@@ -32,7 +32,8 @@ export function getChatExternalAgentId(appName: string): string {
  */
 export function conversationStorageKeys(conversationId: string) {
   return {
-    artifactOpen: `archestra-chat-artifact-open-${conversationId}`,
+    rightPanelOpen: `archestra-chat-right-panel-open-${conversationId}`,
+    rightPanelTab: `archestra-chat-right-panel-tab-${conversationId}`,
     draft: `archestra_chat_draft_${conversationId}`,
   };
 }

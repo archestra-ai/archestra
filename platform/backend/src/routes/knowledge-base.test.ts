@@ -1,5 +1,6 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   GithubAppConfigModel,
@@ -684,6 +685,7 @@ describe("knowledge base routes", () => {
         writable: true,
         configurable: true,
       });
+      enterpriseTier.setUserCountForTesting(9999);
       try {
         const response = await app.inject({
           method: "POST",
@@ -716,6 +718,7 @@ describe("knowledge base routes", () => {
           writable: true,
           configurable: true,
         });
+        enterpriseTier.setUserCountForTesting(0);
       }
     });
 
@@ -1309,6 +1312,7 @@ describe("knowledge base routes", () => {
           writable: true,
           configurable: true,
         });
+        enterpriseTier.setUserCountForTesting(0);
       }
     });
 
@@ -1373,6 +1377,7 @@ describe("knowledge base routes", () => {
         writable: true,
         configurable: true,
       });
+      enterpriseTier.setUserCountForTesting(9999);
       try {
         const response = await app.inject({
           method: "PUT",
@@ -1393,6 +1398,7 @@ describe("knowledge base routes", () => {
           writable: true,
           configurable: true,
         });
+        enterpriseTier.setUserCountForTesting(0);
       }
     });
 
@@ -1424,6 +1430,7 @@ describe("knowledge base routes", () => {
         writable: true,
         configurable: true,
       });
+      enterpriseTier.setUserCountForTesting(9999);
       try {
         const response = await app.inject({
           method: "PUT",
@@ -1441,6 +1448,7 @@ describe("knowledge base routes", () => {
           writable: true,
           configurable: true,
         });
+        enterpriseTier.setUserCountForTesting(0);
       }
     });
   });
@@ -2218,6 +2226,7 @@ describe("knowledge base permission configuration", () => {
           writable: true,
           configurable: true,
         });
+        enterpriseTier.setUserCountForTesting(0);
       }
 
       expect(response.statusCode).toBe(200);

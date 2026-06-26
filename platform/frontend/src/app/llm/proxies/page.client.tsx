@@ -395,7 +395,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter ownerLabelPlural="LLM proxies" />
+                <AgentScopeFilter
+                  ownerLabelPlural="LLM proxies"
+                  adminPermission={{ llmProxy: ["admin"] }}
+                />
                 <AgentDeletedStatusFilter
                   deletePermission={{ llmProxy: ["delete"] }}
                 />
@@ -406,7 +409,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                   permissions={[{ resource: "team", action: "read" }]}
                 />
               )}
-              <ActiveFilterBadges />
+              <ActiveFilterBadges adminPermission={{ llmProxy: ["admin"] }} />
             </div>
 
             <div data-testid={E2eTestId.AgentsTable}>

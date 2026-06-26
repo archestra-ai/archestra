@@ -7,6 +7,7 @@ import {
   isAttachmentRefUrl,
   parseAttachmentIdFromUrl,
 } from "./extract-inline-attachments";
+import { isInlineableTextDocumentMimeType } from "./prepare-for-provider";
 
 type Attachment = Awaited<
   ReturnType<typeof ConversationAttachmentModel.findByIdsWithData>
@@ -31,6 +32,16 @@ export async function materializeAttachments(
   messages: ChatMessage[],
   conversationId: string,
   ingestibleMimeTypes?: Set<string>,
+  // Anthropic `cache_control` is an Anthropic-only request-body feature. Emit it
+  // by default (it is inert metadata for non-Anthropic SDKs), but suppress it
+  // when the call targets an Anthropic-compatible third-party endpoint that
+  // rejects the marker with a turn-0 400. The caller knows the provider/endpoint.
+  applyAnthropicCacheControl = true,
+  // True for an Anthropic-compatible third-party endpoint (custom base URL, non
+  // Claude model) that rejects an Anthropic `document` content block. A binary
+  // document (e.g. a PDF) that such an endpoint can't accept is rerouted to the
+  // sandbox instead of inlined as a block that 400s the whole turn.
+  rerouteBinaryDocsToSandbox = false,
 ): Promise<ChatMessage[]> {
   const refIds = collectRefIds(messages);
   // Even when there are no refs to rehydrate, we still walk every part —
@@ -57,8 +68,14 @@ export async function materializeAttachments(
     }
     return {
       ...message,
-      parts: message.parts.map((part) =>
-        materializePart(part, byId, ingestibleMimeTypes),
+      parts: message.parts.flatMap((part) =>
+        materializePart(
+          part,
+          byId,
+          ingestibleMimeTypes,
+          applyAnthropicCacheControl,
+          rerouteBinaryDocsToSandbox,
+        ),
       ),
     };
   });
@@ -81,8 +98,10 @@ function collectRefIds(messages: ChatMessage[]): string[] {
 function materializePart(
   part: ChatMessagePart,
   byId: Map<string, Attachment>,
-  ingestibleMimeTypes?: Set<string>,
-): ChatMessagePart {
+  ingestibleMimeTypes: Set<string> | undefined,
+  applyAnthropicCacheControl: boolean,
+  rerouteBinaryDocsToSandbox: boolean,
+): ChatMessagePart | ChatMessagePart[] {
   if (part.type !== "file" || typeof part.url !== "string") {
     return { ...part };
   }
@@ -94,7 +113,20 @@ function materializePart(
     // to prompt-cache the file across turns. Without this marker, the same
     // bytes get re-billed at full input price on every turn until reload.
     if (part.url.startsWith("data:")) {
-      return withAnthropicCacheControl(part);
+      // No attachment row backs an inline data URL, so it was never staged into
+      // the sandbox — a binary document an Anthropic-compatible endpoint rejects
+      // can't be rerouted, only dropped with a notice (better than a turn-0 400).
+      const mime = dataUrlMimeType(part);
+      if (
+        rerouteBinaryDocsToSandbox &&
+        mime !== undefined &&
+        isNonInlineableBinaryDocMimeType(mime)
+      ) {
+        return unavailableBinaryDocPart(part, mime);
+      }
+      return applyAnthropicCacheControl
+        ? withAnthropicCacheControl(part)
+        : { ...part };
     }
     return { ...part };
   }
@@ -117,33 +149,131 @@ function materializePart(
     return { ...part };
   }
 
-  // A file type the selected model can't read must not be inlined as a
-  // document the provider would reject (which hard-errors the whole turn).
-  // It has already auto-staged into the sandbox, so reference it there instead.
-  if (ingestibleMimeTypes && !ingestibleMimeTypes.has(attachment.mimeType)) {
+  // A file the selected model can't read must not be inlined as a document the
+  // provider would reject (which hard-errors the whole turn). Two cases:
+  //   - the model's modalities don't cover this mime; or
+  //   - an Anthropic-compatible third-party endpoint can't accept the binary
+  //     `document` block this mime would become (PDF and other non-image,
+  //     non-text-inlineable types), regardless of the model's nominal modality.
+  // Either way the file has auto-staged into the sandbox, so reference it there.
+  const modelCannotRead =
+    ingestibleMimeTypes !== undefined &&
+    !ingestibleMimeTypes.has(attachment.mimeType);
+  const endpointRejectsBinaryDoc =
+    rerouteBinaryDocsToSandbox &&
+    isNonInlineableBinaryDocMimeType(attachment.mimeType);
+  if (modelCannotRead || endpointRejectsBinaryDoc) {
     return referenceSandboxFilePart(attachment);
   }
 
   // findByIdsWithData normalizes bytea to Buffer at the model boundary
   const dataUrl = `data:${attachment.mimeType};base64,${attachment.fileData.toString("base64")}`;
+  // Mark the part for Anthropic ephemeral prompt caching when the endpoint
+  // accepts it. The AI SDK reads this via the file UI part's provider metadata
+  // (`providerMetadata`); convertToModelMessages translates it into the
+  // provider's cache_control directive. Suppressed for Anthropic-compatible
+  // third-party endpoints that reject the marker; the bytes still inline.
+  const filePart: ChatMessagePart = applyAnthropicCacheControl
+    ? {
+        ...part,
+        url: dataUrl,
+        mediaType: attachment.mimeType,
+        filename: attachment.originalName,
+        providerMetadata: {
+          ...(typeof part.providerMetadata === "object" &&
+          part.providerMetadata !== null
+            ? (part.providerMetadata as Record<string, unknown>)
+            : {}),
+          anthropic: {
+            cacheControl: { type: "ephemeral" },
+          },
+        },
+      }
+    : {
+        ...part,
+        url: dataUrl,
+        mediaType: attachment.mimeType,
+        filename: attachment.originalName,
+      };
+
+  // Dual availability: a text-document that is shown inline is ALSO auto-staged
+  // into the sandbox (same byte limit), so the model can both read it in context
+  // and process it with run_command. Point it there alongside the inline copy.
+  const pointer = dualAvailabilityPointer(attachment);
+  return pointer ? [filePart, pointer] : filePart;
+}
+
+/**
+ * When the skill sandbox is enabled and a text-document attachment is within the
+ * auto-staging size limit, it has been staged under
+ * {@link SKILL_SANDBOX_ATTACHMENTS_DIR}. Return a text part telling the model the
+ * inlined file is ALSO available there (distinct from
+ * {@link referenceSandboxFilePart}, which replaces an attachment the model can't
+ * see inline). Returns null when the sandbox is off, the file is over the limit
+ * (not staged), or the mime type is not an inlineable text-document.
+ *
+ * `originalName` is client-controlled, so it is JSON-encoded to keep a crafted
+ * filename from breaking out of this platform-generated notice.
+ */
+function dualAvailabilityPointer(
+  attachment: Attachment,
+): ChatMessagePart | null {
+  if (
+    !config.skillsSandbox.enabled ||
+    !isInlineableTextDocumentMimeType(attachment.mimeType)
+  ) {
+    return null;
+  }
+  if (
+    attachment.fileData.byteLength > config.skillsSandbox.artifactBytesLimit
+  ) {
+    return null;
+  }
+
+  const name = JSON.stringify(attachment.originalName ?? "attachment");
   return {
-    ...part,
-    url: dataUrl,
-    mediaType: attachment.mimeType,
-    filename: attachment.originalName,
-    // Mark the part for Anthropic ephemeral prompt caching. The AI SDK reads
-    // this via the file UI part's provider metadata (`providerMetadata`);
-    // convertToModelMessages translates it into the provider's cache_control
-    // directive.
-    providerMetadata: {
-      ...(typeof part.providerMetadata === "object" &&
-      part.providerMetadata !== null
-        ? (part.providerMetadata as Record<string, unknown>)
-        : {}),
-      anthropic: {
-        cacheControl: { type: "ephemeral" },
-      },
-    },
+    type: "text",
+    text: `[The attached file ${name} is also available in your sandbox under ${SKILL_SANDBOX_ATTACHMENTS_DIR} — run \`ls ${SKILL_SANDBOX_ATTACHMENTS_DIR}\` to find it (the filename may be sanitized), then process it with run_command.]`,
+  };
+}
+
+/**
+ * A mime that an Anthropic-compatible third-party endpoint can't accept inline.
+ * Such an endpoint takes images (as image blocks) and the text documents
+ * {@link prepareMessagesForProvider} inlines as text; everything else (PDF and
+ * other binaries) only travels as a `document` block the endpoint rejects.
+ */
+function isNonInlineableBinaryDocMimeType(mime: string): boolean {
+  return !mime.startsWith("image/") && !isInlineableTextDocumentMimeType(mime);
+}
+
+/** Mime of an inline `data:` file part, from `mediaType` or the URL prefix. */
+function dataUrlMimeType(part: ChatMessagePart): string | undefined {
+  if (part.type !== "file") return undefined;
+  if (typeof part.mediaType === "string" && part.mediaType.length > 0) {
+    return part.mediaType;
+  }
+  if (typeof part.url !== "string") return undefined;
+  return /^data:([^;,]+)[;,]/.exec(part.url)?.[1];
+}
+
+/**
+ * An inline `data:` binary document has no attachment row, so it was never
+ * staged into the sandbox and can't be referenced there. Drop it with a notice
+ * rather than emit a `document` block that 400s an Anthropic-compatible endpoint.
+ */
+function unavailableBinaryDocPart(
+  part: ChatMessagePart,
+  mime: string,
+): ChatMessagePart {
+  const filename =
+    part.type === "file" && typeof part.filename === "string"
+      ? part.filename
+      : "attachment";
+  const name = JSON.stringify(filename);
+  return {
+    type: "text",
+    text: `[Attachment ${name} (${mime}) can't be shown to this model this turn.]`,
   };
 }
 

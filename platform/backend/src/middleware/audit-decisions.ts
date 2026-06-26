@@ -311,10 +311,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of app; immutable version snapshot, parent audited",
   },
-  appTeamTable: {
-    audited: false,
-    reason: "join: app × team; parent (app) audited",
-  },
   appToolsTable: {
     audited: false,
     reason: "tools attached to an app; parent (app) carries the signal",
@@ -381,6 +377,10 @@ export const AUDIT_DECISIONS = {
   virtualApiKeyTeamsTable: {
     audited: false,
     reason: "join: virtual key × team; parent audited",
+  },
+  virtualApiKeyLlmProxiesTable: {
+    audited: false,
+    reason: "join: virtual key × LLM proxy; parent audited",
   },
 
   // =========================================================================

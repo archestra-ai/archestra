@@ -82,6 +82,10 @@ vi.mock("@/lib/config/config.query", () => ({
 vi.mock("@/lib/projects/projects.query", () => ({
   useProjects: () => ({ data: mockProjects }),
   usePinProject: () => ({ mutate: vi.fn() }),
+  useCreateProjectFromConversation: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/components/agent-icon", () => ({

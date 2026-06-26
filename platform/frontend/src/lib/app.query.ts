@@ -6,6 +6,7 @@ import { handleApiError } from "@/lib/utils";
 const {
   getApps,
   getApp,
+  getExternalApp,
   getAppVersions,
   getAppTools,
   createApp,
@@ -27,6 +28,25 @@ export function useApps(params: AppsParams, options?: { enabled?: boolean }) {
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getApps({ query: params });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+  });
+}
+
+// Resolves an external UI-providing app by catalog id: its UI resource plus the
+// caller's accessible installs and default install for the run-page selector.
+export function useExternalApp(catalogId: string | null) {
+  return useQuery({
+    queryKey: ["apps", "external", catalogId],
+    enabled: !!catalogId,
+    queryFn: async () => {
+      const { data, error } = await getExternalApp({
+        path: { catalogId: catalogId as string },
+      });
       if (error) {
         handleApiError(error);
         return null;
@@ -129,6 +149,9 @@ export function useUpdateApp() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["apps"] });
       queryClient.invalidateQueries({ queryKey: ["apps", variables.appId] });
+      // Visibility/environment edits write through to the app's backing catalog,
+      // which drives the MCP registry card — refresh it too.
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       toast.success("App updated");
     },
   });
@@ -148,6 +171,8 @@ export function useDeleteApp() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["apps"] });
+      // Deleting an app tears down its backing catalog — refresh the registry.
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       toast.success("App deleted");
     },
   });

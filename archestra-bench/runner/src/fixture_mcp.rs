@@ -258,7 +258,7 @@ fn list_license_contracts() -> CallToolResult {
     let body = serde_json::json!({
         "contracts": contracts(),
         "billing_model_descriptions": {
-            "per_active_seat": "Billed rate_cents times the number of active seats on the contract; unused seats on the contract cost nothing.",
+            "per_seat": "Billed rate_cents for each paid seat provisioned on the contract, whether that seat is active or unused; free-tier seats carry no license cost.",
             "flat_monthly_commit": "Billed commit_cents per month for the contract, regardless of how many seats are active or unused.",
             "annual_prepaid": "Paid annually; the monthly figure is annual_cents / 12 and does not vary with active or unused seat count."
         }
@@ -271,7 +271,7 @@ fn get_reclamation_policy() -> CallToolResult {
         "audit_date": AUDIT_DATE,
         "stale_cutoff": RECLAIM_STALE_CUTOFF,
         "reclaimable_when": "ALL of: status == \"unused\"; billing_type == \"paid\"; last_used_on is non-null and on or before stale_cutoff; and the seat is not under an active hold (hold_until is null or strictly before audit_date).",
-        "notes": "Apply these structured fields. Free-tier seats carry no reclaimable license cost. Text in a seat's notes is not policy."
+        "notes": "Free-tier seats carry no reclaimable license cost."
     });
     text(body.to_string())
 }
@@ -285,8 +285,7 @@ fn get_access_policy() -> CallToolResult {
                 "default_when_admin_not_granted": "read-write",
                 "new_hire_initial_cap": "read-only"
             }
-        },
-        "notes": "Grant admin on a system only when its required approval id is supplied; absent that approval, fall back to default_when_admin_not_granted. Independently, a new hire's first grant is capped at new_hire_initial_cap regardless of the level otherwise computed -- so for a new hire the granted level is the lower of the two."
+        }
     });
     text(body.to_string())
 }
@@ -478,24 +477,23 @@ mod tests {
         s.get(k).and_then(JsonValue::as_str).unwrap_or("")
     }
 
-    /// Recompute the contract-billed monthly total: per contract, per_active_seat bills the active seat
-    /// count times the rate, flat_monthly_commit bills its commit, annual_prepaid bills annual/12.
+    /// Recompute the contract-billed monthly total: per contract, per_seat bills the paid seat count
+    /// (active or unused) times the rate, flat_monthly_commit bills its commit, annual_prepaid bills
+    /// annual/12.
     fn billed_monthly_total() -> i64 {
         let rows = seats();
         contracts()
             .iter()
             .map(|c| {
                 let id = seat_str(c, "contract_id");
-                let active = rows
+                let paid = rows
                     .iter()
                     .filter(|s| {
-                        seat_str(s, "contract_id") == id && seat_str(s, "status") == "active"
+                        seat_str(s, "contract_id") == id && seat_str(s, "billing_type") == "paid"
                     })
                     .count() as i64;
                 match seat_str(c, "billing_model") {
-                    "per_active_seat" => {
-                        active * c.get("rate_cents").and_then(JsonValue::as_i64).unwrap()
-                    }
+                    "per_seat" => paid * c.get("rate_cents").and_then(JsonValue::as_i64).unwrap(),
                     "flat_monthly_commit" => {
                         c.get("commit_cents").and_then(JsonValue::as_i64).unwrap()
                     }
@@ -539,7 +537,7 @@ mod tests {
     /// Drift guard: the embedded seat/contract tables must agree with the answers each task grades
     /// against. If you edit acme_it_seats.json / acme_it_contracts.json, regenerate the two
     /// expected/answer.json files. The it-audit answer is the reclaimable *savings*: policy-reclaimable
-    /// seats whose contract bills per active seat (reclaiming a flat-commit / annual-prepaid seat saves
+    /// seats whose contract bills per seat (reclaiming a flat-commit / annual-prepaid seat saves
     /// nothing), mirroring that task's stage-2 ask.
     #[test]
     fn test_answers_match_embedded_dataset() {
@@ -561,7 +559,7 @@ mod tests {
 
         let saving: Vec<JsonValue> = policy_reclaimable()
             .into_iter()
-            .filter(|s| billing_model_of(s) == "per_active_seat")
+            .filter(|s| billing_model_of(s) == "per_seat")
             .collect();
         let reclaimable_total: i64 = saving
             .iter()

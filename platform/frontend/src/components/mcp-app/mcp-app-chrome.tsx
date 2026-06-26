@@ -5,6 +5,7 @@ import {
   type LucideIcon,
   Minimize2,
   PanelRight,
+  Pencil,
   RefreshCw,
   SquareArrowOutUpRight,
 } from "lucide-react";
@@ -61,13 +62,20 @@ function PillActions({ children }: { children?: React.ReactNode }) {
 /** Static address pill: the app name with optional inline action buttons. */
 export function McpAppAddressPill({
   label,
+  leading,
   actions,
 }: {
   label?: React.ReactNode;
+  leading?: React.ReactNode;
   actions?: React.ReactNode;
 }) {
   return (
     <div className={PILL_CLASS}>
+      {leading ? (
+        <div className="relative z-10 flex shrink-0 items-center">
+          {leading}
+        </div>
+      ) : null}
       <span className="pointer-events-none min-w-0 flex-1 truncate px-1 text-xs text-muted-foreground">
         {label}
       </span>
@@ -86,11 +94,13 @@ export function McpAppSwitcher({
   value,
   options,
   onChange,
+  leading,
   actions,
 }: {
   value: string | null;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
+  leading?: React.ReactNode;
   actions?: React.ReactNode;
 }) {
   const selectedLabel = options.find((o) => o.value === value)?.label;
@@ -98,7 +108,7 @@ export function McpAppSwitcher({
     <Select value={value ?? undefined} onValueChange={onChange}>
       <div className={cn(PILL_CLASS, "relative cursor-pointer")}>
         {/* Transparent trigger fills the pill so clicking the name/icon
-            (pointer-events-none) opens the dropdown; the action buttons
+            (pointer-events-none) opens the dropdown; the leading/action buttons
             above it (z-10) keep their own clicks. */}
         <SelectPrimitive.Trigger
           aria-label="Switch app"
@@ -108,6 +118,11 @@ export function McpAppSwitcher({
             <SelectPrimitive.Value />
           </span>
         </SelectPrimitive.Trigger>
+        {leading ? (
+          <div className="relative z-10 flex shrink-0 items-center">
+            {leading}
+          </div>
+        ) : null}
         <span className="pointer-events-none min-w-0 flex-1 truncate px-1 text-xs text-muted-foreground">
           {selectedLabel}
         </span>
@@ -169,6 +184,10 @@ export function McpAppRefreshButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+export function McpAppEditButton({ onClick }: { onClick: () => void }) {
+  return <McpAppIconButton icon={Pencil} label="Edit app" onClick={onClick} />;
+}
+
 export function McpAppFullscreenExitButton({
   onClick,
 }: {
@@ -187,8 +206,8 @@ export function McpAppStandaloneButton({ appId }: { appId: string }) {
   return (
     <Button
       asChild
-      aria-label="Open standalone"
-      title="Open standalone"
+      aria-label="Open in new tab"
+      title="Open in new tab"
       {...ICON_BUTTON_PROPS}
     >
       <Link href={`/a/${appId}`} target="_blank" rel="noreferrer">
@@ -222,25 +241,6 @@ export function McpAppChangelogPill({
         {version != null && ` · v${version}`}
         {verb && ` · ${verb}`}
       </span>
-    </div>
-  );
-}
-
-export function McpAppVersionBar({
-  appId,
-  version,
-}: {
-  appId: string;
-  version: number;
-}) {
-  return (
-    <div className="relative z-10 flex h-7 shrink-0 items-center px-3 shadow-[0_-1px_2px_-1px_rgb(0_0_0/0.08)]">
-      <Link
-        href={`/apps/${appId}`}
-        className="text-xs text-muted-foreground transition-colors hover:text-foreground hover:underline"
-      >
-        Version {version}
-      </Link>
     </div>
   );
 }

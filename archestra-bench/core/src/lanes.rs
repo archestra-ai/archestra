@@ -66,12 +66,27 @@ pub struct Lane {
     pub model: String,
     pub base_url: Option<String>,
     pub api_key_env: Option<String>,
+    /// OpenRouter slug to price this lane against. For an `openrouter` lane the `model` already is the
+    /// slug, so this is only needed to map a lane served by another provider onto an OR offering.
+    pub openrouter_model: Option<String>,
 }
 
 impl Lane {
     /// Filesystem-safe handle for this lane's agent / log / artifact dir.
     pub fn slug(&self) -> String {
         slug(&self.name)
+    }
+
+    /// The OpenRouter slug whose pricing applies to this lane, if any: an explicit `openrouter_model`
+    /// wins; otherwise an `openrouter` lane prices off its own `model`; other providers have no slug
+    /// unless one is given (so their cost is reported as unknown rather than guessed).
+    pub fn price_model(&self) -> Option<String> {
+        self.openrouter_model
+            .clone()
+            .or_else(|| match self.provider {
+                Provider::Openrouter => Some(self.model.clone()),
+                _ => None,
+            })
     }
 
     /// Env var holding this lane's key, defaulting to `<PROVIDER>_API_KEY`.
@@ -107,11 +122,13 @@ struct RawLane {
     base_url: Option<String>,
     #[serde(default)]
     api_key_env: Option<String>,
+    #[serde(default)]
+    openrouter_model: Option<String>,
 }
 
 /// Load `[[lane]]` entries from a `lanes.toml`. With `select = Some("a,b")`, return exactly those
 /// lanes in the requested order; with `None`, return every lane in TOML declaration order (which the
-/// "first lane per provider is primary" rule depends on). Names are slug-validated and de-duplicated;
+/// "first lane per provider is primary" rule depends on). Names are slug-normalized and de-duplicated;
 /// a bad provider is reported with its lane name in scope.
 pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneError> {
     let ctx = path
@@ -129,32 +146,26 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneEr
     let mut catalog: Vec<Lane> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     for raw in parsed.lane {
-        if !is_slug(&raw.name) {
-            return Err(LaneError(format!(
-                "{ctx}: lane name {:?} must be a slug ([A-Za-z0-9][A-Za-z0-9-]*)",
-                raw.name
-            )));
-        }
-        if !seen.insert(raw.name.clone()) {
-            return Err(LaneError(format!(
-                "{ctx}: duplicate lane name {:?}",
-                raw.name
-            )));
+        let name = slug(&raw.name);
+        if !seen.insert(name.clone()) {
+            return Err(LaneError(format!("{ctx}: duplicate lane name {:?}", name)));
         }
         let provider = Provider::from_str(&raw.provider)
-            .map_err(|e| LaneError(format!("{ctx}: lane {:?}: {e}", raw.name)))?;
+            .map_err(|e| LaneError(format!("{ctx}: lane {:?}: {e}", name)))?;
         catalog.push(Lane {
-            name: raw.name,
+            name,
             provider,
             model: raw.model,
             base_url: raw.base_url,
             api_key_env: raw.api_key_env,
+            openrouter_model: raw.openrouter_model,
         });
     }
 
     match split_names(select) {
         None => Ok(catalog),
-        Some(names) => {
+        Some(raw_names) => {
+            let names: Vec<String> = raw_names.iter().map(|n| slug(n)).collect();
             let unknown: Vec<String> = names
                 .iter()
                 .filter(|n| !seen.contains(*n))
@@ -187,7 +198,8 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneEr
 
 /// Look up a lane by name, listing the known names when it is missing so a typo is actionable.
 pub fn find_lane<'a>(lanes: &'a [Lane], name: &str) -> Result<&'a Lane, LaneError> {
-    lanes.iter().find(|l| l.name == name).ok_or_else(|| {
+    let target = slug(name);
+    lanes.iter().find(|l| l.name == target).ok_or_else(|| {
         let known = lanes
             .iter()
             .map(|l| l.name.clone())
@@ -378,6 +390,48 @@ model = "o1"
         .unwrap_err()
         .to_string();
         assert!(err.contains("duplicate lane name"));
+    }
+
+    #[test]
+    fn dotted_lane_name_is_slug_normalized_and_selectable() {
+        let body = r#"
+[[lane]]
+name = "qwen3.7-plus"
+provider = "openrouter"
+model = "qwen/qwen3.7-plus"
+"#;
+        let lanes = load(body, None).unwrap();
+        // `.` is path-safe, so it survives normalization rather than erroring
+        assert_eq!(lanes[0].name, "qwen3.7-plus");
+        assert_eq!(load(body, Some("qwen3.7-plus")).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn price_model_prefers_override_then_openrouter_model() {
+        let lanes = load(
+            r#"
+[[lane]]
+name = "or"
+provider = "openrouter"
+model = "vendor/m"
+
+[[lane]]
+name = "gw"
+provider = "anthropic"
+model = "glm-5.2"
+openrouter_model = "z-ai/glm-5.2"
+
+[[lane]]
+name = "bare"
+provider = "anthropic"
+model = "glm-5.2"
+"#,
+            None,
+        )
+        .unwrap();
+        assert_eq!(lanes[0].price_model().as_deref(), Some("vendor/m"));
+        assert_eq!(lanes[1].price_model().as_deref(), Some("z-ai/glm-5.2"));
+        assert_eq!(lanes[2].price_model(), None);
     }
 
     #[test]

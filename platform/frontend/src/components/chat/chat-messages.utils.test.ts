@@ -372,14 +372,14 @@ describe("deriveAppsFromMessages", () => {
     });
   });
 
-  it("returns an app labeled with the app name for an owned-app scaffold_app result", () => {
+  it("returns an app labeled with the app name for an owned-app edit_app result", () => {
     const messages = [
       {
         id: "assistant-1",
         role: "assistant",
         parts: [
           {
-            type: "tool-archestra__scaffold_app",
+            type: "tool-archestra__edit_app",
             toolCallId: "call_app",
             state: "output-available",
             output: {
@@ -416,7 +416,7 @@ describe("deriveAppsFromMessages", () => {
         metadata: { createdAt: "2026-05-29T18:00:00.000Z" },
         parts: [
           {
-            type: "tool-archestra__scaffold_app",
+            type: "tool-archestra__edit_app",
             toolCallId: "call_v1",
             state: "output-available",
             output: {
@@ -470,7 +470,7 @@ describe("deriveAppsFromMessages", () => {
         role: "assistant",
         parts: [
           {
-            type: "tool-archestra__scaffold_app",
+            type: "tool-archestra__edit_app",
             toolCallId: "call_a",
             state: "output-available",
             output: {
@@ -482,7 +482,7 @@ describe("deriveAppsFromMessages", () => {
             },
           },
           {
-            type: "tool-archestra__scaffold_app",
+            type: "tool-archestra__edit_app",
             toolCallId: "call_b",
             state: "output-available",
             output: {
@@ -501,14 +501,14 @@ describe("deriveAppsFromMessages", () => {
     expect(apps.map((a) => a.toolCallId)).toEqual(["call_a", "call_b"]);
   });
 
-  it("ignores a foreign server's scaffold_app result", () => {
+  it("ignores a foreign server's edit_app result", () => {
     const messages = [
       {
         id: "assistant-1",
         role: "assistant",
         parts: [
           {
-            type: "tool-other__scaffold_app",
+            type: "tool-other__edit_app",
             toolCallId: "call_foreign",
             state: "output-available",
             output: {
@@ -524,7 +524,7 @@ describe("deriveAppsFromMessages", () => {
     expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([]);
   });
 
-  it("de-dupes non-owned renders by resourceUri, keeping the latest render", () => {
+  it("keeps every external render of the same resourceUri as its own entry", () => {
     const messages = [
       {
         id: "assistant-1",
@@ -555,6 +555,14 @@ describe("deriveAppsFromMessages", () => {
     ] as never;
 
     expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
+      {
+        toolCallId: "call_1",
+        label: "Pm / Show Board",
+        uiResourceUri: "ui://pm/board",
+        appId: null,
+        version: null,
+        createdAt: Date.parse("2026-05-29T18:00:00.000Z"),
+      },
       {
         toolCallId: "call_2",
         label: "Pm / Show Board",
@@ -603,7 +611,6 @@ describe("extractOwnedAppRender", () => {
   };
 
   it.each([
-    "scaffold_app",
     "edit_app",
     "render_app",
   ])("matches archestra__%s with a UUID structuredContent.id", (shortName) => {
@@ -621,8 +628,8 @@ describe("extractOwnedAppRender", () => {
   });
 
   it.each([
-    "scaffold_app",
     "edit_app",
+    "render_app",
   ])("matches a bare %s name (run_tool accepts bare archestra short names)", (shortName) => {
     expect(
       extractOwnedAppRender({
@@ -638,17 +645,20 @@ describe("extractOwnedAppRender", () => {
   });
 
   it.each([
-    ["foreign server prefix", "other__scaffold_app", output],
+    ["foreign server prefix", "other__edit_app", output],
+    // scaffold_app seeds the boilerplate template — it is not a rendering tool,
+    // so the chat never mounts a canvas for it (only the first edit_app does).
+    ["non-rendering scaffold tool", "archestra__scaffold_app", output],
     ["non-rendering app tool", "archestra__list_apps", output],
     ["non-rendering delete tool", "archestra__delete_app", output],
     ["non-rendering read tool", "archestra__read_app", output],
     [
       "non-UUID id",
-      "archestra__scaffold_app",
+      "archestra__edit_app",
       { structuredContent: { id: "not-a-uuid" } },
     ],
-    ["missing structuredContent", "archestra__scaffold_app", { content: "ok" }],
-    ["plain string output", "archestra__scaffold_app", "Created app"],
+    ["missing structuredContent", "archestra__edit_app", { content: "ok" }],
+    ["plain string output", "archestra__edit_app", "Created app"],
   ])("returns null for %s", (_label, toolName, toolOutput) => {
     expect(
       extractOwnedAppRender({
@@ -812,45 +822,53 @@ describe("identifyCompactToolGroups", () => {
 });
 
 describe("isSupersededRender", () => {
-  const app = (toolCallId: string, uiResourceUri: string): PanelApp => ({
+  const app = (
+    toolCallId: string,
+    uiResourceUri: string,
+    appId: string | null = "app-1",
+  ): PanelApp => ({
     toolCallId,
     label: "Dashboard",
     uiResourceUri,
+    appId,
     version: 1,
     createdAt: 0,
   });
 
-  it("returns false for the latest render of an app (registry points at it)", () => {
+  it("returns false for the latest render of an owned app (registry points at it)", () => {
     const apps = [app("tc2", "ui://app-1")];
     expect(
-      isSupersededRender({
-        apps,
-        uiResourceUri: "ui://app-1",
-        toolCallId: "tc2",
-      }),
+      isSupersededRender({ apps, toolCallId: "tc2", appId: "app-1" }),
     ).toBe(false);
   });
 
-  it("returns true for a prior render once a newer render registers", () => {
+  it("returns true for a prior owned render once a newer render registers", () => {
     const apps = [app("tc2", "ui://app-1")];
     expect(
-      isSupersededRender({
-        apps,
-        uiResourceUri: "ui://app-1",
-        toolCallId: "tc1",
-      }),
+      isSupersededRender({ apps, toolCallId: "tc1", appId: "app-1" }),
     ).toBe(true);
   });
 
-  it("returns false when the app has no registry entry yet (mid-stream)", () => {
-    const apps = [app("tc9", "ui://other-app")];
+  it("returns false when the owned app has no registry entry yet (mid-stream)", () => {
+    const apps = [app("tc9", "ui://other-app", "other-app")];
     expect(
-      isSupersededRender({
-        apps,
-        uiResourceUri: "ui://app-1",
-        toolCallId: "tc1",
-      }),
+      isSupersededRender({ apps, toolCallId: "tc1", appId: "app-1" }),
     ).toBe(false);
+  });
+
+  it("never supersedes external renders sharing a resourceUri", () => {
+    // External renders carry no appId: each tool call is its own live entry,
+    // even when a sibling render holds the same resourceUri.
+    const apps = [
+      app("tc1", "ui://excalidraw", null),
+      app("tc2", "ui://excalidraw", null),
+    ];
+    expect(isSupersededRender({ apps, toolCallId: "tc1", appId: null })).toBe(
+      false,
+    );
+    expect(isSupersededRender({ apps, toolCallId: "tc2", appId: null })).toBe(
+      false,
+    );
   });
 });
 

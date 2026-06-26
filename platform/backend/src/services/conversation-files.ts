@@ -1,8 +1,13 @@
 import config from "@/config";
+import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import FileModel from "@/models/file";
-import { resolveProjectFileScope } from "@/skills-sandbox/project-file-scope";
+import {
+  type ProjectFileScope,
+  resolveProjectFileScope,
+} from "@/skills-sandbox/project-file-scope";
 import { SkillSandboxError } from "@/skills-sandbox/types";
+import { ApiError } from "@/types";
 import type { ConversationFilesResponse } from "@/types/conversation-file";
 
 type ProjectFile = {
@@ -25,13 +30,19 @@ class ConversationFilesService {
     /** Who is asking; their project access gates the project files. */
     requestingUserId: string;
   }): Promise<ConversationFilesResponse> {
-    const [artifacts, attachments, projectScope] = await Promise.all([
-      FileModel.listMetadataByConversationId(params),
-      ConversationAttachmentModel.findByConversationIdWithoutData(
-        params.conversationId,
-      ),
-      this.listProjectFiles(params),
-    ]);
+    const [artifacts, attachments, projectScope, canManageFiles] =
+      await Promise.all([
+        FileModel.listMetadataByConversationId(params),
+        ConversationAttachmentModel.findByConversationIdWithoutData(
+          params.conversationId,
+        ),
+        this.listProjectFiles(params),
+        ConversationModel.isOwnedBy({
+          id: params.conversationId,
+          userId: params.requestingUserId,
+          organizationId: params.organizationId,
+        }),
+      ]);
     const { files: projectFiles, projectName } = projectScope;
 
     // A file created in this chat is already in `generated`; keep it out of
@@ -68,7 +79,39 @@ class ConversationFilesService {
           createdAt: a.createdAt.toISOString(),
         })),
       projectName,
+      canManageFiles,
     };
+  }
+
+  /**
+   * Soft-delete a chat attachment. Mutating, so it is owner-gated (not the
+   * read-only `findReadableConversationById` used by the byte endpoint): only
+   * the conversation owner may remove its attachments, even from a chat a
+   * member can otherwise read via a share or project membership.
+   */
+  async deleteAttachment(params: {
+    attachmentId: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<void> {
+    const meta = await ConversationAttachmentModel.findById(
+      params.attachmentId,
+    );
+    if (!meta) {
+      throw new ApiError(404, "Attachment not found");
+    }
+    if (meta.organizationId !== params.organizationId) {
+      throw new ApiError(403, "Attachment belongs to a different org");
+    }
+    const owns = await ConversationModel.isOwnedBy({
+      id: meta.conversationId,
+      userId: params.userId,
+      organizationId: params.organizationId,
+    });
+    if (!owns) {
+      throw new ApiError(403, "No access to the owning conversation");
+    }
+    await ConversationAttachmentModel.softDelete(params.attachmentId);
   }
 
   /**
@@ -87,7 +130,7 @@ class ConversationFilesService {
       return { files: [], projectName: null };
     }
 
-    let scope: Awaited<ReturnType<typeof resolveProjectFileScope>>;
+    let scope: ProjectFileScope | null = null;
     try {
       scope = await resolveProjectFileScope({
         conversationId: params.conversationId,
@@ -95,11 +138,9 @@ class ConversationFilesService {
         organizationId: params.organizationId,
       });
     } catch (error) {
-      // Fail-closed scope (e.g. the requester lost project access): list none.
-      if (error instanceof SkillSandboxError) {
-        return { files: [], projectName: null };
-      }
-      throw error;
+      // Fail-closed scope: a member who has since lost share access can't reach
+      // the project's files through a chat they still own.
+      if (!(error instanceof SkillSandboxError)) throw error;
     }
 
     if (!scope) {

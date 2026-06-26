@@ -120,6 +120,7 @@ export function RightSidePanel({
         <div className="flex-1 min-h-0 overflow-hidden relative">
           {resolvedTab === "files" && (
             <ConversationFilesPanel
+              key={conversationId ?? "none"}
               conversationId={conversationId}
               artifact={artifact}
               projectId={projectId}

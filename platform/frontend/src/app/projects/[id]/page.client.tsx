@@ -1,33 +1,25 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  PROJECT_DESCRIPTION_MAX_LENGTH,
-  PROJECT_INSTRUCTIONS_FILENAME,
-  PROJECT_NAME_MAX_LENGTH,
-} from "@archestra/shared";
+import { PROJECT_INSTRUCTIONS_FILENAME } from "@archestra/shared";
 import {
   CalendarClock,
+  ChevronLeft,
+  Download,
   Eye,
   FileText,
-  Globe,
-  Lock,
   MessageCircle,
   MoreHorizontal,
   Pencil,
   Pin,
   PinOff,
   Trash2,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
 import { AgentIcon } from "@/components/agent-icon";
-import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type FileListItem,
   FileSection,
@@ -41,8 +33,7 @@ import {
 } from "@/components/chat/project-instructions";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { PageLayout } from "@/components/page-layout";
-import { StandardFormDialog } from "@/components/standard-dialog";
-import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
+import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,14 +42,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  type VisibilityOption,
-  VisibilitySelector,
-} from "@/components/visibility-selector";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { buildProjectChatHandoffUrl } from "@/lib/projects/project-chat-handoff";
 import { canManageProject } from "@/lib/projects/project-permissions";
@@ -68,12 +52,8 @@ import {
   useProject,
   useProjectConversations,
   useProjectFiles,
-  useSetProjectShare,
-  useUpdateProject,
 } from "@/lib/projects/projects.query";
 import { sandboxArtifactUrl } from "@/lib/skills-sandbox/sandbox-file-preview";
-import { useTeams } from "@/lib/teams/team.query";
-import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ProjectDeleteConfirmDialog } from "../project-delete-confirm-dialog";
 
@@ -221,7 +201,7 @@ function ProjectDetail() {
           )}
           {editOpen && (
             <EditProjectDialog
-              project={project}
+              projectId={project.id}
               open={editOpen}
               onOpenChange={setEditOpen}
             />
@@ -357,14 +337,10 @@ function ProjectFilesSidebar({
 }) {
   const { data: files } = useProjectFiles(projectId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [view, setView] = useState<"list" | "detail">("list");
 
   // The instructions file is surfaced only as the pinned entry, so keep it out
-  // of the ordinary list. Its presence + size drives the pinned row's state.
-  const instructionsFile = (files ?? []).find(
-    (f) => f.filename === PROJECT_INSTRUCTIONS_FILENAME,
-  );
-  const hasInstructions = (instructionsFile?.sizeBytes ?? 0) > 0;
-
+  // of the ordinary list (filtered from `items` below).
   const items: FileListItem[] = (files ?? [])
     .filter(
       (f) => f.downloadable && f.filename !== PROJECT_INSTRUCTIONS_FILENAME,
@@ -377,18 +353,25 @@ function ProjectFilesSidebar({
     }));
   const selected = items.find((i) => i.id === selectedId) ?? null;
   const instructionsSelected = selectedId === INSTRUCTIONS_SELECTION;
-  const previewing = selected !== null || instructionsSelected;
+  const detailName = instructionsSelected
+    ? PROJECT_INSTRUCTIONS_FILENAME
+    : (selected?.name ?? "");
 
-  // Open with the newest file previewed, like the chat panel does. Only once —
-  // an explicitly closed preview stays closed. The instructions entry is opened
-  // only on click, never by default.
-  const defaultApplied = useRef(false);
-  const newestId = items.at(-1)?.id;
+  const openFile = (id: string) => {
+    setSelectedId(id);
+    setView("detail");
+  };
+  const backToList = () => setView("list");
+
+  // If the open file disappears (e.g. deleted elsewhere), fall back to the list.
+  const selectedMissing =
+    selectedId !== null && !instructionsSelected && selected === null;
   useEffect(() => {
-    if (defaultApplied.current || !newestId) return;
-    defaultApplied.current = true;
-    setSelectedId(newestId);
-  }, [newestId]);
+    if (selectedMissing) {
+      setSelectedId(null);
+      setView("list");
+    }
+  }, [selectedMissing]);
 
   return (
     <ResizableRightPanel>
@@ -409,265 +392,69 @@ function ProjectFilesSidebar({
 
         <div className="flex-1 min-h-0 overflow-hidden relative">
           <div className="flex h-full flex-col">
-            <div
-              className={cn(
-                "overflow-y-auto px-3 py-3",
-                previewing ? "max-h-[45%] shrink-0 border-b" : "flex-1",
-              )}
-            >
-              <InstructionsRow
-                selected={instructionsSelected}
-                hasContent={hasInstructions}
-                onSelect={() => setSelectedId(INSTRUCTIONS_SELECTION)}
-              />
-              {items.length > 0 ? (
+            {view === "list" ? (
+              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
                 <FileSection
                   items={items}
-                  selectedId={selectedId}
-                  onSelect={setSelectedId}
+                  selectedId={null}
+                  onSelect={openFile}
+                  leading={
+                    <InstructionsRow
+                      onSelect={() => openFile(INSTRUCTIONS_SELECTION)}
+                    />
+                  }
                 />
-              ) : (
-                <p className="px-1 pt-3 text-xs text-muted-foreground">
-                  Results the agent saves in this project will appear here.
-                </p>
-              )}
-            </div>
-            {instructionsSelected && (
-              <ProjectInstructionsPanel
-                projectId={projectId}
-                isOwner={isOwner}
-                onClose={() => setSelectedId(null)}
-              />
-            )}
-            {selected && (
-              <FilePreview
-                file={selected}
-                onClose={() => setSelectedId(null)}
-              />
+                {items.length === 0 && (
+                  <p className="px-1 pt-3 text-xs text-muted-foreground">
+                    Results the agent saves in this project will appear here.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground"
+                    onClick={backToList}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Files
+                  </Button>
+                  <span className="shrink-0 text-muted-foreground">·</span>
+                  <span
+                    className="min-w-0 flex-1 truncate text-sm font-medium"
+                    title={detailName}
+                  >
+                    {detailName}
+                  </span>
+                  {selected && !instructionsSelected && selected.contentUrl && (
+                    <a
+                      href={selected.contentUrl}
+                      download={selected.name}
+                      title={`Download ${selected.name}`}
+                      className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span className="sr-only">Download {selected.name}</span>
+                    </a>
+                  )}
+                </div>
+                {instructionsSelected ? (
+                  <ProjectInstructionsPanel
+                    projectId={projectId}
+                    isOwner={isOwner}
+                    onClose={backToList}
+                  />
+                ) : selected ? (
+                  <FilePreview file={selected} onClose={backToList} />
+                ) : null}
+              </>
             )}
           </div>
         </div>
       </Tabs>
     </ResizableRightPanel>
-  );
-}
-
-type ProjectVisibility = "none" | "organization" | "team";
-type EditProjectForm = {
-  name: string;
-  description: string;
-  icon: string | null;
-};
-
-/**
- * Single edit entry point for the owner: name, description, and icon plus the
- * shared visibility control (replacing the old separate description dialog and
- * share popover).
- */
-function EditProjectDialog({
-  project,
-  open,
-  onOpenChange,
-}: {
-  project: archestraApiTypes.GetProjectResponses["200"];
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const updateProject = useUpdateProject();
-  const setShare = useSetProjectShare();
-  const { data: teams = [] } = useTeams({ enabled: open });
-
-  const form = useForm<EditProjectForm>({
-    defaultValues: {
-      name: project.name,
-      description: project.description ?? "",
-      icon: project.icon,
-    },
-    mode: "onChange",
-  });
-  const icon = form.watch("icon");
-  const name = form.watch("name");
-  const description = form.watch("description");
-  const initialVisibility: ProjectVisibility = project.visibility ?? "none";
-  const [visibility, setVisibility] =
-    useState<ProjectVisibility>(initialVisibility);
-  const [teamIds, setTeamIds] = useState<string[]>(project.shareTeamIds ?? []);
-
-  const visibilityOptions: Array<VisibilityOption<ProjectVisibility>> = [
-    {
-      value: "none",
-      label: "Only me",
-      description: "No one else can see this project.",
-      icon: Lock,
-    },
-    {
-      value: "organization",
-      label: "Organization",
-      description: "Everyone in your organization can see this project.",
-      icon: Globe,
-    },
-    {
-      value: "team",
-      label: "Teams",
-      description: "Share this project with selected teams.",
-      icon: Users,
-      disabled: teams.length === 0,
-      disabledLabel: teams.length === 0 ? "No teams available" : undefined,
-    },
-  ];
-
-  const isPending = updateProject.isPending || setShare.isPending;
-  const teamSelectionMissing = visibility === "team" && teamIds.length === 0;
-  const hasLengthError =
-    name.length > PROJECT_NAME_MAX_LENGTH ||
-    description.length > PROJECT_DESCRIPTION_MAX_LENGTH;
-
-  const onSubmit = form.handleSubmit(async ({ name, description, icon }) => {
-    if (teamSelectionMissing) return;
-    const ok = await updateProject.mutateAsync({
-      id: project.id,
-      name: name.trim(),
-      description: description.trim() || null,
-      icon,
-    });
-    if (!ok) return;
-
-    const nextTeamIds = visibility === "team" ? teamIds : [];
-    const shareChanged =
-      visibility !== initialVisibility ||
-      (visibility === "team" &&
-        nextTeamIds.slice().sort().join() !==
-          (project.shareTeamIds ?? []).slice().sort().join());
-    if (shareChanged) {
-      const shareOk = await setShare.mutateAsync({
-        id: project.id,
-        visibility,
-        teamIds: nextTeamIds,
-      });
-      if (!shareOk) return;
-    }
-    onOpenChange(false);
-  });
-
-  return (
-    <StandardFormDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Edit project"
-      size="medium"
-      onSubmit={onSubmit}
-      bodyClassName="space-y-4"
-      footer={
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isPending}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            disabled={
-              isPending ||
-              !name.trim().length ||
-              hasLengthError ||
-              teamSelectionMissing
-            }
-          >
-            Save
-          </Button>
-        </>
-      }
-    >
-      <div className="flex items-start gap-3">
-        <AgentIconPicker
-          value={icon}
-          onChange={(next) => form.setValue("icon", next)}
-          fallbackType="project"
-        />
-        <div className="flex-1 space-y-3 min-w-0">
-          <Input
-            placeholder="Project name"
-            maxLength={PROJECT_NAME_MAX_LENGTH}
-            aria-invalid={!!form.formState.errors.name}
-            {...form.register("name", {
-              required: "Project name is required.",
-              maxLength: {
-                value: PROJECT_NAME_MAX_LENGTH,
-                message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
-              },
-            })}
-          />
-          {form.formState.errors.name?.message && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.name.message}
-            </p>
-          )}
-          <Textarea
-            placeholder="What is this project about?"
-            rows={3}
-            maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
-            aria-invalid={!!form.formState.errors.description}
-            {...form.register("description", {
-              maxLength: {
-                value: PROJECT_DESCRIPTION_MAX_LENGTH,
-                message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
-              },
-            })}
-          />
-          {form.formState.errors.description?.message && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.description.message}
-            </p>
-          )}
-        </div>
-      </div>
-
-      <VisibilitySelector
-        heading="Sharing"
-        value={visibility}
-        options={visibilityOptions}
-        onValueChange={setVisibility}
-      >
-        {visibility === "team" && (
-          <div className="space-y-2">
-            <Label>Teams</Label>
-            <AssignmentCombobox
-              items={teams.map((team) => ({ id: team.id, name: team.name }))}
-              selectedIds={teamIds}
-              onToggle={(teamId) =>
-                setTeamIds((current) =>
-                  current.includes(teamId)
-                    ? current.filter((id) => id !== teamId)
-                    : [...current, teamId],
-                )
-              }
-              label="Select teams"
-              placeholder="Search teams..."
-              emptyMessage="No teams found."
-              className="h-9 w-full justify-between border text-sm text-foreground"
-            />
-            {teamIds.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {teams
-                  .filter((team) => teamIds.includes(team.id))
-                  .map((team) => (
-                    <Badge key={team.id} variant="secondary">
-                      {team.name}
-                    </Badge>
-                  ))}
-              </div>
-            )}
-          </div>
-        )}
-      </VisibilitySelector>
-
-      <p className="text-xs text-muted-foreground">
-        People you share with can read every chat, start their own, and work
-        with the project's files through chats.
-      </p>
-    </StandardFormDialog>
   );
 }

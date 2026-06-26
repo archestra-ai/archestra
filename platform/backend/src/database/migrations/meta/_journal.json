@@ -2178,6 +2178,13 @@
       "when": 1782372184062,
       "tag": "0310_lame_major_mapleleaf",
       "breakpoints": true
+    },
+    {
+      "idx": 311,
+      "version": "7",
+      "when": 1782402769987,
+      "tag": "0311_cheerful_zeigeist",
+      "breakpoints": true
     }
   ]
 }

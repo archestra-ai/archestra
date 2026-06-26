@@ -1,6 +1,5 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -10,7 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useUpdateApp } from "@/lib/app.query";
 
-type App = archestraApiTypes.GetAppResponses["200"];
+// Only the identity fields are edited here, so accept the minimal shape shared
+// by the full app (detail) and the gallery list item.
+type App = { id: string; name: string; description: string | null };
 
 type EditFormValues = {
   name: string;

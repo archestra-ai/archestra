@@ -801,6 +801,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatAttachmentContent]: {
     chat: ["read"],
   },
+  [RouteId.DeleteChatAttachment]: {
+    chat: ["update"],
+  },
   [RouteId.GetChatAgentMcpTools]: {
     agent: ["read"],
   },

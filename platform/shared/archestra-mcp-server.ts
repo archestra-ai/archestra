@@ -549,9 +549,12 @@ export function isAlwaysExposedArchestraToolShortName(
  * these, so their results must keep `structuredContent` through the chat
  * serialization path. `list_apps`/`delete_app`/`read_app` deliberately excluded
  * — they render nothing (`read_app` returns source, not a new head to show).
+ *
+ * `scaffold_app` is excluded too: it only seeds the boilerplate starter
+ * template, which is noise inline — the first `edit_app` (the first real build)
+ * is the earliest render worth showing.
  */
 export const APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES = [
-  TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];

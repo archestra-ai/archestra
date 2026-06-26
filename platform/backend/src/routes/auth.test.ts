@@ -12,6 +12,7 @@ import db, { schema } from "@/database";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import McpOauthClientModel from "@/models/mcp-oauth-client";
 import OAuthAccessTokenModel from "@/models/oauth-access-token";
+import OAuthClientModel from "@/models/oauth-client";
 import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -90,7 +91,11 @@ describe("auth routes", () => {
         grant_type: "authorization_code",
         client_id: client.clientId,
         code: "auth-code",
-        resource: `http://localhost:3000/v1/mcp/${agent.id}`,
+        // Build the resource on the configured issuer origin (not a hardcoded
+        // localhost) so the lifetime lookup's origin check in
+        // getProfileIdFromResource resolves the gateway regardless of whether a
+        // local .env points the frontend origin at a tunnel domain.
+        resource: `${new URL(config.frontendBaseUrl).origin}/v1/mcp/${agent.id}`,
       },
     });
 
@@ -296,6 +301,67 @@ describe("auth routes", () => {
     expect(storedToken?.userId).toBeNull();
     expect(storedToken?.scopes).toEqual([MCP_GATEWAY_OAUTH_SCOPE]);
     expect(storedToken?.referenceId).toBe(`mcp-oauth-client:${oauthClient.id}`);
+  });
+
+  test("forwards client_secret_basic credentials to better-auth as client_secret_post on the authorization_code grant", async ({
+    makeOrganization,
+  }) => {
+    // A confidential native client (e.g. Claude Desktop) authenticates the token
+    // request with `Authorization: Basic base64(client_id:client_secret)`. Our
+    // better-auth apiKey plugin reads API keys from the Authorization header
+    // (config.api.apiKeyAuthorizationHeaderName), so it would intercept and
+    // reject that header as an invalid API key before the OAuth token handler
+    // runs. The handler must instead lift the Basic credentials into the body
+    // and drop the Authorization header so the request authenticates as
+    // client_secret_post.
+    const organization = await makeOrganization();
+    const { oauthClient, clientSecret } = await McpOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Native Client",
+      grantType: "authorization_code",
+      redirectUris: ["http://127.0.0.1:53280/callback"],
+    });
+
+    let forwardedRequest: Request | undefined;
+    vi.mocked(betterAuth.handler).mockImplementation(async (req: Request) => {
+      forwardedRequest = req;
+      return new Response(
+        JSON.stringify({
+          access_token: "native-client-access-token",
+          token_type: "Bearer",
+          expires_in: 3_600,
+          scope: MCP_GATEWAY_OAUTH_SCOPE,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+
+    const basic = Buffer.from(
+      `${oauthClient.clientId}:${clientSecret}`,
+    ).toString("base64");
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      headers: { authorization: `Basic ${basic}` },
+      payload: {
+        grant_type: "authorization_code",
+        code: "auth-code",
+        code_verifier: "verifier",
+        redirect_uri: "http://127.0.0.1:53280/callback",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    if (!forwardedRequest) {
+      throw new Error("better-auth handler was not called");
+    }
+    // The Authorization header must not reach better-auth, or the apiKey plugin
+    // rejects it before the OAuth client is authenticated.
+    expect(forwardedRequest.headers.get("authorization")).toBeNull();
+    // The credentials are carried in the body as client_secret_post instead.
+    const forwardedBody = JSON.parse(await forwardedRequest.text());
+    expect(forwardedBody.client_id).toBe(oauthClient.clientId);
+    expect(forwardedBody.client_secret).toBe(clientSecret);
   });
 
   test("rejects MCP OAuth client credentials with an invalid secret", async ({
@@ -1028,6 +1094,223 @@ describe("auth routes", () => {
 
       expect(response.statusCode).toBe(201);
       expect(vi.mocked(betterAuth.handler)).toHaveBeenCalled();
+    });
+  });
+
+  describe("offline_access scope for refresh-token DCR clients", () => {
+    let dcrOriginal: boolean;
+
+    beforeEach(() => {
+      dcrOriginal = config.auth.dynamicClientRegistrationEnabled;
+      config.auth.dynamicClientRegistrationEnabled = true;
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(JSON.stringify({ client_id: "c" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+
+    afterEach(() => {
+      config.auth.dynamicClientRegistrationEnabled = dcrOriginal;
+    });
+
+    async function lastForwardedBody(): Promise<Record<string, unknown>> {
+      const calls = vi.mocked(betterAuth.handler).mock.calls;
+      const last = calls[calls.length - 1]?.[0];
+      return last ? await last.clone().json() : {};
+    }
+
+    test("adds offline_access when the client requests the refresh_token grant", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: {
+          client_name: "Claude Desktop",
+          grant_types: ["authorization_code", "refresh_token"],
+          scope: "mcp",
+        },
+      });
+
+      expect((await lastForwardedBody()).scope).toBe("mcp offline_access");
+    });
+
+    test("does not add offline_access without the refresh_token grant", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: {
+          client_name: "No Refresh",
+          grant_types: ["authorization_code"],
+          scope: "mcp",
+        },
+      });
+
+      expect((await lastForwardedBody()).scope).toBe("mcp");
+    });
+
+    test("does not duplicate offline_access when already requested", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: {
+          client_name: "Already Offline",
+          grant_types: ["authorization_code", "refresh_token"],
+          scope: "mcp offline_access",
+        },
+      });
+
+      expect((await lastForwardedBody()).scope).toBe("mcp offline_access");
+    });
+  });
+
+  describe("offline_access reconciliation at authorize", () => {
+    let dcrOriginal: boolean;
+
+    beforeEach(() => {
+      dcrOriginal = config.auth.dynamicClientRegistrationEnabled;
+      config.auth.dynamicClientRegistrationEnabled = true;
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(null, {
+          status: 302,
+          headers: { location: "http://127.0.0.1:5000/callback?code=x" },
+        }),
+      );
+    });
+
+    afterEach(() => {
+      config.auth.dynamicClientRegistrationEnabled = dcrOriginal;
+    });
+
+    function lastForwardedUrl(): string | null {
+      const calls = vi.mocked(betterAuth.handler).mock.calls;
+      const last = calls[calls.length - 1]?.[0];
+      return last ? last.url : null;
+    }
+
+    function authorizeUrl(clientId: string, scope: string): string {
+      const params = new URLSearchParams({
+        client_id: clientId,
+        response_type: "code",
+        scope,
+        redirect_uri: "http://127.0.0.1:5000/callback",
+      });
+      return `/api/auth/oauth2/authorize?${params.toString()}`;
+    }
+
+    test("persists offline_access for a refresh-capable client that requests it but registered only mcp", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "mcp_cached_client",
+        scopes: ["mcp"],
+        grantTypes: ["authorization_code", "refresh_token"],
+      });
+
+      await app.inject({
+        method: "GET",
+        url: authorizeUrl(client.clientId, "mcp offline_access"),
+      });
+
+      // Self-healed: the client now carries offline_access, so the provider's
+      // scope check (against stored scopes) passes on this same request.
+      const found = await OAuthClientModel.findByClientId(client.clientId);
+      expect(found?.scopes).toEqual(["mcp", "offline_access"]);
+      // The request is forwarded with offline_access intact.
+      expect(lastForwardedUrl()).toContain("offline_access");
+    });
+
+    test("injects offline_access when a registered client omits it from the request", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "mcp_registered_offline",
+        scopes: ["mcp", "offline_access"],
+        grantTypes: ["authorization_code", "refresh_token"],
+      });
+
+      await app.inject({
+        method: "GET",
+        url: authorizeUrl(client.clientId, "mcp"),
+      });
+
+      expect(lastForwardedUrl()).toContain("offline_access");
+    });
+  });
+
+  describe("Origin header for native (Origin-less) OAuth clients", () => {
+    // Native MCP clients (e.g. Claude Desktop) call the OAuth endpoints
+    // server-to-server with no Origin header. Better Auth rejects such requests
+    // with MISSING_OR_NULL_ORIGIN before consulting trustedOrigins, so the
+    // forwarding handlers must inject the configured frontend origin. Browsers
+    // always send an Origin on cross-origin POSTs, so a present Origin must be
+    // preserved unchanged.
+    function lastForwardedOrigin(): string | null {
+      const calls = vi.mocked(betterAuth.handler).mock.calls;
+      const last = calls[calls.length - 1]?.[0];
+      return last ? last.headers.get("origin") : null;
+    }
+
+    test("injects frontend origin for DCR when the client sends none", async () => {
+      config.auth.dynamicClientRegistrationEnabled = true;
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(JSON.stringify({ client_id: "c" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: { client_name: "Claude Desktop" },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(lastForwardedOrigin()).toBe(config.frontendBaseUrl);
+    });
+
+    test("preserves a client-supplied Origin on the token endpoint", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/token",
+        headers: { origin: "https://app.example.com" },
+        payload: {
+          grant_type: "authorization_code",
+          client_id: "mcp_some_client",
+          code: "auth-code",
+        },
+      });
+
+      expect(lastForwardedOrigin()).toBe("https://app.example.com");
+    });
+
+    test("does not inject an origin for non-public-OAuth routes", async () => {
+      // The carve-out is scoped to the public OAuth endpoints. Credentialed
+      // browser routes (sign-in, consent, etc.) keep Better Auth's origin-based
+      // CSRF protection, so a missing Origin must be forwarded as missing — never
+      // back-filled with the frontend origin.
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/sign-in/email",
+        payload: { email: "user@example.com", password: "password" },
+      });
+
+      expect(lastForwardedOrigin()).toBeNull();
     });
   });
 });

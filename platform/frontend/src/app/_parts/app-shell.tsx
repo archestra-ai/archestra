@@ -39,7 +39,7 @@ export function AppShell({ children }: AppShellProps) {
   const isBrowserPreview = pathname.startsWith("/chat/browser-preview/");
   const isAuthPage = pathname.startsWith("/auth/");
   // Full-page app runtimes: the owned standalone /a/[id] and the external
-  // /apps/server/[id]/run. (/apps/[id] is the management page — keeps the shell.)
+  // /apps/server/[id]/run. (The /apps gallery itself keeps the shell.)
   const isAppRuntime =
     /^\/a\/[^/]+$/.test(pathname) ||
     /^\/apps\/server\/[^/]+\/run$/.test(pathname);

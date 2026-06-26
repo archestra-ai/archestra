@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateApp } from "@/lib/app.query";
+import { buildAppChatHandoffUrl } from "@/lib/apps/app-chat-handoff";
 
 type CreateFormValues = {
   name: string;
@@ -27,7 +28,7 @@ type CreateFormValues = {
 // Create flow: name the app + pick visibility. The backend seeds it from the
 // single starter template (no template choice). Team scope needs team
 // assignment, so the dialog offers personal/org only; re-scoping to a team
-// happens on the detail page.
+// happens from the app's MCP registry card (Manage MCP).
 export function AppCreateDialog({
   open,
   onOpenChange,
@@ -55,7 +56,12 @@ export function AppCreateDialog({
     if (created) {
       onOpenChange(false);
       form.reset();
-      router.push(`/apps/${created.id}`);
+      router.push(
+        buildAppChatHandoffUrl({
+          appId: created.id,
+          appName: values.name.trim(),
+        }),
+      );
     }
   });
 

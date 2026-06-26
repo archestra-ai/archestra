@@ -74,6 +74,8 @@ export const E2eTestId = {
     "inline-vault-secret-selector-secret-trigger-key",
   McpServerSettingsConnectionsNavButton:
     "mcp-server-settings-connections-nav-button",
+  McpServerSettingsConnectionsContent:
+    "mcp-server-settings-connections-content",
   ManageCredentialsSharedConnectionsSection:
     "manage-credentials-shared-connections-section",
   ManageCredentialsSharedConnectionsEmptyState:

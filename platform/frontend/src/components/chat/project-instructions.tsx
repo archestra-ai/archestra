@@ -25,33 +25,25 @@ import { cn } from "@/lib/utils";
 export const INSTRUCTIONS_SELECTION = "__project_instructions__";
 
 /** The always-present, pinned instructions entry at the top of the file list. */
-export function InstructionsRow({
-  selected,
-  hasContent,
-  onSelect,
-}: {
-  selected: boolean;
-  hasContent: boolean;
-  onSelect: () => void;
-}) {
+export function InstructionsRow({ onSelect }: { onSelect: () => void }) {
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={cn(
-        "mb-1 flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors",
-        selected ? "border-primary/40 bg-muted" : "hover:bg-muted/50",
-      )}
+      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
     >
-      <FileText className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">
-          {PROJECT_INSTRUCTIONS_FILENAME}
-        </span>
-        <span className="block truncate text-xs text-muted-foreground">
-          {hasContent
-            ? "Project instructions for every chat"
-            : "Empty — add instructions for every chat"}
+      {/* Single line, same muted-icon treatment as a regular .md file row — the
+          instructions entry looks like the rest of the list, only pinned and
+          with an inline description after the filename. */}
+      <FileText
+        className="h-5 w-5 shrink-0 text-muted-foreground"
+        aria-hidden
+      />
+      <span className="min-w-0 flex-1 truncate">
+        {PROJECT_INSTRUCTIONS_FILENAME}
+        <span className="text-muted-foreground">
+          {" "}
+          · guidance for every chat
         </span>
       </span>
     </button>

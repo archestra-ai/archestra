@@ -152,6 +152,7 @@ describe("search_tools", () => {
   test("includes unassigned tools from catalogs the user can access when the agent allows dynamic access", async ({
     makeAgent,
     makeInternalMcpCatalog,
+    makeMcpServer,
     makeMember,
     makeOrganization,
     makeTool,
@@ -176,6 +177,7 @@ describe("search_tools", () => {
       description: "Search repositories by topic, language, or owner.",
       catalogId: catalog.id,
     });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
 
     const context: ArchestraContext = {
       agent: { id: agent.id, name: agent.name },

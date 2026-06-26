@@ -143,6 +143,7 @@ async function buildModelMessagesForProvider(params: {
     params.conversationId,
     params.ingestibleMimeTypes,
     applyAnthropicCacheControl,
+    params.provider === "anthropic" && !anthropicNativeEndpoint,
   );
   const providerPreparedMessages = prepareMessagesForProvider({
     messages: materialized,

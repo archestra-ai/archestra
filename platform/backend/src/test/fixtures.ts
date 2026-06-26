@@ -1029,6 +1029,8 @@ async function makeOAuthClient(
     name?: string;
     redirectUris?: string[];
     userId?: string;
+    scopes?: string[] | null;
+    grantTypes?: string[];
   } = {},
 ) {
   const id = crypto.randomUUID();
@@ -1042,12 +1044,16 @@ async function makeOAuthClient(
         "http://localhost:8005/callback",
       ],
       tokenEndpointAuthMethod: "none",
-      grantTypes: ["authorization_code", "refresh_token"],
+      grantTypes: overrides.grantTypes ?? [
+        "authorization_code",
+        "refresh_token",
+      ],
       responseTypes: ["code"],
       public: true,
       type: "web",
       createdAt: new Date(),
       updatedAt: new Date(),
+      ...(overrides.scopes !== undefined ? { scopes: overrides.scopes } : {}),
       ...(overrides.userId ? { userId: overrides.userId } : {}),
     })
     .returning();

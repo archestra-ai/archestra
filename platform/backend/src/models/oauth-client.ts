@@ -1,3 +1,4 @@
+import { OFFLINE_ACCESS_OAUTH_SCOPE } from "@archestra/shared";
 import { and, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { CimdUpsertData } from "@/types";
@@ -57,6 +58,32 @@ class OAuthClientModel {
         and(
           eq(schema.oauthClientsTable.clientId, clientId),
           sql`NOT (${schema.oauthClientsTable.redirectUris} @> ARRAY[${redirectUri}]::text[])`,
+        ),
+      );
+  }
+
+  /**
+   * Register `offline_access` on a client that asks for it at authorize but
+   * registered only a narrower scope (e.g. Claude Desktop registers "mcp" yet
+   * requests offline_access to obtain a refresh token). The OAuth provider
+   * validates authorize-time scopes against the client's *stored* scopes, so a
+   * refresh-capable client missing offline_access fails with `invalid_scope`.
+   *
+   * Idempotent and atomic: only updates clients that registered the
+   * `refresh_token` grant and don't already carry the scope. Self-heals clients
+   * registered before offline_access was added at DCR time.
+   */
+  static async ensureOfflineAccessScope(clientId: string): Promise<void> {
+    await db
+      .update(schema.oauthClientsTable)
+      .set({
+        scopes: sql`array_append(coalesce(${schema.oauthClientsTable.scopes}, ARRAY[]::text[]), ${OFFLINE_ACCESS_OAUTH_SCOPE})`,
+      })
+      .where(
+        and(
+          eq(schema.oauthClientsTable.clientId, clientId),
+          sql`coalesce(${schema.oauthClientsTable.grantTypes}, ARRAY[]::text[]) @> ARRAY['refresh_token']::text[]`,
+          sql`NOT (coalesce(${schema.oauthClientsTable.scopes}, ARRAY[]::text[]) @> ARRAY[${OFFLINE_ACCESS_OAUTH_SCOPE}]::text[])`,
         ),
       );
   }

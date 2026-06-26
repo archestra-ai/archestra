@@ -1,18 +1,24 @@
-"""Verify the submitted top customer against a recompute from the same SQLite fixture.
+"""Verify the submitted top customer by recomputing from the canonical rows.
 
-Reads BENCH_RESULT (submitted JSON) and BENCH_FIXTURES/inputs/orders.sqlite (the same binary DB
-staged to the agent). Recomputing the aggregate from the fixture avoids hard-coding the expected
-value.
+The staged orders.sqlite is deliberately corrupted (malformed sqlite_master schema) so the agent
+has to recover it before it can answer. Ground truth therefore comes from expected/rows.json -- the
+canonical (region, customer, amount) rows -- recomputed here with the same aggregate the task asks
+for, never from the broken binary.
 """
 
 import sqlite3
 
-from bench_verifier import fixtures, result
+from bench_verifier import read_fixture_json, result
 
 
 def _top_customer() -> str:
-    conn = sqlite3.connect(fixtures("inputs", "orders.sqlite"))
+    rows = read_fixture_json("expected", "rows.json")
+    conn = sqlite3.connect(":memory:")
     try:
+        conn.execute("CREATE TABLE orders (region TEXT, customer TEXT, amount INTEGER)")
+        conn.executemany(
+            "INSERT INTO orders (region, customer, amount) VALUES (?, ?, ?)", rows
+        )
         # Highest total amount wins; ties broken alphabetically by customer name.
         row = conn.execute(
             "SELECT customer FROM orders "
@@ -22,7 +28,7 @@ def _top_customer() -> str:
         ).fetchone()
     finally:
         conn.close()
-    assert row is not None, "orders table is empty"
+    assert row is not None, "rows.json is empty"
     return row[0]
 
 

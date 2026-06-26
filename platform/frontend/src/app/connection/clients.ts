@@ -103,6 +103,12 @@ export interface ProxyStep {
    * ANTHROPIC_CUSTOM_HEADERS value for an env block (Claude Code).
    */
   passthroughKeyVariant?: "header" | "env";
+  /**
+   * When true, render the final verify UI beneath this step: a copyable sample
+   * message with a unique marker plus a "Test your setup" link that searches the
+   * LLM logs for exactly that message.
+   */
+  testSetupLink?: boolean;
 }
 
 export type ProxyInstruction =
@@ -239,14 +245,15 @@ claude`,
 }`,
             },
             {
-              title: "Attribute requests to your user",
-              body: "Add ANTHROPIC_CUSTOM_HEADERS to the same env block, set to the value below, so Archestra attributes requests to you while your Claude subscription passes through.",
+              title: "Add your personal auth key header",
+              body: "Add ANTHROPIC_CUSTOM_HEADERS to the same env block and set to the value below to authenticate on the LLM Proxy.",
               showPassthroughKey: true,
               passthroughKeyVariant: "env",
             },
             {
-              title: "Restart Claude Code",
-              body: "New sessions will route through Archestra automatically.",
+              title: "Restart Claude Code and send a test message",
+              body: 'Quit and reopen Claude Code, start a new chat, and send the message below. Then click "Test your setup" to verify in logs that your session is routed through Archestra.',
+              testSetupLink: true,
             },
           ],
         };
@@ -321,8 +328,9 @@ claude`,
             showPassthroughKey: true,
           },
           {
-            title: "Restart and verify",
-            body: "Restart Claude Desktop and send a message in a new conversation. Requests appear in the Archestra LLM proxy logs.",
+            title: "Restart Claude Desktop and send a test message",
+            body: 'Quit and reopen Claude Desktop, start a new chat, and send the message below. Then click "Test your setup" to verify in logs that your session is routed through Archestra.',
+            testSetupLink: true,
           },
         ],
       }),

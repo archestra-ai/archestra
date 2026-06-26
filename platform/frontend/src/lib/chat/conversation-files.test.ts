@@ -3,7 +3,6 @@ import {
   assembleFileSections,
   type ConversationFileItem,
   deleteTargetFor,
-  isManagedFile,
 } from "@/lib/chat/conversation-files";
 
 function fileItem(
@@ -113,15 +112,6 @@ describe("assembleFileSections", () => {
         source: "project",
       },
     ]);
-  });
-});
-
-describe("isManagedFile", () => {
-  it("excludes the in-memory artifact, includes the rest", () => {
-    expect(isManagedFile(fileItem("artifact"))).toBe(false);
-    expect(isManagedFile(fileItem("generated"))).toBe(true);
-    expect(isManagedFile(fileItem("project"))).toBe(true);
-    expect(isManagedFile(fileItem("attachment"))).toBe(true);
   });
 });
 

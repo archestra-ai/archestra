@@ -77,15 +77,6 @@ export function assembleFileSections(params: {
 }
 
 /**
- * A file the user can select/download/delete. The synthesized `artifact.md` row
- * is rendered from in-memory markdown and has no byte endpoint, so it's
- * excluded from selection and bulk actions.
- */
-export function isManagedFile(item: ConversationFileItem): boolean {
-  return item.source !== "artifact";
-}
-
-/**
  * Which delete endpoint removes a given file. Attachments have their own chat
  * route; generated and project files are both persisted artifacts behind the
  * skill-sandbox artifact route.

@@ -7,30 +7,18 @@ import {
   Copy,
   Download,
   File as FileIcon,
-  MoreVertical,
   Trash2,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
-import {
-  type FileListItem,
-  FileSection,
-} from "@/components/chat/file-list-section";
 import { FilePreview } from "@/components/chat/file-preview";
 import {
   INSTRUCTIONS_SELECTION,
   InstructionsRow,
   ProjectInstructionsPanel,
 } from "@/components/chat/project-instructions";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { SelectableFileList } from "@/components/chat/selectable-file-list";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   useBulkDeleteConversationFiles,
   useConversationFiles,
@@ -39,10 +27,9 @@ import {
 import {
   assembleFileSections,
   type ConversationFileItem,
-  isManagedFile,
 } from "@/lib/chat/conversation-files";
-import { downloadFiles } from "@/lib/chat/download-files";
 import { printMarkdownElementAsPdf } from "@/lib/chat/print-markdown";
+import { useFileDeletion } from "@/lib/chat/use-file-deletion";
 import { useProject } from "@/lib/projects/projects.query";
 import { cn } from "@/lib/utils";
 
@@ -63,8 +50,7 @@ export function ConversationFilesPanel({
   const { data: files } = useConversationFiles(conversationId);
   const { data: project } = useProject(projectId ?? undefined);
   // Editing instructions requires manage rights; in a chat the participant is
-  // the owner (a shared member sees them read-only). viewerRole replaces the old
-  // isOwner flag.
+  // the owner (a shared member sees them read-only).
   const isProjectOwner = project?.viewerRole === "owner";
   const sections = assembleFileSections({ files, artifact });
   const { generated, attachments } = sections;
@@ -88,18 +74,12 @@ export function ConversationFilesPanel({
   const [view, setView] = useState<"list" | "detail">(() =>
     hasArtifact ? "detail" : "list",
   );
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [pendingDelete, setPendingDelete] = useState<
-    ConversationFileItem[] | null
-  >(null);
 
   // This chat's own outputs and the project's files are one group ("Results");
   // only attachments stand apart.
   const results = [...generated, ...projectFiles];
   const all = [...results, ...attachments];
   const selected = all.find((f) => f.id === selectedId) ?? null;
-  const byId = new Map(all.map((f) => [f.id, f]));
 
   // The pinned instructions entry only exists in a project chat. Its sentinel
   // selection is not a file, so it must be excluded from the "selected file"
@@ -110,41 +90,11 @@ export function ConversationFilesPanel({
   const instructionsSelectedRef = useRef(false);
   instructionsSelectedRef.current = instructionsSelected;
 
-  // The Results header only earns its place when attachments sit beside it; a
-  // lone group needs no label to tell it apart.
-  const showHeaders = results.length > 0 && attachments.length > 0;
-
-  // Files the user can select / download / delete (everything but the in-memory
-  // artifact and the pinned instructions row).
-  const managed = all.filter(isManagedFile);
-  const managedCount = managed.length;
-  const managedKey = managed.map((f) => f.id).join("|");
-  const selectedItems = managed.filter((f) => selectedIds.has(f.id));
-  const allChecked = managedCount > 0 && selectedItems.length === managedCount;
-  const someChecked = selectedItems.length > 0 && !allChecked;
-
-  const deleteFile = useDeleteConversationFile(conversationId);
-  const bulkDelete = useBulkDeleteConversationFiles(conversationId);
-  const deletePending = deleteFile.isPending || bulkDelete.isPending;
-
   const openFile = (id: string) => {
     setSelectedId(id);
     setView("detail");
   };
   const backToList = () => setView("list");
-  const toggleSelect = (id: string) =>
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  const toggleAll = () =>
-    setSelectedIds(allChecked ? new Set() : new Set(managed.map((f) => f.id)));
-  const exitSelection = () => {
-    setSelectionMode(false);
-    setSelectedIds(new Set());
-  };
 
   // download_file outputs only (the artifact has its own default handling).
   const generatedFileIds = generated
@@ -153,17 +103,6 @@ export function ConversationFilesPanel({
   const newestGeneratedId = generatedFileIds.at(-1);
   const generatedKey = generatedFileIds.join("|");
   const filesLoaded = files !== undefined;
-
-  // Drop selections whose files have disappeared after a refetch so counts and
-  // "select all" stay honest.
-  useEffect(() => {
-    setSelectedIds((prev) => {
-      if (prev.size === 0) return prev;
-      const ids = new Set(managedKey ? managedKey.split("|") : []);
-      const next = new Set([...prev].filter((id) => ids.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-  }, [managedKey]);
 
   // Clear the preview if the selected file disappears (e.g. artifact cleared or
   // the open file was deleted) and fall back to the list. The instructions
@@ -237,66 +176,34 @@ export function ConversationFilesPanel({
     printMarkdownElementAsPdf(artifactRef.current, "Artifact");
   const artifactSelected = selected?.source === "artifact";
 
-  const requestDelete = (items: ConversationFileItem[]) =>
-    setPendingDelete(items);
-
-  const handleConfirmDelete = async () => {
-    const items = pendingDelete;
-    if (!items || items.length === 0) return;
-    const openId = selectedId;
-    // Collect the ids that failed so we don't navigate away from, or deselect,
-    // files that are still there.
-    let failed = new Set<string>();
-    if (items.length === 1) {
-      try {
-        await deleteFile.mutateAsync(items[0]);
-      } catch {
-        failed = new Set([items[0].id]);
-      }
-    } else {
-      const { failedIds } = await bulkDelete.mutateAsync(items);
-      failed = new Set(failedIds);
-    }
-    setPendingDelete(null);
-    if (selectionMode) {
-      if (failed.size === 0) exitSelection();
-      else setSelectedIds(failed); // keep only the failures selected
-    }
-    // Leave the detail view only if the open file was actually deleted.
-    if (openId && items.some((i) => i.id === openId) && !failed.has(openId)) {
-      setSelectedId(null);
-      setView("list");
-    }
-  };
-
-  // Trailing per-row actions: the artifact keeps Copy / Download-as-PDF; managed
-  // files get a "⋯" menu (Download + Delete) when the user can manage them, and
-  // otherwise fall back to FileSection's plain download link.
-  const renderRowActions = (item: FileListItem): ReactNode => {
-    if (item.source === "artifact") {
-      return (
-        <ArtifactRowActions
-          content={artifact ?? ""}
-          onDownloadPdf={handleDownloadArtifactPdf}
-        />
-      );
-    }
-    if (!canManageFiles) return null;
-    const file = byId.get(item.id);
-    if (!file) return null;
-    return <FileRowMenu item={file} onDelete={() => requestDelete([file])} />;
-  };
-
-  const selection = selectionMode
-    ? {
-        selectedIds,
-        onToggle: toggleSelect,
-        isSelectable: (id: string) => {
-          const f = byId.get(id);
-          return !!f && isManagedFile(f);
-        },
-      }
-    : undefined;
+  // Shared confirm + delete flow. The chat surface keeps its own delete hooks
+  // (which own the toast + cache invalidation) and routes each file by source.
+  const deleteFile = useDeleteConversationFile(conversationId);
+  const bulkDelete = useBulkDeleteConversationFiles(conversationId);
+  const { requestDelete, dialog: deleteDialog } =
+    useFileDeletion<ConversationFileItem>({
+      deleteItems: async (items) => {
+        if (items.length === 1) {
+          try {
+            await deleteFile.mutateAsync(items[0]);
+            return { failedIds: [] };
+          } catch {
+            return { failedIds: [items[0].id] };
+          }
+        }
+        return bulkDelete.mutateAsync(items);
+      },
+      describe: (items) =>
+        // A project file — or a file generated in a project chat — is shared, so
+        // deleting it removes it for everyone with access to the project.
+        items.some(
+          (i) =>
+            i.source === "project" ||
+            (i.source === "generated" && projectId != null),
+        )
+          ? "This file is part of the project and will be removed for everyone with access to it. This can't be undone."
+          : "This can't be undone.",
+    });
 
   // A project chat always shows the pinned instructions row, so the empty state
   // only applies to non-project chats with nothing to show.
@@ -320,111 +227,30 @@ export function ConversationFilesPanel({
   return (
     <div className="flex h-full flex-col">
       {view === "list" && (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex shrink-0 items-center justify-between gap-2 px-3 pt-3 pb-2">
-            {selectionMode ? (
-              <>
-                <label
-                  htmlFor="files-select-all"
-                  className="flex items-center gap-2 text-xs text-muted-foreground"
-                >
-                  <Checkbox
-                    id="files-select-all"
-                    checked={
-                      allChecked ? true : someChecked ? "indeterminate" : false
-                    }
-                    onCheckedChange={toggleAll}
-                    aria-label="Select all files"
-                  />
-                  Select all
-                </label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  onClick={exitSelection}
-                >
-                  Cancel
-                </Button>
-              </>
-            ) : (
-              <>
-                <span className="text-xs text-muted-foreground">
-                  {managedCount} {managedCount === 1 ? "file" : "files"}
-                </span>
-                {canManageFiles && managedCount > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setSelectionMode(true)}
-                  >
-                    Select
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* The list never highlights a "current" row: opening a file drills
-              into the full-height detail view, so there's no list-beside-preview
-              for a selection marker to point at. Pass selectedId={null}. */}
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-            <FileSection
-              title={showHeaders ? "Results" : undefined}
-              items={results}
-              selectedId={null}
-              onSelect={openFile}
-              selection={selection}
-              leading={
-                showInstructions && !selectionMode ? (
-                  <InstructionsRow
-                    onSelect={() => openFile(INSTRUCTIONS_SELECTION)}
-                  />
-                ) : undefined
-              }
-              renderActions={renderRowActions}
-            />
-            <FileSection
-              title={showHeaders ? "Attachments" : undefined}
-              items={attachments}
-              selectedId={null}
-              onSelect={openFile}
-              selection={selection}
-              renderActions={renderRowActions}
-            />
-          </div>
-
-          {selectionMode && (
-            <div className="flex shrink-0 items-center justify-between gap-2 border-t px-3 py-2">
-              <span className="text-xs text-muted-foreground">
-                {selectedItems.length} selected
-              </span>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-xs"
-                  disabled={selectedItems.length === 0}
-                  onClick={() => downloadFiles(selectedItems)}
-                >
-                  <Download className="h-4 w-4" />
-                  Download
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-xs text-destructive hover:text-destructive"
-                  disabled={selectedItems.length === 0}
-                  onClick={() => requestDelete(selectedItems)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
+        <SelectableFileList<ConversationFileItem>
+          sections={[
+            { title: "Results", items: results },
+            { title: "Attachments", items: attachments },
+          ]}
+          canManage={canManageFiles}
+          onOpen={openFile}
+          onRequestDelete={requestDelete}
+          leading={
+            showInstructions ? (
+              <InstructionsRow
+                onSelect={() => openFile(INSTRUCTIONS_SELECTION)}
+              />
+            ) : undefined
+          }
+          renderItemActions={(item) =>
+            item.source === "artifact" ? (
+              <ArtifactRowActions
+                content={artifact ?? ""}
+                onDownloadPdf={handleDownloadArtifactPdf}
+              />
+            ) : undefined
+          }
+        />
       )}
 
       {view === "detail" && (
@@ -467,7 +293,11 @@ export function ConversationFilesPanel({
                 {canManageFiles && (
                   <button
                     type="button"
-                    onClick={() => requestDelete([selected])}
+                    onClick={() =>
+                      requestDelete([selected], (failedIds) => {
+                        if (!failedIds.includes(selected.id)) backToList();
+                      })
+                    }
                     title={`Delete ${selected.name}`}
                     className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
                   >
@@ -516,30 +346,7 @@ export function ConversationFilesPanel({
         </div>
       )}
 
-      <DeleteConfirmDialog
-        open={pendingDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDelete(null);
-        }}
-        title={
-          (pendingDelete?.length ?? 0) === 1
-            ? `Delete “${pendingDelete?.[0]?.name}”?`
-            : `Delete ${pendingDelete?.length ?? 0} files?`
-        }
-        description={
-          // A project file — or a file generated in a project chat — is shared,
-          // so deleting it removes it for everyone with access to the project.
-          pendingDelete?.some(
-            (i) =>
-              i.source === "project" ||
-              (i.source === "generated" && projectId != null),
-          )
-            ? "This file is part of the project and will be removed for everyone with access to it. This can't be undone."
-            : "This can't be undone."
-        }
-        isPending={deletePending}
-        onConfirm={handleConfirmDelete}
-      />
+      {deleteDialog}
     </div>
   );
 }
@@ -591,49 +398,5 @@ function ArtifactRowActions({
         <span className="sr-only">Download artifact as PDF</span>
       </button>
     </div>
-  );
-}
-
-/** A "⋯" menu of single-file actions (Download + Delete) for a managed file. */
-function FileRowMenu({
-  item,
-  onDelete,
-}: {
-  item: ConversationFileItem;
-  onDelete: () => void;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          title="More actions"
-          className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <MoreVertical className="h-4 w-4" />
-          <span className="sr-only">Actions for {item.name}</span>
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {item.contentUrl && (
-          <DropdownMenuItem asChild>
-            <a href={item.contentUrl} download={item.name}>
-              <Download className="h-4 w-4" />
-              Download
-            </a>
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuItem
-          className="text-destructive focus:text-destructive"
-          onSelect={(e) => {
-            e.preventDefault();
-            onDelete();
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

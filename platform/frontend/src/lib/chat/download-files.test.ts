@@ -45,15 +45,7 @@ describe("downloadFiles", () => {
       .spyOn(HTMLAnchorElement.prototype, "click")
       .mockImplementation(() => {});
 
-    const started = downloadFiles([
-      {
-        id: "artifact",
-        name: "artifact.md",
-        mimeType: "text/markdown",
-        contentUrl: "",
-        source: "artifact",
-      },
-    ]);
+    const started = downloadFiles([{ name: "artifact.md", contentUrl: "" }]);
 
     expect(started).toBe(0);
     expect(clickSpy).not.toHaveBeenCalled();

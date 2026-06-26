@@ -5064,7 +5064,6 @@ export const createProject = <ThrowOnError extends boolean = false>(options: Opt
  *
  * Authorization:
  *
- * `chat:read`: View and access chat conversations
  * `project:create`: Create projects
  */
 export const createProjectFromConversation = <ThrowOnError extends boolean = false>(options: Options<CreateProjectFromConversationData, ThrowOnError>) => (options.client ?? client).post<CreateProjectFromConversationResponses, CreateProjectFromConversationErrors, ThrowOnError>({

@@ -19,7 +19,7 @@ describe("address-pill action buttons", () => {
   it("opens the owned app's standalone run page in a new tab", () => {
     render(<McpAppStandaloneButton appId="app-123" />);
 
-    const link = screen.getByRole("link", { name: /open standalone/i });
+    const link = screen.getByRole("link", { name: /open in new tab/i });
     expect(link).toHaveAttribute("href", "/a/app-123");
     expect(link).toHaveAttribute("target", "_blank");
   });

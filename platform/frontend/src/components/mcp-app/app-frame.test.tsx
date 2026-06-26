@@ -94,7 +94,7 @@ describe("AppFrame", () => {
     expect(screen.getByTestId("meta-bar")).toHaveTextContent("v3");
     // The caller-composed action button is rendered.
     expect(
-      screen.getByRole("link", { name: /open standalone/i }),
+      screen.getByRole("link", { name: /open in new tab/i }),
     ).toHaveAttribute("href", "/a/app-1");
   });
 

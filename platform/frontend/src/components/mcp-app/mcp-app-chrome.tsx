@@ -206,8 +206,8 @@ export function McpAppStandaloneButton({ appId }: { appId: string }) {
   return (
     <Button
       asChild
-      aria-label="Open standalone"
-      title="Open standalone"
+      aria-label="Open in new tab"
+      title="Open in new tab"
       {...ICON_BUTTON_PROPS}
     >
       <Link href={`/a/${appId}`} target="_blank" rel="noreferrer">

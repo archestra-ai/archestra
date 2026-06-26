@@ -270,6 +270,7 @@ export function McpAppSection({
         onToggleFullscreen={toggleFullscreen}
         diagnostics={diagnosticsBadge}
         fillContainer={renderInPanel}
+        capInlineHeight
         topBar={
           <McpAppTopBar
             left={<McpAppRefreshButton onClick={reload} />}
@@ -349,6 +350,7 @@ export function McpAppSection({
         displayMode="inline"
         onToggleFullscreen={toggleFullscreen}
         frozenHeight={lastInlineHeightRef.current}
+        capInlineHeight
         topBar={
           <McpAppTopBar>
             <McpAppAddressPill label={headerName} />

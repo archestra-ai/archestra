@@ -26,6 +26,7 @@ export function McpAppCard({
   children,
   diagnostics,
   fillContainer = false,
+  capInlineHeight = false,
   placeholder,
   frozenHeight,
   topBar,
@@ -41,6 +42,13 @@ export function McpAppCard({
    */
   diagnostics?: React.ReactNode;
   fillContainer?: boolean;
+  /**
+   * Cap the (non-fullscreen, non-fill) inline body at 60% of the viewport
+   * (floored at 320px) so a tall app can't push the chat off-screen; content
+   * past the cap scrolls within the card. Only the chat-inline surface sets
+   * this — the standalone page and right panel stay full height.
+   */
+  capInlineHeight?: boolean;
   /**
    * When set, the body renders this node — frozen to `frozenHeight`, frosted —
    * instead of `children`. Used in chat while the live iframe lives in the panel.
@@ -117,7 +125,10 @@ export function McpAppCard({
           style={
             frozenHeight != null ? { height: `${frozenHeight}px` } : undefined
           }
-          className="flex items-center justify-center overflow-hidden bg-muted/30 text-xs backdrop-blur-sm"
+          className={cn(
+            "flex items-center justify-center overflow-hidden bg-muted/30 text-xs backdrop-blur-sm",
+            capInlineHeight && "max-h-[max(320px,60vh)]",
+          )}
         >
           {placeholder}
         </div>
@@ -134,7 +145,9 @@ export function McpAppCard({
               ? "flex-1 overflow-hidden [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-h-0 [&_iframe]:!max-h-none [&>div]:!h-full"
               : fillContainer
                 ? "flex-1 min-h-0 overflow-hidden [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-h-0 [&_iframe]:!max-h-none [&>div]:!h-full"
-                : "[&_iframe]:!w-full",
+                : capInlineHeight
+                  ? "[&_iframe]:!w-full max-h-[max(320px,60vh)] overflow-y-auto"
+                  : "[&_iframe]:!w-full",
           )}
         >
           {children}

@@ -405,7 +405,13 @@ function ProjectFilesSidebar({
 
         <div className="flex-1 min-h-0 overflow-hidden relative">
           <div className="flex h-full flex-col">
-            {view === "list" ? (
+            {/* Kept mounted (hidden in detail) so an in-progress multi-selection
+                survives drilling into a file and coming back. */}
+            <div
+              className={
+                view === "list" ? "flex min-h-0 flex-1 flex-col" : "hidden"
+              }
+            >
               <SelectableFileList<FileListItem>
                 sections={[{ items }]}
                 canManage
@@ -417,7 +423,8 @@ function ProjectFilesSidebar({
                   />
                 }
               />
-            ) : (
+            </div>
+            {view === "detail" && (
               <>
                 <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
                   <Button

@@ -226,7 +226,11 @@ export function ConversationFilesPanel({
 
   return (
     <div className="flex h-full flex-col">
-      {view === "list" && (
+      {/* Kept mounted (hidden in detail) so an in-progress multi-selection
+          survives drilling into a file and coming back. */}
+      <div
+        className={view === "list" ? "flex min-h-0 flex-1 flex-col" : "hidden"}
+      >
         <SelectableFileList<ConversationFileItem>
           sections={[
             { title: "Results", items: results },
@@ -251,7 +255,7 @@ export function ConversationFilesPanel({
             ) : undefined
           }
         />
-      )}
+      </div>
 
       {view === "detail" && (
         <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">

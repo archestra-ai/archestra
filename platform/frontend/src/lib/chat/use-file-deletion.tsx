@@ -26,7 +26,6 @@ export function useFileDeletion<T extends DeletableFile>({
     onComplete?: (failedIds: string[]) => void,
   ) => void;
   dialog: ReactNode;
-  isPending: boolean;
 } {
   const [pending, setPending] = useState<{
     items: T[];
@@ -45,10 +44,13 @@ export function useFileDeletion<T extends DeletableFile>({
     if (!pending) return;
     const { items, onComplete } = pending;
     setIsPending(true);
-    const { failedIds } = await deleteItems(items);
-    setIsPending(false);
-    setPending(null);
-    onComplete?.(failedIds);
+    try {
+      const { failedIds } = await deleteItems(items);
+      setPending(null);
+      onComplete?.(failedIds);
+    } finally {
+      setIsPending(false);
+    }
   };
 
   const count = pending?.items.length ?? 0;
@@ -71,5 +73,5 @@ export function useFileDeletion<T extends DeletableFile>({
     />
   );
 
-  return { requestDelete, dialog, isPending };
+  return { requestDelete, dialog };
 }

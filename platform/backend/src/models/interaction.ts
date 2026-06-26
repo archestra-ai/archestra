@@ -1,4 +1,8 @@
-import type { InteractionSource, PaginationQuery } from "@archestra/shared";
+import type {
+  InteractionSource,
+  PaginationQuery,
+  SessionClientSource,
+} from "@archestra/shared";
 import {
   and,
   asc,
@@ -925,6 +929,7 @@ class InteractionModel {
       profileId?: string;
       userId?: string;
       source?: InteractionSource;
+      sessionSource?: SessionClientSource;
       externalAgentId?: string;
       sessionId?: string;
       startDate?: Date;
@@ -965,6 +970,13 @@ class InteractionModel {
     // Source filter
     if (filters?.source) {
       conditions.push(eq(schema.interactionsTable.source, filters.source));
+    }
+
+    // Client/session source filter (e.g. claude_code, claude_desktop)
+    if (filters?.sessionSource) {
+      conditions.push(
+        eq(schema.interactionsTable.sessionSource, filters.sessionSource),
+      );
     }
 
     // External agent ID filter

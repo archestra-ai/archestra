@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, MoreVertical, Trash2 } from "lucide-react";
+import { Download, MoreHorizontal, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import {
   type FileListItem,
@@ -235,7 +235,7 @@ function FileRowMenu({
           title="More actions"
           className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
         >
-          <MoreVertical className="h-4 w-4" />
+          <MoreHorizontal className="h-4 w-4" />
           <span className="sr-only">Actions for {item.name}</span>
         </button>
       </DropdownMenuTrigger>

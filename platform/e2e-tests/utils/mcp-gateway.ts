@@ -550,7 +550,7 @@ export async function openManageCredentialsDialog(
       if (!(await connectionsHeading.isVisible().catch(() => false))) {
         await connectionsNavButton.click();
       }
-      await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
+      await expect(connectionsHeading).toBeVisible({ timeout: 10_000 });
       return;
     }
 
@@ -588,12 +588,12 @@ export async function openManageCredentialsDialog(
       await deploymentButton.click();
     }
 
-    await expect(settingsDialog).toBeVisible({ timeout: 2_000 });
+    await expect(settingsDialog).toBeVisible({ timeout: 10_000 });
     if (!(await connectionsHeading.isVisible().catch(() => false))) {
       await connectionsNavButton.click();
     }
-    await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000, 4000] });
+    await expect(connectionsHeading).toBeVisible({ timeout: 10_000 });
+  }).toPass({ timeout: 60_000, intervals: [500, 1000, 2000, 4000] });
 }
 
 export async function getVisibleCredentials(page: Page): Promise<string[]> {

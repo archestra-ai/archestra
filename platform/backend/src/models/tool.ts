@@ -1360,7 +1360,7 @@ class ToolModel {
    *
    * - Runtime tools (run_command/upload_file/download_file): assigned when the
    *   skills-sandbox runtime is on (`config.skillsSandbox.enabled`).
-   * - Persistent-files (Projects) tools (search_files/read_file/save_result/
+   * - Persistent-files (Projects) tools (search_files/read_file/save_file/
    *   edit_file/delete_file): also require the Projects flag
    *   (`config.projects.enabled`) — they need the runtime to run AND Projects to
    *   be exposed (see `isSandboxToolEnabled`), so gating assignment on both

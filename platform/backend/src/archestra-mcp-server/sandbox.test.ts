@@ -7,7 +7,7 @@ import {
   TOOL_EDIT_FILE_FULL_NAME,
   TOOL_READ_FILE_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
-  TOOL_SAVE_RESULT_FULL_NAME,
+  TOOL_SAVE_FILE_FULL_NAME,
   TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
@@ -1397,7 +1397,7 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
   });
 });
 
-describe("project file scope (save_result, scoped search/my_file)", () => {
+describe("project file scope (save_file, scoped search/my_file)", () => {
   let agent: Agent;
   let organizationId: string;
   let userId: string;
@@ -1467,7 +1467,7 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     return { ...context, conversationId: conversation.id };
   }
 
-  const SAVE_RESULT_FULL_NAME = "archestra__save_result";
+  const SAVE_FILE_FULL_NAME = "archestra__save_file";
 
   test("delete_file refuses the project instructions file", async () => {
     const { project, ctx } = await makeProjectChatCtx("instr-del");
@@ -1496,10 +1496,10 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     ).not.toBeNull();
   });
 
-  test("save_result persists inline content to the PFS root without a project", async () => {
+  test("save_file persists inline content to the PFS root without a project", async () => {
     const ctx = await makePlainChatCtx();
     const result = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "joke.md", content: "# why did the test pass\n" },
       ctx,
     );
@@ -1510,7 +1510,7 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
       downloadUrl?: string;
     }>(result);
     expect(out.projectName).toBeNull();
-    // save_result no longer surfaces a download link.
+    // save_file no longer surfaces a download link.
     expect(out.downloadUrl).toBeUndefined();
     expect(JSON.stringify(result.content)).not.toContain(
       "/api/skill-sandbox/artifacts",
@@ -1522,10 +1522,10 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     expect(row?.projectId).toBeNull();
   });
 
-  test("save_result lands in the project in a project chat", async () => {
+  test("save_file lands in the project in a project chat", async () => {
     const { project, ctx } = await makeProjectChatCtx("save-here");
     const result = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "result.md", content: "done" },
       ctx,
     );
@@ -1538,41 +1538,41 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     expect(row?.projectId).toBe(project.id);
   });
 
-  test("save_result validates filename, content presence, and size", async () => {
+  test("save_file validates filename, content presence, and size", async () => {
     const ctx = await makePlainChatCtx();
     const badName = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "../escape.md", content: "x" },
       ctx,
     );
     expect(badName.isError).toBe(true);
 
     const empty = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "empty.md", content: "" },
       ctx,
     );
     expect(empty.isError).toBe(true);
 
     const both = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "x.md", content: "a", contentBase64: "YQ==" },
       ctx,
     );
     expect(both.isError).toBe(true);
   });
 
-  test("save_result errors on a duplicate name without overwrite", async () => {
+  test("save_file errors on a duplicate name without overwrite", async () => {
     const ctx = await makePlainChatCtx();
     const first = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "dup.md", content: "one" },
       ctx,
     );
     expect(first.isError).toBe(false);
 
     const second = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "dup.md", content: "two" },
       ctx,
     );
@@ -1580,10 +1580,10 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     expect(textOf(second)).toContain("already exists");
   });
 
-  test("save_result overwrite is idempotent for a headless (no-conversation) write", async () => {
+  test("save_file overwrite is idempotent for a headless (no-conversation) write", async () => {
     // the base context has no conversationId and no project → the orphan scope.
     const first = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "run.md", content: "v1" },
       context,
     );
@@ -1593,7 +1593,7 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     // a re-run with overwrite must replace the orphan in place, not dead-end
     // with FileNameExistsError.
     const second = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "run.md", content: "v2", overwrite: true },
       context,
     );
@@ -1608,17 +1608,17 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     expect(row?.data?.toString()).toBe("v2");
   });
 
-  test("save_result overwrite replaces an existing file in place, keeping its id", async () => {
+  test("save_file overwrite replaces an existing file in place, keeping its id", async () => {
     const ctx = await makePlainChatCtx();
     const first = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "report.md", content: "draft" },
       ctx,
     );
     const firstOut = structuredOf<{ fileId: string }>(first);
 
     const second = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "report.md", content: "final", overwrite: true },
       ctx,
     );
@@ -1633,10 +1633,10 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     expect(row?.data?.toString()).toBe("final");
   });
 
-  test("save_result overwrite creates the file when none exists", async () => {
+  test("save_file overwrite creates the file when none exists", async () => {
     const ctx = await makePlainChatCtx();
     const result = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "fresh.md", content: "hi", overwrite: true },
       ctx,
     );
@@ -1646,17 +1646,17 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     );
   });
 
-  test("save_result overwrite stays within the project in a project chat", async () => {
+  test("save_file overwrite stays within the project in a project chat", async () => {
     const { project, ctx } = await makeProjectChatCtx("overwrite-here");
     const first = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "out.md", content: "v1" },
       ctx,
     );
     const firstOut = structuredOf<{ fileId: string }>(first);
 
     const second = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "out.md", content: "v2", overwrite: true },
       ctx,
     );
@@ -1672,17 +1672,17 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     expect(row?.data?.toString()).toBe("v2");
   });
 
-  test("save_result overwrite surfaces an error if the row vanishes mid-write", async () => {
+  test("save_file overwrite surfaces an error if the row vanishes mid-write", async () => {
     const ctx = await makePlainChatCtx();
     await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "racy.md", content: "before" },
       ctx,
     );
     // Simulate the file's row disappearing after the bytes were written.
     vi.spyOn(FileModel, "updateContent").mockResolvedValue(null);
     const result = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
+      SAVE_FILE_FULL_NAME,
       { filename: "racy.md", content: "after", overwrite: true },
       ctx,
     );
@@ -2514,7 +2514,7 @@ describe("edit_file / delete_file", () => {
   });
 });
 
-describe("projects feature gating (search_files / save_result / my_file)", () => {
+describe("projects feature gating (search_files / save_file / my_file)", () => {
   const originalSandbox = config.skillsSandbox.enabled;
   const originalProjects = config.projects.enabled;
 
@@ -2536,7 +2536,7 @@ describe("projects feature gating (search_files / save_result / my_file)", () =>
     const off = getArchestraMcpTools().map((tool) => tool.name);
     expect(off).not.toContain(TOOL_SEARCH_FILES_FULL_NAME);
     expect(off).not.toContain(TOOL_READ_FILE_FULL_NAME);
-    expect(off).not.toContain(TOOL_SAVE_RESULT_FULL_NAME);
+    expect(off).not.toContain(TOOL_SAVE_FILE_FULL_NAME);
     expect(off).not.toContain(TOOL_EDIT_FILE_FULL_NAME);
     expect(off).not.toContain(TOOL_DELETE_FILE_FULL_NAME);
     // the non-gated sandbox surface is still advertised
@@ -2549,7 +2549,7 @@ describe("projects feature gating (search_files / save_result / my_file)", () =>
     for (const name of [
       TOOL_SEARCH_FILES_FULL_NAME,
       TOOL_READ_FILE_FULL_NAME,
-      TOOL_SAVE_RESULT_FULL_NAME,
+      TOOL_SAVE_FILE_FULL_NAME,
       TOOL_EDIT_FILE_FULL_NAME,
       TOOL_DELETE_FILE_FULL_NAME,
       TOOL_RUN_COMMAND_FULL_NAME,
@@ -2589,7 +2589,7 @@ describe("projects feature gating (search_files / save_result / my_file)", () =>
       },
     );
 
-    test("execute refuses search_files / save_result with -32601 when off", async () => {
+    test("execute refuses search_files / save_file with -32601 when off", async () => {
       (config.projects as { enabled: boolean }).enabled = false;
 
       await expect(
@@ -2603,14 +2603,14 @@ describe("projects feature gating (search_files / save_result / my_file)", () =>
 
       await expect(
         executeArchestraTool(
-          TOOL_SAVE_RESULT_FULL_NAME,
+          TOOL_SAVE_FILE_FULL_NAME,
           { filename: "x.txt", content: "hi" },
           context,
         ),
       ).rejects.toMatchObject({
         code: -32601,
         message: expect.stringContaining(
-          `No tool named "${TOOL_SAVE_RESULT_FULL_NAME}" exists`,
+          `No tool named "${TOOL_SAVE_FILE_FULL_NAME}" exists`,
         ),
       });
 

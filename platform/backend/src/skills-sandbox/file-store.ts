@@ -491,7 +491,7 @@ class FileStore {
 
   /**
    * Resolve a headless (no-project, no-conversation) file by name, for a
-   * headless `save_result` overwrite — there is no conversation/project scope to
+   * headless `save_file` overwrite — there is no conversation/project scope to
    * resolve within, so this targets the orphan bucket directly.
    */
   async resolveOrphanRef(params: {

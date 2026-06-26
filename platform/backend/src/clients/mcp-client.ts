@@ -1470,10 +1470,9 @@ class McpClient {
         // The pinned install was uninstalled but the assignment is retained.
         // Route through a remaining install for the same catalog (a multi-tenant
         // sibling, or a reconnect not yet re-pinned), else return the typed
-        // "reconnect" result.
-        const installs = tool.catalogId
-          ? await McpServerModel.findByCatalogId(tool.catalogId)
-          : [];
+        // "reconnect" result. catalogItem is the resolved catalog for this tool,
+        // so use its id rather than the assignment's possibly-stale catalogId.
+        const installs = await McpServerModel.findByCatalogId(catalogItem.id);
         const resolved = await this.pickInstallForCaller(installs, tokenAuth);
         if (resolved) {
           return {
@@ -1483,7 +1482,7 @@ class McpClient {
         }
         const reconnectError = this.buildAuthRequiredMessage(
           tool.catalogName || catalogItem.name,
-          tool.catalogId ?? "",
+          catalogItem.id,
           tokenAuth,
         );
         return {

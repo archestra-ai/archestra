@@ -1010,7 +1010,7 @@ export async function getChatMcpTools({
     // gateway error text never reaches the API client.
     const cacheKey = getCacheKey(agentId, userId, scopeKey);
     try {
-      client.close();
+      await client.close();
     } catch (closeError) {
       logger.warn(
         { agentId, userId, closeError },

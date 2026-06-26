@@ -7,13 +7,13 @@
 export function canCreateProjectFromChat(params: {
   projectsEnabled: boolean;
   hasCreatePermission: boolean;
-  conversation: { projectName?: string | null; origin: string };
+  conversation: { projectId?: string | null; origin: string };
 }): boolean {
   const { projectsEnabled, hasCreatePermission, conversation } = params;
   return (
     projectsEnabled &&
     hasCreatePermission &&
-    !conversation.projectName &&
+    !conversation.projectId &&
     conversation.origin === "user"
   );
 }

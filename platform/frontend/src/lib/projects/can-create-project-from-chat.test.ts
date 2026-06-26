@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { canCreateProjectFromChat } from "./can-create-project-from-chat";
 
-const userChat = { origin: "user", projectName: null };
+const userChat = { origin: "user", projectId: null };
 
 describe("canCreateProjectFromChat", () => {
   it("allows a user chat not yet in a project when the feature and permission are present", () => {
@@ -39,7 +39,7 @@ describe("canCreateProjectFromChat", () => {
       canCreateProjectFromChat({
         projectsEnabled: true,
         hasCreatePermission: true,
-        conversation: { origin: "user", projectName: "Research" },
+        conversation: { origin: "user", projectId: "proj-1" },
       }),
     ).toBe(false);
   });
@@ -49,7 +49,7 @@ describe("canCreateProjectFromChat", () => {
       canCreateProjectFromChat({
         projectsEnabled: true,
         hasCreatePermission: true,
-        conversation: { origin: "schedule_trigger", projectName: null },
+        conversation: { origin: "schedule_trigger", projectId: null },
       }),
     ).toBe(false);
   });

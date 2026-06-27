@@ -37,6 +37,29 @@ const mockLongContentDocument = {
   title: "Long Doc",
 };
 
+const mockFailedDocument = {
+  ...mockDocument,
+  id: "doc-3",
+  title: "Failed Doc",
+  embeddingStatus: "failed",
+  embeddingErrorCode: "rate_limit",
+  embeddingErrorDetail: "Rate limit exceeded",
+};
+
+const mockProcessingDocument = {
+  ...mockDocument,
+  id: "doc-4",
+  title: "Processing Doc",
+  embeddingStatus: "processing",
+};
+
+const mockPendingDocument = {
+  ...mockDocument,
+  id: "doc-5",
+  title: "Pending Doc",
+  embeddingStatus: "pending",
+};
+
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
   useDataTableQueryParams: () => ({
     searchParams: new URLSearchParams(""),
@@ -51,11 +74,17 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
 vi.mock("@/lib/knowledge/kb-document.query", () => ({
   useConnectorDocuments: () => ({
     data: {
-      data: [mockDocument, mockLongContentDocument],
+      data: [
+        mockDocument,
+        mockLongContentDocument,
+        mockFailedDocument,
+        mockProcessingDocument,
+        mockPendingDocument,
+      ],
       pagination: {
         currentPage: 1,
         limit: 10,
-        total: 2,
+        total: 5,
         totalPages: 1,
         hasNext: false,
         hasPrev: false,
@@ -92,6 +121,15 @@ describe("ConnectorDocumentsTable", () => {
     expect(screen.getByText("Quarterly Plan")).toBeInTheDocument();
     expect(screen.queryByText("jira")).not.toBeInTheDocument();
     expect(screen.getByText("Long Doc")).toBeInTheDocument();
+    expect(screen.getByText("Failed Doc")).toBeInTheDocument();
+  });
+
+  it("renders correct status badges (Indexed, Failed, Processing, Pending)", () => {
+    render(<ConnectorDocumentsTable connectorId="connector-1" />);
+    expect(screen.getAllByText("Indexed")[0]).toBeInTheDocument();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByText("Processing")).toBeInTheDocument();
+    expect(screen.getByText("Pending")).toBeInTheDocument();
   });
 
   it("opens preview dialog from row action", async () => {

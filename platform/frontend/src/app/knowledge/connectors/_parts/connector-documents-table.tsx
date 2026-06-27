@@ -3,7 +3,16 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Clock, ExternalLink, Eye, FileText, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  Eye,
+  FileText,
+  Loader2,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -13,7 +22,14 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
+import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   type KnowledgeBaseDocumentListItem,
@@ -28,6 +44,107 @@ type PaginationMeta =
 
 const DEFAULT_DOCUMENT_PAGE_SIZE = 10;
 const MAX_PREVIEW_CHARS = 20_000;
+
+type EmbeddingErrorCode =
+  | "rate_limit"
+  | "api_key_error"
+  | "model_not_found"
+  | "api_server_error"
+  | "dimensions_mismatch"
+  | "unknown_error";
+
+const ERROR_CODE_LABELS: Record<EmbeddingErrorCode, string> = {
+  rate_limit: "Rate limit exceeded",
+  api_key_error: "API key invalid or missing",
+  model_not_found: "Embedding model not found",
+  api_server_error: "Embedding provider error",
+  dimensions_mismatch: "Embedding dimensions mismatch",
+  unknown_error: "Unknown embedding error",
+};
+
+function getErrorLabel(
+  code: string | null | undefined,
+  detail: string | null | undefined,
+): string {
+  if (code && code in ERROR_CODE_LABELS) {
+    return ERROR_CODE_LABELS[code as EmbeddingErrorCode];
+  }
+  return detail ?? "Embedding failed";
+}
+
+function EmbeddingStatusBadge({
+  document,
+}: {
+  document: KnowledgeBaseDocumentListItem;
+}) {
+  const status = document.embeddingStatus;
+
+  if (status === "completed") {
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+      >
+        <CheckCircle2 className="h-3 w-3" />
+        Indexed
+      </Badge>
+    );
+  }
+
+  if (status === "failed") {
+    const errorLabel = getErrorLabel(
+      (document as any).embeddingErrorCode,
+      (document as any).embeddingErrorDetail,
+    );
+    return (
+      <TooltipProvider delayDuration={150}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className="gap-1 cursor-help border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400"
+            >
+              <AlertCircle className="h-3 w-3" />
+              Failed
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[280px] text-xs">
+            <p className="font-semibold">{errorLabel}</p>
+            {(document as any).embeddingErrorDetail &&
+              (document as any).embeddingErrorDetail !== errorLabel && (
+                <p className="mt-0.5 text-muted-foreground/80">
+                  {(document as any).embeddingErrorDetail}
+                </p>
+              )}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  if (status === "processing") {
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1 border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+      >
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Processing
+      </Badge>
+    );
+  }
+
+  // pending
+  return (
+    <Badge
+      variant="outline"
+      className="gap-1 border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+    >
+      <Clock className="h-3 w-3" />
+      Pending
+    </Badge>
+  );
+}
 
 export function ConnectorDocumentsTable({
   connectorId,
@@ -97,6 +214,12 @@ export function ConnectorDocumentsTable({
             </button>
           </div>
         ),
+      },
+      {
+        id: "embeddingStatus",
+        accessorKey: "embeddingStatus",
+        header: "Status",
+        cell: ({ row }) => <EmbeddingStatusBadge document={row.original} />,
       },
       {
         id: "sourceUrl",

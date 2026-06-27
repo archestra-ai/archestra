@@ -268,6 +268,13 @@ export function ConnectConfigPanel({
               .
             </li>
             <li>Select the configuration file you downloaded above.</li>
+            <li>
+              Click{" "}
+              <strong className="font-medium text-foreground">
+                Apply Changes
+              </strong>{" "}
+              and restart Claude Desktop.
+            </li>
           </ol>
         </div>
       </WizardStep>
@@ -298,16 +305,9 @@ export function ConnectConfigPanel({
         </WizardStep>
       )}
 
-      <WizardStep
-        n={gateway ? 6 : 5}
-        title="Restart Claude Desktop and send a test message"
-        last
-      >
+      <WizardStep n={gateway ? 6 : 5} title="Send a test message" last>
         <div className="space-y-4 text-sm text-muted-foreground">
-          <p>
-            Restart Claude Desktop, start a new conversation, and send the
-            message below. Requests appear in the LLM proxy logs.
-          </p>
+          <p>Start a new conversation and send the message below.</p>
           <TestSetupStep />
         </div>
       </WizardStep>

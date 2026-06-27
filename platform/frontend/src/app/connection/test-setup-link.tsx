@@ -5,14 +5,17 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
-import { useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 /**
- * Final verify step for the Claude Code / Claude Desktop proxy setup. Shows a
- * copyable sample message carrying a one-off marker token, then a "Test your
- * setup" link that deep-links to the LLM logs filtered (by `search`) to exactly
- * that message — so the user proves their own request routed through the proxy.
+ * Final verify step for the Claude Code / Claude Desktop proxy setup. Always
+ * shows a copyable sample message carrying a one-off marker token for the user
+ * to send. The "Test your setup" link deep-links to the LLM logs filtered (by
+ * `search`) to exactly that message — so the user proves their own request
+ * routed through the proxy. The link renders only for users who can open the
+ * logs page (gated on `log:read`); without it the link would only land them on
+ * a Forbidden page.
  *
  * The token is generated once on the client per mount, so it is unique across
  * everything that produces a distinct mount: client, user, keys, gateway,
@@ -22,6 +25,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 export function TestSetupStep() {
   const appName = useAppName();
   const { data: session } = useSession();
+  const { data: canReadLogs } = useHasPermissions({ log: ["read"] });
   const userId = session?.user?.id;
 
   // Client-only so the random token never differs between SSR and hydration
@@ -61,19 +65,25 @@ export function TestSetupStep() {
           </span>
         </CopyableCode>
       </div>
-      <div>
-        <Button
-          asChild
-          variant="outline"
-          size="sm"
-          data-testid="connect-test-setup-link"
-        >
-          <Link href={`/llm/logs?${params.toString()}`}>
-            Test your setup
-            <ArrowRight className="size-3.5" />
-          </Link>
-        </Button>
-      </div>
+      {/*
+       * Verifying means opening the logs page, which is gated on log:read — show
+       * the "Test your setup" link only to users who can actually get there.
+       */}
+      {canReadLogs && (
+        <div>
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            data-testid="connect-test-setup-link"
+          >
+            <Link href={`/llm/logs?${params.toString()}`}>
+              Test your setup
+              <ArrowRight className="size-3.5" />
+            </Link>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

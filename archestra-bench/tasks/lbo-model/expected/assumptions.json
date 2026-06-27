@@ -21,6 +21,7 @@
   "tlb_principal": 860.0,
   "tlb_rate": 0.08,
   "tlb_mandatory_amort": 8.6,
+  "revolver_rate": 0.0775,
   "pik_principal": 250.0,
   "pik_rate": 0.105,
   "pik_years": 3,

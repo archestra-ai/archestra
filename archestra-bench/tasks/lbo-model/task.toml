@@ -1,5 +1,5 @@
 [[stages]]
-text = """Hey — I need a proper preliminary LBO on Meridian Fintech (MRDN) before the IC call. The full deal assumptions are attached at /home/sandbox/attachments/deal_assumptions.txt (pulled from the sponsor's model). Build a Base Case, 5-year model (FY2026E-FY2030E) with a real cash-flow sweep and hand me back the key outputs.
+text = """Hey — I need a proper preliminary LBO on Meridian Fintech (MRDN) before the IC call. The full deal assumptions are attached at /home/sandbox/attachments/deal_assumptions.txt (pulled from the sponsor's model). Build a Base Case, 5-year model (FY2026E-FY2030E) with a real debt waterfall and hand me back the key outputs.
 
 Model it EXACTLY this way so it ties out to our template — follow every convention precisely:
 
@@ -7,23 +7,27 @@ OPERATING MODEL
 - Base revenue is FY2025E = $292.4M. Grow it by the per-year Revenue Growth rates; EBITDA each year = revenue x that year's Adj. EBITDA Margin.
 - D&A = 4.5% of revenue. EBIT = EBITDA - D&A. Cash taxes = 22% of EBIT (floor at 0 if EBIT is negative).
 - CapEx = 4.8% of revenue. Change in net working capital = 3.0% of the year-over-year change in revenue (for FY2026E, use the change vs the $292.4M FY2025E base).
+- Operating cash flow (before any interest) = EBITDA - cash taxes - CapEx - change in NWC. (D&A is non-cash, so it is NOT subtracted.)
 
-DEBT & INTEREST (compute interest on the BEGINNING-of-year balance each year to avoid circularity)
-- Term Loan B: $860M at close, cash interest = 8.0% of the beginning TLB balance.
-- Second Lien Notes: $250M at close, 10.5% rate. It PIKs for the first 3 years (interest accrues and is ADDED to the balance, no cash paid), then is cash-pay in years 4-5 (interest = 10.5% of the beginning balance is paid IN CASH and the balance stays flat).
-- Revolver: undrawn throughout (ignore).
+INTEREST — use the AVERAGE of each debt's beginning and ending balance for the year (interest = rate x (beginning + ending) / 2). Because a debt's ending balance depends on the cash flow, which depends on its interest, you must solve each year's debt balances and interest together as a fixed point (iterate until the balances stop moving).
+- Term Loan B: $860M at close, cash interest at 8.0% on its average balance.
+- Revolver: $0 drawn at close, cash interest at 7.75% on its average balance (see the waterfall — it is only drawn if a year is short of cash).
+- Second Lien Notes: $250M at close, 10.5%. It PIKs for the first 3 years — interest accrues on the BEGINNING balance and is added to the balance (ending = beginning x 1.105), no cash paid. In years 4-5 it is cash-pay: interest = 10.5% of the balance is paid in cash and the balance stays flat (so its average equals its balance).
 
-FREE CASH FLOW & CASH SWEEP
-- Free cash flow available for debt paydown = EBITDA - cash taxes - CapEx - change in NWC - cash interest (cash interest = TLB interest in every year, plus the Second Lien cash interest in years 4-5 only; D&A is non-cash, so it is NOT subtracted here). FCF can be negative.
-- TLB paydown each year = the $8.6M mandatory amortization PLUS a 100% cash sweep of any FCF above $8.6M (i.e. paydown = max(8.6, FCF), capped at the beginning balance; if FCF is below 8.6, only the 8.6 mandatory amortization is paid, no sweep and no negative sweep). The Second Lien is never swept. Do not accumulate a cash balance.
+FREE CASH FLOW & DEBT WATERFALL (per year, after computing average-balance cash interest)
+- `fcf` = operating cash flow - total cash interest (TLB + revolver + any Second Lien cash interest). It can be negative.
+- The Term Loan B always takes its $8.6M mandatory amortization. Let net = fcf - 8.6.
+- If net < 0 (the year can't cover mandatory amort): draw the revolver by the shortfall (revolver ending = revolver beginning + (-net)); no sweep.
+- If net >= 0: first repay the revolver (repay = min(revolver beginning, net)), then sweep any remaining cash 100% to the Term Loan B (reducing it below the mandatory amortization, floored at 0). The revolver and TLB never go negative.
+- The Second Lien is never swept or repaid early. Do not hold a cash balance.
 
 ENTRY / EXIT / RETURNS
-- Sponsor invests the Total Equity Required of $1,319M at close (ignore the management rollover; treat the sponsor as owning 100% of the equity). There are no interim distributions.
-- Exit at end of year 5: Exit Enterprise Value = 22.0x x FY2030E EBITDA. Exit equity value = Exit EV minus the year-5 ending debt balances (TLB ending + Second Lien ending).
+- Sponsor invests the Total Equity Required of $1,319M at close (ignore the management rollover; treat the sponsor as owning 100% of the equity). No interim distributions.
+- Exit at end of year 5: Exit Enterprise Value = 22.0x x FY2030E EBITDA. Exit equity value = Exit EV minus the year-5 ending debt balances (Term Loan B + revolver + Second Lien).
 - MOIC = exit equity / sponsor equity invested; IRR = MOIC^(1/5) - 1.
 
 Submit your complete answer in a SINGLE submit_result call (all dollar figures in $M):
-- `revenue`, `ebitda`, `fcf`, `tlb_ending`, `pik_ending`: each a list of the five yearly values FY2026E..FY2030E in order (`fcf` is the free cash flow available for debt paydown each year; `tlb_ending`/`pik_ending` are the year-end debt balances).
+- `revenue`, `ebitda`, `fcf`, `tlb_ending`, `revolver_ending`, `pik_ending`: each a list of the five yearly values FY2026E..FY2030E in order.
 - `exit_ev`, `exit_equity`: scalars.
 - `moic`: the multiple (e.g. 2.5); `irr`: the decimal rate (e.g. 0.20 for 20%)."""
 
@@ -34,7 +38,7 @@ Submit your complete answer in a SINGLE submit_result call (all dollar figures i
 
 [result_schema]
 type = "object"
-required = ["revenue", "ebitda", "fcf", "tlb_ending", "pik_ending", "exit_ev", "exit_equity", "moic", "irr"]
+required = ["revenue", "ebitda", "fcf", "tlb_ending", "revolver_ending", "pik_ending", "exit_ev", "exit_equity", "moic", "irr"]
 additionalProperties = false
 
   [result_schema.properties.revenue]
@@ -63,6 +67,13 @@ additionalProperties = false
   minItems = 5
   maxItems = 5
     [result_schema.properties.tlb_ending.items]
+    type = "number"
+
+  [result_schema.properties.revolver_ending]
+  type = "array"
+  minItems = 5
+  maxItems = 5
+    [result_schema.properties.revolver_ending.items]
     type = "number"
 
   [result_schema.properties.pik_ending]

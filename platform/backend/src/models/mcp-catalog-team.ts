@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 
 class McpCatalogTeamModel {
@@ -114,25 +114,31 @@ class McpCatalogTeamModel {
   static async syncCatalogTeams(
     catalogId: string,
     teamIds: string[],
+    tx?: Transaction,
   ): Promise<number> {
     logger.debug(
       { catalogId, teamCount: teamIds.length },
       "McpCatalogTeamModel.syncCatalogTeams: syncing teams",
     );
-    await withDbTransaction(async (tx) => {
-      await tx
+    const run = async (t: Transaction) => {
+      await t
         .delete(schema.mcpCatalogTeamsTable)
         .where(eq(schema.mcpCatalogTeamsTable.catalogId, catalogId));
 
       if (teamIds.length > 0) {
-        await tx.insert(schema.mcpCatalogTeamsTable).values(
+        await t.insert(schema.mcpCatalogTeamsTable).values(
           teamIds.map((teamId) => ({
             catalogId,
             teamId,
           })),
         );
       }
-    });
+    };
+    if (tx) {
+      await run(tx);
+    } else {
+      await withDbTransaction(run);
+    }
 
     return teamIds.length;
   }

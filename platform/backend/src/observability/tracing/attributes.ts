@@ -54,13 +54,25 @@ export const ATTR_GENAI_USAGE_INPUT_TOKENS = "gen_ai.usage.input_tokens";
 export const ATTR_GENAI_USAGE_OUTPUT_TOKENS = "gen_ai.usage.output_tokens";
 export const ATTR_GENAI_USAGE_TOTAL_TOKENS = "gen_ai.usage.total_tokens";
 // Prompt-cache token counts, per the GenAI semconv. Read = served from a
-// provider cache, creation = written to it. The spec models both as a subset
-// of gen_ai.usage.input_tokens; our normalized input_tokens excludes them, so
-// the subset relationship does not hold here (tracked separately).
+// provider cache, creation = written to it. Both are a subset of
+// gen_ai.usage.input_tokens (the span attribute adds cache read/write back onto
+// our internally-uncached input count, so the spec's subset relationship holds).
 export const ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS =
   "gen_ai.usage.cache_read.input_tokens";
 export const ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS =
   "gen_ai.usage.cache_creation.input_tokens";
+// Portion of cache-creation tokens written at the 1-hour TTL (Anthropic/Bedrock),
+// billed at a higher surcharge than the 5-minute default. The GenAI semconv has no
+// per-TTL breakdown of cache_creation tokens, so this uses the archestra.* namespace.
+// The rest of gen_ai.usage.cache_creation.input_tokens is the 5m-TTL remainder.
+export const ATTR_ARCHESTRA_USAGE_CACHE_CREATION_1H_INPUT_TOKENS =
+  "archestra.usage.cache_creation.1h_input_tokens";
+// Output tokens spent on reasoning / extended thinking. Per the GenAI semconv this
+// value is a subset of gen_ai.usage.output_tokens. Reported by OpenAI
+// (reasoning_tokens) and Gemini (thoughtsTokenCount); unset for providers that
+// do not break reasoning tokens out separately.
+export const ATTR_GENAI_USAGE_REASONING_OUTPUT_TOKENS =
+  "gen_ai.usage.reasoning.output_tokens";
 
 // --- gen_ai content events ---
 export const EVENT_GENAI_CONTENT_PROMPT = "gen_ai.content.prompt";

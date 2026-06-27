@@ -2,10 +2,12 @@ import { createRequire } from "node:module";
 import {
   BUILT_IN_AGENT_IDS,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
+  getModelReadableMimeTypes,
   type SupportedProvider,
 } from "@archestra/shared";
 import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import { convertToModelMessages, generateText, type UIMessage } from "ai";
+import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
 import {
@@ -31,10 +33,15 @@ import type {
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
 import {
+  estimateFileTokens,
+  isTextLikeMediaType,
+} from "./normalization/estimate-message-tokens";
+import {
   isAttachmentRefUrl,
   parseAttachmentIdFromUrl,
 } from "./normalization/extract-inline-attachments";
 import { materializeAttachments } from "./normalization/materialize-attachments";
+import { prepareMessagesForProvider } from "./normalization/prepare-for-provider";
 
 export const CONTEXT_COMPACTION_AUTO_THRESHOLD = 0.8;
 // max number of recent real user messages serialized into the reference block
@@ -44,12 +51,6 @@ const CONTEXT_COMPACTION_RECENT_USER_REFERENCE_MAX_CHARS = 6_000;
 const CONTEXT_COMPACTION_SUMMARY_TAG = "summary";
 const CONTEXT_COMPACTION_CORRECTION_PROMPT =
   "Your previous response did not follow the required format. Reply with EXACTLY ONE <summary>...</summary> block and no text outside the tags.";
-const PDF_BYTES_PER_TOKEN_ESTIMATE = 12;
-const BINARY_BYTES_PER_TOKEN_ESTIMATE = 4;
-// images are billed by dimensions, not byte size; without this ceiling a few-MB
-// image estimates at ~1M tokens (byteLength/4) and spuriously trips the
-// auto-compaction threshold every turn.
-const IMAGE_TOKEN_MAX_ESTIMATE = 1_600;
 const CONTEXT_COMPACTION_TRACE_OPERATION = "context_compaction";
 const ATTR_CONTEXT_COMPACTION_TRIGGER = "archestra.context_compaction.trigger";
 const ATTR_CONTEXT_COMPACTION_STATUS = "archestra.context_compaction.status";
@@ -351,7 +352,6 @@ export const __test = {
   resolveCompactionBoundaryMessageId,
   decodeDataUrl,
   getDataUrlMediaType,
-  estimateBinaryFileTokens,
 };
 
 function resolveContextCompactionPolicy(
@@ -658,6 +658,11 @@ async function tryCreateInContextCompaction(params: {
     });
     const apiKey = fallbackLlm?.apiKey;
     const baseUrl = fallbackLlm?.baseUrl ?? null;
+    const anthropicNativeEndpoint = isAnthropicNativeEndpoint({
+      provider: params.provider,
+      model: params.selectedModel,
+      baseUrl,
+    });
 
     if (isApiKeyRequired(params.provider, apiKey)) {
       return null;
@@ -676,17 +681,34 @@ async function tryCreateInContextCompaction(params: {
     // Rehydrate attachment refs back to inline bytes before the LLM call —
     // otherwise the compaction model sees ref URLs it can't fetch and
     // summarizes without the file content. Materialize is conversation-scoped
-    // so cross-conv refs (if any) are silently dropped.
+    // so cross-conv refs (if any) are silently dropped. Non-ingestible files
+    // are referenced as sandbox paths rather than inlined as documents the
+    // compaction model would reject.
+    const compactionModelRow = await ModelModel.findByProviderAndModelId(
+      params.provider,
+      params.selectedModel,
+    ).catch(() => null);
     const materializedCompactable = await materializeAttachments(
       params.compactableMessages,
       params.conversationId,
+      getModelReadableMimeTypes(compactionModelRow?.inputModalities ?? null),
+      params.provider !== "anthropic" || anthropicNativeEndpoint,
+      params.provider === "anthropic" && !anthropicNativeEndpoint,
     );
     const compactionMessages = buildInContextCompactionMessages({
       previousSummary: params.previousSummary,
       messages: materializedCompactable,
     });
+    // Rewrite document file parts into a shape the compaction model's provider
+    // accepts (e.g. inline CSV/JSON as text for OpenAI-compatible providers),
+    // mirroring the main chat path — otherwise the compaction call hard-errors.
+    const providerPreparedCompaction = prepareMessagesForProvider({
+      messages: compactionMessages,
+      provider: params.provider,
+      anthropicNativeEndpoint,
+    });
     const modelMessages = await convertToModelMessages(
-      compactionMessages as unknown as Omit<UIMessage, "id">[],
+      providerPreparedCompaction as unknown as Omit<UIMessage, "id">[],
     );
     const result = await generateText({
       model,
@@ -732,7 +754,7 @@ async function tryCreateInContextCompaction(params: {
       );
 
       const correctedMessages = await convertToModelMessages([
-        ...(compactionMessages as unknown as Omit<UIMessage, "id">[]),
+        ...(providerPreparedCompaction as unknown as Omit<UIMessage, "id">[]),
         {
           role: "assistant",
           parts: [{ type: "text", text: result.text }],
@@ -1246,7 +1268,7 @@ function getFilePartTextForTokenEstimate(part: ChatMessagePart): {
       return { text: header, extraTokens: 0 };
     }
     const mediaType = fallbackMediaType || "application/octet-stream";
-    const extraTokens = estimateBinaryFileTokens({
+    const extraTokens = estimateFileTokens({
       mediaType,
       byteLength: byteSize,
     });
@@ -1274,7 +1296,7 @@ function getFilePartTextForTokenEstimate(part: ChatMessagePart): {
     };
   }
 
-  const estimatedTokens = estimateBinaryFileTokens({
+  const estimatedTokens = estimateFileTokens({
     mediaType,
     byteLength: decoded.buffer.length,
   });
@@ -1282,22 +1304,6 @@ function getFilePartTextForTokenEstimate(part: ChatMessagePart): {
     text: `${mediaHeader}\n[binary file payload: ${decoded.buffer.length} bytes]`,
     extraTokens: estimatedTokens,
   };
-}
-
-function estimateBinaryFileTokens(params: {
-  mediaType: string;
-  byteLength: number;
-}): number {
-  // todo: estimate PDFs from locally extracted text first, then use this byte fallback for scanned/failed parses.
-  const bytesPerToken =
-    params.mediaType === "application/pdf"
-      ? PDF_BYTES_PER_TOKEN_ESTIMATE
-      : BINARY_BYTES_PER_TOKEN_ESTIMATE;
-  const estimate = Math.ceil(params.byteLength / bytesPerToken);
-  if (params.mediaType.startsWith("image/")) {
-    return Math.min(estimate, IMAGE_TOKEN_MAX_ESTIMATE);
-  }
-  return estimate;
 }
 
 async function getMessageTextForSummary(
@@ -1477,15 +1483,6 @@ function parseDataUrlMetaString(raw: string): {
   }
   const mediaType = meta.split(";", 1)[0] || "application/octet-stream";
   return { mediaType, isBase64 };
-}
-
-function isTextLikeMediaType(mediaType: string): boolean {
-  return (
-    mediaType.startsWith("text/") ||
-    mediaType === "application/json" ||
-    mediaType === "application/xml" ||
-    mediaType === "application/csv"
-  );
 }
 
 function findMessageIndexByIds(messages: ChatMessage[], ids: string[]) {

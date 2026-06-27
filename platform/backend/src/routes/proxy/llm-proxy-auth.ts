@@ -9,8 +9,10 @@ import {
   hasArchestraTokenPrefix,
   isSupportedProvider,
   LLM_PROXY_OAUTH_SCOPE,
+  providerRequiresPerUserCredential,
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
+import { userHasPermission } from "@/auth";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import {
@@ -25,7 +27,8 @@ import {
 } from "@/models";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway.utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import { type Agent, ApiError } from "@/types";
+import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { type Agent, ApiError, type ResourceVisibilityScope } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { isLoopbackAddress } from "@/utils/network";
 
@@ -64,6 +67,16 @@ export interface VirtualKeyValidationResult {
   /** Parent chat_api_key row ID; used by the proxy to look up per-key settings (e.g. extra headers). */
   chatApiKeyId?: string;
   virtualKeyId?: string;
+  /** Scope of the resolved key; a personal key identifies its owner. */
+  virtualKeyScope?: ResourceVisibilityScope;
+  /** Owner of the resolved key (for cross-credential user-consistency checks). */
+  virtualKeyAuthorId?: string | null;
+}
+
+export interface PassthroughVirtualKeyResult {
+  /** Owner of the passthrough key — the acting Archestra user. */
+  userId: string;
+  passthroughVirtualKeyId: string;
 }
 
 type ResolvedVirtualApiKey = NonNullable<
@@ -100,6 +113,12 @@ export async function validateVirtualApiKey(
   expectedProvider: string,
 ): Promise<VirtualKeyValidationResult> {
   const resolved = await validateVirtualApiKeyToken(tokenValue);
+  if (resolved.virtualKey.keyType === "passthrough") {
+    throw new ApiError(
+      400,
+      "Passthrough virtual keys carry no provider credential — send them in the X-Archestra-Virtual-Key header, not Authorization.",
+    );
+  }
   const mappedProviderKey = (
     await VirtualApiKeyModel.getProviderApiKeysForRouting(
       resolved.virtualKey.id,
@@ -110,6 +129,32 @@ export async function validateVirtualApiKey(
       400,
       `Virtual API key is not mapped to provider "${expectedProvider}".`,
     );
+  }
+
+  // Per-user providers (GitHub Copilot) hold an individual's token, so it may
+  // only be served through the owner's OWN personal virtual key mapping to
+  // their OWN personal provider key. Re-checked here at runtime (not just at
+  // create/update) so a virtual key mapped before this rule existed, or one
+  // whose scope/mapping changed, can never hand the token to another user.
+  if (
+    isSupportedProvider(expectedProvider) &&
+    providerRequiresPerUserCredential(expectedProvider)
+  ) {
+    const parentKey = await LlmProviderApiKeyModel.findById(
+      mappedProviderKey.providerApiKeyId,
+    );
+    if (
+      resolved.virtualKey.scope !== "personal" ||
+      !parentKey ||
+      parentKey.scope !== "personal" ||
+      parentKey.userId == null ||
+      parentKey.userId !== resolved.virtualKey.authorId
+    ) {
+      throw new ApiError(
+        403,
+        `${expectedProvider} is per-user: it can only be used through your own personal virtual key linked to your own ${expectedProvider} account.`,
+      );
+    }
   }
 
   // Resolve the real provider API key from the secret.
@@ -141,7 +186,104 @@ export async function validateVirtualApiKey(
     baseUrl: mappedProviderKey.baseUrl ?? undefined,
     chatApiKeyId: mappedProviderKey.providerApiKeyId,
     virtualKeyId: resolved.virtualKey.id,
+    virtualKeyScope: resolved.virtualKey.scope,
+    virtualKeyAuthorId: resolved.virtualKey.authorId,
   };
+}
+
+// =========================================================================
+// Passthrough Virtual Key Validation
+// =========================================================================
+
+/**
+ * Validate a passthrough virtual key from the X-Archestra-Virtual-Key header.
+ *
+ * A passthrough key carries no provider credential. It authenticates the acting
+ * Archestra user and gates access to the target LLM proxy:
+ * - a non-empty allowed-proxy list must include this proxy;
+ * - an empty list means "any proxy the owner can access" (resolved here against
+ *   the owner's own agent access).
+ *
+ * Throws ApiError on validation failure (401 invalid/expired, 400 wrong key
+ * type, 403 no proxy access).
+ */
+export async function validatePassthroughVirtualKey(params: {
+  tokenValue: string;
+  agent: Agent;
+}): Promise<PassthroughVirtualKeyResult> {
+  const { tokenValue, agent } = params;
+
+  const resolved = await VirtualApiKeyModel.validateToken(tokenValue);
+  if (!resolved) {
+    throw new ApiError(401, "Invalid passthrough virtual key");
+  }
+  const { virtualKey } = resolved;
+
+  if (virtualKey.keyType !== "passthrough") {
+    throw new ApiError(
+      400,
+      "This is a standard virtual key. Send it in the Authorization header instead of X-Archestra-Virtual-Key.",
+    );
+  }
+  if (virtualKey.expiresAt && virtualKey.expiresAt < new Date()) {
+    throw new ApiError(401, "Passthrough virtual key expired");
+  }
+  if (!virtualKey.authorId) {
+    throw new ApiError(401, "Passthrough virtual key has no owner");
+  }
+
+  const noAccessError = new ApiError(
+    403,
+    "Your passthrough virtual key does not grant access to this LLM proxy. Contact your administrator.",
+  );
+  if (virtualKey.organizationId !== agent.organizationId) {
+    throw noAccessError;
+  }
+
+  const allowedProxyIds =
+    await VirtualApiKeyModel.getLlmProxyIdsForVirtualApiKey(virtualKey.id);
+  let hasProxyAccess: boolean;
+  if (allowedProxyIds.length > 0) {
+    hasProxyAccess = allowedProxyIds.includes(agent.id);
+  } else {
+    // Empty list → any LLM proxy the owner can access.
+    const ownerIsAgentAdmin = await userHasPermission(
+      virtualKey.authorId,
+      agent.organizationId,
+      "agent",
+      "admin",
+    );
+    hasProxyAccess = await AgentTeamModel.userHasAgentAccess(
+      virtualKey.authorId,
+      agent.id,
+      ownerIsAgentAdmin,
+    );
+  }
+  if (!hasProxyAccess) {
+    throw noAccessError;
+  }
+
+  return {
+    userId: virtualKey.authorId,
+    passthroughVirtualKeyId: virtualKey.id,
+  };
+}
+
+/**
+ * All authenticated user-scoped credentials on a request must resolve to a
+ * single Archestra user. Throws 401 when two differ. Unauthenticated hints
+ * (e.g. the X-Archestra-User-Id header) must NOT be passed in here.
+ */
+export function assertConsistentUserCredentials(
+  userIds: Array<string | null | undefined>,
+): void {
+  const distinct = new Set(userIds.filter((id): id is string => Boolean(id)));
+  if (distinct.size > 1) {
+    throw new ApiError(
+      401,
+      "Conflicting Archestra user credentials: the request's credentials identify different users.",
+    );
+  }
 }
 
 // =========================================================================
@@ -177,6 +319,9 @@ export async function validateLlmOAuthAccessToken(params: {
   }
   if (accessToken.refreshTokenRevoked) {
     throw new ApiError(401, "Invalid LLM OAuth access token.");
+  }
+  if (isAppConnectorAudienceRef(accessToken.referenceId)) {
+    throw new ApiError(403, "Access token is bound to an app connector.");
   }
   if (!hasLlmProxyScope(accessToken.scopes)) {
     throw new ApiError(403, "Access token is missing LLM proxy scope.");
@@ -422,6 +567,20 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
     );
   }
 
+  // OAuth client credentials are a service-to-service credential with no acting
+  // user. Per-user providers (GitHub Copilot) are an individual's token, so
+  // they can never be served this way — there's no user to attribute, and the
+  // mapped key would be one person's token for every caller.
+  if (
+    isSupportedProvider(params.expectedProvider) &&
+    providerRequiresPerUserCredential(params.expectedProvider)
+  ) {
+    throw new ApiError(
+      400,
+      `${params.expectedProvider} is per-user and cannot be used via OAuth client credentials; each user must connect their own account.`,
+    );
+  }
+
   const providerApiKey = await LlmProviderApiKeyModel.findById(
     mappedProviderKey.providerApiKeyId,
   );
@@ -457,12 +616,23 @@ async function validateUserLlmOAuthAccessToken(params: {
     throw new ApiError(401, "OAuth user is no longer available.");
   }
 
+  // Access has two additive sources: the user's own RBAC, or an admin-controlled
+  // grant on the authorization_code LLM OAuth client that minted this token — its
+  // allowedLlmProxyIds may grant access to proxies the user could not otherwise
+  // reach (e.g. a proxy reachable only through a specific pre-registered app).
   const hasAgentAccess = await AgentTeamModel.userHasAgentAccess(
     params.userId,
     params.agent.id,
     false,
   );
-  if (!hasAgentAccess) {
+  const hasClientGrant = hasAgentAccess
+    ? false
+    : await llmOauthClientGrantsProxyAccess({
+        clientId: params.clientId,
+        proxyId: params.agent.id,
+        organizationId: member.organizationId,
+      });
+  if (!hasAgentAccess && !hasClientGrant) {
     throw new ApiError(403, "OAuth user cannot access this LLM Proxy.");
   }
   if (!isSupportedProvider(params.expectedProvider)) {
@@ -493,6 +663,30 @@ async function validateUserLlmOAuthAccessToken(params: {
       : undefined,
     userId: params.userId,
   };
+}
+
+/**
+ * Whether the authorization_code LLM OAuth client that minted a user-bound token
+ * grants access to an LLM proxy beyond the user's own RBAC. Additive,
+ * admin-controlled grant (see the MCP gateway equivalent). Disabled or deleted
+ * clients grant nothing.
+ */
+async function llmOauthClientGrantsProxyAccess(params: {
+  clientId: string;
+  proxyId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const oauthClient = await LlmOauthClientModel.findByClientId(params.clientId);
+  if (!oauthClient || oauthClient.disabled) {
+    return false;
+  }
+  if (oauthClient.grantType !== "authorization_code") {
+    return false;
+  }
+  if (oauthClient.organizationId !== params.organizationId) {
+    return false;
+  }
+  return oauthClient.allowedLlmProxyIds.includes(params.proxyId);
 }
 
 async function resolveOAuthProviderApiKey(params: {

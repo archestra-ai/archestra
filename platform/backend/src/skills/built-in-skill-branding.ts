@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { ARCHESTRA_TOOL_PREFIX, DEFAULT_APP_NAME } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 

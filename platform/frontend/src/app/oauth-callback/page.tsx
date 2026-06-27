@@ -16,7 +16,7 @@ import { useHandleOAuthCallback } from "@/lib/auth/oauth.query";
 import {
   clearCallbackProcessing,
   clearInstallContext,
-  clearOAuthReauthChatResume,
+  clearOAuthPendingChatResume,
   clearOAuthReturnUrl,
   clearReauthContext,
   getOAuthEnvironmentValues,
@@ -30,6 +30,7 @@ import {
   isCallbackProcessed,
   markCallbackProcessing,
   setOAuthInstallationCompleteCatalogId,
+  setOAuthInstallChatResume,
   setOAuthReauthChatResume,
 } from "@/lib/auth/oauth-session";
 import {
@@ -131,9 +132,23 @@ function OAuthCallbackContent() {
           });
 
           const isFirstInstallation = getOAuthIsFirstInstallation();
+          const returnUrl = getOAuthReturnUrl();
 
           clearCallbackProcessing(code, state);
           clearInstallContext();
+          clearOAuthReturnUrl();
+
+          // If the install was started from inside a chat conversation, return
+          // the user there (and queue the conversation to continue) instead of
+          // dropping them on the registry. No-op for installs started
+          // elsewhere (e.g. the MCP registry itself).
+          if (
+            returnUrl &&
+            setOAuthInstallChatResume({ returnUrl, serverName: name })
+          ) {
+            replaceBrowserUrl(returnUrl);
+            return;
+          }
 
           // Store flag to open assignments dialog after redirect (only for first installation)
           if (isFirstInstallation) {
@@ -146,7 +161,7 @@ function OAuthCallbackContent() {
         router.push("/mcp/registry");
       } catch (error) {
         console.error("OAuth completion error:", error);
-        clearOAuthReauthChatResume();
+        clearOAuthPendingChatResume();
         // The mutation's onError handler will show the error toast
         // Redirect back to catalog
         router.push("/mcp/registry");

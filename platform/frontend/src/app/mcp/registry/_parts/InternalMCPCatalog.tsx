@@ -83,6 +83,7 @@ import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { buildCloneFormValues } from "./mcp-catalog-form.utils";
 import {
   type CatalogItem,
+  cardVariantForServerType,
   type InstalledServer,
   McpServerCard,
 } from "./mcp-server-card";
@@ -217,6 +218,24 @@ export function InternalMCPCatalog({
   const [detailsServerName, setDetailsServerName] = useState<string | null>(
     null,
   );
+
+  // The connection being re-authenticated keeps its existing scope, so the
+  // install dialogs need its scope/team to lock the selector (otherwise the
+  // selector treats re-auth as a fresh install and disables the already-used
+  // scope, leaving the owner unable to re-authenticate their own connection).
+  const reauthServer = useMemo(
+    () =>
+      reauthServerId
+        ? installedServers?.find((server) => server.id === reauthServerId)
+        : undefined,
+    [reauthServerId, installedServers],
+  );
+  const reauthExistingScope: McpServerInstallScope | undefined = reauthServerId
+    ? (reauthServer?.scope ?? (reauthServer?.teamId ? "team" : "personal"))
+    : undefined;
+  const reauthExistingTeamId: string | null | undefined = reauthServerId
+    ? (reauthServer?.teamId ?? null)
+    : undefined;
   const { data: detailsServerData } = useMcpRegistryServer(detailsServerName);
 
   const { data: _userIsMcpServerAdmin } = useHasPermissions({
@@ -1492,13 +1511,7 @@ export function InternalMCPCatalog({
                 const serverInfo = getInstalledServerInfo(item);
                 return (
                   <McpServerCard
-                    variant={
-                      item.serverType === "builtin"
-                        ? "builtin"
-                        : item.serverType === "remote"
-                          ? "remote"
-                          : "local"
-                    }
+                    variant={cardVariantForServerType(item.serverType)}
                     key={item.id}
                     item={item}
                     installedServer={serverInfo.installedServer}
@@ -1555,13 +1568,7 @@ export function InternalMCPCatalog({
                 const serverInfo = getInstalledServerInfo(item);
                 return (
                   <McpServerCard
-                    variant={
-                      item.serverType === "builtin"
-                        ? "builtin"
-                        : item.serverType === "remote"
-                          ? "remote"
-                          : "local"
-                    }
+                    variant={cardVariantForServerType(item.serverType)}
                     key={item.id}
                     item={item}
                     installedServer={serverInfo.installedServer}
@@ -1725,8 +1732,12 @@ export function InternalMCPCatalog({
         }
         isReauth={!!reauthServerId}
         isReinstall={!!reinstallServerId && !reauthServerId}
-        existingTeamId={reinstallServerTeamId}
-        existingScope={reinstallServerScope}
+        existingTeamId={
+          reauthServerId ? reauthExistingTeamId : reinstallServerTeamId
+        }
+        existingScope={
+          reauthServerId ? reauthExistingScope : reinstallServerScope
+        }
         preselectedTeamId={preselectedTeamId}
         personalOnly={installPersonalOnly}
         orgOnly={installOrgOnly}
@@ -1753,6 +1764,7 @@ export function InternalMCPCatalog({
         preselectedTeamId={preselectedTeamId}
         personalOnly={installPersonalOnly}
         orgOnly={installOrgOnly}
+        isReauth={!!reauthServerId}
       />
 
       <ReinstallConfirmationDialog
@@ -1807,8 +1819,12 @@ export function InternalMCPCatalog({
             reauthMutation.isPending
           }
           isReinstall={!!reinstallServerId}
-          existingTeamId={reinstallServerTeamId}
-          existingScope={reinstallServerScope}
+          existingTeamId={
+            reauthServerId ? reauthExistingTeamId : reinstallServerTeamId
+          }
+          existingScope={
+            reauthServerId ? reauthExistingScope : reinstallServerScope
+          }
           isReauth={!!reauthServerId}
           preselectedTeamId={preselectedTeamId}
           personalOnly={installPersonalOnly}

@@ -9,7 +9,7 @@ import { expect, goToPage } from "../fixtures";
 import { clickButton, expandTablePagination } from "./dialogs";
 
 export async function goToLlmProviderApiKeysPage(page: Page): Promise<void> {
-  await goToPage(page, "/llm/model-providers/api-keys");
+  await goToPage(page, "/llm/model-providers");
   await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
 }
 

@@ -30,6 +30,38 @@ export const DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME = "ARCHESTRA_AUTH_ADMIN_EMAIL";
 export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
   "ARCHESTRA_AUTH_ADMIN_PASSWORD";
 
+/**
+ * Max length (characters) of a project's display name. Kept short so project
+ * lists, headers, and dialogs stay readable. Enforced by the projects API and
+ * the create/edit forms.
+ */
+export const PROJECT_NAME_MAX_LENGTH = 64;
+
+/**
+ * Max length (characters) of a project's description. Kept to roughly a
+ * sentence or two so it stays a short blurb in project cards/headers rather
+ * than a wall of text. Enforced by the projects API and the create/edit forms.
+ */
+export const PROJECT_DESCRIPTION_MAX_LENGTH = 200;
+
+/**
+ * Filename of a project's instructions file. Once saved it is an ordinary,
+ * available project file — listed, readable, and writable through the normal
+ * file surfaces like any other — with one special rule: it cannot be deleted
+ * (emptying it is how its guidance is removed). Its content is injected into the
+ * system prompt of every chat in the project, and it is surfaced as a pinned,
+ * editable entry in the project's Files panel.
+ */
+export const PROJECT_INSTRUCTIONS_FILENAME = "instructions.md";
+
+/**
+ * Max length (characters) the instructions editor / API accepts in one save. It
+ * is injected into every turn's system prompt, so the UI editing path is
+ * deliberately bounded. (Agent writes via the generic file tools are bounded
+ * instead by the sandbox artifact byte limit.)
+ */
+export const PROJECT_INSTRUCTIONS_MAX_LENGTH = 100_000;
+
 export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
 export const DEFAULT_TEAM_NAME = "Default Team";
@@ -38,6 +70,7 @@ export const OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS = 300;
 export const OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 31_536_000;
 export const DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS = 31_536_000;
 export const LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS = 3_600;
+export const MCP_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS = 3_600;
 
 /**
  * Separator used to construct fully-qualified MCP tool names
@@ -66,6 +99,17 @@ export const EXTERNAL_AGENT_ID_HEADER = "X-Archestra-Agent-Id";
  * Particularly useful for identifying which user was using the Archestra Chat.
  */
 export const USER_ID_HEADER = "X-Archestra-User-Id";
+
+/**
+ * Header name for a passthrough virtual key.
+ * Clients can pass this header to authenticate the acting Archestra user on an
+ * LLM proxy request whose provider credential is something the proxy forwards
+ * untouched (e.g. a Claude Code subscription token or a raw provider key in the
+ * Authorization header). The passthrough key carries no provider credential of
+ * its own — it only attributes the interaction to its owner and gates access to
+ * the proxy. Standard virtual keys still go in the Authorization header.
+ */
+export const VIRTUAL_KEY_HEADER = "X-Archestra-Virtual-Key";
 
 /**
  * Header name for session ID.

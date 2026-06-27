@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { assembleFileSections } from "@/lib/chat/conversation-files";
+import {
+  assembleFileSections,
+  type ConversationFileItem,
+  deleteTargetFor,
+} from "@/lib/chat/conversation-files";
+
+function fileItem(
+  source: ConversationFileItem["source"],
+  id = source,
+): ConversationFileItem {
+  return {
+    id,
+    name: `${id}.bin`,
+    mimeType: "text/plain",
+    contentUrl: "",
+    source,
+  };
+}
 
 const apiFiles = {
   generated: [
@@ -20,6 +37,17 @@ const apiFiles = {
       createdAt: "2026-06-08T00:00:00.000Z",
     },
   ],
+  projectFiles: [
+    {
+      id: "x1",
+      name: "q2.csv",
+      mimeType: "text/csv",
+      contentUrl: "/api/skill-sandbox/artifacts/x1",
+      createdAt: "2026-06-08T00:00:00.000Z",
+    },
+  ],
+  projectName: "hello",
+  canManageFiles: true,
 };
 
 describe("assembleFileSections", () => {
@@ -61,11 +89,43 @@ describe("assembleFileSections", () => {
   });
 
   it("handles a null files payload (artifact only)", () => {
-    const { generated, attachments } = assembleFileSections({
+    const { generated, attachments, projectFiles } = assembleFileSections({
       files: null,
       artifact: "# hello",
     });
     expect(generated.map((f) => f.id)).toEqual(["artifact"]);
     expect(attachments).toEqual([]);
+    expect(projectFiles).toEqual([]);
+  });
+
+  it("maps project files to the project source with the byte URL", () => {
+    const { projectFiles } = assembleFileSections({
+      files: apiFiles,
+      artifact: null,
+    });
+    expect(projectFiles).toEqual([
+      {
+        id: "x1",
+        name: "q2.csv",
+        mimeType: "text/csv",
+        contentUrl: "/api/skill-sandbox/artifacts/x1",
+        source: "project",
+      },
+    ]);
+  });
+});
+
+describe("deleteTargetFor", () => {
+  it("routes attachments to the attachment endpoint", () => {
+    expect(deleteTargetFor(fileItem("attachment"))).toEqual({
+      kind: "attachment",
+    });
+  });
+
+  it("routes generated and project files to the artifact endpoint", () => {
+    expect(deleteTargetFor(fileItem("generated"))).toEqual({
+      kind: "artifact",
+    });
+    expect(deleteTargetFor(fileItem("project"))).toEqual({ kind: "artifact" });
   });
 });

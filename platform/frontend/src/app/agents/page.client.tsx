@@ -110,8 +110,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const sortByFromUrl = searchParams.get("sortBy") as
     | "name"
     | "createdAt"
-    | "toolsCount"
-    | "subagentsCount"
     | "team"
     | null;
   const sortDirectionFromUrl = searchParams.get("sortDirection") as
@@ -363,65 +361,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         );
       },
     },
-    {
-      id: "toolsCount",
-      accessorKey: "toolsCount",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Tools
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => {
-        const toolsCount = row.original.tools.filter(
-          (t) => !t.delegateToAgentId,
-        ).length;
-        return <div>{toolsCount}</div>;
-      },
-    },
-    {
-      id: "knowledgeSourcesCount",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Knowledge Sources
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => {
-        const count =
-          (row.original.knowledgeBaseIds?.length ?? 0) +
-          (row.original.connectorIds?.length ?? 0);
-        return <div>{count}</div>;
-      },
-    },
-    {
-      id: "subagentsCount",
-      accessorKey: "subagentsCount",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Subagents
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => {
-        const subagentsCount = row.original.tools.filter(
-          (t) => t.delegateToAgentId,
-        ).length;
-        return <div>{subagentsCount}</div>;
-      },
-    },
     ...(isAgentAdmin
       ? [
           {
@@ -547,7 +486,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter showBuiltIn ownerLabelPlural="agents" />
+                <AgentScopeFilter
+                  showBuiltIn
+                  ownerLabelPlural="agents"
+                  adminPermission={{ agent: ["admin"] }}
+                />
                 <AgentDeletedStatusFilter
                   deletePermission={{ agent: ["delete"] }}
                 />
@@ -558,7 +501,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   permissions={[{ resource: "team", action: "read" }]}
                 />
               )}
-              <ActiveFilterBadges />
+              <ActiveFilterBadges adminPermission={{ agent: ["admin"] }} />
             </div>
 
             <div data-testid={E2eTestId.AgentsTable}>

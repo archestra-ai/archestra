@@ -30,6 +30,6 @@ dependencies:
     condition: postgresql.enabled
   - name: dagger-helm
     alias: dagger
-    version: "0.21.0"
+    version: "0.21.5"
     repository: oci://registry.dagger.io
     condition: archestra.codeRuntime.dagger.managed.enabled

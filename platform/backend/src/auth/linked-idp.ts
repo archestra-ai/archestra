@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
   CompleteLinkedIdentityProviderIntentRequestSchema,
   CreateLinkedIdentityProviderIntentRequestSchema,

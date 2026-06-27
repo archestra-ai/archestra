@@ -176,6 +176,10 @@ export const SSO_DOMAIN = ADMIN_EMAIL.split("@")[1];
 
 // =============================================================================
 // MCP Server JWKS (example server for JWT propagation testing)
+//
+// The fixture MCP servers behind these images live in the examples repo
+// (archestra-ai/examples, test-fixtures/). Images are built/pushed manually
+// from there; the e2e suite only pulls the pinned tags below.
 // =============================================================================
 
 export const MCP_EXAMPLE_OAUTH_EXTERNAL_URL = "http://localhost:30083";

@@ -191,6 +191,18 @@ class OrganizationModel {
   }
 
   /**
+   * List every organization id. Used to backfill globally-enabled built-in
+   * tools (e.g. the MCP App tools, gated by `ARCHESTRA_APPS_ENABLED` rather
+   * than a per-org opt-in).
+   */
+  static async findAllIds(): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable);
+    return rows.map((row) => row.id);
+  }
+
+  /**
    * Get an organization by ID
    */
   static async getById(id: string): Promise<Organization | null> {
@@ -206,24 +218,6 @@ class OrganizationModel {
       "OrganizationModel.getById: completed",
     );
     return organization || null;
-  }
-
-  /**
-   * Whether the org allows search_tools/run_tool to discover and auto-assign
-   * catalog tools beyond the agent's assigned set. Lean read on the tool
-   * dispatch path; intentionally not cached so admin toggles affect the next
-   * discovery/dispatch call. Defaults to true when the organization is missing.
-   */
-  static async getAllowToolAutoAssignment(id: string): Promise<boolean> {
-    const [organization] = await db
-      .select({
-        allowToolAutoAssignment:
-          schema.organizationsTable.allowToolAutoAssignment,
-      })
-      .from(schema.organizationsTable)
-      .where(eq(schema.organizationsTable.id, id))
-      .limit(1);
-    return organization?.allowToolAutoAssignment ?? true;
   }
 
   /**

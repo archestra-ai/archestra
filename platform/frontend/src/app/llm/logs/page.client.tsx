@@ -3,8 +3,11 @@
 import {
   type archestraApiTypes,
   DynamicInteraction,
+  getSessionClientLabel,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
+  SESSION_CLIENT_SOURCE_DISPLAY,
+  type SessionClientSource,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Database, Layers, MessageSquare, User } from "lucide-react";
@@ -12,6 +15,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
 import {
+  ClientFilterOption,
   ProfileFilterOption,
   SourceFilterOption,
   UserFilterOption,
@@ -85,7 +89,9 @@ function getSessionDisplayData(session: SessionData) {
   const conversationTitle = session.conversationTitle;
   const isArchestraChat = conversationTitle && session.sessionId;
   const claudeCodeTitle = session.claudeCodeTitle;
-  const isClaudeCodeSession = session.sessionSource === "claude_code";
+  // Both Claude clients (Code and Desktop) get a source badge and a labelled
+  // placeholder; other sources fall back to the last user message.
+  const claudeSourceLabel = getSessionClientLabel(session.sessionSource);
 
   let lastUserMessage = "";
   if (session.lastInteractionRequest && session.lastInteractionType) {
@@ -110,7 +116,7 @@ function getSessionDisplayData(session: SessionData) {
     isSingleInteraction,
     conversationTitle,
     isArchestraChat,
-    isClaudeCodeSession,
+    claudeSourceLabel,
     lastUserMessage,
     displayText,
   };
@@ -149,12 +155,14 @@ function SessionsTable({
   const profileIdFromUrl = searchParams.get("profileId");
   const userIdFromUrl = searchParams.get("userId");
   const sourceFromUrl = searchParams.get("source");
+  const sessionSourceFromUrl = searchParams.get("sessionSource");
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
   const searchFromUrl = searchParams.get("search");
   const profileFilter = profileIdFromUrl || "all";
   const userFilter = userIdFromUrl || "all";
   const sourceFilter = sourceFromUrl || "all";
+  const clientFilter = sessionSourceFromUrl || "all";
 
   // Date time range picker hook
   const dateTimePicker = useDateTimeRangePicker({
@@ -212,6 +220,16 @@ function SessionsTable({
     [updateQueryParams],
   );
 
+  const handleClientFilterChange = useCallback(
+    (value: string) => {
+      updateQueryParams({
+        sessionSource: value === "all" ? null : value,
+        page: "1", // Reset to first page
+      });
+    },
+    [updateQueryParams],
+  );
+
   const { data: sessionsResponse, isFetching } = useInteractionSessions({
     limit: pageSize,
     offset,
@@ -219,6 +237,10 @@ function SessionsTable({
     userId: userFilter !== "all" ? userFilter : undefined,
     source:
       sourceFilter !== "all" ? (sourceFilter as InteractionSource) : undefined,
+    sessionSource:
+      clientFilter !== "all"
+        ? (clientFilter as SessionClientSource)
+        : undefined,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
     search: searchFromUrl || undefined,
@@ -237,6 +259,7 @@ function SessionsTable({
     profileFilter !== "all" ||
     userFilter !== "all" ||
     sourceFilter !== "all" ||
+    clientFilter !== "all" ||
     dateTimePicker.startDate !== undefined ||
     !!searchFromUrl;
 
@@ -246,6 +269,7 @@ function SessionsTable({
       profileId: null,
       userId: null,
       source: null,
+      sessionSource: null,
       startDate: null,
       endDate: null,
       search: null,
@@ -266,7 +290,7 @@ function SessionsTable({
             conversationTitle,
             displayText,
             isArchestraChat,
-            isClaudeCodeSession,
+            claudeSourceLabel,
             lastUserMessage,
           } = getSessionDisplayData(session);
 
@@ -293,20 +317,20 @@ function SessionsTable({
                     </Badge>
                   </Link>
                 </>
-              ) : isClaudeCodeSession ? (
+              ) : claudeSourceLabel ? (
                 <>
                   <span className="min-w-0 flex-1 truncate">
                     {displayText
                       ? displayText.length > 80
                         ? `${displayText.slice(0, 80)}...`
                         : displayText
-                      : "Claude Code session"}
+                      : `${claudeSourceLabel} session`}
                   </span>
                   <Badge
                     variant="secondary"
                     className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 shrink-0"
                   >
-                    Claude Code
+                    {claudeSourceLabel}
                   </Badge>
                 </>
               ) : lastUserMessage ? (
@@ -542,6 +566,24 @@ function SessionsTable({
                 selectedContent: (
                   <SourceFilterOption source={value as InteractionSource} />
                 ),
+              }),
+            ),
+          ]}
+          className="w-[200px]"
+        />
+
+        <SearchableSelect
+          value={clientFilter}
+          onValueChange={handleClientFilterChange}
+          placeholder="Filter by Client"
+          items={[
+            { value: "all", label: "All Clients" },
+            ...Object.entries(SESSION_CLIENT_SOURCE_DISPLAY).map(
+              ([value, { label }]) => ({
+                value,
+                label,
+                content: <ClientFilterOption label={label} />,
+                selectedContent: <ClientFilterOption label={label} />,
               }),
             ),
           ]}

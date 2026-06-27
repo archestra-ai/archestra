@@ -6,6 +6,7 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
@@ -51,10 +52,21 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               knowledgeBase: z.boolean(),
               fullWhiteLabeling: z.boolean(),
             }),
+            smallTeamTier: z.strictObject({
+              threshold: z.number(),
+              userCount: z.number(),
+              smallTeam: z.boolean(),
+              envFlag: z.boolean(),
+              communicate: z.boolean(),
+            }),
             features: z.strictObject({
+              betaEnabled: z.boolean(),
               orchestratorK8sRuntime: z.boolean(),
               sandbox: z.boolean(),
               agentSkillsEnabled: z.boolean(),
+              agentEnvironmentsEnabled: z.boolean(),
+              appsEnabled: z.boolean(),
+              projectsEnabled: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               azureOpenAiEntraIdEnabled: z.boolean(),
@@ -92,16 +104,29 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const globalToolPolicy: GlobalToolPolicy =
         org?.globalToolPolicy ?? "permissive";
 
+      const tier = enterpriseTier.getState();
+
       return reply.send({
         enterpriseFeatures: {
-          core: config.enterpriseFeatures.core,
-          knowledgeBase: config.enterpriseFeatures.knowledgeBase,
+          core: tier.coreActive,
+          knowledgeBase: tier.knowledgeBaseActive,
           fullWhiteLabeling: config.enterpriseFeatures.fullWhiteLabeling,
         },
+        smallTeamTier: {
+          threshold: tier.threshold,
+          userCount: tier.userCount,
+          smallTeam: tier.smallTeam,
+          envFlag: tier.envFlag,
+          communicate: tier.communicate,
+        },
         features: {
+          betaEnabled: config.beta,
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           sandbox: skillSandboxRuntimeService.isEnabled,
           agentSkillsEnabled: config.agents.skillsEnabled,
+          agentEnvironmentsEnabled: config.agents.environmentsEnabled,
+          appsEnabled: config.apps.enabled,
+          projectsEnabled: config.projects.enabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
@@ -139,6 +164,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           zhipuai: config.llm.zhipuai.baseUrl || null,
           minimax: config.llm.minimax.baseUrl || null,
           deepseek: config.llm.deepseek.baseUrl || null,
+          "github-copilot": config.llm["github-copilot"].baseUrl || null,
           azure: config.llm.azure.baseUrl || null,
         },
       });
@@ -152,6 +178,9 @@ const PublicConfigResponseSchema = z.strictObject({
   disableBasicAuth: z.boolean(),
   disableInvitations: z.boolean(),
   maintenanceMode: z.string().nullable(),
+  // Effective enterprise core flag (env var OR small-team free tier). Exposed
+  // pre-auth so the login screen can decide whether to render the SSO picker.
+  enterpriseCoreActive: z.boolean(),
   analytics: z.strictObject({
     enabled: z.boolean(),
     instanceId: z.string().uuid().nullable(),
@@ -173,6 +202,7 @@ async function getPublicConfigResponse(): Promise<
     disableBasicAuth: config.auth.disableBasicAuth,
     disableInvitations: config.auth.disableInvitations,
     maintenanceMode: config.maintenanceMode,
+    enterpriseCoreActive: enterpriseTier.isCoreActive(),
     analytics: {
       enabled: config.analytics.enabled,
       instanceId: await getAnalyticsInstanceId(),

@@ -1,0 +1,1 @@
+ALTER TABLE "connection_setups" ADD COLUMN "platform" text DEFAULT 'macos' NOT NULL;

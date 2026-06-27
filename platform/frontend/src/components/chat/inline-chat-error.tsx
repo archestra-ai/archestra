@@ -26,6 +26,7 @@ import {
   mapClientError,
   parseErrorResponse,
 } from "./chat-error.utils";
+import { ProviderAuthRequiredCard } from "./provider-auth-required-card";
 
 interface InlineChatErrorProps {
   error: Error;
@@ -35,6 +36,14 @@ interface InlineChatErrorProps {
   agentName?: string;
   selectedModel?: string;
   modelSource?: ModelSource | null;
+  /** Re-run the original prompt after the user connects a per-user provider. */
+  onProviderConnected?: () => void;
+  /**
+   * When set, render a "Try again" button that clears this error and resends the
+   * prompt. Wired only for scheduled-run chats — other chats omit it and keep
+   * their existing edit-the-message retry flow.
+   */
+  onRetry?: () => void | Promise<void>;
 }
 
 export function InlineChatError({
@@ -45,12 +54,30 @@ export function InlineChatError({
   agentName,
   selectedModel,
   modelSource,
+  onProviderConnected,
+  onRetry,
 }: InlineChatErrorProps) {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const { data: isAdmin } = useHasPermissions({
     organizationSettings: ["read"],
   });
   const chatError = parseErrorResponse(error) ?? mapClientError(error);
+
+  // A per-user provider the user hasn't linked yet → an inline "connect your
+  // account" card instead of a generic error.
+  if (
+    chatError.code === ChatErrorCode.ProviderAuthRequired &&
+    chatError.authAction
+  ) {
+    return (
+      <ProviderAuthRequiredCard
+        provider={chatError.authAction.provider}
+        providerLabel={chatError.authAction.providerLabel}
+        onConnected={onProviderConnected}
+      />
+    );
+  }
+
   const isUsageLimitExceeded = chatError.usageLimitExceeded === true;
   // An empty turn that survived the backend's auto-retries is the model's
   // answer for this conversation, not a system failure — render it as a
@@ -109,6 +136,20 @@ export function InlineChatError({
     );
   };
 
+  const retryButton = onRetry ? (
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-7 gap-1.5"
+      onClick={() => {
+        void onRetry();
+      }}
+    >
+      <RefreshCw className="h-3.5 w-3.5" />
+      Try again
+    </Button>
+  ) : null;
+
   if (slimChatErrorUi) {
     return (
       <Message from="assistant">
@@ -148,6 +189,7 @@ export function InlineChatError({
                   {usageLimitMessage}
                 </p>
               )}
+              {retryButton}
             </div>
           </div>
         </MessageContent>
@@ -217,6 +259,8 @@ export function InlineChatError({
                 {usageLimitMessage}
               </p>
             )}
+
+            {retryButton}
 
             {isAdmin && (
               <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>

@@ -1,5 +1,6 @@
 import {
   isProviderApiKeyOptional,
+  providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
@@ -49,7 +50,9 @@ export async function resolveProviderApiKey(params: {
       conversationId: conversationId ?? null,
       agentLlmApiKeyId,
     });
-  } else {
+  } else if (!providerRequiresPerUserCredential(provider)) {
+    // Per-user providers have no org-scope key to fall back to, and there's no
+    // acting user to resolve a personal key — leave it unresolved.
     resolvedApiKey = await LlmProviderApiKeyModel.findByScope(
       organizationId,
       provider,
@@ -87,14 +90,20 @@ export async function resolveProviderApiKey(params: {
     }
   }
 
-  const envApiKey = getProviderEnvApiKey(provider);
-  if (envApiKey) {
-    return {
-      apiKey: envApiKey,
-      source: "environment",
-      chatApiKeyId: undefined,
-      baseUrl: null,
-    };
+  // Per-user providers (GitHub Copilot) must never fall back to the shared env
+  // token — that single token would be used by every user, which is exactly the
+  // sharing we're preventing. Leave apiKey undefined so the caller prompts the
+  // user to link their own account.
+  if (!providerRequiresPerUserCredential(provider)) {
+    const envApiKey = getProviderEnvApiKey(provider);
+    if (envApiKey) {
+      return {
+        apiKey: envApiKey,
+        source: "environment",
+        chatApiKeyId: undefined,
+        baseUrl: null,
+      };
+    }
   }
 
   return {

@@ -1,5 +1,6 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { Loader2, ShieldX } from "lucide-react";
+import type { UseFormReturn } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,7 +8,11 @@ import {
   DialogFooter,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
-import { useUpdateInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  getCatalogMutationErrorCode,
+  REMOTE_SERVER_URL_NOT_ALLOWED_CODE,
+  useUpdateInternalMcpCatalogItem,
+} from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { McpCatalogForm } from "./mcp-catalog-form";
@@ -87,18 +92,41 @@ export function EditCatalogContent({
     (s) => s.catalogId === item.id,
   ).length;
 
-  const onSubmit = async (values: McpCatalogFormValues) => {
+  const onSubmit = (
+    values: McpCatalogFormValues,
+    form: UseFormReturn<McpCatalogFormValues>,
+  ) => {
     const { multitenant: _multitenant, ...updateData } =
       transformFormToApiData(values);
 
-    await updateMutation.mutateAsync({
-      id: item.id,
-      data: updateData,
-    });
-
-    if (!keepOpenOnSave) {
-      onClose();
-    }
+    // Callback form so the dialog only closes on success; on a validation
+    // error it stays open for correction.
+    updateMutation.mutate(
+      { id: item.id, data: updateData },
+      {
+        onSuccess: () => {
+          if (!keepOpenOnSave) {
+            onClose();
+          }
+        },
+        onError: (error) => {
+          // Network-policy rejections point at the Server URL — show them
+          // inline on that field rather than as a toast.
+          if (
+            getCatalogMutationErrorCode(error) ===
+            REMOTE_SERVER_URL_NOT_ALLOWED_CODE
+          ) {
+            form.setError("serverUrl", {
+              type: "server",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Server URL is not allowed by the environment's network policy.",
+            });
+          }
+        },
+      },
+    );
   };
 
   if (canEditLoading) {

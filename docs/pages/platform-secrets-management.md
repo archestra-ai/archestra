@@ -2,7 +2,7 @@
 title: "Secrets Management"
 category: Administration
 description: "Configure external secrets storage for sensitive data"
-order: 3
+order: 4
 lastUpdated: 2026-05-13
 ---
 

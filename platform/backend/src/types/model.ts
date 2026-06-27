@@ -64,8 +64,19 @@ export type CreateModel = z.infer<typeof CreateModelSchema>;
 
 /**
  * Price source indicates where the effective price comes from.
+ *
+ * - `custom`: admin-set override.
+ * - `models_dev`: synced from the models.dev registry.
+ * - `derived_multiplier`: cache price derived from the input price via a provider
+ *   multiplier (used only for cache prices when the registry omits them).
+ * - `default`: estimated flat fallback — a guess, surfaced as such in the UI.
  */
-export const PriceSourceSchema = z.enum(["custom", "models_dev", "default"]);
+export const PriceSourceSchema = z.enum([
+  "custom",
+  "models_dev",
+  "derived_multiplier",
+  "default",
+]);
 export type PriceSource = z.infer<typeof PriceSourceSchema>;
 
 /**
@@ -84,8 +95,14 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
   pricePerMillionOutput: z.string().nullable(),
   /** Whether the price is a custom admin-set override */
   isCustomPrice: z.boolean(),
-  /** Source of the effective price */
+  /** Source of the effective input/output price */
   priceSource: PriceSourceSchema,
+  /** Price per million cache-read tokens, or null when not priced */
+  pricePerMillionCacheRead: z.string().nullable(),
+  /** Price per million cache-write tokens (default TTL), or null when not priced */
+  pricePerMillionCacheWrite: z.string().nullable(),
+  /** Source of the effective cache price (null when cache is unpriced) */
+  cachePriceSource: PriceSourceSchema.nullable(),
 });
 export type ModelCapabilities = z.infer<typeof ModelCapabilitiesSchema>;
 
@@ -99,6 +116,8 @@ export const PatchModelBodySchema = createUpdateSchema(
   .pick({
     customPricePerMillionInput: true,
     customPricePerMillionOutput: true,
+    customPricePerMillionCacheRead: true,
+    customPricePerMillionCacheWrite: true,
     ignored: true,
     embeddingDimensions: true,
     inputModalities: true,
@@ -107,6 +126,8 @@ export const PatchModelBodySchema = createUpdateSchema(
   .extend({
     customPricePerMillionInput: z.string().nullable().optional(),
     customPricePerMillionOutput: z.string().nullable().optional(),
+    customPricePerMillionCacheRead: z.string().nullable().optional(),
+    customPricePerMillionCacheWrite: z.string().nullable().optional(),
     ignored: z.boolean().optional(),
     embeddingDimensions:
       SupportedEmbeddingDimensionsSchema.nullable().optional(),
@@ -154,19 +175,34 @@ export const PatchModelBodySchema = createUpdateSchema(
   )
   .refine(
     (data) => {
-      if (
-        data.customPricePerMillionInput != null &&
-        data.customPricePerMillionInput !== undefined
-      ) {
-        const price = parseFloat(data.customPricePerMillionInput);
-        if (Number.isNaN(price) || price < 0) return false;
+      // Cache read/write overrides must be set together or both null.
+      const readProvided = data.customPricePerMillionCacheRead !== undefined;
+      const writeProvided = data.customPricePerMillionCacheWrite !== undefined;
+      if (readProvided !== writeProvided) return false;
+      if (readProvided && writeProvided) {
+        const readSet = data.customPricePerMillionCacheRead !== null;
+        const writeSet = data.customPricePerMillionCacheWrite !== null;
+        if (readSet !== writeSet) return false;
       }
-      if (
-        data.customPricePerMillionOutput != null &&
-        data.customPricePerMillionOutput !== undefined
-      ) {
-        const price = parseFloat(data.customPricePerMillionOutput);
-        if (Number.isNaN(price) || price < 0) return false;
+      return true;
+    },
+    {
+      message:
+        "Both custom cache prices must be set together or both must be null",
+    },
+  )
+  .refine(
+    (data) => {
+      for (const value of [
+        data.customPricePerMillionInput,
+        data.customPricePerMillionOutput,
+        data.customPricePerMillionCacheRead,
+        data.customPricePerMillionCacheWrite,
+      ]) {
+        if (value != null) {
+          const price = parseFloat(value);
+          if (Number.isNaN(price) || price < 0) return false;
+        }
       }
       return true;
     },
@@ -200,8 +236,14 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
   pricePerMillionOutput: z.string().nullable(),
   /** Whether the effective price is a custom admin-set override */
   isCustomPrice: z.boolean(),
-  /** Source of the effective price */
+  /** Source of the effective input/output price */
   priceSource: PriceSourceSchema,
+  /** Price per million cache-read tokens, or null when not priced */
+  pricePerMillionCacheRead: z.string().nullable(),
+  /** Price per million cache-write tokens (default TTL), or null when not priced */
+  pricePerMillionCacheWrite: z.string().nullable(),
+  /** Source of the effective cache price (null when cache is unpriced) */
+  cachePriceSource: PriceSourceSchema.nullable(),
   /** True when the provider charges nothing for this model (both raw prices are zero). */
   isFree: z.boolean(),
 });

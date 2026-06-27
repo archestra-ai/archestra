@@ -652,33 +652,6 @@ export function useTestEmbeddingConnection() {
 }
 
 /**
- * Complete onboarding
- */
-export function useCompleteOnboarding() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const { data: updatedOrganization, error } =
-        await archestraApiSdk.completeOnboarding({
-          body: { onboardingComplete: true },
-        });
-
-      if (error) {
-        toast.error("Failed to complete onboarding");
-        return null;
-      }
-
-      return updatedOrganization;
-    },
-    onSuccess: (updatedOrganization) => {
-      if (!updatedOrganization) return;
-      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
-      toast.success("Onboarding complete");
-    },
-  });
-}
-
-/**
  * Get all members of the organization (for admin filtering)
  */
 export function useOrganizationMembers(enabled = true) {

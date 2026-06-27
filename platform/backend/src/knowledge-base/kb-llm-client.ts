@@ -3,7 +3,10 @@ import type {
   ModelInputModality,
   SupportedProvider,
 } from "@archestra/shared";
-import { DEFAULT_PROVIDER_BASE_URLS } from "@archestra/shared";
+import {
+  DEFAULT_PROVIDER_BASE_URLS,
+  providerRequiresPerUserCredential,
+} from "@archestra/shared";
 import { createDirectLLMModel, type LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import {
@@ -136,6 +139,11 @@ export async function resolveApiKeyFromChatApiKey(
 } | null> {
   const chatApiKey = await LlmProviderApiKeyModel.findById(chatApiKeyId);
   if (!chatApiKey) return null;
+
+  // Knowledge-base embedding/reranking is a system operation with no acting
+  // user, so a per-user provider (GitHub Copilot) can't be used here — its
+  // token belongs to one person. (Copilot also exposes no embeddings.)
+  if (providerRequiresPerUserCredential(chatApiKey.provider)) return null;
 
   // Fall back to the provider's default base URL when none is configured on the key
   const baseUrl =

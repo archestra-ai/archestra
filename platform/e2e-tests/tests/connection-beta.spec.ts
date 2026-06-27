@@ -71,6 +71,127 @@ test.describe("connection_beta wizard", () => {
     await expect(page.getByText("a virtual key").first()).toBeVisible();
   });
 
+  test("switching the platform to Windows yields a PowerShell command", async ({
+    page,
+    goToPage,
+  }) => {
+    await goToPage(page, "/connection_beta?clientId=claude-code");
+
+    // defaults to a curl|bash command (macOS/Linux)
+    await expect(
+      page.getByText(/curl -fsSL '.*\/api\/connection-setups\//),
+    ).toBeVisible();
+
+    // open the platform editor in the review step and pick Windows
+    await page.getByTestId("connect-change-platform").click();
+    await page.getByTestId("connect-platform-select").click();
+    await page.getByRole("option", { name: "Windows" }).click();
+
+    // the command regenerates as a PowerShell irm|iex one-liner, and the
+    // served script is PowerShell rather than bash
+    const command = page.getByText(
+      /irm '.*\/api\/connection-setups\/.*' \| iex/,
+    );
+    await expect(command).toBeVisible();
+    const commandText = (await command.textContent()) ?? "";
+    const url = commandText.match(/irm '([^']+)'/)?.[1];
+    expect(url).toBeTruthy();
+
+    const scriptUrl = (url as string).replace(
+      /^https?:\/\/[^/]+/,
+      API_BASE_URL,
+    );
+    const script = await (await page.request.get(scriptUrl)).text();
+    expect(script).toContain("$ErrorActionPreference = 'Stop'");
+    expect(script).not.toContain("#!/usr/bin/env bash");
+  });
+
+  test("claude-code passthrough injects the X-Archestra-Virtual-Key attribution header", async ({
+    page,
+    goToPage,
+  }) => {
+    // passthrough (provider key) is the default for claude-code + Anthropic; the
+    // admin fixture user can mint a passthrough key, so attribution is on.
+    await goToPage(page, "/connection_beta?clientId=claude-code");
+
+    const command = page.getByText(/curl -fsSL '.*\/api\/connection-setups\//);
+    await expect(command).toBeVisible();
+
+    const commandText = (await command.textContent()) ?? "";
+    const url = commandText.match(/curl -fsSL '([^']+)'/)?.[1];
+    expect(url).toBeTruthy();
+    const scriptUrl = (url as string).replace(
+      /^https?:\/\/[^/]+/,
+      API_BASE_URL,
+    );
+    const script = await (await page.request.get(scriptUrl)).text();
+    expect(script).toContain("ANTHROPIC_CUSTOM_HEADERS");
+    expect(script).toMatch(/X-Archestra-Virtual-Key: arch_[0-9a-f]{64}/);
+    // subscription passes through — no auth-token override
+    expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
+  });
+
+  test("claude-code ends with a copyable test message whose marker the logs link searches for", async ({
+    page,
+    goToPage,
+  }) => {
+    await goToPage(page, "/connection_beta?clientId=claude-code");
+
+    // a final wizard step prompts a restart + the sample message…
+    await expect(
+      page.getByText(/Restart Claude Code and send a test message/i),
+    ).toBeVisible();
+
+    // …and the logs link searches for the unique marker that the displayed
+    // sample message carries (the marker alone pins the session — no
+    // sessionSource filter)
+    const link = page.getByTestId("connect-test-setup-link");
+    await expect(link).toBeVisible();
+    const href = (await link.getAttribute("href")) ?? "";
+    expect(href).toMatch(/^\/llm\/logs\?/);
+    expect(href).not.toContain("sessionSource");
+    expect(href).toContain("userId=");
+
+    const marker = new URL(href, "http://x").searchParams.get("search");
+    expect(marker).toMatch(/^conn-test-[0-9a-f]{12}$/);
+    // the copyable sample message contains exactly that marker
+    await expect(page.getByTestId("connect-sample-message")).toContainText(
+      marker as string,
+    );
+  });
+
+  test("claude-desktop's final step searches the logs for its sample-message marker", async ({
+    page,
+    goToPage,
+  }) => {
+    await goToPage(page, "/connection_beta?clientId=claude-desktop");
+
+    const link = page.getByTestId("connect-test-setup-link");
+    await expect(link).toBeVisible();
+    const href = (await link.getAttribute("href")) ?? "";
+    expect(href).not.toContain("sessionSource");
+    expect(href).toContain("userId=");
+
+    const marker = new URL(href, "http://x").searchParams.get("search");
+    expect(marker).toMatch(/^conn-test-[0-9a-f]{12}$/);
+    await expect(page.getByTestId("connect-sample-message")).toContainText(
+      marker as string,
+    );
+  });
+
+  test("non-Claude script clients get no 'Test your setup' step", async ({
+    page,
+    goToPage,
+  }) => {
+    await goToPage(page, "/connection_beta?clientId=codex");
+
+    // the command still generates, but there's no verify step / logs link
+    await expect(
+      page.getByText(/curl -fsSL '.*\/api\/connection-setups\//),
+    ).toBeVisible();
+    await expect(page.getByTestId("connect-test-setup-link")).toHaveCount(0);
+  });
+
   test("admins configure the page from a dialog on the page itself", async ({
     page,
     goToPage,

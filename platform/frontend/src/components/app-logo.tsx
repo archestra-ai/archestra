@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 "use client";
 
 import Image from "next/image";
@@ -29,11 +30,15 @@ export function AppLogo() {
             height={60}
             className="object-contain max-w-full max-h-12 w-auto h-auto"
           />
+          {/* SPDX-SnippetBegin */}
+          {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
+          {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
           {!config.enterpriseFeatures.fullWhiteLabeling && (
             <p className="text-[10px] text-muted-foreground">
               Powered by {APP_DISPLAY_NAME}
             </p>
           )}
+          {/* SPDX-SnippetEnd */}
         </div>
       </div>
     );

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { LINKED_IDP_SSO_MODE } from "@archestra/shared";
 import { z } from "zod";
 import { type Transaction, withDbTransaction } from "@/database";

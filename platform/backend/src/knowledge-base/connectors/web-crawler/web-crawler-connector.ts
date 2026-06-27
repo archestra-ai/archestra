@@ -187,6 +187,7 @@ export class WebCrawlerConnector extends BaseConnector {
     const excludePathPatterns = compileExcludePathPatterns(
       params.config.excludePathPatterns,
     );
+    const startOrigin = new URL(startUrl).origin;
     let previousRequestCompletedAt = 0;
 
     return new CheerioCrawler(
@@ -211,6 +212,47 @@ export class WebCrawlerConnector extends BaseConnector {
             gotOptions.headers = {
               ...gotOptions.headers,
               "User-Agent": params.config.userAgent ?? DEFAULT_USER_AGENT,
+            };
+
+            // got follows redirects internally, bypassing the per-request SSRF
+            // and scope checks above. Reject cross-origin and out-of-scope
+            // redirects without dialing the target (so an unreachable external
+            // host can't hang the crawl, and a redirect can't pull in a path or
+            // origin the crawl was scoped to exclude), and re-run the SSRF check
+            // on the remaining same-origin, in-scope redirects. Origin — not
+            // just hostname — matches the same-origin invariant enforced on
+            // discovered links, so a redirect to another port or scheme is
+            // refused too.
+            gotOptions.hooks = {
+              ...gotOptions.hooks,
+              beforeRedirect: [
+                ...(gotOptions.hooks?.beforeRedirect ?? []),
+                async (redirectOptions) => {
+                  if (!redirectOptions.url) return;
+                  const target = new URL(redirectOptions.url);
+                  if (target.origin !== startOrigin) {
+                    throw new Error(
+                      `Refusing to follow cross-origin redirect to ${target.href}`,
+                    );
+                  }
+                  if (
+                    !isPathInScope({
+                      pathname: target.pathname,
+                      search: target.search,
+                      allowedPathPrefixes,
+                      excludePathPatterns,
+                    })
+                  ) {
+                    throw new Error(
+                      `Refusing to follow out-of-scope redirect to ${target.href}`,
+                    );
+                  }
+                  await assertPublicCrawlUrl({
+                    url: target.href,
+                    allowPrivateNetwork: this.allowPrivateNetwork,
+                  });
+                },
+              ],
             };
           },
         ],
@@ -481,16 +523,31 @@ function isAllowedUrl(params: {
 
   if (url.protocol !== "http:" && url.protocol !== "https:") return false;
   if (url.origin !== startUrl.origin) return false;
+
+  return isPathInScope({
+    pathname: url.pathname,
+    search: url.search,
+    allowedPathPrefixes: params.allowedPathPrefixes,
+    excludePathPatterns: params.excludePathPatterns,
+  });
+}
+
+function isPathInScope(params: {
+  pathname: string;
+  search: string;
+  allowedPathPrefixes: string[];
+  excludePathPatterns: RegExp[];
+}): boolean {
   if (
     !params.allowedPathPrefixes.some((prefix) =>
-      pathMatchesPrefix(url.pathname, prefix),
+      pathMatchesPrefix(params.pathname, prefix),
     )
   ) {
     return false;
   }
 
   return !params.excludePathPatterns.some((pattern) =>
-    pattern.test(`${url.pathname}${url.search}`),
+    pattern.test(`${params.pathname}${params.search}`),
   );
 }
 

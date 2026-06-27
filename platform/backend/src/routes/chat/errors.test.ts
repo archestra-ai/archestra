@@ -17,7 +17,8 @@ vi.mock("@sentry/node", () => ({
   captureException: mockSentryCaptureException,
 }));
 
-import { NoSuchToolError } from "ai";
+import { NoSuchToolError, UnsupportedFunctionalityError } from "ai";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
   EmptyModelResponseError,
   formatUnavailableToolErrorDetails,
@@ -29,6 +30,22 @@ import {
 
 beforeEach(() => {
   mockSentryCaptureException.mockClear();
+});
+
+describe("mapProviderError - per-user provider auth required", () => {
+  it("maps LlmProviderAuthRequiredError to a ProviderAuthRequired card with authAction", () => {
+    const result = mapProviderError(
+      new LlmProviderAuthRequiredError("github-copilot"),
+      "github-copilot",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.ProviderAuthRequired);
+    expect(result.isRetryable).toBe(false);
+    expect(result.authAction).toEqual({
+      provider: "github-copilot",
+      providerLabel: "GitHub Copilot",
+    });
+  });
 });
 
 // =============================================================================
@@ -1766,6 +1783,28 @@ describe("ProviderError", () => {
       usageLimitEntityType: "organization",
     });
   });
+
+  it("preserves authAction so the connect card renders in slim chat mode", () => {
+    expect(
+      sanitizeChatErrorForFrontend({
+        code: ChatErrorCode.ProviderAuthRequired,
+        message: "Connect your GitHub Copilot account to use this model.",
+        isRetryable: false,
+        authAction: {
+          provider: "github-copilot",
+          providerLabel: "GitHub Copilot",
+        },
+      }),
+    ).toEqual({
+      code: ChatErrorCode.ProviderAuthRequired,
+      message: "Connect your GitHub Copilot account to use this model.",
+      isRetryable: false,
+      authAction: {
+        provider: "github-copilot",
+        providerLabel: "GitHub Copilot",
+      },
+    });
+  });
 });
 
 describe("mapProviderError - EmptyModelResponseError", () => {
@@ -1809,6 +1848,21 @@ describe("mapProviderError - EmptyModelResponseError", () => {
       rawFinishReason: "MALFORMED_FUNCTION_CALL",
       attempts: 3,
     });
+  });
+});
+
+describe("mapProviderError - UnsupportedFunctionalityError", () => {
+  it("maps a provider-rejected attachment to a non-retryable InvalidRequest card naming the functionality", () => {
+    const functionality = "file part media type text/csv";
+    const result = mapProviderError(
+      new UnsupportedFunctionalityError({ functionality }),
+      "openai",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+    expect(result.isRetryable).toBe(false);
+    expect(result.message).toContain(functionality);
+    expect(result.originalError?.raw).toEqual({ functionality });
   });
 });
 

@@ -132,7 +132,12 @@ describe("fetchOpenrouterModels", () => {
                 id: "openai/gpt-4o-mini",
                 name: "GPT-4o mini",
                 context_length: 128000,
-                pricing: { prompt: "0.00000015", completion: "0.0000006" },
+                pricing: {
+                  prompt: "0.00000015",
+                  completion: "0.0000006",
+                  input_cache_read: "0.000000075",
+                  input_cache_write: "0.0000001875",
+                },
                 supported_parameters: ["tools", "tool_choice", "max_tokens"],
               },
             ],
@@ -151,6 +156,8 @@ describe("fetchOpenrouterModels", () => {
       supportsToolCalling: true,
       promptPricePerToken: "0.00000015",
       completionPricePerToken: "0.0000006",
+      cacheReadPricePerToken: "0.000000075",
+      cacheWritePricePerToken: "0.0000001875",
     });
   });
 
@@ -182,6 +189,8 @@ describe("fetchOpenrouterModels", () => {
       supportsToolCalling: false,
       promptPricePerToken: "0",
       completionPricePerToken: "0",
+      cacheReadPricePerToken: null,
+      cacheWritePricePerToken: null,
     });
   });
 
@@ -213,6 +222,8 @@ describe("fetchOpenrouterModels", () => {
       supportsToolCalling: true,
       promptPricePerToken: null,
       completionPricePerToken: null,
+      cacheReadPricePerToken: null,
+      cacheWritePricePerToken: null,
     });
   });
 

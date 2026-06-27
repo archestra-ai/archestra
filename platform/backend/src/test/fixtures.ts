@@ -13,6 +13,10 @@ import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
+  AppDataModel,
+  AppModel,
+  AppToolModel,
+  AppVersionModel,
   InternalMcpCatalogModel,
   LlmProviderApiKeyModel,
   ScheduleTriggerModel,
@@ -25,12 +29,17 @@ import {
   TrustedDataPolicyModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { createAppBacking } from "@/services/apps/app-mcp-backing";
 import type {
   Agent,
   AgentTool,
+  App,
+  AppTool,
+  AppVersion,
   ConnectorRun,
   InsertAccount,
   InsertAgent,
+  InsertApp,
   InsertConnectorRun,
   InsertConversation,
   InsertInteraction,
@@ -58,6 +67,7 @@ import type {
   ToolInvocation,
   TrustedData,
 } from "@/types";
+import type { ResourceVisibilityScope } from "@/types/visibility";
 
 type MakeUserOverrides = Partial<
   Pick<InsertUser, "email" | "name" | "emailVerified" | "role">
@@ -80,6 +90,10 @@ interface TestFixtures {
   makeScheduleTriggerRun: typeof makeScheduleTriggerRun;
   makeTool: typeof makeTool;
   makeAgentTool: typeof makeAgentTool;
+  makeApp: typeof makeApp;
+  makeAppVersion: typeof makeAppVersion;
+  makeAppTool: typeof makeAppTool;
+  makeAppData: typeof makeAppData;
   makeToolPolicy: typeof makeToolPolicy;
   makeTrustedDataPolicy: typeof makeTrustedDataPolicy;
   makeCustomRole: typeof makeCustomRole;
@@ -344,7 +358,10 @@ async function makeScheduleTriggerRun(
  */
 async function makeTool(
   overrides: Partial<
-    Pick<Tool, "name" | "description" | "parameters" | "catalogId" | "agentId">
+    Pick<
+      Tool,
+      "name" | "description" | "parameters" | "catalogId" | "agentId" | "meta"
+    >
   > = {},
 ): Promise<Tool> {
   const toolData = {
@@ -377,6 +394,117 @@ async function makeAgentTool(
   return await AgentToolModel.create(agentId, toolId, {
     mcpServerId: overrides.mcpServerId,
     credentialResolutionMode: overrides.credentialResolutionMode,
+  });
+}
+
+/**
+ * Creates a test app (with its version 1) via the App model. Auto-creates an
+ * organization if not provided; defaults to org scope.
+ */
+async function makeApp(
+  overrides: Partial<InsertApp> & {
+    html?: string;
+    teamIds?: string[];
+    scope?: ResourceVisibilityScope;
+    environmentId?: string | null;
+  } = {},
+): Promise<App> {
+  let organizationId = overrides.organizationId;
+  if (!organizationId) {
+    const org = await makeOrganization();
+    organizationId = org.id;
+  }
+  const {
+    html,
+    teamIds,
+    scope: scopeOverride,
+    environmentId,
+    ...appOverrides
+  } = overrides;
+  const scope = scopeOverride ?? "org";
+  // Visibility/environment live on the backing catalog, so an author is needed
+  // (catalog authorId + personal-scope access checks).
+  const authorId = appOverrides.authorId ?? (await makeUser()).id;
+
+  const created = await AppModel.create({
+    app: {
+      name: `Test App ${crypto.randomUUID().substring(0, 8)}`,
+      ...appOverrides,
+      authorId,
+      organizationId,
+    },
+    payload: {
+      html: html ?? "<!doctype html><title>test app</title>",
+      uiPermissions: null,
+    },
+  });
+  await createAppBacking({
+    app: created,
+    scope,
+    environmentId: environmentId ?? null,
+    userId: authorId,
+    organizationId,
+    teamIds: teamIds ?? [],
+  });
+
+  const app = await AppModel.findById(created.id);
+  if (!app) throw new Error("makeApp: failed to load created app");
+  return app;
+}
+
+/** Forks a new app version (changing the html) and returns the new head version. */
+async function makeAppVersion(
+  appId: string,
+  html?: string,
+): Promise<AppVersion> {
+  const app = await AppModel.update({
+    id: appId,
+    version: {
+      html:
+        html ??
+        `<!doctype html><title>v ${crypto.randomUUID().substring(0, 8)}</title>`,
+      uiPermissions: null,
+    },
+  });
+  if (!app) throw new Error("makeAppVersion: app not found");
+  const head = await AppVersionModel.findByAppAndVersion(
+    appId,
+    app.latestVersion,
+  );
+  if (!head) throw new Error("makeAppVersion: head version missing");
+  return head;
+}
+
+/** Attaches a tool to an app via the AppTool model. */
+async function makeAppTool(
+  appId: string,
+  toolId: string,
+  overrides: Partial<
+    Pick<AppTool, "mcpServerId" | "credentialResolutionMode">
+  > = {},
+) {
+  return await AppToolModel.create(appId, toolId, {
+    mcpServerId: overrides.mcpServerId,
+    credentialResolutionMode: overrides.credentialResolutionMode,
+  });
+}
+
+/** Writes an App Data Store entry (shared partition unless a userId is given). */
+async function makeAppData(
+  appId: string,
+  key: string,
+  value: unknown,
+  userId: string | null = null,
+) {
+  return await AppDataModel.set({
+    appId,
+    userId,
+    key,
+    value,
+    // Fixtures write collaborative (unowned) data; override keeps any future
+    // ownership check a no-op and callerUserId is otherwise unused here.
+    callerUserId: userId ?? "fixture",
+    callerCanOverrideOwner: true,
   });
 }
 
@@ -539,6 +667,7 @@ async function makeInternalMcpCatalog(
       | "scope"
       | "teams"
       | "clonedFrom"
+      | "environmentId"
     >
   > & {
     organizationId?: string;
@@ -704,7 +833,16 @@ async function makeInteraction(
   overrides: Partial<
     Pick<
       InsertInteraction,
-      "request" | "response" | "type" | "model" | "inputTokens" | "outputTokens"
+      | "request"
+      | "response"
+      | "type"
+      | "model"
+      | "inputTokens"
+      | "outputTokens"
+      | "cost"
+      | "baselineCost"
+      | "toonCostSavings"
+      | "cacheSavings"
     >
   > = {},
 ) {
@@ -891,6 +1029,8 @@ async function makeOAuthClient(
     name?: string;
     redirectUris?: string[];
     userId?: string;
+    scopes?: string[] | null;
+    grantTypes?: string[];
   } = {},
 ) {
   const id = crypto.randomUUID();
@@ -904,12 +1044,16 @@ async function makeOAuthClient(
         "http://localhost:8005/callback",
       ],
       tokenEndpointAuthMethod: "none",
-      grantTypes: ["authorization_code", "refresh_token"],
+      grantTypes: overrides.grantTypes ?? [
+        "authorization_code",
+        "refresh_token",
+      ],
       responseTypes: ["code"],
       public: true,
       type: "web",
       createdAt: new Date(),
       updatedAt: new Date(),
+      ...(overrides.scopes !== undefined ? { scopes: overrides.scopes } : {}),
       ...(overrides.userId ? { userId: overrides.userId } : {}),
     })
     .returning();
@@ -1122,6 +1266,18 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeAgentTool: async ({}, use) => {
     await use(makeAgentTool);
+  },
+  makeApp: async ({}, use) => {
+    await use(makeApp);
+  },
+  makeAppVersion: async ({}, use) => {
+    await use(makeAppVersion);
+  },
+  makeAppTool: async ({}, use) => {
+    await use(makeAppTool);
+  },
+  makeAppData: async ({}, use) => {
+    await use(makeAppData);
   },
   makeToolPolicy: async ({}, use) => {
     await use(makeToolPolicy);

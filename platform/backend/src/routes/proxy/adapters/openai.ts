@@ -1,4 +1,7 @@
-import { ArchestraInternalErrorCode } from "@archestra/shared";
+import {
+  ArchestraInternalErrorCode,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
@@ -273,13 +276,17 @@ export class OpenAIEmbeddingStreamAdapter
 export class OpenAIRequestAdapter
   implements LLMRequestAdapter<OpenAiRequest, OpenAiMessages>
 {
-  readonly provider = "openai" as const;
+  readonly provider: SupportedProvider;
   private request: OpenAiRequest;
   private modifiedModel: string | null = null;
   private toolResultUpdates: Record<string, string> = {};
 
-  constructor(request: OpenAiRequest) {
+  // `provider` overrides which provider this adapter attributes to (logs,
+  // metrics, interactions). OpenAI-compatible providers (DeepSeek, GitHub
+  // Copilot, …) reuse this adapter via createOpenAiCompatibleAdapterFactory.
+  constructor(request: OpenAiRequest, provider: SupportedProvider = "openai") {
     this.request = request;
+    this.provider = provider;
   }
 
   // ---------------------------------------------------------------------------
@@ -377,7 +384,11 @@ export class OpenAIRequestAdapter
 
   async applyToonCompression(model: string): Promise<ToolCompressionStats> {
     const { messages: compressedMessages, stats } =
-      await convertToolResultsToToon(this.request.messages, model);
+      await convertToolResultsToToon(
+        this.request.messages,
+        model,
+        this.provider,
+      );
     this.request = {
       ...this.request,
       messages: compressedMessages,
@@ -839,11 +850,15 @@ export function stripImageBlocksFromContent(content: unknown): string {
 export class OpenAIResponseAdapter
   implements LLMResponseAdapter<OpenAiResponse>
 {
-  readonly provider = "openai" as const;
+  readonly provider: SupportedProvider;
   private response: OpenAiResponse;
 
-  constructor(response: OpenAiResponse) {
+  constructor(
+    response: OpenAiResponse,
+    provider: SupportedProvider = "openai",
+  ) {
     this.response = response;
+    this.provider = provider;
   }
 
   getId(): string {
@@ -909,7 +924,7 @@ export class OpenAIResponseAdapter
         cacheWriteTokens: 0,
       };
     }
-    const { input, output, cacheRead, cacheWrite } = getUsageTokens(
+    const { input, output, cacheRead, cacheWrite, reasoning } = getUsageTokens(
       this.response.usage,
     );
     return {
@@ -917,6 +932,7 @@ export class OpenAIResponseAdapter
       outputTokens: output,
       cacheReadTokens: cacheRead,
       cacheWriteTokens: cacheWrite,
+      reasoningTokens: reasoning,
     };
   }
 
@@ -958,11 +974,12 @@ export class OpenAIResponseAdapter
 export class OpenAIStreamAdapter
   implements LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse>
 {
-  readonly provider = "openai" as const;
+  readonly provider: SupportedProvider;
   readonly state: StreamAccumulatorState;
   private currentToolCallIndices = new Map<number, number>();
 
-  constructor() {
+  constructor(provider: SupportedProvider = "openai") {
+    this.provider = provider;
     this.state = {
       responseId: "",
       model: "",
@@ -999,6 +1016,12 @@ export class OpenAIStreamAdapter
             | { cached_tokens?: number }
             | undefined
         )?.cached_tokens ?? 0;
+      const reasoningTokens =
+        (
+          chunk.usage.completion_tokens_details as
+            | { reasoning_tokens?: number }
+            | undefined
+        )?.reasoning_tokens ?? 0;
       this.state.usage = {
         inputTokens: Math.max(
           0,
@@ -1007,6 +1030,7 @@ export class OpenAIStreamAdapter
         outputTokens: chunk.usage.completion_tokens ?? 0,
         cacheReadTokens,
         cacheWriteTokens: 0,
+        reasoningTokens,
       };
     }
 
@@ -1145,6 +1169,18 @@ export class OpenAIStreamAdapter
         },
       ],
     };
+    // Carry the usage the provider sent in its trailing chunk into the synthesized final chunk;
+    // without it, streaming clients (e.g. the chat route's AI SDK, for OpenRouter and other
+    // OpenAI-compatible models) never see token counts. Shape mirrors the non-streaming
+    // `toProviderResponse()` below — `prompt_tokens` is net of cache, with no `prompt_tokens_details`.
+    if (this.state.usage !== null) {
+      finalChunk.usage = {
+        prompt_tokens: this.state.usage.inputTokens,
+        completion_tokens: this.state.usage.outputTokens,
+        total_tokens:
+          this.state.usage.inputTokens + this.state.usage.outputTokens,
+      };
+    }
     return `data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
   }
 
@@ -1199,11 +1235,12 @@ export class OpenAIStreamAdapter
 export async function convertToolResultsToToon(
   messages: OpenAiMessages,
   model: string,
+  provider: SupportedProvider,
 ): Promise<{
   messages: OpenAiMessages;
   stats: ToolCompressionStats;
 }> {
-  const tokenizer = getTokenizer("openai");
+  const tokenizer = getTokenizer(provider);
   let toolResultCount = 0;
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
@@ -1214,7 +1251,7 @@ export async function convertToolResultsToToon(
         {
           toolCallId: message.tool_call_id,
           contentType: typeof message.content,
-          provider: "openai",
+          provider,
         },
         "convertToolResultsToToon: tool message found",
       );
@@ -1250,7 +1287,7 @@ export async function convertToolResultsToToon(
                 tokensBefore,
                 tokensAfter,
                 toonPreview: compressed.substring(0, 150),
-                provider: "openai",
+                provider,
               },
               "convertToolResultsToToon: compressed",
             );
@@ -1259,7 +1296,7 @@ export async function convertToolResultsToToon(
                 toolCallId: message.tool_call_id,
                 before: noncompressed,
                 after: compressed,
-                provider: "openai",
+                provider,
                 supposedToBeJson: parsed,
               },
               "convertToolResultsToToon: before/after",
@@ -1278,7 +1315,7 @@ export async function convertToolResultsToToon(
               toolCallId: message.tool_call_id,
               tokensBefore,
               tokensAfter,
-              provider: "openai",
+              provider,
             },
             "Skipping TOON compression - compressed output has more tokens",
           );
@@ -1314,7 +1351,7 @@ export async function convertToolResultsToToon(
     toonCostSavings = await ModelModel.calculateCostSavings(
       model,
       tokensSaved,
-      "openai",
+      provider,
     );
   }
 
@@ -1344,11 +1381,18 @@ export function getUsageTokens(usage: OpenAi.Types.Usage) {
   const cacheRead =
     (usage.prompt_tokens_details as { cached_tokens?: number } | undefined)
       ?.cached_tokens ?? 0;
+  const reasoning =
+    (
+      usage.completion_tokens_details as
+        | { reasoning_tokens?: number }
+        | undefined
+    )?.reasoning_tokens ?? 0;
   return {
     input: Math.max(0, usage.prompt_tokens - cacheRead),
     output: usage.completion_tokens,
     cacheRead,
     cacheWrite: 0,
+    reasoning,
   };
 }
 

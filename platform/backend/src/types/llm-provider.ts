@@ -439,6 +439,8 @@ export interface UsageView {
   cacheWriteTokens?: number;
   /** Portion of cacheWriteTokens written at the 1-hour TTL (billed higher than 5m). Anthropic-only; absent elsewhere. */
   cacheWrite1hTokens?: number;
+  /** Output tokens spent on reasoning/extended thinking. Reported by OpenAI (reasoning_tokens) and Gemini (thoughtsTokenCount); absent elsewhere. */
+  reasoningTokens?: number;
 }
 
 /**

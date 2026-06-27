@@ -1,0 +1,82 @@
+name: Build Sandbox Base Docker Image
+
+on:
+  workflow_call:
+    inputs:
+      push_to_gcr:
+        description: "Whether to push the built image to GCR"
+        required: true
+        type: boolean
+      version:
+        description: "Version tag for the Docker image"
+        required: true
+        type: string
+      checkout_ref:
+        description: "Optional ref to checkout when building the image"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+        required: false
+      GCP_SERVICE_ACCOUNT_NAME:
+        required: false
+
+permissions: {}
+
+concurrency:
+  group: build-sandbox-base-docker-image-${{ inputs.version }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sandbox-base-lockfile-check:
+    name: Sandbox Base Python Lockfile Check
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    defaults:
+      run:
+        working-directory: ./platform
+    permissions:
+      contents: read # Required to checkout the repository and verify the lockfile.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          version: "0.9.26"
+
+      - name: Regenerate lockfile and verify it is committed
+        run: |
+          make -C sandbox_base update-lockfile
+
+          if ! git diff --exit-code -- sandbox_base/requirements.lock; then
+            echo "::error::sandbox_base/requirements.lock is out of date. Regenerate it with 'make -C sandbox_base update-lockfile'."
+            exit 1
+          fi
+
+  build-sandbox-base-image:
+    name: Build Sandbox Base Image
+    needs:
+      - sandbox-base-lockfile-check
+    permissions:
+      contents: read # Required to checkout the repository and build the image.
+      id-token: write # Required for Workload Identity Federation when pushing images.
+    uses: ./.github/workflows/build-native-multi-arch-image.yml
+    with:
+      image_directory: ./platform/sandbox_base
+      dockerfile: ./platform/sandbox_base/Dockerfile
+      image_name: sandbox-base
+      image_registry: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+      version: ${{ inputs.version }}
+      push_image: ${{ inputs.push_to_gcr }}
+      auth_provider: gar
+      include_latest_tag: true
+      checkout_ref: ${{ inputs.checkout_ref }}
+    secrets:
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

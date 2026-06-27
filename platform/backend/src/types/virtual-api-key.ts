@@ -4,8 +4,25 @@ import { z } from "zod";
 import { schema } from "@/database";
 import { ResourceVisibilityScopeSchema } from "./visibility";
 
+/**
+ * Kind of virtual key.
+ * - `standard`: maps to one or more provider API keys; used as a provider key
+ *   replacement in the Authorization header.
+ * - `passthrough`: carries no provider credential; sent in the
+ *   `X-Archestra-Virtual-Key` header purely to authenticate the acting user and
+ *   gate access to selected LLM proxies.
+ */
+export const VirtualApiKeyTypeSchema = z.enum(["standard", "passthrough"]);
+export type VirtualApiKeyType = z.infer<typeof VirtualApiKeyTypeSchema>;
+
 const VirtualApiKeyTeamSchema = z.object({
   id: z.string(),
+  name: z.string(),
+});
+
+/** An LLM proxy a passthrough virtual key is allowed to use. */
+const VirtualApiKeyLlmProxySchema = z.object({
+  id: z.string().uuid(),
   name: z.string(),
 });
 
@@ -19,6 +36,7 @@ export const SelectVirtualApiKeySchema = createSelectSchema(
   schema.virtualApiKeysTable,
 ).extend({
   scope: ResourceVisibilityScopeSchema,
+  keyType: VirtualApiKeyTypeSchema,
 });
 
 export const InsertVirtualApiKeySchema = createInsertSchema(
@@ -39,6 +57,8 @@ export const VirtualApiKeyWithValueSchema = SelectVirtualApiKeySchema.extend({
   teams: z.array(VirtualApiKeyTeamSchema),
   authorName: z.string().nullable(),
   providerApiKeys: z.array(VirtualApiKeyProviderMappingSchema),
+  /** Allowed LLM proxies for passthrough keys (empty for standard keys). */
+  allowedLlmProxies: z.array(VirtualApiKeyLlmProxySchema),
 });
 
 /** Schema for virtual key listing responses. */
@@ -47,6 +67,8 @@ export const VirtualApiKeyWithParentInfoSchema =
     teams: z.array(VirtualApiKeyTeamSchema),
     authorName: z.string().nullable(),
     providerApiKeys: z.array(VirtualApiKeyProviderMappingSchema),
+    /** Allowed LLM proxies for passthrough keys (empty for standard keys). */
+    allowedLlmProxies: z.array(VirtualApiKeyLlmProxySchema),
   });
 
 export type SelectVirtualApiKey = z.infer<typeof SelectVirtualApiKeySchema>;

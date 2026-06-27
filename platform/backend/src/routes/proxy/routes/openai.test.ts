@@ -241,6 +241,50 @@ describe("OpenAI proxy streaming", () => {
     );
     expect(contentChunks.length).toBeGreaterThan(0);
   });
+
+  test("streaming response includes token usage in the SSE body", async ({
+    makeAgent,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+
+    const agent = await makeAgent({ name: "Test Streaming Usage Agent" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: true,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+
+    // The provider sends usage in a trailing chunk; the proxy must carry it into the SSE the
+    // client reads (otherwise streaming clients — and archestra-bench — see no token usage).
+    const chunks = response.body
+      .split("\n")
+      .filter(
+        (line: string) => line.startsWith("data: ") && line !== "data: [DONE]",
+      )
+      .map((line: string) => JSON.parse(line.substring(6)));
+    const usageChunk = chunks.find(
+      (chunk: OpenAi.Types.ChatCompletionChunk & { usage?: unknown }) =>
+        chunk.usage,
+    );
+    expect(usageChunk?.usage).toMatchObject({
+      prompt_tokens: 12,
+      completion_tokens: 10,
+      total_tokens: 22,
+    });
+  });
 });
 
 describe("OpenAI cost tracking", () => {

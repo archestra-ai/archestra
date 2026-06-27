@@ -1,0 +1,63 @@
+The Archestra Inc. Enterprise license (the “Enterprise License”)
+Copyright (c) 2026 Archestra Inc.
+
+With regard to the Archestra.AI Software:
+
+This software and associated documentation files (the "Software") may only be
+used in production, if you (and any entity that you represent) have agreed to,
+and are in compliance with, the Archestra.AI Subscription Terms of Service, available
+at https://archestra.ai/terms (the “Enterprise Terms”), or other
+agreement governing the use of the Software, as agreed by you and Archestra Inc.,
+and otherwise have a valid Archestra.AI Enterprise license for the
+correct number of user seats. Subject to the foregoing sentence, you are free to
+modify this Software and publish patches to the Software. You agree that Archestra Inc.
+and/or its licensors (as applicable) retain all right, title and interest in and
+to all such modifications and/or patches, and all such modifications and/or
+patches may only be used, copied, modified, displayed, distributed, or otherwise
+exploited with a valid Archestra Enterprise license for the correct
+number of user seats. Notwithstanding the foregoing, you may copy and modify
+the Software for development and testing purposes, without requiring a
+subscription. You agree that Archestra and/or its licensors (as applicable) retain
+all right, title and interest in and to all such modifications. You are not
+granted any other rights beyond what is expressly stated herein. Subject to the
+foregoing, it is forbidden to copy, merge, publish, distribute, sublicense,
+and/or sell the Software.
+
+Small Team Clause. Notwithstanding the production-use restrictions above, you
+may use the Software in production without a paid Archestra.AI Enterprise
+license or subscription if the total number of users of Archestra.AI software
+across your entire company (including all affiliates, subsidiaries, parent
+entities, and any entities under common control) is fewer than 30. For purposes
+of this clause, a "user" means any individual person who is provisioned,
+invited, or otherwise able to access any Archestra.AI software, regardless of
+activity level, role, or whether their access is to free or Enterprise
+features. If at any time the total number of users reaches 30 or more, this
+exception ceases to apply, and continued production use of the Software
+requires a valid Enterprise license under the Enterprise Terms.
+
+You may not use the Software, its source code, its documentation, its user
+interfaces, its behavior, its outputs, or any portion thereof as input,
+reference material, training data, fine-tuning data, evaluation data,
+retrieval-augmented context, or any other signal for any artificial
+intelligence or machine learning system (including large language models,
+code-generation models, agents, and embeddings) for the purpose of, or with
+the effect of, (a) reproducing, recreating, emulating, or substantially
+imitating the Software or any of its features, (b) producing a specification,
+design document, or other artifact describing the Software's features or
+implementation, (c) training, fine-tuning, distilling, or evaluating any
+model, or (d) otherwise leveraging AI to reproduce, derive, or compete with
+the Software or its features. This restriction applies whether the use is
+direct or indirect, manual or automated, and regardless of whether the
+resulting artifact is distributed.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+For all third party components incorporated into the Archestra Software, those
+components are licensed under the original license provided by the owner of the
+applicable component.

@@ -48,6 +48,7 @@ describe("config routes", () => {
       disableBasicAuth: expect.any(Boolean),
       disableInvitations: expect.any(Boolean),
       maintenanceMode: null,
+      enterpriseCoreActive: expect.any(Boolean),
       analytics: {
         enabled: expect.any(Boolean),
         instanceId: expect.any(String),
@@ -125,6 +126,7 @@ describe("config routes", () => {
       "cohere",
       "deepseek",
       "gemini",
+      "github-copilot",
       "groq",
       "minimax",
       "mistral",

@@ -1,0 +1,25 @@
+[[stages]]
+text = """Hi -- can you file system access for a new hire through our IT service desk? Dana Lee is
+joining Sales; her email is dana.lee@acme.test, and she needs Salesforce CRM access at the admin level
+for Q3 onboarding."""
+
+[[stages]]
+text = """Her approving manager is priya.nair@acme.test. We don't have a director exception for the admin
+request and I'd rather not chase one down right now, so just grant whatever our access policy allows by
+default in that case and file it. Then tell me the ticket id via submit_result as
+result = {"ticket_id": "<the id the service desk returned>"}."""
+
+[result_schema]
+type = "object"
+required = ["ticket_id"]
+additionalProperties = false
+
+  [result_schema.properties.ticket_id]
+  type = "string"
+  minLength = 1
+
+[state]
+rest = ["/api/skills?search=access-request-intake&limit=100"]
+
+[verifier]
+deps = []

@@ -471,6 +471,36 @@ describe("agent routes", () => {
       expect(getResponse.statusCode).toBe(200);
       expect(getResponse.json().toolExposureMode).toBe("search_and_run_only");
     });
+
+    test("should update and persist accessAllTools", async ({ makeAgent }) => {
+      const created = await makeAgent({
+        name: `Agent Access All Test ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+        agentType: "agent",
+      });
+      expect(created.accessAllTools).toBe(false); // off by default
+
+      const updateResponse = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${created.id}`,
+        payload: {
+          accessAllTools: true,
+        },
+      });
+
+      expect(updateResponse.statusCode).toBe(200);
+      expect(updateResponse.json().accessAllTools).toBe(true);
+
+      const getResponse = await app.inject({
+        method: "GET",
+        url: `/api/agents/${created.id}`,
+      });
+
+      expect(getResponse.statusCode).toBe(200);
+      expect(getResponse.json().accessAllTools).toBe(true);
+    });
   });
 
   describe("DELETE /api/agents/:id", () => {

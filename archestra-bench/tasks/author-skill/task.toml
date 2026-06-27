@@ -1,0 +1,17 @@
+[[stages]]
+text = """Author a new Agent Skill in this instance named exactly `prime-counter-{{cell}}`. Its SKILL.md frontmatter must set that `name` and a short `description`, and it must bundle one resource file `scripts/count.py`: a Python script that reads a single integer N from its first command-line argument and prints (to stdout) the count of prime numbers less than or equal to N. Create the skill now -- do not run it yet, and do not submit anything yet."""
+
+[[stages]]
+text = """Now use that skill to count the primes less than or equal to 100000 -- actually run the skill you just authored to get the number, not a fresh re-implementation. Then call submit_result with result = {"prime_count": <the number it printed>}."""
+
+[result_schema]
+type = "object"
+required = ["prime_count"]
+additionalProperties = false
+
+  [result_schema.properties.prime_count]
+  type = "integer"
+  minimum = 0
+
+[state]
+rest = ["/api/skills?search=prime-counter-{{cell}}&limit=100"]

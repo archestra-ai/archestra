@@ -8,6 +8,11 @@ import {
 import { catalogSeed } from "./data/catalog";
 import { configSeed, healthSeed, publicConfigSeed } from "./data/config";
 import {
+  llmLogsSessionsSeed,
+  makeInteraction,
+  paginated,
+} from "./data/interactions";
+import {
   llmProviderApiKeysSeed,
   makeCreatedVirtualKey,
   makeLlmProviderApiKey,
@@ -96,6 +101,17 @@ export const handlers: HttpHandler[] = [
     defaultAssignedCatalogCount: 0,
   }),
   ...getJson("/api/teams", teamsSeed),
+  ...getJson("/api/members", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 50,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
   ...getJson("/api/internal_mcp_catalog", catalogSeed),
   ...getJson("/api/internal_mcp_catalog/labels/keys", []),
   ...getJson("/api/internal_mcp_catalog/:catalogId/children", []),
@@ -198,6 +214,32 @@ export const handlers: HttpHandler[] = [
       );
     }),
   ),
+
+  // LLM proxy logs (/llm/logs list, session detail, interaction detail).
+  // The sessions handler is query-aware: it filters the seed by the params the
+  // frontend actually sends (sessionId / sessionSource / source), so the
+  // Client/Source filter specs genuinely exercise the request wiring rather
+  // than asserting against a pre-baked body. Specs needing other data still
+  // override it via `mswControl.use(...)` (overrides take precedence).
+  ...paired("/api/interactions/sessions").map((url) =>
+    http.get(url, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const sessionId = params.get("sessionId");
+      const sessionSource = params.get("sessionSource");
+      const source = params.get("source");
+      let data = llmLogsSessionsSeed;
+      if (sessionId) data = data.filter((s) => s.sessionId === sessionId);
+      if (sessionSource) {
+        data = data.filter((s) => s.sessionSource === sessionSource);
+      }
+      if (source) data = data.filter((s) => s.source === source);
+      return HttpResponse.json(paginated(data));
+    }),
+  ),
+  ...getJson("/api/interactions/user-ids", []),
+  ...getJson("/api/interactions/external-agent-ids", []),
+  ...getJson("/api/interactions", paginated([])),
+  ...getJson("/api/interactions/:interactionId", makeInteraction()),
 
   // /connection probes the org's default gateway/proxy to preselect them
   ...getJson("/api/mcp-gateways/default", makeAgent()),

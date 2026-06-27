@@ -1,0 +1,1 @@
+ALTER TABLE "interactions" ADD COLUMN "cache_write_1h_tokens" integer;

@@ -5,7 +5,7 @@
 //! every match site to handle it.
 
 use crate::backends::dagger::DaggerBackend;
-use crate::{ArtifactBytes, CommandExecution, Limits, ReplayStep, Result};
+use crate::{ArtifactBytes, CommandExecution, EngineFault, Limits, ReplayStep, Result};
 
 /// a materialise-and-run request handed to a backend. validated at the public
 /// core entry points before it reaches here. skill files and PYTHONPATH are no
@@ -75,6 +75,17 @@ impl Backend {
     pub(crate) async fn prewarm(&self) {
         match self {
             Backend::Dagger(b) => b.prewarm().await,
+        }
+    }
+
+    /// recover an engine fault from a handler panic payload. some backends (the
+    /// Dagger SDK) `unwrap()` transient engine errors deep in generated code, so
+    /// the failure escapes as a panic rather than a typed error; this lets the
+    /// backend-agnostic session layer re-tag the known-recoverable ones onto the
+    /// retry path without naming a concrete runtime.
+    pub(crate) fn engine_fault_from_panic(&self, message: &str) -> Option<EngineFault> {
+        match self {
+            Backend::Dagger(_) => crate::backends::dagger::engine_fault_from_panic(message),
         }
     }
 }

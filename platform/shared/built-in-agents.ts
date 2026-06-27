@@ -11,6 +11,7 @@ export const BUILT_IN_AGENT_NAMES = {
   DUAL_LLM_QUARANTINE: "Dual LLM Quarantine Agent",
   CONTEXT_COMPACTION: "Context Compaction Subagent",
   CHAT_TITLE_GENERATION: "Chat Title Generation Subagent",
+  APP_RUNTIME: "App Runtime LLM Agent",
 } as const;
 
 /** Discriminator values for builtInAgentConfig.name */
@@ -20,6 +21,7 @@ export const BUILT_IN_AGENT_IDS = {
   DUAL_LLM_QUARANTINE: "dual-llm-quarantine-agent",
   CONTEXT_COMPACTION: "context-compaction-subagent",
   CHAT_TITLE_GENERATION: "chat-title-generation-subagent",
+  APP_RUNTIME: "app-runtime-llm-agent",
 } as const;
 
 /** System prompt template for the policy configuration subagent.
@@ -184,6 +186,12 @@ export const CHAT_TITLE_GENERATION_SYSTEM_PROMPT = `You generate short chat titl
 
 Return only a concise 3-6 word title. Do not wrap the title in quotes. Do not include explanations, markdown, or punctuation unless it is part of the topic.`;
 
+// Identity for the LLM completions an MCP App requests through
+// `archestra.llm.complete()`. Each call supplies its own instruction (the SDK's
+// `system` option), so this prompt is only the fallback when the app provides
+// none; it is intentionally minimal.
+export const APP_RUNTIME_SYSTEM_PROMPT = `You answer prompts sent by an Archestra MCP App. Follow the app's instructions for the request and reply with only the requested content.`;
+
 /** Maps built-in agent IDs to their default system prompts for reset-to-default. */
 export const BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
   [BUILT_IN_AGENT_IDS.POLICY_CONFIG]: POLICY_CONFIG_SYSTEM_PROMPT,
@@ -192,4 +200,15 @@ export const BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
   [BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION]: CONTEXT_COMPACTION_SYSTEM_PROMPT,
   [BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION]:
     CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
+  [BUILT_IN_AGENT_IDS.APP_RUNTIME]: APP_RUNTIME_SYSTEM_PROMPT,
 };
+
+// Starter persona prefilled into the system-prompt editor when authoring a new
+// user-facing agent. The author sees it, can edit or clear it, and it is saved
+// with the agent like any other prompt — nothing is injected at request time.
+// Plain text (no Handlebars) so it reads as a ready-to-edit starting point.
+export const DEFAULT_AGENT_SYSTEM_PROMPT = `You are an assistant inside an MCP-native AI platform. Most of the people you help are platform and AI-platform engineers, SREs, and the occasional brave hobbyist — they live in terminals, run things in production, and don't need their hands held.
+
+Be genuinely useful first: accurate, direct, and concrete. Reach for the tools you have instead of guessing, and when you don't actually know something, say so plainly rather than confidently inventing it — a wrong answer at 3am costs more than an honest "not sure."
+
+You're allowed a personality: dry, a little sarcastic, the lovable-but-grumpy senior engineer who's seen this bug before and has opinions about it. A well-placed (occasionally cringe) joke is fine. But the bit never outranks the answer — when someone's shipping to prod, read the room and keep it short.`;

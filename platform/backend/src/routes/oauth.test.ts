@@ -1,14 +1,17 @@
 import { createHash } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import { CacheKey, cacheManager } from "@/cache-manager";
-import db from "@/database";
+import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import oauthRoutes, {
   buildDiscoveryUrls,
+  classifyRefreshResponse,
+  classifyThrownRefreshError,
   discoverOAuthEndpoints,
   discoverScopes,
   generateCodeChallenge,
@@ -16,8 +19,10 @@ import oauthRoutes, {
   getOAuthResource,
   getOAuthResourceUrl,
   getOAuthTokenResource,
+  refreshFailureToServerFields,
   refreshOAuthToken,
   resolveOAuthScopesForAuthorization,
+  sanitizeOAuthErrorCode,
 } from "./oauth";
 
 describe("OAuth helper functions", () => {
@@ -685,11 +690,18 @@ describe("OAuth routes", () => {
 
         return {
           ok: true,
+          status: 200,
           json: async () => ({
             access_token: "new-access-token",
             refresh_token: "new-refresh-token",
             expires_in: 3600,
           }),
+          text: async () =>
+            JSON.stringify({
+              access_token: "new-access-token",
+              refresh_token: "new-refresh-token",
+              expires_in: 3600,
+            }),
         };
       }
 
@@ -799,21 +811,194 @@ describe("OAuth routes", () => {
 
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        access_token: "new-access-token",
-        refresh_token: "new-refresh-token",
-        expires_in: 3600,
-      }),
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          access_token: "new-access-token",
+          refresh_token: "new-refresh-token",
+          expires_in: 3600,
+        }),
     }) as Mock;
     globalThis.fetch = fetchMock;
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toBe(true);
+    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+      ok: true,
+    });
 
     const requestBody = fetchMock.mock.calls.at(-1)?.[1]
       ?.body as URLSearchParams;
     expect(requestBody.get("grant_type")).toBe("refresh_token");
     expect(requestBody.get("refresh_token")).toBe("stored-refresh-token");
     expect(requestBody.get("resource")).toBe("https://mcp.example.com");
+  });
+
+  test("returns a terminal failure when the refreshed token cannot be persisted", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Persist Failure MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name: "Persist Failure MCP",
+        server_url: "https://mcp.example.com/mcp",
+        grant_type: "authorization_code",
+        token_endpoint: "https://login.example.com/token",
+        client_id: "public-client-id",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: [],
+        default_scopes: [],
+        supports_resource_metadata: false,
+      },
+    });
+    const secret = await secretManager().createSecret(
+      {
+        refresh_token: "stored-refresh-token",
+        access_token: "old-access-token",
+      },
+      "persist-failure-token",
+      true,
+    );
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          access_token: "rotated-access-token",
+          refresh_token: "rotated-refresh-token",
+          expires_in: 3600,
+        }),
+    }) as Mock;
+
+    // A rotating server has spent the old refresh token; losing the new one to
+    // a persistence failure must force re-authentication, not a silent retry.
+    const updateSpy = vi
+      .spyOn(secretManager(), "updateSecret")
+      .mockRejectedValueOnce(new Error("vault unavailable"));
+
+    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+      ok: false,
+      kind: "terminal",
+      category: "refresh_failed",
+      message: "refresh_failed",
+    });
+
+    updateSpy.mockRestore();
+  });
+
+  test("a 400 invalid_grant is a terminal failure and persists no token", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Invalid Grant MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name: "Invalid Grant MCP",
+        server_url: "https://mcp.example.com/mcp",
+        grant_type: "authorization_code",
+        token_endpoint: "https://login.example.com/token",
+        client_id: "public-client-id",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: [],
+        default_scopes: [],
+        supports_resource_metadata: false,
+      },
+    });
+    const secret = await secretManager().createSecret(
+      {
+        refresh_token: "stored-refresh-token",
+        access_token: "old-access-token",
+      },
+      "invalid-grant-token",
+      true,
+    );
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () =>
+        JSON.stringify({
+          error: "invalid_grant",
+          error_description: "Token expired or revoked",
+        }),
+    }) as Mock;
+    const updateSpy = vi.spyOn(secretManager(), "updateSecret");
+
+    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+      ok: false,
+      kind: "terminal",
+      category: "refresh_failed",
+      message: "invalid_grant",
+    });
+    // A rejected grant must not write a token; re-authentication is required.
+    expect(updateSpy).not.toHaveBeenCalled();
+
+    updateSpy.mockRestore();
+  });
+
+  test("returns a terminal no_refresh_token failure when the secret has no refresh token", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "No Refresh Token MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name: "No Refresh Token MCP",
+        server_url: "https://mcp.example.com/mcp",
+        grant_type: "authorization_code",
+        token_endpoint: "https://login.example.com/token",
+        client_id: "public-client-id",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: [],
+        default_scopes: [],
+        supports_resource_metadata: false,
+      },
+    });
+    const secret = await secretManager().createSecret(
+      { access_token: "only-access-token" },
+      "no-refresh-token-secret",
+      true,
+    );
+
+    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+      ok: false,
+      kind: "terminal",
+      category: "no_refresh_token",
+      message: "no_refresh_token",
+    });
+  });
+
+  test("returns a terminal refresh_failed when the secret cannot be found", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Missing Secret MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name: "Missing Secret MCP",
+        server_url: "https://mcp.example.com/mcp",
+        grant_type: "authorization_code",
+        token_endpoint: "https://login.example.com/token",
+        client_id: "public-client-id",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: [],
+        default_scopes: [],
+        supports_resource_metadata: false,
+      },
+    });
+
+    await expect(
+      refreshOAuthToken("00000000-0000-0000-0000-000000000000", catalog.id),
+    ).resolves.toEqual({
+      ok: false,
+      kind: "terminal",
+      category: "refresh_failed",
+      message: "refresh_failed",
+    });
   });
 
   test("does not send the MCP endpoint URL as a token resource during refresh", async ({
@@ -866,11 +1051,18 @@ describe("OAuth routes", () => {
 
         return {
           ok: true,
+          status: 200,
           json: async () => ({
             access_token: "new-access-token",
             refresh_token: "new-refresh-token",
             expires_in: 3600,
           }),
+          text: async () =>
+            JSON.stringify({
+              access_token: "new-access-token",
+              refresh_token: "new-refresh-token",
+              expires_in: 3600,
+            }),
         };
       }
 
@@ -884,7 +1076,9 @@ describe("OAuth routes", () => {
     }) as Mock;
     globalThis.fetch = fetchMock;
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toBe(true);
+    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+      ok: true,
+    });
 
     const tokenRequest = fetchMock.mock.calls.find(
       ([input]) => String(input) === "https://login.example.com/oauth/token",
@@ -893,5 +1087,373 @@ describe("OAuth routes", () => {
     expect(requestBody.get("grant_type")).toBe("refresh_token");
     expect(requestBody.get("refresh_token")).toBe("stored-refresh-token");
     expect(requestBody.has("resource")).toBe(false);
+  });
+});
+
+describe("OAuth dynamic client registration client name", () => {
+  // Stubs an authenticated request context so request.organizationId resolves
+  // to a fresh org per test, which the brand-name resolution reads under
+  // white-labeling.
+  const ctx = useRouteTestApp(oauthRoutes);
+  const originalFetch = globalThis.fetch;
+  const REGISTRATION_ENDPOINT = "https://auth.example.com/register";
+
+  beforeEach(() => {
+    cacheManager.start();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  // Every non-registration request resolves auth-server metadata advertising a
+  // registration endpoint; the registration POST returns a freshly issued
+  // client id. Returns the mock so the test can read back the client metadata
+  // that was sent.
+  const mockRegistrationFlow = (): Mock => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === REGISTRATION_ENDPOINT) {
+        return {
+          ok: true,
+          json: async () => ({ client_id: "registered-client-id" }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          authorization_endpoint: "https://auth.example.com/authorize",
+          token_endpoint: "https://auth.example.com/token",
+          registration_endpoint: REGISTRATION_ENDPOINT,
+        }),
+      };
+    }) as Mock;
+    globalThis.fetch = fetchMock;
+    return fetchMock;
+  };
+
+  const readRegisteredClientName = (fetchMock: Mock): string => {
+    const registrationCall = fetchMock.mock.calls.find(
+      ([input]) => String(input) === REGISTRATION_ENDPOINT,
+    );
+    return JSON.parse(String(registrationCall?.[1]?.body)).client_name;
+  };
+
+  // A catalog item without a client_id, so the initiate flow performs dynamic
+  // client registration (which is where the consent-screen client name is set).
+  const makeDcrCatalog = (
+    makeInternalMcpCatalog: (
+      overrides?: Record<string, unknown>,
+    ) => Promise<{ id: string; name: string }>,
+    name: string,
+  ) =>
+    makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      name,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name,
+        server_url: "https://mcp.example.com/mcp",
+        grant_type: "authorization_code",
+        client_id: "",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["read"],
+        default_scopes: ["read"],
+        supports_resource_metadata: false,
+      },
+    });
+
+  test("ignores the org app name and uses the default brand when full white-labeling is off", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const config = (await import("@/config")).default;
+    const original = config.enterpriseFeatures.fullWhiteLabeling;
+    (
+      config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+    ).fullWhiteLabeling = false;
+    // App name is set, but without the white-labeling license it must not leak
+    // into the consent screen.
+    await db
+      .update(schema.organizationsTable)
+      .set({ appName: "Contoso Copilot" })
+      .where(eq(schema.organizationsTable.id, ctx.organizationId));
+
+    try {
+      const catalog = await makeDcrCatalog(
+        makeInternalMcpCatalog,
+        "Acme Cloud",
+      );
+      const fetchMock = mockRegistrationFlow();
+
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/oauth/initiate",
+        payload: { catalogId: catalog.id },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(readRegisteredClientName(fetchMock)).toBe(
+        "Archestra Platform - Acme Cloud",
+      );
+    } finally {
+      (
+        config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+      ).fullWhiteLabeling = original;
+    }
+  });
+
+  test("uses the organization's white-label app name when full white-labeling is on", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const config = (await import("@/config")).default;
+    const original = config.enterpriseFeatures.fullWhiteLabeling;
+    (
+      config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+    ).fullWhiteLabeling = true;
+    await db
+      .update(schema.organizationsTable)
+      .set({ appName: "Contoso Copilot" })
+      .where(eq(schema.organizationsTable.id, ctx.organizationId));
+
+    try {
+      const catalog = await makeDcrCatalog(
+        makeInternalMcpCatalog,
+        "Acme Cloud",
+      );
+      const fetchMock = mockRegistrationFlow();
+
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/oauth/initiate",
+        payload: { catalogId: catalog.id },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(readRegisteredClientName(fetchMock)).toBe(
+        "Contoso Copilot - Acme Cloud",
+      );
+    } finally {
+      (
+        config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+      ).fullWhiteLabeling = original;
+    }
+  });
+
+  test("falls back to the default brand when white-labeling is on but no app name is set", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const config = (await import("@/config")).default;
+    const original = config.enterpriseFeatures.fullWhiteLabeling;
+    (
+      config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+    ).fullWhiteLabeling = true;
+
+    try {
+      const catalog = await makeDcrCatalog(
+        makeInternalMcpCatalog,
+        "Acme Cloud",
+      );
+      const fetchMock = mockRegistrationFlow();
+
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/oauth/initiate",
+        payload: { catalogId: catalog.id },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(readRegisteredClientName(fetchMock)).toBe(
+        "Archestra Platform - Acme Cloud",
+      );
+    } finally {
+      (
+        config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+      ).fullWhiteLabeling = original;
+    }
+  });
+});
+
+describe("OAuth refresh-failure classification", () => {
+  describe("classifyRefreshResponse", () => {
+    test("2xx with an access token is a success", () => {
+      expect(
+        classifyRefreshResponse({
+          status: 200,
+          body: { access_token: "at" },
+        }),
+      ).toEqual({ ok: true });
+    });
+
+    test("invalid_grant body is terminal (refresh token revoked/expired)", () => {
+      expect(
+        classifyRefreshResponse({
+          status: 400,
+          body: { error: "invalid_grant", error_description: "expired" },
+        }),
+      ).toEqual({
+        ok: false,
+        kind: "terminal",
+        category: "refresh_failed",
+        message: "invalid_grant",
+      });
+    });
+
+    test("invalid_client at 401 is terminal", () => {
+      expect(
+        classifyRefreshResponse({
+          status: 401,
+          body: { error: "invalid_client" },
+        }),
+      ).toMatchObject({
+        kind: "terminal",
+        category: "refresh_failed",
+        message: "invalid_client",
+      });
+    });
+
+    test("authorization-server 5xx is transient", () => {
+      expect(classifyRefreshResponse({ status: 503, body: null })).toEqual({
+        ok: false,
+        kind: "transient",
+        reason: "server_error",
+      });
+    });
+
+    test("429 rate-limit is transient", () => {
+      expect(classifyRefreshResponse({ status: 429, body: null })).toEqual({
+        ok: false,
+        kind: "transient",
+        reason: "rate_limited",
+      });
+    });
+
+    test("proxy/WAF 4xx without an OAuth error body is transient, not terminal", () => {
+      expect(classifyRefreshResponse({ status: 403, body: null })).toEqual({
+        ok: false,
+        kind: "transient",
+        reason: "unexpected_response",
+      });
+    });
+
+    test("2xx without an access token and without an error is transient (captive portal)", () => {
+      expect(classifyRefreshResponse({ status: 200, body: {} })).toEqual({
+        ok: false,
+        kind: "transient",
+        reason: "unexpected_response",
+      });
+    });
+
+    test("a 5xx is transient even when it carries an OAuth error body (status wins)", () => {
+      expect(
+        classifyRefreshResponse({
+          status: 500,
+          body: { error: "invalid_grant" },
+        }),
+      ).toEqual({ ok: false, kind: "transient", reason: "server_error" });
+    });
+
+    test("a transient OAuth error code at 400 is transient, not a dead grant", () => {
+      expect(
+        classifyRefreshResponse({
+          status: 400,
+          body: { error: "temporarily_unavailable" },
+        }),
+      ).toEqual({ ok: false, kind: "transient", reason: "server_error" });
+    });
+  });
+
+  describe("classifyThrownRefreshError", () => {
+    test("AbortSignal.timeout (TimeoutError) is a transient timeout", () => {
+      const err = new Error("timed out");
+      err.name = "TimeoutError";
+      expect(classifyThrownRefreshError(err)).toEqual({
+        ok: false,
+        kind: "transient",
+        reason: "timeout",
+      });
+    });
+
+    test("AbortError is a transient timeout", () => {
+      const err = new Error("aborted");
+      err.name = "AbortError";
+      expect(classifyThrownRefreshError(err)).toMatchObject({
+        reason: "timeout",
+      });
+    });
+
+    test("any other throw is a transient network error", () => {
+      expect(classifyThrownRefreshError(new Error("ECONNREFUSED"))).toEqual({
+        ok: false,
+        kind: "transient",
+        reason: "network",
+      });
+    });
+  });
+
+  describe("sanitizeOAuthErrorCode", () => {
+    test("passes a well-formed OAuth error code through unchanged", () => {
+      expect(sanitizeOAuthErrorCode("invalid_grant")).toBe("invalid_grant");
+    });
+
+    test("redacts a credential-bearing URL to the generic code", () => {
+      expect(
+        sanitizeOAuthErrorCode(
+          "https://as.example/cb?code=SECRET_AUTH_CODE&access_token=tok",
+        ),
+      ).toBe("refresh_failed");
+    });
+
+    test("redacts free text with spaces / token material", () => {
+      expect(
+        sanitizeOAuthErrorCode("refresh token abc123.def456 was rejected"),
+      ).toBe("refresh_failed");
+    });
+
+    test("falls back to the generic code for empty/missing input", () => {
+      expect(sanitizeOAuthErrorCode(undefined)).toBe("refresh_failed");
+      expect(sanitizeOAuthErrorCode("")).toBe("refresh_failed");
+    });
+  });
+
+  describe("refreshFailureToServerFields", () => {
+    test("a terminal failure maps to the persisted trio", () => {
+      const fields = refreshFailureToServerFields({
+        ok: false,
+        kind: "terminal",
+        category: "refresh_failed",
+        message: "invalid_grant",
+      });
+      expect(fields).not.toBeNull();
+      expect(fields).toMatchObject({
+        oauthRefreshError: "refresh_failed",
+        oauthRefreshErrorMessage: "invalid_grant",
+      });
+      expect(fields?.oauthRefreshFailedAt).toBeInstanceOf(Date);
+    });
+
+    test("a no_refresh_token terminal failure carries its category", () => {
+      const fields = refreshFailureToServerFields({
+        ok: false,
+        kind: "terminal",
+        category: "no_refresh_token",
+        message: "no_refresh_token",
+      });
+      expect(fields?.oauthRefreshError).toBe("no_refresh_token");
+    });
+
+    test("a transient failure persists nothing", () => {
+      expect(
+        refreshFailureToServerFields({
+          ok: false,
+          kind: "transient",
+          reason: "server_error",
+        }),
+      ).toBeNull();
+    });
+
+    test("a success persists nothing", () => {
+      expect(refreshFailureToServerFields({ ok: true })).toBeNull();
+    });
   });
 });

@@ -12,7 +12,7 @@ import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import { BrowserTabStateModel, ToolModel } from "@/models";
-import { ApiError } from "@/types";
+import { ApiError, agentOwner } from "@/types";
 import {
   shouldLogBrowserStreamScreenshots,
   shouldLogBrowserStreamTabSync,
@@ -163,9 +163,9 @@ export class BrowserStreamService {
       arguments: args,
     };
 
-    const result = await mcpClient.executeToolCall(
+    const result = await mcpClient.executeToolCallForOwner(
       toolCall,
-      agentId,
+      agentOwner(agentId),
       tokenAuth,
       {
         conversationId,

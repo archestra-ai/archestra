@@ -1,0 +1,16 @@
+account_id,name,arr_usd,segment,renewal_date
+ACC-01,Northwind Retail,320000,Enterprise,2026-07-20
+ACC-02,Helios Manufacturing,540000,Enterprise,2026-07-10
+ACC-03,Cobalt Logistics,180000,Mid,2026-08-05
+ACC-04,Vertex Analytics,95000,SMB,2026-07-05
+ACC-05,Marigold Health,410000,Enterprise,2026-09-15
+ACC-06,Quartz Media,60000,SMB,2026-10-01
+ACC-07,Sterling Finance,270000,Enterprise,2026-11-20
+ACC-08,Beacon Education,130000,Mid,2026-08-25
+ACC-09,Ironwood Energy,200000,Mid,2027-01-10
+ACC-10,Lumen Software,75000,SMB,2026-12-05
+ACC-11,Falcon Aerospace,350000,Enterprise,2027-02-01
+ACC-12,Pebble Consumer,50000,SMB,2026-10-20
+ACC-13,Granite Construction,160000,Mid,2026-12-30
+ACC-14,Azure Travel,90000,SMB,2027-03-15
+ACC-15,Cedar Hospitality,140000,Mid,2026-11-05

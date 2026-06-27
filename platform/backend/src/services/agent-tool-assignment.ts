@@ -1,6 +1,10 @@
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   AgentModel,
   AgentToolModel,
+  AppModel,
+  AppTeamModel,
+  AppToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
   MemberModel,
@@ -13,9 +17,10 @@ import type {
   InternalMcpCatalog,
   ResourceVisibilityScope,
   Tool,
+  ToolOwnerContext,
 } from "@/types";
 
-type AgentToolAssignmentError = {
+export type ToolAssignmentError = {
   code: "not_found" | "validation_error";
   error: { message: string; type: string };
 };
@@ -54,7 +59,7 @@ interface AgentToolAssignmentRequest {
 
 export async function assignToolToAgent(
   params: AgentToolAssignmentRequest,
-): Promise<AgentToolAssignmentError | "duplicate" | "updated" | null> {
+): Promise<ToolAssignmentError | "duplicate" | "updated" | null> {
   const credentialResolutionMode = normalizeCredentialResolutionMode(params);
   const validationError = await validateAssignment({
     agentId: params.agentId,
@@ -89,7 +94,7 @@ export async function assignToolToAgent(
 
 export async function validateAssignment(
   params: AgentToolAssignmentRequest,
-): Promise<AgentToolAssignmentError | null> {
+): Promise<ToolAssignmentError | null> {
   const { agentId, toolId, preFetchedData } = params;
   const mcpServerId = params.mcpServerId;
   const credentialResolutionMode = normalizeCredentialResolutionMode(params);
@@ -147,7 +152,7 @@ export async function validateAssignment(
     const preFetchedServer =
       preFetchedData?.mcpServersBasicMap?.get(mcpServerId);
     const validationError = await validateAssignedMcpServer({
-      agentId,
+      getOwnerContext: () => getAssignmentTargetContext(agentId),
       mcpServerId,
       tool,
       preFetchedServer,
@@ -160,12 +165,234 @@ export async function validateAssignment(
   return null;
 }
 
+/**
+ * Resolve a declarative tool-name list (the `tools` param of the
+ * `scaffold_app` chat tool) to assignable tool rows — clean or
+ * fail, never a silent partial set. Names resolve strictly within the caller's
+ * organization (`ToolModel.findAppAssignableToolsByNames`; a global lookup
+ * would let a caller attach another org's tool row), built-ins are rejected,
+ * and an ambiguous or unknown name errors with the offenders listed. The
+ * resulting assignments use dynamic credential resolution: the server (and so
+ * the credential) is picked per viewing user at call time, which both makes
+ * the assignment valid without an explicit mcpServerId and gives shared apps
+ * per-viewer auth.
+ */
+export async function resolveAppToolsByName(params: {
+  organizationId: string;
+  toolNames: readonly string[];
+  /** Environment to resolve tools within (the app's bound environment; the org
+   * default for scaffold_app, where env selection is deferred). */
+  environmentId: string | null;
+}): Promise<
+  { tools: Array<{ id: string; name: string }> } | ToolAssignmentError
+> {
+  const requested = [...new Set(params.toolNames)];
+
+  const builtIns = requested.filter((name) =>
+    archestraMcpBranding.isToolName(name),
+  );
+  if (builtIns.length > 0) {
+    return appToolsValidationError(
+      `Built-in tools cannot be assigned to apps (app HTML reaches the data store via archestra.storage automatically): ${builtIns.join(", ")}`,
+    );
+  }
+
+  const rows = await ToolModel.findAppAssignableToolsByNames(
+    params.organizationId,
+    requested,
+    params.environmentId,
+  );
+  const byName = new Map<string, typeof rows>();
+  for (const row of rows) {
+    byName.set(row.name, [...(byName.get(row.name) ?? []), row]);
+  }
+
+  const unknown = requested.filter((name) => !byName.has(name));
+  if (unknown.length > 0) {
+    return appToolsValidationError(
+      `Unknown tool name(s) for this organization: ${unknown.join(", ")}. Use search_tools to discover available tools.`,
+    );
+  }
+  const ambiguous = requested.filter(
+    (name) => (byName.get(name) ?? []).length > 1,
+  );
+  if (ambiguous.length > 0) {
+    return appToolsValidationError(
+      `Tool name(s) match more than one installed tool and cannot be assigned by name: ${ambiguous.join(", ")}.`,
+    );
+  }
+  const pendingDiscovery = rows.filter((row) => row.clonedPendingDiscovery);
+  if (pendingDiscovery.length > 0) {
+    return appToolsValidationError(
+      `Tool(s) not available until their server is installed: ${pendingDiscovery.map((row) => row.name).join(", ")}`,
+    );
+  }
+
+  return {
+    tools: requested.map((name) => {
+      // biome-ignore lint/style/noNonNullAssertion: unknown names errored above
+      const row = byName.get(name)![0];
+      return { id: row.id, name: row.name };
+    }),
+  };
+}
+
+/**
+ * Replace an app's tool assignments with the resolved set, atomically (a
+ * failure cannot leave a partial set). See {@link resolveAppToolsByName} for
+ * why assignments are dynamic-mode.
+ */
+export async function replaceAppToolAssignments(
+  appId: string,
+  tools: ReadonlyArray<{ id: string }>,
+): Promise<void> {
+  await AppToolModel.replaceAssignments(
+    appId,
+    tools.map((tool) => ({
+      toolId: tool.id,
+      mcpServerId: null,
+      credentialResolutionMode: "dynamic",
+    })),
+  );
+}
+
+function appToolsValidationError(message: string): ToolAssignmentError {
+  return {
+    code: "validation_error",
+    error: { message, type: "validation_error" },
+  };
+}
+
+/**
+ * Assign an upstream tool to an *app*, mirroring `assignToolToAgent`. Reuses the
+ * same catalog/server validation and scope-alignment rules with the app's owner
+ * context, so a personal app cannot be handed a team- or owner-scoped server it
+ * has no claim to.
+ */
+export async function assignToolToApp(params: {
+  appId: string;
+  organizationId: string;
+  toolId: string;
+  mcpServerId?: string | null;
+  credentialResolutionMode?: CredentialResolutionMode;
+}): Promise<ToolAssignmentError | "duplicate" | "updated" | null> {
+  const credentialResolutionMode = normalizeCredentialResolutionMode(params);
+
+  const app = await AppModel.findByIdInOrg(params.appId, params.organizationId);
+  if (!app) {
+    return {
+      code: "not_found",
+      error: {
+        message: `App with ID ${params.appId} not found`,
+        type: "not_found",
+      },
+    };
+  }
+
+  // Org-scoped: a tool from another organization is indistinguishable from a
+  // nonexistent one, so this raw-id endpoint cannot attach or probe foreign tools.
+  const tool = await ToolModel.findAppAssignableToolById(
+    params.organizationId,
+    params.toolId,
+  );
+  if (!tool) {
+    return {
+      code: "not_found",
+      error: {
+        message: `Tool with ID ${params.toolId} not found`,
+        type: "not_found",
+      },
+    };
+  }
+
+  // Environment fence: a tool whose catalog is outside the app's bound
+  // environment is not assignable. This is a same-org, wrong-environment tool —
+  // distinct from the foreign-org not_found above — so it gets a clear 400.
+  const inEnvironment = await ToolModel.isToolInEnvironment(
+    params.toolId,
+    app.environmentId,
+  );
+  if (!inEnvironment) {
+    return {
+      code: "validation_error",
+      error: {
+        message:
+          "Tool is not available in the app's environment and cannot be assigned.",
+        type: "validation_error",
+      },
+    };
+  }
+
+  if (tool.clonedPendingDiscovery) {
+    return {
+      code: "validation_error",
+      error: {
+        message:
+          "Tool is not available for assignment until its server is installed.",
+        type: "validation_error",
+      },
+    };
+  }
+
+  const catalogValidationError = await validateCatalogRequirements({
+    tool,
+    mcpServerId: params.mcpServerId,
+    credentialResolutionMode,
+  });
+  if (catalogValidationError) {
+    return catalogValidationError;
+  }
+
+  if (params.mcpServerId) {
+    // Same org-scoping for the server: resolve within the org first so a
+    // foreign-org server (even one sharing a global catalog with the tool) is
+    // rejected as not_found before reaching the scope-assignability check.
+    const mcpServer = await McpServerModel.findByIdInOrg(
+      params.mcpServerId,
+      params.organizationId,
+    );
+    if (!mcpServer) {
+      return {
+        code: "not_found",
+        error: {
+          message: `MCP server with ID ${params.mcpServerId} not found`,
+          type: "not_found",
+        },
+      };
+    }
+    const validationError = await validateAssignedMcpServer({
+      getOwnerContext: () => getAppAssignmentTargetContext(params.appId),
+      mcpServerId: params.mcpServerId,
+      tool,
+      preFetchedServer: mcpServer,
+    });
+    if (validationError) {
+      return validationError;
+    }
+  }
+
+  const result = await AppToolModel.createOrUpdateCredentials(
+    params.appId,
+    params.toolId,
+    params.mcpServerId,
+    credentialResolutionMode,
+  );
+
+  if (result.status === "unchanged") {
+    return "duplicate";
+  }
+  if (result.status === "updated") {
+    return "updated";
+  }
+  return null;
+}
+
 async function validateCatalogRequirements(params: {
   tool: Tool;
   mcpServerId?: string | null;
   preFetchedData?: Partial<AgentToolAssignmentPrefetchedData>;
   credentialResolutionMode: CredentialResolutionMode;
-}): Promise<AgentToolAssignmentError | null> {
+}): Promise<ToolAssignmentError | null> {
   const { tool, mcpServerId, preFetchedData, credentialResolutionMode } =
     params;
   const usesLateBoundResolution =
@@ -223,15 +450,15 @@ function normalizeCredentialResolutionMode(params: {
 }
 
 async function validateAssignedMcpServer(params: {
-  agentId: string;
+  getOwnerContext: () => Promise<ToolOwnerContext>;
   mcpServerId: string;
   tool: Tool;
   preFetchedServer?: Pick<
     PrefetchedMcpServer,
     "id" | "ownerId" | "catalogId" | "teamId" | "scope"
   > | null;
-}): Promise<AgentToolAssignmentError | null> {
-  const { agentId, mcpServerId, tool, preFetchedServer } = params;
+}): Promise<ToolAssignmentError | null> {
+  const { getOwnerContext, mcpServerId, tool, preFetchedServer } = params;
 
   const mcpServer =
     preFetchedServer !== undefined
@@ -259,10 +486,9 @@ async function validateAssignedMcpServer(params: {
     };
   }
 
-  const targetContext = await getAssignmentTargetContext(agentId);
   const isAllowed = await isMcpServerAssignableToTarget({
     mcpServer,
-    target: targetContext,
+    target: await getOwnerContext(),
   });
 
   if (!isAllowed) {
@@ -278,12 +504,9 @@ async function validateAssignedMcpServer(params: {
   return null;
 }
 
-async function getAssignmentTargetContext(agentId: string): Promise<{
-  organizationId: string;
-  scope: AgentScope;
-  authorId: string | null;
-  teamIds: string[];
-}> {
+async function getAssignmentTargetContext(
+  agentId: string,
+): Promise<ToolOwnerContext> {
   const agent = await AgentModel.findById(agentId, undefined, true);
 
   if (!agent) {
@@ -295,6 +518,25 @@ async function getAssignmentTargetContext(agentId: string): Promise<{
     scope: agent.scope,
     authorId: agent.authorId,
     teamIds: agent.teams.map((team) => team.id),
+  };
+}
+
+async function getAppAssignmentTargetContext(
+  appId: string,
+): Promise<ToolOwnerContext> {
+  const app = await AppModel.findById(appId);
+
+  if (!app) {
+    throw new Error(`App with ID ${appId} not found`);
+  }
+
+  const teamIds = await AppTeamModel.getTeamsForApp(appId);
+
+  return {
+    organizationId: app.organizationId,
+    scope: app.scope,
+    authorId: app.authorId,
+    teamIds,
   };
 }
 

@@ -7,6 +7,8 @@ Before this goes out I need a QC pass on the numbers. I'm worried about two clas
 
 Go through the whole deck and find every such defect. For each one, report the metric it concerns and which class of problem it is.
 
+Two scope notes so we're aligned: (1) the deck quotes different headline enterprise values on different slides — a comps-IMPLIED EV (~$1.2B) versus the INDICATIVE deal EV ($1.25B). Those are different concepts by design, so do NOT treat that as a defect. (2) For `implied_ev`, the only thing to check is whether slide 6's stated implied EV correctly equals the median EV/Revenue multiple it cites times the revenue it cites — i.e. is that one stated calculation right.
+
 Send it back with submit_result as `findings`: a list of objects, each with a `metric` (pick from the allowed enum) and an `issue_type` of either "value_conflict" or "calc_error". Only report real defects — don't pad the list with metrics that are actually consistent.
 
 Make a single submit_result call with your complete, final list of findings — your first submission is final, so don't send a partial or empty list to test the format first."""

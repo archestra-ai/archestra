@@ -594,6 +594,7 @@ export const RouteId = {
   CreateConnectionSetup: "createConnectionSetup",
   GetConnectionSetupScript: "getConnectionSetupScript",
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
+  CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
 
   // MCP App Routes
   GetApps: "getApps",

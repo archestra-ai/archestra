@@ -6,7 +6,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { ResourceVisibilityScope } from "@/types";
+import type { ResourceVisibilityScope, VirtualApiKeyType } from "@/types";
 import secretsTable from "./secret";
 import usersTable from "./user";
 
@@ -16,6 +16,15 @@ const virtualApiKeysTable = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
     name: varchar("name", { length: 256 }).notNull(),
+    /**
+     * Kind of key. `standard` maps to provider API keys and is sent in the
+     * Authorization header; `passthrough` carries no provider credential and is
+     * sent in the X-Archestra-Virtual-Key header for user attribution.
+     */
+    keyType: text("key_type")
+      .$type<VirtualApiKeyType>()
+      .notNull()
+      .default("standard"),
     /** Reference to secret table where token value is stored */
     secretId: uuid("secret_id")
       .notNull()

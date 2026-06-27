@@ -378,6 +378,13 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: virtual key × team; parent audited",
   },
+  virtualApiKeyLlmProxiesTable: {
+    audited: false,
+    // Orphaned table — the passthrough-key "allowed LLM proxies" feature was
+    // removed; no code reads/writes it. Retained only so this release doesn't
+    // drop it under old pods; entry stays until the table is dropped (phase 2).
+    reason: "orphaned/unused; retained for zero-downtime, dropped in phase 2",
+  },
 
   // =========================================================================
   // Children of audited parents

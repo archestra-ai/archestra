@@ -1,6 +1,10 @@
 "use client";
 
-import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@archestra/shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  parseFullToolName,
+  TOOL_LOAD_SKILL_SHORT_NAME,
+} from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon, WebhookIcon } from "lucide-react";
 import { useState } from "react";
@@ -26,6 +30,7 @@ import {
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils";
 import { HookRunChip, type HookRunChipData } from "./hook-run-chip";
+import { SkillPill } from "./skill-pill";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
 
@@ -103,6 +108,57 @@ function CompactCircle({
             : state === "error"
               ? " (error)"
               : ""}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+/**
+ * Variant of CompactCircle for `archestra__load_skill` calls. Same chrome as
+ * the circle (32px tall, rounded-full, bordered) but the pill extends
+ * horizontally to surface the skill name inline. The pill itself does NOT
+ * expand the tool-call detail card on click — only the skill name navigates
+ * to the Skills list (filtered by name) and only when the user has
+ * `skill:read`.
+ */
+function ToolCallSkillPill({
+  toolName,
+  skillName,
+  skillPath,
+  state,
+}: {
+  toolName: string;
+  skillName: string | null;
+  skillPath: string | null;
+  state: "running" | "completed" | "error";
+}) {
+  const tooltipLabel = (() => {
+    const base = skillName ? `Skill: ${skillName}` : "Loading skill";
+    const withPath = skillPath ? `${base} → ${skillPath}` : base;
+    if (state === "running") return `${withPath} (running)`;
+    if (state === "error") return `${withPath} (error)`;
+    return withPath;
+  })();
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <SkillPill skillName={skillName} data-tool-name={toolName}>
+            {state === "running" || state === "error" ? (
+              <span
+                className={cn(
+                  "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
+                  state === "running" && "bg-blue-500 animate-pulse",
+                  state === "error" && "bg-destructive",
+                )}
+              />
+            ) : null}
+          </SkillPill>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {tooltipLabel}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -194,7 +250,7 @@ export function CompactToolGroup({
   }) => void;
 }) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const { isToolName } = useArchestraMcpIdentity();
+  const { isToolName, getToolShortName } = useArchestraMcpIdentity();
 
   const handleToggle = (key: string) => {
     if (!canExpandToolCalls) return;
@@ -204,7 +260,7 @@ export function CompactToolGroup({
   const expandedEntry = tools.find((t) => t.key === expandedKey);
 
   return (
-    <div className="mb-1">
+    <div className="mb-4">
       <div className="flex flex-wrap gap-1.5 items-center">
         {tools.map((entry) => {
           if (entry.kind === "hook") {
@@ -218,6 +274,33 @@ export function CompactToolGroup({
               />
             );
           }
+          const state = getCompactToolState({
+            part: entry.part,
+            toolResultPart: entry.toolResultPart,
+          });
+          if (getToolShortName(entry.toolName) === TOOL_LOAD_SKILL_SHORT_NAME) {
+            const input = (entry.part.input ?? {}) as {
+              name?: unknown;
+              path?: unknown;
+            };
+            const skillName =
+              typeof input.name === "string" && input.name.length > 0
+                ? input.name
+                : null;
+            const skillPath =
+              typeof input.path === "string" && input.path.length > 0
+                ? input.path
+                : null;
+            return (
+              <ToolCallSkillPill
+                key={entry.key}
+                toolName={entry.toolName}
+                skillName={skillName}
+                skillPath={skillPath}
+                state={state}
+              />
+            );
+          }
           const iconInfo = toolIconMap?.get(entry.toolName);
           const fallbackCatalogId =
             iconInfo?.catalogId ??
@@ -226,10 +309,7 @@ export function CompactToolGroup({
             <CompactCircle
               key={entry.key}
               toolName={entry.toolName}
-              state={getCompactToolState({
-                part: entry.part,
-                toolResultPart: entry.toolResultPart,
-              })}
+              state={state}
               isExpanded={expandedKey === entry.key}
               isExpandable={canExpandToolCalls}
               onClick={() => handleToggle(entry.key)}

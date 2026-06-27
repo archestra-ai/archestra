@@ -91875,6 +91875,10 @@
                       "virtual-key"
                     ]
                   },
+                  "attributePassthrough": {
+                    "default": true,
+                    "type": "boolean"
+                  },
                   "skills": {
                     "type": "object",
                     "properties": {
@@ -92220,6 +92224,293 @@
                 },
                 "required": [
                   "provider"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "name"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/connection-setups/passthrough-key": {
+      "post": {
+        "operationId": "createConnectionPassthroughKey",
+        "tags": [
+          "Connection Setups"
+        ],
+        "description": "Provision (or reuse) the caller's personal passthrough virtual key scoped to an LLM proxy and return its value once. Backs the manual /connection flow's X-Archestra-Virtual-Key attribution step for Claude Code and Claude Desktop. Requires llmVirtualKey:create.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "llmProxyId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                },
+                "required": [
+                  "llmProxyId"
                 ]
               }
             }
@@ -106456,6 +106747,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -106496,6 +106793,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -106895,6 +107193,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -106953,6 +107252,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -106993,6 +107298,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -107809,6 +108115,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -107867,6 +108174,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -107907,6 +108220,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -108420,6 +108734,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -108478,6 +108793,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -108518,6 +108839,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -108917,6 +109239,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -108975,6 +109298,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -109015,6 +109344,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -109414,6 +109744,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -109472,6 +109803,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -109512,6 +109849,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -111734,6 +112072,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -111792,6 +112131,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -111832,6 +112177,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -112231,6 +112577,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -112289,6 +112636,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -112329,6 +112682,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -112728,6 +113082,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -112786,6 +113141,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -112826,6 +113187,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -113225,6 +113587,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -113283,6 +113646,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -113323,6 +113692,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -113722,6 +114092,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -113780,6 +114151,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -113820,6 +114197,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -114219,6 +114597,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -114277,6 +114656,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -114317,6 +114702,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -114716,6 +115102,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -114774,6 +115161,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -114814,6 +115207,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -115202,6 +115596,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -115260,6 +115655,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -115300,6 +115701,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -115688,6 +116090,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -115746,6 +116149,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -115786,6 +116195,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -116185,6 +116595,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -116243,6 +116654,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -116283,6 +116700,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -116682,6 +117100,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -116740,6 +117159,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -116780,6 +117205,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -117179,6 +117605,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -117237,6 +117664,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -117277,6 +117710,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -119842,6 +120276,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -119900,6 +120335,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -119940,6 +120381,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -120339,6 +120781,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -120397,6 +120840,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -120437,6 +120886,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -121069,6 +121519,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -121127,6 +121578,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "environmentId": {
                                 "nullable": true,
                                 "type": "string",
@@ -121167,6 +121624,7 @@
                                 "enum": [
                                   "provider_key",
                                   "virtual_key",
+                                  "passthrough_virtual_key",
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
@@ -121983,6 +122441,7 @@
                               "executionId",
                               "userId",
                               "virtualKeyId",
+                              "passthroughVirtualKeyId",
                               "environmentId",
                               "sessionId",
                               "sessionSource",
@@ -122354,6 +122813,19 @@
           },
           {
             "schema": {
+              "type": "string",
+              "enum": [
+                "claude_code",
+                "claude_desktop"
+              ]
+            },
+            "in": "query",
+            "name": "sessionSource",
+            "required": false,
+            "description": "Filter by client/session source (e.g. claude_code, claude_desktop)"
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "in": "query",
@@ -122579,6 +123051,7 @@
                               "enum": [
                                 "provider_key",
                                 "virtual_key",
+                                "passthrough_virtual_key",
                                 "jwks",
                                 "oauth_client_credentials",
                                 "oauth_user",
@@ -123536,6 +124009,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -123576,6 +124055,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -123975,6 +124455,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -124033,6 +124514,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -124073,6 +124560,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -124889,6 +125377,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -124947,6 +125436,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -124987,6 +125482,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -125500,6 +125996,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -125558,6 +126055,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -125598,6 +126101,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -125997,6 +126501,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -126055,6 +126560,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -126095,6 +126606,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -126494,6 +127006,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -126552,6 +127065,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -126592,6 +127111,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -128814,6 +129334,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -128872,6 +129393,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -128912,6 +129439,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -129311,6 +129839,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -129369,6 +129898,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -129409,6 +129944,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -129808,6 +130344,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -129866,6 +130403,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -129906,6 +130449,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -130305,6 +130849,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -130363,6 +130908,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -130403,6 +130954,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -130802,6 +131354,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -130860,6 +131413,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -130900,6 +131459,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -131299,6 +131859,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -131357,6 +131918,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -131397,6 +131964,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -131796,6 +132364,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -131854,6 +132423,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -131894,6 +132469,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -132282,6 +132858,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -132340,6 +132917,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -132380,6 +132963,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -132768,6 +133352,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -132826,6 +133411,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -132866,6 +133457,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -133265,6 +133857,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -133323,6 +133916,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -133363,6 +133962,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -133762,6 +134362,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -133820,6 +134421,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -133860,6 +134467,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -134259,6 +134867,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -134317,6 +134926,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -134357,6 +134972,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -136922,6 +137538,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -136980,6 +137597,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -137020,6 +137643,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -137419,6 +138043,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -137477,6 +138102,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -137517,6 +138148,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -138149,6 +138781,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -138207,6 +138840,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "environmentId": {
                           "nullable": true,
                           "type": "string",
@@ -138247,6 +138886,7 @@
                           "enum": [
                             "provider_key",
                             "virtual_key",
+                            "passthrough_virtual_key",
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
@@ -139063,6 +139703,7 @@
                         "executionId",
                         "userId",
                         "virtualKeyId",
+                        "passthroughVirtualKeyId",
                         "environmentId",
                         "sessionId",
                         "sessionSource",
@@ -236949,6 +237590,18 @@
             "in": "query",
             "name": "providerApiKeyId",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "standard",
+                "passthrough"
+              ]
+            },
+            "in": "query",
+            "name": "keyType",
+            "required": false
           }
         ],
         "responses": {
@@ -236975,6 +237628,13 @@
                           "name": {
                             "type": "string",
                             "maxLength": 256
+                          },
+                          "keyType": {
+                            "type": "string",
+                            "enum": [
+                              "standard",
+                              "passthrough"
+                            ]
                           },
                           "secretId": {
                             "type": "string",
@@ -237084,6 +237744,7 @@
                           "id",
                           "organizationId",
                           "name",
+                          "keyType",
                           "secretId",
                           "tokenStart",
                           "scope",
@@ -237402,6 +238063,14 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "keyType": {
+                    "default": "standard",
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "passthrough"
+                    ]
+                  },
                   "expiresAt": {
                     "nullable": true
                   },
@@ -237422,7 +238091,7 @@
                     }
                   },
                   "providerApiKeys": {
-                    "minItems": 1,
+                    "default": [],
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -237467,8 +238136,7 @@
                   }
                 },
                 "required": [
-                  "name",
-                  "providerApiKeys"
+                  "name"
                 ]
               }
             }
@@ -237493,6 +238161,13 @@
                     "name": {
                       "type": "string",
                       "maxLength": 256
+                    },
+                    "keyType": {
+                      "type": "string",
+                      "enum": [
+                        "standard",
+                        "passthrough"
+                      ]
                     },
                     "secretId": {
                       "type": "string",
@@ -237605,6 +238280,7 @@
                     "id",
                     "organizationId",
                     "name",
+                    "keyType",
                     "secretId",
                     "tokenStart",
                     "scope",
@@ -237878,6 +238554,14 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "keyType": {
+                    "default": "standard",
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "passthrough"
+                    ]
+                  },
                   "expiresAt": {
                     "nullable": true
                   },
@@ -237898,7 +238582,7 @@
                     }
                   },
                   "providerApiKeys": {
-                    "minItems": 1,
+                    "default": [],
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -237940,8 +238624,7 @@
                   }
                 },
                 "required": [
-                  "name",
-                  "providerApiKeys"
+                  "name"
                 ]
               }
             }
@@ -237978,6 +238661,13 @@
                     "name": {
                       "type": "string",
                       "maxLength": 256
+                    },
+                    "keyType": {
+                      "type": "string",
+                      "enum": [
+                        "standard",
+                        "passthrough"
+                      ]
                     },
                     "secretId": {
                       "type": "string",
@@ -238087,6 +238777,7 @@
                     "id",
                     "organizationId",
                     "name",
+                    "keyType",
                     "secretId",
                     "tokenStart",
                     "scope",

@@ -12,6 +12,7 @@ import {
   providerRequiresPerUserCredential,
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
+import { userHasPermission } from "@/auth";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import {
@@ -27,7 +28,7 @@ import {
 import { validateExternalIdpToken } from "@/routes/mcp-gateway.utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
-import { type Agent, ApiError } from "@/types";
+import { type Agent, ApiError, type ResourceVisibilityScope } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { isLoopbackAddress } from "@/utils/network";
 
@@ -66,6 +67,16 @@ export interface VirtualKeyValidationResult {
   /** Parent chat_api_key row ID; used by the proxy to look up per-key settings (e.g. extra headers). */
   chatApiKeyId?: string;
   virtualKeyId?: string;
+  /** Scope of the resolved key; a personal key identifies its owner. */
+  virtualKeyScope?: ResourceVisibilityScope;
+  /** Owner of the resolved key (for cross-credential user-consistency checks). */
+  virtualKeyAuthorId?: string | null;
+}
+
+export interface PassthroughVirtualKeyResult {
+  /** Owner of the passthrough key — the acting Archestra user. */
+  userId: string;
+  passthroughVirtualKeyId: string;
 }
 
 type ResolvedVirtualApiKey = NonNullable<
@@ -102,6 +113,12 @@ export async function validateVirtualApiKey(
   expectedProvider: string,
 ): Promise<VirtualKeyValidationResult> {
   const resolved = await validateVirtualApiKeyToken(tokenValue);
+  if (resolved.virtualKey.keyType === "passthrough") {
+    throw new ApiError(
+      400,
+      "Passthrough virtual keys carry no provider credential — send them in the X-Archestra-Virtual-Key header, not Authorization.",
+    );
+  }
   const mappedProviderKey = (
     await VirtualApiKeyModel.getProviderApiKeysForRouting(
       resolved.virtualKey.id,
@@ -169,7 +186,95 @@ export async function validateVirtualApiKey(
     baseUrl: mappedProviderKey.baseUrl ?? undefined,
     chatApiKeyId: mappedProviderKey.providerApiKeyId,
     virtualKeyId: resolved.virtualKey.id,
+    virtualKeyScope: resolved.virtualKey.scope,
+    virtualKeyAuthorId: resolved.virtualKey.authorId,
   };
+}
+
+// =========================================================================
+// Passthrough Virtual Key Validation
+// =========================================================================
+
+/**
+ * Validate a passthrough virtual key from the X-Archestra-Virtual-Key header.
+ *
+ * A passthrough key carries no provider credential. It authenticates the acting
+ * Archestra user; access to the target LLM proxy is then governed by the owner's
+ * own agent access (the same access any authenticated user would have).
+ *
+ * Throws ApiError on validation failure (401 invalid/expired, 400 wrong key
+ * type, 403 no proxy access).
+ */
+export async function validatePassthroughVirtualKey(params: {
+  tokenValue: string;
+  agent: Agent;
+}): Promise<PassthroughVirtualKeyResult> {
+  const { tokenValue, agent } = params;
+
+  const resolved = await VirtualApiKeyModel.validateToken(tokenValue);
+  if (!resolved) {
+    throw new ApiError(401, "Invalid passthrough virtual key");
+  }
+  const { virtualKey } = resolved;
+
+  if (virtualKey.keyType !== "passthrough") {
+    throw new ApiError(
+      400,
+      "This is a standard virtual key. Send it in the Authorization header instead of X-Archestra-Virtual-Key.",
+    );
+  }
+  if (virtualKey.expiresAt && virtualKey.expiresAt < new Date()) {
+    throw new ApiError(401, "Passthrough virtual key expired");
+  }
+  if (!virtualKey.authorId) {
+    throw new ApiError(401, "Passthrough virtual key has no owner");
+  }
+
+  const noAccessError = new ApiError(
+    403,
+    "Your passthrough virtual key does not grant access to this LLM proxy. Contact your administrator.",
+  );
+  if (virtualKey.organizationId !== agent.organizationId) {
+    throw noAccessError;
+  }
+
+  // Proxy access follows the owner's own agent access.
+  const ownerIsAgentAdmin = await userHasPermission(
+    virtualKey.authorId,
+    agent.organizationId,
+    "agent",
+    "admin",
+  );
+  const hasProxyAccess = await AgentTeamModel.userHasAgentAccess(
+    virtualKey.authorId,
+    agent.id,
+    ownerIsAgentAdmin,
+  );
+  if (!hasProxyAccess) {
+    throw noAccessError;
+  }
+
+  return {
+    userId: virtualKey.authorId,
+    passthroughVirtualKeyId: virtualKey.id,
+  };
+}
+
+/**
+ * All authenticated user-scoped credentials on a request must resolve to a
+ * single Archestra user. Throws 401 when two differ. Unauthenticated hints
+ * (e.g. the X-Archestra-User-Id header) must NOT be passed in here.
+ */
+export function assertConsistentUserCredentials(
+  userIds: Array<string | null | undefined>,
+): void {
+  const distinct = new Set(userIds.filter((id): id is string => Boolean(id)));
+  if (distinct.size > 1) {
+    throw new ApiError(
+      401,
+      "Conflicting Archestra user credentials: the request's credentials identify different users.",
+    );
+  }
 }
 
 // =========================================================================

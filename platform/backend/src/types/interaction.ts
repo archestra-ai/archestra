@@ -40,6 +40,7 @@ export const UserInfoSchema = z.object({
 export const InteractionAuthMethodSchema = z.enum([
   "provider_key",
   "virtual_key",
+  "passthrough_virtual_key",
   "jwks",
   "oauth_client_credentials",
   "oauth_user",

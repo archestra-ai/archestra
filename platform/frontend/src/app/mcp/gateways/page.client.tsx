@@ -468,7 +468,10 @@ function McpGateways({
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter ownerLabelPlural="MCP gateways" />
+                <AgentScopeFilter
+                  ownerLabelPlural="MCP gateways"
+                  adminPermission={{ mcpGateway: ["admin"] }}
+                />
                 <AgentDeletedStatusFilter
                   deletePermission={{ mcpGateway: ["delete"] }}
                 />
@@ -479,7 +482,7 @@ function McpGateways({
                   permissions={[{ resource: "team", action: "read" }]}
                 />
               )}
-              <ActiveFilterBadges />
+              <ActiveFilterBadges adminPermission={{ mcpGateway: ["admin"] }} />
             </div>
 
             <div data-testid={E2eTestId.AgentsTable}>

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChatSkillMetadata } from "@archestra/shared";
-import { AlertTriangle, FileText, Paperclip, Sparkles } from "lucide-react";
+import { AlertTriangle, FileText, Paperclip } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
@@ -10,8 +10,8 @@ import {
   useMessageEditor,
 } from "@/components/chat/editable-message-editor";
 import { MessageActions } from "@/components/chat/message-actions";
+import { SkillPill } from "@/components/chat/skill-pill";
 import { UserMessageText } from "@/components/chat/user-message-text";
-import { Badge } from "@/components/ui/badge";
 import {
   getAttachmentFallbackLabel,
   isCsvAttachment,
@@ -123,13 +123,12 @@ export function EditableUserMessage({
       onMouseLeave={() => setIsRegenerateConfirming(false)}
     >
       <div className="relative flex flex-col items-end pb-2 w-full">
-        {/* Skill invoked via slash command */}
-        {skill && (
-          <Badge variant="secondary" className="mb-2 gap-1 text-xs">
-            <Sparkles className="h-3 w-3" />
-            {skill.name}
-          </Badge>
-        )}
+        {/* Skill invoked via slash command — same pill shape as the tool-call
+            SkillPill so the slash-command attribution and the model-driven
+            load_skill call read as the same thing. Right-aligned (inheriting
+            the parent column's `items-end`) so it sits above the bubble it
+            belongs to rather than drifting to the far-left column edge. */}
+        {skill && <SkillPill skillName={skill.name} className="mb-2" />}
         {/* Image attachments above the message bubble */}
         {imageAttachments.length > 0 && (
           <div className="flex flex-wrap gap-1 justify-end mb-2">
@@ -181,20 +180,27 @@ export function EditableUserMessage({
         )}
         {/* Text message bubble - only show if there's text */}
         {text && (
-          <div className="group/user-message-text-row flex max-w-[80%] items-center justify-end gap-2">
-            <MessageActions
-              textToCopy={text}
-              onEditClick={handleStartEdit}
-              onRegenerateClick={handleRegenerateClick}
-              isRegenerateConfirming={isRegenerateConfirming}
-              editDisabled={editDisabled}
-              className={cn(
-                "shrink-0 transition-opacity",
-                isRegenerateConfirming
-                  ? "opacity-100"
-                  : "pointer-events-none opacity-0 group-hover/user-message-text-row:pointer-events-auto group-hover/user-message-text-row:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100",
-              )}
-            />
+          <div className="group/user-message-text-row relative flex max-w-[80%] items-center justify-end">
+            {/* Actions float to the left of the bubble so growing the panel
+              (e.g. into the regenerate-confirmation copy) does not squeeze the
+              bubble's width. The wrapper owns the gap as right-padding so the
+              cursor can travel from the bubble into the panel without leaving
+              the group-hover region. */}
+            <div className="absolute right-full top-1/2 -translate-y-1/2 pr-2">
+              <MessageActions
+                textToCopy={text}
+                onEditClick={handleStartEdit}
+                onRegenerateClick={handleRegenerateClick}
+                isRegenerateConfirming={isRegenerateConfirming}
+                editDisabled={editDisabled}
+                className={cn(
+                  "shrink-0 transition-opacity",
+                  isRegenerateConfirming
+                    ? "opacity-100"
+                    : "pointer-events-none opacity-0 group-hover/user-message-text-row:pointer-events-auto group-hover/user-message-text-row:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100",
+                )}
+              />
+            </div>
             <MessageContent className="max-w-none">
               <UserMessageText text={text} />
             </MessageContent>

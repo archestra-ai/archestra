@@ -3021,6 +3021,79 @@ describe("mcp server core route coverage", () => {
     });
   });
 
+  describe("GET /api/mcp_server/:id/installation-status", () => {
+    test("returns the installation status for an accessible server", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+      const server = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/mcp_server/${server.id}/installation-status`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        localInstallationStatus: "idle",
+        localInstallationError: null,
+      });
+    });
+  });
+
+  describe("GET /api/mcp_server/:id/tools", () => {
+    test("returns the catalog tools for an accessible server", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+      const server = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+      });
+      const tool = await makeTool({ catalogId: catalog.id });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/mcp_server/${server.id}/tools`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const tools = response.json();
+      expect(tools).toHaveLength(1);
+      expect(tools[0]).toMatchObject({
+        id: tool.id,
+        name: tool.name,
+        assignedAgentCount: 0,
+        assignedAgents: [],
+      });
+    });
+
+    test("returns an empty list when the catalog has no tools", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+      const server = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/mcp_server/${server.id}/tools`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual([]);
+    });
+  });
+
   describe("DELETE /api/mcp_server/:id", () => {
     test("returns 404 for an unknown id", async () => {
       const response = await app.inject({
@@ -3055,6 +3128,126 @@ describe("mcp server core route coverage", () => {
       );
       await expect(McpServerModel.findById(builtin.id)).resolves.not.toBeNull();
     });
+
+    test("uninstalling the last connection retains tools, policies, and assignments (binding nulled)", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const { default: AgentModel } = await import("@/models/agent");
+
+      const catalog = await makeInternalMcpCatalog({
+        name: "Retain On Uninstall",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      connectAndGetToolsMock.mockResolvedValueOnce([
+        {
+          name: "retained-tool",
+          description: "kept after uninstall",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+      const installResponse = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: { name: "Retain On Uninstall", catalogId: catalog.id },
+      });
+      expect(installResponse.statusCode).toBe(200);
+      const installedServer = installResponse.json();
+
+      const toolsBefore = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, catalog.id));
+      expect(toolsBefore).toHaveLength(1);
+      const tool = toolsBefore[0];
+
+      const personalGateway = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        organizationId,
+      );
+      if (!personalGateway) throw new Error("expected personal gateway");
+
+      const assignmentBefore = await db
+        .select({ mcpServerId: schema.agentToolsTable.mcpServerId })
+        .from(schema.agentToolsTable)
+        .where(
+          and(
+            eq(schema.agentToolsTable.agentId, personalGateway.id),
+            eq(schema.agentToolsTable.toolId, tool.id),
+          ),
+        );
+      expect(assignmentBefore).toHaveLength(1);
+      expect(assignmentBefore[0].mcpServerId).toBe(installedServer.id);
+
+      const policiesBefore = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+      expect(policiesBefore.length).toBeGreaterThan(0);
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/mcp_server/${installedServer.id}`,
+      });
+      expect(deleteResponse.statusCode).toBe(200);
+
+      // The connection is gone, but the catalog's capability is retained.
+      await expect(
+        McpServerModel.findById(installedServer.id),
+      ).resolves.toBeNull();
+
+      const toolsAfter = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, catalog.id));
+      expect(toolsAfter).toHaveLength(1);
+
+      const policiesAfter = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+      expect(policiesAfter).toHaveLength(policiesBefore.length);
+
+      const assignmentAfter = await db
+        .select({ mcpServerId: schema.agentToolsTable.mcpServerId })
+        .from(schema.agentToolsTable)
+        .where(
+          and(
+            eq(schema.agentToolsTable.agentId, personalGateway.id),
+            eq(schema.agentToolsTable.toolId, tool.id),
+          ),
+        );
+      expect(assignmentAfter).toHaveLength(1);
+      expect(assignmentAfter[0].mcpServerId).toBeNull();
+    });
+
+    test("refuses to delete an app server with 400", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "app" });
+      const appServer = await McpServerModel.create({
+        name: "app-server",
+        catalogId: catalog.id,
+        serverType: "app",
+        scope: "org",
+        ownerId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/mcp_server/${appServer.id}`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toBe(
+        "App servers are managed via the Apps API; delete the app instead.",
+      );
+      await expect(
+        McpServerModel.findById(appServer.id),
+      ).resolves.not.toBeNull();
+    });
   });
 
   describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
@@ -3081,6 +3274,30 @@ describe("mcp server core route coverage", () => {
       expect(response.statusCode).toBe(404);
       expect(response.json().error.message).toBe("MCP server not found");
     });
+
+    test("rejects re-authenticating an app server with 400", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "app" });
+      const appServer = await McpServerModel.create({
+        name: "app-server",
+        catalogId: catalog.id,
+        serverType: "app",
+        scope: "org",
+        ownerId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/mcp_server/${appServer.id}/reauthenticate`,
+        payload: { accessToken: "fresh-token" },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toBe(
+        "App servers are managed via the Apps API and have no credentials to re-authenticate.",
+      );
+    });
   });
 
   describe("POST /api/mcp_server/:id/reinstall", () => {
@@ -3094,6 +3311,30 @@ describe("mcp server core route coverage", () => {
       expect(response.statusCode).toBe(404);
       expect(response.json().error.message).toBe("MCP server not found");
     });
+
+    test("rejects reinstalling an app server with 400", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "app" });
+      const appServer = await McpServerModel.create({
+        name: "app-server",
+        catalogId: catalog.id,
+        serverType: "app",
+        scope: "org",
+        ownerId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/mcp_server/${appServer.id}/reinstall`,
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toBe(
+        "App servers run in-process and are not reinstallable; manage them via the Apps API.",
+      );
+    });
   });
 
   describe("POST /api/mcp_server", () => {
@@ -3106,6 +3347,23 @@ describe("mcp server core route coverage", () => {
 
       expect(response.statusCode).toBe(400);
       expect(response.json().error.message).toBe("Catalog item not found");
+    });
+
+    test("returns 400 when installing an app-type catalog item", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "app" });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: { name: "app", catalogId: catalog.id, scope: "personal" },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toBe(
+        "App servers are managed via the Apps API and cannot be installed here.",
+      );
     });
   });
 });

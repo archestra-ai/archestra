@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -26,6 +26,22 @@ const PROXY = {
   proxyName: "default_proxy",
   virtualKey: "arch_deadbeefcafe",
   virtualKeyName: "Connection setup — user@example.com",
+  passthroughVirtualKey: null,
+};
+
+/**
+ * Claude Code's Anthropic subscription passthrough: no provider credential is
+ * injected (the subscription token passes through), only the attribution header.
+ */
+const ANTHROPIC_PASSTHROUGH_PROXY = {
+  authMode: "provider-key" as const,
+  provider: "anthropic" as const,
+  providerLabel: "Anthropic",
+  url: "https://archestra.example.com/v1/anthropic/profile-123",
+  proxyName: "default_proxy",
+  virtualKey: null,
+  virtualKeyName: null,
+  passthroughVirtualKey: "arch_passthroughcafe",
 };
 
 const GITHUB_COPILOT_PROXY = {
@@ -36,6 +52,7 @@ const GITHUB_COPILOT_PROXY = {
   proxyName: "default_proxy",
   virtualKey: null,
   virtualKeyName: null,
+  passthroughVirtualKey: null,
   githubCopilot: {
     tokenExchangeUrl:
       "https://api.github.example.com/copilot_internal/v2/token",
@@ -76,6 +93,47 @@ async function expectValidBash(script: string): Promise<void> {
     await execFileAsync("bash", ["-n", file]);
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Runs the real ~/.claude/settings.json merge (the python extracted from the
+ * rendered claude-code passthrough script) against a temp HOME, so the
+ * append/dedupe behavior is asserted end-to-end rather than by string match.
+ */
+async function runClaudeSettingsMerge(params: {
+  existing: object | null;
+}): Promise<{ env: { ANTHROPIC_CUSTOM_HEADERS: string } }> {
+  const script = renderSetupScript({
+    ...fullContext("claude-code"),
+    mcp: null,
+    skills: null,
+    proxy: ANTHROPIC_PASSTHROUGH_PROXY,
+  });
+  const match = script.match(
+    /python3 - <<'ARCHESTRA_PY'\n([\s\S]*?)\nARCHESTRA_PY/,
+  );
+  if (!match) throw new Error("could not extract the settings-merge python");
+  const home = await mkdtemp(path.join(tmpdir(), "archestra-home-"));
+  try {
+    await mkdir(path.join(home, ".claude"), { recursive: true });
+    const settingsPath = path.join(home, ".claude", "settings.json");
+    if (params.existing) {
+      await writeFile(settingsPath, JSON.stringify(params.existing), "utf8");
+    }
+    const pyFile = path.join(home, "merge.py");
+    await writeFile(pyFile, match[1], "utf8");
+    await execFileAsync("python3", [pyFile], {
+      env: {
+        ...process.env,
+        HOME: home,
+        ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS:
+          "X-Archestra-Virtual-Key: arch_passthroughcafe",
+      },
+    });
+    return JSON.parse(await readFile(settingsPath, "utf8"));
+  } finally {
+    await rm(home, { recursive: true, force: true });
   }
 }
 
@@ -151,6 +209,81 @@ describe("renderSetupScript", () => {
     expect(script).toContain("AWS_BEARER_TOKEN_BEDROCK");
     // The secret goes to the profile-paste block, not the settings merge env.
     expect(script).not.toContain(`ARCHESTRA_SET_ENV_AWS_BEARER_TOKEN_BEDROCK`);
+  });
+
+  test("claude-code anthropic passthrough: injects the attribution header, not an auth token", async () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code"),
+      mcp: null,
+      skills: null,
+      proxy: ANTHROPIC_PASSTHROUGH_PROXY,
+    });
+    await expectValidBash(script);
+    // The attribution header is appended into ANTHROPIC_CUSTOM_HEADERS (colon
+    // form), passed via env so the token never lands in argv.
+    expect(script).toContain("ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS");
+    expect(script).toContain("X-Archestra-Virtual-Key: arch_passthroughcafe");
+    expect(script).toContain("ANTHROPIC_CUSTOM_HEADERS");
+    // The base URL is still set; the subscription token passes through, so no
+    // ANTHROPIC_AUTH_TOKEN is injected (that would override the subscription).
+    expect(script).toContain("ANTHROPIC_BASE_URL");
+    expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
+  });
+
+  test("claude-code anthropic passthrough: no header when no passthrough key", () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code"),
+      mcp: null,
+      skills: null,
+      proxy: { ...ANTHROPIC_PASSTHROUGH_PROXY, passthroughVirtualKey: null },
+    });
+    // The shared merge python always mentions ANTHROPIC_CUSTOM_HEADERS; the
+    // meaningful signal is that nothing is exported to populate it.
+    expect(script).not.toContain(
+      "export ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS",
+    );
+    expect(script).not.toContain("X-Archestra-Virtual-Key");
+    expect(script).toContain("ANTHROPIC_BASE_URL");
+  });
+
+  test("claude-code bedrock: never gets the anthropic attribution header", () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code"),
+      mcp: null,
+      skills: null,
+      proxy: {
+        ...ANTHROPIC_PASSTHROUGH_PROXY,
+        provider: "bedrock",
+        providerLabel: "Bedrock",
+        url: "https://archestra.example.com/v1/bedrock/profile-123",
+        // even if a value is present, the bedrock section ignores it
+        passthroughVirtualKey: "arch_passthroughcafe",
+      },
+    });
+    // The bedrock section never exports the attribution header.
+    expect(script).not.toContain(
+      "export ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS",
+    );
+    expect(script).not.toContain("X-Archestra-Virtual-Key");
+  });
+
+  test("claude-code passthrough merge: preserves existing headers, no duplicate on re-run", async () => {
+    // Existing user header must survive; ours is appended once and replaced
+    // (not duplicated) on a second run.
+    const first = await runClaudeSettingsMerge({
+      existing: { env: { ANTHROPIC_CUSTOM_HEADERS: "X-Foo: bar" } },
+    });
+    expect(first.env.ANTHROPIC_CUSTOM_HEADERS).toContain("X-Foo: bar");
+    expect(first.env.ANTHROPIC_CUSTOM_HEADERS).toContain(
+      "X-Archestra-Virtual-Key: arch_passthroughcafe",
+    );
+
+    const second = await runClaudeSettingsMerge({ existing: first });
+    const lines = second.env.ANTHROPIC_CUSTOM_HEADERS.split("\n");
+    expect(
+      lines.filter((l) => l.startsWith("X-Archestra-Virtual-Key:")),
+    ).toEqual(["X-Archestra-Virtual-Key: arch_passthroughcafe"]);
+    expect(second.env.ANTHROPIC_CUSTOM_HEADERS).toContain("X-Foo: bar");
   });
 
   test("codex: manages a marker-delimited TOML block and logs in via stdin", () => {
@@ -325,6 +458,39 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain("ANTHROPIC_AUTH_TOKEN");
     expect(script).toContain("ConvertTo-Json -Depth 32");
     expect(script).toContain(".claude\\settings.json");
+  });
+
+  test("claude-code anthropic passthrough: appends the attribution header (PowerShell)", () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code", "windows"),
+      mcp: null,
+      skills: null,
+      proxy: ANTHROPIC_PASSTHROUGH_PROXY,
+    });
+    expect(script).toContain("ANTHROPIC_CUSTOM_HEADERS");
+    expect(script).toContain("X-Archestra-Virtual-Key: arch_passthroughcafe");
+    // Append/dedupe by header name, preserving the user's other headers.
+    expect(script).toContain("-split ':',2");
+    expect(script).toContain("$arch_hname");
+    expect(script).toContain("ANTHROPIC_BASE_URL");
+    // Subscription passes through — no auth token injected.
+    expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
+  });
+
+  test("claude-code bedrock: no attribution header (PowerShell)", () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code", "windows"),
+      mcp: null,
+      skills: null,
+      proxy: {
+        ...ANTHROPIC_PASSTHROUGH_PROXY,
+        provider: "bedrock",
+        providerLabel: "Bedrock",
+        url: "https://archestra.example.com/v1/bedrock/profile-123",
+        passthroughVirtualKey: "arch_passthroughcafe",
+      },
+    });
+    expect(script).not.toContain("ANTHROPIC_CUSTOM_HEADERS");
   });
 
   test("codex: marker-delimited TOML block dropped before append (idempotent)", () => {

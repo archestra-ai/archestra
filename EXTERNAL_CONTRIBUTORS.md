@@ -651,3 +651,11 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @aionathenea-eng
 - @Poom5741
 - @Kubostrel
+- @victor-akua
+- @vitaliyfedotovpro-art
+- @sajithmuhammed
+- @ikshantshukla123
+- @astrodev9955
+- @BittuBarnwal7479
+- @Ami765
+- @Chris-Graffagnino

@@ -393,4 +393,50 @@ describe("GET /api/llm-virtual-keys", () => {
       ]),
     );
   });
+
+  test("GET /api/llm-virtual-keys filters by keyType", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "std-key",
+        scope: "personal",
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: parentKey.id },
+        ],
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: { name: "pt-key", keyType: "passthrough" },
+    });
+
+    const passthroughOnly = await app.inject({
+      method: "GET",
+      url: "/api/llm-virtual-keys?limit=50&offset=0&keyType=passthrough",
+    });
+    expect(passthroughOnly.statusCode).toBe(200);
+    const ptData = passthroughOnly.json().data;
+    expect(ptData).toHaveLength(1);
+    expect(ptData[0].name).toBe("pt-key");
+    expect(ptData[0].keyType).toBe("passthrough");
+
+    const standardOnly = await app.inject({
+      method: "GET",
+      url: "/api/llm-virtual-keys?limit=50&offset=0&keyType=standard",
+    });
+    const stdData = standardOnly.json().data;
+    expect(stdData).toHaveLength(1);
+    expect(stdData[0].name).toBe("std-key");
+    expect(stdData[0].keyType).toBe("standard");
+  });
 });

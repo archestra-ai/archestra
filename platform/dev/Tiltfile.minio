@@ -1,0 +1,49 @@
+# MinIO (S3-compatible) for local My Files S3 storage. Loaded only when
+# ARCHESTRA_FILE_STORAGE_PROVIDER=s3 (see root Tiltfile), so default dev never
+# deploys it. Uses MinIO's official chart + image (quay.io/minio/minio), so
+# there is no dependency on Bitnami's archived images and no need for the
+# `allowInsecureImages` escape hatch that the Postgres resource requires.
+load('ext://helm_remote', 'helm_remote')
+
+minio_namespace = os.getenv('ARCHESTRA_K8S_NAMESPACE', 'archestra-dev')
+minio_bucket = os.getenv('ARCHESTRA_FILE_STORAGE_S3_BUCKET', 'archestra-files')
+minio_access_key = os.getenv('ARCHESTRA_FILE_STORAGE_S3_ACCESS_KEY_ID', 'archestra')
+minio_secret_key = os.getenv('ARCHESTRA_FILE_STORAGE_S3_SECRET_ACCESS_KEY', 'archestra_dev_password')
+minio_api_host_port = os.getenv('ARCHESTRA_MINIO_API_HOST_PORT', '9100')
+minio_console_host_port = os.getenv('ARCHESTRA_MINIO_CONSOLE_HOST_PORT', '9101')
+
+helm_remote(
+  'minio',
+  repo_url='https://charts.min.io/',
+  namespace=minio_namespace,
+  # Tiltfile.database (always loaded first) already creates this namespace.
+  # Re-creating it here registers a duplicate Namespace YAML and aborts the
+  # whole Tiltfile, so rely on the existing one.
+  create_namespace=False,
+  set=[
+    # Single-node, ephemeral object store sized for a laptop. The official chart
+    # defaults (distributed mode, 16 replicas, 16Gi RAM request, 500Gi PVC) are
+    # production-shaped and would never schedule locally.
+    'mode=standalone',
+    'replicas=1',
+    'persistence.enabled=false',
+    'resources.requests.memory=512Mi',
+
+    'rootUser=' + minio_access_key,
+    'rootPassword=' + minio_secret_key,
+
+    # Auto-create the My Files bucket via the chart's mc provisioning job.
+    'buckets[0].name=' + minio_bucket,
+    'buckets[0].policy=none',
+    'buckets[0].purge=false',
+  ],
+)
+
+k8s_resource(
+  'minio',
+  port_forwards=[
+    minio_api_host_port + ':9000',
+    minio_console_host_port + ':9001',
+  ],
+  labels=['storage'],
+)

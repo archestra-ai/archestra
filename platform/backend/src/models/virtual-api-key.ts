@@ -13,6 +13,7 @@ import { secretManager } from "@/secrets-manager";
 import type {
   ResourceVisibilityScope,
   SelectVirtualApiKey,
+  VirtualApiKeyType,
   VirtualApiKeyWithParentInfo,
 } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
@@ -42,6 +43,7 @@ type ProviderApiKeyRoutingInfo = ProviderApiKeyInfo & {
 type VirtualApiKeyAccessContext = {
   id: string;
   organizationId: string;
+  keyType: VirtualApiKeyType;
   scope: ResourceVisibilityScope;
   authorId: string | null;
   teamIds: string[];
@@ -55,6 +57,7 @@ class VirtualApiKeyModel {
   static async create(params: {
     organizationId?: string;
     name: string;
+    keyType?: VirtualApiKeyType;
     expiresAt?: Date | null;
     scope?: ResourceVisibilityScope;
     authorId?: string | null;
@@ -70,6 +73,7 @@ class VirtualApiKeyModel {
     const {
       organizationId: providedOrganizationId,
       name,
+      keyType = "standard",
       expiresAt,
       scope = "org",
       authorId = null,
@@ -101,6 +105,7 @@ class VirtualApiKeyModel {
         .values({
           organizationId: resolvedOrganizationId,
           name,
+          keyType,
           secretId: secret.id,
           tokenStart,
           scope,
@@ -129,6 +134,7 @@ class VirtualApiKeyModel {
         organizationId: resolvedOrganizationId,
         virtualKeyId: virtualKey.id,
         scope,
+        keyType,
       },
       "VirtualApiKeyModel.create: virtual key created",
     );
@@ -282,6 +288,7 @@ class VirtualApiKeyModel {
           id: schema.virtualApiKeysTable.id,
           organizationId: schema.virtualApiKeysTable.organizationId,
           name: schema.virtualApiKeysTable.name,
+          keyType: schema.virtualApiKeysTable.keyType,
           secretId: schema.virtualApiKeysTable.secretId,
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           scope: schema.virtualApiKeysTable.scope,
@@ -346,6 +353,7 @@ class VirtualApiKeyModel {
       .select({
         id: schema.virtualApiKeysTable.id,
         organizationId: schema.virtualApiKeysTable.organizationId,
+        keyType: schema.virtualApiKeysTable.keyType,
         scope: schema.virtualApiKeysTable.scope,
         authorId: schema.virtualApiKeysTable.authorId,
       })
@@ -435,6 +443,7 @@ class VirtualApiKeyModel {
     isAdmin?: boolean;
     search?: string;
     providerApiKeyId?: string;
+    keyType?: VirtualApiKeyType;
   }): Promise<PaginatedResult<VirtualApiKeyWithParentInfo>> {
     const {
       organizationId,
@@ -444,6 +453,7 @@ class VirtualApiKeyModel {
       isAdmin = true,
       search,
       providerApiKeyId,
+      keyType,
     } = params;
 
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
@@ -477,6 +487,10 @@ class VirtualApiKeyModel {
       );
     }
 
+    if (keyType) {
+      whereConditions.push(eq(schema.virtualApiKeysTable.keyType, keyType));
+    }
+
     const whereClause = and(...whereConditions);
 
     const [rows, [{ total }]] = await Promise.all([
@@ -485,6 +499,7 @@ class VirtualApiKeyModel {
           id: schema.virtualApiKeysTable.id,
           organizationId: schema.virtualApiKeysTable.organizationId,
           name: schema.virtualApiKeysTable.name,
+          keyType: schema.virtualApiKeysTable.keyType,
           secretId: schema.virtualApiKeysTable.secretId,
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           scope: schema.virtualApiKeysTable.scope,

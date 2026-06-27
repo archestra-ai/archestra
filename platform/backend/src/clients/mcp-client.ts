@@ -66,6 +66,7 @@ import type {
   EnterpriseManagedCredentialConfig,
   InternalMcpCatalog,
   MCPGatewayAuthMethod,
+  McpServer,
   McpToolAssignment,
   ToolOwner,
 } from "@/types";
@@ -1466,12 +1467,31 @@ class McpClient {
     // Static credential case: tool has a bound MCP server credential to use.
     if (tool.credentialResolutionMode === "static") {
       if (!tool.mcpServerId) {
+        // The pinned install was uninstalled but the assignment is retained.
+        // Route through a remaining install for the same catalog (a multi-tenant
+        // sibling, or a reconnect not yet re-pinned), else return the typed
+        // "reconnect" result. catalogItem is the resolved catalog for this tool,
+        // so use its id rather than the assignment's possibly-stale catalogId.
+        const installs = await McpServerModel.findByCatalogId(catalogItem.id);
+        const resolved = await this.pickInstallForCaller(installs, tokenAuth);
+        if (resolved) {
+          return {
+            targetMcpServerId: resolved.id,
+            mcpServerName: resolved.name,
+          };
+        }
+        const reconnectError = this.buildReconnectRequiredMessage(
+          tool.catalogName || catalogItem.name,
+          catalogItem.id,
+        );
         return {
           error: await this.createErrorResult(
             toolCall,
             owner,
-            "An MCP server installation is required for statically assigned MCP tools.",
+            reconnectError.message,
             fallbackName,
+            undefined,
+            reconnectError,
           ),
         };
       }
@@ -1593,105 +1613,23 @@ class McpClient {
     // user token -> personal, then a team the user belongs to, then org-scoped;
     // team token -> the team's connection, then org-scoped. Pinning a service
     // account (above) overrides this to force one connection for every caller.
-    if (tokenAuth.userId) {
-      // Priority 1: Personal credential owned by current user
-      const userServer = allServers.find(
-        (s) => s.ownerId === tokenAuth.userId && !s.teamId && s.scope !== "org",
+    const resolvedServer = await this.pickInstallForCaller(
+      allServers,
+      tokenAuth,
+    );
+    if (resolvedServer) {
+      logger.info(
+        {
+          toolName: toolCall.name,
+          catalogId: tool.catalogId,
+          serverId: resolvedServer.id,
+        },
+        `Dynamic resolution: using scoped install for tool ${toolCall.name}`,
       );
-      if (userServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: userServer.id,
-            userId: tokenAuth.userId,
-          },
-          `Dynamic resolution: using user-owned server for tool ${toolCall.name}`,
-        );
-        return {
-          targetMcpServerId: userServer.id,
-          mcpServerName: userServer.name,
-        };
-      }
-
-      // Priority 2: Team-owned server for a team the user is a member of
-      const userTeams = await TeamModel.getUserTeams(tokenAuth.userId);
-      const userTeamIds = new Set(userTeams.map((t) => t.id));
-      const teamServer = allServers.find(
-        (s) => s.teamId && userTeamIds.has(s.teamId),
-      );
-      if (teamServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: teamServer.id,
-            teamId: teamServer.teamId,
-            userId: tokenAuth.userId,
-          },
-          `Dynamic resolution: using team-owned server for user ${tokenAuth.userId}`,
-        );
-        return {
-          targetMcpServerId: teamServer.id,
-          mcpServerName: teamServer.name,
-        };
-      }
-
-      // Priority 3: Org-scoped install
-      const orgServer = allServers.find((s) => s.scope === "org");
-      if (orgServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: orgServer.id,
-            userId: tokenAuth.userId,
-          },
-          `Dynamic resolution: using org-scoped server for user ${tokenAuth.userId}`,
-        );
-        return {
-          targetMcpServerId: orgServer.id,
-          mcpServerName: orgServer.name,
-        };
-      }
-    }
-
-    // Team token: try team-owned servers for the token's team, then fall back
-    // to an org-scoped install.
-    if (tokenAuth.teamId) {
-      const teamServer = allServers.find((s) => s.teamId === tokenAuth.teamId);
-      if (teamServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: teamServer.id,
-            teamId: tokenAuth.teamId,
-          },
-          `Dynamic resolution: using team-owned server for team ${tokenAuth.teamId}`,
-        );
-        return {
-          targetMcpServerId: teamServer.id,
-          mcpServerName: teamServer.name,
-        };
-      }
-
-      const orgServer = allServers.find((s) => s.scope === "org");
-      if (orgServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: orgServer.id,
-            teamId: tokenAuth.teamId,
-          },
-          `Dynamic resolution: using org-scoped server for team ${tokenAuth.teamId}`,
-        );
-        return {
-          targetMcpServerId: orgServer.id,
-          mcpServerName: orgServer.name,
-        };
-      }
+      return {
+        targetMcpServerId: resolvedServer.id,
+        mcpServerName: resolvedServer.name,
+      };
     }
 
     // Org-wide token is incompatible with dynamic credential resolution
@@ -1740,6 +1678,44 @@ class McpClient {
         authError,
       ),
     };
+  }
+
+  // Picks which of a catalog's installs the calling identity routes through, using
+  // the runtime credential-resolution scope priority: a user token prefers its own
+  // personal install, then a team the user belongs to, then an org-scoped install;
+  // a team token prefers the team's install, then org-scoped. Returns undefined when
+  // none match. Shared by dynamic resolution and by a retained static assignment
+  // whose pinned install was uninstalled (its mcpServerId is null).
+  private async pickInstallForCaller(
+    allServers: McpServer[],
+    tokenAuth: TokenAuthContext | undefined,
+  ): Promise<McpServer | undefined> {
+    if (tokenAuth?.userId) {
+      const userServer = allServers.find(
+        (s) => s.ownerId === tokenAuth.userId && !s.teamId && s.scope !== "org",
+      );
+      if (userServer) return userServer;
+
+      const userTeams = await TeamModel.getUserTeams(tokenAuth.userId);
+      const userTeamIds = new Set(userTeams.map((t) => t.id));
+      const teamServer = allServers.find(
+        (s) => s.teamId && userTeamIds.has(s.teamId),
+      );
+      if (teamServer) return teamServer;
+
+      const orgServer = allServers.find((s) => s.scope === "org");
+      if (orgServer) return orgServer;
+    }
+
+    if (tokenAuth?.teamId) {
+      const teamServer = allServers.find((s) => s.teamId === tokenAuth.teamId);
+      if (teamServer) return teamServer;
+
+      const orgServer = allServers.find((s) => s.scope === "org");
+      if (orgServer) return orgServer;
+    }
+
+    return undefined;
   }
 
   /**
@@ -2521,6 +2497,34 @@ class McpClient {
         url: installUrl,
         postAction:
           "Once you have completed authentication, retry this tool call.",
+      }),
+      catalogId,
+      catalogName: catalogDisplayName,
+      action: "install_mcp_credentials",
+      actionUrl: installUrl,
+    };
+  }
+
+  /**
+   * Like buildAuthRequiredMessage but worded for a retained tool whose MCP
+   * connection was uninstalled (no install remains for its catalog). Same typed
+   * shape/action so clients handle it identically; only the human-readable
+   * message is reconnect-framed, matching the search_tools "not installed —
+   * reconnect" wording rather than "no credentials".
+   */
+  private buildReconnectRequiredMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+  ): AuthRequiredMcpToolError {
+    const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${catalogId}`;
+    return {
+      type: "auth_required",
+      message: formatActionableAuthError({
+        title: `"${catalogDisplayName}" is not connected`,
+        detail: `This tool's MCP connection has been uninstalled. Reconnect "${catalogDisplayName}" to use it.`,
+        actionLabel: "reconnect the connection",
+        url: installUrl,
+        postAction: "Once reconnected, retry this tool call.",
       }),
       catalogId,
       catalogName: catalogDisplayName,

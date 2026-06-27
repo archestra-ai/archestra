@@ -2,14 +2,13 @@
 
 Reads BENCH_RESULT (submitted JSON) and BENCH_FIXTURES/expected/defects.json (verifier-only, never
 staged to the agent). Grading is a CLOSED SET over the four unambiguous planted defects: the submitted
-set of (metric, issue_type) pairs -- after dropping any pair on an `ignored_metrics` metric -- must
-EQUAL the expected set exactly. Every planted defect must be present with the correct issue_type, and
-no decoy metric (one that is actually consistent in the deck) or extra pair may be flagged.
+set of (metric, issue_type) pairs must EQUAL the expected set exactly -- every planted defect present
+with the correct issue_type, and no decoy metric (one that is actually consistent in the deck) or
+extra pair flagged. Strings are normalized for case/whitespace before comparison.
 
-`enterprise_value` is an `ignored_metric`: the deck shows $1.2B (slide 6, a comps-IMPLIED EV) vs
-$1.25B (slide 10, the INDICATIVE deal EV). Whether that is a genuine internal conflict or two
-legitimately different concepts is debatable, so flagging it (or not) is neither rewarded nor
-penalized -- the verifier silently drops it before comparison. Strings are normalized for case/space.
+(The deck also shows $1.2B on slide 6, a comps-IMPLIED EV, vs $1.25B on slide 10, the INDICATIVE deal
+EV. Whether those two are a genuine internal conflict or just different concepts is debatable, so
+`enterprise_value` is deliberately NOT in the result_schema's metric enum and is not graded either way.)
 """
 
 from bench_verifier import read_fixture_json, result
@@ -24,9 +23,7 @@ def _pair(item: dict) -> tuple[str, str]:
 
 
 def test_findings_match_expected_set() -> None:
-    spec = read_fixture_json("expected", "defects.json")
-    expected = {_pair(d) for d in spec["defects"]}
-    ignored = {_norm(m) for m in spec.get("ignored_metrics", [])}
+    expected = {_pair(d) for d in read_fixture_json("expected", "defects.json")["defects"]}
 
     raw = result().get("findings")
     assert isinstance(raw, list), f"findings must be a list, got {type(raw).__name__}"
@@ -36,14 +33,13 @@ def test_findings_match_expected_set() -> None:
             f"findings[{i}] must have 'metric' and 'issue_type': {item!r}"
         )
 
-    submitted = {_pair(item) for item in raw if _norm(item["metric"]) not in ignored}
+    submitted = {_pair(item) for item in raw}
 
     if submitted != expected:
         missing = sorted(expected - submitted)
         extra = sorted(submitted - expected)
         raise AssertionError(
-            f"graded findings {sorted(submitted)} != expected {sorted(expected)} "
-            f"(ignored metrics {sorted(ignored)} dropped before comparison); "
+            f"findings {sorted(submitted)} != expected {sorted(expected)}; "
             f"missing (true defects not flagged, or flagged with wrong issue_type): {missing}; "
             f"wrongly flagged (decoys/extras/wrong issue_type): {extra}"
         )

@@ -87,7 +87,10 @@ def _recompute() -> dict:
 
 
 def _tol(expected: float) -> float:
-    return max(0.1, abs(expected) * 0.005)
+    # Tight absolute floor (answers are reported to >=2 decimals, so rounding error <= 0.005), plus a
+    # 0.5% relative band that only matters for the large EV/EBITDA multiples. A wrong EV method (e.g.
+    # omitting net cash) shifts the affected stats by >0.2, well outside this.
+    return max(0.02, abs(expected) * 0.005)
 
 
 def test_recompute_matches_expected() -> None:

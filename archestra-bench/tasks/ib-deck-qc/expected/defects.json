@@ -4,6 +4,5 @@
     { "metric": "employees", "issue_type": "value_conflict" },
     { "metric": "implied_ev", "issue_type": "calc_error" },
     { "metric": "cagr", "issue_type": "calc_error" }
-  ],
-  "ignored_metrics": ["enterprise_value"]
+  ]
 }

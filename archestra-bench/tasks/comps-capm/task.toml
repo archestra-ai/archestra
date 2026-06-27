@@ -3,8 +3,8 @@ text = """Hi — I'm putting together the comparable-companies page for CloudPea
 
 Build the peer set as all SIX companies: CloudPeak plus the five public comps in competitor_metrics.csv (Veeva, Procore, nCino, Paylocity, Sprinklr).
 
-For the five peers, take the metrics straight from their row. For CloudPeak, use its FY2024A column and compute:
-- EV/Revenue and EV/EBITDA from an enterprise value you derive as: diluted market cap (current_stock_price x shares_diluted_m) minus net cash (cash_and_equivalents minus total_debt). Use revenue and ebitda_adj for the denominators.
+For the five peers, take the metrics straight from their row. For CloudPeak, use its FY2024A figures for the per-year line items (revenue, ebitda_adj, revenue_growth_yoy_pct, gross_margin_pct, ebitda_margin_pct, shares_diluted_m, cash_and_equivalents, total_debt). The market-data inputs (current_stock_price, beta_5yr_monthly, risk_free_rate_10yr_treasury, equity_risk_premium) are single point-in-time values — take whatever value is given in that row. Then compute:
+- EV/Revenue and EV/EBITDA from an enterprise value you derive as: diluted market cap (current_stock_price x shares_diluted_m) minus net cash (cash_and_equivalents minus total_debt). Use FY2024A revenue and ebitda_adj for the denominators.
 - revenue growth %, gross margin %, and EBITDA margin % straight from CloudPeak's FY2024A row (revenue_growth_yoy_pct, gross_margin_pct, ebitda_margin_pct).
 
 Then for each of these five metrics across all six companies — ev_revenue, ev_ebitda, revenue_growth_pct, gross_margin_pct, ebitda_margin_pct — give me the five-number summary: max, 75th percentile, median, 25th percentile, min. Use linear interpolation for the percentiles (the standard numpy.percentile default — for n=6 the p75 falls between the 4th and 5th sorted values, etc.). Do not round intermediate values; report each statistic to at least two decimals.

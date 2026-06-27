@@ -18,7 +18,7 @@ from bench_verifier import read_fixture_json, result
 
 MONEY_TOL = 0.05
 EPS_TOL = 0.005
-YOY_TOL = 0.1
+YOY_TOL = 0.05
 EPS_KEYS = {"eps_diluted"}
 EXACT_KPIS = {
     "total_customers",
@@ -84,14 +84,16 @@ def test_segments() -> None:
             f"segments[{name}].rev_2025 {rev_2025} != {exp['rev_2025']}"
         )
 
-        gt_yoy = _yoy(exp["rev_2026"], exp["rev_2025"])
+        # Prompt pins yoy to 1 decimal, so compare against the 1-dp rounded recompute (not the raw
+        # float) -- otherwise a truncated 18.5 and the correct 18.6 would both fall inside tolerance.
+        gt_yoy = round(_yoy(exp["rev_2026"], exp["rev_2025"]), 1)
         assert abs(yoy - gt_yoy) <= YOY_TOL, (
-            f"segments[{name}].yoy_growth_pct {yoy} != ground-truth recompute {gt_yoy:.1f}"
+            f"segments[{name}].yoy_growth_pct {yoy} != ground-truth {gt_yoy}"
         )
-        self_yoy = _yoy(rev_2026, rev_2025)
+        self_yoy = round(_yoy(rev_2026, rev_2025), 1)
         assert abs(yoy - self_yoy) <= YOY_TOL, (
             f"segments[{name}].yoy_growth_pct {yoy} inconsistent with submitted revs "
-            f"(recompute {self_yoy:.1f})"
+            f"(recompute {self_yoy})"
         )
 
 

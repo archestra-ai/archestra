@@ -35,7 +35,6 @@ additionalProperties = false
       enum = [
         "revenue",
         "employees",
-        "enterprise_value",
         "implied_ev",
         "cagr",
         "gross_margin",

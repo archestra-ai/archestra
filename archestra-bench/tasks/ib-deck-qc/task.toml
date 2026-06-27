@@ -1,0 +1,53 @@
+[[stages]]
+text = """Hey, I've attached deck.md — it's the draft CIM for Project Atlas (the Meridian Software sale) that an analyst put together. It's at /home/sandbox/attachments/deck.md.
+
+Before this goes out I need a QC pass on the numbers. I'm worried about two classes of problem:
+- the SAME metric showing up with different values on different slides (an internal inconsistency / value conflict), and
+- a number that doesn't actually follow from the figures stated for it (a stated calculation that's arithmetically wrong).
+
+Go through the whole deck and find every such defect. For each one, report the metric it concerns and which class of problem it is.
+
+Send it back with submit_result as `findings`: a list of objects, each with a `metric` (pick from the allowed enum) and an `issue_type` of either "value_conflict" or "calc_error". Only report real defects — don't pad the list with metrics that are actually consistent.
+
+Make a single submit_result call with your complete, final list of findings — your first submission is final, so don't send a partial or empty list to test the format first."""
+
+  [[stages.files]]
+  src = "deck.md"
+  dest = "/home/sandbox/attachments/deck.md"
+  mime_type = "text/markdown"
+
+[result_schema]
+type = "object"
+required = ["findings"]
+additionalProperties = false
+
+  [result_schema.properties.findings]
+  type = "array"
+  uniqueItems = true
+
+    [result_schema.properties.findings.items]
+    type = "object"
+    required = ["metric", "issue_type"]
+    additionalProperties = false
+
+      [result_schema.properties.findings.items.properties.metric]
+      type = "string"
+      enum = [
+        "revenue",
+        "employees",
+        "enterprise_value",
+        "implied_ev",
+        "cagr",
+        "gross_margin",
+        "net_revenue_retention",
+        "ebitda",
+        "arr",
+        "free_cash_flow",
+      ]
+
+      [result_schema.properties.findings.items.properties.issue_type]
+      type = "string"
+      enum = ["value_conflict", "calc_error"]
+
+[verifier]
+deps = []

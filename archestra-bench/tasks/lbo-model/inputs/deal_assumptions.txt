@@ -1,0 +1,84 @@
+══════════════════════════════════════════════════════════════
+MERIDIAN FINTECH CORP — LBO DEAL ASSUMPTIONS
+Prepared by: Apex Partners (PE Sponsor)
+Date: November 20, 2025
+══════════════════════════════════════════════════════════════
+
+TRANSACTION OVERVIEW
+────────────────────
+Target: Meridian Fintech Corp (NASDAQ: MRDN)
+Transaction Type: Public-to-Private LBO
+Go-Shop Period: 30 days
+Expected Close: Q1 2026
+
+ENTRY ASSUMPTIONS
+─────────────────
+Offer Price: $48.00 per share (16.5% premium to current price of $41.20)
+Diluted Shares Outstanding: 51.98M
+Purchase Price (equity): $2,495M
+Net Cash at Close: ($114.3M) (deducted from EV)
+Enterprise Value at Entry: $2,381M
+LTM Adj. EBITDA (Q3 2025): $76.5M
+Entry EV/EBITDA Multiple: 31.1x
+Entry EV/Revenue Multiple: 9.6x
+
+FINANCING STRUCTURE
+────────────────────
+Senior Secured Term Loan B:        $860M  (6.0x LTM EBITDA)
+Senior Secured Revolving Credit:   $150M  (undrawn at close)
+Second Lien Notes:                 $250M  (3.3x LTM EBITDA; interest: 10.5% PIK)
+Sponsor Equity:                    $1,271M
+
+Total Sources:                     $2,381M
+Financing Fees & Expenses:         $48M   (paid at close; financed through equity)
+Total Equity Required:             $1,319M
+
+Interest Rates:
+  Term Loan B:      SOFR + 3.75% (assume SOFR = 4.25%; total = 8.00%)
+  Second Lien PIK:  10.5% (PIK for first 3 years; cash pay thereafter)
+  Revolver:         SOFR + 3.50% (assume undrawn for model period)
+
+Mandatory Amortization (TLB): 1% per year ($8.6M annually)
+
+OPERATING ASSUMPTIONS (Base Case)
+───────────────────────────────────
+Projection Period: FY2026E–FY2030E (5 years)
+
+Revenue Growth:
+  FY2026E: 18.0%
+  FY2027E: 17.0%
+  FY2028E: 16.0%
+  FY2029E: 14.0%
+  FY2030E: 12.0%
+
+Adj. EBITDA Margin:
+  FY2026E: 30.0%
+  FY2027E: 31.0%
+  FY2028E: 32.0%
+  FY2029E: 33.0%
+  FY2030E: 34.0%
+
+D&A (% of Revenue): 4.5% per year
+CapEx (% of Revenue): 4.8% per year
+Change in Working Capital (% of Revenue Change): 3.0%
+Cash Taxes: 22% effective rate on EBITDA-D&A (EBIT)
+
+EXIT ASSUMPTIONS
+─────────────────
+Exit Year: Year 5 (FY2030E)
+Exit EV/EBITDA Multiple: 22.0x (discount from entry; multiple compression expected)
+Exit EV/Revenue Multiple: implied by EBITDA multiple and margins
+
+SENSITIVITY RANGES
+───────────────────
+Entry Multiple Sensitivity:  ±2.0x turns around base case (29.1x–33.1x)
+Exit Multiple Sensitivity:   18.0x–26.0x
+Revenue Growth Sensitivity:  ±2% around base each year
+
+NOTES
+──────
+1. FY2025E revenue estimated at $292.4M per FactSet consensus
+2. Net cash of $114.3M assumed to be distributed to shareholders at close
+3. Revolving credit facility assumed undrawn throughout projection period
+4. Management rollover: 5% of equity (approximately $66M); not included in sponsor equity above
+5. Transaction fees of $48M are in addition to the enterprise value

@@ -1,0 +1,115 @@
+[[stages]]
+text = """Hi — I'm putting together the comparable-companies page for CloudPeak Technologies (CPTECH) and need the summary statistics computed cleanly. Two files are attached in /home/sandbox/attachments: `competitor_metrics.csv` (one row per public peer, with valuation multiples and operating metrics already computed) and `target_financials.csv` (CloudPeak's own financials, laid out as one metric per row across fiscal years).
+
+Build the peer set as all SIX companies: CloudPeak plus the five public comps in competitor_metrics.csv (Veeva, Procore, nCino, Paylocity, Sprinklr).
+
+For the five peers, take the metrics straight from their row. For CloudPeak, use its FY2024A column and compute:
+- EV/Revenue and EV/EBITDA from an enterprise value you derive as: diluted market cap (current_stock_price x shares_diluted_m) minus net cash (cash_and_equivalents minus total_debt). Use revenue and ebitda_adj for the denominators.
+- revenue growth %, gross margin %, and EBITDA margin % straight from CloudPeak's FY2024A row (revenue_growth_yoy_pct, gross_margin_pct, ebitda_margin_pct).
+
+Then for each of these five metrics across all six companies — ev_revenue, ev_ebitda, revenue_growth_pct, gross_margin_pct, ebitda_margin_pct — give me the five-number summary: max, 75th percentile, median, 25th percentile, min. Use linear interpolation for the percentiles (the standard numpy.percentile default — for n=6 the p75 falls between the 4th and 5th sorted values, etc.). Do not round intermediate values; report each statistic to at least two decimals.
+
+Finally, compute CloudPeak's cost of equity via CAPM: risk_free_rate_10yr_treasury + beta_5yr_monthly x equity_risk_premium (all from target_financials.csv), reported as a percent.
+
+Submit with submit_result: `comps` as an object keyed by the five metric names, each mapping to an object with `max`, `p75`, `median`, `p25`, `min`; and `cost_of_equity_pct` as the CAPM percent."""
+
+  [[stages.files]]
+  src = "competitor_metrics.csv"
+  dest = "/home/sandbox/attachments/competitor_metrics.csv"
+  mime_type = "text/csv"
+
+  [[stages.files]]
+  src = "target_financials.csv"
+  dest = "/home/sandbox/attachments/target_financials.csv"
+  mime_type = "text/csv"
+
+[result_schema]
+type = "object"
+required = ["comps", "cost_of_equity_pct"]
+additionalProperties = false
+
+  [result_schema.properties.cost_of_equity_pct]
+  type = "number"
+
+  [result_schema.properties.comps]
+  type = "object"
+  required = ["ev_revenue", "ev_ebitda", "revenue_growth_pct", "gross_margin_pct", "ebitda_margin_pct"]
+  additionalProperties = false
+
+    [result_schema.properties.comps.properties.ev_revenue]
+    type = "object"
+    required = ["max", "p75", "median", "p25", "min"]
+    additionalProperties = false
+      [result_schema.properties.comps.properties.ev_revenue.properties.max]
+      type = "number"
+      [result_schema.properties.comps.properties.ev_revenue.properties.p75]
+      type = "number"
+      [result_schema.properties.comps.properties.ev_revenue.properties.median]
+      type = "number"
+      [result_schema.properties.comps.properties.ev_revenue.properties.p25]
+      type = "number"
+      [result_schema.properties.comps.properties.ev_revenue.properties.min]
+      type = "number"
+
+    [result_schema.properties.comps.properties.ev_ebitda]
+    type = "object"
+    required = ["max", "p75", "median", "p25", "min"]
+    additionalProperties = false
+      [result_schema.properties.comps.properties.ev_ebitda.properties.max]
+      type = "number"
+      [result_schema.properties.comps.properties.ev_ebitda.properties.p75]
+      type = "number"
+      [result_schema.properties.comps.properties.ev_ebitda.properties.median]
+      type = "number"
+      [result_schema.properties.comps.properties.ev_ebitda.properties.p25]
+      type = "number"
+      [result_schema.properties.comps.properties.ev_ebitda.properties.min]
+      type = "number"
+
+    [result_schema.properties.comps.properties.revenue_growth_pct]
+    type = "object"
+    required = ["max", "p75", "median", "p25", "min"]
+    additionalProperties = false
+      [result_schema.properties.comps.properties.revenue_growth_pct.properties.max]
+      type = "number"
+      [result_schema.properties.comps.properties.revenue_growth_pct.properties.p75]
+      type = "number"
+      [result_schema.properties.comps.properties.revenue_growth_pct.properties.median]
+      type = "number"
+      [result_schema.properties.comps.properties.revenue_growth_pct.properties.p25]
+      type = "number"
+      [result_schema.properties.comps.properties.revenue_growth_pct.properties.min]
+      type = "number"
+
+    [result_schema.properties.comps.properties.gross_margin_pct]
+    type = "object"
+    required = ["max", "p75", "median", "p25", "min"]
+    additionalProperties = false
+      [result_schema.properties.comps.properties.gross_margin_pct.properties.max]
+      type = "number"
+      [result_schema.properties.comps.properties.gross_margin_pct.properties.p75]
+      type = "number"
+      [result_schema.properties.comps.properties.gross_margin_pct.properties.median]
+      type = "number"
+      [result_schema.properties.comps.properties.gross_margin_pct.properties.p25]
+      type = "number"
+      [result_schema.properties.comps.properties.gross_margin_pct.properties.min]
+      type = "number"
+
+    [result_schema.properties.comps.properties.ebitda_margin_pct]
+    type = "object"
+    required = ["max", "p75", "median", "p25", "min"]
+    additionalProperties = false
+      [result_schema.properties.comps.properties.ebitda_margin_pct.properties.max]
+      type = "number"
+      [result_schema.properties.comps.properties.ebitda_margin_pct.properties.p75]
+      type = "number"
+      [result_schema.properties.comps.properties.ebitda_margin_pct.properties.median]
+      type = "number"
+      [result_schema.properties.comps.properties.ebitda_margin_pct.properties.p25]
+      type = "number"
+      [result_schema.properties.comps.properties.ebitda_margin_pct.properties.min]
+      type = "number"
+
+[verifier]
+deps = ["numpy==2.2.1"]

@@ -675,8 +675,7 @@ export function ConnectCommandPanel({
           <div className="space-y-3 text-sm text-muted-foreground">
             <p>
               Quit and reopen Claude Code, start a new chat, and send the
-              message below. Then click "Test your setup" to verify in logs that
-              your session is routed through Archestra.
+              message below.
             </p>
             <TestSetupStep />
           </div>

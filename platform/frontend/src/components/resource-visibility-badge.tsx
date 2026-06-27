@@ -27,12 +27,21 @@ export function ResourceVisibilityBadge({
   authorId,
   authorName,
   currentUserId,
+  showSelfAsMe = false,
 }: {
   scope: ResourceVisibilityScope | undefined;
   teams: TeamInfo[] | undefined;
   authorId: string | null | undefined;
   authorName: string | null | undefined;
   currentUserId: string | undefined;
+  /**
+   * Controls how a personal resource owned by the current user is labelled. By
+   * default that badge is hidden. Set this to render a "Me" badge instead: when
+   * the same column also lists team- and organization-scoped resources, a blank
+   * cell on the user's own row is confusing, so labelling it "Me" keeps every
+   * row consistently attributed.
+   */
+  showSelfAsMe?: boolean;
 }) {
   const MAX_TEAMS_TO_SHOW = 3;
   const MAX_BADGE_TEXT_LENGTH = 15;
@@ -47,11 +56,15 @@ export function ResourceVisibilityBadge({
   }
 
   if (scope === "personal") {
-    // "Me" is redundant — personal resources are only visible to their author.
-    if (currentUserId && authorId === currentUserId) {
+    const isSelf = !!currentUserId && authorId === currentUserId;
+    // Hidden by default; callers opt in via showSelfAsMe to label the current
+    // user's own row "Me" — needed for consistency when the same column also
+    // lists team- and org-scoped rows, so the user's row isn't a confusing blank.
+    if (isSelf && !showSelfAsMe) {
       return null;
     }
-    if (!authorName) {
+    const displayName = isSelf ? "Me" : authorName;
+    if (!displayName) {
       return <span className="text-muted-foreground">-</span>;
     }
 
@@ -65,7 +78,7 @@ export function ResourceVisibilityBadge({
       >
         <User className="h-3 w-3 shrink-0" />
         <span className="min-w-0 flex-1 truncate">
-          {truncateBadgeText(authorName, MAX_BADGE_TEXT_LENGTH)}
+          {truncateBadgeText(displayName, MAX_BADGE_TEXT_LENGTH)}
         </span>
       </Badge>
     );

@@ -199,10 +199,8 @@ export async function validateVirtualApiKey(
  * Validate a passthrough virtual key from the X-Archestra-Virtual-Key header.
  *
  * A passthrough key carries no provider credential. It authenticates the acting
- * Archestra user and gates access to the target LLM proxy:
- * - a non-empty allowed-proxy list must include this proxy;
- * - an empty list means "any proxy the owner can access" (resolved here against
- *   the owner's own agent access).
+ * Archestra user; access to the target LLM proxy is then governed by the owner's
+ * own agent access (the same access any authenticated user would have).
  *
  * Throws ApiError on validation failure (401 invalid/expired, 400 wrong key
  * type, 403 no proxy access).
@@ -240,25 +238,18 @@ export async function validatePassthroughVirtualKey(params: {
     throw noAccessError;
   }
 
-  const allowedProxyIds =
-    await VirtualApiKeyModel.getLlmProxyIdsForVirtualApiKey(virtualKey.id);
-  let hasProxyAccess: boolean;
-  if (allowedProxyIds.length > 0) {
-    hasProxyAccess = allowedProxyIds.includes(agent.id);
-  } else {
-    // Empty list → any LLM proxy the owner can access.
-    const ownerIsAgentAdmin = await userHasPermission(
-      virtualKey.authorId,
-      agent.organizationId,
-      "agent",
-      "admin",
-    );
-    hasProxyAccess = await AgentTeamModel.userHasAgentAccess(
-      virtualKey.authorId,
-      agent.id,
-      ownerIsAgentAdmin,
-    );
-  }
+  // Proxy access follows the owner's own agent access.
+  const ownerIsAgentAdmin = await userHasPermission(
+    virtualKey.authorId,
+    agent.organizationId,
+    "agent",
+    "admin",
+  );
+  const hasProxyAccess = await AgentTeamModel.userHasAgentAccess(
+    virtualKey.authorId,
+    agent.id,
+    ownerIsAgentAdmin,
+  );
   if (!hasProxyAccess) {
     throw noAccessError;
   }

@@ -62900,10 +62900,6 @@ export type GetAllVirtualApiKeysResponses = {
                 providerApiKeyId: string;
                 providerApiKeyName: string;
             }>;
-            allowedLlmProxies: Array<{
-                id: string;
-                name: string;
-            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -62929,7 +62925,6 @@ export type CreateVirtualApiKeyData = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
         }>;
-        allowedLlmProxyIds?: Array<string>;
         ownerId?: string;
     };
     path?: never;
@@ -63028,10 +63023,6 @@ export type CreateVirtualApiKeyResponses = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
-        }>;
-        allowedLlmProxies: Array<{
-            id: string;
-            name: string;
         }>;
     };
 };
@@ -63134,7 +63125,6 @@ export type UpdateVirtualApiKeyData = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
         }>;
-        allowedLlmProxyIds?: Array<string>;
     };
     path: {
         id: string;
@@ -63233,10 +63223,6 @@ export type UpdateVirtualApiKeyResponses = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
-        }>;
-        allowedLlmProxies: Array<{
-            id: string;
-            name: string;
         }>;
     };
 };

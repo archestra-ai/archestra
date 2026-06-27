@@ -1,4 +1,5 @@
 {
+  "_source": "Ported from tessl-multi-anthropics-financial-services_3 (skill anthropics_financial-services_lbo-model); upstream https://github.com/anthropics/financial-services",
   "base_rev_fy2025e": 292.4,
   "revenue_growth": [
     0.18,

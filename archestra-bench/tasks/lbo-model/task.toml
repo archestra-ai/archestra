@@ -9,7 +9,7 @@ OPERATING MODEL
 - CapEx = 4.8% of revenue. Change in net working capital = 3.0% of the year-over-year change in revenue (for FY2026E, use the change vs the $292.4M FY2025E base).
 - Operating cash flow (before any interest) = EBITDA - cash taxes - CapEx - change in NWC. (D&A is non-cash, so it is NOT subtracted.)
 
-INTEREST — use the AVERAGE of each debt's beginning and ending balance for the year (interest = rate x (beginning + ending) / 2). Because a debt's ending balance depends on the cash flow, which depends on its interest, you must solve each year's debt balances and interest together as a fixed point (iterate until the balances stop moving).
+INTEREST — use the AVERAGE of each debt's beginning and ending balance for the year (interest = rate x (beginning + ending) / 2).
 - Term Loan B: $860M at close, cash interest at 8.0% on its average balance.
 - Revolver: $0 drawn at close, cash interest at 7.75% on its average balance (see the waterfall — it is only drawn if a year is short of cash).
 - Second Lien Notes: $250M at close, 10.5%. It PIKs for the first 3 years — interest accrues on the BEGINNING balance and is added to the balance (ending = beginning x 1.105), no cash paid. In years 4-5 it is cash-pay: interest = 10.5% of the balance is paid in cash and the balance stays flat (so its average equals its balance).

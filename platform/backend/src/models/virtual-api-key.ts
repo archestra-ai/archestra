@@ -28,7 +28,6 @@ const TOKEN_START_LENGTH = 14;
 const FORCE_DB = true;
 
 type TeamInfo = { id: string; name: string };
-type LlmProxyInfo = { id: string; name: string };
 type ProviderApiKeyInput = {
   provider: SupportedProvider;
   providerApiKeyId: string;
@@ -64,14 +63,12 @@ class VirtualApiKeyModel {
     authorId?: string | null;
     teamIds?: string[];
     providerApiKeys?: ProviderApiKeyInput[];
-    allowedLlmProxyIds?: string[];
   }): Promise<{
     virtualKey: SelectVirtualApiKey;
     value: string;
     teams: TeamInfo[];
     authorName: string | null;
     providerApiKeys: ProviderApiKeyInfo[];
-    allowedLlmProxies: LlmProxyInfo[];
   }> {
     const {
       organizationId: providedOrganizationId,
@@ -82,7 +79,6 @@ class VirtualApiKeyModel {
       authorId = null,
       teamIds = [],
       providerApiKeys = [],
-      allowedLlmProxyIds = [],
     } = params;
 
     const tokenValue = generateToken();
@@ -129,11 +125,6 @@ class VirtualApiKeyModel {
         virtualApiKeyId: createdVirtualKey.id,
         mappings: providerApiKeys,
       });
-      await syncVirtualApiKeyLlmProxies({
-        tx,
-        virtualApiKeyId: createdVirtualKey.id,
-        llmProxyIds: allowedLlmProxyIds,
-      });
 
       return createdVirtualKey;
     });
@@ -151,9 +142,6 @@ class VirtualApiKeyModel {
     const { teams, authorName } =
       await VirtualApiKeyModel.getVisibilityMetadata([virtualKey.id]);
     const mappings = await VirtualApiKeyModel.getProviderApiKeys(virtualKey.id);
-    const allowedLlmProxies = await VirtualApiKeyModel.getLlmProxies(
-      virtualKey.id,
-    );
 
     return {
       virtualKey,
@@ -161,7 +149,6 @@ class VirtualApiKeyModel {
       teams: teams.get(virtualKey.id) ?? [],
       authorName: authorName.get(virtualKey.id) ?? null,
       providerApiKeys: mappings,
-      allowedLlmProxies,
     };
   }
 
@@ -176,18 +163,9 @@ class VirtualApiKeyModel {
     authorId: string | null;
     teamIds: string[];
     providerApiKeys: ProviderApiKeyInput[];
-    allowedLlmProxyIds: string[];
   }): Promise<SelectVirtualApiKey | null> {
-    const {
-      id,
-      name,
-      expiresAt,
-      scope,
-      authorId,
-      teamIds,
-      providerApiKeys,
-      allowedLlmProxyIds,
-    } = params;
+    const { id, name, expiresAt, scope, authorId, teamIds, providerApiKeys } =
+      params;
 
     const updatedVirtualKey = await withDbTransaction(async (tx) => {
       const [updated] = await tx
@@ -215,11 +193,6 @@ class VirtualApiKeyModel {
         tx,
         virtualApiKeyId: id,
         mappings: providerApiKeys,
-      });
-      await syncVirtualApiKeyLlmProxies({
-        tx,
-        virtualApiKeyId: id,
-        llmProxyIds: allowedLlmProxyIds,
       });
 
       return updated;
@@ -293,25 +266,6 @@ class VirtualApiKeyModel {
         ],
         set: { providerApiKeyId: params.providerApiKeyId },
       });
-  }
-
-  /**
-   * Add one LLM proxy to a passthrough key's allowed list, idempotently (the
-   * composite PK makes a re-add a no-op). Unlike update(), whose
-   * syncVirtualApiKeyLlmProxies replaces the whole list, this only adds — so a
-   * reused per-user connection key accumulates the proxies it's connected to.
-   */
-  static async ensureLlmProxyMapping(params: {
-    virtualApiKeyId: string;
-    llmProxyId: string;
-  }): Promise<void> {
-    await db
-      .insert(schema.virtualApiKeyLlmProxiesTable)
-      .values({
-        virtualApiKeyId: params.virtualApiKeyId,
-        llmProxyId: params.llmProxyId,
-      })
-      .onConflictDoNothing();
   }
 
   /**
@@ -566,10 +520,9 @@ class VirtualApiKeyModel {
     ]);
 
     const rowIds = rows.map((row) => row.id);
-    const [metadata, mappings, proxies] = await Promise.all([
+    const [metadata, mappings] = await Promise.all([
       VirtualApiKeyModel.getVisibilityMetadata(rowIds),
       VirtualApiKeyModel.getProviderApiKeysForVirtualKeys(rowIds),
-      VirtualApiKeyModel.getLlmProxiesForVirtualKeys(rowIds),
     ]);
 
     const data = rows.map((row) => ({
@@ -577,7 +530,6 @@ class VirtualApiKeyModel {
       teams: metadata.teams.get(row.id) ?? [],
       authorName: metadata.authorName.get(row.id) ?? null,
       providerApiKeys: mappings.get(row.id) ?? [],
-      allowedLlmProxies: proxies.get(row.id) ?? [],
     }));
 
     return createPaginatedResult(data, Number(total), pagination);
@@ -734,69 +686,6 @@ class VirtualApiKeyModel {
       );
 
     return rows.map((row) => row.teamId);
-  }
-
-  /** Allowed LLM proxy IDs for a passthrough key (empty = any the owner can access). */
-  static async getLlmProxyIdsForVirtualApiKey(
-    virtualApiKeyId: string,
-  ): Promise<string[]> {
-    const rows = await db
-      .select({ llmProxyId: schema.virtualApiKeyLlmProxiesTable.llmProxyId })
-      .from(schema.virtualApiKeyLlmProxiesTable)
-      .where(
-        eq(
-          schema.virtualApiKeyLlmProxiesTable.virtualApiKeyId,
-          virtualApiKeyId,
-        ),
-      );
-
-    return rows.map((row) => row.llmProxyId);
-  }
-
-  static async getLlmProxies(virtualApiKeyId: string): Promise<LlmProxyInfo[]> {
-    const result = await VirtualApiKeyModel.getLlmProxiesForVirtualKeys([
-      virtualApiKeyId,
-    ]);
-    return result.get(virtualApiKeyId) ?? [];
-  }
-
-  static async getLlmProxiesForVirtualKeys(
-    virtualApiKeyIds: string[],
-  ): Promise<Map<string, LlmProxyInfo[]>> {
-    const result = new Map<string, LlmProxyInfo[]>();
-    if (virtualApiKeyIds.length === 0) {
-      return result;
-    }
-
-    const rows = await db
-      .select({
-        virtualApiKeyId: schema.virtualApiKeyLlmProxiesTable.virtualApiKeyId,
-        llmProxyId: schema.virtualApiKeyLlmProxiesTable.llmProxyId,
-        llmProxyName: schema.agentsTable.name,
-      })
-      .from(schema.virtualApiKeyLlmProxiesTable)
-      .innerJoin(
-        schema.agentsTable,
-        eq(
-          schema.virtualApiKeyLlmProxiesTable.llmProxyId,
-          schema.agentsTable.id,
-        ),
-      )
-      .where(
-        inArray(
-          schema.virtualApiKeyLlmProxiesTable.virtualApiKeyId,
-          virtualApiKeyIds,
-        ),
-      )
-      .orderBy(schema.agentsTable.name);
-
-    for (const row of rows) {
-      const existing = result.get(row.virtualApiKeyId) ?? [];
-      existing.push({ id: row.llmProxyId, name: row.llmProxyName });
-      result.set(row.virtualApiKeyId, existing);
-    }
-
-    return result;
   }
 
   static async findByIdForAudit(
@@ -1067,32 +956,6 @@ async function syncProviderApiKeys(params: {
       virtualApiKeyId,
       provider: mapping.provider,
       providerApiKeyId: mapping.providerApiKeyId,
-    })),
-  );
-}
-
-async function syncVirtualApiKeyLlmProxies(params: {
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0];
-  virtualApiKeyId: string;
-  llmProxyIds: string[];
-}): Promise<void> {
-  const { tx, virtualApiKeyId, llmProxyIds } = params;
-
-  await tx
-    .delete(schema.virtualApiKeyLlmProxiesTable)
-    .where(
-      eq(schema.virtualApiKeyLlmProxiesTable.virtualApiKeyId, virtualApiKeyId),
-    );
-
-  const uniqueProxyIds = [...new Set(llmProxyIds)];
-  if (uniqueProxyIds.length === 0) {
-    return;
-  }
-
-  await tx.insert(schema.virtualApiKeyLlmProxiesTable).values(
-    uniqueProxyIds.map((llmProxyId) => ({
-      virtualApiKeyId,
-      llmProxyId,
     })),
   );
 }

@@ -245,7 +245,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               organizationId,
               userId: user.id,
               userEmail: user.email,
-              llmProxyId,
             });
           }
         }
@@ -384,7 +383,8 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // The key is scoped to this proxy, so the caller must be able to reach it.
+      // We're generating a connection for this proxy, so the caller must be able
+      // to reach it.
       await requireAgentAccess({
         agentId: llmProxyId,
         organizationId,
@@ -396,7 +396,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
         userEmail: user.email,
-        llmProxyId,
       });
 
       const value = await readVirtualKeyValue(virtualApiKeyId);

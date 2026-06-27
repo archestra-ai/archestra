@@ -764,6 +764,136 @@ describe("ChatOpsManager security validation", () => {
       sendMessageSpy.mockRestore();
     }
   });
+
+  test("delivers the full Slack message body when a link contains a '>'", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executeSpy = mockA2AExecutor();
+
+    const user = await makeUser({ email: "linker@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const slackProvider: ChatOpsProvider = {
+      providerId: "slack",
+      displayName: "Slack",
+      isConfigured: () => true,
+      initialize: async () => {},
+      cleanup: async () => {},
+      validateWebhookRequest: async () => true,
+      handleValidationChallenge: () => null,
+      parseWebhookNotification: async () => null,
+      sendReply: async () => "reply-id",
+      parseInteractivePayload: () => null,
+      sendAgentSelectionCard: async () => {},
+      getThreadHistory: async () => [],
+      getUserEmail: async () => "linker@example.com",
+      getChannelName: async () => "test-channel",
+      getWorkspaceId: () => "test-workspace-id",
+      getWorkspaceName: () => "Test Workspace",
+      hasMissingScopes: () => false,
+      notifyMissingScopes: async () => {},
+      downloadFiles: async () => [],
+      discoverChannels: async () => [],
+      addApprovalRequestForm: async () => {},
+      updateApprovalRequest: async () => {},
+    };
+    const manager = new ChatOpsManager();
+    (manager as unknown as { slackProvider: ChatOpsProvider }).slackProvider =
+      slackProvider;
+
+    // Slack renders a URL as <https://example.com>, which ends in ">", the same
+    // character used for the "AgentName > message" switch. The text before it
+    // is not an agent name, so the whole message must reach the agent.
+    const body =
+      'add "review the PR (<https://example.com/pull/123>)" as a task';
+    const result = await manager.processMessage({
+      message: createMockMessage({ text: body }),
+      provider: slackProvider,
+    });
+
+    expect(result.success).toBe(true);
+    expect(executeSpy).toHaveBeenCalled();
+    // The text before the link and the link itself must arrive contiguously;
+    // the pre-fix code dropped everything up to the link's ">".
+    const delivered = JSON.stringify(executeSpy.mock.calls[0]);
+    expect(delivered).toContain(
+      "review the PR (<https://example.com/pull/123>)",
+    );
+    expect(delivered).toContain("as a task");
+  });
+
+  test("routes a valid 'AgentName > message' switch to the named agent and strips the prefix", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executeSpy = mockA2AExecutor();
+
+    const user = await makeUser({ email: "switcher@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const defaultAgent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    const namedAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Helper",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(defaultAgent.id, [team.id]);
+    await AgentTeamModel.assignTeamsToAgent(namedAgent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: defaultAgent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "switcher@example.com",
+    });
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    // When the text before ">" is a real agent name it is a genuine switch, so
+    // the message routes to that agent with the "AgentName >" prefix stripped.
+    const result = await manager.processMessage({
+      message: createMockMessage({ text: "Helper > do the thing" }),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    expect(executeSpy).toHaveBeenCalled();
+    const delivered = JSON.stringify(executeSpy.mock.calls[0]);
+    expect(delivered).toContain(namedAgent.id);
+    expect(delivered).toContain("do the thing");
+    expect(delivered).not.toContain("Helper >");
+  });
 });
 
 describe("ChatOpsManager.getAccessibleChatopsAgents", () => {

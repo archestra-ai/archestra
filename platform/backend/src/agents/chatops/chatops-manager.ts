@@ -980,10 +980,11 @@ export class ChatOpsManager {
       }
     }
 
-    // No known agent matched - return fallback with the message after delimiter
+    // No agent name matched, so treat the ">" as message content (e.g. a
+    // Slack-formatted link like <https://example.com>) and keep the full text.
     return {
       agentToUse: defaultAgent,
-      cleanedMessageText: messageAfterDelimiter || messageText,
+      cleanedMessageText: messageText,
     };
   }
 

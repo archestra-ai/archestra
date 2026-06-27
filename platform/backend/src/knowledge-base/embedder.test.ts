@@ -460,4 +460,93 @@ describe("EmbeddingService", () => {
     expect(updated2?.embeddingStatus).toBe("completed");
     expect(updated2?.chunkCount).toBe(0);
   });
+
+  test("processDocument sets error classification columns on failure", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Rate Limit Fail Doc",
+      content: "Content",
+      contentHash: "hash-rl-fail",
+      embeddingStatus: "pending",
+    });
+
+    await KbChunkModel.insertMany([
+      {
+        documentId: doc.id,
+        content: "Chunk",
+        chunkIndex: 0,
+      },
+    ]);
+
+    const OpenAIMod = (await import("openai")).default;
+    const rateLimitError = Object.assign(new Error("Rate limited"), {
+      status: 429,
+    });
+    Object.setPrototypeOf(rateLimitError, OpenAIMod.APIError.prototype);
+
+    mockEmbeddingsCreate.mockRejectedValue(rateLimitError);
+
+    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+
+    const updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingErrorCode).toBe("rate_limit");
+    expect(updated?.embeddingErrorDetail).toContain("Rate limited");
+  });
+
+  test("processDocuments sets error classification columns on failure", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    mockGetDefaultOrgEmbeddingConfig.mockResolvedValue({
+      organizationId: org.id,
+      config: makeEmbeddingContext(),
+    });
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Auth Fail Doc",
+      content: "Content",
+      contentHash: "hash-auth-fail",
+      embeddingStatus: "pending",
+    });
+
+    await KbChunkModel.insertMany([
+      {
+        documentId: doc.id,
+        content: "Chunk",
+        chunkIndex: 0,
+      },
+    ]);
+
+    const OpenAIMod = (await import("openai")).default;
+    const authError = Object.assign(new Error("API key invalid"), {
+      status: 401,
+    });
+    Object.setPrototypeOf(authError, OpenAIMod.APIError.prototype);
+
+    mockEmbeddingsCreate.mockRejectedValueOnce(authError);
+
+    await embeddingService.processDocuments([doc.id]);
+
+    const updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingErrorCode).toBe("api_key_error");
+    expect(updated?.embeddingErrorDetail).toContain("API key invalid");
+  });
 });

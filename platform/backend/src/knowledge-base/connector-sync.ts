@@ -442,6 +442,8 @@ class ConnectorSyncService {
 
           await KbDocumentModel.update(existing.id, {
             embeddingStatus: "pending",
+            embeddingErrorCode: null,
+            embeddingErrorDetail: null,
           });
 
           log.warn(
@@ -473,6 +475,8 @@ class ConnectorSyncService {
         acl,
         metadata: doc.metadata,
         embeddingStatus: "pending",
+        embeddingErrorCode: null,
+        embeddingErrorDetail: null,
       });
 
       // Re-chunk: content changed, so replace stale chunks

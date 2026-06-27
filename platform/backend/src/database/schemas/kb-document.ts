@@ -8,7 +8,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { EmbeddingStatus, KbDocumentMetadata } from "@/types/kb-document";
+import type { EmbeddingStatus, KbDocumentMetadata, EmbeddingErrorCode } from "@/types/kb-document";
 import knowledgeBaseConnectorsTable from "./knowledge-base-connector";
 
 const kbDocumentsTable = pgTable(
@@ -33,6 +33,8 @@ const kbDocumentsTable = pgTable(
       .notNull()
       .default("pending"),
     chunkCount: integer("chunk_count").notNull().default(0),
+    embeddingErrorCode: text("embedding_error_code").$type<EmbeddingErrorCode>(),
+    embeddingErrorDetail: text("embedding_error_detail"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

@@ -42,6 +42,7 @@ export function FilePreview({
   onClose,
   fileId,
   canEdit = false,
+  onEditingChange,
 }: {
   file: PreviewableFile;
   onClose?: () => void;
@@ -49,6 +50,13 @@ export function FilePreview({
   fileId?: string;
   /** Whether the viewer may edit this file (author / project access). */
   canEdit?: boolean;
+  /**
+   * Notified as the in-place editor opens/closes so a parent that auto-switches
+   * the previewed file (the chat panel follows fresh outputs) can avoid yanking
+   * the view away from an unsaved draft. Pass a stable callback. Mount this
+   * component with a per-file `key` so the editor resets when the file changes.
+   */
+  onEditingChange?: (editing: boolean) => void;
 }) {
   const kind = getFilePreviewKind(file.mimeType, file.name);
   const editable =
@@ -63,16 +71,24 @@ export function FilePreview({
   const [reloadNonce, setReloadNonce] = useState(0);
   const contentUrl = withReload(file.contentUrl, reloadNonce);
 
+  const changeEditing = (next: boolean) => {
+    setEditing(next);
+    onEditingChange?.(next);
+  };
+  // If the preview unmounts mid-edit (the file was switched/closed), clear the
+  // parent's "editing in progress" guard so it isn't left stuck.
+  useEffect(() => () => onEditingChange?.(false), [onEditingChange]);
+
   if (editing && editable && fileId) {
     return (
       <FileContentEditor
         key={contentUrl}
         fileId={fileId}
         contentUrl={contentUrl}
-        onCancel={() => setEditing(false)}
+        onCancel={() => changeEditing(false)}
         onSaved={() => {
           setReloadNonce((n) => n + 1);
-          setEditing(false);
+          changeEditing(false);
         }}
       />
     );
@@ -85,7 +101,7 @@ export function FilePreview({
           variant="secondary"
           size="sm"
           className="absolute right-2 top-2 z-10 h-7 gap-1 px-2 text-xs shadow-sm"
-          onClick={() => setEditing(true)}
+          onClick={() => changeEditing(true)}
         >
           <Pencil className="h-3.5 w-3.5" />
           Edit

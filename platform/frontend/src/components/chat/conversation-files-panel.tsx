@@ -2,7 +2,7 @@
 
 import { PROJECT_INSTRUCTIONS_FILENAME } from "@archestra/shared";
 import { Check, Copy, Download, File as FileIcon, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { FileDetailHeader } from "@/components/chat/file-detail-header";
 import { FilePreview } from "@/components/chat/file-preview";
@@ -81,6 +81,15 @@ export function ConversationFilesPanel({
   const instructionsSelectedRef = useRef(false);
   instructionsSelectedRef.current = instructionsSelected;
 
+  // A file's in-place editor is open with an unsaved draft. Tracked via a ref so
+  // the "follow latest output" effect below can avoid yanking the view (and the
+  // draft) away when a new file lands during a run — mirroring the instructions
+  // guard. FilePreview reports its editing state through `onEditingChange`.
+  const fileEditingRef = useRef(false);
+  const handleFileEditingChange = useCallback((editing: boolean) => {
+    fileEditingRef.current = editing;
+  }, []);
+
   // Something is open (file, artifact, or the pinned instructions) → show the
   // preview. Split by default; `expanded` hides the list and fills the panel.
   const previewing = selected !== null || instructionsSelected;
@@ -135,6 +144,8 @@ export function ConversationFilesPanel({
     // Don't yank the view away from the instructions editor (and its unsaved
     // draft) when a new output lands while the owner is editing.
     if (instructionsSelectedRef.current) return;
+    // Same for an open file editor with an unsaved draft.
+    if (fileEditingRef.current) return;
 
     if (hasArtifact && artifact !== prevArtifact) {
       setSelectedId("artifact");
@@ -305,6 +316,9 @@ export function ConversationFilesPanel({
 
       {previewing && !artifactSelected && !instructionsSelected && selected && (
         <FilePreview
+          // Per-file key: reset the editor (and discard its draft) when the
+          // previewed file changes, rather than carrying edit state across files.
+          key={selected.id}
           file={selected}
           onClose={deselect}
           fileId={selected.id}
@@ -315,6 +329,7 @@ export function ConversationFilesPanel({
             selected.source !== "attachment" &&
             selected.source !== "artifact"
           }
+          onEditingChange={handleFileEditingChange}
         />
       )}
 

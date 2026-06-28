@@ -495,6 +495,8 @@ function ProjectFilesSidebar({
               />
             ) : previewing && selected ? (
               <FilePreview
+                // Per-file key: reset the editor when the previewed file changes.
+                key={selected.id}
                 file={selected}
                 onClose={deselect}
                 // Only row-backed files are editable; a rowless (obj_) object has

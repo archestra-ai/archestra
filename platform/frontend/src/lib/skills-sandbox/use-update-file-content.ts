@@ -8,9 +8,9 @@ const { updateSkillSandboxArtifactContent } = archestraApiSdk;
 /**
  * Overwrite a row-backed text file's content (the Files-panel editor, the REST
  * analog of saving project instructions). Returns true on success, null on a
- * handled API error. Cache refresh is the caller's concern: the preview re-reads
- * its own bytes after a save, and the owning file list (whose size/order may
- * change) is invalidated by the panel via `onSaved`.
+ * handled API error. No cache refresh is needed: an edit changes only the bytes,
+ * which the preview re-reads itself — not the filename, type, or list order — so
+ * the file list is unaffected.
  */
 export function useUpdateFileContent() {
   return useMutation({

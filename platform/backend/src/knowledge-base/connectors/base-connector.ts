@@ -46,7 +46,11 @@ export abstract class BaseConnector implements Connector {
   abstract type: ConnectorType;
 
   resolveDocumentPermissions?(
-    document: ConnectorDocument
+    document: ConnectorDocument,
+    params: {
+      config: Record<string, unknown>;
+      credentials: ConnectorCredentials;
+    },
   ): Promise<ConnectorDocument["permissions"]>;
 
   protected log: pino.Logger = defaultLogger;

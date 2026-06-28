@@ -163,6 +163,23 @@ class ConnectorSyncService {
         for (const doc of batch.documents) {
           documentsProcessed++;
           try {
+            if (
+              connector.visibility === "auto-sync-permissions" &&
+              typeof connectorImpl.resolveDocumentPermissions === "function"
+            ) {
+              try {
+                doc.permissions = await connectorImpl.resolveDocumentPermissions(doc, {
+                  config: connector.config as Record<string, unknown>,
+                  credentials,
+                });
+              } catch (err) {
+                runLog.warn(
+                  { docId: doc.id, error: extractErrorMessage(err) },
+                  "Failed to resolve permissions for document",
+                );
+              }
+            }
+
             const result = await this.ingestDocument({
               doc,
               connectorId,

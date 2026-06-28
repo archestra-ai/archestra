@@ -119,6 +119,134 @@ export class ConfluenceConnector extends BaseConnector {
     }
   }
 
+  async resolveDocumentPermissions(
+    document: ConnectorDocument,
+    params: {
+      config: Record<string, unknown>;
+      credentials: ConnectorCredentials;
+    },
+  ): Promise<ConnectorDocument["permissions"]> {
+    const config = parseConfluenceConfig(params.config);
+    if (!config) {
+      return { isPublic: false };
+    }
+
+    const client = createConfluenceClient(config, params.credentials, this.log);
+
+    // 1. Get ancestors from document metadata
+    const ancestors = (document.metadata?.ancestors as any[]) || [];
+    // Check closest first: page itself, then closest ancestor (reverse order of ancestors)
+    const pageIdsToCheck = [document.id, ...ancestors.map((a) => a.id).reverse()];
+
+    for (const pageId of pageIdsToCheck) {
+      try {
+        const restrictionRes: any = await client.sendRequest(
+          {
+            url: `/api/content/${pageId}/restriction/byOperation`,
+            method: "GET",
+          },
+          undefined as any,
+        );
+
+        const readRestrictions = restrictionRes?.read;
+        if (readRestrictions && readRestrictions.restrictions) {
+          const userResults = readRestrictions.restrictions.user?.results || [];
+          const groupResults = readRestrictions.restrictions.group?.results || [];
+
+          // If there are specific users or groups restricted on this page or any parent,
+          // then this page is NOT public and is limited to those users/groups.
+          if (userResults.length > 0 || groupResults.length > 0) {
+            const users = userResults
+              .map((u: any) => u.email || u.emailAddress)
+              .filter(Boolean);
+            const groups = groupResults
+              .map((g: any) => g.name || g.groupId)
+              .filter(Boolean);
+
+            return {
+              isPublic: false,
+              users,
+              groups,
+            };
+          }
+        }
+      } catch (err) {
+        this.log.warn(
+          { pageId, error: extractErrorMessage(err) },
+          "Failed to fetch page restrictions",
+        );
+      }
+    }
+
+    // 2. If no page or ancestor restrictions, check Space permissions
+    const spaceKey = document.metadata?.spaceKey;
+    if (spaceKey) {
+      try {
+        const spaceRes: any = await client.sendRequest(
+          {
+            url: `/api/space/${spaceKey}`,
+            method: "GET",
+            params: {
+              expand: "permissions",
+            },
+          },
+          undefined as any,
+        );
+
+        const permissions = spaceRes?.permissions || [];
+
+        // Check if anonymous has view permission
+        const isAnonymousPublic = permissions.some(
+          (p: any) =>
+            p.anonymousAccess &&
+            p.operation?.operation === "view" &&
+            p.operation?.targetType === "space",
+        );
+
+        if (isAnonymousPublic) {
+          return { isPublic: true };
+        }
+
+        const users: string[] = [];
+        const groups: string[] = [];
+
+        for (const p of permissions) {
+          if (
+            p.operation?.operation === "view" &&
+            p.operation?.targetType === "space"
+          ) {
+            if (p.subjects?.user?.results) {
+              for (const u of p.subjects.user.results) {
+                const email = u.email || u.emailAddress;
+                if (email) users.push(email);
+              }
+            }
+            if (p.subjects?.group?.results) {
+              for (const g of p.subjects.group.results) {
+                const name = g.name;
+                if (name) groups.push(name);
+              }
+            }
+          }
+        }
+
+        return {
+          isPublic: false,
+          users: [...new Set(users)],
+          groups: [...new Set(groups)],
+        };
+      } catch (err) {
+        this.log.warn(
+          { spaceKey, error: extractErrorMessage(err) },
+          "Failed to fetch space permissions",
+        );
+      }
+    }
+
+    // Default to fail-closed
+    return { isPublic: false };
+  }
+
   async *sync(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
@@ -169,7 +297,7 @@ export class ConfluenceConnector extends BaseConnector {
             cql,
             cursor,
             limit: batchSize,
-            expand: ["body.storage", "version", "space", "metadata.labels"],
+            expand: ["body.storage", "version", "space", "metadata.labels", "ancestors"],
           });
         } else {
           // Server/DC: offset-based pagination — the SDK's searchContentByCQL
@@ -182,7 +310,7 @@ export class ConfluenceConnector extends BaseConnector {
                 cql,
                 start,
                 limit: batchSize,
-                expand: ["body.storage", "version", "space", "metadata.labels"],
+                expand: ["body.storage", "version", "space", "metadata.labels", "ancestors"],
               },
             },
             // biome-ignore lint/suspicious/noExplicitAny: SDK requires callback arg
@@ -431,6 +559,7 @@ function pageToDocument(
       labels:
         page.metadata?.labels?.results?.map((l: { name: string }) => l.name) ??
         [],
+      ancestors: page.ancestors?.map((a: any) => ({ id: a.id })) || [],
     },
     updatedAt: page.version?.when ? new Date(page.version.when) : undefined,
   };

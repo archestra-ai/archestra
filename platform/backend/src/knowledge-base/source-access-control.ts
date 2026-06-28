@@ -36,7 +36,11 @@ function buildDocumentAccessControlList(params: {
     groups?: string[];
     isPublic?: boolean;
   };
+  materializedAcl?: AclEntry[]; // Added hook for pre-materialized auto-sync ACL
 }): AclEntry[] {
+  if (params.visibility === "auto-sync-permissions") {
+    return params.materializedAcl || [];
+  }
   switch (params.visibility) {
     case "org-wide":
       return ["org:*"];

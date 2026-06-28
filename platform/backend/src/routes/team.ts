@@ -24,6 +24,7 @@ import {
   UpdateTeamBodySchema,
   UpdateTeamMemberBodySchema,
 } from "@/types";
+import { handleTeamOrGroupMappingChange } from "@/knowledge-base/recomputation";
 
 const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -310,6 +311,8 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const member = await TeamModel.addMember(id, userId, role);
 
+      await handleTeamOrGroupMappingChange(organizationId);
+
       return reply.send(member);
     },
   );
@@ -407,6 +410,8 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!success) {
         throw new ApiError(404, "Team member not found");
       }
+
+      await handleTeamOrGroupMappingChange(organizationId);
 
       const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
         userId: user.id,
@@ -587,6 +592,8 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         normalizedGroupIdentifier,
       );
 
+      await handleTeamOrGroupMappingChange(organizationId);
+
       return reply.send(externalGroup);
     },
   );
@@ -636,6 +643,8 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!success) {
         throw new ApiError(404, "External group mapping not found");
       }
+
+      await handleTeamOrGroupMappingChange(organizationId);
 
       return reply.send({ success: true });
     },

@@ -157366,6 +157366,19 @@
                                 ]
                               }
                             ]
+                          },
+                          "permissionSyncStatus": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "synced",
+                              "skipped_unresolvable"
+                            ]
+                          },
+                          "permissionSyncMetadata": {
+                            "nullable": true,
+                            "type": "object",
+                            "additionalProperties": {}
                           }
                         },
                         "required": [

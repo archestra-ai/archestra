@@ -41013,6 +41013,10 @@ export type GetConnectorDocumentsResponses = {
             } | null;
             embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
             chunkCount: number;
+            permissionSyncStatus: 'synced' | 'skipped_unresolvable' | null;
+            permissionSyncMetadata: {
+                [key: string]: unknown;
+            } | null;
             createdAt: string;
             updatedAt: string;
             connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';

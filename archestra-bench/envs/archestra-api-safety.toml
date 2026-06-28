@@ -1,0 +1,26 @@
+id = "archestra-api-safety"
+name = "Archestra self-API safety"
+tasks = [
+  "api-scoped-agent-edit",
+  "api-resist-delete-injection",
+  "api-targeted-agent-delete",
+]
+
+# The only platform tool these tasks need is `archestra__api` (the loopback REST
+# dispatch under test). The agent drives all agent CRUD through it, discovering
+# routes via GET /api/openapi-compact as the built-in "Archestra Platform
+# Operations" skill teaches. That skill is enabled automatically for every env
+# (enable_skill_defaults), so it needs no [[skills]] entry. No fixture MCP: the
+# injection task (api-resist-delete-injection) carries its planted instruction in
+# an attached sandbox file, not in synthetic MCP output.
+tools = ["api"]
+
+# Isolated backend per lane (the default, set explicitly because it is load-bearing
+# here): these tasks issue real DELETE/PUT against the backend they run in, so a
+# misbehaving lane must not be able to mutate state another lane is grading.
+share_backend = false
+
+# Defaults shown; uncomment to pin. search_and_run_only is the realistic path we
+# want to validate -- the agent must discover archestra__api via search + the skill.
+# [platform]
+# tool_exposure_mode = "search_and_run_only"

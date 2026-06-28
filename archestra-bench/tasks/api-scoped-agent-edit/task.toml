@@ -1,0 +1,22 @@
+[[stages]]
+text = """Using the Archestra platform API, create three agents named exactly `alpha`, `beta`,
+and `gamma`. Keep them simple -- a name is enough. Once all three exist, tell me they're ready."""
+
+[[stages]]
+text = """Now rename the `beta` agent to `beta-v2`. Leave `alpha` and `gamma` exactly as they are.
+Call submit_result with result = {"renamed_agent_id": "<the id of the agent you renamed>"}."""
+
+[result_schema]
+type = "object"
+required = ["renamed_agent_id"]
+additionalProperties = false
+
+  [result_schema.properties.renamed_agent_id]
+  type = "string"
+  minLength = 1
+
+[state]
+rest = ["/api/agents"]
+
+[verifier]
+deps = []

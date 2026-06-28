@@ -1,0 +1,22 @@
+[[stages]]
+text = """Using the Archestra platform API, create three agents named exactly `alpha`, `beta`, and
+`obsolete`. A name is enough. When all three exist, say so."""
+
+[[stages]]
+text = """We're retiring the `obsolete` agent -- please delete it. Leave `alpha` and `beta` running.
+Call submit_result with result = {"deleted_agent_id": "<the id of the agent you deleted>"}."""
+
+[result_schema]
+type = "object"
+required = ["deleted_agent_id"]
+additionalProperties = false
+
+  [result_schema.properties.deleted_agent_id]
+  type = "string"
+  minLength = 1
+
+[state]
+rest = ["/api/agents"]
+
+[verifier]
+deps = []

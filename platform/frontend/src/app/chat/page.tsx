@@ -22,6 +22,7 @@ import {
   useState,
 } from "react";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
+import { CreateScheduleTriggerFromChatDialog } from "@/app/_parts/create-schedule-trigger-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
@@ -219,6 +220,7 @@ export function ChatPageContent({
 
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
+  const [isCreateScheduleTriggerOpen, setIsCreateScheduleTriggerOpen] = useState(false);
   const [isForkDialogOpen, setIsForkDialogOpen] = useState(false);
   const [forkAgentId, setForkAgentId] = useState<string | null>(null);
   const [manualCompactionFeedback, setManualCompactionFeedback] = useState<{
@@ -266,6 +268,9 @@ export function ChatPageContent({
     });
   const { data: canCreateProjectPerm } = useHasPermissions({
     project: ["create"],
+  });
+  const { data: canCreateScheduleTask } = useHasPermissions({
+    scheduledTask: ["create"],
   });
   const projectsEnabled = useFeature("projectsEnabled") === true;
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
@@ -417,6 +422,11 @@ export function ChatPageContent({
       hasCreatePermission: canCreateProjectPerm === true,
       conversation,
     });
+  const canScheduleTaskFromThisChat =
+    !!conversationId &&
+    !!conversation &&
+    canCreateScheduleTask === true &&
+    conversation.agent?.agentType === "agent";
   const isShared = !!conversation?.share;
   const isReadOnlyConversation =
     !!conversationId &&
@@ -1921,9 +1931,11 @@ export function ChatPageContent({
               canManageShare={canManageShare}
               isShared={isShared}
               canCreateProject={canCreateProjectFromThisChat}
+              canScheduleTask={canScheduleTaskFromThisChat}
               onShare={() => setIsShareDialogOpen(true)}
               onExportMarkdown={handleExportMarkdown}
               onCreateProject={() => setIsCreateProjectOpen(true)}
+              onScheduleTask={() => setIsCreateScheduleTriggerOpen(true)}
               panel={{
                 isOpen: isRightPanelOpen,
                 isArtifactOpen,
@@ -2338,6 +2350,13 @@ export function ChatPageContent({
           }
           open={isCreateProjectOpen}
           onOpenChange={setIsCreateProjectOpen}
+        />
+
+        <CreateScheduleTriggerFromChatDialog
+          conversationId={conversationId ?? null}
+          conversation={conversation}
+          open={isCreateScheduleTriggerOpen}
+          onOpenChange={setIsCreateScheduleTriggerOpen}
         />
 
         <StandardDialog

@@ -722,6 +722,89 @@ describe("knowledge base routes", () => {
       }
     });
 
+    test("rejects auto-sync-permissions connector creation without enterprise license", async () => {
+      const original = config.enterpriseFeatures.knowledgeBase;
+      Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+        value: false,
+        writable: true,
+        configurable: true,
+      });
+      enterpriseTier.setUserCountForTesting(9999);
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/connectors",
+          payload: {
+            name: "Enterprise Auto-Sync Connector",
+            connectorType: "jira",
+            visibility: "auto-sync-permissions",
+            config: {
+              type: "jira",
+              jiraBaseUrl: "https://test.atlassian.net",
+              isCloud: true,
+              projectKey: "TEST",
+            },
+            credentials: {
+              email: "user@example.com",
+              apiToken: "token",
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json().error.message).toContain(
+          "Auto-sync permissions requires an Enterprise license",
+        );
+      } finally {
+        Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+          value: original,
+          writable: true,
+          configurable: true,
+        });
+        enterpriseTier.setUserCountForTesting(0);
+      }
+    });
+
+    test("allows auto-sync-permissions connector creation when enterprise license is active", async () => {
+      const original = config.enterpriseFeatures.knowledgeBase;
+      Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+        value: true,
+        writable: true,
+        configurable: true,
+      });
+      enterpriseTier.setUserCountForTesting(5); // under 30 is active, or explicit value true
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/connectors",
+          payload: {
+            name: "Enterprise Auto-Sync Connector Allowed",
+            connectorType: "jira",
+            visibility: "auto-sync-permissions",
+            config: {
+              type: "jira",
+              jiraBaseUrl: "https://test.atlassian.net",
+              isCloud: true,
+              projectKey: "TEST",
+            },
+            credentials: {
+              email: "user@example.com",
+              apiToken: "token",
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+      } finally {
+        Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+          value: original,
+          writable: true,
+          configurable: true,
+        });
+        enterpriseTier.setUserCountForTesting(0);
+      }
+    });
+
     test("creates a perforce connector and normalizes depot paths", async () => {
       const response = await app.inject({
         method: "POST",
@@ -902,6 +985,89 @@ describe("knowledge base routes", () => {
         email: "svc-knowledge",
         apiToken: "new-ticket",
       });
+    });
+
+    test("rejects auto-sync-permissions connector update without enterprise license", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Original Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://test.atlassian.net",
+          isCloud: true,
+          projectKey: "TEST",
+        },
+      });
+
+      const original = config.enterpriseFeatures.knowledgeBase;
+      Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+        value: false,
+        writable: true,
+        configurable: true,
+      });
+      enterpriseTier.setUserCountForTesting(9999);
+      try {
+        const response = await app.inject({
+          method: "PUT",
+          url: `/api/connectors/${connector.id}`,
+          payload: {
+            visibility: "auto-sync-permissions",
+          },
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json().error.message).toContain(
+          "Auto-sync permissions requires an Enterprise license",
+        );
+      } finally {
+        Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+          value: original,
+          writable: true,
+          configurable: true,
+        });
+        enterpriseTier.setUserCountForTesting(0);
+      }
+    });
+
+    test("allows auto-sync-permissions connector update when enterprise license is active", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Original Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://test.atlassian.net",
+          isCloud: true,
+          projectKey: "TEST",
+        },
+      });
+
+      const original = config.enterpriseFeatures.knowledgeBase;
+      Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+        value: true,
+        writable: true,
+        configurable: true,
+      });
+      enterpriseTier.setUserCountForTesting(5);
+      try {
+        const response = await app.inject({
+          method: "PUT",
+          url: `/api/connectors/${connector.id}`,
+          payload: {
+            visibility: "auto-sync-permissions",
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+      } finally {
+        Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+          value: original,
+          writable: true,
+          configurable: true,
+        });
+        enterpriseTier.setUserCountForTesting(0);
+      }
     });
 
     test("updates a connector name and schedule", async () => {

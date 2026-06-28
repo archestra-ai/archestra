@@ -517,6 +517,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Team-scoped connectors require an enterprise license",
         );
       }
+      if (
+        visibility === "auto-sync-permissions" &&
+        !enterpriseTier.isKnowledgeBaseActive()
+      ) {
+        throw new ApiError(
+          403,
+          "Auto-sync permissions requires an Enterprise license",
+        );
+      }
       // SPDX-SnippetEnd
 
       // Validate connector config
@@ -841,6 +850,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(
           403,
           "Team-scoped connectors require an enterprise license",
+        );
+      }
+      if (
+        connector.visibility !== "auto-sync-permissions" &&
+        nextVisibility === "auto-sync-permissions" &&
+        !enterpriseTier.isKnowledgeBaseActive()
+      ) {
+        throw new ApiError(
+          403,
+          "Auto-sync permissions requires an Enterprise license",
         );
       }
       // SPDX-SnippetEnd

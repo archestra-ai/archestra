@@ -70,6 +70,8 @@ export const UpdateKbDocumentSchema = createUpdateSchema(
   metadata: true,
   embeddingStatus: true,
   chunkCount: true,
+  permissionSyncStatus: true,
+  permissionSyncMetadata: true,
 });
 
 export type KbDocument = z.infer<typeof SelectKbDocumentSchema>;

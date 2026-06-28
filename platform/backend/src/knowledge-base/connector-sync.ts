@@ -14,7 +14,10 @@ import type {
   AclEntry,
   ConnectorDocument,
   KnowledgeBaseConnector,
+  KnowledgeSourceVisibility,
 } from "@/types";
+import { IdentityResolutionService } from "./identity-resolution";
+import { AclMaterializer } from "./acl-materializer";
 import { chunkDocument } from "./chunker";
 import { resolveConnectorCredentials } from "./connector-credentials";
 import {
@@ -167,6 +170,8 @@ class ConnectorSyncService {
               organizationId: connector.organizationId,
               acl: documentAcl,
               log: runLog,
+              visibility: connector.visibility,
+              connector,
             });
             if (result.ingested) {
               documentsIngested++;
@@ -397,12 +402,15 @@ class ConnectorSyncService {
     organizationId: string;
     acl: AclEntry[];
     log: pino.Logger;
+    visibility: KnowledgeSourceVisibility;
+    connector: KnowledgeBaseConnector;
   }): Promise<{ ingested: boolean; documentId: string | null }> {
-    const { doc, connectorId, connectorType, organizationId, acl, log } =
+    const { doc, connectorId, connectorType, organizationId, acl, log, visibility, connector } =
       params;
 
-    // Include media data in hash so unchanged images are properly skipped.
-    const hashInput = doc.mediaContent
+    // Include media data and permissions in hash so unchanged content/permissions are properly skipped.
+    const permissionHashString = doc.permissions ? JSON.stringify(doc.permissions) : "";
+    const hashInput = (doc.mediaContent
       ? `${doc.mediaContent.mimeType}:${doc.mediaContent.data}` +
         (doc.metadata
           ? "\n" +
@@ -412,7 +420,7 @@ class ConnectorSyncService {
         ? doc.content +
           "\n" +
           JSON.stringify(doc.metadata, Object.keys(doc.metadata).sort())
-        : doc.content;
+        : doc.content) + (permissionHashString ? "\npermissions:" + permissionHashString : "");
     const contentHash = createHash("sha256").update(hashInput).digest("hex");
 
     // Lookup existing document by connector + source ID
@@ -421,9 +429,86 @@ class ConnectorSyncService {
       sourceId: doc.id,
     });
 
+    let targetAcl = acl;
+    let syncStatus: "synced" | "skipped_unresolvable" = "synced";
+    let syncMetadata: Record<string, any> | null = null;
+
+    if (visibility === "auto-sync-permissions") {
+      if (!doc.permissions) {
+        log.warn(`Skipping document ${doc.id} - missing permission metadata`);
+        const errMetadata = {
+          provider: connector.connectorType,
+          error: "Missing upstream permission metadata",
+          lastSyncedAt: new Date().toISOString(),
+        };
+        if (existing) {
+          await KbDocumentModel.update(existing.id, {
+            permissionSyncStatus: "skipped_unresolvable",
+            permissionSyncMetadata: errMetadata,
+          });
+          return { ingested: false, documentId: existing.id };
+        } else {
+          const created = await KbDocumentModel.create({
+            organizationId,
+            sourceId: doc.id,
+            connectorId,
+            title: doc.title,
+            content: "",
+            contentHash,
+            sourceUrl: doc.sourceUrl || null,
+            acl: [],
+            metadata: doc.metadata,
+            permissionSyncStatus: "skipped_unresolvable",
+            permissionSyncMetadata: errMetadata,
+          });
+          return { ingested: false, documentId: created.id };
+        }
+      }
+
+      const materializer = new AclMaterializer(new IdentityResolutionService(organizationId));
+      const resolved = await materializer.materialize(doc.permissions);
+
+      syncMetadata = {
+        provider: connector.connectorType,
+        rawPermissions: doc.permissions,
+        resolvedEmails: resolved.resolvedEmails,
+        skippedGroups: resolved.skippedGroups,
+        lastSyncedAt: new Date().toISOString(),
+      };
+
+      if (!resolved.complete) {
+        log.warn({ docId: doc.id, skippedGroups: resolved.skippedGroups }, "Fail-closed check: unmapped groups. Skipping document.");
+        if (existing) {
+          await KbDocumentModel.update(existing.id, {
+            permissionSyncStatus: "skipped_unresolvable",
+            permissionSyncMetadata: syncMetadata,
+          });
+          return { ingested: false, documentId: existing.id };
+        } else {
+          const created = await KbDocumentModel.create({
+            organizationId,
+            sourceId: doc.id,
+            connectorId,
+            title: doc.title,
+            content: "",
+            contentHash,
+            sourceUrl: doc.sourceUrl || null,
+            acl: [],
+            metadata: doc.metadata,
+            permissionSyncStatus: "skipped_unresolvable",
+            permissionSyncMetadata: syncMetadata,
+          });
+          return { ingested: false, documentId: created.id };
+        }
+      }
+
+      targetAcl = resolved.acl;
+      syncStatus = "synced";
+    }
+
     if (existing) {
       // Same content hash → skip (unchanged)
-      if (existing.contentHash === contentHash) {
+      if (existing.contentHash === contentHash && existing.permissionSyncStatus !== "skipped_unresolvable") {
         const existingChunkCount = await KbChunkModel.countByDocument(
           existing.id,
         );
@@ -436,7 +521,7 @@ class ConnectorSyncService {
             mediaContent: doc.mediaContent,
             metadata: doc.metadata,
             connectorType,
-            acl,
+            acl: targetAcl,
             log,
           });
 
@@ -464,15 +549,17 @@ class ConnectorSyncService {
         return { ingested: false, documentId: null };
       }
 
-      // Content has changed — update existing document
+      // Content has changed or permission was skipped — update existing document
       await KbDocumentModel.update(existing.id, {
         title: doc.title,
         content: doc.content,
         contentHash,
         sourceUrl: doc.sourceUrl ?? null,
-        acl,
+        acl: targetAcl,
         metadata: doc.metadata,
         embeddingStatus: "pending",
+        permissionSyncStatus: syncStatus,
+        permissionSyncMetadata: syncMetadata,
       });
 
       // Re-chunk: content changed, so replace stale chunks
@@ -484,7 +571,7 @@ class ConnectorSyncService {
         mediaContent: doc.mediaContent,
         metadata: doc.metadata,
         connectorType,
-        acl,
+        acl: targetAcl,
         log,
       });
 
@@ -507,8 +594,10 @@ class ConnectorSyncService {
       content: doc.content,
       contentHash,
       sourceUrl: doc.sourceUrl,
-      acl,
+      acl: targetAcl,
       metadata: doc.metadata,
+      permissionSyncStatus: syncStatus,
+      permissionSyncMetadata: syncMetadata,
     });
 
     await this.chunkAndStore({
@@ -518,7 +607,7 @@ class ConnectorSyncService {
       mediaContent: doc.mediaContent,
       metadata: doc.metadata,
       connectorType,
-      acl,
+      acl: targetAcl,
       log,
     });
 

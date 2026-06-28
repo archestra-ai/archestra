@@ -224,6 +224,17 @@ class KbDocumentModel {
     return result ?? null;
   }
 
+  static async updatePermissionStatus(
+    id: string,
+    status: "synced" | "skipped_unresolvable",
+    metadata: Record<string, any> | null,
+  ): Promise<KbDocument | null> {
+    return await this.update(id, {
+      permissionSyncStatus: status,
+      permissionSyncMetadata: metadata,
+    });
+  }
+
   static async delete(id: string): Promise<boolean> {
     const result = await db
       .delete(schema.kbDocumentsTable)

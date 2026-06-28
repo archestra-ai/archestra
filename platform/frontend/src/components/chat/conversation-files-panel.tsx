@@ -22,6 +22,7 @@ import {
   ProjectInstructionsPanel,
 } from "@/components/chat/project-instructions";
 import { SelectableFileList } from "@/components/chat/selectable-file-list";
+import { FileDropZone } from "@/components/files/file-drop-zone";
 import {
   useBulkDeleteConversationFiles,
   useConversationFiles,
@@ -33,7 +34,10 @@ import {
 } from "@/lib/chat/conversation-files";
 import { printMarkdownElementAsPdf } from "@/lib/chat/print-markdown";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
-import { useProject } from "@/lib/projects/projects.query";
+import {
+  useProject,
+  useUploadProjectFiles,
+} from "@/lib/projects/projects.query";
 import { cn } from "@/lib/utils";
 
 interface ConversationFilesPanelProps {
@@ -52,6 +56,12 @@ export function ConversationFilesPanel({
 }: ConversationFilesPanelProps) {
   const { data: files } = useConversationFiles(conversationId);
   const { data: project } = useProject(projectId ?? undefined);
+  // A project chat's files belong to the project, so dropping onto this panel
+  // uploads to the project (same destination as the project page). Non-project
+  // chats get no drop zone — there's no project, and we don't add chat
+  // attachments via drag-and-drop. Hook is called unconditionally (rules of
+  // hooks); it only issues a request when a drop actually fires.
+  const uploadProjectFiles = useUploadProjectFiles(projectId ?? "");
   // Editing instructions requires manage rights; in a chat the participant is
   // the owner (a shared member sees them read-only).
   const isProjectOwner = project?.viewerRole === "owner";
@@ -242,7 +252,7 @@ export function ConversationFilesPanel({
     ? PROJECT_INSTRUCTIONS_FILENAME
     : (selected?.name ?? "");
 
-  return (
+  const panelBody = (
     <div className="flex h-full flex-col">
       {/* The list fills the panel when nothing is open, is capped above the
           preview in the split, and is hidden when the preview is expanded.
@@ -398,6 +408,18 @@ export function ConversationFilesPanel({
 
       {deleteDialog}
     </div>
+  );
+
+  // No project = no drop target (the composer still handles chat attachments).
+  if (projectId == null) return panelBody;
+  return (
+    <FileDropZone
+      onDropFiles={(droppedFiles) => uploadProjectFiles.mutate(droppedFiles)}
+      disabled={uploadProjectFiles.isPending}
+      className="h-full"
+    >
+      {panelBody}
+    </FileDropZone>
   );
 }
 

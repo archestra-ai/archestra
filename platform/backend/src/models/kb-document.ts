@@ -252,6 +252,13 @@ class KbDocumentModel {
     return result?.count ?? 0;
   }
 
+  static async findAllByConnector(connectorId: string): Promise<KbDocument[]> {
+    return await db
+      .select()
+      .from(schema.kbDocumentsTable)
+      .where(eq(schema.kbDocumentsTable.connectorId, connectorId));
+  }
+
   static async countByConnectorWithSearch(params: {
     connectorId: string;
     organizationId: string;

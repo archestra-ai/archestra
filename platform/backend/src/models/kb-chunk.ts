@@ -71,6 +71,16 @@ class KbChunkModel {
     return typeof count === "number" ? count : Number(count ?? 0);
   }
 
+  static async updateAclByDocument(
+    documentId: string,
+    acl: AclEntry[],
+  ): Promise<void> {
+    await db
+      .update(schema.kbChunksTable)
+      .set({ acl })
+      .where(eq(schema.kbChunksTable.documentId, documentId));
+  }
+
   static async vectorSearch(params: {
     connectorIds: string[];
     queryEmbedding: number[];

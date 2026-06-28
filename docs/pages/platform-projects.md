@@ -38,6 +38,8 @@ In a project chat, the files an agent produces (`save_result`, `download_file`) 
 
 Plain-text and Markdown files (`.txt`, `.md`) can be edited in place: open one in the Files panel and choose Edit, then save to overwrite its contents — the same way the instructions file is edited. Whoever can reach a file can edit it (project access for a project file, the author for a personal chat's file); the read-only `project:admin` oversight view cannot.
 
+Anyone with project access can also add files directly: drag and drop them onto the project page's Files panel to upload them (up to 25 MB each). Dropping a file whose name already exists keeps both by appending a number, so an upload never overwrites an existing file.
+
 ## Scheduled tasks
 
 A schedule runs an agent automatically on a repeating cron schedule, scoped to the project. Each run starts a chat in the project — it appears in the project's session list marked as a scheduled run — and any result it saves lands in the project's files. This makes recurring work (a daily summary, periodic triage) accumulate in the same shared place as the rest of the project.

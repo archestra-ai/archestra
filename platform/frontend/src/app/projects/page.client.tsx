@@ -267,21 +267,20 @@ function ProjectCard({
           <span className="min-w-0 truncate font-medium">{project.name}</span>
         </Link>
         <span className="relative z-10 flex shrink-0 items-center gap-1">
-          {/* Scope pill (personal/team/org) on every card; role badge below
-              adds the "why you can see it" context for non-owners. */}
+          {/* Scope pill (personal/team/org) on every card. The owner label is
+              added only on another member's PERSONAL project (admin oversight),
+              where the personal pill alone can't say whose it is — for team/org
+              the scope pill already conveys the sharing. */}
           <ProjectVisibilityBadge
             visibility={project.visibility}
             teamNames={project.shareTeamNames}
           />
-          {project.viewerRole === "admin" && (
+          {project.viewerRole === "admin" && project.visibility === null && (
             <Badge variant="secondary">
               {project.ownerName
                 ? `Owned by ${project.ownerName}`
                 : "Other user"}
             </Badge>
-          )}
-          {project.viewerRole === "shared" && (
-            <Badge variant="secondary">Shared with you</Badge>
           )}
           <ProjectCardActions
             pinned={!!project.pinnedAt}

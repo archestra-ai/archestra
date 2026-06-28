@@ -1,741 +1,767 @@
 # Issue #3218 – Auto-sync permissions ACL support for Jira + Confluence
 
-## Status after research
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-This is **not implemented** in `main`.
+**Goal:** Implement secure, automated document-level permission syncing from Jira Cloud and Confluence Cloud into Archestra's Knowledge Base, materializing upstream permissions to user-specific search filters.
 
-The codebase already has useful groundwork:
-- connector-level visibility (`org-wide`, `team-scoped`)
-- ACL columns on `kb_documents` + `kb_chunks`
-- query-time ACL filtering in `query_knowledge_sources`
-- team external group mappings that can be reused for identity mapping
-- a placeholder `ConnectorDocument.permissions` field
+**Architecture:** Extend Archestra's Knowledge Base connector visibility with a new `auto-sync-permissions` mode. During sync, connectors extract upstream read permissions (page restrictions in Confluence; project browse grants & issue security levels in Jira), convert them to local `user_email:<email>` ACL entries, and store them alongside content. Query-time vector and keyword search filters remain unchanged, checking the query user's email against document ACL entries to ensure strict access control.
 
-But the missing parts are the hard ones:
-- third visibility mode (`auto-sync-permissions`)
-- extraction of upstream ACL/permission data from Jira + Confluence
-- identity mapping between upstream principals and Archestra users/teams
-- refresh behavior when permissions or mappings change
-- UI, docs, tests, and enterprise gating
+**Tech Stack:** TypeScript, Node.js (Fastify), PostgreSQL, Drizzle ORM, Zod, React, Next.js, Jira Cloud API, Confluence Cloud API.
 
 ---
 
-## Hard research conclusions
+## Technical Overview & Baseline
 
-### 1) Confluence is feasible, but Cloud inherited restrictions are awkward
-- Confluence Cloud REST restrictions endpoints exist for page restrictions.
-- Confluence Cloud REST **does not expose inherited restrictions directly**; Atlassian’s own support article says you must combine `Get restrictions` with `Get ancestors`, or use an unsupported internal GraphQL endpoint.
-- Confluence Data Center has a `relevantViewRestrictions` endpoint that returns direct + inherited view restrictions.
-
-### 2) Jira is much harder than Confluence
-Jira visibility is a combination of:
-- project "Browse Projects" permission scheme
-- optional issue security scheme / security level
-- role-based grants
-- issue-role grants (reporter / assignee / project lead)
-- sometimes custom user/group picker fields
-- possibly public / anyone access
-
-APIs exist for many of these pieces, but not as a single "effective ACL for issue" endpoint.
-
-### 3) Current ACL model is OR-only
-Current KB ACL storage is an array like:
-- `org:*`
-- `team:<id>`
-- `user_email:<email>`
-- `group:<id>`
-
-That means it models **OR** semantics well.
-
-This becomes important because Confluence inherited restrictions can act like an **AND across ancestors** when evaluated against real users. So for strict correctness, you should not try to flatten inherited restrictions into a single abstract principal list unless you are okay with approximation.
-
-### 4) The cleanest v1 is to materialize ACLs to Archestra-local principals
-Recommended v1 strategy:
-- compute a document’s **effective access for current Archestra org members only**
-- materialize the result into normal ACL entries (mostly `user_email:*`, sometimes `org:*`, optionally `team:*` if exact)
-- reuse existing query-time filtering unchanged
-
-This avoids inventing a complex new query engine.
-
-The tradeoff:
-- ACLs must be refreshed if relevant local mappings change (team membership / external group mappings / org members)
-
----
-
-## Recommended product/engineering decisions
-
-### Decision A – ship as a multi-phase feature
-Do **not** try to land everything in one PR.
-
-Recommended phases:
-1. groundwork + visibility mode
-2. identity/materialization layer
-3. Confluence implementation
-4. Jira implementation
-5. refresh + admin tooling + docs/demo hardening
-
-### Decision B – Cloud-first for both connectors
-Even though the connectors support `isCloud`, the safest implementation path is:
-- **Confluence Cloud first**
-- **Jira Cloud classic/company-managed first**
-- then add Data Center parity
-
-Reason:
-- Cloud docs/APIs are more standardized
-- Jira issue security APIs explicitly mention classic project behavior
-- Confluence Cloud inherited restrictions need special handling anyway
-
-### Decision C – v1 identity mapping strategy should be fixed, not configurable
-Do **not** introduce a big UI/config matrix for identity mapping in v1.
-
-Use this fixed strategy:
-1. **direct user match by email** when upstream email is available
-2. **group match through existing Team External Groups mappings**
-   - admins map upstream group identifiers to Archestra teams
-   - users gain access through membership in those teams
-3. if a document’s effective permissions cannot be resolved confidently:
-   - **fail closed** (skip ingest or mark as skipped/unresolved)
-   - never fall back to org-wide
-
-### Decision D – materialize only to existing ACL primitives in v1
-Try hard not to expand the ACL grammar for v1.
-
-Use:
-- `org:*`
-- `user_email:<email>`
-- optionally `team:<id>` only when it is exactly correct
-
-Avoid relying on `group:*` at query time in v1 unless you also add a robust user-ACL builder from team external groups and are comfortable with the semantics.
-
----
-
-## Target architecture
-
-## A. New visibility mode
-Extend connector visibility from:
-- `org-wide`
-- `team-scoped`
-
-to:
-- `org-wide`
-- `team-scoped`
-- `auto-sync-permissions`
-
-This mode is enterprise-only.
-
-## B. Two-layer permission pipeline
-
-### Layer 1 – connector/provider extraction
-Each provider must extract enough upstream permission facts to decide document visibility.
-
-### Layer 2 – ACL materialization
-A backend service converts provider permission facts into document/chunk ACL arrays that the current query system already understands.
-
-## C. Fail-closed behavior
-If auto-sync is enabled and permissions for a document cannot be fully resolved:
-- the document should **not** be ingested as broadly accessible
-- it should be:
-  - skipped, or
-  - ingested with empty ACL and marked as unresolved
-
-Prefer **skip + run warning** in v1 because it is safer and easier to reason about.
-
----
-
-## Detailed implementation plan
-
-# Phase 1 – groundwork / visibility mode / plumbing
-
-## Goal
-Make the platform understand a third visibility mode without yet doing provider-specific ACL resolution.
-
-## Files to change
-
-### Backend types / schema / model
-- `platform/backend/src/types/knowledge-base.ts`
-- `platform/backend/src/types/knowledge-base-connector.ts`
-- `platform/backend/src/database/schemas/knowledge-base-connector.ts`
-- migration file under `platform/backend/src/database/migrations/`
-- `platform/backend/src/models/knowledge-base-connector.ts`
-
-### Routes / MCP tool schemas
-- `platform/backend/src/routes/knowledge-base.ts`
-- `platform/backend/src/archestra-mcp-server/knowledge-management.ts`
-
-### Frontend
-- `platform/frontend/src/app/knowledge/_parts/knowledge-source-visibility-selector.tsx`
-- `platform/frontend/src/app/knowledge/knowledge-bases/_parts/create-connector-dialog.tsx`
-- `platform/frontend/src/app/knowledge/knowledge-bases/_parts/edit-connector-dialog.tsx`
-- any connector list/detail UI that renders visibility badges
-
-### Docs / generated docs
-- `docs/pages/platform-knowledge-connectors.md`
-- `docs/pages/platform-archestra-mcp-server.md`
-- `docs/openapi.json` (generated)
-
-## Tasks
-1. Add `"auto-sync-permissions"` to `KnowledgeSourceVisibilitySchema`
-2. Update insert/update/select schemas for connectors
-3. Gate create/update routes:
-   - allowed only when `config.enterpriseFeatures.knowledgeBase` is enabled
-4. UI should expose the mode again
-   - but label it clearly as enterprise
-5. Do not yet ingest provider ACLs in this phase
-6. Add route/tool validation tests
-
-## Tests
-- `platform/backend/src/routes/knowledge-base.test.ts`
-- `platform/backend/src/archestra-mcp-server/knowledge-management.test.ts`
-- frontend dialog tests
-
-## Acceptance criteria
-- connectors can be created/updated with `auto-sync-permissions`
-- enterprise gating works
-- docs and tool schemas reflect the new enum
-
----
-
-# Phase 2 – identity mapping + ACL materialization foundation
-
-## Goal
-Create the reusable service that converts upstream principals into KB ACL entries.
-
-## New service(s) to add
-
-### 1. `platform/backend/src/knowledge-base/identity-resolution.ts`
-Responsibilities:
-- load org members (`MemberModel.findAllByOrganization`)
-- load teams + members
-- load team external group mappings
-- provide fast lookups:
-  - email -> org user
-  - external group identifier -> Archestra team(s)
-  - team -> member emails
-
-### 2. `platform/backend/src/knowledge-base/acl-materializer.ts`
-Responsibilities:
-- accept provider-resolved permission facts
-- output final `AclEntry[]`
-- apply fail-closed rules
-- optionally return a reason/status if unresolved
-
-## Proposed v1 input shape
-Add a stronger internal type, e.g.
-
-```ts
-type ResolvedDocumentPermissions = {
-  isPublic: boolean;
-  allowedEmails: string[];
-  allowedExternalGroups: string[];
-  complete: boolean;
-  debug?: Record<string, unknown>;
-};
+### 1. Existing ACL Architecture
+Archestra uses PostgreSQL `jsonb` array columns (`acl`) on both `kb_documents` and `kb_chunks`.
+Search queries filter results using the PG `?|` operator (contains any of these keys) against the user's ACL.
+At query time, `buildUserAccessControlList` constructs the user's runtime ACL:
+```typescript
+const acl = ["org:*", `user_email:${userEmail}`, ...teamIds.map(id => `team:${id}`)]
 ```
 
-If you want to keep `ConnectorDocument.permissions`, evolve it toward this shape instead of the current loose object.
+### 2. Identity Mapping Strategy
+Upstream groups and users are converted to Archestra members:
+1. **Direct Email Mapping**: Upstream user account email maps to Archestra user email.
+2. **External Group Mapping**: Upstream groups are mapped to Archestra teams using the existing `team_external_group` database mappings. These teams are then expanded to their user email memberships.
+3. **Fail-Closed Policy**: If any permission holder cannot be mapped (e.g., an unmapped group, or a user without a public email address), the document must be **skipped** from ingestion, and a sync status warning recorded.
 
-## Materialization rules
-1. if `isPublic === true` -> `["org:*"]`
-2. include `user_email:<email>` for org members whose email matches `allowedEmails`
-3. for each `allowedExternalGroups`:
-   - find mapped Archestra teams from `team_external_group`
-   - expand those teams to member emails
-   - include `user_email:<memberEmail>` for those members
-4. if `complete === false`:
-   - return unresolved status
-   - caller decides to skip ingest
-5. de-duplicate + sort output for stable writes/tests
-
-## Important choice
-For v1, materialize to **user_email ACLs** for auto-sync documents.
-
-Why:
-- it keeps query-time behavior unchanged
-- it avoids incorrect OR semantics for complex upstream inheritance/role combinations
-- it can represent exact access for current org members
-
-## Additional metadata to store
-Add permission-resolution debug metadata to document metadata, e.g.
-
-```ts
-metadata.permissionSync = {
-  provider: "jira" | "confluence",
-  mode: "auto-sync-permissions",
-  complete: true,
-  source: { ...provider-specific identifiers... }
-}
-```
-
-This helps later ACL refreshes without refetching everything.
-
-## Tests
-Add new unit tests for:
-- email mapping
-- group->team->member expansion
-- unresolved/partial behavior
-- dedupe/stable ordering
+### 3. Eventual Consistency of Mappings
+Materializing permissions to local user emails means that changes to Archestra team memberships or group mappings do not immediately reflect on stored document ACLs. To guarantee security, an explicit re-materialization job must run when these local mappings change.
 
 ---
 
-# Phase 3 – connector sync integration
+## File Structure Changes
 
-## Goal
-Teach the sync pipeline to use provider permissions when visibility is `auto-sync-permissions`.
-
-## Files to change
-- `platform/backend/src/knowledge-base/connector-sync.ts`
-- `platform/backend/src/knowledge-base/source-access-control.ts`
-- maybe `platform/backend/src/types/knowledge-connector.ts`
-- maybe `platform/backend/src/knowledge-base/connectors/base-connector.ts`
-
-## Changes
-
-### 1. Add visibility branch in sync
-Current logic always builds one connector-level ACL and applies it to every doc.
-
-Change flow:
-- if connector visibility is `org-wide` or `team-scoped`
-  - keep existing behavior
-- if connector visibility is `auto-sync-permissions`
-  - resolve per-document ACL before ingest
-
-### 2. Introduce a sync-time hook
-Recommended abstraction:
-
-```ts
-interface PermissionAwareConnector {
-  resolveDocumentPermissions?(params): Promise<ResolvedDocumentPermissions>
-}
-```
-
-or have connectors populate `doc.permissions` directly during `sync()`.
-
-### 3. Update `source-access-control.ts`
-This file currently ignores `permissions` entirely.
-
-Do **not** make it responsible for provider semantics.
-Instead:
-- keep it as the simple visibility ACL builder for org/team modes
-- add helper(s) for auto-sync materialization if needed
-
-### 4. Skip unresolved docs in strict mode
-If `auto-sync-permissions` doc permissions are incomplete/unresolved:
-- add an item failure/skipped record to the sync batch
-- do not ingest the document
-
-## Tests
-- extend `connector-sync.test.ts`
-- add tests for per-document ACL application
-- add tests proving unchanged docs are still skipped correctly
-- add tests for unresolved docs being skipped
+| Subsystem | File Path | Action | Description |
+|-----------|-----------|--------|-------------|
+| Types | `platform/backend/src/types/knowledge-base.ts` | Modify | Add `auto-sync-permissions` visibility option |
+| Types | `platform/backend/src/types/knowledge-connector.ts` | Modify | Extend `ConnectorDocument.permissions` shape |
+| Database | `platform/backend/src/database/schemas/kb-document.ts` | Modify | Add `permissionSyncStatus` and `permissionSyncMetadata` |
+| Database | `platform/backend/src/database/migrations/xxxx_add_kb_permission_columns.sql` | Create | Database migration for status/metadata columns |
+| Service | `platform/backend/src/knowledge-base/identity-resolution.ts` | Create | Resolve emails and external groups to local users |
+| Service | `platform/backend/src/knowledge-base/acl-materializer.ts` | Create | Build final `AclEntry[]` from resolved permissions |
+| Service | `platform/backend/src/knowledge-base/source-access-control.ts` | Modify | Implement per-document ACL builders |
+| Service | `platform/backend/src/knowledge-base/connector-sync.ts` | Modify | Integrate per-document ACL matching and status tracking |
+| Connector | `platform/backend/src/knowledge-base/connectors/base-connector.ts` | Modify | Declare optional `resolveDocumentPermissions` hook |
+| Connector | `platform/backend/src/knowledge-base/connectors/confluence/confluence-connector.ts` | Modify | Retrieve restrictions and traverse ancestor tree |
+| Connector | `platform/backend/src/knowledge-base/connectors/jira/jira-connector.ts` | Modify | Fetch `security` fields and project scheme actors |
+| Backend | `platform/backend/src/routes/knowledge-base.ts` | Modify | Validate routes with new visibility enum + enterprise gate |
+| Frontend | `platform/frontend/src/app/knowledge/_parts/knowledge-source-visibility-selector.tsx` | Modify | Add visibility option UI toggle |
 
 ---
 
-# Phase 4 – Confluence implementation
+## Detailed Phases & Tasks
 
-## Recommendation
-Implement Confluence **before** Jira.
+### Phase 1 – Schema & Visibility Mode Groundwork
 
-It is a better first end-to-end slice because the upstream model is easier to reason about.
+#### Task 1: Add Visibility Enum & Database Columns
+- [ ] **Step 1: Modify backend visibility types**
+  File: `platform/backend/src/types/knowledge-base.ts:1-13`
+  Change the enum definition to:
+  ```typescript
+  export const KnowledgeSourceVisibilitySchema = z.enum([
+    "org-wide",
+    "team-scoped",
+    "auto-sync-permissions", // Added
+  ]);
+  export type KnowledgeSourceVisibility = z.infer<typeof KnowledgeSourceVisibilitySchema>;
+  ```
 
-## Scope recommendation for v1
-### Confluence Cloud v1
-Support:
-- page-level read restrictions
-- ancestor-derived inherited read restrictions (via ancestor walk)
-- space-level read permissions for groups/users where available
-- anonymous/public space access -> `org:*` only if your product policy says that means org-wide within Archestra
+- [ ] **Step 2: Add database columns to `kb_documents`**
+  File: `platform/backend/src/database/schemas/kb-document.ts`
+  Add columns:
+  ```typescript
+  permissionSyncStatus: text("permission_sync_status")
+    .$type<"synced" | "skipped_unresolvable">()
+    .notNull()
+    .default("synced"),
+  permissionSyncMetadata: jsonb("permission_sync_metadata")
+    .$type<{
+      provider: string;
+      rawPermissions?: Record<string, unknown>;
+      resolvedEmails?: string[];
+      skippedGroups?: string[];
+      lastSyncedAt?: string;
+    }>(),
+  ```
 
-### Confluence Data Center v1.1
-Support:
-- `relevantViewRestrictions` endpoint for effective inherited view restrictions
-- space permissions if needed for unrestricted pages
+- [ ] **Step 3: Generate the Drizzle database migration**
+  Run command in `platform/`:
+  ```bash
+  pnpm db:generate
+  ```
+  Expected: A new migration file created in `platform/backend/src/database/migrations/`. Verify it adds the two columns to `kb_documents`.
 
-## Files to change
-- `platform/backend/src/knowledge-base/connectors/confluence/confluence-connector.ts`
-- maybe add `confluence-permissions.ts`
-- `platform/backend/src/types/knowledge-connector.ts`
-- tests under `confluence-connector.test.ts`
+- [ ] **Step 4: Run the migration**
+  Run command in `platform/`:
+  ```bash
+  pnpm db:migrate
+  ```
+  Expected: Successful application of SQL migrations.
 
-## Recommended implementation shape
+- [ ] **Step 5: Commit changes**
+  Run:
+  ```bash
+  git add backend/src/types/knowledge-base.ts backend/src/database/schemas/kb-document.ts backend/src/database/migrations/
+  git commit -m "feat: add auto-sync-permissions visibility enum and database columns"
+  ```
 
-### Option A – keep logic in connector helper(s)
-Add Confluence-specific helpers:
-- `fetchPageRestrictions(pageId)`
-- `fetchAncestorRestrictions(pageId)` (Cloud)
-- `fetchRelevantViewRestrictions(pageId)` (Data Center)
-- `fetchSpaceReadPermissions(spaceKey)`
-- `resolveEffectiveConfluencePermissions(page)`
+#### Task 2: Route Gating & Validation Tests
+- [ ] **Step 1: Apply route validation and enterprise gate**
+  File: `platform/backend/src/routes/knowledge-base.ts`
+  Update POST `/api/connectors` and PUT `/api/connectors/:id` validation logic. Ensure `auto-sync-permissions` requires `enterpriseTier.isKnowledgeBaseActive()`.
+  ```typescript
+  if (visibility === "auto-sync-permissions" && !enterpriseTier.isKnowledgeBaseActive()) {
+    throw new ApiError(403, "Auto-sync permissions requires an Enterprise license");
+  }
+  ```
 
-### Option B – separate provider service
-Add:
-- `platform/backend/src/knowledge-base/connectors/confluence/confluence-permissions.ts`
+- [ ] **Step 2: Write route gating tests**
+  File: `platform/backend/src/routes/knowledge-base.test.ts`
+  Write tests verifying that non-enterprise configurations fail to set `auto-sync-permissions` with a 403 status, while enterprise or small teams (<30) succeed.
+  Run:
+  ```bash
+  pnpm --filter backend test src/routes/knowledge-base.test.ts
+  ```
+  Expected: PASS
 
-This is easier to unit test and keeps connector file readable.
+- [ ] **Step 3: Commit changes**
+  Run:
+  ```bash
+  git add backend/src/routes/knowledge-base.ts backend/src/routes/knowledge-base.test.ts
+  git commit -m "feat: enforce enterprise license gating for permission sync visibility"
+  ```
 
-## Confluence Cloud algorithm (recommended)
-1. Sync page content as today
-2. For each page, get direct restrictions
-3. Get ancestors for the page
-4. For each ancestor, fetch direct restrictions
-5. Determine whether the page is effectively restricted by any ancestor
-6. Combine with space-level read permissions
-7. Produce provider permission facts:
-   - `isPublic`
-   - `allowedEmails`
-   - `allowedExternalGroups`
-   - `complete`
+#### Task 3: Frontend Visibility Selector & Connector Dialogs
+- [ ] **Step 1: Add new option to Visibility Selector**
+  File: `platform/frontend/src/app/knowledge/_parts/knowledge-source-visibility-selector.tsx`
+  Add `"auto-sync-permissions"` option with Shield/Lock icon and appropriate helper copy:
+  "Auto-sync permissions: Synchronize upstream file-level restrictions directly to Archestra."
+  Ensure it behaves similarly to `team-scoped` regarding `enterpriseLocked`.
 
-## Important caveat
-Because Cloud REST does not directly expose inherited restrictions, do **not** assume page-level restrictions alone are enough.
+- [ ] **Step 2: Adapt Dialog forms to permit third visibility mode**
+  Files:
+  - `platform/frontend/src/app/knowledge/knowledge-bases/_parts/create-connector-dialog.tsx`
+  - `platform/frontend/src/app/knowledge/knowledge-bases/_parts/edit-connector-dialog.tsx`
+  Make sure form submission handles `"auto-sync-permissions"` and serializes it to the backend payload.
 
-You must at least do the ancestor walk documented by Atlassian support.
-
-## Safe v1 policy
-If inherited restriction evaluation is ambiguous or incomplete:
-- mark incomplete
-- skip document
-
-## Confluence-specific tests
-Cases to cover:
-1. unrestricted page in unrestricted space
-2. page directly restricted to a group
-3. page directly restricted to a user
-4. page inheriting parent restriction
-5. page with both ancestor + direct restrictions
-6. page with unmapped group
-7. page with no resolvable principals -> skipped
-8. Data Center relevantViewRestrictions path
-
----
-
-# Phase 5 – Jira implementation
-
-## Warning
-This is the hardest phase.
-
-## Scope recommendation for v1
-### Jira Cloud v1
-Support only **classic/company-managed** projects and only these holder types initially:
-- user
-- group
-- project role
-- reporter
-- current assignee
-- project lead
-- anyone/public
-
-Defer for later if needed:
-- custom user picker fields
-- custom group picker fields
-- all edge-case issue role types
-- full team-managed parity if APIs behave differently
-
-## Files to change
-- `platform/backend/src/knowledge-base/connectors/jira/jira-connector.ts`
-- maybe add `jira-permissions.ts`
-- tests under `jira-connector.test.ts`
-
-## Required upstream facts to gather
-For each issue:
-- project key / project id
-- security level id (if any)
-- reporter / assignee identifiers
-- maybe project lead
-- maybe project role actors
-
-For each project:
-- browse permission scheme grants
-- project role memberships
-
-For each security level:
-- issue security level members
-
-## Suggested Jira service structure
-Create a separate helper/service with caches:
-
-```ts
-class JiraPermissionResolver {
-  getProjectBrowseRules(projectId)
-  getProjectRoleActors(projectId)
-  getIssueSecurityMembers(projectId, securityLevelId)
-  resolveIssuePermissions(issue)
-}
-```
-
-This service should cache per-sync-run data because otherwise sync will explode into too many API calls.
-
-## Jira Cloud algorithm (recommended)
-1. Add `security` to fetched issue fields if not already included
-2. For each issue, determine baseline project viewers from Browse Projects grants
-3. If issue has security level, intersect/bound with security level members
-4. Expand supported holders:
-   - `user` -> direct user email if available
-   - `group` -> canonical group identifier
-   - `projectRole` -> project role actors -> users/groups
-   - `reporter` -> issue reporter
-   - `assignee` -> issue assignee
-   - `projectLead` -> project lead
-   - `anyone` -> public
-5. Materialize to Archestra-local ACLs
-6. If any required holder cannot be resolved confidently, mark incomplete and skip doc
-
-## Why skip-on-uncertain matters
-Jira permission schemes can include holder types that are not safely flattenable without more context.
-If you guess wrong, you overexpose data.
-
-## Jira-specific risks
-1. Browse permissions can be granted via roles/groups/users/issue roles/custom fields
-2. Issue security members API has classic-project caveats
-3. User email may be unavailable because of privacy settings
-4. Some issues may depend on role membership + group membership + issue fields simultaneously
-5. Team-managed projects may need different handling
-
-## Jira-specific tests
-Cases to cover:
-1. project browse granted to group only
-2. project browse granted to project role -> role actor group
-3. issue security level narrows project viewers
-4. reporter-only issue security
-5. assignee-only issue security
-6. project lead issue security
-7. public/anyone access
-8. unsupported holder -> skipped
-9. no security level -> browse-project-only ACL
-10. company-managed supported / team-managed unsupported behavior
+- [ ] **Step 3: Commit changes**
+  Run:
+  ```bash
+  git commit -am "frontend: add auto-sync-permissions visibility options to UI selectors and dialogs"
+  ```
 
 ---
 
-# Phase 6 – refresh and change propagation
+### Phase 2 – Identity Resolution & ACL Materializer
 
-## Goal
-Handle changes after initial sync.
+#### Task 1: Create Identity Resolution Service
+- [ ] **Step 1: Implement Identity Resolver**
+  Create File: `platform/backend/src/knowledge-base/identity-resolution.ts`
+  Add resolution code to map emails and external groups:
+  ```typescript
+  import { memberModel } from "@/models/member";
+  import { teamModel } from "@/models/team";
 
-This phase is required for production quality.
+  export class IdentityResolutionService {
+    private orgId: string;
 
-## What changes can invalidate ACLs?
-### Upstream changes
-- Confluence page restriction changed
-- Confluence space permission changed
-- page moved under a different parent
-- Jira permission scheme changed
-- Jira project role membership changed
-- Jira issue security level changed
-- issue reporter/assignee changed
+    constructor(orgId: string) {
+      this.orgId = orgId;
+    }
 
-### Local changes
-- Archestra team membership changed
-- team external group mapping changed
-- org member added/removed
-- user email changed
+    async resolveEmailsToMembers(emails: string[]): Promise<string[]> {
+      const activeMembers = await memberModel.findAllByOrganization(this.orgId);
+      const memberEmails = new Set(activeMembers.map(m => m.email.toLowerCase()));
+      return emails.filter(email => memberEmails.has(email.toLowerCase()));
+    }
 
-## Minimal practical v1 behavior
-1. upstream changes are picked up on next connector sync
-2. local mapping changes require an explicit ACL refresh job
+    async resolveGroupsToEmails(groupIds: string[]): Promise<{
+      resolvedEmails: string[];
+      unmappedGroups: string[];
+    }> {
+      const resolvedEmails: string[] = [];
+      const unmappedGroups: string[] = [];
 
-## Recommended admin affordances
-Add a new action:
-- "Recompute permissions ACLs"
+      for (const groupId of groupIds) {
+        const teams = await teamModel.findTeamsByExternalGroup(this.orgId, groupId);
+        if (teams.length === 0) {
+          unmappedGroups.push(groupId);
+          continue;
+        }
+        for (const team of teams) {
+          const members = await teamModel.getTeamMembersWithUsers(team.id);
+          for (const member of members) {
+            if (member.email) {
+              resolvedEmails.push(member.email.toLowerCase());
+            }
+          }
+        }
+      }
 
-This should:
-- keep document content as-is
-- rebuild document/chunk ACLs from stored permission metadata
-- not require full remote resync if enough metadata is stored
+      return {
+        resolvedEmails: [...new Set(resolvedEmails)],
+        unmappedGroups,
+      };
+    }
+  }
+  ```
 
-## Optional later automation
-Trigger ACL refresh jobs when:
-- team member added/removed
-- external group mapping added/removed
+- [ ] **Step 2: Commit changes**
+  Run:
+  ```bash
+  git add backend/src/knowledge-base/identity-resolution.ts
+  git commit -m "feat: implement IdentityResolutionService for emails and group mappings"
+  ```
 
-This likely touches:
-- `platform/backend/src/routes/team.ts`
-- team member / external group mutation handlers
-- a new background task type
+#### Task 2: Create ACL Materializer Service
+- [ ] **Step 1: Implement Materializer**
+  Create File: `platform/backend/src/knowledge-base/acl-materializer.ts`
+  Add code to materialize Resolved upstream permissions:
+  ```typescript
+  import { AclEntry } from "@/types/kb-document";
+  import { IdentityResolutionService } from "./identity-resolution";
 
----
+  export interface UpstreamPermissions {
+    isPublic: boolean;
+    users?: string[];
+    groups?: string[];
+  }
 
-# Phase 7 – query path / runtime behavior
+  export class AclMaterializer {
+    private resolver: IdentityResolutionService;
 
-## Goal
-Keep query path as unchanged as possible.
+    constructor(resolver: IdentityResolutionService) {
+      this.resolver = resolver;
+    }
 
-## Desired outcome
-`query_knowledge_sources` should not need provider-specific logic.
+    async materialize(permissions: UpstreamPermissions): Promise<{
+      acl: AclEntry[];
+      complete: boolean;
+      skippedGroups: string[];
+      resolvedEmails: string[];
+    }> {
+      if (permissions.isPublic) {
+        return { acl: ["org:*"], complete: true, skippedGroups: [], resolvedEmails: [] };
+      }
 
-It should continue to:
-- build a normal user ACL
-- run the existing KB chunk filtering query
+      const rawEmails = permissions.users || [];
+      const rawGroups = permissions.groups || [];
 
-## Files
-- `platform/backend/src/archestra-mcp-server/knowledge-management.ts`
-- `platform/backend/src/knowledge-base/query.ts`
-- maybe `platform/backend/src/models/kb-chunk.ts`
+      const resolvedUserEmails = await this.resolver.resolveEmailsToMembers(rawEmails);
+      const { resolvedEmails: groupEmails, unmappedGroups } = await this.resolver.resolveGroupsToEmails(rawGroups);
 
-## Query-time changes needed
-Probably only minor ones:
-- keep `buildUserAccessControlList` as-is if docs are materialized to `user_email:*` / `org:*`
-- if you choose to keep `group:*` entries, extend user ACL builder to include group tokens derived from the user’s mapped teams/external groups
+      const allEmails = [...new Set([...resolvedUserEmails, ...groupEmails])];
+      const aclEntries: AclEntry[] = allEmails.map((email): AclEntry => `user_email:${email.toLowerCase()}`);
 
-## Recommendation
-For v1, prefer materialized `user_email:*` and avoid query-time group logic changes unless necessary.
+      // Fail-closed condition: if unmapped groups exist, resolution is incomplete
+      const complete = unmappedGroups.length === 0;
 
----
+      return {
+        acl: aclEntries.sort(),
+        complete,
+        skippedGroups: unmappedGroups,
+        resolvedEmails: allEmails,
+      };
+    }
+  }
+  ```
 
-# Phase 8 – UI / DX / docs / demo
+- [ ] **Step 2: Write materializer unit tests**
+  Create File: `platform/backend/src/knowledge-base/acl-materializer.test.ts`
+  Assert:
+  - Correct email matching to existing org users
+  - Proper team mapping lookup and expansion to user emails
+  - Correct complete status handling (false when unmapped groups exist)
+  - Sorting and deduplication of ACL output
+  Run:
+  ```bash
+  pnpm --filter backend test src/knowledge-base/acl-materializer.test.ts
+  ```
+  Expected: PASS
 
-## UI behavior
-### Connector create/edit dialogs
-Allow selecting `Auto-sync permissions`.
-
-Suggested help text:
-- "Enterprise only"
-- "Requires mapping upstream groups to Archestra teams via Team External Groups"
-- "Documents whose permissions can’t be resolved are skipped"
-
-### Connector details page
-Add visibility indicators and maybe sync warnings such as:
-- X documents skipped because permissions could not be resolved
-
-## Docs to update
-- knowledge connector docs
-- knowledge base visibility docs
-- MCP tool docs for create/update connector visibility enum
-- enterprise feature docs
-- team external group docs (cross-link them)
-
-## Demo scenario to record
-1. create team `Engineering`
-2. map external group `engineering` to that team
-3. add user A to team, leave user B out
-4. create Confluence/Jira connector with `auto-sync-permissions`
-5. sync restricted docs
-6. query as user A -> sees restricted doc
-7. query as user B -> does not see restricted doc
-8. change upstream restriction or local mapping
-9. resync/recompute ACLs
-10. show changed visibility taking effect
-
----
-
-## Exact code hotspots to hand to agents
-
-### Core backend
-- `platform/backend/src/types/knowledge-base.ts`
-- `platform/backend/src/types/knowledge-base-connector.ts`
-- `platform/backend/src/types/knowledge-connector.ts`
-- `platform/backend/src/knowledge-base/connector-sync.ts`
-- `platform/backend/src/knowledge-base/source-access-control.ts`
-- `platform/backend/src/knowledge-base/query.ts`
-- `platform/backend/src/models/kb-document.ts`
-- `platform/backend/src/models/kb-chunk.ts`
-- `platform/backend/src/routes/knowledge-base.ts`
-- `platform/backend/src/archestra-mcp-server/knowledge-management.ts`
-
-### Identity / teams
-- `platform/backend/src/models/team.ts`
-- `platform/backend/src/models/member.ts`
-- `platform/backend/src/routes/team.ts`
-- `platform/backend/src/database/schemas/team-external-group.ts`
-
-### Connector implementations
-- `platform/backend/src/knowledge-base/connectors/base-connector.ts`
-- `platform/backend/src/knowledge-base/connectors/jira/jira-connector.ts`
-- `platform/backend/src/knowledge-base/connectors/confluence/confluence-connector.ts`
-
-### Frontend
-- `platform/frontend/src/app/knowledge/_parts/knowledge-source-visibility-selector.tsx`
-- `platform/frontend/src/app/knowledge/knowledge-bases/_parts/create-connector-dialog.tsx`
-- `platform/frontend/src/app/knowledge/knowledge-bases/_parts/edit-connector-dialog.tsx`
-- connector visibility badges/pages
-
-### Tests
-- `platform/backend/src/routes/knowledge-base.test.ts`
-- `platform/backend/src/archestra-mcp-server/knowledge-management.test.ts`
-- `platform/backend/src/knowledge-base/source-access-control.test.ts`
-- `platform/backend/src/knowledge-base/connector-sync.test.ts`
-- `platform/backend/src/knowledge-base/query.test.ts`
-- Jira/Confluence connector tests
-- frontend dialog tests
+- [ ] **Step 3: Commit changes**
+  Run:
+  ```bash
+  git add backend/src/knowledge-base/acl-materializer.ts backend/src/knowledge-base/acl-materializer.test.ts
+  git commit -m "feat: implement AclMaterializer and verify behavior with unit tests"
+  ```
 
 ---
 
-## Suggested PR breakdown
+### Phase 3 – Sync Pipeline & Access Control Integration
 
-### PR 1 – Visibility mode groundwork
-Small, mechanical, low-risk.
+#### Task 1: Update Source Access Control
+- [ ] **Step 1: Wire permissions parameter handling**
+  File: `platform/backend/src/knowledge-base/source-access-control.ts`
+  Modify `buildDocumentAccessControlList` to properly handle and materialize permissions when the visibility mode matches `auto-sync-permissions`:
+  ```typescript
+  function buildDocumentAccessControlList(params: {
+    visibility: KnowledgeSourceVisibility;
+    teamIds: string[];
+    permissions?: { users?: string[]; groups?: string[]; isPublic?: boolean; };
+    materializedAcl?: AclEntry[]; // Added hook for pre-materialized auto-sync ACL
+  }): AclEntry[] {
+    if (params.visibility === "auto-sync-permissions") {
+      return params.materializedAcl || [];
+    }
+    switch (params.visibility) {
+      case "org-wide": return ["org:*"];
+      case "team-scoped": return params.teamIds.map((id): AclEntry => `team:${id}`);
+    }
+  }
+  ```
 
-### PR 2 – ACL materializer + identity mapping service
-No Jira/Confluence yet; just reusable services + tests.
+- [ ] **Step 2: Commit changes**
+  Run:
+  ```bash
+  git add backend/src/knowledge-base/source-access-control.ts
+  git commit -m "feat: adapt source access control to process pre-materialized ACLs"
+  ```
 
-### PR 3 – Sync integration for per-document ACLs
-Wire connector sync to use per-document ACLs in auto-sync mode.
+#### Task 2: Extend Connector Typings
+- [ ] **Step 1: Update `ConnectorDocument` and Base Interface**
+  File: `platform/backend/src/types/knowledge-connector.ts`
+  Add status fields and verify base types:
+  ```typescript
+  export interface ConnectorDocument {
+    id: string;
+    title: string;
+    content: string;
+    sourceUrl?: string;
+    metadata: Record<string, unknown>;
+    updatedAt?: Date;
+    permissions?: {
+      users?: string[];
+      groups?: string[];
+      isPublic?: boolean;
+      complete?: boolean;
+      debug?: Record<string, unknown>;
+    };
+    mediaContent?: { mimeType: string; data: string; };
+  }
+  ```
+  File: `platform/backend/src/knowledge-base/connectors/base-connector.ts`
+  Define optional abstract method:
+  ```typescript
+  // Inside BaseConnector
+  resolveDocumentPermissions?(
+    document: ConnectorDocument
+  ): Promise<ConnectorDocument["permissions"]>;
+  ```
 
-### PR 4 – Confluence Cloud support
-First real end-to-end provider.
+- [ ] **Step 2: Commit changes**
+  Run:
+  ```bash
+  git commit -am "feat: extend ConnectorDocument typings with status fields"
+  ```
 
-### PR 5 – Confluence DC support
-Add `relevantViewRestrictions` path.
+#### Task 3: Modify the Ingestion Loop
+- [ ] **Step 1: Update `ingestDocument` to support per-doc ACLs and skips**
+  File: `platform/backend/src/knowledge-base/connector-sync.ts`
+  Locate `ingestDocument` and adapt the signature and logic:
+  1. Add `visibility: KnowledgeSourceVisibility` to signature.
+  2. Include `permissionSyncMetadata` in the document's content hash to ensure permission modifications force re-sync:
+     ```typescript
+     const permissionHashString = doc.permissions ? JSON.stringify(doc.permissions) : "";
+     const contentHash = computeHash(doc.content + JSON.stringify(doc.metadata) + permissionHashString);
+     ```
+  3. Resolve ACL for `"auto-sync-permissions"` mode:
+     ```typescript
+     let targetAcl = acl;
+     let syncStatus: "synced" | "skipped_unresolvable" = "synced";
+     let syncMetadata: Record<string, any> | undefined = undefined;
 
-### PR 6 – Jira Cloud company-managed support
-Supported holder types only; fail closed for unsupported cases.
+     if (visibility === "auto-sync-permissions") {
+       if (!doc.permissions) {
+         // Missing upstream metadata -> default to fail-closed skip
+         logger.warn(`Skipping document ${doc.id} - missing permission metadata`);
+         return { status: "skipped", reason: "missing_permissions" };
+       }
 
-### PR 7 – Refresh/recompute ACL job + admin UX
-Optional but strongly recommended.
+       const materializer = new AclMaterializer(new IdentityResolutionService(organizationId));
+       const resolved = await materializer.materialize(doc.permissions);
 
-### PR 8 – Docs/demo/polish
-Finalize docs, screenshots, changelog, demo.
+       syncMetadata = {
+         provider: connector.type,
+         rawPermissions: doc.permissions,
+         resolvedEmails: resolved.resolvedEmails,
+         skippedGroups: resolved.skippedGroups,
+         lastSyncedAt: new Date().toISOString(),
+       };
+
+       if (!resolved.complete) {
+         // Fail closed because group mapping is incomplete
+         await KbDocumentModel.updatePermissionStatus(docId, "skipped_unresolvable", syncMetadata);
+         return { status: "skipped", reason: "unmapped_groups" };
+       }
+
+       targetAcl = resolved.acl;
+     }
+     ```
+  4. Write `targetAcl`, `syncStatus`, and `syncMetadata` into the database models.
+
+- [ ] **Step 2: Update model CRUD methods to persist columns**
+  File: `platform/backend/src/models/kb-document.ts`
+  Modify insert and update queries to handle `permissionSyncStatus` and `permissionSyncMetadata`.
+
+- [ ] **Step 3: Commit changes**
+  Run:
+  ```bash
+  git add backend/src/knowledge-base/connector-sync.ts backend/src/models/kb-document.ts
+  git commit -m "feat: integrate per-document permission materialization into the sync ingestion flow"
+  ```
 
 ---
 
-## What I would explicitly tell agents NOT to do
-1. **Do not** fall back to `org:*` when permissions are unclear
-2. **Do not** try to land Jira + Confluence + refresh automation in one PR
-3. **Do not** rely on Confluence Cloud direct page restrictions alone; inherited restrictions matter
-4. **Do not** invent a huge new ACL query engine for v1 unless forced
-5. **Do not** assume Jira emails are always present
-6. **Do not** assume abstract group/user principal lists can always flatten correctly without considering inherited/role semantics
+### Phase 4 – Confluence Cloud Implementation
+
+#### Task 1: Retrieve Restrictions and Ancestors
+- [ ] **Step 1: Implement permission extraction helper**
+  Create File: `platform/backend/src/knowledge-base/connectors/confluence/confluence-permissions.ts`
+  Add page permissions fetching and ancestor walk caching:
+  ```typescript
+  import { ConfluenceClient } from "./confluence-client"; // Hypothetical/existing client reference
+
+  export class ConfluencePermissionResolver {
+    private client: any;
+    private spacePermissionsCache = new Map<string, any>();
+    private pageRestrictionsCache = new Map<string, any>();
+
+    constructor(client: any) {
+      this.client = client;
+    }
+
+    async resolvePermissions(pageId: string, spaceKey: string): Promise<{
+      users: string[];
+      groups: string[];
+      isPublic: boolean;
+    }> {
+      const pageRestrictions = await this.fetchPageRestrictions(pageId);
+      const ancestorRestrictions = await this.fetchAncestorRestrictions(pageId);
+
+      // Merge direct page restrictions with inherited ancestor restrictions (AND semantics)
+      const allowedUsers = this.intersectAllowedUsers(pageRestrictions.users, ancestorRestrictions.users);
+      const allowedGroups = this.intersectAllowedGroups(pageRestrictions.groups, ancestorRestrictions.groups);
+
+      // If unrestricted, space permissions determine access
+      const isPublic = pageRestrictions.isPublic && ancestorRestrictions.isPublic;
+
+      return {
+        users: allowedUsers,
+        groups: allowedGroups,
+        isPublic,
+      };
+    }
+
+    private async fetchPageRestrictions(pageId: string) {
+      if (this.pageRestrictionsCache.has(pageId)) {
+        return this.pageRestrictionsCache.get(pageId);
+      }
+      // Call GET /rest/api/content/{id}/restriction
+      const response = await this.client.sendRequest({
+        url: `/rest/api/content/${pageId}/restriction/byOperation/read`,
+        method: "GET",
+      });
+      // Extract users and groups
+      const users = (response.data.restrictions?.user?.results || []).map((u: any) => u.email);
+      const groups = (response.data.restrictions?.group?.results || []).map((g: any) => g.name);
+      const isPublic = users.length === 0 && groups.length === 0;
+
+      const result = { users, groups, isPublic };
+      this.pageRestrictionsCache.set(pageId, result);
+      return result;
+    }
+
+    private async fetchAncestorRestrictions(pageId: string) {
+      // Traverse page ancestors and intersect their read restrictions
+      const ancestors = await this.client.getAncestors(pageId);
+      const usersList: string[][] = [];
+      const groupsList: string[][] = [];
+
+      for (const ancestor of ancestors) {
+        const restrictions = await this.fetchPageRestrictions(ancestor.id);
+        if (!restrictions.isPublic) {
+          usersList.push(restrictions.users);
+          groupsList.push(restrictions.groups);
+        }
+      }
+
+      if (usersList.length === 0 && groupsList.length === 0) {
+        return { users: [], groups: [], isPublic: true };
+      }
+
+      return {
+        users: this.intersectArrays(usersList),
+        groups: this.intersectArrays(groupsList),
+        isPublic: false,
+      };
+    }
+
+    private intersectArrays(arrays: string[][]): string[] {
+      if (arrays.length === 0) return [];
+      return arrays.reduce((a, b) => a.filter(c => b.includes(c)));
+    }
+
+    private intersectAllowedUsers(a: string[], b: string[]) {
+      if (a.length === 0) return b;
+      if (b.length === 0) return a;
+      return a.filter(x => b.includes(x));
+    }
+
+    private intersectAllowedGroups(a: string[], b: string[]) {
+      if (a.length === 0) return b;
+      if (b.length === 0) return a;
+      return a.filter(x => b.includes(x));
+    }
+  }
+  ```
+
+- [ ] **Step 2: Integrate resolver inside Confluence Connector**
+  File: `platform/backend/src/knowledge-base/connectors/confluence/confluence-connector.ts`
+  Update page fetching logic in `sync()`. If visibility is `auto-sync-permissions`, invoke `ConfluencePermissionResolver.resolvePermissions` for each synced page and write permissions metadata to the produced `ConnectorDocument`.
+
+- [ ] **Step 3: Test Confluence sync integrations**
+  File: `platform/backend/src/knowledge-base/connectors/confluence/confluence-connector.test.ts`
+  Add test blocks checking:
+  - Space level visibility mapping
+  - Page level restriction extraction
+  - Deep parent-child constraint intersections
+  Run:
+  ```bash
+  pnpm --filter backend test src/knowledge-base/connectors/confluence/confluence-connector.test.ts
+  ```
+  Expected: PASS
+
+- [ ] **Step 4: Commit changes**
+  Run:
+  ```bash
+  git add backend/src/knowledge-base/connectors/confluence/
+  git commit -m "feat: implement Confluence permission resolution with ancestor traversal and caching"
+  ```
 
 ---
 
-## Recommended implementation order if you are using multiple agents
+### Phase 5 – Core Recomputation & Local Change Propagation (Mandatory)
 
-### Agent 1 – groundwork / schemas / routes / UI
-Owns PR 1.
+#### Task 1: Create Per-Document Recomputation Service
+- [ ] **Step 1: Implement recompute action handler**
+  File: `platform/backend/src/knowledge-base/source-access-control.ts`
+  Add the `refreshAutoSyncDocumentAccessControlLists(connectorId)` method:
+  ```typescript
+  async refreshAutoSyncDocumentAccessControlLists(connectorId: string): Promise<void> {
+    const connector = await KnowledgeBaseConnectorModel.findById(connectorId);
+    if (!connector || connector.visibility !== "auto-sync-permissions") return;
 
-### Agent 2 – ACL materializer + org/team mapping layer
-Owns PR 2.
+    const documents = await KbDocumentModel.findAllByConnector(connectorId);
+    const materializer = new AclMaterializer(new IdentityResolutionService(connector.organizationId));
 
-### Agent 3 – sync pipeline integration
-Owns PR 3.
+    for (const doc of documents) {
+      const syncMeta = doc.permissionSyncMetadata;
+      if (!syncMeta || !syncMeta.rawPermissions) continue;
 
-### Agent 4 – Confluence provider implementation
-Owns PR 4/5.
+      const resolved = await materializer.materialize(syncMeta.rawPermissions);
 
-### Agent 5 – Jira provider implementation
-Owns PR 6.
+      // Re-save recomputed ACLs and mappings
+      const updatedMetadata = {
+        ...syncMeta,
+        resolvedEmails: resolved.resolvedEmails,
+        skippedGroups: resolved.skippedGroups,
+        lastSyncedAt: new Date().toISOString(),
+      };
 
-### Agent 6 – tests / docs / demo / cleanup
-Owns PR 7/8.
+      const newStatus = resolved.complete ? "synced" : "skipped_unresolvable";
+
+      await KbDocumentModel.updateAclAndSyncStatus(
+        doc.id,
+        resolved.complete ? resolved.acl : [],
+        newStatus,
+        updatedMetadata
+      );
+    }
+  }
+  ```
+
+- [ ] **Step 2: Hook recomputation to Local mutation paths**
+  Files:
+  - `platform/backend/src/routes/team.ts` (Trigger sync/async queue job when team membership changes or team gets deleted)
+  - `platform/backend/src/routes/organization.ts` (Trigger sync when members leave or join)
+  Write unit tests validating that mutating team memberships propagates modifications directly to the relevant document ACLs.
+
+- [ ] **Step 3: Commit changes**
+  Run:
+  ```bash
+  git commit -am "feat: implement mandatory auto-sync ACL recomputation and membership propagation"
+  ```
 
 ---
 
-## My final recommendation
+### Phase 6 – Jira Cloud Implementation
 
-If you need the best chance of shipping this successfully:
+#### Task 1: Fetch Project Schemas & Issue Fields
+- [ ] **Step 1: Request Security fields**
+  File: `platform/backend/src/knowledge-base/connectors/jira/jira-connector.ts`
+  Modify `SEARCH_FIELDS` array, appending the `security` property:
+  ```typescript
+  const SEARCH_FIELDS = [
+    // ... existing fields ...
+    "security" // Added
+  ];
+  ```
 
-1. restore the visibility mode first
-2. build the materialization layer second
-3. ship **Confluence first**
-4. ship **Jira second**, Cloud classic/company-managed first, fail closed for unsupported holder types
-5. add refresh/recompute tooling before calling it “done”
+- [ ] **Step 2: Build Jira Permissions Resolver**
+  Create File: `platform/backend/src/knowledge-base/connectors/jira/jira-permissions.ts`
+  Add logic resolving browse rules and security levels:
+  ```typescript
+  export class JiraPermissionResolver {
+    private client: any;
+    private projectBrowseRulesCache = new Map<string, any>();
+    private securityLevelsCache = new Map<string, any>();
 
-The hardest technical decision is not the enum or the UI.
-It is this:
+    constructor(client: any) {
+      this.client = client;
+    }
 
-> **whether you store abstract upstream principals or materialized Archestra-local ACLs**
+    async resolveIssuePermissions(issue: any): Promise<{
+      users: string[];
+      groups: string[];
+      isPublic: boolean;
+    }> {
+      const projectId = issue.fields.project.id;
+      const securityLevelId = issue.fields.security?.id;
 
-My recommendation is:
+      const projectBrowseRules = await this.getProjectBrowseRules(projectId);
+      let allowedActors = projectBrowseRules;
 
-> **materialize to Archestra-local ACLs in v1**
+      if (securityLevelId) {
+        const securityRules = await this.getSecurityLevelRules(projectId, securityLevelId);
+        allowedActors = this.intersectPermissions(projectBrowseRules, securityRules);
+      }
 
-because it reuses the current query system and gives you a realistic path to correctness.
+      return {
+        users: allowedActors.users,
+        groups: allowedActors.groups,
+        isPublic: allowedActors.isPublic,
+      };
+    }
+
+    private async getProjectBrowseRules(projectId: string) {
+      if (this.projectBrowseRulesCache.has(projectId)) {
+        return this.projectBrowseRulesCache.get(projectId);
+      }
+      // Call GET /rest/api/3/project/{projectIdOrKey}/permissionscheme
+      const response = await this.client.sendRequest({
+        url: `/rest/api/3/project/${projectId}/permissionscheme?expand=permissions.grantee`,
+        method: "GET",
+      });
+      // Extract actors allowed to 'BROWSE_PROJECTS'
+      const browseGrants = response.data.permissions?.filter(
+        (p: any) => p.permission === "BROWSE_PROJECTS"
+      ) || [];
+      const result = this.extractGrantees(browseGrants);
+      this.projectBrowseRulesCache.set(projectId, result);
+      return result;
+    }
+
+    private async getSecurityLevelRules(projectId: string, levelId: string) {
+      const cacheKey = `${projectId}:${levelId}`;
+      if (this.securityLevelsCache.has(cacheKey)) {
+        return this.securityLevelsCache.get(cacheKey);
+      }
+      // Call GET /rest/api/3/issuesecurityschemes
+      const response = await this.client.sendRequest({
+        url: `/rest/api/3/issuesecuritylevelmember/member?issueSecurityLevelId=${levelId}`,
+        method: "GET",
+      });
+      const result = this.extractGrantees(response.data.results || []);
+      this.securityLevelsCache.set(cacheKey, result);
+      return result;
+    }
+
+    private extractGrantees(grants: any[]) {
+      const users: string[] = [];
+      const groups: string[] = [];
+      let isPublic = false;
+
+      for (const grant of grants) {
+        const holder = grant.holder || grant.grantee;
+        if (!holder) continue;
+
+        switch (holder.type) {
+          case "user":
+            if (holder.parameter) users.push(holder.parameter);
+            break;
+          case "group":
+            if (holder.parameter) groups.push(holder.parameter);
+            break;
+          case "anyone":
+            isPublic = true;
+            break;
+        }
+      }
+
+      return { users, groups, isPublic };
+    }
+
+    private intersectPermissions(a: any, b: any) {
+      if (a.isPublic) return b;
+      if (b.isPublic) return a;
+      return {
+        users: a.users.filter((u: string) => b.users.includes(u)),
+        groups: a.groups.filter((g: string) => b.groups.includes(g)),
+        isPublic: false,
+      };
+    }
+  }
+  ```
+
+- [ ] **Step 3: Integrate permissions in Jira Sync loop**
+  File: `platform/backend/src/knowledge-base/connectors/jira/jira-connector.ts`
+  Map output of `JiraPermissionResolver.resolveIssuePermissions` onto `ConnectorDocument` during ingestion.
+
+- [ ] **Step 4: Test Jira permission mapping**
+  File: `platform/backend/src/knowledge-base/connectors/jira/jira-connector.test.ts`
+  Assert project-wide constraints, assignee validations, security schema configurations, and missing/null values skips.
+  Run:
+  ```bash
+  pnpm --filter backend test src/knowledge-base/connectors/jira/jira-connector.test.ts
+  ```
+  Expected: PASS
+
+- [ ] **Step 5: Commit changes**
+  Run:
+  ```bash
+  git add backend/src/knowledge-base/connectors/jira/
+  git commit -m "feat: implement Jira security level matching and browse permission resolving"
+  ```
+
+---
+
+### Phase 7 – UI Dashboard & Admin Visibility
+
+#### Task 1: Render skipped documents report
+- [ ] **Step 1: Expose skipped/unresolved counts in detail page**
+  File: `platform/frontend/src/app/knowledge/knowledge-bases/_parts/connector-sync-warnings.tsx`
+  Create a component displaying skipped documents list referencing unmapped groups.
+  Link to Team Settings mapping pages directly from the warnings layout.
+
+- [ ] **Step 2: Add force recompute action**
+  Add a "Recompute Permissions" button triggering backend recomputation routes.
+
+- [ ] **Step 3: Commit changes**
+  Run:
+  ```bash
+  git commit -am "frontend: render permission-sync skipped report layout and recompute action buttons"
+  ```
+
+---
+
+## Acceptance Criteria Checklist
+
+- [ ] **Enterprise Gating:** Attempting to configure `auto-sync-permissions` without an active enterprise license returns a 403 Forbidden response.
+- [ ] **Identity Mapping completeness:** Document is fully skipped (empty ACL) when it references a group missing mapping configurations.
+- [ ] **Confluence restrictions mapping:** Restricted Confluence pages are accessible only to resolved user emails from matching groups/users.
+- [ ] **Jira security rules mapping:** Issues with security levels or restrictive browse permissions are skipped if unmapped actors exist, and match materialized user emails when synced.
+- [ ] **Change propagation consistency:** Changing external team assignments triggers automatic ACL updates on next run or via direct manual trigger.
+- [ ] **Performance benchmark:** Sync loop does not exceed 1 API request per document when walking Confluence hierarchies or resolving Jira metadata caches.

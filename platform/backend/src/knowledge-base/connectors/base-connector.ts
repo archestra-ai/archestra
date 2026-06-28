@@ -3,6 +3,7 @@ import defaultLogger from "@/logging";
 import type {
   Connector,
   ConnectorCredentials,
+  ConnectorDocument,
   ConnectorItemFailure,
   ConnectorItemSkipped,
   ConnectorSyncBatch,
@@ -43,6 +44,10 @@ export const REQUEST_TIMEOUT_MS = 30000;
 
 export abstract class BaseConnector implements Connector {
   abstract type: ConnectorType;
+
+  resolveDocumentPermissions?(
+    document: ConnectorDocument
+  ): Promise<ConnectorDocument["permissions"]>;
 
   protected log: pino.Logger = defaultLogger;
   private rateLimitDelayMs: number;

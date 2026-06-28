@@ -13,7 +13,6 @@ import {
   PinOff,
   Plus,
   Trash2,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -26,6 +25,7 @@ import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { ProjectScopeFilter } from "@/components/project-scope-filter";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
+import { ProjectVisibilityBadge } from "@/components/projects/project-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -267,6 +267,12 @@ function ProjectCard({
           <span className="min-w-0 truncate font-medium">{project.name}</span>
         </Link>
         <span className="relative z-10 flex shrink-0 items-center gap-1">
+          {/* Scope pill (personal/team/org) on every card; role badge below
+              adds the "why you can see it" context for non-owners. */}
+          <ProjectVisibilityBadge
+            visibility={project.visibility}
+            teamNames={project.shareTeamNames}
+          />
           {project.viewerRole === "admin" && (
             <Badge variant="secondary">
               {project.ownerName
@@ -276,16 +282,6 @@ function ProjectCard({
           )}
           {project.viewerRole === "shared" && (
             <Badge variant="secondary">Shared with you</Badge>
-          )}
-          {project.viewerRole === "owner" && project.visibility && (
-            <Badge variant="outline" className="gap-1">
-              <Users className="h-3 w-3" />
-              {project.visibility === "organization"
-                ? "Org"
-                : project.shareTeamNames && project.shareTeamNames.length > 0
-                  ? project.shareTeamNames.join(", ")
-                  : "Teams"}
-            </Badge>
           )}
           <ProjectCardActions
             pinned={!!project.pinnedAt}

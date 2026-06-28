@@ -1,7 +1,7 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 "use client";
 
-import { Globe, Users } from "lucide-react";
+import { Globe, Shield, Users } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
@@ -11,7 +11,10 @@ import {
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { useTeams } from "@/lib/teams/team.query";
 
-export type KnowledgeSourceVisibility = "org-wide" | "team-scoped";
+export type KnowledgeSourceVisibility =
+  | "org-wide"
+  | "team-scoped"
+  | "auto-sync-permissions";
 
 const VISIBILITY_OPTIONS: Record<
   KnowledgeSourceVisibility,
@@ -28,6 +31,12 @@ const VISIBILITY_OPTIONS: Record<
     label: "Teams",
     description: "Share this knowledge source with selected teams",
     icon: Users,
+  },
+  "auto-sync-permissions": {
+    value: "auto-sync-permissions",
+    label: "Auto-sync permissions",
+    description: "Synchronize upstream file-level restrictions directly to Archestra.",
+    icon: Shield,
   },
 };
 
@@ -56,12 +65,15 @@ export function KnowledgeSourceVisibilitySelector({
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // Keep team-scoped visible per spec; disable when enterprise access
-    // control isn't active or there are no teams yet.
+    // Keep team-scoped and auto-sync-permissions visible per spec; disable when
+    // enterprise access control isn't active or there are no teams yet.
     const isTeamScoped = value === "team-scoped";
+    const isAutoSync = value === "auto-sync-permissions";
     const noTeams = isTeamScoped && (teams ?? []).length === 0;
     const enterpriseLocked =
-      isTeamScoped && !knowledgeBaseEnterprise && visibility !== "team-scoped";
+      (isTeamScoped || isAutoSync) &&
+      !knowledgeBaseEnterprise &&
+      visibility !== value;
     // SPDX-SnippetEnd
     return {
       ...option,

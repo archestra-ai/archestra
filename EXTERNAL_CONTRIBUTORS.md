@@ -662,3 +662,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @benjaminjaklic
 - @githubuser420x
 - @RanggaGibran
+- @diegosanchezsegundo25-wq

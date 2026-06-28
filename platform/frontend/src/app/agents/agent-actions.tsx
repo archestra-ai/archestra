@@ -4,6 +4,7 @@ import {
   Copy,
   Download,
   Eye,
+  Gauge,
   MessageSquare,
   Pencil,
   Plug,
@@ -121,6 +122,14 @@ export function AgentActions({
       disabledTooltip: "Built-in agents cannot be scheduled",
       permissions: { scheduledTask: ["read"] },
       href: `/scheduled-tasks?agentId=${agent.id}`,
+    },
+    {
+      icon: <Gauge className="h-4 w-4" />,
+      label: "Manage limits",
+      permissions: { llmLimit: ["read"] },
+      disabled: isBuiltIn,
+      disabledTooltip: "Built-in agents cannot have limits",
+      href: `/llm/limits?appliedTo=agent&entityId=${agent.id}`,
     },
     {
       icon: <Copy className="h-4 w-4" />,

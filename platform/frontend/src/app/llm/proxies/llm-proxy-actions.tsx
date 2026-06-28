@@ -1,5 +1,6 @@
 import { E2eTestId } from "@archestra/shared";
-import { Pencil, Plug, RotateCcw, Trash2 } from "lucide-react";
+import { Gauge, Pencil, Plug, RotateCcw, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { PermissionButton } from "@/components/ui/permission-button";
 import type { useProfilesPaginated } from "@/lib/agent.query";
@@ -74,6 +75,20 @@ export function LlmProxyActions({
         }}
       >
         <Pencil className="h-4 w-4" />
+      </PermissionButton>
+      <PermissionButton
+        permissions={{ llmLimit: ["read"] }}
+        aria-label="Manage limits"
+        variant="outline"
+        size="icon-sm"
+        asChild
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+      >
+        <Link href={`/llm/limits?appliedTo=llm_proxy&entityId=${agent.id}`}>
+          <Gauge className="h-4 w-4" />
+        </Link>
       </PermissionButton>
       <PermissionButton
         permissions={{ llmProxy: ["delete"] }}

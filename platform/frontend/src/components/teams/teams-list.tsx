@@ -6,7 +6,7 @@ import {
 } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Pencil, Plus, Trash2, Users } from "lucide-react";
+import { Gauge, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -204,6 +204,12 @@ export function TeamsList() {
               setSelectedTeam(team);
               setManagementDialogOpen(true);
             },
+          },
+          {
+            icon: <Gauge className="h-4 w-4" />,
+            label: "Manage limits",
+            permissions: { llmLimit: ["read"] },
+            href: `/llm/limits?appliedTo=team&entityId=${team.id}`,
           },
           {
             icon: <Trash2 className="h-4 w-4" />,

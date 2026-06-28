@@ -3,7 +3,14 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Clock, ExternalLink, Eye, FileText, Trash2 } from "lucide-react";
+import {
+  Clock,
+  ExternalLink,
+  Eye,
+  FileText,
+  Loader2,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -13,7 +20,13 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
+import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   type KnowledgeBaseDocumentListItem,
@@ -21,7 +34,7 @@ import {
   useConnectorDocuments,
   useDeleteConnectorDocument,
 } from "@/lib/knowledge/kb-document.query";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 type PaginationMeta =
   archestraApiTypes.GetConnectorDocumentsResponses["200"]["pagination"];
@@ -135,6 +148,50 @@ export function ConnectorDocumentsTable({
             </span>
           </div>
         ),
+      },
+      {
+        id: "status",
+        header: "Status",
+        cell: ({ row }) => {
+          const status = row.original.embeddingStatus ?? "pending";
+          const errorMsg = (
+            row.original.metadata as Record<string, unknown> | undefined
+          )?.embeddingError;
+
+          const label =
+            status === "completed"
+              ? "Indexed"
+              : status === "processing"
+                ? "Processing"
+                : status === "failed"
+                  ? "Failed"
+                  : "Pending";
+
+          const badge = (
+            <Badge
+              variant={status === "failed" ? "destructive" : "secondary"}
+              className={cn("text-xs", status === "failed" && "cursor-help")}
+            >
+              {status === "processing" && (
+                <Loader2 className="h-3 w-3 animate-spin mr-1 inline-block" />
+              )}
+              {label}
+            </Badge>
+          );
+
+          if (status === "failed" && errorMsg) {
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>{badge}</TooltipTrigger>
+                <TooltipContent className="max-w-[300px] break-words">
+                  {errorMsg as string}
+                </TooltipContent>
+              </Tooltip>
+            );
+          }
+
+          return badge;
+        },
       },
       {
         id: "actions",

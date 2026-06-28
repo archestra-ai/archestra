@@ -359,6 +359,8 @@ export interface ChatErrorResponse {
     provider: SupportedProvider;
     providerLabel: string;
   };
+  /** The usage-limit entity ID that blocked the request, when known */
+  usageLimitEntityId?: string;
   /** Original error details for debugging (provider-specific) */
   originalError?: {
     /** Provider name (anthropic, openai, gemini) */
@@ -389,6 +391,7 @@ export const ChatErrorResponseSchema: z.ZodType<ChatErrorResponse> = z.object({
       providerLabel: z.string(),
     })
     .optional(),
+  usageLimitEntityId: z.string().optional(),
   originalError: z
     .object({
       provider: SupportedProvidersSchema.optional(),

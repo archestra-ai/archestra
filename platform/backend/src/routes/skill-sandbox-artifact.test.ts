@@ -1174,9 +1174,9 @@ describe("PUT /api/skill-sandbox/artifacts/:artifactId/content", () => {
       projectId: null,
     });
 
-    // 6000 × "é": 6000 UTF-16 code units (passes the route's coarse `.max`), but
-    // 12000 UTF-8 bytes — over the 10 KB cap, caught by the store's byte check.
-    const content = "é".repeat(6000);
+    // 600k × "é": 600k UTF-16 code units (passes the route's coarse `.max`), but
+    // 1.2M UTF-8 bytes — over the cap, caught by the store's byte check.
+    const content = "é".repeat(600_000);
     expect(content.length).toBeLessThanOrEqual(EDITABLE_TEXT_FILE_MAX_BYTES);
     expect(Buffer.byteLength(content, "utf8")).toBeGreaterThan(
       EDITABLE_TEXT_FILE_MAX_BYTES,

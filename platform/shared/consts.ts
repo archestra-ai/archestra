@@ -64,11 +64,12 @@ export const PROJECT_INSTRUCTIONS_MAX_LENGTH = 100_000;
 
 /**
  * Max size (bytes) of a Markdown/plain-text file the in-place editor saves in one
- * write. Editing happens in a textarea, so this is deliberately small — larger
- * generated files can still be downloaded and read, just not hand-edited here.
- * The backend write route is the authority; the editor mirrors it.
+ * write. Editing happens in a textarea, so this caps it below the sandbox
+ * artifact limit; larger generated files can still be downloaded and read, just
+ * not hand-edited here. The backend write route is the authority; the editor
+ * mirrors it.
  */
-export const EDITABLE_TEXT_FILE_MAX_BYTES = 10_000;
+export const EDITABLE_TEXT_FILE_MAX_BYTES = 1_000_000;
 
 export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */

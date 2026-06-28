@@ -225948,7 +225948,7 @@
                 "properties": {
                   "content": {
                     "type": "string",
-                    "maxLength": 10000
+                    "maxLength": 1000000
                   }
                 },
                 "required": [

@@ -177,13 +177,13 @@ class ProjectService {
         (c) => c.project.visibility === "organization",
       );
     } else {
-      // "All": an admin sees the whole org EXCEPT other members' PRIVATE
-      // projects — those live under Personal → Other users (mirrors the Agents
-      // filter, where "All types" hides other users' personal agents). Only
-      // affects admins; non-admins have no oversight candidates to drop.
-      candidates = candidates.filter(
-        (c) => !(c.viewerRole === "admin" && c.project.visibility === null),
-      );
+      // "All": show only what the caller can actually access — own, org-shared,
+      // and team-shared to a team they belong to. For an admin that drops every
+      // oversight row (other members' private projects AND team-shared projects
+      // for teams they aren't in); those stay reachable via Personal → Other
+      // users and Team → pick that team. Non-admins have no oversight candidates
+      // to begin with, so this is a no-op for them.
+      candidates = candidates.filter((c) => c.viewerRole !== "admin");
     }
 
     // admin "My / Other users" owner sub-filter (honored upstream for admins only).

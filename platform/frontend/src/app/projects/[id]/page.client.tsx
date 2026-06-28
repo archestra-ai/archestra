@@ -402,8 +402,9 @@ function ProjectFilesSidebar({
 
   const openFile = (id: string) => {
     setSelectedId(id);
-    // Instructions open straight in the editor; a file opens in the read view.
-    setEditing(id === INSTRUCTIONS_SELECTION);
+    // Files and instructions both open in the read view; editing is entered
+    // explicitly via the Edit affordance in the action row.
+    setEditing(false);
     setExpanded(false);
   };
   const collapse = () => setExpanded(false);

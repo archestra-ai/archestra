@@ -117,9 +117,9 @@ export function ConversationFilesPanel({
 
   const openFile = (id: string) => {
     setSelectedId(id);
-    // Instructions open straight in the editor (its primary use); a file opens
-    // in the read view with an Edit affordance.
-    setEditing(id === INSTRUCTIONS_SELECTION);
+    // Everything (files and instructions) opens in the read view; editing is
+    // entered explicitly via the Edit affordance in the action row.
+    setEditing(false);
     setExpanded(false);
   };
   const collapse = () => setExpanded(false);

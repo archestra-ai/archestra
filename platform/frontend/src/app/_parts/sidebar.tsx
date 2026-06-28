@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 "use client";
 import {
   COMMUNITY_DOCS_URL,
@@ -8,20 +9,29 @@ import {
 } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import {
+  AppWindow,
   BookOpen,
   Bot,
+  Boxes,
   Bug,
   Cable,
+  CircleDollarSign,
   Database,
+  FolderKanban,
   Github,
+  Inbox,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
   MoreHorizontal,
   Network,
+  PencilRuler,
   Route,
+  ShieldCheck,
   Slack,
+  Sparkles,
   Star,
+  Waypoints,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -52,6 +62,7 @@ import { useFeature } from "@/lib/config/config.query";
 
 import { useGithubStars } from "@/lib/github/github.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
+import { useOnce } from "@/lib/hooks/use-once";
 import { cn } from "@/lib/utils";
 
 interface NavSubItem {
@@ -77,15 +88,116 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// Primary nav items shown in the header (flat list, like sidebar-10 NavMain)
-const headerNavItems: NavItem[] = [
+type SidebarMode = "chats" | "studio";
+
+const SIDEBAR_MODE_STORAGE_KEY = "archestra-sidebar-mode";
+
+// Items of the Chats tab (flat list above Recents)
+const chatsNavItems: NavItem[] = [
   {
     title: "New Chat",
     url: "/chat",
     icon: MessageCircle,
     customIsActive: (pathname: string) => pathname === "/chat",
   },
+  {
+    title: "Projects",
+    url: "/projects",
+    icon: FolderKanban,
+    customIsActive: (pathname: string) => pathname.startsWith("/projects"),
+  },
 ];
+
+/** Which tab a route belongs to; null = no opinion (keep the current tab). */
+function routeSidebarMode(pathname: string): SidebarMode | null {
+  const chatPrefixes = ["/chat", "/projects"];
+  if (
+    chatPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+  ) {
+    return "chats";
+  }
+  const studioPrefixes = [
+    "/agents",
+    "/scheduled-tasks",
+    "/mcp",
+    "/llm",
+    "/knowledge",
+    "/audit",
+    "/connection",
+    "/connection_beta",
+  ];
+  if (
+    studioPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+  ) {
+    return "studio";
+  }
+  return null;
+}
+
+/**
+ * Chats/Studio tab state: explicit picks persist, and navigation that
+ * clearly belongs to one tab (deep links included) switches to it.
+ */
+function useSidebarMode(pathname: string) {
+  const [mode, setMode] = React.useState<SidebarMode>(
+    () => routeSidebarMode(pathname) ?? "chats",
+  );
+
+  React.useEffect(() => {
+    const stored = window.localStorage.getItem(SIDEBAR_MODE_STORAGE_KEY);
+    if (
+      (stored === "chats" || stored === "studio") &&
+      routeSidebarMode(window.location.pathname) === null
+    ) {
+      setMode(stored);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const routeMode = routeSidebarMode(pathname);
+    if (routeMode) setMode(routeMode);
+  }, [pathname]);
+
+  const pick = React.useCallback((next: SidebarMode) => {
+    setMode(next);
+    window.localStorage.setItem(SIDEBAR_MODE_STORAGE_KEY, next);
+  }, []);
+
+  return [mode, pick] as const;
+}
+
+/** Segmented Chats/Studio control (hidden when the sidebar is collapsed). */
+function SidebarModeToggle({
+  mode,
+  onPick,
+}: {
+  mode: SidebarMode;
+  onPick: (mode: SidebarMode) => void;
+}) {
+  const segment = (value: SidebarMode, label: string, Icon: LucideIcon) => (
+    <button
+      type="button"
+      key={value}
+      onClick={() => onPick(value)}
+      className={cn(
+        "flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors",
+        mode === value
+          ? "bg-background font-medium text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden">
+      {segment("chats", "Chats", MessageCircle)}
+      {segment("studio", "Studio", PencilRuler)}
+    </div>
+  );
+}
 
 // Labeled groups shown in the scrollable content (like sidebar-10 Favorites/Workspaces)
 const contentNavGroups: NavGroup[] = [
@@ -96,30 +208,39 @@ const contentNavGroups: NavGroup[] = [
         title: "Agents",
         url: "/agents",
         icon: Bot,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/agents") &&
-          !pathname.startsWith("/agents/triggers") &&
-          !pathname.startsWith("/agents/skills"),
+        customIsActive: (pathname: string) => pathname.startsWith("/agents"),
         subItems: [
           {
-            title: "Skills",
-            url: "/agents/skills",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/agents/skills"),
-          },
-          {
-            title: "Scheduled",
+            title: "Scheduled Tasks",
             url: "/scheduled-tasks",
             customIsActive: (pathname: string) =>
               pathname.startsWith("/scheduled-tasks"),
           },
-          {
-            title: "Triggers",
-            url: "/agents/triggers",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/agents/triggers"),
-          },
         ],
+      },
+      {
+        title: "Skills",
+        url: "/skills",
+        icon: Sparkles,
+        customIsActive: (pathname: string) => pathname.startsWith("/skills"),
+      },
+      {
+        title: "Messaging Channels",
+        url: "/messaging-channels",
+        icon: Inbox,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/messaging-channels"),
+      },
+    ],
+  },
+  {
+    label: "Apps",
+    items: [
+      {
+        title: "Apps",
+        url: "/apps",
+        icon: AppWindow,
+        customIsActive: (pathname: string) => pathname === "/apps",
       },
     ],
   },
@@ -127,24 +248,32 @@ const contentNavGroups: NavGroup[] = [
     label: "MCP & Tools",
     items: [
       {
-        title: "MCPs",
+        title: "Guardrails",
+        url: "/mcp/tool-guardrails",
+        icon: ShieldCheck,
+        testId: E2eTestId.SidebarNavGuardrails,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/mcp/tool-guardrails"),
+      },
+      {
+        title: "MCP Registry",
         url: "/mcp/registry",
         icon: Route,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/mcp/registry"),
+      },
+      {
+        title: "MCP Gateways",
+        url: "/mcp/gateways",
+        icon: Waypoints,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/mcp/gateways"),
         subItems: [
           {
-            title: "Gateways",
-            url: "/mcp/gateways",
+            title: "Credentials",
+            url: "/mcp/credentials/oauth-clients",
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/mcp/gateways"),
-          },
-          {
-            title: "Guardrails",
-            url: "/mcp/tool-guardrails",
-            testId: E2eTestId.SidebarNavGuardrails,
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/mcp/tool-guardrails"),
+              pathname.startsWith("/mcp/credentials"),
           },
         ],
       },
@@ -160,22 +289,25 @@ const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) => pathname === "/llm/proxies",
         subItems: [
           {
-            title: "Model Providers",
-            url: "/llm/model-providers/api-keys",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/llm/model-providers"),
-          },
-          {
             title: "Credentials",
             url: "/llm/credentials/virtual-keys",
             customIsActive: (pathname: string) =>
               pathname.startsWith("/llm/credentials"),
           },
-          {
-            title: "Costs & Limits",
-            url: "/llm/costs",
-          },
         ],
+      },
+      {
+        title: "Model Providers",
+        url: "/llm/model-providers",
+        icon: Boxes,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/llm/model-providers") ||
+          pathname.startsWith("/llm/models"),
+      },
+      {
+        title: "Costs & Limits",
+        url: "/llm/costs",
+        icon: CircleDollarSign,
       },
     ],
   },
@@ -188,7 +320,6 @@ const contentNavGroups: NavGroup[] = [
         icon: Database,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/knowledge") &&
-          !pathname.startsWith("/knowledge/files") &&
           !pathname.startsWith("/knowledge/connectors"),
         subItems: [
           {
@@ -196,12 +327,6 @@ const contentNavGroups: NavGroup[] = [
             url: "/knowledge/connectors",
             customIsActive: (pathname: string) =>
               pathname.startsWith("/knowledge/connectors"),
-          },
-          {
-            title: "Files",
-            url: "/knowledge/files",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/knowledge/files"),
           },
         ],
       },
@@ -232,14 +357,12 @@ const NavPrimary = ({
   pathname,
   searchParams,
   permissionMap,
-  chatSection,
 }: {
   items: NavItem[];
   groups: NavGroup[];
   pathname: string;
   searchParams: URLSearchParams;
   permissionMap: Record<string, boolean>;
-  chatSection?: React.ReactNode;
 }) => {
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -264,7 +387,6 @@ const NavPrimary = ({
           <span>{item.title}</span>
         </SidebarPrefetchLink>
       </SidebarMenuButton>
-      {item.title === "New Chat" && chatSection}
       {item.subItems && item.subItems.length > 0 && (
         <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
           {item.subItems
@@ -298,10 +420,34 @@ const NavPrimary = ({
   const permittedHeaderItems = items.filter(
     (item) => permissionMap[item.url] ?? true,
   );
+  // In Studio mode the header items don't include New Chat, and when collapsed
+  // the Chats/Studio toggle is hidden — so surface a collapsed-only New Chat in
+  // the icon rail. Skipped when New Chat is already a header item (Chats mode),
+  // to avoid a duplicate.
+  const hasNewChat = permittedHeaderItems.some((item) => item.url === "/chat");
 
   return (
     <SidebarGroup>
       <SidebarMenu>
+        {!hasNewChat && (
+          <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
+            <SidebarMenuButton
+              asChild
+              tooltip="New Chat"
+              isActive={pathname === "/chat"}
+            >
+              <SidebarPrefetchLink
+                href="/chat"
+                onClick={() => {
+                  if (isMobile) setOpenMobile(false);
+                }}
+              >
+                <MessageCircle />
+                <span>New Chat</span>
+              </SidebarPrefetchLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
         {permittedHeaderItems.map(renderItem)}
         <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
           <SidebarMenuButton
@@ -447,7 +593,13 @@ export function AppSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isAuthenticated = useIsAuthenticated();
-  const showCommunityLinks = !config.enterpriseFeatures.fullWhiteLabeling;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Show community menu items unless the Enterprise license env var is set
+  // (the small-team free tier doesn't hide them).
+  const showCommunityLinks = !config.enterpriseFeatures.core;
+  // SPDX-SnippetEnd
   // GitHub stars are cosmetic and external, so defer them until after the
   // authenticated shell data has had a chance to load.
   const { data: starCount } = useGithubStars({
@@ -468,28 +620,62 @@ export function AppSidebar() {
 
   // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env var.
   const skillsEnabled = useFeature("agentSkillsEnabled") === true;
+  // Projects are gated behind the ARCHESTRA_PROJECTS_ENABLED env var.
+  const projectsEnabled = useFeature("projectsEnabled") === true;
+  const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
+  const chatListFadeIn = useOnce();
+  // Apps are gated behind the ARCHESTRA_APPS_ENABLED env var.
+  const appsEnabled = useFeature("appsEnabled") === true;
+  // ARCHESTRA_BETA master switch — when on, the new connection page is the
+  // default Connect destination.
+  const betaEnabled = useFeature("betaEnabled") === true;
+
+  // Projects exist only when the projects feature is on.
+  const filteredChatsNavItems = React.useMemo(
+    () =>
+      chatsNavItems.filter(
+        (item) => item.title !== "Projects" || projectsEnabled,
+      ),
+    [projectsEnabled],
+  );
 
   // Filter nav groups based on connect permissions and feature flags
   const filteredNavGroups = React.useMemo(() => {
-    return contentNavGroups.map((group) => ({
-      ...group,
-      items: group.items
-        .filter((item) => {
-          if (item.title === "Connect" && !showConnect) return false;
-          return true;
-        })
-        .map((item) =>
-          item.subItems
-            ? {
-                ...item,
-                subItems: item.subItems.filter(
-                  (sub) => sub.url !== "/agents/skills" || skillsEnabled,
-                ),
-              }
-            : item,
-        ),
-    }));
-  }, [showConnect, skillsEnabled]);
+    // With ARCHESTRA_BETA on, these nav items point at their beta routes.
+    const betaNavUrls: Record<string, string> = {
+      Connect: "/connection_beta",
+      "MCP Registry": "/mcp/registry/beta",
+    };
+    return contentNavGroups
+      .filter((group) => group.label !== "Apps" || appsEnabled)
+      .map((group) => ({
+        ...group,
+        items: group.items
+          .filter((item) => {
+            if (item.title === "Connect" && !showConnect) return false;
+            // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env
+            // var. It's a top-level item now, so gate it here (not in subItems).
+            if (item.url === "/skills" && !skillsEnabled) return false;
+            return true;
+          })
+          .map((item) => {
+            const betaUrl = betaEnabled ? betaNavUrls[item.title] : undefined;
+            const resolved = betaUrl ? { ...item, url: betaUrl } : item;
+            return resolved.subItems
+              ? {
+                  ...resolved,
+                  subItems: resolved.subItems.filter((sub) => {
+                    // With projects on, schedules are managed per-project on the
+                    // project detail page (the per-project runs view), so the
+                    // standalone entry is hidden.
+                    if (sub.url === "/scheduled-tasks") return !projectsEnabled;
+                    return true;
+                  }),
+                }
+              : resolved;
+          }),
+      }));
+  }, [showConnect, skillsEnabled, appsEnabled, projectsEnabled, betaEnabled]);
 
   return (
     <Sidebar collapsible="icon">
@@ -505,29 +691,61 @@ export function AppSidebar() {
         >
           <img src={appIconLogo} alt="Logo" className="size-7" />
         </SidebarPrefetchLink>
+        {isAuthenticated && permissionMap && (
+          <SidebarModeToggle mode={sidebarMode} onPick={pickSidebarMode} />
+        )}
       </SidebarHeader>
       <SidebarContent>
-        {isAuthenticated && permissionMap && (
-          <>
-            <NavPrimary
-              items={headerNavItems}
-              groups={filteredNavGroups}
-              pathname={pathname}
-              searchParams={searchParams}
-              permissionMap={permissionMap}
-              chatSection={<ChatSidebarSection />}
-            />
-            <NavSecondary
-              items={[]}
-              pathname={pathname}
-              searchParams={searchParams}
-              permissionMap={permissionMap}
-              showCommunityLinks={showCommunityLinks}
-              starCount={formattedStarCount}
-              className="mt-auto"
-            />
-          </>
-        )}
+        {isAuthenticated &&
+          permissionMap &&
+          (sidebarMode === "chats" ? (
+            <>
+              <NavPrimary
+                items={filteredChatsNavItems}
+                groups={[]}
+                pathname={pathname}
+                searchParams={searchParams}
+                permissionMap={permissionMap}
+              />
+              {/* The chat list (Pinned + Recents, labeled inside
+                    ChatSidebarSection) and the community links below it scroll
+                    together within this region, while the nav above stays
+                    pinned. The fade hints there is more content below. */}
+              <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-8 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
+                <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto pb-8 [scrollbar-gutter:stable] scrollbar-sidebar">
+                  <ChatSidebarSection slots={15} flat fadeIn={chatListFadeIn} />
+                  <NavSecondary
+                    items={[]}
+                    pathname={pathname}
+                    searchParams={searchParams}
+                    permissionMap={permissionMap}
+                    showCommunityLinks={showCommunityLinks}
+                    starCount={formattedStarCount}
+                    className="mt-2.5"
+                  />
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </>
+          ) : (
+            <>
+              <NavPrimary
+                items={[]}
+                groups={filteredNavGroups}
+                pathname={pathname}
+                searchParams={searchParams}
+                permissionMap={permissionMap}
+              />
+              <NavSecondary
+                items={[]}
+                pathname={pathname}
+                searchParams={searchParams}
+                permissionMap={permissionMap}
+                showCommunityLinks={showCommunityLinks}
+                starCount={formattedStarCount}
+                className="mt-auto"
+              />
+            </>
+          ))}
         {!isAuthenticated && showCommunityLinks && (
           <NavSecondary
             items={[]}

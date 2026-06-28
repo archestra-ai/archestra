@@ -3,7 +3,7 @@ title: "Enterprise-Managed Auth"
 category: Administration
 subcategory: Identity Providers
 description: "Per-user identity for downstream MCP tool calls — OBO, ID-JAG, Cross-App Access, and RFC 8693 token exchange"
-order: 4
+order: 5
 lastUpdated: 2026-06-09
 ---
 
@@ -22,6 +22,8 @@ on their own pages.
 -->
 
 SSO gets the user signed in. **Enterprise-Managed Auth** is what happens after — when an agent or MCP server needs to call a downstream API and the call should carry the *user's* identity, not a shared service-account credential.
+
+> **Enterprise feature** — see the [Pricing Model](/docs/platform-pricing-model).
 
 ## Why this matters
 

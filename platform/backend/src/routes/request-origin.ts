@@ -4,13 +4,13 @@ import config, { getMCPGatewayOauthAllowedPublicHosts } from "@/config";
 import logger from "@/logging";
 
 /**
- * Return the public origin for a request. This is used to build the OAuth protected resource metadata URL.
- * It's needed to nmake sure mcp gateway oauth works out of the box, without the need to set ARCHESTRA_TRUST_PROXY. (it's too broad)
- * Idea is to scope publc oriing only to Oauth and additionally validate hosts to prevent X-Forwarded-Host header spoofing.
+ * Return the public origin for a request — used to build the OAuth
+ * protected-resource metadata URL. Scoping origin derivation to OAuth lets MCP
+ * gateway OAuth work out of the box without the (too-broad) ARCHESTRA_TRUST_PROXY,
+ * while still validating the forwarded host to prevent X-Forwarded-Host spoofing.
+ * The origin-derivation logic is adapted from Fastify.
  *
- * The code which gets the origin is taken form the fastify.
- *
- * MUST BE USED ONLY FOR MCP GATEWAY OAUTH.
+ * MUST BE USED ONLY FOR MCP OAUTH (the MCP gateway and the shareable-App connector).
  */
 export function getPublicRequestOrigin(request: FastifyRequest): string {
   const result = computePublicRequestOrigin(request);

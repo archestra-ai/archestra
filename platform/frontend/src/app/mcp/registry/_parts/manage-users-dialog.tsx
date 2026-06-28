@@ -2,8 +2,10 @@
 
 import {
   ADMIN_ROLE_NAME,
+  DocsPage,
   E2eTestId,
   formatSecretStorageType,
+  getDocsUrl,
   getManageCredentialsAddToTeamOptionTestId,
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
@@ -11,14 +13,17 @@ import { format } from "date-fns";
 import {
   AlertTriangle,
   ChevronDown,
+  KeyRound,
   PlugZap,
   Plus,
   RefreshCw,
   Trash,
   User,
+  Zap,
 } from "lucide-react";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,6 +49,13 @@ import {
   EmptyMedia,
 } from "@/components/ui/empty";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -64,10 +76,16 @@ import {
   setOAuthMcpServerId,
   setOAuthState,
 } from "@/lib/auth/oauth-session";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  useInternalMcpCatalog,
+  useUpdateInternalMcpCatalogItem,
+} from "@/lib/mcp/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMyTeams } from "@/lib/teams/team.query";
+import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
+import { formatOAuthFailureDetail } from "./oauth-reauth-detail";
+import { useCanReauthenticate } from "./use-can-reauthenticate";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
@@ -130,6 +148,7 @@ interface ManageUsersContentProps {
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   onOpenPodLogs?: (serverId: string) => void;
   hideHeader?: boolean;
+  bodyTestId?: string;
 }
 
 export function ManageUsersContent({
@@ -143,6 +162,7 @@ export function ManageUsersContent({
   deploymentStatuses = {},
   onOpenPodLogs,
   hideHeader = false,
+  bodyTestId,
 }: ManageUsersContentProps) {
   // Subscribe to live mcp-servers query to get fresh data. We fetch all
   // servers (no catalogId filter) and keep those installed from this catalog.
@@ -182,34 +202,7 @@ export function ManageUsersContent({
     return mcpServer.scope ?? (mcpServer.teamId ? "team" : "personal");
   };
 
-  // Check if user can re-authenticate a credential
-  // WHY: Permission requirements match team installation rules for consistency:
-  // - Personal: mcpServer:create AND owner
-  // - Team: team admin role OR (mcpServer:update AND team membership)
-  // - Org: mcpServerInstallation:admin
-  // Members cannot re-authenticate team credentials, only editors and admins can.
-  const canReauthenticate = (mcpServer: (typeof allServers)[number]) => {
-    // Must have mcpServer create permission
-    if (!hasMcpServerCreatePermission) return false;
-    const scope = getServerScope(mcpServer);
-
-    if (scope === "org") {
-      return !!hasMcpServerAdminPermission;
-    }
-
-    // For personal credentials, only owner can re-authenticate
-    if (scope === "personal") {
-      return mcpServer.ownerId === currentUserId;
-    }
-
-    if (isCurrentUserTeamAdmin(mcpServer.teamId)) return true;
-
-    // WHY: Editors have mcpServer:update, members don't
-    // This ensures only editors and admins can manage team credentials
-    if (!hasMcpServerUpdatePermission) return false;
-
-    return userTeams?.some((team) => team.id === mcpServer.teamId) ?? false;
-  };
+  const canReauthenticate = useCanReauthenticate();
 
   // Get tooltip message for disabled re-authenticate button
   const getReauthTooltip = (mcpServer: (typeof allServers)[number]): string => {
@@ -368,18 +361,25 @@ export function ManageUsersContent({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            Manage credentials
+            Connections
             <span className="text-muted-foreground font-normal">
               {label || firstServer?.name}
             </span>
           </DialogTitle>
-          <DialogDescription className="sr-only">
-            Manage credentials
-          </DialogDescription>
+          <DialogDescription className="sr-only">Connections</DialogDescription>
         </DialogHeader>
       )}
 
-      <div className={hideHeader ? "space-y-4 px-4 py-4" : "space-y-4 pb-4"}>
+      <div
+        className={hideHeader ? "space-y-4 px-4 py-4" : "space-y-4 pb-4"}
+        data-testid={bodyTestId}
+      >
+        {catalogItem && (
+          <AgentConnectionsSection
+            item={catalogItem}
+            connections={allServers}
+          />
+        )}
         {(() => {
           const split = splitByScope(allServers);
           const hasContent = allServers.length > 0;
@@ -424,7 +424,15 @@ export function ManageUsersContent({
 
           return (
             <div className="space-y-2">
-              <div className="flex justify-end">{installMenu}</div>
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <h4 className="text-sm font-medium">Connections</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Accounts connected to this server.
+                  </p>
+                </div>
+                {installMenu}
+              </div>
               <Card>
                 <CardContent className="p-0">
                   {hasContent ? (
@@ -788,8 +796,8 @@ function UnifiedConnectionsTable({
                       <TooltipTrigger>
                         <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
                       </TooltipTrigger>
-                      <TooltipContent>
-                        Authentication failed. Please re-authenticate.
+                      <TooltipContent className="max-w-xs">
+                        <p className="font-medium">Needs re-authentication</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -889,6 +897,17 @@ function UnifiedConnectionsTable({
                     </Tooltip>
                   </TooltipProvider>
                 )}
+                {isOAuthServer && server.oauthRefreshError && (
+                  <p
+                    className="mb-2 break-words text-[11px] leading-tight text-destructive"
+                    data-testid="oauth-reauth-detail"
+                  >
+                    {formatOAuthFailureDetail(
+                      server.oauthRefreshErrorMessage,
+                      server.oauthRefreshFailedAt,
+                    )}
+                  </p>
+                )}
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -923,5 +942,125 @@ function UnifiedConnectionsTable({
         ))}
       </TableBody>
     </Table>
+  );
+}
+
+// The catalog-level "agent connections" setting as a standard settings row:
+// title, a plain-language description that names the current choice, and a
+// dedicated select whose options are self-explanatory. NULL (default) = agents
+// act on behalf of whoever is chatting, using that person's own connection;
+// an mcp_servers.id = agents always use that one connection. Saves on change;
+// gated by the same authorization as editing the catalog item.
+const ON_BEHALF_OF_VALUE = "__on_behalf_of__";
+
+function AgentConnectionsSection({
+  item,
+  connections,
+}: {
+  item: NonNullable<Parameters<typeof useCanModifyCatalogItem>[0]>;
+  connections: NonNullable<ReturnType<typeof useMcpServers>["data"]>;
+}) {
+  const { canModify } = useCanModifyCatalogItem(item);
+  const updateMutation = useUpdateInternalMcpCatalogItem();
+  const pinnedId = item.dynamicConnectionMcpServerId ?? null;
+  const pinnedConnection = pinnedId
+    ? connections.find((connection) => connection.id === pinnedId)
+    : undefined;
+  const pinRemoved = Boolean(pinnedId) && !pinnedConnection;
+
+  const connectionLabel = (connection: (typeof connections)[number]) => {
+    const scope = connection.scope ?? (connection.teamId ? "team" : "personal");
+    if (scope === "org") return "Organization account";
+    if (scope === "team")
+      return `Team — ${connection.teamDetails?.name ?? "Unknown team"}`;
+    return connection.ownerEmail ?? "Unknown user";
+  };
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+      <div className="max-w-xl space-y-1">
+        <h4 className="text-sm font-medium">Agent connections</h4>
+        <p className="text-sm text-muted-foreground">
+          {!pinnedId ? (
+            <>
+              Agents act on behalf of whoever is chatting — each person uses
+              their own connection if they have one, otherwise a team or
+              organization connection they can access.
+            </>
+          ) : pinRemoved ? (
+            <>
+              The selected connection was removed. Agents act on behalf of
+              whoever is chatting until you choose another one.
+            </>
+          ) : (
+            <>
+              Agents always connect as{" "}
+              <span className="font-medium text-foreground">
+                {pinnedConnection ? connectionLabel(pinnedConnection) : ""}
+              </span>
+              , no matter who is chatting.
+            </>
+          )}{" "}
+          <ExternalDocsLink
+            href={getDocsUrl(
+              DocsPage.McpAuthentication,
+              "resolve-at-call-time",
+            )}
+            className="underline"
+            showIcon={false}
+          >
+            Learn more
+          </ExternalDocsLink>
+        </p>
+      </div>
+      <Select
+        value={pinRemoved ? "" : (pinnedId ?? ON_BEHALF_OF_VALUE)}
+        disabled={!canModify || updateMutation.isPending}
+        onValueChange={(value) =>
+          updateMutation.mutate({
+            id: item.id,
+            data: {
+              dynamicConnectionMcpServerId:
+                value === ON_BEHALF_OF_VALUE ? null : value,
+            },
+          })
+        }
+      >
+        <SelectTrigger className="w-[260px]">
+          <SelectValue placeholder="Connection removed" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem
+            value={ON_BEHALF_OF_VALUE}
+            className="cursor-pointer"
+            description="Everyone connects their own account."
+          >
+            <div className="flex items-center gap-1.5">
+              <Zap className="h-3.5! w-3.5! text-amber-500" />
+              <span>On behalf of the user</span>
+            </div>
+          </SelectItem>
+          {connections.length > 0 && (
+            <>
+              <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+                Always use one account
+              </div>
+              {connections.map((connection) => (
+                <SelectItem
+                  key={connection.id}
+                  value={connection.id}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <KeyRound className="h-3.5! w-3.5! text-muted-foreground" />
+                    <span>{connectionLabel(connection)}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </>
+          )}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }

@@ -26,6 +26,7 @@ const tokenizerFactories: Record<SupportedProvider, () => Tokenizer> = {
   ollama: () => new TiktokenTokenizer(),
   zhipuai: () => new TiktokenTokenizer(),
   deepseek: () => new TiktokenTokenizer(),
+  "github-copilot": () => new TiktokenTokenizer(),
   gemini: () => new TiktokenTokenizer(),
   bedrock: () => new TiktokenTokenizer(),
   minimax: () => new TiktokenTokenizer(),

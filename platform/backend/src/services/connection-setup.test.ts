@@ -1,6 +1,7 @@
 import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
 import { VirtualApiKeyModel } from "@/models";
 import {
+  ensureConnectionPassthroughKey,
   ensureConnectionVirtualKey,
   readVirtualKeyValue,
 } from "@/services/connection-setup";
@@ -70,6 +71,106 @@ describe("ensureConnectionVirtualKey", () => {
       provider: "anthropic",
     });
     expect(secondId).toBe(firstId);
+  });
+
+  test("per-user provider: provisions a personal key mapped to the connecting user's own key", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const copilotKey = await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret()).id,
+      { provider: "github-copilot", scope: "personal", userId: user.id },
+    );
+
+    const id = await ensureConnectionVirtualKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+      userTeamIds: [],
+      provider: "github-copilot",
+    });
+
+    const created = await VirtualApiKeyModel.findById(id);
+    expect(created?.scope).toBe("personal");
+    expect(created?.authorId).toBe(user.id);
+    expect(await VirtualApiKeyModel.getProviderApiKeys(id)).toEqual([
+      expect.objectContaining({
+        provider: "github-copilot",
+        providerApiKeyId: copilotKey.id,
+      }),
+    ]);
+  });
+
+  test("per-user provider: ignores an admin default and never wraps another user's key", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const otherUser = await makeUser();
+    await makeMember(user.id, org.id);
+    const ownKey = await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret()).id,
+      {
+        provider: "github-copilot",
+        scope: "personal",
+        userId: user.id,
+      },
+    );
+    const otherKey = await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret()).id,
+      { provider: "github-copilot", scope: "personal", userId: otherUser.id },
+    );
+
+    const id = await ensureConnectionVirtualKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+      userTeamIds: [],
+      provider: "github-copilot",
+      // An admin default pointing at someone else's personal key must be
+      // ignored for per-user providers.
+      preferredProviderKeyId: otherKey.id,
+    });
+
+    expect(await VirtualApiKeyModel.getProviderApiKeys(id)).toEqual([
+      expect.objectContaining({
+        provider: "github-copilot",
+        providerApiKeyId: ownKey.id,
+      }),
+    ]);
+  });
+
+  test("per-user provider: throws when the user hasn't connected their own account", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+
+    await expect(
+      ensureConnectionVirtualKey({
+        organizationId: org.id,
+        userId: user.id,
+        userEmail: user.email,
+        userTeamIds: [],
+        provider: "github-copilot",
+      }),
+    ).rejects.toThrow(/Connect your own/);
   });
 
   test("adds a second provider mapping without clobbering the first", async ({
@@ -242,5 +343,69 @@ describe("readVirtualKeyValue", () => {
 
     await VirtualApiKeyModel.delete(id);
     expect(await readVirtualKeyValue(id)).toBeNull();
+  });
+});
+
+describe("ensureConnectionPassthroughKey", () => {
+  test("creates a single personal passthrough key per user and reuses it", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+
+    const firstId = await ensureConnectionPassthroughKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+    });
+
+    const created = await VirtualApiKeyModel.findById(firstId);
+    expect(created?.keyType).toBe("passthrough");
+    expect(created?.scope).toBe("personal");
+    expect(created?.authorId).toBe(user.id);
+    expect(created?.name).toBe(`Connection passthrough — ${user.email}`);
+    // No provider credential — passthrough keys only attribute the user.
+    expect(await VirtualApiKeyModel.getProviderApiKeys(firstId)).toEqual([]);
+    expect(
+      (await readVirtualKeyValue(firstId))?.startsWith(ARCHESTRA_TOKEN_PREFIX),
+    ).toBe(true);
+
+    // Re-running returns the same per-user key.
+    const secondId = await ensureConnectionPassthroughKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+    });
+    expect(secondId).toBe(firstId);
+  });
+
+  test("recreates the key when the prior one was deleted", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+
+    const firstId = await ensureConnectionPassthroughKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+    });
+    await VirtualApiKeyModel.delete(firstId);
+
+    const secondId = await ensureConnectionPassthroughKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+    });
+    expect(secondId).not.toBe(firstId);
+    expect((await VirtualApiKeyModel.findById(secondId))?.keyType).toBe(
+      "passthrough",
+    );
   });
 });

@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   ScheduleTrigger,
@@ -148,14 +148,27 @@ class ScheduleTriggerRunModel {
     return run ?? null;
   }
 
+  /**
+   * Link a run to its chat conversation. Compare-and-swap on a null
+   * `chat_conversation_id` so the up-front (execution) path and the lazy (view)
+   * path can't both create a conversation: returns true only for the writer
+   * that actually set it.
+   */
   static async setChatConversationId(
     runId: string,
     conversationId: string,
-  ): Promise<void> {
-    await db
+  ): Promise<boolean> {
+    const [updated] = await db
       .update(schema.scheduleTriggerRunsTable)
       .set({ chatConversationId: conversationId })
-      .where(eq(schema.scheduleTriggerRunsTable.id, runId));
+      .where(
+        and(
+          eq(schema.scheduleTriggerRunsTable.id, runId),
+          isNull(schema.scheduleTriggerRunsTable.chatConversationId),
+        ),
+      )
+      .returning({ id: schema.scheduleTriggerRunsTable.id });
+    return !!updated;
   }
 
   static async setArtifact(runId: string, artifact: string): Promise<boolean> {

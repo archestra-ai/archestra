@@ -10,6 +10,7 @@ import {
   CHAT_API_KEY_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -17,6 +18,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import {
   LlmProviderApiKeyModel,
@@ -103,6 +105,7 @@ import { virtualKeyRateLimiter } from "./llm-proxy-auth";
 import anthropicProxyRoutes from "./routes/anthropic";
 import azureProxyRoutes from "./routes/azure";
 import geminiProxyRoutes from "./routes/gemini";
+import githubCopilotProxyRoutes from "./routes/github-copilot";
 import openAiProxyRoutes from "./routes/openai";
 
 describe("LLM Proxy Handler Prometheus Metrics", () => {
@@ -271,6 +274,48 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
           value: expect.any(Number),
         }),
       );
+    });
+
+    test("passthrough virtual key attributes the interaction to its owner", async ({
+      makeUser,
+    }) => {
+      const owner = await makeUser();
+      const { value: passthroughToken, virtualKey } =
+        await VirtualApiKeyModel.create({
+          organizationId: testAgent.organizationId,
+          name: "pt-attribution",
+          keyType: "passthrough",
+          scope: "personal",
+          authorId: owner.id,
+        });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          // Raw provider key forwarded upstream; passthrough key attributes the user.
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": passthroughToken,
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: false,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const [interaction] = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+
+      expect(interaction.userId).toBe(owner.id);
+      expect(interaction.passthroughVirtualKeyId).toBe(virtualKey.id);
+      expect(interaction.virtualKeyId).toBeNull();
+      expect(interaction.authMethod).toBe("passthrough_virtual_key");
     });
 
     test.skip("non-streaming request increments token metrics", async () => {
@@ -1207,5 +1252,102 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
       "sk-resolved-real",
       expect.any(Object),
     );
+  });
+});
+
+describe("LLM Proxy Handler — per-user provider connect required", () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler((error, _request, reply) => {
+      if (error instanceof ApiError) {
+        return reply
+          .status(error.statusCode)
+          .send({ error: { message: error.message, type: error.type } });
+      }
+      return reply.status(500).send({
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+          type: "api_internal_server_error",
+        },
+      });
+    });
+
+    vi.spyOn(virtualKeyRateLimiter, "check").mockResolvedValue(undefined);
+    vi.spyOn(virtualKeyRateLimiter, "recordFailure").mockResolvedValue(
+      undefined,
+    );
+    metrics.llm.initializeMetrics([]);
+    mockEvaluatePolicies.mockResolvedValue(null);
+    mockGetGlobalToolPolicy.mockResolvedValue("permissive");
+
+    await app.register(githubCopilotProxyRoutes);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  test("returns an actionable provider_auth_required 401 when the acting user's Copilot credential is missing", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({
+      name: "Copilot Proxy Agent",
+      organizationId: org.id,
+    });
+
+    // Personal Copilot key whose secret is gone (revoked / orphaned): the
+    // virtual key authenticates but resolves no usable upstream token.
+    const copilotKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: null,
+      name: "Copilot (orphaned secret)",
+      provider: "github-copilot",
+      scope: "personal",
+      userId: user.id,
+      teamId: null,
+    });
+
+    const { value: virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "my-copilot-vk",
+      scope: "personal",
+      authorId: user.id,
+      providerApiKeys: [
+        { provider: "github-copilot", providerApiKeyId: copilotKey.id },
+      ],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/github-copilot/${agent.id}/chat/completions`,
+      remoteAddress: "203.0.113.5",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${virtualKey}`,
+      },
+      payload: {
+        model: "gpt-4",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(401);
+    const body = response.json();
+    expect(body.error.type).toBe("api_authentication_error");
+    expect(body.error.internal_code).toBe("provider_auth_required");
+    expect(body.error.message).toContain("GitHub Copilot");
+    expect(body.error.message).toContain("/settings");
   });
 });

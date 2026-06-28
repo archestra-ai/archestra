@@ -6,6 +6,7 @@ import {
 } from "@/models";
 import { afterEach, describe, expect, test, vi } from "@/test";
 import { asSandboxId } from "@/types";
+import { SandboxRuntimeError } from "../sandbox-runtime/sandbox-runtime-service";
 import {
   __internals,
   skillSandboxRuntimeService,
@@ -95,6 +96,28 @@ describe("skillSandboxRuntimeService", () => {
         command: "   ",
       }),
     ).rejects.toThrow("command must be a non-empty string");
+  });
+
+  test("runCommand rejects NUL bytes in command or cwd before executing", async () => {
+    const enabled = await importEnabledService();
+    const NUL = String.fromCharCode(0);
+
+    await expect(
+      enabled.runCommand({
+        sandboxId: asSandboxId(crypto.randomUUID()),
+        caller: { userId: "u", organizationId: "o" },
+        command: `echo${NUL} hi`,
+      }),
+    ).rejects.toThrow("must not contain NUL bytes");
+
+    await expect(
+      enabled.runCommand({
+        sandboxId: asSandboxId(crypto.randomUUID()),
+        caller: { userId: "u", organizationId: "o" },
+        command: "echo hi",
+        cwd: `/home/sandbox${NUL}`,
+      }),
+    ).rejects.toThrow("must not contain NUL bytes");
   });
 
   test("queue guard rejects exactly the calls beyond maxSandboxQueueLength", async () => {
@@ -406,6 +429,22 @@ describe("__internals", () => {
     expect(notices[0]).toContain("huge.bin");
     expect(notices[0]).toContain("exceeds");
   });
+
+  test("a history-limit failure is not recorded as a synthetic replay row", () => {
+    // recording the failing command would append yet another replay step and
+    // make the over-limit sandbox permanently unrecoverable. only genuine
+    // mid-stream engine failures (INTERNAL) get a synthetic row.
+    expect(
+      __internals.shouldRecordOnFailure(
+        new SandboxRuntimeError("too long", "ARCHESTRA_SANDBOX_HISTORY_LIMIT"),
+      ),
+    ).toBe(false);
+    expect(
+      __internals.shouldRecordOnFailure(
+        new SandboxRuntimeError("boom", "ARCHESTRA_INTERNAL"),
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("stageConversationAttachments (db)", () => {
@@ -449,7 +488,7 @@ describe("stageConversationAttachments (db)", () => {
     if (upload?.kind !== "upload") throw new Error("expected an upload event");
     // filename is sanitized (space -> underscore) and lands under the dir.
     expect(upload.upload.path).toBe("/home/sandbox/attachments/pi_mc.gif");
-    expect(upload.upload.data.toString("utf8")).toBe("GIF89a-bytes");
+    expect(upload.upload.data?.toString("utf8")).toBe("GIF89a-bytes");
     expect(upload.upload.sourceAttachmentId).not.toBeNull();
   });
 
@@ -624,6 +663,7 @@ describe("uploadFile dedupeId idempotency (db)", () => {
     // First insert — should create a file row and a replay event.
     const row1 = await SkillSandboxReplayEventModel.appendUpload({
       sandboxId: sandbox.id,
+      userId: user.id,
       path: "/home/sandbox/hooks/h/script.py",
       mimeType: "text/x-python",
       originalName: null,
@@ -637,6 +677,7 @@ describe("uploadFile dedupeId idempotency (db)", () => {
     // Second append with the same dedupeId — ON CONFLICT → returns null (no-op).
     const row2 = await SkillSandboxReplayEventModel.appendUpload({
       sandboxId: sandbox.id,
+      userId: user.id,
       path: "/home/sandbox/hooks/h/script.py",
       mimeType: "text/x-python",
       originalName: null,
@@ -663,6 +704,7 @@ describe("uploadFile dedupeId idempotency (db)", () => {
     const otherDedupeId = crypto.randomUUID();
     const row3 = await SkillSandboxReplayEventModel.appendUpload({
       sandboxId: sandbox.id,
+      userId: user.id,
       path: "/home/sandbox/hooks/h/other.py",
       mimeType: "text/x-python",
       originalName: null,
@@ -681,6 +723,7 @@ describe("uploadFile dedupeId idempotency (db)", () => {
     // An upload without a sourceAttachmentId (no dedupeId) also appends normally.
     const row4 = await SkillSandboxReplayEventModel.appendUpload({
       sandboxId: sandbox.id,
+      userId: user.id,
       path: "/home/sandbox/hooks/h/payload.json",
       mimeType: "application/json",
       originalName: null,

@@ -1,7 +1,18 @@
-import { and, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
+import {
+  and,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
@@ -12,14 +23,22 @@ import type {
   ResourceVisibilityScope,
   UpdateMcpServer,
 } from "@/types";
-import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
+import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpHttpSessionModel from "./mcp-http-session";
 import McpServerUserModel from "./mcp-server-user";
-import ToolModel from "./tool";
+import { toolUiResourceUriSql } from "./tool";
 
 // Alias for users table to avoid conflict with the owner LEFT JOIN
 const assignedUsersTable = alias(schema.usersTable, "assigned_users");
+
+// Run-time install precedence for an external app (mcp-apps.md FR-31): the
+// caller's own personal install wins, then a team install, then an org install.
+// Used to order availability scopes, the run-page install list, and the default
+// install deterministically rather than by unordered DB result.
+const SCOPE_PRECEDENCE: ResourceVisibilityScope[] = ["personal", "team", "org"];
+const scopeRank = (scope: ResourceVisibilityScope): number =>
+  SCOPE_PRECEDENCE.indexOf(scope);
 
 /**
  * Data-access layer for `mcp_server` — an installation of an
@@ -64,7 +83,10 @@ class McpServerModel {
     }
   }
 
-  static async create(server: InsertMcpServer): Promise<McpServer> {
+  static async create(
+    server: InsertMcpServer,
+    tx?: Transaction,
+  ): Promise<McpServer> {
     const { userId, ...serverData } = server;
 
     const mcpServerName = McpServerModel.constructServerName({
@@ -76,14 +98,18 @@ class McpServerModel {
     });
 
     // ownerId is part of serverData and will be inserted
-    const [createdServer] = await db
+    const [createdServer] = await (tx ?? db)
       .insert(schema.mcpServersTable)
       .values({ ...serverData, name: mcpServerName })
       .returning();
 
     // Assign user to the MCP server if provided (personal auth)
     if (userId) {
-      await McpServerUserModel.assignUserToMcpServer(createdServer.id, userId);
+      await McpServerUserModel.assignUserToMcpServer(
+        createdServer.id,
+        userId,
+        tx,
+      );
     }
 
     return {
@@ -303,6 +329,321 @@ class McpServerModel {
     return Array.from(serversMap.values());
   }
 
+  /**
+   * UI-providing catalog items the caller may view, listed once each (not once
+   * per install). Drives the external half of the unified Apps listing
+   * (mcp-apps.md FR-26/FR-27). A catalog is included when the caller can see it
+   * in the registry — no admin bypass, so another user's personal catalog is
+   * never surfaced as an app (FR-31) — and it exposes a tool whose
+   * `_meta.ui.resourceUri` (or legacy `ui/resourceUri`) names a `ui://`
+   * resource. `runnable` is true when the caller has at least one accessible
+   * install of the catalog; `availabilityScopes` are those installs' scopes.
+   * The built-in Archestra catalog and server-type `app` backings are excluded.
+   */
+  static async findUiCapableForCaller(params: {
+    userId: string;
+    organizationId: string;
+    search?: string;
+  }): Promise<
+    Array<{
+      catalogId: string;
+      name: string;
+      description: string | null;
+      resourceUri: string;
+      runnable: boolean;
+      availabilityScopes: ResourceVisibilityScope[];
+    }>
+  > {
+    const { userId, organizationId, search } = params;
+
+    const accessibleCatalogIds =
+      await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+        userId,
+        false,
+        organizationId,
+      );
+    if (accessibleCatalogIds.length === 0) return [];
+
+    const uiCatalogs = await McpServerModel.getUiCatalogs({
+      catalogIds: accessibleCatalogIds,
+      search,
+    });
+    if (uiCatalogs.length === 0) return [];
+
+    const scopesByCatalog =
+      await McpServerModel.getAccessibleInstallScopesByCatalog({
+        userId,
+        catalogIds: uiCatalogs.map((c) => c.catalogId),
+      });
+
+    return uiCatalogs.map((c) => ({
+      catalogId: c.catalogId,
+      name: c.name,
+      description: c.description,
+      resourceUri: c.resourceUri,
+      runnable: (scopesByCatalog.get(c.catalogId)?.size ?? 0) > 0,
+      availabilityScopes: Array.from(
+        scopesByCatalog.get(c.catalogId) ?? [],
+      ).sort((a, b) => scopeRank(a) - scopeRank(b)),
+    }));
+  }
+
+  /**
+   * Resolve one UI-providing catalog into its run payload for the caller: the
+   * primary `ui://` resource plus the caller's accessible installs (mcp-apps.md
+   * FR-31), with the default install resolved personal → team → org. Returns
+   * null when the caller may not view the catalog or it is not a UI app.
+   */
+  static async findCatalogAppForCaller(params: {
+    userId: string;
+    organizationId: string;
+    catalogId: string;
+  }): Promise<{
+    catalogId: string;
+    name: string;
+    description: string | null;
+    resourceUri: string;
+    defaultMcpServerId: string | null;
+    installs: Array<{
+      mcpServerId: string;
+      scope: ResourceVisibilityScope;
+      ownerId: string | null;
+      teamId: string | null;
+      name: string;
+      localInstallationStatus: string | null;
+    }>;
+  } | null> {
+    const { userId, organizationId, catalogId } = params;
+
+    const accessibleCatalogIds =
+      await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+        userId,
+        false,
+        organizationId,
+      );
+    if (!accessibleCatalogIds.includes(catalogId)) return null;
+
+    const [uiCatalog] = await McpServerModel.getUiCatalogs({
+      catalogIds: [catalogId],
+    });
+    if (!uiCatalog) return null;
+
+    const installs = await McpServerModel.findAccessibleInstallsForCatalog({
+      userId,
+      catalogId,
+    });
+
+    return {
+      catalogId: uiCatalog.catalogId,
+      name: uiCatalog.name,
+      description: uiCatalog.description,
+      resourceUri: uiCatalog.resourceUri,
+      defaultMcpServerId: McpServerModel.pickDefaultInstall(installs),
+      installs,
+    };
+  }
+
+  /**
+   * The caller's accessible installs of one catalog (mcp-apps.md FR-31): own
+   * personal + team + org installs. Another user's personal install is excluded.
+   */
+  private static async findAccessibleInstallsForCatalog(params: {
+    userId: string;
+    catalogId: string;
+  }): Promise<
+    Array<{
+      mcpServerId: string;
+      scope: ResourceVisibilityScope;
+      ownerId: string | null;
+      teamId: string | null;
+      name: string;
+      localInstallationStatus: string | null;
+    }>
+  > {
+    const accessibleServerIds = await McpServerModel.getAccessibleInstallIds(
+      params.userId,
+    );
+    if (accessibleServerIds.length === 0) return [];
+    const rows = await db
+      .select({
+        mcpServerId: schema.mcpServersTable.id,
+        scope: schema.mcpServersTable.scope,
+        ownerId: schema.mcpServersTable.ownerId,
+        teamId: schema.mcpServersTable.teamId,
+        name: schema.mcpServersTable.name,
+        localInstallationStatus: schema.mcpServersTable.localInstallationStatus,
+      })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          inArray(schema.mcpServersTable.id, accessibleServerIds),
+          eq(schema.mcpServersTable.catalogId, params.catalogId),
+        ),
+      );
+    // Stable selector order: scope precedence, then name.
+    return rows.sort(
+      (a, b) =>
+        scopeRank(a.scope) - scopeRank(b.scope) || a.name.localeCompare(b.name),
+    );
+  }
+
+  /** UI-providing catalogs among `catalogIds`, deduped to the lowest-named ui tool. */
+  private static async getUiCatalogs(params: {
+    catalogIds: string[];
+    search?: string;
+  }): Promise<
+    Array<{
+      catalogId: string;
+      name: string;
+      description: string | null;
+      resourceUri: string;
+    }>
+  > {
+    const { catalogIds, search } = params;
+    if (catalogIds.length === 0) return [];
+    const searchTerm = search?.trim();
+    const uiResourceUri = toolUiResourceUriSql();
+    const rows = await db
+      .select({
+        catalogId: schema.internalMcpCatalogTable.id,
+        name: schema.internalMcpCatalogTable.name,
+        description: schema.internalMcpCatalogTable.description,
+        toolName: schema.toolsTable.name,
+        resourceUri: uiResourceUri,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          inArray(schema.internalMcpCatalogTable.id, catalogIds),
+          ne(schema.internalMcpCatalogTable.id, ARCHESTRA_MCP_CATALOG_ID),
+          // serverType "app" backings are owned apps, served viewer-scoped under
+          // the platform CSP — never surfaced as external apps.
+          ne(schema.internalMcpCatalogTable.serverType, "app"),
+          sql`${uiResourceUri} IS NOT NULL`,
+          searchTerm
+            ? or(
+                ilike(schema.internalMcpCatalogTable.name, `%${searchTerm}%`),
+                ilike(
+                  schema.internalMcpCatalogTable.description,
+                  `%${searchTerm}%`,
+                ),
+              )
+            : undefined,
+        ),
+      );
+
+    const byCatalog = new Map<
+      string,
+      {
+        catalogId: string;
+        name: string;
+        description: string | null;
+        resourceUri: string;
+        primaryToolName: string;
+      }
+    >();
+    for (const row of rows) {
+      if (!row.resourceUri) continue;
+      const existing = byCatalog.get(row.catalogId);
+      if (!existing || row.toolName < existing.primaryToolName) {
+        byCatalog.set(row.catalogId, {
+          catalogId: row.catalogId,
+          name: row.name,
+          description: row.description,
+          resourceUri: row.resourceUri,
+          primaryToolName: row.toolName,
+        });
+      }
+    }
+    return Array.from(byCatalog.values()).map((c) => ({
+      catalogId: c.catalogId,
+      name: c.name,
+      description: c.description,
+      resourceUri: c.resourceUri,
+    }));
+  }
+
+  /**
+   * Catalog ids the caller has an accessible install of (own personal + team +
+   * org). Distinct from catalog *visibility* (McpCatalogTeamModel): an
+   * org-scoped catalog is visible to every member, but if its only install is
+   * another user's personal server it is absent here. Scopes the search_tools /
+   * run_tool dynamic-discovery space so it cannot reach another user's servers.
+   */
+  static async getAccessibleInstallCatalogIds(
+    userId: string,
+  ): Promise<Set<string>> {
+    const installIds = await McpServerModel.getAccessibleInstallIds(userId);
+    if (installIds.length === 0) return new Set();
+    const rows = await db
+      .select({ catalogId: schema.mcpServersTable.catalogId })
+      .from(schema.mcpServersTable)
+      .where(inArray(schema.mcpServersTable.id, installIds));
+    const catalogIds = new Set<string>();
+    for (const row of rows) {
+      if (row.catalogId) catalogIds.add(row.catalogId);
+    }
+    return catalogIds;
+  }
+
+  /** Distinct scopes of the caller's accessible installs, keyed by catalog. */
+  private static async getAccessibleInstallScopesByCatalog(params: {
+    userId: string;
+    catalogIds: string[];
+  }): Promise<Map<string, Set<ResourceVisibilityScope>>> {
+    const map = new Map<string, Set<ResourceVisibilityScope>>();
+    if (params.catalogIds.length === 0) return map;
+    const accessibleServerIds = await McpServerModel.getAccessibleInstallIds(
+      params.userId,
+    );
+    if (accessibleServerIds.length === 0) return map;
+    const rows = await db
+      .select({
+        catalogId: schema.mcpServersTable.catalogId,
+        scope: schema.mcpServersTable.scope,
+      })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          inArray(schema.mcpServersTable.id, accessibleServerIds),
+          inArray(schema.mcpServersTable.catalogId, params.catalogIds),
+        ),
+      );
+    for (const r of rows) {
+      const set = map.get(r.catalogId) ?? new Set<ResourceVisibilityScope>();
+      set.add(r.scope);
+      map.set(r.catalogId, set);
+    }
+    return map;
+  }
+
+  /** Union of the caller's accessible install ids: own personal + team + org. */
+  private static async getAccessibleInstallIds(
+    userId: string,
+  ): Promise<string[]> {
+    const [teamIds, personalIds, orgIds] = await Promise.all([
+      McpServerModel.getUserAccessibleMcpServerIdsByTeam(userId),
+      McpServerUserModel.getUserPersonalMcpServerIds(userId),
+      McpServerModel.getOrgScopedMcpServerIds(),
+    ]);
+    return [...new Set([...teamIds, ...personalIds, ...orgIds])];
+  }
+
+  /** Default install for a run: personal → team → org (mcp-apps.md FR-31). */
+  private static pickDefaultInstall(
+    installs: Array<{ mcpServerId: string; scope: ResourceVisibilityScope }>,
+  ): string | null {
+    for (const scope of SCOPE_PRECEDENCE) {
+      const match = installs.find((i) => i.scope === scope);
+      if (match) return match.mcpServerId;
+    }
+    return null;
+  }
+
   static async findById(
     id: string,
     userId?: string,
@@ -392,6 +733,47 @@ class McpServerModel {
       .where(inArray(schema.mcpServersTable.id, ids));
   }
 
+  /**
+   * Resolve a server only within an organization. `mcp_server` has no org
+   * column, so org membership is inferred exactly like {@link findByIdForAudit}
+   * (team-in-org OR owner-is-member OR a legacy unowned+teamless system row).
+   * Foreign-org servers return null — used to org-scope app tool assignment.
+   */
+  static async findByIdInOrg(
+    id: string,
+    organizationId: string,
+  ): Promise<McpServer | null> {
+    const [row] = await db
+      .select({ server: schema.mcpServersTable })
+      .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
+      )
+      .leftJoin(
+        schema.membersTable,
+        and(
+          eq(schema.membersTable.userId, schema.mcpServersTable.ownerId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, id),
+          or(
+            eq(schema.teamsTable.organizationId, organizationId),
+            isNotNull(schema.membersTable.id),
+            and(
+              isNull(schema.mcpServersTable.teamId),
+              isNull(schema.mcpServersTable.ownerId),
+            ),
+          ),
+        ),
+      )
+      .limit(1);
+    return row?.server ?? null;
+  }
+
   static async findByCatalogId(catalogId: string): Promise<McpServer[]> {
     return await db
       .select()
@@ -452,6 +834,22 @@ class McpServerModel {
   }
 
   /**
+   * Set the visibility scope of an MCP server. For installed servers scope is
+   * install-time-only (changed via uninstall+reinstall), but an app backing
+   * server is in-process with no deployment, so its scope can be re-pointed in
+   * place to track the app's scope.
+   */
+  static async setScope(
+    id: string,
+    scope: ResourceVisibilityScope,
+  ): Promise<void> {
+    await db
+      .update(schema.mcpServersTable)
+      .set({ scope })
+      .where(eq(schema.mcpServersTable.id, id));
+  }
+
+  /**
    * Set the team for an MCP server. Pass null to remove team assignment.
    */
   static async setTeam(
@@ -487,30 +885,11 @@ class McpServerModel {
       // Continue with deletion even if session cleanup fails
     }
 
-    // Clean up agent_tools that reference this server
-    // Must be done before deletion to ensure agents do not retain unusable tool assignments
-    // FK constraint would only null out the reference, not remove the assignment
-    try {
-      let deletedAgentTools = 0;
-      if (mcpServer.serverType === "local") {
-        deletedAgentTools =
-          await AgentToolModel.deleteByExecutionSourceMcpServerId(id);
-      } else {
-        deletedAgentTools =
-          await AgentToolModel.deleteByCredentialSourceMcpServerId(id);
-      }
-      if (deletedAgentTools > 0) {
-        logger.info(
-          `Deleted ${deletedAgentTools} agent tool assignments for MCP server: ${mcpServer.name}`,
-        );
-      }
-    } catch (error) {
-      logger.error(
-        { err: error },
-        `Failed to clean up agent tools for MCP server ${mcpServer.name}:`,
-      );
-      // Continue with deletion even if agent tool cleanup fails
-    }
+    // Uninstall retains the catalog's tools, their policies, and the agent ↔ tool
+    // assignments so reconnecting the catalog item restores them. The mcp_server
+    // delete below nulls each assignment's server binding via the agent_tools FK
+    // (onDelete: set null); a tool's availability is derived from whether the
+    // catalog still has an install, not from removing these rows.
 
     // For local servers, stop and remove the K8s deployment
     if (mcpServer.serverType === "local") {
@@ -539,33 +918,6 @@ class McpServerModel {
     // If the MCP server was deleted and it had an associated secret, delete the secret
     if (deleted && mcpServer.secretId) {
       await secretManager().deleteSecret(mcpServer.secretId);
-    }
-
-    // If the MCP server was deleted and had a catalogId, check if this was the last installation
-    // If so, clean up all tools for this catalog
-    if (deleted && mcpServer.catalogId) {
-      try {
-        // Check if any other servers exist for this catalog
-        const remainingServers = await McpServerModel.findByCatalogId(
-          mcpServer.catalogId,
-        );
-
-        if (remainingServers.length === 0) {
-          // No more servers for this catalog, delete all tools
-          const deletedToolsCount = await ToolModel.deleteByCatalogId(
-            mcpServer.catalogId,
-          );
-          logger.info(
-            `Deleted ${deletedToolsCount} tools for catalog ${mcpServer.catalogId} (last installation removed)`,
-          );
-        }
-      } catch (error) {
-        logger.error(
-          { err: error },
-          `Failed to clean up tools for catalog ${mcpServer.catalogId}:`,
-        );
-        // Don't fail the deletion if tool cleanup fails
-      }
     }
 
     return deleted;

@@ -21,6 +21,7 @@ import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layou
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { SearchInput } from "@/components/search-input";
+import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { StandardDialog } from "@/components/standard-dialog";
 import {
   type TableRowAction,
@@ -178,11 +179,12 @@ function KnowledgeBasesList() {
   return (
     <KnowledgePageLayout
       title="Knowledge Bases"
-      description="Manage knowledge bases and their data connectors."
+      description="A knowledge base is a searchable collection of content, grouped from one or more connectors, that your agents can retrieve answers from."
       createLabel="Create Knowledge Base"
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !knowledgeBases}
     >
+      <SmallTeamTierBanner featureName="Knowledge Base with access control" />
       <div>
         <div className="mb-6 flex flex-col gap-2">
           <div className="flex items-center gap-4">

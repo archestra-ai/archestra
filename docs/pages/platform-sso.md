@@ -3,7 +3,7 @@ title: "SSO"
 category: Administration
 subcategory: Identity Providers
 description: "Sign users in with their existing identity provider via OIDC or SAML"
-order: 3
+order: 4
 lastUpdated: 2026-05-06
 ---
 
@@ -19,6 +19,8 @@ Per-provider walkthroughs (Entra, Okta) live on their own pages and link here.
 -->
 
 Single Sign-On (SSO) lets users sign in to Archestra with the identity they already have at work — Microsoft, Okta, Google, GitHub, GitLab, or any OIDC/SAML provider — instead of managing yet another username and password.
+
+> **Enterprise feature** — see the [Pricing Model](/docs/platform-pricing-model).
 
 ## How sign-in works
 

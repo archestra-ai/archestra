@@ -1,0 +1,5 @@
+{
+  "_source": "Yahoo Finance chart API, 1h candle stamped 2026-06-01T16:00:00Z (close); btc_sol_ratio = btc_usd / sol_usd, derived in the verifier",
+  "btc_usd": 71445.92,
+  "sol_usd": 80.28
+}

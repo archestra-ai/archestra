@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { createPrivateKey, randomUUID } from "node:crypto";
 import {
   OAUTH_CLIENT_ASSERTION_TYPE,

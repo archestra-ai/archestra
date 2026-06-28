@@ -53,6 +53,20 @@ const internalMcpCatalogTable = pgTable(
      * one deployment per caller (default).
      */
     multitenant: boolean("multitenant").notNull().default(false),
+    /**
+     * Agent connections policy for call-time ("dynamic") credential
+     * resolution. NULL (default) = resolve at call time: each caller uses its
+     * own connection (user token → that user's install, team token → that
+     * team's install) and gets an actionable connect prompt when none exists.
+     * Set to an mcp_servers.id to pin a service account: every
+     * runtime-resolved agent call connects through that installation,
+     * regardless of the caller. Intentionally NOT a DB-level FK — mcp_servers
+     * already references this table, so the FK would create a schema import
+     * cycle; the resolver re-validates the id against the catalog's installs
+     * on every call, so a revoked connection degrades to resolve-at-call-time
+     * instead of dangling.
+     */
+    dynamicConnectionMcpServerId: uuid("dynamic_connection_mcp_server_id"),
     serverUrl: text("server_url"), // For remote servers
     docsUrl: text("docs_url"), // Documentation URL for remote servers
     clientSecretId: uuid("client_secret_id").references(() => secretTable.id, {

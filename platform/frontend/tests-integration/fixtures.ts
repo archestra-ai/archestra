@@ -1,6 +1,7 @@
 import { test as base } from "@playwright/test";
 import { MswControl } from "./helpers/msw-control";
 import { AgentsPage } from "./pages/agents-page";
+import { LlmLogsPage } from "./pages/llm-logs-page";
 import { LlmProviderApiKeysPage } from "./pages/llm-provider-api-keys-page";
 import { McpRegistryPage } from "./pages/mcp-registry-page";
 import { SkillsNewPage } from "./pages/skills-new-page";
@@ -11,6 +12,7 @@ import { VirtualKeysPage } from "./pages/virtual-keys-page";
 // classifies as type-shaped. The runtime constructors are required at fixture
 // build time — keep value imports.
 void AgentsPage;
+void LlmLogsPage;
 void LlmProviderApiKeysPage;
 void SkillsNewPage;
 void VirtualKeysPage;
@@ -18,6 +20,7 @@ void VirtualKeysPage;
 type Fixtures = {
   agentsPage: AgentsPage;
   llmKeysPage: LlmProviderApiKeysPage;
+  llmLogsPage: LlmLogsPage;
   mcpRegistryPage: McpRegistryPage;
   mswControl: MswControl;
   skillsNewPage: SkillsNewPage;
@@ -40,6 +43,9 @@ export const test = base.extend<Fixtures & AutoFixtures>({
   },
   llmKeysPage: async ({ page }, use) => {
     await use(new LlmProviderApiKeysPage(page));
+  },
+  llmLogsPage: async ({ page }, use) => {
+    await use(new LlmLogsPage(page));
   },
   mcpRegistryPage: async ({ page }, use) => {
     await use(new McpRegistryPage(page));

@@ -16,6 +16,7 @@ import {
   Cohere,
   DeepSeek,
   Gemini,
+  GithubCopilot,
   Groq,
   Minimax,
   Mistral,
@@ -39,6 +40,7 @@ export const UserInfoSchema = z.object({
 export const InteractionAuthMethodSchema = z.enum([
   "provider_key",
   "virtual_key",
+  "passthrough_virtual_key",
   "jwks",
   "oauth_client_credentials",
   "oauth_user",
@@ -67,6 +69,7 @@ export const InteractionRequestSchema = z.union([
   Cohere.API.ChatRequestSchema,
   Zhipuai.API.ChatCompletionRequestSchema,
   DeepSeek.API.ChatCompletionRequestSchema,
+  GithubCopilot.API.ChatCompletionRequestSchema,
   Minimax.API.ChatCompletionRequestSchema,
   OpenAi.API.ResponsesRequestSchema,
   Azure.API.ChatCompletionRequestSchema,
@@ -90,6 +93,7 @@ export const InteractionResponseSchema = z.union([
   Cohere.API.ChatResponseSchema,
   Zhipuai.API.ChatCompletionResponseSchema,
   DeepSeek.API.ChatCompletionResponseSchema,
+  GithubCopilot.API.ChatCompletionResponseSchema,
   Minimax.API.ChatCompletionResponseSchema,
   OpenAi.API.ResponsesResponseSchema,
   Azure.API.ChatCompletionResponseSchema,
@@ -113,7 +117,25 @@ const BaseSelectInteractionSchema = createSelectSchema(
   extendedFields,
 );
 
-const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.extend({
+/**
+ * Delta-encoding bookkeeping columns. They live on the Drizzle table (and so on
+ * the row the model reads) so the delta manager can walk parent chains, but they
+ * are internal plumbing: the `request` / `processedRequest` returned by the model
+ * is always fully reconstructed, so these must never leak into the public API
+ * surface (OpenAPI spec, generated response types). Omit them from every response
+ * schema. The internal row type stays available via Drizzle's `$inferSelect`.
+ */
+const DELTA_ENCODING_COLUMNS = {
+  threadId: true,
+  parentId: true,
+  requestSharedPrefix: true,
+  processedRequestSharedPrefix: true,
+  requestLastMessageIdx: true,
+} as const;
+
+const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit(
+  DELTA_ENCODING_COLUMNS,
+).extend({
   chatErrors: z.array(SelectConversationChatErrorSchema).optional(),
 });
 
@@ -280,6 +302,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       DeepSeek.API.ChatCompletionRequestSchema.nullable().optional(),
     response: DeepSeek.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["github-copilot:chatCompletions"]),
+    request: GithubCopilot.API.ChatCompletionRequestSchema,
+    processedRequest:
+      GithubCopilot.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: GithubCopilot.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

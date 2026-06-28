@@ -7,7 +7,7 @@ import {
   SkillParseError,
 } from "../backend/src/skills/parser";
 import { dedupeSkillCatalogEntries } from "../backend/src/skills/skill-catalog-index";
-import { POPULAR_REPOS } from "../frontend/src/app/agents/skills/_parts/popular-repos";
+import { POPULAR_REPOS } from "../frontend/src/app/skills/_parts/popular-repos";
 
 interface CrawledSkill {
   repo: string;

@@ -160,6 +160,71 @@ describe("Anthropic request logging", () => {
   });
 });
 
+describe("Anthropic anthropic-beta forwarding", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Drive a real /messages request and return the headers the handler actually
+  // hands the upstream client (the strip/forward decision's observable effect).
+  async function forwardedHeaders(agentId: string, model: string) {
+    let captured: Record<string, string> | undefined;
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(((
+      _apiKey: string | undefined,
+      options: unknown,
+    ) => {
+      captured = (options as { defaultHeaders?: Record<string, string> })
+        ?.defaultHeaders;
+      return createAnthropicTestClient() as never;
+    }) as never);
+
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(anthropicProxyRoutes);
+    try {
+      await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agentId}/v1/messages`,
+        remoteAddress: "127.0.0.1",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "anthropic-version": "2023-06-01",
+          "anthropic-beta": "pdfs-2024-09-25",
+          "x-api-key": "test-anthropic-key",
+          // Loopback-only override that marks the upstream as a custom base URL.
+          "x-archestra-provider-base-url": "http://localhost:9/v1",
+        },
+        payload: {
+          model,
+          messages: [{ role: "user", content: "Hello!" }],
+          max_tokens: 128,
+        },
+      });
+    } finally {
+      await app.close();
+    }
+    return captured;
+  }
+
+  test("strips anthropic-beta for a non-Claude model on a custom base URL", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Beta Strip Agent" });
+    const headers = await forwardedHeaders(agent.id, "kimi-k2");
+    expect(headers?.["anthropic-beta"]).toBeUndefined();
+  });
+
+  test("forwards anthropic-beta for a Claude model on a custom base URL", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Beta Forward Agent" });
+    const headers = await forwardedHeaders(agent.id, "claude-opus-4-20250514");
+    expect(headers?.["anthropic-beta"]).toBe("pdfs-2024-09-25");
+  });
+});
+
 describe("Anthropic cost tracking", () => {
   beforeEach(() => {
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
@@ -883,5 +948,106 @@ describe("Anthropic proxy routing", () => {
 
     // Should get 400 because the preHandler blocks proxy forwarding with a clean error response
     expect(response.statusCode).toBe(400);
+  });
+});
+
+describe("Anthropic delta encoding (claude_code sessions)", () => {
+  beforeEach(() => {
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+      () => createAnthropicTestClient() as never,
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("two sequential requests delta-encode on write and reconstruct on read", async ({
+    makeAgent,
+  }) => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(anthropicProxyRoutes);
+
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-opus-4-20250514",
+      provider: "anthropic",
+      modelId: "claude-opus-4-20250514",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "15.00",
+      customPricePerMillionOutput: "75.00",
+      lastSyncedAt: new Date(),
+    });
+
+    const agent = await makeAgent({ name: "Test Delta Agent" });
+    const sessionUuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+    const userId = `user_test_account_1_session_${sessionUuid}`;
+    const headers = {
+      "content-type": "application/json",
+      authorization: "Bearer test-key",
+      "user-agent": "test-client",
+      "anthropic-version": "2023-06-01",
+      "x-api-key": "test-anthropic-key",
+    };
+
+    const firstMessages = [{ role: "user", content: "kick off the session" }];
+    const secondMessages = [
+      ...firstMessages,
+      { role: "assistant", content: "working on it" },
+      { role: "user", content: "second turn" },
+    ];
+
+    const first = await app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${agent.id}/v1/messages`,
+      headers,
+      payload: {
+        model: "claude-opus-4-20250514",
+        messages: firstMessages,
+        max_tokens: 1024,
+        metadata: { user_id: userId },
+      },
+    });
+    expect(first.statusCode).toBe(200);
+
+    const second = await app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${agent.id}/v1/messages`,
+      headers,
+      payload: {
+        model: "claude-opus-4-20250514",
+        messages: secondMessages,
+        max_tokens: 1024,
+        metadata: { user_id: userId },
+      },
+    });
+    expect(second.statusCode).toBe(200);
+
+    const { InteractionModel } = await import("@/models");
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions).toHaveLength(2);
+    // Identify the rows by structure rather than array position: both rows are
+    // inserted back-to-back with `created_at = now()`, so when they share a
+    // millisecond the `ORDER BY created_at ASC` tie-break is non-deterministic.
+    const head = interactions.find((i) => i.parentId === null);
+    const child = interactions.find((i) => i.parentId !== null);
+    expect(head).toBeDefined();
+    expect(child).toBeDefined();
+
+    // Session was attributed to Claude Code and the second row chains to the first.
+    expect(head?.sessionSource).toBe("claude_code");
+    expect(head?.sessionId).toBe(sessionUuid);
+    expect(head?.threadId).not.toBeNull();
+    expect(child?.parentId).toBe(head?.id);
+    expect(child?.threadId).toBe(head?.threadId);
+
+    // The read path reconstructs the full request that was originally sent.
+    expect((child?.request as { messages: unknown[] }).messages).toEqual(
+      secondMessages,
+    );
   });
 });

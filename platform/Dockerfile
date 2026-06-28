@@ -1,14 +1,14 @@
 # build KinD, Docker CLI, Dagger CLI, and kubectl from source with a patched Go toolchain.
 # the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
-ARG GOLANG_IMAGE=golang:1.25.11-alpine@sha256:c05ba4b73604069d376c4f41346b05374335b5ca0c46fb6dfede5a59f5196931
+ARG GOLANG_IMAGE=golang:1.26.4-alpine@sha256:3ad57304ad93bbec8548a0437ad9e06a455660655d9af011d58b993f6f615648
 ARG NODE_IMAGE=node:24-alpine3.23@sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14
 ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
 ARG DOCKER_CLI_VERSION=v29.3.0
 ARG DOCKER_CLI_COMMIT=5927d80c76b3ce5cf782be818922966e8a0d87a3
-ARG DAGGER_VERSION=v0.21.0
-ARG DAGGER_COMMIT=1be1867fd879109586a39d8a8d999eaf44604fee
+ARG DAGGER_VERSION=v0.21.5
+ARG DAGGER_COMMIT=c7a5ecd0d0c2fb3e6609e167325fb70a51a5c2b8
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
 
@@ -62,12 +62,11 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     test "$(git -C /dagger rev-parse HEAD)" = "${DAGGER_COMMIT}" && \
     cd /dagger && \
     cp -R /dagger-dockercompat ./dockercompat && \
-    go mod edit -go=1.25.11 && \
+    # dagger v0.21.5's vendored Go SDK requires go >= 1.26.1; align the module directive.
+    go mod edit -go=1.26.1 && \
     # cve-2026-34040: replace Dagger's BuildKit Docker monolith imports with split Moby modules.
     go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
     go mod edit -replace=github.com/docker/docker=./dockercompat && \
-    # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
-    go get github.com/containerd/containerd/v2@v2.2.4 && \
     # cve-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
     go get github.com/go-jose/go-jose/v4@v4.1.4 && \
     # cve-2026-45022: go-git validation issue fixed in >= 5.19.0
@@ -79,6 +78,11 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
     go get golang.org/x/crypto@v0.52.0 && \
     go get github.com/moby/go-archive@v0.2.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.0 && \
+    # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
+    # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
+    # Must be the LAST `go get` before `go mod tidy` — earlier `go get`s (go-git/go-billy/moby)
+    # transitively pull containerd 2.2.4 and would otherwise downgrade our explicit requirement.
+    go get github.com/containerd/containerd/v2@v2.2.5 && \
     go mod tidy && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \
@@ -147,6 +151,7 @@ COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
+COPY archestra-rs/app-runtime-rs/package.json archestra-rs/app-runtime-rs/
 
 # Install all dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
@@ -179,6 +184,7 @@ COPY --from=deps /app/backend/node_modules ./backend/node_modules
 COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY --from=deps /app/archestra-rs/sandbox-rs/node_modules ./archestra-rs/sandbox-rs/node_modules
+COPY --from=deps /app/archestra-rs/app-runtime-rs/node_modules ./archestra-rs/app-runtime-rs/node_modules
 
 # Copy source files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
@@ -188,6 +194,8 @@ COPY shared ./shared
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
 COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
 COPY archestra-rs/sandbox-rs ./archestra-rs/sandbox-rs
+COPY archestra-rs/app-runtime-core ./archestra-rs/app-runtime-core
+COPY archestra-rs/app-runtime-rs ./archestra-rs/app-runtime-rs
 
 # Build the Rust N-API skill sandbox addon during the JS workspace build.
 RUN apk add --no-cache build-base cargo rust
@@ -198,13 +206,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # VERSION is exported as env var for child processes (used by Sentry source map upload)
 ENV VERSION=${VERSION}
 
-FROM builder-base AS sandbox-rs-musl-smoke
+FROM builder-base AS rust-napi-musl-smoke
 # cache cargo registry/git + the workspace target dir so heavy deps
 # (dagger-sdk, tokio, …) aren't recompiled on every build of this stage.
+# Smokes every N-API addon under musl: build the .node, then load and call it so
+# a musl-specific loader/linkage regression fails here rather than at runtime.
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/app/archestra-rs/target \
-    pnpm --filter @archestra/sandbox-rs check:musl
+    pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs check:musl
 
 # <----- Builder stage ----->
 FROM builder-base AS builder
@@ -223,7 +233,7 @@ FROM builder-base AS builder
 # Cache cargo registry/git, the Rust workspace target dir, turbo's local cache,
 # and Next.js's build cache so a cold `pnpm build` (which recompiles the Rust
 # N-API addon and builds the frontend) reuses prior work on subsequent builds.
-# The cargo targets match the sandbox-rs-musl-smoke stage above, so that stage
+# The cargo targets match the rust-napi-musl-smoke stage above, so that stage
 # warms the registry for this one; cargo isolates artifacts by target triple.
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
@@ -285,7 +295,7 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # install KinD (Kubernetes in Docker), docker-cli, and kubectl for Kubernetes runtime support
-# these binaries are built from source in go-builder with Go 1.25.11 to fix CVE-2025-68121,
+# these binaries are built from source in go-builder with Go 1.26.4 to fix CVE-2025-68121,
 # the Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811), and
 # the Go stdlib HIGH CVE fixed in 1.25.11 (CVE-2026-42504).
 COPY --from=go-builder /docker-binary /usr/local/bin/docker
@@ -339,6 +349,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
+COPY archestra-rs/app-runtime-rs/package.json archestra-rs/app-runtime-rs/
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 # slim Dagger Engine manifest (rendered in the dagger-manifest stage above)
@@ -365,6 +376,13 @@ RUN set -eux; \
     rm -f picomatch-4.0.4.tgz; \
     grep -q '"version": "4.0.4"' "$target/package.json"
 
+# CVE-2026-12151: corepack's cached pnpm bundles undici 6.26.0 (<6.27.0) at
+# /root/.cache/node/corepack/.../dist/node_modules/undici — pnpm overrides cannot
+# reach it. pnpm is only needed at build time (the prod install above); runtime DB
+# migrations call drizzle-kit directly (see docker/supervisord/supervisord.conf),
+# so drop corepack/pnpm from the final image entirely.
+RUN rm -rf /root/.cache/node/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx
+
 # Copy built backend
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/scripts ./backend/scripts
@@ -373,6 +391,9 @@ COPY --from=builder /app/backend/src/database/migrations ./backend/src/database/
 COPY --from=builder /app/archestra-rs/sandbox-rs/index.cjs ./archestra-rs/sandbox-rs/
 COPY --from=builder /app/archestra-rs/sandbox-rs/index.d.ts ./archestra-rs/sandbox-rs/
 COPY --from=builder /app/archestra-rs/sandbox-rs/*.node ./archestra-rs/sandbox-rs/
+COPY --from=builder /app/archestra-rs/app-runtime-rs/index.cjs ./archestra-rs/app-runtime-rs/
+COPY --from=builder /app/archestra-rs/app-runtime-rs/index.d.ts ./archestra-rs/app-runtime-rs/
+COPY --from=builder /app/archestra-rs/app-runtime-rs/*.node ./archestra-rs/app-runtime-rs/
 RUN chmod +x /app/backend/scripts/start-production.sh
 
 # Copy built frontend

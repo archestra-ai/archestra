@@ -34,6 +34,16 @@ vi.mock("@/lib/limits.query", () => ({
   useDeleteLimit: () => ({ mutateAsync: vi.fn() }),
 }));
 
+// A configured default user limit drives the settings notice; the page reads the
+// unified list from this hook.
+vi.mock("@/lib/default-user-limit.query", () => ({
+  useDefaultUserLimits: () => ({ data: [{ id: "dul-1" }] }),
+}));
+
+vi.mock("@/lib/environment.query", () => ({
+  useEnvironments: () => ({ data: { environments: [] } }),
+}));
+
 vi.mock("@/lib/teams/team.query", () => ({
   useTeams: () => ({ data: [] }),
 }));

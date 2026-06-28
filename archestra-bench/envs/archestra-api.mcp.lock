@@ -1,0 +1,16 @@
+{
+  "context7": [
+    "context7__query-docs",
+    "context7__resolve-library-id"
+  ],
+  "deepwiki": [
+    "deepwiki__ask_question",
+    "deepwiki__read_wiki_contents",
+    "deepwiki__read_wiki_structure"
+  ],
+  "microsoft-learn": [
+    "microsoft-learn__microsoft_code_sample_search",
+    "microsoft-learn__microsoft_docs_fetch",
+    "microsoft-learn__microsoft_docs_search"
+  ]
+}

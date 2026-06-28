@@ -164,6 +164,7 @@ const CatalogMetadataToolSchema = z
 const McpConfigToolSchema = z
   .object({
     serverType: InsertInternalMcpCatalogSchema.shape.serverType
+      .exclude(["app"])
       .optional()
       .describe("Server type: local, remote, or builtin."),
     serverUrl: InsertInternalMcpCatalogSchema.shape.serverUrl
@@ -251,7 +252,7 @@ const SearchPrivateMcpRegistryOutputSchema = z.object({
           .nullable()
           .describe("The server description, if any."),
         serverType: InsertInternalMcpCatalogSchema.shape.serverType.describe(
-          "Whether the server is local, remote, or builtin.",
+          "Server type: local, remote, builtin, or app (user-generated App).",
         ),
         serverUrl: z
           .string()
@@ -353,8 +354,11 @@ const EditMcpConfigToolArgsSchema = z
 
 const CreateMcpServerToolArgsSchema = CatalogMetadataToolSchema.extend({
   serverType: InsertInternalMcpCatalogSchema.shape.serverType
+    .exclude(["app"])
     .optional()
-    .describe("Server type: local, remote, or builtin."),
+    .describe(
+      "Server type: local, remote, or builtin. (The `app` type is reserved for user-generated Apps managed on the Apps surface, not creatable via this tool.)",
+    ),
 })
   .merge(McpConfigToolSchema.partial())
   .strict();
@@ -832,6 +836,16 @@ async function handleEditMcpConfig(
     });
     if (!existing) {
       return errorResult("MCP server not found.");
+    }
+    // App-backed catalogs have no deployable config and are managed through the
+    // Apps API. The schema blocks setting serverType TO "app", but without this
+    // an app author (who has modify rights on their own backing catalog) could
+    // flip it to local/remote and attach a command, escaping the Apps lifecycle
+    // and registry-creation controls. Mirrors the REST route's app-catalog guard.
+    if (existing.serverType === "app") {
+      return errorResult(
+        "App-backed catalog items are managed through the Apps API and cannot be configured here.",
+      );
     }
 
     try {

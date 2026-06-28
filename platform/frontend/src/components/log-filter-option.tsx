@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes, InteractionSource } from "@archestra/shared";
 import { AgentIcon } from "@/components/agent-icon";
+import { ProviderIcon } from "@/components/provider-icon";
 import { SourceLabel } from "@/components/source-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -30,6 +31,17 @@ export function SourceFilterOption({ source }: { source: InteractionSource }) {
   return (
     <span className="flex items-center min-w-0">
       <SourceLabel source={source} className="flex items-center min-w-0" />
+    </span>
+  );
+}
+
+export function ClientFilterOption({ label }: { label: string }) {
+  // Both Claude clients (Code and Desktop) are Anthropic, so show the Claude
+  // provider logo.
+  return (
+    <span className="flex items-center gap-2 min-w-0">
+      <ProviderIcon provider="anthropic" size={16} />
+      <span className="truncate">{label}</span>
     </span>
   );
 }

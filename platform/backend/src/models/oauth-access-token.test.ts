@@ -256,4 +256,64 @@ describe("OAuthAccessTokenModel", () => {
       expect(updated).toBeNull();
     });
   });
+
+  describe("bindReferenceIdByTokenHashWhenUnbound", () => {
+    test("binds the audience when the token is still unbound", async ({
+      makeUser,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+    }) => {
+      const user = await makeUser();
+      const client = await makeOAuthClient({ userId: user.id });
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: "unbound-token-hash",
+        referenceId: null,
+      });
+
+      const bound =
+        await OAuthAccessTokenModel.bindReferenceIdByTokenHashWhenUnbound({
+          tokenHash: "unbound-token-hash",
+          referenceId: "mcp-app-resource:https://host/api/mcp/app/app-1",
+        });
+
+      expect(bound?.referenceId).toBe(
+        "mcp-app-resource:https://host/api/mcp/app/app-1",
+      );
+    });
+
+    test("never overwrites a token that is already bound", async ({
+      makeUser,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+    }) => {
+      const user = await makeUser();
+      const client = await makeOAuthClient({ userId: user.id });
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: "already-bound-token-hash",
+        referenceId: "mcp-resource:some-gateway",
+      });
+
+      const bound =
+        await OAuthAccessTokenModel.bindReferenceIdByTokenHashWhenUnbound({
+          tokenHash: "already-bound-token-hash",
+          referenceId: "mcp-app-resource:https://host/api/mcp/app/app-1",
+        });
+
+      expect(bound).toBeNull();
+      const found = await OAuthAccessTokenModel.getByTokenHash(
+        "already-bound-token-hash",
+      );
+      expect(found?.referenceId).toBe("mcp-resource:some-gateway");
+    });
+
+    test("returns null when the token hash does not match", async () => {
+      const bound =
+        await OAuthAccessTokenModel.bindReferenceIdByTokenHashWhenUnbound({
+          tokenHash: "missing-token-hash",
+          referenceId: "mcp-app-resource:https://host/api/mcp/app/app-1",
+        });
+
+      expect(bound).toBeNull();
+    });
+  });
 });

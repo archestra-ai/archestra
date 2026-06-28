@@ -95,7 +95,6 @@ function extractToolResults(content: unknown): CommonMessage["toolCalls"] {
         name: toolName,
         content: output,
         isError,
-        ...(isError && typeof output === "string" ? { error: output } : {}),
       },
     ];
   });

@@ -64,6 +64,26 @@ const modelsTable = pgTable(
       scale: 12,
     }),
 
+    /**
+     * Price per token for reading a cached input token (in dollars). Synced from
+     * the model registry; null when the registry omits cache pricing for this model.
+     */
+    cacheReadPricePerToken: numeric("cache_read_price_per_token", {
+      precision: 20,
+      scale: 12,
+    }),
+
+    /**
+     * Price per token for writing/creating a cached input token at the default
+     * (5-minute) TTL, in dollars. Synced from the model registry; null when the
+     * registry omits cache pricing. Longer-TTL writes (e.g. Anthropic 1h) are
+     * derived from this via a provider multiplier.
+     */
+    cacheWritePricePerToken: numeric("cache_write_price_per_token", {
+      precision: 20,
+      scale: 12,
+    }),
+
     /** Custom admin-set price per million tokens for input (nullable, overrides models.dev price) */
     customPricePerMillionInput: numeric("custom_price_per_million_input", {
       precision: 10,
@@ -75,6 +95,24 @@ const modelsTable = pgTable(
       precision: 10,
       scale: 2,
     }),
+
+    /** Custom admin-set price per million cache-read tokens (nullable, overrides synced price) */
+    customPricePerMillionCacheRead: numeric(
+      "custom_price_per_million_cache_read",
+      {
+        precision: 10,
+        scale: 2,
+      },
+    ),
+
+    /** Custom admin-set price per million cache-write tokens at the default TTL (nullable, overrides synced price) */
+    customPricePerMillionCacheWrite: numeric(
+      "custom_price_per_million_cache_write",
+      {
+        precision: 10,
+        scale: 2,
+      },
+    ),
 
     /** Whether this model should be excluded from chat model selection. */
     ignored: boolean("ignored").notNull().default(false),

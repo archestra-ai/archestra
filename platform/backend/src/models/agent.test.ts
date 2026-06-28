@@ -9,7 +9,9 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
+import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import MemberModel from "./member";
+import ModelModel from "./model";
 import TeamModel from "./team";
 
 describe("AgentModel", () => {
@@ -18,6 +20,95 @@ describe("AgentModel", () => {
     await AgentModel.create({ name: "Test Agent 2", teams: [], scope: "org" });
 
     expect(await AgentModel.findAll()).toHaveLength(2);
+  });
+
+  describe("resolved LLM metadata", () => {
+    test("resolves provider + per-user flag from the agent's configured key", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const copilotKey = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        userId: user.id,
+        name: "GitHub Copilot",
+        provider: "github-copilot",
+        scope: "personal",
+      });
+      const copilotModel = await ModelModel.create({
+        externalId: "github-copilot/gpt-4",
+        provider: "github-copilot",
+        modelId: "gpt-4",
+        inputModalities: null,
+        outputModalities: null,
+      });
+      const agent = await AgentModel.create({
+        name: "Copilot Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+        llmApiKeyId: copilotKey.id,
+        modelId: copilotModel.id,
+      });
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.resolvedLlmProvider).toBe("github-copilot");
+      expect(fetched?.llmProviderRequiresPerUserCredential).toBe(true);
+      // The model's human name, so a viewer without key access sees "gpt-4"
+      // rather than the model row's UUID.
+      expect(fetched?.resolvedLlmModelName).toBe("gpt-4");
+
+      // The same metadata must appear on list responses, not just findById.
+      const listed = (await AgentModel.findAll()).find(
+        (a) => a.id === agent.id,
+      );
+      expect(listed?.resolvedLlmProvider).toBe("github-copilot");
+      expect(listed?.llmProviderRequiresPerUserCredential).toBe(true);
+    });
+
+    test("falls back to the pinned model's provider with the flag false", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const anthropicModel = await ModelModel.create({
+        externalId: "anthropic/claude-3-5-sonnet",
+        provider: "anthropic",
+        modelId: "claude-3-5-sonnet",
+        inputModalities: null,
+        outputModalities: null,
+      });
+      const agent = await AgentModel.create({
+        name: "Anthropic Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+        modelId: anthropicModel.id,
+      });
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.resolvedLlmProvider).toBe("anthropic");
+      expect(fetched?.llmProviderRequiresPerUserCredential).toBe(false);
+    });
+
+    test("leaves provider null when no LLM is configured", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await AgentModel.create({
+        name: "No LLM Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+      });
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.resolvedLlmProvider ?? null).toBeNull();
+      expect(fetched?.llmProviderRequiresPerUserCredential ?? false).toBe(
+        false,
+      );
+    });
   });
 
   describe("findBasicByOrganizationIdAndIds", () => {
@@ -334,6 +425,83 @@ describe("AgentModel", () => {
 
       const foundAgent = await AgentModel.findById(agent.id, user2.id, false);
       expect(foundAgent).toBeNull();
+    });
+
+    test("findLlmSelectionFieldsById returns selection fields for an admin", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      const fields = await AgentModel.findLlmSelectionFieldsById(
+        agent.id,
+        admin.id,
+        true,
+      );
+      expect(fields).not.toBeNull();
+      expect(fields).toEqual({ llmApiKeyId: null, modelId: null });
+    });
+
+    test("findLlmSelectionFieldsById returns selection fields for a user in an assigned team", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user.id);
+
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [team.id],
+        scope: "team",
+      });
+
+      const fields = await AgentModel.findLlmSelectionFieldsById(
+        agent.id,
+        user.id,
+        false,
+      );
+      expect(fields).not.toBeNull();
+      expect(fields).toHaveProperty("llmApiKeyId");
+      expect(fields).toHaveProperty("modelId");
+    });
+
+    test("findLlmSelectionFieldsById returns null for a user not in assigned teams", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user1 = await makeUser();
+      const user2 = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user1.id);
+
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [team.id],
+        scope: "team",
+      });
+
+      // The access gate must hold for the narrow fetch exactly as for findById.
+      const fields = await AgentModel.findLlmSelectionFieldsById(
+        agent.id,
+        user2.id,
+        false,
+      );
+      expect(fields).toBeNull();
     });
 
     test("update syncs team assignments correctly", async ({
@@ -2917,6 +3085,64 @@ describe("AgentModel", () => {
 
       const fetched = await AgentModel.findById(agent.id);
       expect(fetched?.passthroughHeaders).toEqual(["x-request-id"]);
+    });
+  });
+
+  describe("accessAllTools / toolExposureMode normalization", () => {
+    test("create coerces toolExposureMode to search_and_run_only when accessAllTools is true", async () => {
+      const agent = await AgentModel.create({
+        name: "All Tools Agent",
+        teams: [],
+        scope: "org",
+        accessAllTools: true,
+        toolExposureMode: "full",
+      });
+
+      expect(agent.accessAllTools).toBe(true);
+      expect(agent.toolExposureMode).toBe("search_and_run_only");
+    });
+
+    test("create leaves toolExposureMode untouched when accessAllTools is false", async () => {
+      const agent = await AgentModel.create({
+        name: "Custom Tools Agent",
+        teams: [],
+        scope: "org",
+        accessAllTools: false,
+        toolExposureMode: "full",
+      });
+
+      expect(agent.toolExposureMode).toBe("full");
+    });
+
+    test("update coerces toolExposureMode to search_and_run_only when accessAllTools is enabled", async () => {
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+        accessAllTools: false,
+        toolExposureMode: "full",
+      });
+
+      const updated = await AgentModel.update(agent.id, {
+        accessAllTools: true,
+      });
+
+      expect(updated?.toolExposureMode).toBe("search_and_run_only");
+    });
+
+    test("update keeps an all-tools agent on search_and_run_only even when full is requested", async () => {
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+        accessAllTools: true,
+      });
+
+      const updated = await AgentModel.update(agent.id, {
+        toolExposureMode: "full",
+      });
+
+      expect(updated?.toolExposureMode).toBe("search_and_run_only");
     });
   });
 });

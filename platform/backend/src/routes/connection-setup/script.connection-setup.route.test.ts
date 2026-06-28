@@ -1,5 +1,11 @@
 import { vi } from "vitest";
-import { MemberModel, SkillModel, SkillShareLinkModel } from "@/models";
+import {
+  ConnectionSetupModel,
+  MemberModel,
+  SkillModel,
+  SkillShareLinkModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -151,7 +157,82 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(second.statusCode).toBe(410);
   });
 
-  test("provider-key (passthrough) script rewires the base URL without any virtual key", async ({
+  test("windows platform yields an irm|iex command and a PowerShell script", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Prod Gateway",
+    });
+
+    const { rawToken, command } = await createSetup({
+      clientId: "claude-code",
+      platform: "windows",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+    });
+    expect(command).toContain("irm '");
+    expect(command).toContain("| iex");
+    expect(command).not.toContain("curl");
+
+    const response = await fetchScript(rawToken);
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/plain");
+    const script = response.body;
+    expect(script).toContain("$ErrorActionPreference = 'Stop'");
+    expect(script).not.toContain("set -euo pipefail");
+    expect(script).toContain("claude mcp add --transport http 'prod_gateway'");
+  });
+
+  test("default platform (omitted) renders bash", async ({ makeAgent }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Prod Gateway",
+    });
+    const { rawToken, command } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+    });
+    expect(command).toContain("curl -fsSL");
+    const response = await fetchScript(rawToken);
+    expect(response.body).toContain("set -euo pipefail");
+  });
+
+  test("provider-key (passthrough) script rewires the base URL without any virtual key (attribution off)", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId,
+      agentType: "llm_proxy",
+      name: "Main Proxy",
+    });
+
+    const { rawToken } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      llmProxyId: proxy.id,
+      provider: "anthropic",
+      attributePassthrough: false,
+    });
+
+    const response = await fetchScript(rawToken);
+    expect(response.statusCode).toBe(200);
+    const script = response.body;
+    expect(script).toContain(`/v1/anthropic/${proxy.id}`);
+    expect(script).toContain("ANTHROPIC_BASE_URL");
+    // passthrough, attribution off: no injected key, no auth token, no header
+    expect(script).not.toMatch(/arch_[0-9a-f]{64}/);
+    expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
+    expect(script).not.toContain(
+      "export ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS",
+    );
+    expect(script).toContain("credentials keep working");
+  });
+
+  test("claude-code anthropic passthrough injects the X-Archestra-Virtual-Key header by default", async ({
     makeAgent,
   }) => {
     const proxy = await makeAgent({
@@ -170,13 +251,96 @@ describe("GET /api/connection-setups/script/:token", () => {
     const response = await fetchScript(rawToken);
     expect(response.statusCode).toBe(200);
     const script = response.body;
-    expect(script).toContain(`/v1/anthropic/${proxy.id}`);
     expect(script).toContain("ANTHROPIC_BASE_URL");
-    // passthrough: no injected key, no auth-token env, no revocation line
-    expect(script).not.toMatch(/arch_[0-9a-f]{64}/);
+    // the provisioned passthrough key rides in the attribution header, but the
+    // subscription still passes through (no auth token override)
+    expect(script).toContain(
+      "export ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS",
+    );
+    expect(script).toMatch(/X-Archestra-Virtual-Key: arch_[0-9a-f]{64}/);
     expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
-    expect(script).not.toContain("Virtual API Keys page");
-    expect(script).toContain("credentials keep working");
+  });
+
+  test("a revoked attribution key degrades gracefully: script renders without the header, no 410", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId,
+      agentType: "llm_proxy",
+      name: "Main Proxy",
+    });
+
+    const { rawToken } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      llmProxyId: proxy.id,
+      provider: "anthropic",
+    });
+
+    // Revoke the provisioned passthrough key between POST and GET.
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(setup?.virtualApiKeyId).toBeTruthy();
+    await VirtualApiKeyModel.delete(setup?.virtualApiKeyId as string);
+
+    const response = await fetchScript(rawToken);
+    // Best-effort: the subscription still passes through, so we render (200),
+    // just without the attribution header — never a 410.
+    expect(response.statusCode).toBe(200);
+    const script = response.body;
+    expect(script).toContain("ANTHROPIC_BASE_URL");
+    expect(script).not.toContain(
+      "export ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS",
+    );
+  });
+
+  test("github-copilot passthrough script embeds the in-script GitHub device flow", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId,
+      agentType: "llm_proxy",
+      name: "Main Proxy",
+    });
+
+    const { rawToken } = await createSetup({
+      clientId: "copilot-cli",
+      baseUrl: "http://localhost:9000/v1",
+      llmProxyId: proxy.id,
+      provider: "github-copilot",
+    });
+
+    const response = await fetchScript(rawToken);
+    expect(response.statusCode).toBe(200);
+    const script = response.body;
+    expect(script).toContain(`/v1/github-copilot/${proxy.id}`);
+    // device-flow endpoints come from backend config
+    expect(script).toContain("/login/device/code");
+    expect(script).toContain("copilot_internal/v2/token");
+    // token obtained at runtime, not injected server-side
+    expect(script).toContain("ARCHESTRA_GHCP_TOKEN");
+    expect(script).not.toMatch(/arch_[0-9a-f]{64}/);
+  });
+
+  test("github-copilot is rejected for clients that do not support it", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId,
+      agentType: "llm_proxy",
+      name: "Main Proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider: "github-copilot",
+      },
+    });
+    expect(response.statusCode).toBe(400);
   });
 
   test("410s without burning the token when re-validation fails, then succeeds after access is restored", async ({

@@ -2,7 +2,7 @@
 {{/*
 Database migration Job.
 
-Runs `pnpm db:migrate` as a Helm pre-upgrade hook so the target version's
+Runs `drizzle-kit migrate` as a Helm pre-upgrade hook so the target version's
 schema is applied before web and worker Deployments roll. Fresh installs are
 covered by the web pod running migrations on startup plus the worker
 wait-for-migrations init container.
@@ -45,9 +45,9 @@ spec:
           imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
           workingDir: /app/backend
           {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
-          {{- include "archestra-platform.vaultSecretsCommand" "pnpm db:migrate" | nindent 10 }}
+          {{- include "archestra-platform.vaultSecretsCommand" "./node_modules/.bin/drizzle-kit migrate" | nindent 10 }}
           {{- else }}
-          command: ["pnpm", "db:migrate"]
+          command: ["./node_modules/.bin/drizzle-kit", "migrate"]
           {{- end }}
           env:
             {{- range $key, $value := .Values.archestra.migrationJob.env }}

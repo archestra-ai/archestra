@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 "use client";
 
 import { Globe, Users } from "lucide-react";
@@ -51,22 +52,28 @@ export function KnowledgeSourceVisibilitySelector({
   const { data: teams } = useTeams();
   const knowledgeBaseEnterprise = useEnterpriseFeature("knowledgeBase");
 
-  const options = visibilityEntries
-    .filter(
-      ([value]) =>
-        value !== "team-scoped" ||
-        knowledgeBaseEnterprise ||
-        visibility === "team-scoped",
-    )
-    .map(([value, option]) => ({
+  const options = visibilityEntries.map(([value, option]) => {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Keep team-scoped visible per spec; disable when enterprise access
+    // control isn't active or there are no teams yet.
+    const isTeamScoped = value === "team-scoped";
+    const noTeams = isTeamScoped && (teams ?? []).length === 0;
+    const enterpriseLocked =
+      isTeamScoped && !knowledgeBaseEnterprise && visibility !== "team-scoped";
+    // SPDX-SnippetEnd
+    return {
       ...option,
       value,
-      disabled: value === "team-scoped" && (teams ?? []).length === 0,
-      disabledLabel:
-        value === "team-scoped" && (teams ?? []).length === 0
+      disabled: noTeams || enterpriseLocked,
+      disabledLabel: enterpriseLocked
+        ? "Enterprise feature"
+        : noTeams
           ? "No teams available"
           : undefined,
-    }));
+    };
+  });
 
   return (
     <SharedVisibilitySelector

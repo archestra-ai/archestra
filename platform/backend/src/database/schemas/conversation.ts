@@ -7,9 +7,11 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { ConversationOrigin } from "@/types/conversation";
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
+import projectsTable from "./project";
 
 // Note: Additional pg_trgm GIN index for search is created in migration 0116_pg_trgm_indexes.sql:
 // - conversations_title_trgm_idx: GIN index on title column
@@ -55,6 +57,15 @@ const conversationsTable = pgTable("conversations", {
       }>
     >(),
   artifact: text("artifact"),
+  /**
+   * Project this chat was started in (forever — no moves in v1). SET NULL on
+   * project delete: the chat survives as an ordinary conversation.
+   */
+  projectId: uuid("project_id").references(() => projectsTable.id, {
+    onDelete: "set null",
+  }),
+  /** How the chat was started; `schedule_trigger` marks a scheduled run's chat. */
+  origin: text("origin").$type<ConversationOrigin>().notNull().default("user"),
   pinnedAt: timestamp("pinned_at", { mode: "date" }),
   lastMessageAt: timestamp("last_message_at", { mode: "date" })
     .notNull()

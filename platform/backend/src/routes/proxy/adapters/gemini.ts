@@ -511,7 +511,7 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
         cacheWriteTokens: 0,
       };
     }
-    const { input, output, cacheRead, cacheWrite } = getUsageTokens(
+    const { input, output, cacheRead, cacheWrite, reasoning } = getUsageTokens(
       this.response.usageMetadata,
     );
     return {
@@ -519,6 +519,7 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
       outputTokens: output,
       cacheReadTokens: cacheRead,
       cacheWriteTokens: cacheWrite,
+      reasoningTokens: reasoning,
     };
   }
 
@@ -617,6 +618,7 @@ class GeminiStreamAdapter
         outputTokens: chunk.usageMetadata.candidatesTokenCount ?? 0,
         cacheReadTokens,
         cacheWriteTokens: 0,
+        reasoningTokens: chunk.usageMetadata.thoughtsTokenCount ?? 0,
       };
     }
 
@@ -1013,6 +1015,7 @@ export function getUsageTokens(usage: {
   promptTokenCount?: number;
   candidatesTokenCount?: number;
   cachedContentTokenCount?: number;
+  thoughtsTokenCount?: number;
 }) {
   // Gemini's cachedContentTokenCount is a SUBSET already inside promptTokenCount,
   // so subtract it to get the uncached input and avoid double-counting.
@@ -1022,6 +1025,7 @@ export function getUsageTokens(usage: {
     output: usage.candidatesTokenCount ?? 0,
     cacheRead,
     cacheWrite: 0,
+    reasoning: usage.thoughtsTokenCount ?? 0,
   };
 }
 

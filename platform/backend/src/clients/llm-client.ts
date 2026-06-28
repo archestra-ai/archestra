@@ -13,6 +13,7 @@ import {
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
+  providerRequiresPerUserCredential,
   requiresOpenAiResponsesApi,
   SESSION_ID_HEADER,
   SOURCE_HEADER,
@@ -22,6 +23,7 @@ import {
 } from "@archestra/shared";
 import { context, propagation } from "@opentelemetry/api";
 import type { streamText } from "ai";
+import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   createAzureFetchWithApiVersion,
@@ -34,11 +36,13 @@ import {
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import config from "@/config";
 import logger from "@/logging";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 
 /**
  * Placeholder API key for providers that don't require authentication (vLLM, Ollama).
@@ -209,6 +213,13 @@ export async function createLLMModelForAgent(params: {
   model: LLMModel;
   provider: SupportedProvider;
   apiKeySource: string;
+  /**
+   * True when this resolves to genuine Anthropic (vs an Anthropic-compatible
+   * endpoint behind a custom base URL serving a non-Claude model). Gates
+   * Anthropic-only request-body features in chat normalization, mirroring the
+   * proxy's `anthropic-beta` header gating so the two can't drift.
+   */
+  anthropicNativeEndpoint: boolean;
 }> {
   const {
     organizationId,
@@ -269,6 +280,12 @@ export async function createLLMModelForAgent(params: {
     !isOllama &&
     !isAzureWithEntra
   ) {
+    // Per-user providers (GitHub Copilot) need the acting user's own linked
+    // account; surface a typed error so callers can prompt them to connect
+    // rather than showing a generic "configure a key" message.
+    if (providerRequiresPerUserCredential(provider)) {
+      throw new LlmProviderAuthRequiredError(provider);
+    }
     throw new ApiError(
       400,
       "LLM Provider API key not configured. Please configure it in Provider Settings.",
@@ -289,7 +306,13 @@ export async function createLLMModelForAgent(params: {
     chatApiKeyId,
   });
 
-  return { model, provider, apiKeySource };
+  const anthropicNativeEndpoint = isAnthropicNativeEndpoint({
+    provider,
+    model: modelName,
+    baseUrl,
+  });
+
+  return { model, provider, apiKeySource, anthropicNativeEndpoint };
 }
 
 // =============================================================================
@@ -443,6 +466,18 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     defaultBaseUrl: config.llm.deepseek.baseUrl,
     apiKeyRequiredMessage:
       "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
+  },
+
+  "github-copilot": {
+    // The model always talks to the local LLM proxy (buildProxyBaseUrl), and
+    // the proxy's github-copilot adapter exchanges the GitHub OAuth token for
+    // the short-lived Copilot bearer — exchanging here too would hand the
+    // proxy an already-exchanged bearer it cannot exchange again.
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    defaultBaseUrl: config.llm["github-copilot"].baseUrl,
+    apiKeyRequiredMessage:
+      "GitHub Copilot requires a GitHub OAuth token. Connect your GitHub account or configure ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY.",
   },
 
   azure: {
@@ -608,7 +643,19 @@ function createTracedFetch(): typeof globalThis.fetch {
     for (const [key, value] of Object.entries(carrier)) {
       headers.set(key, value);
     }
-    return globalThis.fetch(input, { ...init, headers });
+    // Opt-in upstream timeout dispatcher; undefined leaves undici defaults
+    // untouched. See @/clients/llm-upstream-dispatcher.
+    const dispatcher = getLlmUpstreamDispatcher();
+
+    if (!dispatcher) {
+      return globalThis.fetch(input, { ...init, headers });
+    }
+
+    return globalThis.fetch(input, {
+      ...init,
+      headers,
+      dispatcher,
+    } as RequestInit);
   };
 }
 

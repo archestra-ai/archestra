@@ -33,6 +33,7 @@ import {
   getObservableGenAI,
   initializeMetrics,
   reportBlockedTools,
+  reportLLMCacheCost,
   reportLLMCost,
   reportLLMTokens,
   reportTimeToFirstToken,
@@ -1205,5 +1206,75 @@ describe("reportLLMTokens cache tokens", () => {
         labels: expect.objectContaining({ cache_type: expect.any(String) }),
       }),
     );
+  });
+});
+
+describe("reportLLMCacheCost", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("emits cache cost and gross read savings", () => {
+    reportLLMCacheCost(
+      "anthropic",
+      testAgent,
+      "claude-sonnet",
+      { cacheCost: 0.012, cacheReadSavings: 0.09 },
+      "api",
+    );
+
+    const expectedLabels = {
+      provider: "anthropic",
+      external_agent_id: "",
+      agent_id: testAgent.id,
+      agent_name: testAgent.name,
+      agent_type: testAgent.agentType,
+      source: "api",
+      model: "claude-sonnet",
+    };
+
+    expect(counterInc).toHaveBeenCalledWith({
+      labels: expectedLabels,
+      value: 0.012,
+      exemplarLabels: expect.any(Object),
+    });
+    expect(counterInc).toHaveBeenCalledWith({
+      labels: expectedLabels,
+      value: 0.09,
+      exemplarLabels: expect.any(Object),
+    });
+  });
+
+  test("does not emit when cost and savings are absent or non-positive", () => {
+    reportLLMCacheCost(
+      "openai",
+      testAgent,
+      "gpt-4",
+      { cacheCost: 0, cacheReadSavings: undefined },
+      "api",
+    );
+
+    expect(counterInc).not.toHaveBeenCalled();
+  });
+
+  test("emits only savings when there is no cache cost", () => {
+    reportLLMCacheCost(
+      "anthropic",
+      testAgent,
+      "claude-sonnet",
+      { cacheCost: undefined, cacheReadSavings: 0.05 },
+      "api",
+    );
+
+    expect(counterInc).toHaveBeenCalledTimes(1);
+    expect(counterInc).toHaveBeenCalledWith({
+      labels: expect.objectContaining({ provider: "anthropic" }),
+      value: 0.05,
+      exemplarLabels: expect.any(Object),
+    });
   });
 });

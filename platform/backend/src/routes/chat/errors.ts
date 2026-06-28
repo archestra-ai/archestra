@@ -24,10 +24,12 @@ import {
   NoOutputGeneratedError,
   NoSuchToolError,
   RetryError,
+  UnsupportedFunctionalityError,
 } from "ai";
 import logger from "@/logging";
 import { getActiveSessionId } from "@/observability/request-context";
 import { captureRawProviderErrorInSentry } from "@/observability/sentry";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 
 // =============================================================================
 // ProviderError — carries a fully-mapped ChatErrorResponse with correct provider
@@ -76,7 +78,7 @@ export class EmptyModelResponseError extends Error {
 // =============================================================================
 
 const UNAVAILABLE_TOOL_ERROR_MESSAGE =
-  "The requested tool is not available in this chat. Available tools are listed in the details below; use an exact available tool name for the next tool call.";
+  "The requested tool is not available in this chat. Available tools are listed in the details below. Tool names carry their server as a prefix in the form `server__tool`; the bare short name without that prefix will not match. Copy an exact name from the list for the next tool call.";
 
 type UnavailableToolErrorDetails = {
   type: "unavailable_tool";
@@ -1327,6 +1329,7 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   ollama: providerErrorHandler(parseOpenAIError, mapOllamaErrorToCode),
   zhipuai: providerErrorHandler(parseZhipuaiError, mapZhipuaiErrorToCode),
   deepseek: openAiCompatibleErrorHandler,
+  "github-copilot": openAiCompatibleErrorHandler,
   minimax: providerErrorHandler(parseMinimaxError, mapMinimaxErrorToCode),
   azure: openAiCompatibleErrorHandler,
 };
@@ -1471,6 +1474,25 @@ function createErrorResponse(
 }
 
 /**
+ * Build the error surfaced when a turn ends with a tool call the model started
+ * streaming but never completed — nothing executes and the turn produces no
+ * reply. Uses the dedicated retryable IncompleteToolCall code so telemetry and
+ * the rendered card distinguish it from a cleanly empty turn (EmptyResponse).
+ */
+export function buildAbortiveTurnError(
+  provider: SupportedProvider,
+): ChatErrorResponse {
+  return createErrorResponse(
+    ChatErrorCode.IncompleteToolCall,
+    provider,
+    undefined,
+    ChatErrorMessages[ChatErrorCode.IncompleteToolCall],
+    "AbortiveTurn",
+    undefined,
+  );
+}
+
+/**
  * Map a provider error to a normalized ChatErrorResponse.
  * Uses provider-specific parsing and mapping for accurate error classification.
  *
@@ -1483,6 +1505,20 @@ export function mapProviderError(
   provider: SupportedProvider,
 ): ChatErrorResponse {
   logger.debug({ provider }, "[ChatErrorMapper] Mapping provider error");
+
+  // Per-user provider with no linked account → an actionable "connect" prompt,
+  // not a generic key error. Carries authAction so the UI renders a link card.
+  if (error instanceof LlmProviderAuthRequiredError) {
+    return {
+      code: ChatErrorCode.ProviderAuthRequired,
+      message: `Connect your ${error.providerLabel} account to use this model.`,
+      isRetryable: false,
+      authAction: {
+        provider: error.provider,
+        providerLabel: error.providerLabel,
+      },
+    };
+  }
 
   // Handle Vercel AI SDK RetryError - extract the lastError and map it
   // RetryError wraps errors from retry attempts and contains the last underlying error
@@ -1557,6 +1593,28 @@ export function mapProviderError(
       "NoOutputGeneratedError",
       {},
     );
+  }
+
+  // Handle UnsupportedFunctionalityError — a provider SDK rejected an input it
+  // can't represent (e.g. a text-document file part on an OpenAI-compatible
+  // provider). Surface the specific functionality so the user sees what was
+  // unsupported instead of the bare InvalidRequest message; sanitization strips
+  // originalError, so the detail must live in the user-facing message.
+  if (UnsupportedFunctionalityError.isInstance(error)) {
+    const code = ChatErrorCode.InvalidRequest;
+    const message = `This model does not support the attached content: ${error.functionality}`;
+    return {
+      code,
+      message,
+      isRetryable: RetryableErrorCodes.has(code),
+      originalError: {
+        provider,
+        status: undefined,
+        message,
+        type: "UnsupportedFunctionalityError",
+        raw: safeSerialize({ functionality: error.functionality }),
+      },
+    };
   }
 
   // Get provider-specific parser and mapper
@@ -1738,6 +1796,12 @@ export function sanitizeChatErrorForFrontend(
   if (error.usageLimitExceeded) {
     sanitized.usageLimitExceeded = true;
     sanitized.usageLimitEntityType = error.usageLimitEntityType;
+  }
+  // Preserve the connect-account action so the inline "Connect <provider>" card
+  // still renders in slim chat error mode. It carries no secrets — only the
+  // provider name and label.
+  if (error.authAction) {
+    sanitized.authAction = error.authAction;
   }
   return sanitized;
 }

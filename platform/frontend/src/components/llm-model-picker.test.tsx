@@ -107,7 +107,7 @@ describe("LlmModelPicker", () => {
 
       expect(screen.getByText("Add pricing")).toHaveAttribute(
         "href",
-        "/llm/providers/models",
+        "/llm/models",
       );
     });
 

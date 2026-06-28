@@ -29,3 +29,6 @@ __pycache__/
 docs/superpowers/plans
 docs/superpowers/specs
 
+archestra-bench/experiments/
+archestra-bench/analyzer/target/
+archestra-bench/**/.trajectory-analysis-*/

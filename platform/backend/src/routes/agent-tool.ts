@@ -6,7 +6,6 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { policyConfigurationService } from "@/agents/subagents/policy-configuration";
-import { grantToolToAgent } from "@/archestra-mcp-server/tool-auto-assign";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeAdminPermission,
@@ -178,48 +177,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Return success for new assignments, duplicates, and updates
       return reply.send({ success: true });
-    },
-  );
-
-  fastify.post(
-    "/api/agents/:agentId/tools/grant",
-    {
-      schema: {
-        operationId: RouteId.GrantToolToAgent,
-        description:
-          "Grant a user-accessible tool to an agent by name (chat grant flow). Resolves the tool and enforces the same authorization as a manual assignment server-side.",
-        tags: ["Agent Tools"],
-        params: z.object({ agentId: UuidIdSchema }),
-        body: z.object({ toolName: z.string().min(1) }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
-      },
-    },
-    async (request, reply) => {
-      const { agentId } = request.params;
-      const { toolName } = request.body;
-
-      const outcome = await grantToolToAgent({
-        toolName,
-        agentId,
-        userId: request.user.id,
-        organizationId: request.organizationId,
-      });
-
-      switch (outcome) {
-        case "grantable":
-          clearChatMcpClient(agentId);
-          return reply.send({ success: true });
-        case "forbidden":
-          throw new ApiError(
-            403,
-            "You are not allowed to add tools to this agent.",
-          );
-        case "unavailable":
-          throw new ApiError(
-            404,
-            `Tool "${toolName}" is not available to grant to this agent.`,
-          );
-      }
     },
   );
 

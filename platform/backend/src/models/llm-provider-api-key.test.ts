@@ -775,6 +775,82 @@ describe("LlmProviderApiKeyModel", () => {
 
       expect(resolved?.id).toBe(olderKey.id);
     });
+
+    // GitHub Copilot is a per-user-credential provider: resolution must use ONLY
+    // the acting user's personal key, never an agent's attached key or a
+    // team/org key — those would let one user ride on another's GitHub token.
+    test("per-user provider: resolves only the acting user's personal key", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const secret = await makeSecret();
+
+      const personalKey = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "My Copilot",
+        provider: "github-copilot",
+        scope: "personal",
+        userId: user.id,
+        secretId: secret.id,
+      });
+
+      const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+        provider: "github-copilot",
+        conversationId: null,
+      });
+
+      expect(resolved?.id).toBe(personalKey.id);
+    });
+
+    test("per-user provider: ignores an agent's attached key and another user's/org key", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+    }) => {
+      const org = await makeOrganization();
+      const owner = await makeUser();
+      const otherUser = await makeUser();
+      const ownerSecret = await makeSecret();
+      const orgSecret = await makeSecret();
+
+      // The agent owner's personal Copilot key (used as the agent's attached key)
+      const ownerKey = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Owner Copilot",
+        provider: "github-copilot",
+        scope: "personal",
+        userId: owner.id,
+        secretId: ownerSecret.id,
+      });
+      // An org-scoped Copilot key (shouldn't exist under enforcement, but the
+      // guard must ignore it even if one is present)
+      await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Shared Copilot",
+        provider: "github-copilot",
+        scope: "org",
+        secretId: orgSecret.id,
+      });
+
+      // otherUser invokes the agent (agentLlmApiKeyId = owner's key) but has no
+      // personal Copilot key → must resolve to null, not the owner's/org key.
+      const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: otherUser.id,
+        userTeamIds: [],
+        provider: "github-copilot",
+        conversationId: null,
+        agentLlmApiKeyId: ownerKey.id,
+      });
+
+      expect(resolved).toBeNull();
+    });
   });
 
   describe("hasAnyApiKey", () => {

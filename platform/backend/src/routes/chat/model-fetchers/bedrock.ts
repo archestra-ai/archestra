@@ -66,6 +66,13 @@ interface BedrockInferenceProfile {
   inferenceProfileId?: string;
   inferenceProfileName?: string;
   status?: string;
+  /**
+   * The underlying foundation model(s) the profile routes to. AWS returns the
+   * ARN(s) here; the foundation-model id is the authoritative canonical model
+   * (the inference-profile id only encodes it for system/cross-region profiles,
+   * not application inference profiles whose id is an opaque ARN).
+   */
+  models?: { modelArn?: string }[];
 }
 
 interface BedrockIamSigningParams {
@@ -171,6 +178,15 @@ function mapInferenceProfilesToModels(
       displayName:
         profile.inferenceProfileName || profile.inferenceProfileId || "Unknown",
       provider: "bedrock" as const,
+      // Authoritative underlying model for pricing — more robust than parsing
+      // the inference-profile id (and the only signal for application profiles).
+      ...(foundationModelIdFromArn(profile.models?.[0]?.modelArn)
+        ? {
+            underlyingModelName: foundationModelIdFromArn(
+              profile.models?.[0]?.modelArn,
+            ),
+          }
+        : {}),
     }))
     .filter((model) => model.id);
 
@@ -189,4 +205,19 @@ function mapInferenceProfilesToModels(
   );
 
   return models;
+}
+
+/**
+ * Extract the foundation-model id from a Bedrock model ARN, e.g.
+ * `arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0`
+ * → `anthropic.claude-3-5-sonnet-20240620-v1:0`. Returns null for ARNs that
+ * don't reference a foundation model (e.g. imported/custom models).
+ */
+function foundationModelIdFromArn(arn: string | undefined): string | null {
+  if (!arn) {
+    return null;
+  }
+  const marker = "foundation-model/";
+  const index = arn.indexOf(marker);
+  return index === -1 ? null : arn.slice(index + marker.length);
 }

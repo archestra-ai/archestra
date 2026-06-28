@@ -3,7 +3,7 @@ title: "Team Sync"
 category: Administration
 subcategory: Identity Providers
 description: "Automatically add and remove users from Archestra teams based on IdP group membership"
-order: 6
+order: 7
 lastUpdated: 2026-05-05
 ---
 
@@ -16,6 +16,8 @@ Identity Providers index.
 -->
 
 Archestra supports automatic team membership synchronization based on user group memberships from your identity provider. When users log in via SSO, they are automatically added to or removed from Archestra teams based on their IdP groups.
+
+> **Enterprise feature** — see the [Pricing Model](/docs/platform-pricing-model).
 
 ## How team sync works
 

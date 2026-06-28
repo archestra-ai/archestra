@@ -66,11 +66,11 @@ const organizationsTable = pgTable("organization", {
     .default(true),
 
   /**
-   * Whether search_tools may surface catalog tools beyond the agent's
-   * assigned set and run_tool may auto-assign them on first use (gated by the
-   * user's catalog access and permission to modify the agent). Defaults to
-   * true. Admins disable it when catalog tool names must not be exposed to
-   * users beyond their agents' assigned toolsets.
+   * @deprecated No longer consulted. Dynamic tool access is now gated solely
+   * by the per-agent `access_all_tools` setting. The column is retained (not
+   * dropped) to avoid a backwards-incompatible migration and to keep the
+   * existing API field; any stored value is ignored. Safe to drop in a future
+   * migration once no deployment reads it.
    */
   allowToolAutoAssignment: boolean("allow_tool_auto_assignment")
     .notNull()
@@ -302,7 +302,7 @@ const organizationsTable = pgTable("organization", {
   /**
    * When true, the Agent Skill tools (`list_skills`, `load_skill`) are assigned
    * to every agent in the org and added to all new agents. Flipped on
-   * by the "Enable and create a new skill" empty-state button on /agents/skills.
+   * by the "Enable and create a new skill" empty-state button on /skills.
    */
   skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
 

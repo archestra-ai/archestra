@@ -1069,9 +1069,9 @@ const registry = defineArchestraTools([
       } else {
         data = Buffer.from(args.content ?? "", "utf8");
       }
-      if (data.byteLength === 0) {
-        return errorResult("the file content is empty.");
-      }
+      // An empty file is allowed: the model may intentionally create a blank
+      // file (parity with the in-place file editor and project instructions,
+      // which both accept empty content). Only the byte cap is enforced.
       const limit = config.skillsSandbox.artifactBytesLimit;
       if (data.byteLength > limit) {
         return errorResult(

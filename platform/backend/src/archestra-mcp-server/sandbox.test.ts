@@ -1538,7 +1538,7 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     expect(row?.projectId).toBe(project.id);
   });
 
-  test("save_result validates filename, content presence, and size", async () => {
+  test("save_result validates filename and content/base64 exclusivity", async () => {
     const ctx = await makePlainChatCtx();
     const badName = await executeArchestraTool(
       SAVE_RESULT_FULL_NAME,
@@ -1547,19 +1547,29 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     );
     expect(badName.isError).toBe(true);
 
-    const empty = await executeArchestraTool(
-      SAVE_RESULT_FULL_NAME,
-      { filename: "empty.md", content: "" },
-      ctx,
-    );
-    expect(empty.isError).toBe(true);
-
     const both = await executeArchestraTool(
       SAVE_RESULT_FULL_NAME,
       { filename: "x.md", content: "a", contentBase64: "YQ==" },
       ctx,
     );
     expect(both.isError).toBe(true);
+  });
+
+  test("save_result creates an empty file from empty content", async () => {
+    const ctx = await makePlainChatCtx();
+    const result = await executeArchestraTool(
+      SAVE_RESULT_FULL_NAME,
+      { filename: "blank.md", content: "" },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    const out = structuredOf<{ fileId: string; sizeBytes: number }>(result);
+    expect(out.sizeBytes).toBe(0);
+
+    const { FileModel } = await import("@/models");
+    const row = await FileModel.findById(out.fileId);
+    expect(row?.filename).toBe("blank.md");
+    expect(row?.sizeBytes).toBe(0);
   });
 
   test("save_result errors on a duplicate name without overwrite", async () => {

@@ -38,6 +38,7 @@ const SEARCH_FIELDS = [
   "resolutiondate",
   "created",
   "duedate",
+  "security",
 ];
 
 export class JiraConnector extends BaseConnector {
@@ -127,6 +128,164 @@ export class JiraConnector extends BaseConnector {
       );
       return null;
     }
+  }
+
+  async resolveDocumentPermissions(
+    document: ConnectorDocument,
+    params: {
+      config: Record<string, unknown>;
+      credentials: ConnectorCredentials;
+    },
+  ): Promise<ConnectorDocument["permissions"]> {
+    const config = parseJiraConfig(params.config);
+    if (!config) {
+      return { isPublic: false };
+    }
+
+    const client = config.isCloud
+      ? createV3Client(config, params.credentials, this.log)
+      : createV2Client(config, params.credentials, this.log);
+
+    const projectIdOrKey = document.metadata?.projectKey || document.metadata?.projectId;
+    if (!projectIdOrKey) {
+      return { isPublic: false };
+    }
+
+    try {
+      // 1. Fetch the project's permission scheme
+      const schemeRes: any = await client.sendRequest(
+        {
+          url: `/api/3/project/${projectIdOrKey}/permissionscheme`,
+          method: "GET",
+          params: {
+            expand: "permissions",
+          },
+        },
+        undefined as any,
+      );
+
+      const permissions = schemeRes?.permissions || [];
+      const browsePermissions = permissions.filter((p: any) => p.permission === "BROWSE_PROJECTS");
+
+      if (browsePermissions.length === 0) {
+        return { isPublic: false };
+      }
+
+      let isPublic = false;
+      const users: string[] = [];
+      const groups: string[] = [];
+
+      for (const p of browsePermissions) {
+        const holder = p.holder;
+        if (!holder) continue;
+
+        if (holder.type === "group") {
+          const groupName = holder.parameter || holder.group?.name;
+          if (groupName) groups.push(groupName);
+        } else if (holder.type === "user") {
+          const accountId = holder.parameter || holder.user?.accountId;
+          if (accountId) {
+            try {
+              const userRes: any = await client.sendRequest(
+                {
+                  url: `/api/3/user`,
+                  method: "GET",
+                  params: { accountId },
+                },
+                undefined as any,
+              );
+              const email = userRes?.emailAddress || userRes?.email;
+              if (email) users.push(email);
+            } catch (err) {
+              this.log.warn({ accountId, error: extractErrorMessage(err) }, "Failed to fetch user email");
+            }
+          }
+        } else if (holder.type === "projectRole") {
+          const roleId = holder.parameter;
+          if (roleId) {
+            try {
+              const roleRes: any = await client.sendRequest(
+                {
+                  url: `/api/3/project/${projectIdOrKey}/role/${roleId}`,
+                  method: "GET",
+                },
+                undefined as any,
+              );
+
+              if (roleRes?.actors) {
+                for (const actor of roleRes.actors) {
+                  if (actor.type === "atlassian-user-role-actor") {
+                    const email = actor.user?.emailAddress || actor.user?.email || actor.email;
+                    if (email) {
+                      users.push(email);
+                    } else if (actor.user?.accountId) {
+                      try {
+                        const userRes: any = await client.sendRequest(
+                          {
+                            url: `/api/3/user`,
+                            method: "GET",
+                            params: { accountId: actor.user.accountId },
+                          },
+                          undefined as any,
+                        );
+                        const email = userRes?.emailAddress || userRes?.email;
+                        if (email) users.push(email);
+                      } catch {}
+                    }
+                  } else if (actor.type === "atlassian-group-role-actor") {
+                    const groupName = actor.group?.name || actor.name;
+                    if (groupName) groups.push(groupName);
+                  }
+                }
+              }
+            } catch (err) {
+              this.log.warn({ roleId, error: extractErrorMessage(err) }, "Failed to fetch project role actors");
+            }
+          }
+        } else if (
+          holder.type === "applicationRole" ||
+          holder.type === "anyUser" ||
+          holder.type === "reporter" ||
+          holder.type === "assignee"
+        ) {
+          isPublic = true;
+        }
+      }
+
+      // 2. If the issue has a security level, restrict it further
+      const securityLevel = document.metadata?.securityLevel;
+      if (securityLevel && securityLevel.id) {
+        try {
+          const secLevelsRes: any = await client.sendRequest(
+            {
+              url: `/api/3/project/${projectIdOrKey}/securitylevelwithdefault`,
+              method: "GET",
+            },
+            undefined as any,
+          );
+
+          const levels = secLevelsRes?.levels || [];
+          const matchedLevel = levels.find((l: any) => l.id === securityLevel.id);
+
+          if (matchedLevel) {
+            isPublic = false;
+          }
+        } catch (err) {
+          this.log.warn({ securityLevel, error: extractErrorMessage(err) }, "Failed to fetch security levels");
+          isPublic = false;
+        }
+      }
+
+      return {
+        isPublic,
+        users: [...new Set(users)],
+        groups: [...new Set(groups)],
+      };
+    } catch (err) {
+      this.log.warn({ projectIdOrKey, error: extractErrorMessage(err) }, "Failed to fetch project permissions");
+    }
+
+    return { isPublic: false };
   }
 
   async *sync(params: {
@@ -627,7 +786,9 @@ function issueToDocument(params: {
       assigneeEmail: fields.assignee?.emailAddress,
       labels: fields.labels,
       project: fields.project?.key,
+      projectKey: fields.project?.key,
       projectName: fields.project?.name,
+      securityLevel: fields.security ? { id: fields.security.id, name: fields.security.name } : undefined,
       resolution: fields.resolution?.name,
       resolutionDate: toDateOnly(fields.resolutiondate),
       parent: fields.parent?.key,

@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  EDITABLE_TEXT_FILE_MAX_BYTES,
-  isEditableTextFile,
-} from "@archestra/shared";
-import { Download, Pencil } from "lucide-react";
+import { EDITABLE_TEXT_FILE_MAX_BYTES } from "@archestra/shared";
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { PlainTextEditor } from "@/components/chat/plain-text-editor";
@@ -31,39 +28,30 @@ export type PreviewableFile = {
  * prompt. Extracted from the chat Files panel so the project pages preview
  * identically.
  *
- * When the caller passes a row-backed `fileId` and `canEdit`, a `.md`/`.txt`
- * file also gets an Edit affordance that swaps the preview for an in-place text
- * editor. The caller owns authorization (it passes `canEdit`); the preview
- * reloads its own bytes after a save. An edit changes only the bytes — not the
- * filename, type, or list order — so the caller's file list needs no refresh.
+ * Editing is controlled by the caller: when `editing` is true and a row-backed
+ * `fileId` is given, the body swaps to an in-place text editor. The Edit toggle
+ * itself lives in the caller's action row (next to Download/Delete); the caller
+ * owns authorization and the `editing` flag, and `onExitEdit` fires when the
+ * editor saves or cancels. An edit changes only the bytes — not the filename,
+ * type, or list order — so the caller's file list needs no refresh.
  */
 export function FilePreview({
   file,
   onClose,
+  editing = false,
   fileId,
-  canEdit = false,
-  onEditingChange,
+  onExitEdit,
 }: {
   file: PreviewableFile;
   onClose?: () => void;
+  /** Show the in-place editor instead of the preview (requires `fileId`). */
+  editing?: boolean;
   /** The backing row id; required to edit (rowless objects aren't editable). */
   fileId?: string;
-  /** Whether the viewer may edit this file (author / project access). */
-  canEdit?: boolean;
-  /**
-   * Notified as the in-place editor opens/closes so a parent that auto-switches
-   * the previewed file (the chat panel follows fresh outputs) can avoid yanking
-   * the view away from an unsaved draft. Pass a stable callback. Mount this
-   * component with a per-file `key` so the editor resets when the file changes.
-   */
-  onEditingChange?: (editing: boolean) => void;
+  /** Called when the editor saves or cancels, so the caller can clear `editing`. */
+  onExitEdit?: () => void;
 }) {
   const kind = getFilePreviewKind(file.mimeType, file.name);
-  const editable =
-    canEdit &&
-    !!fileId &&
-    isEditableTextFile({ filename: file.name, mimeType: file.mimeType });
-  const [editing, setEditing] = useState(false);
   // After a save the bytes change but the URL doesn't, so a plain re-render would
   // show stale content (useFileText only refetches when the URL changes). Bump a
   // nonce into the URL to force the reload; the byte route is `no-cache`/ETag so
@@ -71,42 +59,23 @@ export function FilePreview({
   const [reloadNonce, setReloadNonce] = useState(0);
   const contentUrl = withReload(file.contentUrl, reloadNonce);
 
-  const changeEditing = (next: boolean) => {
-    setEditing(next);
-    onEditingChange?.(next);
-  };
-  // If the preview unmounts mid-edit (the file was switched/closed), clear the
-  // parent's "editing in progress" guard so it isn't left stuck.
-  useEffect(() => () => onEditingChange?.(false), [onEditingChange]);
-
-  if (editing && editable && fileId) {
+  if (editing && fileId) {
     return (
       <FileContentEditor
         key={contentUrl}
         fileId={fileId}
         contentUrl={contentUrl}
-        onCancel={() => changeEditing(false)}
+        onCancel={() => onExitEdit?.()}
         onSaved={() => {
           setReloadNonce((n) => n + 1);
-          changeEditing(false);
+          onExitEdit?.();
         }}
       />
     );
   }
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-auto">
-      {editable && (
-        <Button
-          variant="secondary"
-          size="sm"
-          className="absolute right-2 top-2 z-10 h-7 gap-1 px-2 text-xs shadow-sm"
-          onClick={() => changeEditing(true)}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-          Edit
-        </Button>
-      )}
+    <div className="min-h-0 flex-1 overflow-auto">
       {kind === "markdown" && (
         <RemoteMarkdownPreview
           contentUrl={contentUrl}
@@ -194,6 +163,13 @@ function FileContentEditor({
 
 // === internal components ===
 
+/** Shown when a previewable text file has zero bytes (a valid, empty file). */
+function EmptyFileNotice() {
+  return (
+    <p className="p-4 text-xs text-muted-foreground">This file is empty.</p>
+  );
+}
+
 /** Fetch a file's bytes as text from its content endpoint. */
 function useFileText(contentUrl: string): {
   text: string | null;
@@ -243,6 +219,11 @@ function RemoteMarkdownPreview({
   }
   if (text === null) {
     return <p className="p-4 text-xs text-muted-foreground">Loading…</p>;
+  }
+  // An empty file is a real, valid file — render an explicit notice rather than
+  // the artifact panel's "No artifact yet" placeholder, which reads as missing.
+  if (text === "") {
+    return <EmptyFileNotice />;
   }
   return (
     <ConversationArtifactPanel
@@ -302,6 +283,9 @@ function FileTextPreview({
   }
   if (text === null) {
     return <p className="p-4 text-xs text-muted-foreground">Loading…</p>;
+  }
+  if (text === "") {
+    return <EmptyFileNotice />;
   }
   if (asTable) {
     // Naive CSV: split on newlines/commas. Good enough for a preview; does not

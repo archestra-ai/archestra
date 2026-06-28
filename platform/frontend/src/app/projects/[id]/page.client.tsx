@@ -1,6 +1,9 @@
 "use client";
 
-import { PROJECT_INSTRUCTIONS_FILENAME } from "@archestra/shared";
+import {
+  isEditableTextFile,
+  PROJECT_INSTRUCTIONS_FILENAME,
+} from "@archestra/shared";
 import {
   CalendarClock,
   Download,
@@ -360,6 +363,9 @@ function ProjectFilesSidebar({
 }) {
   const { data: files } = useProjectFiles(projectId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The selected file's in-place editor is open. Lifted here so the Edit toggle
+  // can sit in the action row next to Download/Delete.
+  const [editing, setEditing] = useState(false);
   // Opening a file shows it below the list (split); `expanded` fills the panel.
   const [expanded, setExpanded] = useState(false);
 
@@ -383,14 +389,26 @@ function ProjectFilesSidebar({
   const detailName = instructionsSelected
     ? PROJECT_INSTRUCTIONS_FILENAME
     : (selected?.name ?? "");
+  // Editable only for a row-backed .md/.txt file when the viewer has real project
+  // access (the admin-oversight view is read-only, so `canEditFiles` is false).
+  const selectedEditable =
+    selected != null &&
+    canEditFiles &&
+    selected.rowId != null &&
+    isEditableTextFile({
+      filename: selected.name,
+      mimeType: selected.mimeType,
+    });
 
   const openFile = (id: string) => {
     setSelectedId(id);
+    setEditing(false);
     setExpanded(false);
   };
   const collapse = () => setExpanded(false);
   const deselect = () => {
     setSelectedId(null);
+    setEditing(false);
     setExpanded(false);
   };
 
@@ -400,6 +418,7 @@ function ProjectFilesSidebar({
   useEffect(() => {
     if (selectedMissing) {
       setSelectedId(null);
+      setEditing(false);
       setExpanded(false);
     }
   }, [selectedMissing]);
@@ -470,6 +489,17 @@ function ProjectFilesSidebar({
                         </span>
                       </a>
                     )}
+                    {selectedEditable && !editing && (
+                      <button
+                        type="button"
+                        onClick={() => setEditing(true)}
+                        title={`Edit ${selected.name}`}
+                        className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        <Pencil className="h-4 w-4" />
+                        <span className="sr-only">Edit {selected.name}</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() =>
@@ -495,14 +525,15 @@ function ProjectFilesSidebar({
               />
             ) : previewing && selected ? (
               <FilePreview
-                // Per-file key: reset the editor when the previewed file changes.
+                // Per-file key: drop any editor state when the previewed file changes.
                 key={selected.id}
                 file={selected}
                 onClose={deselect}
                 // Only row-backed files are editable; a rowless (obj_) object has
-                // no `rowId`, so its Edit affordance stays hidden.
+                // no `rowId`, so `selectedEditable` is false and Edit stays hidden.
                 fileId={selected.rowId ?? undefined}
-                canEdit={canEditFiles && !!selected.rowId}
+                editing={editing && selectedEditable}
+                onExitEdit={() => setEditing(false)}
               />
             ) : null}
           </div>

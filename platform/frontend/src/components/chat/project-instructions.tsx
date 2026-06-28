@@ -62,9 +62,10 @@ export function InstructionsRow({
 }
 
 /**
- * The instructions surface for the pinned entry. The owner lands straight in the
- * editor (no repeated filename header, no Edit button); non-owners get a
- * read-only rendered view with a Close.
+ * The instructions surface for the pinned entry. The owner opens straight in the
+ * editor; saving (or cancelling) returns to a read-only rendered view — with an
+ * Edit affordance to go back — rather than closing, so the saved guidance stays
+ * visible. Non-owners only ever see the read view with a Close.
  */
 export function ProjectInstructionsPanel({
   projectId,
@@ -78,6 +79,9 @@ export function ProjectInstructionsPanel({
   const { data, isPending } = useProjectInstructions(projectId);
   const setInstructions = useSetProjectInstructions();
   const content = data?.content ?? "";
+  // The owner opens in the editor (the usual reason to open instructions). Save
+  // and Cancel return here to the read view instead of closing the panel.
+  const [editing, setEditing] = useState(isOwner);
 
   if (isPending) {
     return (
@@ -87,18 +91,18 @@ export function ProjectInstructionsPanel({
     );
   }
 
-  if (isOwner) {
+  if (isOwner && editing) {
     return (
       <InstructionsEditor
         initialContent={content}
         saving={setInstructions.isPending}
-        onCancel={onClose}
+        onCancel={() => setEditing(false)}
         onSave={async (value) => {
           const ok = await setInstructions.mutateAsync({
             id: projectId,
             content: value,
           });
-          if (ok) onClose();
+          if (ok) setEditing(false);
         }}
       />
     );
@@ -106,7 +110,17 @@ export function ProjectInstructionsPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-end border-b px-3 py-1.5">
+      <div className="flex items-center justify-end gap-1 border-b px-3 py-1.5">
+        {isOwner && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => setEditing(true)}
+          >
+            Edit
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"
@@ -126,7 +140,9 @@ export function ProjectInstructionsPanel({
         />
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
-          The project owner hasn't added any instructions.
+          {isOwner
+            ? "No instructions yet. Choose Edit to add guidance for every chat."
+            : "The project owner hasn't added any instructions."}
         </div>
       )}
     </div>

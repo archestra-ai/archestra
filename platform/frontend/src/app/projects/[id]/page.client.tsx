@@ -223,6 +223,9 @@ function ProjectDetail() {
         <ProjectFilesSidebar
           projectId={project.id}
           canManageProject={canManage}
+          // Anyone with real project access (owner or shared) may edit its text
+          // files; the admin-oversight view is read-only.
+          canEditFiles={!isAdminView}
         />
       </div>
     </div>
@@ -347,10 +350,13 @@ function ChatsList({
 function ProjectFilesSidebar({
   projectId,
   canManageProject,
+  canEditFiles,
 }: {
   projectId: string;
   /** Owner / project-admin — gates editing the pinned instructions. */
   canManageProject: boolean;
+  /** Real project access (owner/shared, not oversight) — gates editing files. */
+  canEditFiles: boolean;
 }) {
   const { data: files } = useProjectFiles(projectId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -368,6 +374,8 @@ function ProjectFilesSidebar({
       name: f.filename,
       mimeType: f.mimeType,
       contentUrl: sandboxArtifactUrl(f.downloadRef),
+      // The real row id (null for a rowless hand-placed object) — gates editing.
+      rowId: f.id,
     }));
   const selected = items.find((i) => i.id === selectedId) ?? null;
   const instructionsSelected = selectedId === INSTRUCTIONS_SELECTION;
@@ -486,7 +494,14 @@ function ProjectFilesSidebar({
                 onClose={deselect}
               />
             ) : previewing && selected ? (
-              <FilePreview file={selected} onClose={deselect} />
+              <FilePreview
+                file={selected}
+                onClose={deselect}
+                // Only row-backed files are editable; a rowless (obj_) object has
+                // no `rowId`, so its Edit affordance stays hidden.
+                fileId={selected.rowId ?? undefined}
+                canEdit={canEditFiles && !!selected.rowId}
+              />
             ) : null}
           </div>
         </div>

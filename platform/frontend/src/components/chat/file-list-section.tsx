@@ -25,6 +25,12 @@ export type FileListItem = {
   /** Byte endpoint; empty for in-memory items (no download link rendered). */
   contentUrl: string;
   source?: string;
+  /**
+   * The backing `files` row UUID, when distinct from `id`. The project sidebar
+   * keys rows on `downloadRef` (which may be a rowless `obj_` ref), so it carries
+   * the real row id here to gate editing — editing needs a row to overwrite.
+   */
+  rowId?: string | null;
 };
 
 /**

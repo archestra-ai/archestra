@@ -304,7 +304,18 @@ export function ConversationFilesPanel({
       )}
 
       {previewing && !artifactSelected && !instructionsSelected && selected && (
-        <FilePreview file={selected} onClose={deselect} />
+        <FilePreview
+          file={selected}
+          onClose={deselect}
+          fileId={selected.id}
+          // Edit shares Delete's gate (canManageFiles) — generated/project files
+          // only; attachments and the in-memory artifact are never editable.
+          canEdit={
+            canManageFiles &&
+            selected.source !== "attachment" &&
+            selected.source !== "artifact"
+          }
+        />
       )}
 
       {hasArtifact && (

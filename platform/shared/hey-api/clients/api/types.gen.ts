@@ -59424,6 +59424,97 @@ export type GetSkillSandboxArtifactResponses = {
     200: unknown;
 };
 
+export type UpdateSkillSandboxArtifactContentData = {
+    body: {
+        content: string;
+    };
+    path: {
+        artifactId: string;
+    };
+    query?: never;
+    url: '/api/skill-sandbox/artifacts/{artifactId}/content';
+};
+
+export type UpdateSkillSandboxArtifactContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateSkillSandboxArtifactContentError = UpdateSkillSandboxArtifactContentErrors[keyof UpdateSkillSandboxArtifactContentErrors];
+
+export type UpdateSkillSandboxArtifactContentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+        fileId: string;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+    };
+};
+
+export type UpdateSkillSandboxArtifactContentResponse = UpdateSkillSandboxArtifactContentResponses[keyof UpdateSkillSandboxArtifactContentResponses];
+
 export type GetSkillSandboxConversationArtifactsData = {
     body?: never;
     path: {

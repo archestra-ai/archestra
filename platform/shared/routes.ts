@@ -574,6 +574,7 @@ export const RouteId = {
   PinProject: "pinProject",
   UnpinProject: "unpinProject",
   DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
+  UpdateSkillSandboxArtifactContent: "updateSkillSandboxArtifactContent",
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",

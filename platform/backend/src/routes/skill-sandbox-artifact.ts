@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { RouteId } from "@archestra/shared";
+import { EDITABLE_TEXT_FILE_MAX_BYTES, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
@@ -183,6 +183,76 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Artifact not found");
       }
       return { ok: true as const };
+    },
+  );
+
+  // Overwrite a text file's content from the browser editor — the REST analog of
+  // the project-instructions write, for any row-backed `.md`/`.txt` file. Auth
+  // and the editability/instructions guards live in the store (parity with the
+  // GET/DELETE above, whose authority is also `fileStore`).
+  fastify.put(
+    "/api/skill-sandbox/artifacts/:artifactId/content",
+    {
+      schema: {
+        operationId: RouteId.UpdateSkillSandboxArtifactContent,
+        description:
+          "Overwrite the full text content of a row-backed Markdown/plain-text " +
+          "file. Allowed for the file's author, or anyone with access to the " +
+          "project owning the file.",
+        tags: ["Skills"],
+        // Row-backed files only — a rowless (`obj_`) object has no row to
+        // update, so a strict UUID (not the GET/DELETE `ARTIFACT_REF`).
+        params: z.object({ artifactId: z.string().uuid() }),
+        body: z.object({
+          // Coarse payload guard; the store's UTF-8 `byteLength` check is the
+          // precise authority (a multi-byte character is more than one byte).
+          content: z.string().max(EDITABLE_TEXT_FILE_MAX_BYTES),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            ok: z.literal(true),
+            fileId: z.string(),
+            filename: z.string(),
+            mimeType: z.string(),
+            sizeBytes: z.number(),
+          }),
+        ),
+      },
+    },
+    async ({
+      params: { artifactId },
+      body: { content },
+      organizationId,
+      user,
+    }) => {
+      const result = await fileStore.updateTextFileContent({
+        ref: artifactId,
+        organizationId,
+        userId: user.id,
+        content,
+      });
+      if ("error" in result) {
+        switch (result.error) {
+          case "not_found":
+            throw new ApiError(404, "Artifact not found");
+          case "reserved":
+            throw new ApiError(
+              409,
+              "The project instructions file is edited from the Instructions panel.",
+            );
+          case "not_editable":
+            throw new ApiError(415, "Only .md and .txt files can be edited.");
+          case "too_large":
+            throw new ApiError(413, "File content is too large to edit.");
+        }
+      }
+      return {
+        ok: true as const,
+        fileId: result.id,
+        filename: result.filename,
+        mimeType: result.mimeType,
+        sizeBytes: result.sizeBytes,
+      };
     },
   );
 

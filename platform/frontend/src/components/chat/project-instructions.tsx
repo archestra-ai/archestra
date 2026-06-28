@@ -7,8 +7,8 @@ import {
 import { FileText } from "lucide-react";
 import { useState } from "react";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
+import { PlainTextEditor } from "@/components/chat/plain-text-editor";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import {
   useProjectInstructions,
   useSetProjectInstructions,
@@ -150,47 +150,18 @@ function InstructionsEditor({
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState(initialContent);
-  const overLimit = draft.length > PROJECT_INSTRUCTIONS_MAX_LENGTH;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-      <Textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        placeholder="Instructions that apply to every chat in this project…"
-        className="min-h-40 flex-1 resize-none font-mono text-xs"
-        autoFocus
-      />
-      <div className="flex items-center justify-between">
-        <span
-          className={cn(
-            "text-[11px]",
-            overLimit ? "text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {draft.length.toLocaleString()} /{" "}
-          {PROJECT_INSTRUCTIONS_MAX_LENGTH.toLocaleString()}
-        </span>
-        <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={onCancel}
-            disabled={saving}
-          >
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={() => onSave(draft)}
-            disabled={saving || overLimit}
-          >
-            Save
-          </Button>
-        </div>
-      </div>
-    </div>
+    <PlainTextEditor
+      value={draft}
+      onChange={setDraft}
+      // Instructions are bounded by character count (they go into every prompt).
+      count={draft.length}
+      max={PROJECT_INSTRUCTIONS_MAX_LENGTH}
+      saving={saving}
+      onSave={() => onSave(draft)}
+      onCancel={onCancel}
+      placeholder="Instructions that apply to every chat in this project…"
+    />
   );
 }

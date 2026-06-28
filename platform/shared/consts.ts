@@ -62,6 +62,14 @@ export const PROJECT_INSTRUCTIONS_FILENAME = "instructions.md";
  */
 export const PROJECT_INSTRUCTIONS_MAX_LENGTH = 100_000;
 
+/**
+ * Max size (bytes) of a Markdown/plain-text file the in-place editor saves in one
+ * write. Editing happens in a textarea, so this is deliberately small — larger
+ * generated files can still be downloaded and read, just not hand-edited here.
+ * The backend write route is the authority; the editor mirrors it.
+ */
+export const EDITABLE_TEXT_FILE_MAX_BYTES = 10_000;
+
 export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
 export const DEFAULT_TEAM_NAME = "Default Team";
@@ -192,4 +200,25 @@ export function getArchestraTokenPrefix(value: string): string | null {
 
 export function hasArchestraTokenPrefix(value: string): boolean {
   return getArchestraTokenPrefix(value) !== null;
+}
+
+/**
+ * Whether a file may be edited in place through the generic text editor: only
+ * Markdown and plain-text files, by extension or MIME. Intentionally narrower
+ * than the Files preview's text rendering (which also shows JSON/CSV/logs) — the
+ * editor targets `.md`/`.txt` only. Single source of truth for both the backend
+ * write route's gate and the frontend's Edit affordance, so they cannot drift.
+ */
+export function isEditableTextFile(params: {
+  filename: string;
+  mimeType: string;
+}): boolean {
+  const name = params.filename.toLowerCase();
+  const mime = params.mimeType.toLowerCase();
+  return (
+    name.endsWith(".md") ||
+    name.endsWith(".txt") ||
+    mime === "text/markdown" ||
+    mime === "text/plain"
+  );
 }

@@ -1,8 +1,13 @@
 "use client";
 
-import { Download } from "lucide-react";
+import {
+  EDITABLE_TEXT_FILE_MAX_BYTES,
+  isEditableTextFile,
+} from "@archestra/shared";
+import { Download, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
+import { PlainTextEditor } from "@/components/chat/plain-text-editor";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -11,6 +16,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { getFilePreviewKind } from "@/lib/chat/file-preview-kind";
+import { useUpdateFileContent } from "@/lib/skills-sandbox/use-update-file-content";
 
 /** Anything previewable: a display name, a MIME type, and a byte endpoint. */
 export type PreviewableFile = {
@@ -22,44 +28,151 @@ export type PreviewableFile = {
 /**
  * Content-only preview for a file served from a byte endpoint: markdown
  * rendered, images inline, text/CSV as text/table, everything else a download
- * prompt. Extracted from the chat Files panel so My Files and project pages
- * preview identically.
+ * prompt. Extracted from the chat Files panel so the project pages preview
+ * identically.
+ *
+ * When the caller passes a row-backed `fileId` and `canEdit`, a `.md`/`.txt`
+ * file also gets an Edit affordance that swaps the preview for an in-place text
+ * editor. The caller owns authorization (it passes `canEdit`); the preview
+ * reloads its own bytes after a save. An edit changes only the bytes — not the
+ * filename, type, or list order — so the caller's file list needs no refresh.
  */
 export function FilePreview({
   file,
   onClose,
+  fileId,
+  canEdit = false,
 }: {
   file: PreviewableFile;
   onClose?: () => void;
+  /** The backing row id; required to edit (rowless objects aren't editable). */
+  fileId?: string;
+  /** Whether the viewer may edit this file (author / project access). */
+  canEdit?: boolean;
 }) {
   const kind = getFilePreviewKind(file.mimeType, file.name);
+  const editable =
+    canEdit &&
+    !!fileId &&
+    isEditableTextFile({ filename: file.name, mimeType: file.mimeType });
+  const [editing, setEditing] = useState(false);
+  // After a save the bytes change but the URL doesn't, so a plain re-render would
+  // show stale content (useFileText only refetches when the URL changes). Bump a
+  // nonce into the URL to force the reload; the byte route is `no-cache`/ETag so
+  // it revalidates against the new content.
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const contentUrl = withReload(file.contentUrl, reloadNonce);
+
+  if (editing && editable && fileId) {
+    return (
+      <FileContentEditor
+        key={contentUrl}
+        fileId={fileId}
+        contentUrl={contentUrl}
+        onCancel={() => setEditing(false)}
+        onSaved={() => {
+          setReloadNonce((n) => n + 1);
+          setEditing(false);
+        }}
+      />
+    );
+  }
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto">
+    <div className="relative min-h-0 flex-1 overflow-auto">
+      {editable && (
+        <Button
+          variant="secondary"
+          size="sm"
+          className="absolute right-2 top-2 z-10 h-7 gap-1 px-2 text-xs shadow-sm"
+          onClick={() => setEditing(true)}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          Edit
+        </Button>
+      )}
       {kind === "markdown" && (
         <RemoteMarkdownPreview
-          contentUrl={file.contentUrl}
+          contentUrl={contentUrl}
           onClose={onClose ?? (() => {})}
         />
       )}
       {kind === "image" && (
         <div className="flex h-full items-center justify-center p-4">
           <img
-            src={file.contentUrl}
+            src={contentUrl}
             alt={file.name}
             className="max-h-full max-w-full object-contain"
           />
         </div>
       )}
-      {kind === "html" && <HtmlPreview contentUrl={file.contentUrl} />}
+      {kind === "html" && <HtmlPreview contentUrl={contentUrl} />}
       {(kind === "text" || kind === "csv") && (
-        <FileTextPreview
-          contentUrl={file.contentUrl}
-          asTable={kind === "csv"}
-        />
+        <FileTextPreview contentUrl={contentUrl} asTable={kind === "csv"} />
       )}
       {kind === "unsupported" && <UnsupportedPreview file={file} />}
     </div>
+  );
+}
+
+/** Append a cache-busting nonce so a re-fetch sees post-save bytes. */
+function withReload(url: string, nonce: number): string {
+  if (nonce === 0 || !url) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}_r=${nonce}`;
+}
+
+/**
+ * In-place editor for a `.md`/`.txt` file: loads the current bytes as text,
+ * seeds a textarea, and saves the whole content back through the artifact-content
+ * route. Byte-counted against the same cap the backend enforces. On success the
+ * parent reloads the preview's bytes.
+ */
+function FileContentEditor({
+  fileId,
+  contentUrl,
+  onSaved,
+  onCancel,
+}: {
+  fileId: string;
+  contentUrl: string;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const { text, failed } = useFileText(contentUrl);
+  const update = useUpdateFileContent();
+  const [draft, setDraft] = useState<string | null>(null);
+
+  // Seed the draft once, from the loaded bytes (an empty file is valid content).
+  useEffect(() => {
+    if (text !== null)
+      setDraft((current) => (current === null ? text : current));
+  }, [text]);
+
+  if (failed) {
+    return (
+      <p className="p-4 text-xs text-muted-foreground">
+        Failed to load the file for editing.
+      </p>
+    );
+  }
+  if (draft === null) {
+    return <p className="p-4 text-xs text-muted-foreground">Loading…</p>;
+  }
+
+  return (
+    <PlainTextEditor
+      value={draft}
+      onChange={(value) => setDraft(value)}
+      // Files are bounded by stored byte size, not character count.
+      count={new TextEncoder().encode(draft).length}
+      max={EDITABLE_TEXT_FILE_MAX_BYTES}
+      saving={update.isPending}
+      onSave={async () => {
+        const ok = await update.mutateAsync({ fileId, content: draft });
+        if (ok) onSaved();
+      }}
+      onCancel={onCancel}
+    />
   );
 }
 

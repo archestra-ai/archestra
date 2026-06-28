@@ -1352,6 +1352,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.PinProject]: { project: ["read"] },
   [RouteId.UnpinProject]: { project: ["read"] },
   [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
+  // Editing a file's text content shares the delete path's authorization
+  // (author / project access), enforced per-file in the store handler.
+  [RouteId.UpdateSkillSandboxArtifactContent]: { sandbox: ["execute"] },
 
   // Audit Log Routes
   [RouteId.GetAuditLogs]: {

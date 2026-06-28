@@ -117,6 +117,10 @@ import {
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
+  drainPendingChatHandoffFiles,
+  hasPendingChatHandoffFiles,
+} from "@/lib/chat/pending-chat-handoff-files";
+import {
   applyPendingActions,
   clearPendingActions,
   getPendingActions,
@@ -1694,8 +1698,16 @@ export function ChatPageContent({
 
   // Auto-send message from URL when conditions are met (deep link support)
   useEffect(() => {
-    // Skip if already triggered or no user_prompt in URL
-    if (autoSendTriggeredRef.current || !initialUserPrompt) return;
+    if (autoSendTriggeredRef.current) return;
+
+    // A handoff that stashed attachments stamps `attachments=1` and may carry no
+    // prompt (files-only), so it triggers the send too — but only when the files
+    // are actually still in memory, else a reloaded handoff URL (store cleared)
+    // would create an empty conversation.
+    const handoffHasAttachments = searchParams.get("attachments") === "1";
+    const handoffFilesReady =
+      handoffHasAttachments && hasPendingChatHandoffFiles();
+    if (!initialUserPrompt && !handoffFilesReady) return;
 
     // Skip if conversation already exists
     if (conversationId) return;
@@ -1713,8 +1725,13 @@ export function ChatPageContent({
       searchParams,
     });
 
-    // Store the message to send after conversation is created
+    // Store the message to send after conversation is created. Draining is
+    // gated on the URL marker so the shared auto-send path never pulls stashed
+    // files into an unrelated handoff (app / SSO / a2a / deep link).
     pendingPromptRef.current = initialUserPrompt;
+    pendingFilesRef.current = handoffHasAttachments
+      ? drainPendingChatHandoffFiles()
+      : [];
 
     createInitialConversation((newConversation) => {
       // the init effect on the /chat/<id> mount reads this preference and
@@ -2396,6 +2413,9 @@ function clearUserPromptQueryParam(params: {
 }) {
   const nextSearchParams = new URLSearchParams(params.searchParams.toString());
   nextSearchParams.delete("user_prompt");
+  // The attachments marker is one-shot too: drop it once consumed so a remount
+  // can't re-trigger a drain (which would now find an empty store).
+  nextSearchParams.delete("attachments");
   const nextUrl = nextSearchParams.toString()
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;

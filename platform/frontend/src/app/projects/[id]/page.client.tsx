@@ -240,9 +240,14 @@ function ProjectChatInput({ projectId }: { projectId: string }) {
 
   return (
     <NewChatComposer
-      onSubmitPrompt={(text, agentId) =>
+      onSubmitPrompt={(text, agentId, hasAttachments) =>
         router.push(
-          buildProjectChatHandoffUrl({ projectId, prompt: text, agentId }),
+          buildProjectChatHandoffUrl({
+            projectId,
+            prompt: text,
+            agentId,
+            hasAttachments,
+          }),
         )
       }
     />

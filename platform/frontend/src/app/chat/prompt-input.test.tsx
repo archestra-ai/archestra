@@ -673,8 +673,9 @@ describe("ArchestraPromptInput", () => {
       localStorage.setItem(draftKey, text);
       mockControllerState.value = text;
 
-      // Mirrors NewChatComposer rejecting a submit (e.g. attachment toast) by
-      // throwing synchronously after the user confirms "Send anyway".
+      // Mirrors a consumer rejecting a submit by throwing synchronously after
+      // the user confirms "Send anyway" (e.g. the main composer's
+      // "stop-not-submit" throw that keeps a half-typed follow-up).
       const onSubmit = vi.fn(() => {
         throw new Error("rejected");
       });

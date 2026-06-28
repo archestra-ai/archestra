@@ -117,7 +117,9 @@ export function ConversationFilesPanel({
 
   const openFile = (id: string) => {
     setSelectedId(id);
-    setEditing(false);
+    // Instructions open straight in the editor (its primary use); a file opens
+    // in the read view with an Edit affordance.
+    setEditing(id === INSTRUCTIONS_SELECTION);
     setExpanded(false);
   };
   const collapse = () => setExpanded(false);
@@ -295,6 +297,19 @@ export function ConversationFilesPanel({
               content={artifact ?? ""}
               onDownloadPdf={handleDownloadArtifactPdf}
             />
+          ) : instructionsSelected ? (
+            isProjectOwner &&
+            !editing && (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                title="Edit instructions"
+                className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <Pencil className="h-4 w-4" />
+                <span className="sr-only">Edit instructions</span>
+              </button>
+            )
           ) : (
             selected && (
               <div className="flex shrink-0 items-center">
@@ -345,7 +360,8 @@ export function ConversationFilesPanel({
         <ProjectInstructionsPanel
           projectId={projectId}
           isOwner={isProjectOwner}
-          onClose={deselect}
+          editing={editing}
+          onExitEdit={() => setEditing(false)}
         />
       )}
 

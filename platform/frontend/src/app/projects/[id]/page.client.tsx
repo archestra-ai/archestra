@@ -402,7 +402,8 @@ function ProjectFilesSidebar({
 
   const openFile = (id: string) => {
     setSelectedId(id);
-    setEditing(false);
+    // Instructions open straight in the editor; a file opens in the read view.
+    setEditing(id === INSTRUCTIONS_SELECTION);
     setExpanded(false);
   };
   const collapse = () => setExpanded(false);
@@ -474,6 +475,17 @@ function ProjectFilesSidebar({
                 onExpand={() => setExpanded(true)}
                 onCollapse={collapse}
               >
+                {instructionsSelected && canManageProject && !editing && (
+                  <button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    title="Edit instructions"
+                    className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    <span className="sr-only">Edit instructions</span>
+                  </button>
+                )}
                 {selected && !instructionsSelected && (
                   <div className="flex shrink-0 items-center">
                     {selected.contentUrl && (
@@ -521,7 +533,8 @@ function ProjectFilesSidebar({
               <ProjectInstructionsPanel
                 projectId={projectId}
                 isOwner={canManageProject}
-                onClose={deselect}
+                editing={editing}
+                onExitEdit={() => setEditing(false)}
               />
             ) : previewing && selected ? (
               <FilePreview

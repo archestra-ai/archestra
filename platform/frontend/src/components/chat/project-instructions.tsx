@@ -8,7 +8,6 @@ import { FileText } from "lucide-react";
 import { useState } from "react";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { PlainTextEditor } from "@/components/chat/plain-text-editor";
-import { Button } from "@/components/ui/button";
 import {
   useProjectInstructions,
   useSetProjectInstructions,
@@ -62,26 +61,26 @@ export function InstructionsRow({
 }
 
 /**
- * The instructions surface for the pinned entry. The owner opens straight in the
- * editor; saving (or cancelling) returns to a read-only rendered view — with an
- * Edit affordance to go back — rather than closing, so the saved guidance stays
- * visible. Non-owners only ever see the read view with a Close.
+ * The instructions surface for the pinned entry — the body only, mirroring
+ * {@link FilePreview}: the editor when `editing`, the rendered read view
+ * otherwise. The caller owns the `editing` flag and renders the Edit toggle in
+ * the file detail header's action row (so it sits with the other row actions);
+ * `onExitEdit` fires when the editor saves or cancels.
  */
 export function ProjectInstructionsPanel({
   projectId,
   isOwner,
-  onClose,
+  editing,
+  onExitEdit,
 }: {
   projectId: string;
   isOwner: boolean;
-  onClose: () => void;
+  editing: boolean;
+  onExitEdit: () => void;
 }) {
   const { data, isPending } = useProjectInstructions(projectId);
   const setInstructions = useSetProjectInstructions();
   const content = data?.content ?? "";
-  // The owner opens in the editor (the usual reason to open instructions). Save
-  // and Cancel return here to the read view instead of closing the panel.
-  const [editing, setEditing] = useState(isOwner);
 
   if (isPending) {
     return (
@@ -96,52 +95,32 @@ export function ProjectInstructionsPanel({
       <InstructionsEditor
         initialContent={content}
         saving={setInstructions.isPending}
-        onCancel={() => setEditing(false)}
+        onCancel={onExitEdit}
         onSave={async (value) => {
           const ok = await setInstructions.mutateAsync({
             id: projectId,
             content: value,
           });
-          if (ok) setEditing(false);
+          if (ok) onExitEdit();
         }}
       />
     );
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-end gap-1 border-b px-3 py-1.5">
-        {isOwner && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={() => setEditing(true)}
-          >
-            Edit
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs text-muted-foreground"
-          onClick={onClose}
-        >
-          Close
-        </Button>
-      </div>
+    <div className="min-h-0 flex-1 overflow-auto">
       {content.trim() ? (
         <ConversationArtifactPanel
           artifact={content}
           isOpen
-          onToggle={onClose}
+          onToggle={() => {}}
           embedded
           hideHeader
         />
       ) : (
-        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
+        <div className="flex h-full flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
           {isOwner
-            ? "No instructions yet. Choose Edit to add guidance for every chat."
+            ? "No instructions yet."
             : "The project owner hasn't added any instructions."}
         </div>
       )}

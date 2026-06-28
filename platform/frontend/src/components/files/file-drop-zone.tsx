@@ -20,6 +20,12 @@ const isFileDrag = (event: DragEvent) =>
  * Wraps a region so dragging OS files onto it triggers an upload. Only reacts to
  * file drags (ignores text/element drags), and uses a depth counter so the
  * overlay doesn't flicker as the pointer moves between nested children.
+ *
+ * A file drag inside the zone is always *claimed* (preventDefault +
+ * stopPropagation) — even while `disabled` — so it never reaches a global
+ * document-level drop listener elsewhere on the page (e.g. the chat composer's
+ * `globalDrop`, which would otherwise also attach the dropped file). `disabled`
+ * only suppresses the overlay and the upload, not the claim.
  */
 export function FileDropZone({
   onDropFiles,
@@ -32,27 +38,29 @@ export function FileDropZone({
 
   const handleDragEnter = useCallback(
     (event: DragEvent) => {
-      if (disabled || !isFileDrag(event)) return;
+      if (!isFileDrag(event)) return;
       event.preventDefault();
+      event.stopPropagation();
+      if (disabled) return;
       dragDepth.current += 1;
       setDragActive(true);
     },
     [disabled],
   );
 
-  const handleDragOver = useCallback(
-    (event: DragEvent) => {
-      if (disabled || !isFileDrag(event)) return;
-      // Required for the drop to fire and to show the copy cursor.
-      event.preventDefault();
-    },
-    [disabled],
-  );
+  const handleDragOver = useCallback((event: DragEvent) => {
+    if (!isFileDrag(event)) return;
+    // Required for the drop to fire and to show the copy cursor.
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
 
   const handleDragLeave = useCallback(
     (event: DragEvent) => {
-      if (disabled || !isFileDrag(event)) return;
+      if (!isFileDrag(event)) return;
       event.preventDefault();
+      event.stopPropagation();
+      if (disabled) return;
       dragDepth.current -= 1;
       if (dragDepth.current <= 0) {
         dragDepth.current = 0;
@@ -64,10 +72,12 @@ export function FileDropZone({
 
   const handleDrop = useCallback(
     (event: DragEvent) => {
-      if (disabled || !isFileDrag(event)) return;
+      if (!isFileDrag(event)) return;
       event.preventDefault();
+      event.stopPropagation();
       dragDepth.current = 0;
       setDragActive(false);
+      if (disabled) return;
       const files = Array.from(event.dataTransfer.files);
       if (files.length > 0) onDropFiles(files);
     },

@@ -69,6 +69,19 @@ vi.mock("@/components/mcp-app/mcp-app-meta-bar", () => ({
   McpAppMetaBar: () => <div data-testid="meta-bar" />,
 }));
 
+// Stub the side-panel management tabs: they pull the environment/teams/auth
+// query chains, which aren't this suite's concern (covered by their own tests).
+// Here we only assert the panel chrome wires them to the tabs.
+vi.mock("@/components/mcp-app/app-settings-panel", () => ({
+  AppSettingsPanel: () => <div data-testid="settings-panel" />,
+}));
+vi.mock("@/components/mcp-app/app-visibility-panel", () => ({
+  AppVisibilityPanel: () => <div data-testid="visibility-panel" />,
+}));
+vi.mock("@/components/mcp-app/app-versions-panel", () => ({
+  AppVersionsPanel: () => <div data-testid="versions-panel" />,
+}));
+
 // ── Import component under test after mocks ───────────────────────────────────
 
 import { useApp } from "@/lib/app.query";
@@ -710,6 +723,85 @@ describe("McpAppSection superseded renders", () => {
 
     expect(document.querySelector("iframe")).toBeInTheDocument();
     expect(screen.queryByText(/· Updated/)).not.toBeInTheDocument();
+  });
+});
+
+describe("McpAppSection owned-app panel chrome", () => {
+  const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearAllAppDiagnostics();
+  });
+
+  function PanelHost({ target }: { target: HTMLElement }) {
+    const { setPortalTarget } = useApps();
+    useEffect(() => {
+      setPortalTarget(target);
+    }, [setPortalTarget, target]);
+    return null;
+  }
+
+  // Renders an owned app selected into the panel host so the tabbed chrome
+  // branch (renderInPanel && appId && ownedApp) is active. The live card portals
+  // into `target`.
+  async function renderOwnedPanel() {
+    mockUseApp.mockReturnValue({
+      data: { id: APP_ID, name: "To Do App" },
+    } as ReturnType<typeof useApp>);
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+    await act(async () => {
+      render(
+        <AppsProvider
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "To Do App",
+              uiResourceUri: defaultProps.uiResourceUri,
+              createdAt: 0,
+            },
+          ]}
+        >
+          <PanelHost target={target} />
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </AppsProvider>,
+      );
+    });
+    return target;
+  }
+
+  it("shows the management tabs and drops the bottom meta bar", async () => {
+    const target = await renderOwnedPanel();
+
+    for (const name of ["Preview", "Settings", "Visibility", "Versions"]) {
+      expect(within(target).getByRole("tab", { name })).toBeInTheDocument();
+    }
+    expect(screen.queryByTestId("meta-bar")).not.toBeInTheDocument();
+    expect(target.querySelector("iframe")).toBeInTheDocument();
+
+    target.remove();
+  });
+
+  it("keeps the live iframe mounted when switching to a management tab", async () => {
+    const user = userEvent.setup();
+    const target = await renderOwnedPanel();
+    const iframe = target.querySelector("iframe");
+
+    await act(async () => {
+      await user.click(within(target).getByRole("tab", { name: "Settings" }));
+    });
+
+    expect(within(target).getByTestId("settings-panel")).toBeInTheDocument();
+    // The runtime overlay never unmounts the iframe — same DOM node persists.
+    expect(target.querySelector("iframe")).toBe(iframe);
+
+    target.remove();
   });
 });
 

@@ -17,6 +17,9 @@ import {
 } from "@/components/chat/chat-messages.utils";
 import { AppEditModelContextDialog } from "@/components/mcp-app/app-edit-model-context-dialog.lazy";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
+import { AppSettingsPanel } from "@/components/mcp-app/app-settings-panel";
+import { AppVersionsPanel } from "@/components/mcp-app/app-versions-panel";
+import { AppVisibilityPanel } from "@/components/mcp-app/app-visibility-panel";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
   McpAppAddressPill,
@@ -37,6 +40,7 @@ import {
   type McpCallToolResult,
 } from "@/components/mcp-app/mcp-app-view";
 import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApp } from "@/lib/app.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -88,6 +92,9 @@ class McpAppErrorBoundary extends Component<
 
 /** Stable no-op size reporter for the panel-hosted (fill) render. */
 const noopSizeChange = () => {};
+
+/** Tabs of the owned-app side-panel chrome. */
+type PanelTab = "preview" | "settings" | "visibility" | "versions";
 
 /**
  * Self-contained MCP App section for use inside a Tool collapsible.
@@ -159,6 +166,7 @@ export function McpAppSection({
   // at render time) and to seed the edit dialog.
   const { data: canEdit } = useHasPermissions({ app: ["update"] });
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<PanelTab>("preview");
   const { data: ownedApp } = useApp(appId ?? null);
 
   const headerName = ownedApp?.name || appName || humanizeToolLabel(toolName);
@@ -263,6 +271,148 @@ export function McpAppSection({
     editPencil = <McpAppEditButton onClick={() => setEditDialogOpen(true)} />;
   }
 
+  const runtimeNode = (
+    <McpAppRuntime
+      toolResourceUri={uiResourceUri}
+      endpoint={
+        appId
+          ? { kind: "app", appId }
+          : {
+              kind: "agent",
+              agentId,
+              serverPrefix: parseFullToolName(toolName).serverName ?? toolName,
+            }
+      }
+      displayMode={displayMode}
+      onDisplayModeChange={setDisplayMode}
+      // While portaled into the panel (fill mode), don't report size: that
+      // would overwrite the last inline size and make the card return at the
+      // panel's height when the panel closes.
+      onSizeChange={renderInPanel ? noopSizeChange : setSize}
+      // Seed the iframe + loading box at the last measured inline height so a
+      // reload (e.g. closing the panel re-mounts it) doesn't collapse then grow.
+      inlineInitialHeight={size?.height ?? INITIAL_INLINE_HEIGHT}
+      toolInput={appId ? undefined : toolInput}
+      toolResult={toolResult}
+      preloadedResource={preloadedResource}
+      onResourceStateChange={handleResourceStateChange}
+      onSendMessage={onSendMessage}
+      appVersion={appVersion}
+      reloadNonce={reloadNonce}
+    />
+  );
+
+  // The owned-app side panel gets a two-row header (name/switcher + refresh,
+  // then tabs) and no bottom meta bar. The management tabs render as an opaque
+  // overlay over the live iframe so the runtime is never unmounted — only the
+  // Preview tab leaves it visible.
+  let topBar: React.ReactNode;
+  let body: React.ReactNode;
+  let bottomBar: React.ReactNode;
+  if (renderInPanel && appId && ownedApp) {
+    topBar = (
+      <div className="relative z-10 flex shrink-0 flex-col gap-2 px-2 py-2 shadow-[0_1px_2px_-1px_rgb(0_0_0/0.08)]">
+        <div className="flex h-7 items-center gap-2">
+          <div className="min-w-0 flex-1">
+            {apps.length > 1 ? (
+              <McpAppSwitcher
+                value={selectedToolCallId}
+                options={apps.map((app) => ({
+                  value: app.toolCallId,
+                  label: app.label,
+                }))}
+                onChange={select}
+                className="w-full"
+              />
+            ) : (
+              <span className="truncate px-1 text-sm font-medium">
+                {headerName}
+              </span>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <McpAppStandaloneButton appId={appId} />
+            <McpAppRefreshButton onClick={reload} />
+          </div>
+        </div>
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as PanelTab)}
+        >
+          <TabsList className="h-8 w-max">
+            <TabsTrigger value="preview" className="px-3 text-xs">
+              Preview
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="px-3 text-xs">
+              Settings
+            </TabsTrigger>
+            <TabsTrigger value="visibility" className="px-3 text-xs">
+              Visibility
+            </TabsTrigger>
+            <TabsTrigger value="versions" className="px-3 text-xs">
+              Versions
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+    );
+    body = (
+      <div className="relative h-full w-full [&>div]:!h-full">
+        {runtimeNode}
+        {activeTab !== "preview" && (
+          <div className="absolute inset-0 z-10 overflow-y-auto bg-background p-4">
+            {activeTab === "settings" && <AppSettingsPanel app={ownedApp} />}
+            {activeTab === "visibility" && (
+              <AppVisibilityPanel app={ownedApp} />
+            )}
+            {activeTab === "versions" && <AppVersionsPanel appId={appId} />}
+          </div>
+        )}
+      </div>
+    );
+    bottomBar = undefined;
+  } else {
+    topBar = (
+      <McpAppTopBar
+        left={<McpAppRefreshButton onClick={reload} />}
+        right={
+          <>
+            {displayMode === "fullscreen" && (
+              <McpAppFullscreenExitButton onClick={toggleFullscreen} />
+            )}
+            {toolCallId && !renderInPanel && (
+              <McpAppPanelButton onClick={handleShowInPanel} />
+            )}
+          </>
+        }
+      >
+        {renderInPanel && apps.length > 1 ? (
+          <McpAppSwitcher
+            value={selectedToolCallId}
+            options={apps.map((app) => ({
+              value: app.toolCallId,
+              label: app.label,
+            }))}
+            onChange={select}
+            leading={editPencil}
+            actions={pillActions}
+          />
+        ) : (
+          <McpAppAddressPill
+            label={headerName}
+            leading={editPencil}
+            actions={pillActions}
+          />
+        )}
+      </McpAppTopBar>
+    );
+    body = runtimeNode;
+    bottomBar =
+      appId && ownedApp ? (
+        <McpAppMetaBar app={ownedApp} version={appVersion ?? null} />
+      ) : undefined;
+  }
+
   const liveSurface = (
     <McpAppErrorBoundary>
       <McpAppCard
@@ -271,75 +421,10 @@ export function McpAppSection({
         diagnostics={diagnosticsBadge}
         fillContainer={renderInPanel}
         capInlineHeight
-        topBar={
-          <McpAppTopBar
-            left={<McpAppRefreshButton onClick={reload} />}
-            right={
-              <>
-                {displayMode === "fullscreen" && (
-                  <McpAppFullscreenExitButton onClick={toggleFullscreen} />
-                )}
-                {toolCallId && !renderInPanel && (
-                  <McpAppPanelButton onClick={handleShowInPanel} />
-                )}
-              </>
-            }
-          >
-            {renderInPanel && apps.length > 1 ? (
-              <McpAppSwitcher
-                value={selectedToolCallId}
-                options={apps.map((app) => ({
-                  value: app.toolCallId,
-                  label: app.label,
-                }))}
-                onChange={select}
-                leading={editPencil}
-                actions={pillActions}
-              />
-            ) : (
-              <McpAppAddressPill
-                label={headerName}
-                leading={editPencil}
-                actions={pillActions}
-              />
-            )}
-          </McpAppTopBar>
-        }
-        bottomBar={
-          appId && ownedApp ? (
-            <McpAppMetaBar app={ownedApp} version={appVersion ?? null} />
-          ) : undefined
-        }
+        topBar={topBar}
+        bottomBar={bottomBar}
       >
-        <McpAppRuntime
-          toolResourceUri={uiResourceUri}
-          endpoint={
-            appId
-              ? { kind: "app", appId }
-              : {
-                  kind: "agent",
-                  agentId,
-                  serverPrefix:
-                    parseFullToolName(toolName).serverName ?? toolName,
-                }
-          }
-          displayMode={displayMode}
-          onDisplayModeChange={setDisplayMode}
-          // While portaled into the panel (fill mode), don't report size: that
-          // would overwrite the last inline size and make the card return at the
-          // panel's height when the panel closes.
-          onSizeChange={renderInPanel ? noopSizeChange : setSize}
-          // Seed the iframe + loading box at the last measured inline height so a
-          // reload (e.g. closing the panel re-mounts it) doesn't collapse then grow.
-          inlineInitialHeight={size?.height ?? INITIAL_INLINE_HEIGHT}
-          toolInput={appId ? undefined : toolInput}
-          toolResult={toolResult}
-          preloadedResource={preloadedResource}
-          onResourceStateChange={handleResourceStateChange}
-          onSendMessage={onSendMessage}
-          appVersion={appVersion}
-          reloadNonce={reloadNonce}
-        />
+        {body}
       </McpAppCard>
     </McpAppErrorBoundary>
   );

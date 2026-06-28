@@ -96,17 +96,20 @@ export function McpAppSwitcher({
   onChange,
   leading,
   actions,
+  className,
 }: {
   value: string | null;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
   leading?: React.ReactNode;
   actions?: React.ReactNode;
+  /** Overrides the pill's default fixed width (e.g. `w-full` in a narrow panel). */
+  className?: string;
 }) {
   const selectedLabel = options.find((o) => o.value === value)?.label;
   return (
     <Select value={value ?? undefined} onValueChange={onChange}>
-      <div className={cn(PILL_CLASS, "relative cursor-pointer")}>
+      <div className={cn(PILL_CLASS, "relative cursor-pointer", className)}>
         {/* Transparent trigger fills the pill so clicking the name/icon
             (pointer-events-none) opens the dropdown; the leading/action buttons
             above it (z-10) keep their own clicks. */}

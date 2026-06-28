@@ -130,9 +130,6 @@ function ProjectDetail() {
           description={project.description ?? ""}
           actionButton={
             <div className="flex items-center gap-2">
-              {project.viewerRole === "shared" && (
-                <Badge variant="secondary">Shared with you</Badge>
-              )}
               {isAdminView && (
                 <Badge variant="secondary">
                   Viewing as administrator

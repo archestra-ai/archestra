@@ -4,6 +4,7 @@ import {
   transformCatalogItemToFormValues,
   transformExternalCatalogToFormValues,
   transformFormToApiData,
+  parseSmartPaste,
 } from "./mcp-catalog-form.utils";
 
 describe("transformFormToApiData", () => {
@@ -1013,3 +1014,100 @@ describe("buildCloneFormValues", () => {
     expect(values.oauthConfig?.client_secret).toBe("keep-me");
   });
 });
+
+describe("parseSmartPaste", () => {
+  it("returns null for non-JSON input", () => {
+    expect(parseSmartPaste("not a json")).toBeNull();
+    expect(parseSmartPaste("")).toBeNull();
+  });
+
+  it("handles a JSON array of arguments", () => {
+    const input = '["--verbose", "/path/to/server.js"]';
+    expect(parseSmartPaste(input)).toEqual({
+      arguments: "--verbose\n/path/to/server.js",
+    });
+  });
+
+  it("handles a single server config at root", () => {
+    const input = `{
+      "command": "node",
+      "args": ["server.js", "--verbose"],
+      "env": {
+        "PORT": 3000,
+        "DEBUG": true,
+        "NAME": "test"
+      }
+    }`;
+    expect(parseSmartPaste(input)).toEqual({
+      serverType: "local",
+      command: "node",
+      arguments: "server.js\n--verbose",
+      environment: [
+        { key: "PORT", value: "3000", type: "number", promptOnInstallation: false },
+        { key: "DEBUG", value: "true", type: "boolean", promptOnInstallation: false },
+        { key: "NAME", value: "test", type: "plain_text", promptOnInstallation: false },
+      ],
+    });
+  });
+
+  it("handles mcpServers nested format", () => {
+    const input = `{
+      "mcpServers": {
+        "my-server": {
+          "command": "npx",
+          "args": ["-y", "@mcp/server"],
+          "env": {
+            "TOKEN": "secret"
+          }
+        }
+      }
+    }`;
+    expect(parseSmartPaste(input)).toEqual({
+      serverType: "local",
+      command: "npx",
+      arguments: "-y\n@mcp/server",
+      environment: [
+        { key: "TOKEN", value: "secret", type: "plain_text", promptOnInstallation: false },
+      ],
+    });
+  });
+
+  it("handles a flat map of servers", () => {
+    const input = `{
+      "github": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"]
+      }
+    }`;
+    expect(parseSmartPaste(input)).toEqual({
+      serverType: "local",
+      command: "npx",
+      arguments: "-y\n@modelcontextprotocol/server-github",
+    });
+  });
+
+  it("handles remote servers with http/url", () => {
+    const input = `{
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/"
+    }`;
+    expect(parseSmartPaste(input)).toEqual({
+      serverType: "remote",
+      serverUrl: "https://api.githubcopilot.com/mcp/",
+    });
+  });
+
+  it("handles docker run commands via parseDockerArgsToLocalConfig", () => {
+    const input = `{
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "mcp/github", "--token", "foo"],
+      "docker_image": "mcp/github"
+    }`;
+    expect(parseSmartPaste(input)).toEqual({
+      serverType: "local",
+      dockerImage: "mcp/github",
+      arguments: "--token\nfoo",
+    });
+  });
+});
+

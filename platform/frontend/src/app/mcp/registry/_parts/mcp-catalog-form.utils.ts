@@ -979,3 +979,159 @@ export function stripEnvVarQuotes(value: string): string {
 
   return value;
 }
+
+export interface SmartPasteResult {
+  serverType?: "remote" | "local";
+  serverUrl?: string;
+  command?: string;
+  arguments?: string;
+  environment?: Array<{
+    key: string;
+    value: string;
+    type: "plain_text" | "secret" | "boolean" | "number";
+    promptOnInstallation: boolean;
+  }>;
+  dockerImage?: string;
+}
+
+export function parseSmartPaste(text: string): SmartPasteResult | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (e) {
+    return null;
+  }
+
+  // Case 1: JSON Array
+  if (Array.isArray(parsed)) {
+    return {
+      arguments: parsed.map((a: any) => typeof a === "object" ? JSON.stringify(a) : String(a)).join("\n"),
+    };
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    return null;
+  }
+
+  // Case 2: Object
+  let serverConfig: any = null;
+
+  // Detect mcpServers
+  if (parsed.mcpServers && typeof parsed.mcpServers === "object") {
+    const keys = Object.keys(parsed.mcpServers);
+    if (keys.length > 0) {
+      serverConfig = parsed.mcpServers[keys[0]];
+    }
+  } else if (parsed.command || parsed.args || parsed.arguments || parsed.url || parsed.serverUrl || parsed.dockerImage || parsed.docker_image) {
+    // Direct server config at the root
+    serverConfig = parsed;
+  } else {
+    // Maybe a flat map of servers, e.g. { "github": { "command": "..." } }
+    const keys = Object.keys(parsed);
+    for (const key of keys) {
+      const val = parsed[key];
+      if (val && typeof val === "object" && (val.command || val.args || val.arguments || val.url || val.serverUrl || val.dockerImage || val.docker_image)) {
+        serverConfig = val;
+        break;
+      }
+    }
+  }
+
+  if (!serverConfig) {
+    return null;
+  }
+
+  const result: SmartPasteResult = {};
+
+  // Detect serverType and serverUrl
+  const urlVal = serverConfig.url || serverConfig.serverUrl;
+  const isRemote = typeof urlVal === "string" && urlVal.startsWith("http");
+  const typeVal = serverConfig.type || serverConfig.serverType;
+  
+  if (isRemote || typeVal === "remote" || typeVal === "http") {
+    result.serverType = "remote";
+    if (typeof urlVal === "string") {
+      result.serverUrl = urlVal;
+    }
+  } else {
+    result.serverType = "local";
+  }
+
+  // command
+  let command = typeof serverConfig.command === "string" ? serverConfig.command : undefined;
+  
+  // dockerImage
+  let dockerImage = typeof serverConfig.dockerImage === "string"
+    ? serverConfig.dockerImage
+    : (typeof serverConfig.docker_image === "string" ? serverConfig.docker_image : undefined);
+
+  // args / arguments
+  const argsVal = serverConfig.args !== undefined ? serverConfig.args : serverConfig.arguments;
+  let argsStr = "";
+  if (Array.isArray(argsVal)) {
+    argsStr = argsVal.map((a: any) => typeof a === "object" ? JSON.stringify(a) : String(a)).join("\n");
+  } else if (typeof argsVal === "string") {
+    argsStr = argsVal;
+  }
+
+  // Handle docker run parsing if command is docker or dockerImage is present
+  if (command === "docker" && dockerImage) {
+    const argsArray = Array.isArray(argsVal)
+      ? argsVal.map(String)
+      : (typeof argsVal === "string" ? argsVal.split("\n").map(s => s.trim()).filter(Boolean) : []);
+    const parsedDocker = parseDockerArgsToLocalConfig(command, argsArray, dockerImage);
+    if (parsedDocker) {
+      command = parsedDocker.command;
+      if (parsedDocker.arguments) {
+        argsStr = parsedDocker.arguments.join("\n");
+      }
+      dockerImage = parsedDocker.dockerImage;
+    }
+  } else if (command === "docker" && !dockerImage) {
+    // command is "docker", see if we can extract image from arguments
+    const argsArray = Array.isArray(argsVal)
+      ? argsVal.map(String)
+      : (typeof argsVal === "string" ? argsVal.split("\n").map(s => s.trim()).filter(Boolean) : []);
+    // Find first non-flag argument that is likely the image
+    const imageCandidate = argsArray.find(a => !a.startsWith("-") && a !== "run");
+    if (imageCandidate) {
+      const parsedDocker = parseDockerArgsToLocalConfig(command, argsArray, imageCandidate);
+      if (parsedDocker) {
+        command = parsedDocker.command;
+        if (parsedDocker.arguments) {
+          argsStr = parsedDocker.arguments.join("\n");
+        }
+        dockerImage = parsedDocker.dockerImage;
+      }
+    }
+  }
+
+  if (command !== undefined) result.command = command;
+  if (dockerImage !== undefined) result.dockerImage = dockerImage;
+  if (argsStr) result.arguments = argsStr;
+
+  // env / environment / envs
+  const envVal = serverConfig.env !== undefined ? serverConfig.env : (serverConfig.environment !== undefined ? serverConfig.environment : serverConfig.envs);
+  if (envVal && typeof envVal === "object" && !Array.isArray(envVal)) {
+    result.environment = Object.entries(envVal).map(([key, val]) => {
+      const strVal = typeof val === "object" ? JSON.stringify(val) : String(val);
+      let type: "plain_text" | "secret" | "boolean" | "number" = "plain_text";
+      if (val === "true" || val === "false" || typeof val === "boolean") {
+        type = "boolean";
+      } else if (typeof val === "number") {
+        type = "number";
+      }
+      return {
+        key,
+        value: strVal,
+        type,
+        promptOnInstallation: false,
+      };
+    });
+  }
+
+  return result;
+}

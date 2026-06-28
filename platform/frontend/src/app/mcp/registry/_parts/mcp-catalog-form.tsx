@@ -102,7 +102,9 @@ import {
 import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
+  parseSmartPaste,
 } from "./mcp-catalog-form.utils";
+import { toast } from "sonner";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -719,6 +721,43 @@ export function McpCatalogForm({
     { mode: "add" } | { mode: "edit"; index: number } | null
   >(null);
 
+  const handleSmartPaste = (
+    e: React.ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
+    const pastedText = e.clipboardData.getData("text");
+    const parsed = parseSmartPaste(pastedText);
+    if (parsed) {
+      e.preventDefault();
+      if (parsed.serverType !== undefined) {
+        form.setValue("serverType", parsed.serverType, { shouldDirty: true });
+      }
+      if (parsed.serverUrl !== undefined) {
+        form.setValue("serverUrl", parsed.serverUrl, { shouldDirty: true });
+      }
+      if (parsed.command !== undefined) {
+        form.setValue("localConfig.command", parsed.command, {
+          shouldDirty: true,
+        });
+      }
+      if (parsed.arguments !== undefined) {
+        form.setValue("localConfig.arguments", parsed.arguments, {
+          shouldDirty: true,
+        });
+      }
+      if (parsed.dockerImage !== undefined) {
+        form.setValue("localConfig.dockerImage", parsed.dockerImage, {
+          shouldDirty: true,
+        });
+      }
+      if (parsed.environment !== undefined) {
+        form.setValue("localConfig.environment", parsed.environment, {
+          shouldDirty: true,
+        });
+      }
+      toast.success("Successfully parsed and populated MCP configuration!");
+    }
+  };
+
   // Fetch available k8s docker-registry secrets for the "existing" dropdown
   const { data: k8sSecrets = [] } = useK8sImagePullSecrets();
   const imagePullSecretItems = useMemo(
@@ -1196,6 +1235,7 @@ export function McpCatalogForm({
                           placeholder="https://api.example.com/mcp"
                           className="font-mono"
                           autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                          onPaste={handleSmartPaste}
                           {...field}
                         />
                       </FormControl>
@@ -1221,6 +1261,7 @@ export function McpCatalogForm({
                             placeholder="node"
                             className="font-mono"
                             autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                            onPaste={handleSmartPaste}
                             {...field}
                           />
                         </FormControl>
@@ -1247,6 +1288,7 @@ export function McpCatalogForm({
                           <Textarea
                             placeholder={`/path/to/server.js\n--verbose`}
                             className="font-mono min-h-20"
+                            onPaste={handleSmartPaste}
                             {...field}
                           />
                         </FormControl>

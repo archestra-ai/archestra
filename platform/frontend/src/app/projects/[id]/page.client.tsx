@@ -5,7 +5,6 @@ import {
   CalendarClock,
   Download,
   Eye,
-  FileText,
   MessageCircle,
   MoreHorizontal,
   Pencil,
@@ -41,7 +40,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
 import { buildProjectChatHandoffUrl } from "@/lib/projects/project-chat-handoff";
@@ -224,7 +222,6 @@ function ProjectDetail() {
       <div className="hidden md:flex h-full min-h-0">
         <ProjectFilesSidebar
           projectId={project.id}
-          projectName={project.name}
           canManageProject={canManage}
         />
       </div>
@@ -342,17 +339,16 @@ function ChatsList({
 }
 
 /**
- * The project's files as a full-height right sidebar — the exact chat-page
- * Files panel: same resizable shell, same tab header, same stacked
- * list-over-preview body.
+ * The project's files as a full-height right sidebar — the same resizable shell
+ * and stacked list-over-preview body as the chat-page Files panel, minus the tab
+ * header: Files is the only view here, and the project name already shows in the
+ * page title, so both are dropped.
  */
 function ProjectFilesSidebar({
   projectId,
-  projectName,
   canManageProject,
 }: {
   projectId: string;
-  projectName: string;
   /** Owner / project-admin — gates editing the pinned instructions. */
   canManageProject: boolean;
 }) {
@@ -414,21 +410,7 @@ function ProjectFilesSidebar({
 
   return (
     <ResizableRightPanel>
-      <Tabs value="files" className="flex-1 min-h-0 flex flex-col gap-0">
-        <div className="flex items-center gap-2 border-b px-2 py-2">
-          <div className="min-w-0 flex-1 overflow-x-auto">
-            <TabsList className="h-8 w-max">
-              <TabsTrigger value="files" className="text-xs px-3">
-                <FileText className="h-3 w-3" />
-                Files
-              </TabsTrigger>
-            </TabsList>
-          </div>
-          <span className="shrink-0 truncate pr-1 text-xs text-muted-foreground">
-            {projectName}
-          </span>
-        </div>
-
+      <div className="flex-1 min-h-0 flex flex-col gap-0">
         <div className="flex-1 min-h-0 overflow-hidden relative">
           <div className="flex h-full flex-col">
             {/* The list fills the panel when nothing is open, is capped above
@@ -508,7 +490,7 @@ function ProjectFilesSidebar({
             ) : null}
           </div>
         </div>
-      </Tabs>
+      </div>
       {deleteDialog}
     </ResizableRightPanel>
   );

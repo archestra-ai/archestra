@@ -659,3 +659,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @BittuBarnwal7479
 - @Ami765
 - @Chris-Graffagnino
+- @benjaminjaklic
+- @githubuser420x
+- @RanggaGibran
+- @diegosanchezsegundo25-wq
+- @muokwejosh-cloud

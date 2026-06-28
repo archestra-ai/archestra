@@ -111,6 +111,8 @@ class KbDocumentModel {
         metadata: schema.kbDocumentsTable.metadata,
         embeddingStatus: schema.kbDocumentsTable.embeddingStatus,
         chunkCount: schema.kbDocumentsTable.chunkCount,
+        permissionSyncStatus: schema.kbDocumentsTable.permissionSyncStatus,
+        permissionSyncMetadata: schema.kbDocumentsTable.permissionSyncMetadata,
         createdAt: schema.kbDocumentsTable.createdAt,
         updatedAt: schema.kbDocumentsTable.updatedAt,
       })

@@ -665,3 +665,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @diegosanchezsegundo25-wq
 - @muokwejosh-cloud
 - @Aina483
+- @zhangshuaiyingde

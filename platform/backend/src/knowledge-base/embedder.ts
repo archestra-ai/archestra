@@ -1,8 +1,10 @@
 import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@archestra/shared";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
+import type { EmbeddingErrorCode } from "@/types/kb-document";
 import {
   callEmbedding,
+  categorizeEmbeddingError,
   type EmbeddingApiResponse,
   type EmbeddingInput,
   getEmbeddingDiscriminator,
@@ -82,6 +84,7 @@ class EmbeddingService {
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "completed",
         chunkCount: chunks.length,
+        embeddingErrorCode: null,
       });
 
       logger.info(
@@ -89,12 +92,15 @@ class EmbeddingService {
         "[Embedder] Document embeddings completed",
       );
     } catch (error) {
+      const errorCode = categorizeEmbeddingError(error);
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "failed",
+        embeddingErrorCode: errorCode,
       });
       logger.error(
         {
           documentId,
+          errorCode,
           error: error instanceof Error ? error.message : String(error),
         },
         "[Embedder] Failed to embed document",
@@ -195,6 +201,7 @@ class EmbeddingService {
     const ctx = orgConfig.config;
     const embeddingResults = new Map<string, number[]>();
     const failedChunkIds = new Set<string>();
+    const failedChunkErrors = new Map<string, EmbeddingErrorCode>();
 
     for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
       const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
@@ -212,17 +219,20 @@ class EmbeddingService {
           embeddingResults.set(batch[j].chunkId, response.data[j].embedding);
         }
       } catch (error) {
+        const errorCode = categorizeEmbeddingError(error);
         logger.error(
           {
             runId: connectorRunId,
             batchStart: i,
             batchSize: batch.length,
+            errorCode,
             error: error instanceof Error ? error.message : String(error),
           },
           "[Embedder] Batch embedding API call failed",
         );
         for (const chunk of batch) {
           failedChunkIds.add(chunk.chunkId);
+          failedChunkErrors.set(chunk.chunkId, errorCode);
         }
       }
     }
@@ -236,19 +246,22 @@ class EmbeddingService {
     }
 
     for (const { documentId, chunkIds, chunkCount } of docChunkMap) {
-      const anyFailed = chunkIds.some((id) => failedChunkIds.has(id));
-      if (anyFailed) {
+      const failedChunkId = chunkIds.find((id) => failedChunkIds.has(id));
+      if (failedChunkId) {
+        const errorCode = failedChunkErrors.get(failedChunkId) ?? "unknown";
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "failed",
+          embeddingErrorCode: errorCode,
         });
         logger.error(
-          { documentId, runId: connectorRunId },
+          { documentId, runId: connectorRunId, errorCode },
           "[Embedder] Failed to embed document (batch failure)",
         );
       } else {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "completed",
           chunkCount,
+          embeddingErrorCode: null,
         });
         logger.info(
           { documentId, runId: connectorRunId, chunkCount },

@@ -13,7 +13,13 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
+import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   type KnowledgeBaseDocumentListItem,
@@ -120,6 +126,75 @@ export function ConnectorDocumentsTable({
           ) : (
             <span className="text-sm text-muted-foreground">-</span>
           ),
+      },
+      {
+        id: "status",
+        accessorKey: "embeddingStatus",
+        header: "Status",
+        cell: ({ row }) => {
+          const status = row.original.embeddingStatus;
+          const errorCode = row.original.embeddingErrorCode;
+
+          if (!status) return null;
+
+          const errorTooltipMap: Record<string, string> = {
+            rate_limit:
+              "Embedding rate limit exceeded. Please try again later.",
+            auth_error:
+              "Authentication failed. Check your API key configuration.",
+            model_not_found: "The configured embedding model was not found.",
+            server_error: "API server returned an error during embedding.",
+            dimensions_mismatch:
+              "Vector dimensions mismatch (check database & model configuration).",
+            unknown: "Embedding failed due to an unknown error.",
+          };
+
+          const statusConfig = {
+            completed: {
+              label: "Completed",
+              className:
+                "bg-green-500/10 text-green-600 border border-green-500/30",
+            },
+            failed: {
+              label: "Failed",
+              className: "bg-red-500/10 text-red-600 border border-red-500/30",
+            },
+            processing: {
+              label: "Processing",
+              className:
+                "bg-blue-500/10 text-blue-600 border border-blue-500/30",
+            },
+            pending: {
+              label: "Pending",
+              className:
+                "bg-muted-foreground/10 text-muted-foreground border border-muted-foreground/30",
+            },
+          };
+
+          const config = statusConfig[status] || statusConfig.pending;
+
+          if (status === "failed") {
+            const errorMsg = errorCode
+              ? errorTooltipMap[errorCode] || errorTooltipMap.unknown
+              : errorTooltipMap.unknown;
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className={config.className}>
+                    {config.label}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>{errorMsg}</TooltipContent>
+              </Tooltip>
+            );
+          }
+
+          return (
+            <Badge variant="secondary" className={config.className}>
+              {config.label}
+            </Badge>
+          );
+        },
       },
       {
         id: "updatedAt",

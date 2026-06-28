@@ -1,7 +1,8 @@
 import type {
   SupportedProvider,
   SupportedProviderDiscriminator,
-} from "@archestra/shared";
+} from "@shared";
+import type { EmbeddingErrorCode } from "@/types/kb-document";
 import { AzureEmbeddingError, callAzureEmbedding } from "./azure";
 import { callGeminiEmbedding, GeminiEmbeddingError } from "./gemini";
 import { callOpenAIEmbedding, OpenAIEmbeddingError } from "./openai";
@@ -93,4 +94,85 @@ export function getEmbeddingRetryDelayMs(
   }
 
   return fallbackDelayMs;
+}
+
+/**
+ * Categorize a thrown error into a standard EmbeddingErrorCode.
+ */
+export function categorizeEmbeddingError(error: unknown): EmbeddingErrorCode {
+  let status: number | undefined;
+  let message = "";
+
+  if (
+    error instanceof AzureEmbeddingError ||
+    error instanceof GeminiEmbeddingError ||
+    error instanceof OpenAIEmbeddingError
+  ) {
+    status = error.status;
+    message = error.message;
+  } else if (error instanceof Error) {
+    message = error.message;
+    if (
+      "status" in error &&
+      typeof (error as Record<string, unknown>).status === "number"
+    ) {
+      status = (error as Record<string, unknown>).status as number;
+    }
+  } else {
+    message = String(error);
+  }
+
+  const lowercaseMessage = message.toLowerCase();
+
+  // 1. Dimensions Mismatch
+  if (
+    lowercaseMessage.includes("dimension") ||
+    lowercaseMessage.includes("dimensionality")
+  ) {
+    return "dimensions_mismatch";
+  }
+
+  // 2. Rate Limit
+  if (
+    status === 429 ||
+    lowercaseMessage.includes("rate limit") ||
+    lowercaseMessage.includes("rate_limit") ||
+    lowercaseMessage.includes("too many requests")
+  ) {
+    return "rate_limit";
+  }
+
+  // 3. Auth Error
+  if (
+    status === 401 ||
+    status === 403 ||
+    lowercaseMessage.includes("api key") ||
+    lowercaseMessage.includes("unauthorized") ||
+    lowercaseMessage.includes("forbidden") ||
+    lowercaseMessage.includes("authentication") ||
+    lowercaseMessage.includes("invalid key")
+  ) {
+    return "auth_error";
+  }
+
+  // 4. Model Not Found
+  if (
+    status === 404 ||
+    lowercaseMessage.includes("model not found") ||
+    lowercaseMessage.includes("does not exist") ||
+    lowercaseMessage.includes("not found")
+  ) {
+    return "model_not_found";
+  }
+
+  // 5. Server Error
+  if (
+    (status !== undefined && status >= 500) ||
+    lowercaseMessage.includes("server error") ||
+    lowercaseMessage.includes("internal server error")
+  ) {
+    return "server_error";
+  }
+
+  return "unknown";
 }

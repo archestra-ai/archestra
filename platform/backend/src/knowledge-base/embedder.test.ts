@@ -145,6 +145,7 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingErrorCode).toBe("rate_limit");
   });
 
   test("no chunks marks document as completed with chunkCount 0", async ({
@@ -293,6 +294,7 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingErrorCode).toBe("server_error");
     expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(3);
   });
 
@@ -454,10 +456,80 @@ describe("EmbeddingService", () => {
 
     const updated1 = await KbDocumentModel.findById(doc1.id);
     expect(updated1?.embeddingStatus).toBe("failed");
+    expect(updated1?.embeddingErrorCode).toBe("unknown");
 
     // doc2 had no chunks, so it completes regardless
     const updated2 = await KbDocumentModel.findById(doc2.id);
     expect(updated2?.embeddingStatus).toBe("completed");
     expect(updated2?.chunkCount).toBe(0);
+  });
+
+  test("categorizes different API errors correctly when processing documents", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Error Categorization Doc",
+      content: "Content",
+      contentHash: "hash-errors",
+      embeddingStatus: "pending",
+    });
+
+    await KbChunkModel.insertMany([
+      { documentId: doc.id, content: "Some chunk", chunkIndex: 0 },
+    ]);
+
+    const OpenAIMod = (await import("openai")).default;
+    const makeError = (status: number, message: string) => {
+      const err = Object.assign(new Error(message), { status });
+      Object.setPrototypeOf(err, OpenAIMod.APIError.prototype);
+      return err;
+    };
+
+    // 1. Test auth_error
+    mockEmbeddingsCreate.mockRejectedValueOnce(
+      makeError(401, "Invalid API key"),
+    );
+    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+    let updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingErrorCode).toBe("auth_error");
+
+    // Reset status to pending for next test
+    await KbDocumentModel.update(doc.id, {
+      embeddingStatus: "pending",
+      embeddingErrorCode: null,
+    });
+
+    // 2. Test model_not_found
+    mockEmbeddingsCreate.mockRejectedValueOnce(
+      makeError(404, "Model not found"),
+    );
+    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+    updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingErrorCode).toBe("model_not_found");
+
+    // Reset status to pending
+    await KbDocumentModel.update(doc.id, {
+      embeddingStatus: "pending",
+      embeddingErrorCode: null,
+    });
+
+    // 3. Test dimensions_mismatch
+    mockEmbeddingsCreate.mockRejectedValueOnce(
+      new Error("The embedding dimension does not match"),
+    );
+    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+    updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingErrorCode).toBe("dimensions_mismatch");
   });
 });

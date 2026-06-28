@@ -41012,6 +41012,7 @@ export type GetConnectorDocumentsResponses = {
                 [key: string]: unknown;
             } | null;
             embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+            embeddingErrorCode: 'rate_limit' | 'auth_error' | 'model_not_found' | 'server_error' | 'dimensions_mismatch' | 'unknown';
             chunkCount: number;
             createdAt: string;
             updatedAt: string;
@@ -41209,6 +41210,7 @@ export type GetConnectorDocumentResponses = {
             [key: string]: unknown;
         } | null;
         embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+        embeddingErrorCode: 'rate_limit' | 'auth_error' | 'model_not_found' | 'server_error' | 'dimensions_mismatch' | 'unknown';
         chunkCount: number;
         createdAt: string;
         updatedAt: string;

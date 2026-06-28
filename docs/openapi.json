@@ -157248,6 +157248,18 @@
                               "failed"
                             ]
                           },
+                          "embeddingErrorCode": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "rate_limit",
+                              "auth_error",
+                              "model_not_found",
+                              "server_error",
+                              "dimensions_mismatch",
+                              "unknown"
+                            ]
+                          },
                           "chunkCount": {
                             "type": "integer",
                             "minimum": -2147483648,
@@ -157373,6 +157385,7 @@
                           "acl",
                           "metadata",
                           "embeddingStatus",
+                          "embeddingErrorCode",
                           "chunkCount",
                           "createdAt",
                           "updatedAt",
@@ -157756,6 +157769,18 @@
                         "failed"
                       ]
                     },
+                    "embeddingErrorCode": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "rate_limit",
+                        "auth_error",
+                        "model_not_found",
+                        "server_error",
+                        "dimensions_mismatch",
+                        "unknown"
+                      ]
+                    },
                     "chunkCount": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -157882,6 +157907,7 @@
                     "acl",
                     "metadata",
                     "embeddingStatus",
+                    "embeddingErrorCode",
                     "chunkCount",
                     "createdAt",
                     "updatedAt",

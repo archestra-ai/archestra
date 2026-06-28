@@ -249,10 +249,13 @@ class ProjectService {
       ownerName: ownerNames.get(project.userId) ?? null,
       conversationCount: counts.get(project.id) ?? 0,
       visibility: project.visibility,
-      // Owner's team-shared projects expose their team names for the badge;
-      // others (and non-team projects) get null.
+      // Team-shared projects expose their team names for the badge to the
+      // owner and to a project:admin overseeing them. A plain "shared"
+      // recipient (a member of one of the teams) gets null — the full target
+      // list stays the owner's business. Non-team projects: null.
       shareTeamNames:
-        viewerRole === "owner" && project.visibility === "team"
+        (viewerRole === "owner" || viewerRole === "admin") &&
+        project.visibility === "team"
           ? (shareTeams.get(project.id) ?? []).map((t) => t.name)
           : null,
       pinnedAt: pins.get(project.id) ?? null,

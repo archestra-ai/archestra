@@ -178,6 +178,32 @@ describe("GET /api/projects (scope + search)", () => {
     ]);
   });
 
+  test("admin oversight of a team-shared project exposes its team names", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+  }) => {
+    const admin = await makeUser({ email: "list-admin-teamnames@test.com" });
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    const other = await makeUser({ email: "list-other-teamnames@test.com" });
+    await makeMember(other.id, organizationId, {});
+    const team = await makeTeam(organizationId, other.id, { name: "Finance" });
+    const p = await create(other, "team-proj");
+    await share(other, p.id, "team", [team.id]);
+    actingUser = admin;
+
+    // The admin isn't a Finance member, so they reach the project via oversight
+    // (viewerRole "admin") — and still get the team name(s) for the pill tooltip.
+    const items = JSON.parse((await list("?scope=team")).body) as Array<{
+      name: string;
+      viewerRole: string;
+      shareTeamNames: string[] | null;
+    }>;
+    const item = items.find((i) => i.name === "team-proj");
+    expect(item?.viewerRole).toBe("admin");
+    expect(item?.shareTeamNames).toEqual(["Finance"]);
+  });
+
   test("the owner sub-filter is ignored for non-admins", async ({
     makeUser,
     makeMember,

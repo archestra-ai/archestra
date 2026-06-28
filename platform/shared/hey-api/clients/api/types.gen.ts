@@ -54682,6 +54682,97 @@ export type GetProjectFilesResponses = {
 
 export type GetProjectFilesResponse = GetProjectFilesResponses[keyof GetProjectFilesResponses];
 
+export type UploadProjectFilesData = {
+    body: {
+        name: string;
+        mimeType: string;
+        dataBase64: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/files';
+};
+
+export type UploadProjectFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UploadProjectFilesError = UploadProjectFilesErrors[keyof UploadProjectFilesErrors];
+
+export type UploadProjectFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        filename: string;
+        mimeType: string;
+    };
+};
+
+export type UploadProjectFilesResponse = UploadProjectFilesResponses[keyof UploadProjectFilesResponses];
+
 export type GetProjectInstructionsData = {
     body?: never;
     path: {

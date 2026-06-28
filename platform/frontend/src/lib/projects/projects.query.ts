@@ -1,6 +1,17 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  MAX_PROJECT_UPLOAD_BYTES,
+  MAX_PROJECT_UPLOAD_MB,
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import {
+  readFileAsBase64,
+  summarizeUploadResults,
+  type UploadOutcome,
+  validateUploadFile,
+} from "@/lib/files/file-upload";
 import { getApiErrorType, handleApiError } from "@/lib/utils";
 
 /**
@@ -28,6 +39,7 @@ const {
   setProjectShare,
   unpinProject,
   updateProject,
+  uploadProjectFiles,
 } = archestraApiSdk;
 
 type ProjectListFilters = NonNullable<
@@ -354,6 +366,64 @@ export function useDeleteProjectFiles(projectId: string) {
         toast.error(
           `Deleted ${deleted} of ${total}; ${failedIds.length} failed`,
         );
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["projects", projectId, "files"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["conversation-files"] });
+    },
+  });
+}
+
+/**
+ * Upload dropped files into the project, one request per file, sequentially —
+ * so a multi-file drop never aggregates into one oversized body and one file's
+ * failure (oversize, server error) never aborts the rest. Over-limit / empty
+ * files are caught client-side before any request. A new project file is visible
+ * to every chat in the project, so it also refreshes chat Files panels
+ * (`["conversation-files", …]`).
+ */
+export function useUploadProjectFiles(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (files: File[]): Promise<UploadOutcome[]> => {
+      const results: UploadOutcome[] = [];
+      for (const file of files) {
+        const validation = validateUploadFile(file, MAX_PROJECT_UPLOAD_BYTES);
+        if (!validation.ok) {
+          results.push({
+            name: file.name,
+            ok: false,
+            reason: validation.reason,
+          });
+          continue;
+        }
+        try {
+          const dataBase64 = await readFileAsBase64(file);
+          const { error } = await uploadProjectFiles({
+            path: { id: projectId },
+            body: { name: file.name, mimeType: file.type, dataBase64 },
+          });
+          results.push({
+            name: file.name,
+            ok: error == null,
+            reason: error == null ? undefined : "server",
+          });
+        } catch {
+          results.push({ name: file.name, ok: false, reason: "server" });
+        }
+      }
+      return results;
+    },
+    onSuccess: (results) => {
+      for (const { type, message } of summarizeUploadResults(
+        results,
+        MAX_PROJECT_UPLOAD_MB,
+      )) {
+        if (type === "success") toast.success(message);
+        else toast.error(message);
       }
     },
     onSettled: () => {

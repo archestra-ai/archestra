@@ -33,6 +33,7 @@ import {
 } from "@/components/chat/project-instructions";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { SelectableFileList } from "@/components/chat/selectable-file-list";
+import { FileDropZone } from "@/components/files/file-drop-zone";
 import { PageLayout } from "@/components/page-layout";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +55,7 @@ import {
   useProject,
   useProjectConversations,
   useProjectFiles,
+  useUploadProjectFiles,
 } from "@/lib/projects/projects.query";
 import { sandboxArtifactUrl } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { cn } from "@/lib/utils";
@@ -431,6 +433,7 @@ function ProjectFilesSidebar({
   // delete authorizes — so file select/delete is available to anyone here (the
   // chat panel gates on conversation ownership; the project surface on access).
   const deleteProjectFiles = useDeleteProjectFiles(projectId);
+  const uploadProjectFiles = useUploadProjectFiles(projectId);
   const { requestDelete, dialog: deleteDialog } = useFileDeletion<FileListItem>(
     {
       deleteItems: (toDelete) => deleteProjectFiles.mutateAsync(toDelete),
@@ -441,7 +444,11 @@ function ProjectFilesSidebar({
 
   return (
     <ResizableRightPanel>
-      <div className="flex-1 min-h-0 flex flex-col gap-0">
+      <FileDropZone
+        onDropFiles={(droppedFiles) => uploadProjectFiles.mutate(droppedFiles)}
+        disabled={uploadProjectFiles.isPending}
+        className="flex-1 min-h-0 flex flex-col gap-0"
+      >
         <div className="flex-1 min-h-0 overflow-hidden relative">
           <div className="flex h-full flex-col">
             {/* The list fills the panel when nothing is open, is capped above
@@ -554,7 +561,7 @@ function ProjectFilesSidebar({
             ) : null}
           </div>
         </div>
-      </div>
+      </FileDropZone>
       {deleteDialog}
     </ResizableRightPanel>
   );

@@ -1343,6 +1343,12 @@ export const requiredEndpointPermissionsMap: Partial<
   // `downloadable` and then 403 on every fetch. Project membership is still
   // enforced in the handler (projectService.listFiles -> requireReadable).
   [RouteId.GetProjectFiles]: { project: ["read"], sandbox: ["execute"] },
+  // Uploading a project file mirrors how files are produced in a project today
+  // (a sandbox run writing a result), so it carries the same `sandbox:execute`
+  // as the list/byte surfaces. Project membership (owner/shared, not admin
+  // oversight) is enforced in the handler (projectService.uploadFile ->
+  // requireReadable).
+  [RouteId.UploadProjectFiles]: { project: ["read"], sandbox: ["execute"] },
   // Instructions are plain project metadata (not a sandbox byte surface), so the
   // GET needs only project read — every project reader can see the instructions
   // that steer the project's chats. Editing is owner-only, enforced in the

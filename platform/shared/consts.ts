@@ -71,6 +71,17 @@ export const PROJECT_INSTRUCTIONS_MAX_LENGTH = 100_000;
  */
 export const EDITABLE_TEXT_FILE_MAX_BYTES = 1_000_000;
 
+/**
+ * Max size (bytes) of a single file uploaded by dragging it onto the project
+ * Files panel. Enforced both client-side (instant feedback before encoding) and
+ * server-side (the real gate). Kept comfortably under the API body limit: a
+ * 25 MB file is ~33 MB once base64-encoded, and uploads are one request per
+ * file, so a multi-file drop never aggregates into one oversized body.
+ */
+export const MAX_PROJECT_UPLOAD_BYTES = 25 * 1024 * 1024;
+/** {@link MAX_PROJECT_UPLOAD_BYTES} expressed in whole MB, for user-facing copy. */
+export const MAX_PROJECT_UPLOAD_MB = MAX_PROJECT_UPLOAD_BYTES / (1024 * 1024);
+
 export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
 export const DEFAULT_TEAM_NAME = "Default Team";

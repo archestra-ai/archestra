@@ -16,10 +16,11 @@ export type SkillSandboxReplayEventKind = z.infer<
 export const SkillSandboxFileKindSchema = z.enum(["upload", "artifact"]);
 export type SkillSandboxFileKind = z.infer<typeof SkillSandboxFileKindSchema>;
 
-/** Where a sandbox file's bytes live: Postgres bytea or an external filesystem. */
+/** Where a file's bytes live: Postgres bytea, an external filesystem, or S3. */
 export const SkillSandboxFileStorageProviderSchema = z.enum([
   "db",
   "filesystem",
+  "s3",
 ]);
 export type SkillSandboxFileStorageProvider = z.infer<
   typeof SkillSandboxFileStorageProviderSchema

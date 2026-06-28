@@ -12,6 +12,7 @@ import logger from "@/logging";
 import {
   ConversationEnabledToolModel,
   InternalMcpCatalogModel,
+  McpServerModel,
   ToolModel,
 } from "@/models";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
@@ -125,6 +126,18 @@ const SearchToolsOutputSchema = z.object({
         .describe(
           "MCP server prefix for third-party MCP tools when available.",
         ),
+      available: z
+        .boolean()
+        .describe(
+          "False when the tool's MCP connection is not installed; it stays " +
+            "discoverable but cannot run until reconnected.",
+        ),
+      unavailableReason: z
+        .string()
+        .nullable()
+        .describe(
+          "Compact reason and recovery action when available is false; null otherwise.",
+        ),
       params: z
         .string()
         .describe(
@@ -150,6 +163,7 @@ type SearchCandidate = {
   source: "archestra" | "mcp" | "agent_delegation";
   server: string | null;
   catalogName: string | null;
+  available: boolean;
   inputParameters: InputParameterSummary[];
   searchText: {
     name: string;
@@ -200,7 +214,15 @@ const registry = defineArchestraTools([
       }
 
       const matchCount = matches.length;
-      const tools = matches.slice(0, args.limit).map(toSearchResult);
+      // Available tools rank ahead of unavailable ones regardless of match
+      // strength, so an unavailable tool never displaces a usable match and is
+      // dropped first on truncation. Stable partition keeps relevance order
+      // within each group.
+      const ranked = [
+        ...matches.filter((candidate) => candidate.available),
+        ...matches.filter((candidate) => !candidate.available),
+      ];
+      const tools = ranked.slice(0, args.limit).map(toSearchResult);
       const truncated = matchCount > tools.length;
       // Only relevant to the zero-match hint, so resolve it lazily to avoid an
       // extra permission/assignment lookup on every successful search.
@@ -275,6 +297,7 @@ export const __test = {
       source: "mcp",
       server: null,
       catalogName: null,
+      available: true,
       inputParameters: [],
       searchText: buildSearchText({
         name: input.toolName,
@@ -333,6 +356,7 @@ async function getSearchableTools(params: {
       : [];
 
   const catalogNamesById = await getCatalogNamesById(filteredTools);
+  const catalogsWithInstalls = await getCatalogIdsWithInstalls(filteredTools);
   const candidates = new Map<string, SearchCandidate>();
   // First occurrence wins on duplicate names: assigned tools come before the
   // discoverable ones, and the discoverable set is ordered newest-first — the
@@ -350,6 +374,7 @@ async function getSearchableTools(params: {
           tool.catalogId != null
             ? (catalogNamesById.get(tool.catalogId) ?? null)
             : null,
+        catalogsWithInstalls,
       }),
     );
   }
@@ -379,11 +404,19 @@ function toAssignedToolCandidate(params: {
     catalogId: string | null;
   };
   catalogName: string | null;
+  catalogsWithInstalls: Set<string>;
 }): SearchCandidate {
-  const { catalogName, tool } = params;
+  const { catalogsWithInstalls, catalogName, tool } = params;
   const source = archestraMcpBranding.isToolName(tool.name)
     ? "archestra"
     : "mcp";
+  // Built-in Archestra tools and proxy-sniffed tools (no catalog) are always
+  // available; a third-party tool is available only while its catalog still
+  // has an installed connection.
+  const available =
+    source === "archestra" || tool.catalogId == null
+      ? true
+      : catalogsWithInstalls.has(tool.catalogId);
   const parsedToolName =
     source === "mcp" ? parseFullToolName(tool.name) : { serverName: null };
   const parameters = tool.parameters ?? {};
@@ -398,6 +431,7 @@ function toAssignedToolCandidate(params: {
     source,
     server: parsedToolName.serverName ?? null,
     catalogName: source === "mcp" ? catalogName : null,
+    available,
     inputParameters,
     searchText: buildSearchText({
       name: tool.name,
@@ -420,6 +454,7 @@ function toDelegationToolCandidate(tool: Tool): SearchCandidate {
     source: "agent_delegation",
     server: null,
     catalogName: null,
+    available: true,
     inputParameters,
     searchText: buildSearchText({
       name: tool.name,
@@ -443,6 +478,26 @@ async function getCatalogNamesById(
   const catalogs = await InternalMcpCatalogModel.getByIds(catalogIds);
   return new Map(
     Array.from(catalogs.values()).map((catalog) => [catalog.id, catalog.name]),
+  );
+}
+
+// A tool is runnable only while its catalog still has an installed connection;
+// this resolves, in one query, which of the given tools' catalogs do.
+async function getCatalogIdsWithInstalls(
+  tools: Array<{ catalogId: string | null }>,
+): Promise<Set<string>> {
+  const catalogIds = Array.from(
+    new Set(
+      tools
+        .map((tool) => tool.catalogId)
+        .filter((catalogId): catalogId is string => catalogId != null),
+    ),
+  );
+  const installs = await McpServerModel.findByCatalogIds(catalogIds);
+  return new Set(
+    installs
+      .map((server) => server.catalogId)
+      .filter((catalogId): catalogId is string => catalogId != null),
   );
 }
 
@@ -649,6 +704,10 @@ function toSearchResult(candidate: SearchCandidate) {
     description: candidate.description,
     source: candidate.source,
     server: candidate.server,
+    available: candidate.available,
+    unavailableReason: candidate.available
+      ? null
+      : "MCP connection not installed — reconnect the server to use this tool.",
     params: formatParamsSignature(candidate.inputParameters),
   };
 }

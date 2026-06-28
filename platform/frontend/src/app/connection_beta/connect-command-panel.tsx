@@ -51,6 +51,7 @@ import {
   fetchAllSkillIds,
   useTotalSkillCount,
 } from "./skills-marketplace-step";
+import { TestSetupStep } from "./test-setup-link";
 import { WizardStep } from "./wizard-step";
 
 type ScriptClientId = CreateConnectionSetupBody["clientId"];
@@ -204,6 +205,18 @@ export function ConnectCommandPanel({
   const proxy = (llmProxies ?? []).find((p) => p.id === llmProxyId) ?? null;
   const proxyActive = !!(proxy && provider);
   const hasAnything = Boolean(gateway || proxyActive || includeSkills);
+
+  // Claude Code's Anthropic subscription passthrough also gets a personal
+  // passthrough key wired into the command (best-effort: only when the user can
+  // mint one). Used purely to tailor the passthrough description copy — the
+  // backend provisions it automatically; there is no separate UI choice.
+  const { data: canAttribute } = useHasPermissions({
+    llmVirtualKey: ["create"],
+  });
+  const passthroughAttributes =
+    client.id === "claude-code" &&
+    provider === "anthropic" &&
+    canAttribute === true;
 
   const { mutateAsync: createSetup, isPending } = useCreateConnectionSetup();
   // Creating the personal key invalidates the available-keys query, so once the
@@ -407,7 +420,11 @@ export function ConnectCommandPanel({
               </Tabs>
               <p className="text-xs text-muted-foreground">
                 {proxyAuth === "provider-key" ? (
-                  "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
+                  passthroughAttributes ? (
+                    "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan). Your personal auth key is created for you and wired into the command via ANTHROPIC_CUSTOM_HEADERS."
+                  ) : (
+                    "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
+                  )
                 ) : providers.length === 0 ? (
                   canCreateProviderKey ? (
                     <>
@@ -571,7 +588,11 @@ export function ConnectCommandPanel({
         </ul>
       </WizardStep>
 
-      <WizardStep n={3} title="Run this command" last>
+      <WizardStep
+        n={3}
+        title="Run this command"
+        last={client.id !== "claude-code"}
+      >
         <div className="flex flex-col gap-3">
           <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
             {providers.length > 1 && proxyActive && (
@@ -644,6 +665,22 @@ export function ConnectCommandPanel({
           </div>
         </div>
       </WizardStep>
+
+      {client.id === "claude-code" && (
+        <WizardStep
+          n={4}
+          title="Restart Claude Code and send a test message"
+          last
+        >
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              Quit and reopen Claude Code, start a new chat, and send the
+              message below.
+            </p>
+            <TestSetupStep />
+          </div>
+        </WizardStep>
+      )}
 
       <CreateLlmProviderApiKeyDialog
         open={showAddProviderKey}

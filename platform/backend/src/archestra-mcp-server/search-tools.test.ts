@@ -57,6 +57,8 @@ type SearchToolsStructuredContent = {
     description: string | null;
     source: "archestra" | "mcp" | "agent_delegation";
     server: string | null;
+    available: boolean;
+    unavailableReason: string | null;
     params: string;
   }>;
 };
@@ -65,6 +67,7 @@ describe("search_tools", () => {
   test("returns ranked matching tools with compact parameter summaries", async ({
     makeAgent,
     makeInternalMcpCatalog,
+    makeMcpServer,
     makeMember,
     makeOrganization,
     makeTool,
@@ -105,6 +108,7 @@ describe("search_tools", () => {
       },
     });
     await makeAgentTool(agent.id, githubTool.id);
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
 
     const context: ArchestraContext = {
       agent: { id: agent.id, name: agent.name },
@@ -129,6 +133,8 @@ describe("search_tools", () => {
       description: "Search repositories by topic, language, or owner.",
       source: "mcp",
       server: "github",
+      available: true,
+      unavailableReason: null,
       params:
         "query!:string — Repository search query string.; language?:string — Optional language filter.",
     });
@@ -147,6 +153,89 @@ describe("search_tools", () => {
     );
     expect(returnedToolNames).not.toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
     expect(returnedToolNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
+  });
+
+  test("marks tools without an installed connection as unavailable and ranks them last", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeAgentTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      name: "Availability Agent",
+      organizationId: org.id,
+    });
+
+    const installedCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Installed MCP",
+    });
+    const installedTool = await makeTool({
+      name: "installed__do_thing",
+      description: "widget action available now",
+      catalogId: installedCatalog.id,
+    });
+    await makeAgentTool(agent.id, installedTool.id);
+    await makeMcpServer({ catalogId: installedCatalog.id, scope: "org" });
+
+    // Same catalog shape but no installed connection -> retained, unavailable.
+    const removedCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Removed MCP",
+    });
+    const removedTool = await makeTool({
+      name: "removed__do_thing",
+      description: "widget action pending reconnect",
+      catalogId: removedCatalog.id,
+    });
+    await makeAgentTool(agent.id, removedTool.id);
+
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      agentId: agent.id,
+      organizationId: org.id,
+      userId: user.id,
+    };
+
+    const result = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "widget action", limit: 5 },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    const content = result.structuredContent as SearchToolsStructuredContent;
+    const byName = new Map(content.tools.map((tool) => [tool.toolName, tool]));
+
+    expect(byName.get("installed__do_thing")).toMatchObject({
+      available: true,
+      unavailableReason: null,
+    });
+    expect(byName.get("removed__do_thing")?.available).toBe(false);
+    expect(byName.get("removed__do_thing")?.unavailableReason).toBeTruthy();
+
+    // Available ranks ahead of unavailable.
+    const names = content.tools.map((tool) => tool.toolName);
+    expect(names.indexOf("installed__do_thing")).toBeLessThan(
+      names.indexOf("removed__do_thing"),
+    );
+
+    // On truncation, the unavailable tool is dropped first.
+    const truncated = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "widget action", limit: 1 },
+      context,
+    );
+    const truncatedContent =
+      truncated.structuredContent as SearchToolsStructuredContent;
+    expect(truncatedContent.tools).toHaveLength(1);
+    expect(truncatedContent.tools[0].toolName).toBe("installed__do_thing");
   });
 
   test("includes unassigned tools from catalogs the user can access when the agent allows dynamic access", async ({

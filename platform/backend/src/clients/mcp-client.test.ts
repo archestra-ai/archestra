@@ -440,6 +440,43 @@ describe("McpClient", () => {
       ).toBe("unknown_tool");
     });
 
+    test("a retained static assignment whose connection was uninstalled returns a typed reconnect error", async () => {
+      // A catalog with no installed connection (the pinned install was removed).
+      const orphanCatalog = await InternalMcpCatalogModel.create({
+        name: "orphan-mcp-server",
+        serverType: "remote",
+        serverUrl: "https://example.invalid/mcp/",
+      });
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "orphan-mcp-server__do_thing",
+        description: "needs a connection",
+        parameters: {},
+        catalogId: orphanCatalog.id,
+      });
+      // Retained assignment after uninstall: still static, but the server
+      // binding is null and the catalog has no install.
+      await AgentToolModel.create(agentId, tool.id, {
+        mcpServerId: null,
+        credentialResolutionMode: "static",
+      });
+
+      const result = await mcpClient.executeToolCallForOwner(
+        { id: "call_orphan", name: tool.name, arguments: {} },
+        agentOwner(agentId),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(
+        (result._meta as { archestraError?: { type?: string } } | undefined)
+          ?.archestraError?.type,
+      ).toBe("auth_required");
+      // Reconnect-framed wording (not the "no credentials" auth message).
+      expect(result.error).toContain("reconnect");
+      expect(result.error).toContain("is not connected");
+      // The call is refused before any dispatch is attempted.
+      expect(mockCallTool).not.toHaveBeenCalled();
+    });
+
     test("declares MCP Apps and enterprise auth extensions during initialize", async () => {
       const tool = await ToolModel.createToolIfNotExists({
         name: "github-mcp-server__declared_extensions",

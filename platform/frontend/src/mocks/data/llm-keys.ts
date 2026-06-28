@@ -55,7 +55,6 @@ export function makeVirtualKey(
     teams: [],
     authorName: "Test Admin",
     providerApiKeys: [],
-    allowedLlmProxies: [],
     ...overrides,
   };
 }

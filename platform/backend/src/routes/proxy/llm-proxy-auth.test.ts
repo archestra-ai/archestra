@@ -87,7 +87,6 @@ describe("validateVirtualApiKey", () => {
       keyType: "passthrough",
       scope: "personal",
       authorId: owner.id,
-      allowedLlmProxyIds: [],
     });
 
     await expect(validateVirtualApiKey(value, "openai")).rejects.toMatchObject({
@@ -759,7 +758,7 @@ describe("VirtualKeyRateLimiter", () => {
 // =========================================================================
 
 describe("validatePassthroughVirtualKey", () => {
-  test("returns owner + key id when the proxy is in the allowed list", async ({
+  test("returns owner + key id when the owner can access the proxy", async ({
     makeOrganization,
     makeUser,
     makeAgent,
@@ -777,7 +776,6 @@ describe("validatePassthroughVirtualKey", () => {
       keyType: "passthrough",
       scope: "personal",
       authorId: owner.id,
-      allowedLlmProxyIds: [proxy.id],
     });
 
     const result = await validatePassthroughVirtualKey({
@@ -787,35 +785,7 @@ describe("validatePassthroughVirtualKey", () => {
     expect(result.userId).toBe(owner.id);
   });
 
-  test("allows an empty list when the owner can access the proxy", async ({
-    makeOrganization,
-    makeUser,
-    makeAgent,
-  }) => {
-    const org = await makeOrganization();
-    const owner = await makeUser();
-    const proxy = await makeAgent({
-      organizationId: org.id,
-      agentType: "llm_proxy",
-      scope: "org",
-    });
-    const { value } = await VirtualApiKeyModel.create({
-      organizationId: org.id,
-      name: "pt",
-      keyType: "passthrough",
-      scope: "personal",
-      authorId: owner.id,
-      allowedLlmProxyIds: [],
-    });
-
-    const result = await validatePassthroughVirtualKey({
-      tokenValue: value,
-      agent: proxy,
-    });
-    expect(result.userId).toBe(owner.id);
-  });
-
-  test("403 when an empty-list key's owner cannot access the proxy", async ({
+  test("403 when the owner cannot access the proxy", async ({
     makeOrganization,
     makeUser,
     makeAgent,
@@ -835,7 +805,6 @@ describe("validatePassthroughVirtualKey", () => {
       keyType: "passthrough",
       scope: "personal",
       authorId: owner.id,
-      allowedLlmProxyIds: [],
     });
 
     await expect(
@@ -843,37 +812,6 @@ describe("validatePassthroughVirtualKey", () => {
         tokenValue: value,
         agent: personalProxy,
       }),
-    ).rejects.toMatchObject({ statusCode: 403 });
-  });
-
-  test("403 when the proxy is not in a non-empty allowed list", async ({
-    makeOrganization,
-    makeUser,
-    makeAgent,
-  }) => {
-    const org = await makeOrganization();
-    const owner = await makeUser();
-    const allowed = await makeAgent({
-      organizationId: org.id,
-      agentType: "llm_proxy",
-      scope: "org",
-    });
-    const target = await makeAgent({
-      organizationId: org.id,
-      agentType: "llm_proxy",
-      scope: "org",
-    });
-    const { value } = await VirtualApiKeyModel.create({
-      organizationId: org.id,
-      name: "pt",
-      keyType: "passthrough",
-      scope: "personal",
-      authorId: owner.id,
-      allowedLlmProxyIds: [allowed.id],
-    });
-
-    await expect(
-      validatePassthroughVirtualKey({ tokenValue: value, agent: target }),
     ).rejects.toMatchObject({ statusCode: 403 });
   });
 
@@ -896,7 +834,6 @@ describe("validatePassthroughVirtualKey", () => {
       scope: "personal",
       authorId: owner.id,
       expiresAt: new Date(Date.now() - 1000),
-      allowedLlmProxyIds: [proxy.id],
     });
 
     await expect(

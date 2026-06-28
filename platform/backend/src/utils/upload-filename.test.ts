@@ -89,4 +89,11 @@ describe("nextAvailableName", () => {
     expect(Buffer.byteLength(result, "utf8")).toBeLessThanOrEqual(255);
     expect(result.endsWith(" (1).pdf")).toBe(true);
   });
+
+  it("stays within the byte cap even with a pathologically long extension", () => {
+    // Tiny base, ~253-byte extension — the suffix must still fit.
+    const result = nextAvailableName(`a.${"x".repeat(252)}`, 1);
+    expect(Buffer.byteLength(result, "utf8")).toBeLessThanOrEqual(255);
+    expect(result.includes(" (1)")).toBe(true);
+  });
 });

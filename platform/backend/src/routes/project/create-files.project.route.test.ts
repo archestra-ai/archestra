@@ -1,4 +1,5 @@
 import {
+  ADMIN_ROLE_NAME,
   MAX_PROJECT_UPLOAD_BYTES,
   PROJECT_INSTRUCTIONS_FILENAME,
 } from "@archestra/shared";
@@ -162,6 +163,31 @@ describe("POST /api/projects/:id/files", () => {
     ).toBeNull();
   });
 
+  test("rejects a case variant of the reserved instructions filename", async () => {
+    const project = await seedProject("reserved-case");
+
+    const res = await upload(project.id, {
+      name: "Instructions.MD",
+      mimeType: "text/markdown",
+      dataBase64: b64("# still reserved"),
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  test("rejects base64 of a structurally-invalid length", async () => {
+    const project = await seedProject("badlen");
+
+    const res = await upload(project.id, {
+      name: "x.bin",
+      mimeType: "application/octet-stream",
+      // 5 chars: valid alphabet but length % 4 === 1, so it can't encode bytes.
+      dataBase64: "AAAAA",
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
   test("rejects a zero-byte payload with 400", async () => {
     const project = await seedProject("empty");
 
@@ -249,5 +275,40 @@ describe("POST /api/projects/:id/files", () => {
     });
 
     expect(res.statusCode).toBe(200);
+  });
+
+  test("a project admin with only oversight cannot upload (404, nothing written)", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    // A foreign project NOT shared with the admin: oversight is read-only, so an
+    // upload (a write) must be refused even though the admin can view it.
+    const otherOwner = await makeUser({ email: "oversight-owner@test.com" });
+    await makeMember(otherOwner.id, organizationId, {});
+    const project = await projectService.create({
+      organizationId,
+      userId: otherOwner.id,
+      name: "overseen",
+      description: null,
+    });
+
+    const admin = await makeUser({ email: "oversight-admin@test.com" });
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    actingUser = admin;
+
+    const res = await upload(project.id, {
+      name: "oversight.txt",
+      mimeType: "text/plain",
+      dataBase64: b64("data"),
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(
+      await FileModel.findByProjectAndName({
+        organizationId,
+        projectId: project.id,
+        filename: "oversight.txt",
+      }),
+    ).toBeNull();
   });
 });

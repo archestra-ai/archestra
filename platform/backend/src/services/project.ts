@@ -503,8 +503,10 @@ class ProjectService {
     const filename = sanitizeUploadFilename(params.name);
     // The instructions file steers every chat in the project and is owner-only
     // via setInstructions (with its own length cap); an upload must not be able
-    // to create or replace it, bypassing that gate.
-    if (filename === PROJECT_INSTRUCTIONS_FILENAME) {
+    // to create or replace it, bypassing that gate. Compared case-insensitively
+    // so a case variant can't impersonate it (or collide on a case-insensitive
+    // filesystem store).
+    if (filename.toLowerCase() === PROJECT_INSTRUCTIONS_FILENAME) {
       throw new ApiError(
         400,
         `"${PROJECT_INSTRUCTIONS_FILENAME}" is reserved; edit the project instructions instead`,
@@ -696,7 +698,12 @@ function decodeUploadBase64(input: string): Buffer {
   if (normalized.length === 0) {
     throw new ApiError(400, "File is empty");
   }
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) {
+  // A base64 length of n % 4 === 1 can't encode whole bytes; Buffer.from would
+  // silently drop the dangling char instead of erroring, so reject it here.
+  if (
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(normalized) ||
+    normalized.length % 4 === 1
+  ) {
     throw new ApiError(400, "File data is not valid base64");
   }
   const data = Buffer.from(normalized, "base64");

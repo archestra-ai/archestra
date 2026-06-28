@@ -33,20 +33,26 @@ export function sanitizeUploadFilename(name: string): string {
  * the last dot that isn't the first character, so dotfiles (`.gitignore`) and
  * extensionless names (`README`) keep their whole name as the base. Any existing
  * ` (n)` suffix on the base is stripped first so re-uploading an already-renamed
- * file yields `report (n).pdf`, never `report (1) (n).pdf`. The base is truncated
- * if needed so the result stays within {@link MAX_FILENAME_BYTES}.
+ * file yields `report (n).pdf`, never `report (1) (n).pdf`. The base — and, in
+ * the degenerate case of an enormous extension, the extension — is truncated so
+ * the result always stays within {@link MAX_FILENAME_BYTES}, guaranteeing every
+ * candidate passes {@link safeSegment} on every storage provider.
  */
 export function nextAvailableName(name: string, attempt: number): string {
   const lastDot = name.lastIndexOf(".");
   const hasExtension = lastDot > 0;
   const rawBase = hasExtension ? name.slice(0, lastDot) : name;
-  const extension = hasExtension ? name.slice(lastDot) : "";
   const base = rawBase.replace(TRAILING_INDEX_SUFFIX, "");
   const suffix = ` (${attempt})`;
+  const suffixBytes = Buffer.byteLength(suffix, "utf8");
+  // The suffix is non-negotiable (it's what makes the name unique); truncate the
+  // extension only if it alone wouldn't leave room for it.
+  const extension = truncateToBytes(
+    hasExtension ? name.slice(lastDot) : "",
+    Math.max(MAX_FILENAME_BYTES - suffixBytes, 0),
+  );
   const budget =
-    MAX_FILENAME_BYTES -
-    Buffer.byteLength(suffix, "utf8") -
-    Buffer.byteLength(extension, "utf8");
+    MAX_FILENAME_BYTES - suffixBytes - Buffer.byteLength(extension, "utf8");
   const safeBase = truncateToBytes(base, Math.max(budget, 0));
   return `${safeBase}${suffix}${extension}`;
 }

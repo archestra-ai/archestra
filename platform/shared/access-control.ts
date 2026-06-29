@@ -622,6 +622,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInternalMcpCatalogLabelValues]: {
     mcpRegistry: ["read"],
   },
+  [RouteId.ListPendingImageApprovalCatalogItems]: {
+    mcpServerInstallation: ["admin"],
+  },
+  [RouteId.ApproveCatalogItemImage]: {
+    mcpServerInstallation: ["admin"],
+  },
+  [RouteId.DeclineCatalogItemImage]: {
+    mcpServerInstallation: ["admin"],
+  },
   [RouteId.GetDeploymentYamlPreview]: {
     mcpRegistry: ["read"],
   },

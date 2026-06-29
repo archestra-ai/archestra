@@ -32,6 +32,7 @@ import {
   findExternalIdentityProviderById,
   findExternalIdentityProviderByProviderId,
 } from "@/services/identity-providers/oidc";
+import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
 import {
   type Account,
@@ -311,6 +312,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
         }
+
+        // Trusted-image-registry gate: a personal local catalog item whose
+        // custom image is not in the target environment's trusted registries is
+        // blocked (HTTP 403) and recorded pending admin approval. Runs before any
+        // secret/deployment work, so a blocked install has no side effects beyond
+        // the pending flag.
+        await assertInstallAllowedOrBlock({ catalogItem, organizationId });
 
         // Update catalog's serviceAccount if user provided a different value
         const normalizedServiceAccount =

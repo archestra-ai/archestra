@@ -1244,6 +1244,88 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  // === Image approval (trusted-image-registry gate) ===
+
+  fastify.get(
+    "/api/internal_mcp_catalog/pending-image-approval",
+    {
+      schema: {
+        operationId: RouteId.ListPendingImageApprovalCatalogItems,
+        description:
+          "List personal local catalog items in the org whose custom image is awaiting admin approval (blocked by the target environment's trusted image registries).",
+        tags: ["MCP Catalog"],
+        response: constructResponseSchema(
+          z.array(SelectInternalMcpCatalogSchema),
+        ),
+      },
+    },
+    async (request, reply) => {
+      return reply.send(
+        await InternalMcpCatalogModel.listPendingImageApproval(
+          request.organizationId,
+        ),
+      );
+    },
+  );
+
+  fastify.post(
+    "/api/internal_mcp_catalog/:id/approve",
+    {
+      schema: {
+        operationId: RouteId.ApproveCatalogItemImage,
+        description:
+          "Approve a personal local catalog item's image so its installs proceed. Requires mcpServerInstallation:admin.",
+        tags: ["MCP Catalog"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
+      },
+    },
+    async (request, reply) => {
+      const catalogItem = await assertImageApprovable(
+        request.params.id,
+        request.organizationId,
+      );
+      const approved = await InternalMcpCatalogModel.approveImage({
+        id: catalogItem.id,
+        reviewedBy: request.user.id,
+      });
+      if (!approved) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+      return reply.send(approved);
+    },
+  );
+
+  fastify.post(
+    "/api/internal_mcp_catalog/:id/decline",
+    {
+      schema: {
+        operationId: RouteId.DeclineCatalogItemImage,
+        description:
+          "Decline a personal local catalog item's image with a reason; its installs stay blocked. Requires mcpServerInstallation:admin.",
+        tags: ["MCP Catalog"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({ reason: z.string().trim().min(1).max(1000) }),
+        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
+      },
+    },
+    async (request, reply) => {
+      const catalogItem = await assertImageApprovable(
+        request.params.id,
+        request.organizationId,
+      );
+      const declined = await InternalMcpCatalogModel.declineImage({
+        id: catalogItem.id,
+        reviewedBy: request.user.id,
+        reason: request.body.reason,
+      });
+      if (!declined) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+      return reply.send(declined);
+    },
+  );
+
   fastify.delete(
     "/api/internal_mcp_catalog/:id",
     {
@@ -1989,6 +2071,35 @@ function multitenantSharedEnvChanged(
   return (
     JSON.stringify(project(oldCatalog)) !== JSON.stringify(project(newCatalog))
   );
+}
+
+/**
+ * Resolve a catalog item that is subject to image approval — a personal local
+ * item with a custom image — in the caller's org, or throw. The approve/decline
+ * endpoints are admin-gated by the route permission map; this adds the org-scope
+ * and "actually gateable" guards.
+ */
+async function assertImageApprovable(
+  id: string,
+  organizationId: string,
+): Promise<InternalMcpCatalog> {
+  const catalogItem = await InternalMcpCatalogModel.findById(id, {
+    expandSecrets: false,
+  });
+  if (!catalogItem || catalogItem.organizationId !== organizationId) {
+    throw new ApiError(404, "Catalog item not found");
+  }
+  if (
+    catalogItem.scope !== "personal" ||
+    catalogItem.serverType !== "local" ||
+    !catalogItem.localConfig?.dockerImage
+  ) {
+    throw new ApiError(
+      400,
+      "This catalog item is not subject to image approval.",
+    );
+  }
+  return catalogItem;
 }
 
 export default internalMcpCatalogRoutes;

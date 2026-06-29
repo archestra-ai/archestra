@@ -23,6 +23,7 @@ import type {
   OnboardingWizard,
   OrganizationChatLink,
   OrganizationCompressionScope,
+  TrustedImageRegistries,
 } from "@/types";
 import modelsTable from "./model";
 
@@ -298,6 +299,16 @@ const organizationsTable = pgTable("organization", {
   defaultEnvironmentValidationRegex: text(
     "default_environment_validation_regex",
   ),
+
+  /**
+   * Trusted image registries for the implicit "default" environment
+   * (internal_mcp_catalog.environment_id = null). Mirrors
+   * `environment.trusted_image_registries` for the default scope. NULL/empty
+   * disables the check.
+   */
+  defaultEnvironmentTrustedImageRegistries: jsonb(
+    "default_environment_trusted_image_registries",
+  ).$type<TrustedImageRegistries>(),
 
   /**
    * When true, the Agent Skill tools (`list_skills`, `load_skill`) are assigned

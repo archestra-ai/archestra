@@ -91,7 +91,7 @@ export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
 export function useHasAnyApiKey(): {
   hasAnyApiKey: boolean;
   isLoading: boolean;
-  isError: boolean;
+  isLoadError: boolean;
   refetch: () => void;
 } {
   const { data: canReadKeys } = useHasPermissions({
@@ -102,7 +102,7 @@ export function useHasAnyApiKey(): {
   const {
     data: keys = [],
     isLoading,
-    isError,
+    isLoadingError,
     refetch,
   } = useLlmProviderApiKeys({ enabled, toastOnError: false });
   const permissionsResolving =
@@ -110,7 +110,10 @@ export function useHasAnyApiKey(): {
   return {
     hasAnyApiKey: keys.length > 0,
     isLoading: permissionsResolving || (enabled && isLoading),
-    isError: enabled && isError,
+    // Only the first-fetch failure (no cached list). A failed background
+    // refetch keeps the last successful result — empty or not — so we don't
+    // hide a known "no keys" or working state behind the load-error screen.
+    isLoadError: enabled && isLoadingError,
     refetch: () => {
       void refetch();
     },

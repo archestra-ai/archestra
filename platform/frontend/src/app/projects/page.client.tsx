@@ -89,7 +89,7 @@ function ProjectsList() {
   const {
     hasAnyApiKey,
     isLoading: isApiKeyLoading,
-    isError: isApiKeyError,
+    isLoadError: isApiKeyLoadError,
     refetch: refetchApiKeys,
   } = useHasAnyApiKey();
   const [createOpen, setCreateOpen] = useState(false);
@@ -114,11 +114,11 @@ function ProjectsList() {
     !!authorIds ||
     !!excludeAuthorIds;
 
-  // The keys request failed and we have no usable list to fall back on (e.g.
-  // offline cold start). Show a retry state rather than the setup prompt, which
-  // would wrongly imply the user has no keys configured. A failed background
-  // refetch after a prior success keeps the cached keys, so it falls through.
-  if (!isApiKeyLoading && isApiKeyError && !hasAnyApiKey) {
+  // The first keys fetch failed with no cached list (e.g. offline cold start).
+  // Show a retry state rather than the setup prompt, which would wrongly imply
+  // the user has no keys configured. `isLoadError` is scoped to the first-fetch
+  // failure, so a failed background refetch keeps the cached state instead.
+  if (!isApiKeyLoading && isApiKeyLoadError) {
     return (
       <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
         <ApiKeyLoadError onRetry={refetchApiKeys} />

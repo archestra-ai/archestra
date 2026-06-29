@@ -313,7 +313,7 @@ export function ChatPageContent({
   const {
     data: chatApiKeys = [],
     isLoading: isLoadingApiKeys,
-    isError: isApiKeysError,
+    isLoadingError: isApiKeysLoadError,
     refetch: refetchApiKeys,
   } = useLlmProviderApiKeys({
     enabled: hasChatAccess && canUseProviderSettings,
@@ -1854,12 +1854,12 @@ export function ChatPageContent({
     );
   }
 
-  // The keys request failed and we have no usable list to fall back on (e.g.
-  // offline cold start). Show a retry state rather than the setup prompt, which
-  // would wrongly imply the user has no keys configured. When a prior fetch
-  // succeeded, react-query keeps that data through a failed background refetch,
-  // so keep showing the real UI instead of flipping to this error screen.
-  if (isApiKeysError && !hasAnyApiKey) {
+  // The first keys fetch failed with no cached list (e.g. offline cold start).
+  // Show a retry state rather than the setup prompt, which would wrongly imply
+  // the user has no keys configured. `isLoadingError` is scoped to the
+  // first-fetch failure: a failed background refetch keeps the last successful
+  // result, so we don't flip a working or known-empty screen to this one.
+  if (isApiKeysLoadError) {
     return <ApiKeyLoadError onRetry={() => refetchApiKeys()} />;
   }
 

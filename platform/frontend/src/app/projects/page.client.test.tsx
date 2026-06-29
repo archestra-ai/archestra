@@ -11,7 +11,7 @@ let mockProjects: ProjectFixture[] = [];
 type ApiKeyState = {
   hasAnyApiKey: boolean;
   isLoading: boolean;
-  isError: boolean;
+  isLoadError: boolean;
   refetch: () => void;
 };
 let mockApiKeyState: ApiKeyState;
@@ -242,7 +242,7 @@ describe("ProjectsPageClient", () => {
     mockApiKeyState = {
       hasAnyApiKey: true,
       isLoading: false,
-      isError: false,
+      isLoadError: false,
       refetch: vi.fn(),
     };
     mockDeleteMutateAsync.mockResolvedValue(true);
@@ -312,7 +312,7 @@ describe("ProjectsPageClient", () => {
     mockApiKeyState = {
       hasAnyApiKey: false,
       isLoading: false,
-      isError: true,
+      isLoadError: true,
       refetch,
     };
 
@@ -329,7 +329,7 @@ describe("ProjectsPageClient", () => {
     mockApiKeyState = {
       hasAnyApiKey: false,
       isLoading: false,
-      isError: false,
+      isLoadError: false,
       refetch: vi.fn(),
     };
 
@@ -340,10 +340,12 @@ describe("ProjectsPageClient", () => {
   });
 
   it("keeps showing projects when a refetch fails but cached keys remain", () => {
+    // A failed background refetch after a prior success is not a load error,
+    // so the cached keys keep the project list on screen.
     mockApiKeyState = {
       hasAnyApiKey: true,
       isLoading: false,
-      isError: true,
+      isLoadError: false,
       refetch: vi.fn(),
     };
     mockProjects = [makeProject({ id: "plain", name: "Plain project" })];

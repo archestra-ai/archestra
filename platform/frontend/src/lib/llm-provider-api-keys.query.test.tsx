@@ -50,6 +50,9 @@ describe("useLlmProviderApiKeys", () => {
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
+    // First-fetch failure with no cached data — the signal the gating screens
+    // branch on to show the load-error state.
+    expect(result.current.isLoadingError).toBe(true);
     expect(result.current.data).toBeUndefined();
     expect(mockToastError).toHaveBeenCalledTimes(1);
   });

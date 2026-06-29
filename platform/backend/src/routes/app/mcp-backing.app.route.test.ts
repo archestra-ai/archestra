@@ -88,11 +88,11 @@ describe("MCP backing for apps", () => {
     // (`<server>__open`) so apps don't collide in the gateway's
     // dedupe-by-name; it is the only tool on the app's catalog.
     expect(tools).toHaveLength(1);
-    const showApp = tools[0];
-    expect(showApp.name.endsWith("__open")).toBe(true);
+    const openTool = tools[0];
+    expect(openTool.name.endsWith("__open")).toBe(true);
     // The tool points at the app's ui:// resource and stores no CSP (the CSP
     // floor is applied at serve time, never persisted).
-    const ui = (showApp?.meta as { _meta?: { ui?: Record<string, unknown> } })
+    const ui = (openTool?.meta as { _meta?: { ui?: Record<string, unknown> } })
       ?._meta?.ui;
     expect(ui?.resourceUri).toBe(getArchestraAppResourceUri(appId));
     expect(ui?.csp).toBeUndefined();

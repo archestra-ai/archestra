@@ -28,12 +28,6 @@ vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => hasPermissionsMock(),
 }));
 
-// The claude-code verify step pulls in app-name/session queries that need a
-// QueryClient; these tests are about the command panel, not the verify UI.
-vi.mock("./test-setup-link", () => ({
-  TestSetupStep: () => <div data-testid="test-setup-step" />,
-}));
-
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => true,
 }));

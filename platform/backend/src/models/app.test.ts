@@ -1,7 +1,7 @@
 import { deleteAppBacking } from "@/services/apps/app-mcp-backing";
 import { describe, expect, test } from "@/test";
 import AppModel from "./app";
-import AppTeamModel from "./app-team";
+import AppAccessModel from "./app-access";
 import AppVersionModel from "./app-version";
 
 describe("AppModel.create", () => {
@@ -188,7 +188,7 @@ describe("AppVersionModel.computeContentHash", () => {
   });
 });
 
-describe("AppTeamModel accessibility", () => {
+describe("AppAccessModel accessibility", () => {
   test("scopes visibility by org/personal/team and excludes deleted", async ({
     makeOrganization,
     makeUser,
@@ -223,7 +223,7 @@ describe("AppTeamModel accessibility", () => {
     const deletedApp = await makeApp({ organizationId: org.id, scope: "org" });
     await AppModel.delete(deletedApp.id);
 
-    const authorIds = await AppTeamModel.getUserAccessibleAppIds({
+    const authorIds = await AppAccessModel.getUserAccessibleAppIds({
       organizationId: org.id,
       userId: author.id,
     });
@@ -231,13 +231,13 @@ describe("AppTeamModel accessibility", () => {
       new Set([orgApp.id, personalApp.id, teamApp.id]),
     );
 
-    const memberIds = await AppTeamModel.getUserAccessibleAppIds({
+    const memberIds = await AppAccessModel.getUserAccessibleAppIds({
       organizationId: org.id,
       userId: member.id,
     });
     expect(new Set(memberIds)).toEqual(new Set([orgApp.id, teamApp.id]));
 
-    const outsiderIds = await AppTeamModel.getUserAccessibleAppIds({
+    const outsiderIds = await AppAccessModel.getUserAccessibleAppIds({
       organizationId: org.id,
       userId: outsider.id,
     });
@@ -259,7 +259,7 @@ describe("AppTeamModel accessibility", () => {
     });
 
     expect(
-      await AppTeamModel.userHasAppAccess({
+      await AppAccessModel.userHasAppAccess({
         organizationId: org.id,
         userId: author.id,
         app: personalApp,
@@ -267,7 +267,7 @@ describe("AppTeamModel accessibility", () => {
       }),
     ).toBe(true);
     expect(
-      await AppTeamModel.userHasAppAccess({
+      await AppAccessModel.userHasAppAccess({
         organizationId: org.id,
         userId: other.id,
         app: personalApp,
@@ -275,7 +275,7 @@ describe("AppTeamModel accessibility", () => {
       }),
     ).toBe(false);
     expect(
-      await AppTeamModel.userHasAppAccess({
+      await AppAccessModel.userHasAppAccess({
         organizationId: org.id,
         userId: other.id,
         app: personalApp,

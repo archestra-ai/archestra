@@ -23,9 +23,9 @@ import {
 } from "@/agents/chatops/channel-activation";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
+  buildThreadMutedNotice,
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
-  CHATOPS_THREAD_MUTED_NOTICE,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "@/agents/chatops/constants";
 import { EventDedupMap } from "@/agents/chatops/utils";
@@ -1857,7 +1857,7 @@ async function muteTeamsThreadAndNotify(
   activation: { provider: "ms-teams"; channelId: string; threadId: string },
 ): Promise<void> {
   if (await clearChannelThreadActive(activation)) {
-    await context.sendActivity(CHATOPS_THREAD_MUTED_NOTICE);
+    await context.sendActivity(buildThreadMutedNotice());
   }
 }
 

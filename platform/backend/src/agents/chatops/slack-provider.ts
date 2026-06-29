@@ -50,9 +50,9 @@ import {
   resolveChannelGateAction,
 } from "./channel-activation";
 import {
+  buildThreadMutedNotice,
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_THREAD_HISTORY,
-  CHATOPS_THREAD_MUTED_NOTICE,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
 import { EventDedupMap, errorMessage, isSlackDmChannel } from "./utils";
@@ -1422,7 +1422,7 @@ class SlackProvider implements ChatOpsProvider {
     try {
       await this.client.chat.postMessage({
         channel: channelId,
-        text: CHATOPS_THREAD_MUTED_NOTICE,
+        text: buildThreadMutedNotice(),
         thread_ts: threadTs,
       });
     } catch (error) {

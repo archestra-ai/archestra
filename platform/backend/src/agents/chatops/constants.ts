@@ -74,12 +74,32 @@ export const CHATOPS_CHANNEL_AUTO_REPLY = {
 };
 
 /**
- * Posted to confirm a thread was muted (see channel-activation). Plain text
- * with no provider-specific markup so it renders identically in Slack and
- * MS Teams.
+ * A randomized confirmation that a thread was muted (see channel-activation),
+ * posted by both providers. The lead-in varies for a bit of personality; the
+ * reassurance about how to un-mute is appended consistently so users always
+ * know how to bring the bot back. Plain text (no provider-specific markup) so
+ * it renders identically in Slack and MS Teams.
  */
-export const CHATOPS_THREAD_MUTED_NOTICE =
-  "🔇 Got it — I'll stop auto-replying in this thread. @mention me when you need me again.";
+export function buildThreadMutedNotice(): string {
+  const leadIn =
+    THREAD_MUTED_LEAD_INS[
+      Math.floor(Math.random() * THREAD_MUTED_LEAD_INS.length)
+    ];
+  return `🔇 ${leadIn} — @mention me to bring me back.`;
+}
+
+const THREAD_MUTED_LEAD_INS = [
+  "Got it, going quiet for now",
+  "Say no more, I'll zip it",
+  "Understood, standing down",
+  "Cool, I'll stop chiming in",
+  "On it, muting myself",
+  "Roger that, I'll hush up",
+  "Fair enough, I'll button it",
+  "Heard you loud and clear, stepping back",
+  "No problem, I'll keep to myself",
+  "Done, I'll sit this thread out",
+] as const;
 
 /**
  * In group conversations the agent hears every message but should not answer

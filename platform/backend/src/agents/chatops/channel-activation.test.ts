@@ -28,7 +28,10 @@ import {
   markChannelThreadActive,
   resolveChannelGateAction,
 } from "./channel-activation";
-import { CHATOPS_CHANNEL_AUTO_REPLY } from "./constants";
+import {
+  buildThreadMutedNotice,
+  CHATOPS_CHANNEL_AUTO_REPLY,
+} from "./constants";
 
 const CHANNEL = "19:abc@thread.tacv2";
 const THREAD = "1700000000000";
@@ -176,6 +179,21 @@ describe("isThreadMuteCommand", () => {
     "mute mute",
   ])("does not treat %j as a mute command", (text) => {
     expect(isThreadMuteCommand(text)).toBe(false);
+  });
+});
+
+describe("buildThreadMutedNotice", () => {
+  test("always confirms the mute and how to un-mute, with a varied lead-in", () => {
+    const notices = new Set<string>();
+    for (let i = 0; i < 50; i++) {
+      const notice = buildThreadMutedNotice();
+      expect(notice.startsWith("🔇 ")).toBe(true);
+      // The reassurance (how to bring the bot back) is always present.
+      expect(notice).toContain("@mention me to bring me back.");
+      notices.add(notice);
+    }
+    // The lead-in is randomized, so 50 draws should surface more than one.
+    expect(notices.size).toBeGreaterThan(1);
   });
 });
 

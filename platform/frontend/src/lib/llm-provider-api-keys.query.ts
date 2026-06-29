@@ -29,6 +29,12 @@ type LlmProviderApiKeysQueryParams = Partial<LlmProviderApiKeysQuery> & {
    * gates) pass false to avoid a redundant toast-plus-screen and a fresh
    * toast on every retry. The query throws regardless, so `isError` is always
    * available to branch on.
+   *
+   * Best-effort under react-query's shared fetches: observers with the same
+   * query key share one request, so the toast follows whichever observer
+   * triggers the fetch (e.g. a gating screen's own retry uses its `false`).
+   * The gating screens don't rely on suppression for correctness — they show
+   * their inline error from `isError` either way.
    */
   toastOnError?: boolean;
 };

@@ -1854,9 +1854,12 @@ export function ChatPageContent({
     );
   }
 
-  // The keys request failed (e.g. offline). Show a retry state rather than the
-  // setup prompt, which would wrongly imply the user has no keys configured.
-  if (isApiKeysError) {
+  // The keys request failed and we have no usable list to fall back on (e.g.
+  // offline cold start). Show a retry state rather than the setup prompt, which
+  // would wrongly imply the user has no keys configured. When a prior fetch
+  // succeeded, react-query keeps that data through a failed background refetch,
+  // so keep showing the real UI instead of flipping to this error screen.
+  if (isApiKeysError && !hasAnyApiKey) {
     return <ApiKeyLoadError onRetry={() => refetchApiKeys()} />;
   }
 

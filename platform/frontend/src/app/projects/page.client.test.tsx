@@ -87,9 +87,7 @@ vi.mock("@/components/page-layout", () => ({
 }));
 
 vi.mock("@/components/no-api-key-setup", () => ({
-  NoApiKeySetup: ({ description }: { description: string }) => (
-    <p>{description}</p>
-  ),
+  NoApiKeySetup: () => <div data-testid="no-api-key-setup" />,
 }));
 
 vi.mock("@/components/agent-icon", () => ({
@@ -310,19 +308,21 @@ describe("ProjectsPageClient", () => {
   });
 
   it("shows the load-error retry state, not the add-key prompt, when the keys request fails", () => {
+    const refetch = vi.fn();
     mockApiKeyState = {
       hasAnyApiKey: false,
       isLoading: false,
       isError: true,
-      refetch: vi.fn(),
+      refetch,
     };
 
     render(<ProjectsPageClient />);
 
     expect(screen.getByTestId("api-key-load-error")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Connect an LLM provider to start a project"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("no-api-key-setup")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("api-key-load-error"));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 
   it("shows the add-key prompt when the keys request succeeds with no keys", () => {
@@ -335,10 +335,24 @@ describe("ProjectsPageClient", () => {
 
     render(<ProjectsPageClient />);
 
-    expect(
-      screen.getByText("Connect an LLM provider to start a project"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("no-api-key-setup")).toBeInTheDocument();
     expect(screen.queryByTestId("api-key-load-error")).not.toBeInTheDocument();
+  });
+
+  it("keeps showing projects when a refetch fails but cached keys remain", () => {
+    mockApiKeyState = {
+      hasAnyApiKey: true,
+      isLoading: false,
+      isError: true,
+      refetch: vi.fn(),
+    };
+    mockProjects = [makeProject({ id: "plain", name: "Plain project" })];
+
+    render(<ProjectsPageClient />);
+
+    expect(screen.queryByTestId("api-key-load-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("no-api-key-setup")).not.toBeInTheDocument();
+    expect(screen.getByText("Plain project")).toBeInTheDocument();
   });
 
   it("shows unpin in pinned project card menus", () => {

@@ -30,6 +30,12 @@ const scopeLabels: Record<ResourceVisibilityScope, string> = {
   org: "Organization",
 };
 
+const scopeIcons: Record<ResourceVisibilityScope, typeof Globe> = {
+  personal: User,
+  team: Users,
+  org: Globe,
+};
+
 // Header "Publish" control: a compact button (with the current-scope icon) that
 // opens a popover with the shared VisibilitySelector UI to set who can use the
 // app. Edits apply via the Apps API (which syncs the backing catalog). Lives
@@ -85,6 +91,7 @@ export function AppPublishButton({ app }: { app: App }) {
   ];
 
   const teamSelectionMissing = scope === "team" && teamIds.length === 0;
+  const ScopeIcon = scopeIcons[app.scope];
 
   const handleApply = async () => {
     await updateApp.mutateAsync({
@@ -116,11 +123,12 @@ export function AppPublishButton({ app }: { app: App }) {
           type="button"
           variant="default"
           size="sm"
-          className="h-7 shrink-0 gap-1.5 px-2.5 text-xs font-medium"
+          className="h-7 shrink-0 gap-1.5 px-2.5 text-xs font-medium @max-md:w-7 @max-md:px-0"
           aria-label={`Publish — who can use this app: ${scopeLabels[app.scope]}`}
           title="Publish — change who can use this app"
         >
-          Publish
+          <ScopeIcon className="hidden h-3.5 w-3.5 @max-md:block" />
+          <span className="@max-md:hidden">Publish</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80">

@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 const PILL_CLASS =
-  "flex h-7 w-80 min-w-0 max-w-full items-center gap-1 rounded-md border border-border/60 bg-background px-1";
+  "flex h-7 w-80 @max-lg:w-64 @max-md:w-full min-w-0 max-w-full items-center gap-1 rounded-md border border-border/60 bg-background px-1";
 
 /**
  * Pure-layout browser-style top bar for an {@link McpAppCard}: a fixed-height row
@@ -35,7 +35,7 @@ export function McpAppTopBar({
   right?: React.ReactNode;
 }) {
   return (
-    <div className="relative z-10 grid h-9 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 px-2 shadow-[0_1px_2px_-1px_rgb(0_0_0/0.08)]">
+    <div className="@container relative z-10 grid h-9 shrink-0 grid-cols-[1fr_auto_1fr] @max-md:grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-2 shadow-[0_1px_2px_-1px_rgb(0_0_0/0.08)]">
       <div className="flex min-w-0 items-center justify-start gap-0.5">
         {left}
       </div>

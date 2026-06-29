@@ -1142,6 +1142,36 @@ describe("SlackProvider file attachment downloads", () => {
     expect(result?.attachments?.[0].name).toBe("report.pdf");
   });
 
+  test("file-only DM whose download fails is dropped (no empty turn)", async () => {
+    const provider = createProviderWithConfig();
+
+    // The download fails (e.g. expired/oversized), so no attachment survives.
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 404 }));
+
+    const payload = makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel: "D_FILE_ONLY",
+        channel_type: "im",
+        text: "",
+        files: [
+          {
+            id: "F_DM",
+            name: "report.pdf",
+            mimetype: "application/pdf",
+            size: 1234,
+            url_private: "https://files.slack.com/files-pri/T123/report.pdf",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toBeNull();
+  });
+
   test("file-only app_mention (empty text + files) is parsed with attachments", async () => {
     const provider = createProviderWithConfig();
     const fileContent = Buffer.from("file-only mention");

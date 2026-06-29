@@ -282,6 +282,29 @@ describe("MSTeamsProvider file attachment downloads", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  test("file-only message whose download fails is dropped (no empty turn)", async () => {
+    const provider = createProvider();
+
+    // The download fails (e.g. expired/oversized), so no attachment survives.
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 404 }));
+
+    const result = await provider.parseWebhookNotification(
+      makeActivity({
+        text: undefined,
+        attachments: [
+          {
+            contentType: "application/pdf",
+            contentUrl: "https://teams.blob.core.windows.net/files/report.pdf",
+            name: "report.pdf",
+          },
+        ],
+      }),
+      {},
+    );
+
+    expect(result).toBeNull();
+  });
+
   test("card-only message with empty text returns null (cards are not files)", async () => {
     const provider = createProvider();
 

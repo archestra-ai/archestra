@@ -302,17 +302,20 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     const cleanedText = this.cleanBotMention(text);
-    // A file-only message (empty text but with attachments) is still meaningful
-    // — let it through in the same addressed contexts a text message would
-    // (DMs, or active/mentioned channel threads, already gated above). Only
-    // genuinely empty, attachment-less messages are dropped here.
-    const hasFiles = Boolean(event.files?.length);
-    if (!cleanedText && event.type !== "app_mention" && !hasFiles) {
+
+    // Download file attachments first (we're already in an addressed context —
+    // DM, mention, or active thread — gated above). A file-only message (empty
+    // text) is kept only when a file actually survived download: oversized,
+    // expired, or failed downloads must not leave the bot answering an empty
+    // turn. Genuinely empty, attachment-less messages are dropped here.
+    const attachments = await this.downloadSlackFiles(event.files);
+    if (
+      !cleanedText &&
+      event.type !== "app_mention" &&
+      attachments.length === 0
+    ) {
       return null;
     }
-
-    // Download file attachments if present
-    const attachments = await this.downloadSlackFiles(event.files);
 
     // Resolve display names in one LRU-cached batch: the sender (so prompts
     // say "ildar", not "U0966V5MTM4"), the bot itself (so the agent

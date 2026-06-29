@@ -283,6 +283,13 @@ class MSTeamsProvider implements ChatOpsProvider {
       activity.serviceUrl,
     );
 
+    // A file-only message (empty text) is kept only when a file actually
+    // survived download — oversized, expired, or failed downloads must not
+    // leave the bot answering an empty turn.
+    if (!cleanedText && attachments.length === 0) {
+      return null;
+    }
+
     return {
       messageId: activity.id || `teams-${Date.now()}`,
       channelId,

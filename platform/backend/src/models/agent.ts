@@ -2454,18 +2454,22 @@ class AgentModel {
    * Checks both the id and slug columns in a single query.
    */
   static async resolveIdFromIdOrSlug(idOrSlug: string): Promise<string | null> {
+    // `agents.id` is a uuid column. Casting it to text (`id::text = $1`) so it
+    // can be compared against a possibly-non-uuid slug defeats the primary-key
+    // index and forces a sequential scan. Instead, only compare against `id`
+    // when the input is itself a valid uuid (letting Postgres use the PK index),
+    // and otherwise rely solely on the indexed `slug` lookup.
+    const matchesIdOrSlug = UUID_REGEX.test(idOrSlug)
+      ? or(
+          eq(schema.agentsTable.id, idOrSlug),
+          eq(schema.agentsTable.slug, idOrSlug),
+        )
+      : eq(schema.agentsTable.slug, idOrSlug);
+
     const [row] = await db
       .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
-      .where(
-        and(
-          or(
-            sql`${schema.agentsTable.id}::text = ${idOrSlug}`,
-            eq(schema.agentsTable.slug, idOrSlug),
-          ),
-          notDeleted(schema.agentsTable),
-        ),
-      )
+      .where(and(matchesIdOrSlug, notDeleted(schema.agentsTable)))
       .limit(1);
 
     return row?.id ?? null;
@@ -2644,6 +2648,11 @@ class AgentModel {
     };
   }
 }
+
+// Canonical 8-4-4-4-12 hex UUID shape. Used to decide whether an id-or-slug
+// input can be matched against the uuid `agents.id` primary key without a cast.
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const PERSONAL_MCP_GATEWAY_NAME = "My Gateway";
 const PERSONAL_MCP_GATEWAY_DESCRIPTION =

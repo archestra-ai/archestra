@@ -135,6 +135,89 @@ describe("MSTeamsProvider.wasBotMentioned", () => {
   });
 });
 
+describe("MSTeamsProvider.parseMuteReaction", () => {
+  const CHANNEL = "19:abcdef@thread.tacv2";
+  const ROOT = "1700000000000";
+  const channelReaction = (overrides: Record<string, unknown> = {}) => ({
+    type: "messageReaction",
+    conversation: {
+      id: `${CHANNEL};messageid=${ROOT}`,
+      conversationType: "channel",
+    },
+    channelData: { channel: { id: CHANNEL } },
+    reactionsAdded: [{ type: "1f507_mutedspeaker" }],
+    ...overrides,
+  });
+
+  test("returns channel + thread (root from conversation id) for a mute reaction", () => {
+    const provider = createProvider();
+    expect(provider.parseMuteReaction(channelReaction())).toEqual({
+      channelId: CHANNEL,
+      threadId: ROOT,
+    });
+  });
+
+  test("accepts the shushing-face reaction id too", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({ reactionsAdded: [{ type: "lipssealed" }] }),
+      ),
+    ).not.toBeNull();
+  });
+
+  test("derives the thread root from conversation id, NOT replyToId", () => {
+    const provider = createProvider();
+    // replyToId points at the reacted (bot reply) message, which must be ignored.
+    const result = provider.parseMuteReaction(
+      channelReaction({ replyToId: "9999-bot-reply-message-id" }),
+    );
+    expect(result?.threadId).toBe(ROOT);
+  });
+
+  test("null for a non-mute reaction", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({ reactionsAdded: [{ type: "like" }] }),
+      ),
+    ).toBeNull();
+  });
+
+  test("null when the activity is not a messageReaction", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(channelReaction({ type: "message" })),
+    ).toBeNull();
+  });
+
+  test("null outside team channels (no sticky state to clear)", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({
+          conversation: {
+            id: `${CHANNEL};messageid=${ROOT}`,
+            conversationType: "groupChat",
+          },
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  test("null when the thread root can't be resolved (no false mute)", () => {
+    const provider = createProvider();
+    // conversation id without ;messageid= — we must NOT guess a key.
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({
+          conversation: { id: CHANNEL, conversationType: "channel" },
+        }),
+      ),
+    ).toBeNull();
+  });
+});
+
 describe("MSTeamsProvider.parseWebhookNotification is mention-agnostic", () => {
   test("channel message WITH @mention is parsed", async () => {
     const provider = createProvider();

@@ -71,6 +71,39 @@ def test_parse_plan_rejects_bad_enums() -> None:
         c.parse_decision({**base, "target_kind": "agent", "action": "delete"}, ctx="d")
 
 
+def test_parse_bundled_file_allows_empty_content() -> None:
+    # an empty file (e.g. a package __init__.py) is legitimate and must survive the round-trip.
+    bf = c.parse_bundled_file({"path": "recipes/__init__.py", "content": "", "encoding": "utf8"}, ctx="t")
+    assert bf.content == ""
+    inv = c.Inventory(
+        source_root="/x",
+        items=[c.SkillItem(
+            id="skill:tools", name="tools", path=".claude/skills/tools/SKILL.md",
+            data=c.SkillData(content="---\nname: tools\ndescription: d\n---\n"),
+            files=[c.BundledFile(path="recipes/__init__.py", content="", encoding="utf8")])],
+    )
+    assert _roundtrip(inv) == inv
+
+
+def test_parse_bundled_file_still_requires_string_content() -> None:
+    with pytest.raises(c.ContractError, match="content"):
+        c.parse_bundled_file({"path": "p", "content": 123, "encoding": "utf8"}, ctx="t")
+
+
+def test_non_migrate_decision_may_omit_target_kind() -> None:
+    manual = c.parse_decision({"source_id": "openclaw", "action": "manual", "scope": "personal"}, ctx="d")
+    assert manual.target_kind is None and manual.action == "manual"
+    # an explicit kind on a non-migrate decision is still accepted (backward compatible).
+    skip = c.parse_decision(
+        {"source_id": "x", "action": "skip", "target_kind": "skill", "scope": "personal"}, ctx="d")
+    assert skip.target_kind == "skill"
+
+
+def test_migrate_decision_requires_target_kind() -> None:
+    with pytest.raises(c.ContractError, match="target kind"):
+        c.parse_decision({"source_id": "x", "action": "migrate", "scope": "personal"}, ctx="d")
+
+
 def test_user_answer_validators_reject_bad_values() -> None:
     with pytest.raises(c.ContractError, match="provider"):
         c.require_provider({"provider": "huggingface"}, ctx="a")

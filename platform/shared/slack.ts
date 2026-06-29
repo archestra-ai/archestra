@@ -23,6 +23,7 @@ export const SLACK_REQUIRED_BOT_SCOPES = [
   "im:history",
   "im:read",
   "im:write",
+  "reactions:read",
   "users:read",
   "users:read.email",
 ] as const;

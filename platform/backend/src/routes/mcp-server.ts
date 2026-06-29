@@ -1895,10 +1895,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
             const submitted = userConfigValues?.[fieldName];
             if (submitted === "") {
+              // Explicit clear.
               delete mergedSecrets[fieldName];
-            } else if (typeof submitted === "string") {
+            } else if (typeof submitted === "string" && submitted.trim()) {
               mergedSecrets[fieldName] = submitted;
             }
+            // A whitespace-only submission is treated as "no change" (matching
+            // validation's existing-bag fallback) so an accidental blank can't
+            // clobber a valid stored header.
           }
 
           if (mcpServer.secretId) {

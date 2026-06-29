@@ -220,34 +220,6 @@ describe("assertInstallAllowedOrBlock", () => {
     ).resolves.toBeUndefined();
   });
 
-  test("blocks a declined catalog item and surfaces the reason", async ({
-    makeOrganization,
-    makeInternalMcpCatalog,
-  }) => {
-    const org = await makeOrganization();
-    await OrganizationModel.patch(org.id, {
-      defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
-    });
-    const catalog = await makeInternalMcpCatalog({
-      organizationId: org.id,
-      scope: "personal",
-      serverType: "local",
-      localConfig: { dockerImage: UNTRUSTED_IMAGE },
-    });
-    await setApproval(catalog.id, "declined", "unvetted publisher");
-    const declined = await InternalMcpCatalogModel.findById(catalog.id);
-
-    await expect(
-      assertInstallAllowedOrBlock({
-        catalogItem: declined!,
-        organizationId: org.id,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 403,
-      message: expect.stringContaining("unvetted publisher"),
-    });
-  });
-
   test("resolves a named environment's trusted registries", async ({
     makeOrganization,
     makeInternalMcpCatalog,

@@ -27,14 +27,9 @@ export const InternalMcpCatalogServerTypeSchema = z.enum([
 /**
  * Image-approval state for a personal local catalog item gated by an
  * environment's trusted image registries. `pending` = blocked, awaiting an
- * admin; `approved` = installs proceed; `declined` = installs blocked with a
- * reason. NULL on the row = no decision recorded.
+ * admin; `approved` = installs proceed. NULL on the row = no decision recorded.
  */
-export const CatalogItemApprovalStatusSchema = z.enum([
-  "pending",
-  "approved",
-  "declined",
-]);
+export const CatalogItemApprovalStatusSchema = z.enum(["pending", "approved"]);
 
 // Define Zod schemas for complex JSONB fields
 const AuthFieldSchema = z.object({

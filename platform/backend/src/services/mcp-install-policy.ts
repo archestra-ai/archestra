@@ -21,7 +21,6 @@ type InstallPolicyCatalogItem = Pick<
   | "environmentId"
   | "localConfig"
   | "catalogItemApprovalStatus"
-  | "catalogItemApprovalReason"
 >;
 
 // === Public API ===
@@ -55,26 +54,13 @@ export async function assertInstallAllowedOrBlock(params: {
   }
 
   if (catalogItem.catalogItemApprovalStatus === "approved") return;
-  if (catalogItem.catalogItemApprovalStatus === "declined") {
-    logger.info(
-      { catalogId: catalogItem.id, image: policy.image },
-      "Install blocked: catalog image was declined",
-    );
-    throw new ApiError(
-      403,
-      declineMessage(catalogItem.catalogItemApprovalReason),
-    );
-  }
 
   // No decision yet (or already pending): record pending and block. The CAS
-  // returns the winning decision so a concurrent admin approve/decline wins.
+  // returns the winning status so a concurrent admin approval wins.
   const winning = await InternalMcpCatalogModel.markImageApprovalPending(
     catalogItem.id,
   );
   if (winning.status === "approved") return;
-  if (winning.status === "declined") {
-    throw new ApiError(403, declineMessage(winning.reason));
-  }
   logger.info(
     {
       catalogId: catalogItem.id,
@@ -185,10 +171,4 @@ function imageIsGatedForRegistries(
 
 function blockedMessage(environmentLabel: string): string {
   return `This server's image is not in the trusted image registries for "${environmentLabel}" and is blocked pending administrator approval.`;
-}
-
-function declineMessage(reason: string | null | undefined): string {
-  return reason
-    ? `This server's image was declined by an administrator: ${reason}`
-    : "This server's image was declined by an administrator.";
 }

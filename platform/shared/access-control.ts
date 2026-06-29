@@ -628,9 +628,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ApproveCatalogItemImage]: {
     mcpServerInstallation: ["admin"],
   },
-  [RouteId.DeclineCatalogItemImage]: {
-    mcpServerInstallation: ["admin"],
-  },
   [RouteId.GetDeploymentYamlPreview]: {
     mcpRegistry: ["read"],
   },

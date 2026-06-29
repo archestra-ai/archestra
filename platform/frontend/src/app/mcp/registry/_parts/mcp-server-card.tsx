@@ -882,9 +882,10 @@ export function McpServerCard({
   // The trusted-image-registry policy holds this catalog's image: an untrusted
   // personal local image can't be installed until an admin approves it. The
   // backend flags `imageApprovalRequired` so we prevent the install up front
-  // (rather than letting it fail), and explain why.
+  // (rather than letting it fail). An admin reviews the config and approves in
+  // the edit form; the requester gets a copy-link to share.
   const showApprovalPanel = item.imageApprovalRequired === true;
-  const imageDeclined = item.catalogItemApprovalStatus === "declined";
+  const isInstallAdmin = !!isMcpServerInstallAdmin;
 
   const copyApprovalLink = () => {
     void navigator.clipboard.writeText(
@@ -895,34 +896,36 @@ export function McpServerCard({
 
   const localInstallButton = showApprovalPanel ? (
     <div className="flex-1 space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
-      <div
-        className={`flex items-center gap-2 text-sm font-medium ${
-          imageDeclined
-            ? "text-destructive"
-            : "text-amber-600 dark:text-amber-500"
-        }`}
-      >
+      <div className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-500">
         <ShieldAlert className="h-4 w-4" />
-        {imageDeclined ? "Image declined" : "Awaiting admin approval"}
+        {isInstallAdmin ? "Image needs approval" : "Awaiting admin approval"}
       </div>
       <p className="text-xs text-muted-foreground">
-        {imageDeclined
-          ? `An administrator declined this image${
-              item.catalogItemApprovalReason
-                ? `: ${item.catalogItemApprovalReason}`
-                : "."
-            }`
+        {isInstallAdmin
+          ? "This image isn't from a trusted registry. Review the configuration, then approve to allow installs."
           : "This image isn't from a trusted registry. An admin must approve it before it can be installed."}
       </p>
-      <Button
-        size="sm"
-        variant="outline"
-        className="w-full"
-        onClick={copyApprovalLink}
-      >
-        <Copy className="h-4 w-4" />
-        Copy link
-      </Button>
+      {isInstallAdmin ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full"
+          onClick={openEditorConfiguration}
+        >
+          <Pencil className="h-4 w-4" />
+          Review config
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full"
+          onClick={copyApprovalLink}
+        >
+          <Copy className="h-4 w-4" />
+          Copy link
+        </Button>
+      )}
     </div>
   ) : (
     <TooltipProvider>

@@ -66,7 +66,6 @@ export const RouteId = {
   GetInternalMcpCatalogLabelValues: "getInternalMcpCatalogLabelValues",
   ListPendingImageApprovalCatalogItems: "listPendingImageApprovalCatalogItems",
   ApproveCatalogItemImage: "approveCatalogItemImage",
-  DeclineCatalogItemImage: "declineCatalogItemImage",
   GetDeploymentYamlPreview: "getDeploymentYamlPreview",
   ValidateDeploymentYaml: "validateDeploymentYaml",
   ResetDeploymentYaml: "resetDeploymentYaml",

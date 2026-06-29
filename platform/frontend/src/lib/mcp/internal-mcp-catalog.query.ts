@@ -5,6 +5,7 @@ import { environmentKeys } from "@/lib/environment.query";
 import { throwOnApiError } from "@/lib/utils";
 
 const {
+  approveCatalogItemImage,
   createInternalMcpCatalogItem,
   deleteInternalMcpCatalogItem,
   getDeploymentYamlPreview,
@@ -139,6 +140,27 @@ export function useCreateInternalMcpCatalogItem() {
         error instanceof Error
           ? error.message
           : "Failed to create catalog item",
+      );
+    },
+  });
+}
+
+export function useApproveCatalogItemImage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await approveCatalogItemImage({ path: { id } });
+      throwOnApiError(error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      toast.success("Image approved");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to approve image",
       );
     },
   });

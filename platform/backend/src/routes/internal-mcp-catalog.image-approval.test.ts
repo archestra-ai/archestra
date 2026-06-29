@@ -89,22 +89,6 @@ describe("internal MCP catalog image approval", () => {
     expect(stored?.catalogItemApprovalReviewedBy).toBe(user.id);
   });
 
-  test("decline records the status and reason", async () => {
-    const catalog = await makePersonalLocalCatalog();
-    await InternalMcpCatalogModel.markImageApprovalPending(catalog.id);
-
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/internal_mcp_catalog/${catalog.id}/decline`,
-      payload: { reason: "unvetted publisher" },
-    });
-
-    expect(response.statusCode).toBe(200);
-    const stored = await InternalMcpCatalogModel.findById(catalog.id);
-    expect(stored?.catalogItemApprovalStatus).toBe("declined");
-    expect(stored?.catalogItemApprovalReason).toBe("unvetted publisher");
-  });
-
   test("approve rejects a catalog item not subject to image approval", async () => {
     const orgCatalog = await InternalMcpCatalogModel.create(
       {

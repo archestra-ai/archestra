@@ -1317,40 +1317,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.post(
-    "/api/internal_mcp_catalog/:id/decline",
-    {
-      schema: {
-        operationId: RouteId.DeclineCatalogItemImage,
-        description:
-          "Decline a personal local catalog item's image with a reason; its installs stay blocked. Requires mcpServerInstallation:admin.",
-        tags: ["MCP Catalog"],
-        params: z.object({ id: UuidIdSchema }),
-        body: z.object({ reason: z.string().trim().min(1).max(1000) }),
-        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
-      },
-    },
-    async (request, reply) => {
-      const catalogItem = await assertImageApprovable(
-        request.params.id,
-        request.organizationId,
-      );
-      const declined = await InternalMcpCatalogModel.declineImage({
-        id: catalogItem.id,
-        reviewedBy: request.user.id,
-        reason: request.body.reason,
-      });
-      if (!declined) {
-        throw new ApiError(404, "Catalog item not found");
-      }
-      logger.info(
-        { catalogId: catalogItem.id, reviewedBy: request.user.id },
-        "Catalog item image declined",
-      );
-      return reply.send(declined);
-    },
-  );
-
   fastify.delete(
     "/api/internal_mcp_catalog/:id",
     {

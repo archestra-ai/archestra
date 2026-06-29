@@ -53,7 +53,6 @@ from contracts import (
     CommandItem,
     ContractError,
     Decision,
-    FrontMatter,
     HookEvent,
     HookItem,
     Item,
@@ -85,7 +84,7 @@ from contracts import (
     to_jsonable,
     validate_requirements,
 )
-from frontmatter import emit_frontmatter, parse_frontmatter, set_name
+from frontmatter import emit_frontmatter, fm_str, parse_frontmatter, set_name
 
 # deterministic apply order: keys before the agent, skills/catalog next, install, then policies,
 # then hooks (they attach to the already-created primary agent).
@@ -117,19 +116,9 @@ def _outcome_label(outcome: Outcome) -> str:
 # --- built operations: a typed union of what _build_payload produces ----------------------
 
 
-@dataclass(frozen=True)
-class BuiltAgent:
-    payload: AgentCreate
-
-
-@dataclass(frozen=True)
-class BuiltSkill:
-    payload: SkillCreate
-
-
-@dataclass(frozen=True)
-class BuiltCatalog:
-    payload: CatalogCreate
+# a "ready" op is its own api payload (fully built offline). the three structs below instead
+# carry pre-resolution data because they need an id looked up at execute time -- a catalog id,
+# a tool id, or the primary agent id -- that the offline build cannot know yet.
 
 
 @dataclass(frozen=True)
@@ -139,11 +128,6 @@ class BuiltInstall:
     environment_values: dict[str, str]
     agent_ids: list[str]
     team_id: str | None = None
-
-
-@dataclass(frozen=True)
-class BuiltLlmKey:
-    payload: LlmKeyCreate
 
 
 @dataclass(frozen=True)
@@ -166,18 +150,13 @@ class BuiltHook:
 
 
 Built = Union[
-    BuiltAgent, BuiltSkill, BuiltCatalog, BuiltInstall, BuiltLlmKey, BuiltPolicy, BuiltHook
+    AgentCreate, SkillCreate, CatalogCreate, BuiltInstall, LlmKeyCreate, BuiltPolicy, BuiltHook
 ]
 
 
 def _nonmigrate_outcome(action: str) -> Outcome:
     """an intentional skip is 'skipped'; a deferred item is 'manual'."""
     return "skipped" if action == "skip" else "manual"
-
-
-def _fm_str(fm: FrontMatter, key: str) -> str | None:
-    value = fm.get(key)
-    return value if isinstance(value, str) else None
 
 
 # --- payload builders (offline, deterministic) -------------------------------------------
@@ -209,7 +188,7 @@ def _skill_content_for(item: Item, name: str) -> tuple[str, list[SkillFile]]:
                 )
             return emit_frontmatter(name, desc) + item.data.body + note, files
         case CommandItem():
-            desc = (_fm_str(item.data.frontmatter, "description") or "").strip() or f"migrated command {name}"
+            desc = (fm_str(item.data.frontmatter, "description") or "").strip() or f"migrated command {name}"
             return emit_frontmatter(name, desc.replace("\n", " ")) + item.data.body, files
         case LocalToolItem():
             entry = item.data.entrypoint
@@ -248,7 +227,7 @@ def _agent_source(item: Item) -> tuple[str | None, str | None]:
     """extract (system prompt body, description) from an agent-capable source item."""
     match item:
         case ClaudeMdItem():
-            return item.data.body or None, _fm_str(item.data.frontmatter, "description")
+            return item.data.body or None, fm_str(item.data.frontmatter, "description")
         case SubagentItem():
             return item.data.body or None, item.data.description
         case _:
@@ -345,21 +324,21 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
             raise ContractError(f"{decision.source_id}: a migrate decision must declare a target_kind")
         case "agent":
             body, description = _agent_source(item)
-            return name, BuiltAgent(AgentCreate(
+            return name, AgentCreate(
                 name=name, scope=decision.scope, systemPrompt=body,
                 description=description or "Migrated from CLAUDE.md",
                 teams=_team_ids(decision, ctx=ctx) or [],
-            ))
+            )
 
         case "skill":
             content, files = _skill_content_for(item, name)
             _require_skill_frontmatter(content, ctx=decision.source_id)
-            return name, BuiltSkill(SkillCreate(
+            return name, SkillCreate(
                 content=content,
                 scope=decision.scope,
                 files=files,
                 teamIds=_team_ids(decision, ctx=ctx),
-            ))
+            )
 
         case "mcp_catalog":
             if not isinstance(item, McpServerItem):
@@ -376,7 +355,7 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
                                     localConfig=LocalConfig(command=data.command or "",
                                                             arguments=data.args, environment=env),
                                     teams=_team_ids(decision, ctx=ctx) or [])
-            return name, BuiltCatalog(cfg)
+            return name, cfg
 
         case "mcp_install":
             # catalogId is resolved by name at execute time; carry the supplied env values.
@@ -392,12 +371,12 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
             api_key = require_answer(answers, "apiKey", ctx=ctx)
             is_primary = answers.get("isPrimary")
             base_url = answers.get("baseUrl")
-            return name, BuiltLlmKey(LlmKeyCreate(
+            return name, LlmKeyCreate(
                 provider=provider, scope=decision.scope, apiKey=api_key, name=name,
                 isPrimary=is_primary if isinstance(is_primary, bool) else None,
                 baseUrl=base_url if isinstance(base_url, str) and base_url else None,
                 teamId=_team_id(decision, ctx=ctx),
-            ))
+            )
 
         case "tool_policy":
             # the model must extract the guard's semantics into user_answers.
@@ -503,7 +482,7 @@ def _scrub_url(url: str) -> str:
 def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
     """strip user-supplied secrets before printing a built op in --dry-run."""
     match built:
-        case BuiltLlmKey(payload):
+        case LlmKeyCreate() as payload:
             shown = to_payload(payload)
             shown["apiKey"] = "<redacted>"
             return shown
@@ -511,9 +490,9 @@ def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
             return {"catalog_name": built.catalog_name, "scope": built.scope,
                     "teamId": built.team_id, "agentIds": built.agent_ids,
                     "environmentValues": {k: "<redacted>" for k in built.environment_values}}
-        case BuiltAgent(payload) | BuiltSkill(payload):
+        case (AgentCreate() | SkillCreate()) as payload:
             return to_payload(payload)
-        case BuiltCatalog(payload):
+        case CatalogCreate() as payload:
             if payload.serverUrl is not None:
                 payload = replace(payload, serverUrl=_scrub_url(payload.serverUrl))
             local = payload.localConfig
@@ -543,13 +522,13 @@ def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
 
 def _preview_detail(built: Built) -> str:
     match built:
-        case BuiltAgent(payload):
+        case AgentCreate() as payload:
             return f"scope={payload.scope}; inherits org default model"
-        case BuiltSkill(payload):
+        case SkillCreate() as payload:
             if payload.scope == "team":
                 return f"scope=team; team_ids={len(payload.teamIds or [])}; bundled_files={len(payload.files)}"
             return f"scope={payload.scope}; bundled_files={len(payload.files)}"
-        case BuiltCatalog(payload):
+        case CatalogCreate() as payload:
             match payload.serverType:
                 case "remote":
                     return f"scope={payload.scope}; remote MCP catalog item"
@@ -564,7 +543,7 @@ def _preview_detail(built: Built) -> str:
                 f"scope={built.scope}; catalog={built.catalog_name}; "
                 f"agent_ids={len(built.agent_ids)}{team}; supplied_env_values={len(built.environment_values)}"
             )
-        case BuiltLlmKey(payload):
+        case LlmKeyCreate() as payload:
             return f"scope={payload.scope}; provider={payload.provider}; api_key=<redacted>"
         case BuiltPolicy():
             return f"tool={built.tool_name}; action={built.action}; conditions={len(built.conditions)}"
@@ -585,7 +564,7 @@ def _execute(client: ArchestraClient, decision: Decision, name: str, built: Buil
                         outcome=outcome, archestra_id=archestra_id, error=error, detail=detail)
 
     match built:
-        case BuiltAgent(payload):
+        case AgentCreate() as payload:
             existing = client.list_agents(name=name, scope=payload.scope)
             if existing:
                 return op("skipped", archestra_id=require_str_field(existing[0], "id", ctx="agent"),
@@ -593,7 +572,7 @@ def _execute(client: ArchestraClient, decision: Decision, name: str, built: Buil
             created = client.create_agent(payload)
             return op("created", archestra_id=require_str_field(created, "id", ctx="agent create response"))
 
-        case BuiltSkill(payload):
+        case SkillCreate() as payload:
             existing = [
                 s for s in client.list_skills(search=name)
                 if s.get("name") == name and s.get("scope") == payload.scope
@@ -604,7 +583,7 @@ def _execute(client: ArchestraClient, decision: Decision, name: str, built: Buil
             created = client.create_skill(payload)
             return op("created", archestra_id=require_str_field(created, "id", ctx="skill create response"))
 
-        case BuiltCatalog(payload):
+        case CatalogCreate() as payload:
             existing = [c for c in client.list_catalog() if c.get("name") == name and c.get("scope") == payload.scope]
             if existing:
                 return op("skipped", archestra_id=require_str_field(existing[0], "id", ctx="catalog item"),
@@ -628,7 +607,7 @@ def _execute(client: ArchestraClient, decision: Decision, name: str, built: Buil
             ))
             return op("created", archestra_id=require_str_field(created, "id", ctx="install response"))
 
-        case BuiltLlmKey(payload):
+        case LlmKeyCreate() as payload:
             existing = [
                 k for k in client.list_llm_keys(search=name, provider=payload.provider)
                 if k.get("name") == name and k.get("scope") == payload.scope and k.get("teamId") == payload.teamId
@@ -799,13 +778,7 @@ def _run_apply(built: list[_Built], base_url: str, api_key: str) -> list[ResultO
                 continue
             built_op = b.built
             if isinstance(built_op, BuiltInstall) and not built_op.agent_ids and primary_agent_id:
-                built_op = BuiltInstall(
-                    catalog_name=built_op.catalog_name,
-                    scope=built_op.scope,
-                    environment_values=built_op.environment_values,
-                    agent_ids=[primary_agent_id],
-                    team_id=built_op.team_id,
-                )
+                built_op = replace(built_op, agent_ids=[primary_agent_id])
             if isinstance(built_op, BuiltHook) and built_op.agent_id is None and primary_agent_id:
                 built_op = replace(built_op, agent_id=primary_agent_id)
             try:

@@ -203,6 +203,12 @@ def _parse_single_quoted(token: str) -> str | None:
     return None  # unterminated
 
 
+def fm_str(fm: FrontMatter, key: str) -> str | None:
+    """the value of a frontmatter key when it is a string, else None (a list-valued or absent key)."""
+    value = fm.get(key)
+    return value if isinstance(value, str) else None
+
+
 def emit_frontmatter(name: str, description: str) -> str:
     """emit a minimal, valid-YAML frontmatter block. json.dumps quoting means names or
     descriptions with YAML-significant characters cannot break the block."""

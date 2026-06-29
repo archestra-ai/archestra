@@ -89,7 +89,7 @@ creating hooks and warns when the feature is off.
 - **unresolved** — a missing/escaping script or unparsable command; map it `manual`.
 
 What you author per hook decision (`target_kind:"hook"`): usually nothing. Optional `user_answers`:
-`agentId` (UUID; defaults to the primary migrated agent), `fileName` (override; must match the basename
+`agentId` (UUID; defaults to the primary agent), `fileName` (override; must match the basename
 regex), `requirements` (override the PEP-723 list; a `.sh` hook must have none). `apply.py` builds and
 validates the payload, attaches it to the primary agent, and skips an existing `(agentId, event, fileName)`.
 

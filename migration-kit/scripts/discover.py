@@ -39,7 +39,6 @@ from contracts import (
     CommandData,
     CommandItem,
     ContractError,
-    FrontMatter,
     HookData,
     HookIntent,
     HookItem,
@@ -65,7 +64,7 @@ from contracts import (
     to_jsonable,
     validate_requirements,
 )
-from frontmatter import parse_frontmatter
+from frontmatter import fm_str, parse_frontmatter
 
 # events whose hooks can block the action -- candidates for a tool-invocation policy.
 _BLOCKING_EVENTS = {"PreToolUse", "UserPromptSubmit", "PreCompact", "Stop", "SubagentStop"}
@@ -116,11 +115,6 @@ def _redact(value: JsonValue, ref: str, sink: list[str]) -> JsonValue:
             return "<redacted>"
         case _:
             return value
-
-
-def _meta_str(meta: FrontMatter, key: str) -> str | None:
-    value = meta.get(key)
-    return value if isinstance(value, str) else None
 
 
 def _as_opt_str(value: JsonValue) -> str | None:
@@ -207,11 +201,11 @@ def discover(root: Path) -> Inventory:
         if not _is_contained_file(f, root):
             continue
         doc = parse_frontmatter(read(f))
-        name = _meta_str(doc.frontmatter, "name") or f.stem
+        name = fm_str(doc.frontmatter, "name") or f.stem
         rel = f.relative_to(root).as_posix()
         note_unparsed(doc.unparsed_lines, rel)
         _warn_if_secret(doc.body, rel, inv.warnings)
-        description = _meta_str(doc.frontmatter, "description")
+        description = fm_str(doc.frontmatter, "description")
         tools = doc.frontmatter.get("tools")
         inv.items.append(SubagentItem(
             id=f"subagent:{name}", name=name, path=rel, summary=(description or "")[:200],
@@ -227,7 +221,7 @@ def discover(root: Path) -> Inventory:
         skill_dir = skill_md.parent
         content = read(skill_md)
         doc = parse_frontmatter(content)
-        name = _meta_str(doc.frontmatter, "name") or skill_dir.name
+        name = fm_str(doc.frontmatter, "name") or skill_dir.name
         rel = skill_md.relative_to(root).as_posix()
         note_unparsed(doc.unparsed_lines, rel)
         files = [
@@ -241,7 +235,7 @@ def discover(root: Path) -> Inventory:
                 _warn_if_secret(bf.content, f"{skill_dir.relative_to(root).as_posix()}/{bf.path}", inv.warnings)
         inv.items.append(SkillItem(
             id=f"skill:{name}", name=name, path=rel,
-            summary=(_meta_str(doc.frontmatter, "description") or "")[:200],
+            summary=(fm_str(doc.frontmatter, "description") or "")[:200],
             data=SkillData(content=content, frontmatter=doc.frontmatter), files=files,
         ))
         for p in skill_dir.rglob("*"):
@@ -252,13 +246,13 @@ def discover(root: Path) -> Inventory:
         if not _is_contained_file(f, root):
             continue
         doc = parse_frontmatter(read(f))
-        name = _meta_str(doc.frontmatter, "name") or f.stem
+        name = fm_str(doc.frontmatter, "name") or f.stem
         rel = f.relative_to(root).as_posix()
         note_unparsed(doc.unparsed_lines, rel)
         _warn_if_secret(doc.body, rel, inv.warnings)
         inv.items.append(CommandItem(
             id=f"command:{name}", name=name, path=rel,
-            summary=(_meta_str(doc.frontmatter, "description") or "")[:200],
+            summary=(fm_str(doc.frontmatter, "description") or "")[:200],
             data=CommandData(body=doc.body, frontmatter=doc.frontmatter),
         ))
         mark(f)

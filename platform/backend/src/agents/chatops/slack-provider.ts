@@ -47,6 +47,7 @@ import {
   isMuteReaction,
   isThreadMuteCommand,
   markChannelThreadActive,
+  mightBeAddressedMuteCommand,
   resolveChannelGateAction,
 } from "./channel-activation";
 import {
@@ -316,6 +317,15 @@ class SlackProvider implements ChatOpsProvider {
         channelId: event.channel,
         threadId: threadTs,
       };
+      // "mute" / "shut up" etc., optionally prefixed by a name the bot answers
+      // to ("Archestra shut up") with no explicit @mention. The app name is
+      // DB-backed, so only resolve it when the message might be such a command.
+      let wantsMute = isThreadMuteCommand(cleanedText);
+      if (!wantsMute && mightBeAddressedMuteCommand(cleanedText)) {
+        wantsMute = isThreadMuteCommand(cleanedText, [
+          await OrganizationModel.getAppName(),
+        ]);
+      }
       // isActive is only consulted when the bot wasn't mentioned (see
       // resolveChannelGateAction), so skip the cache read on mentions.
       const isActive = hasBotMention
@@ -324,7 +334,7 @@ class SlackProvider implements ChatOpsProvider {
       switch (
         resolveChannelGateAction({
           botMentioned: hasBotMention,
-          wantsMute: isThreadMuteCommand(cleanedText),
+          wantsMute,
           isActive,
         })
       ) {

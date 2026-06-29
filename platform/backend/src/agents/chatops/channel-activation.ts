@@ -67,13 +67,41 @@ export async function clearChannelThreadActive(params: {
  * the deployment" is a real request, not a mute — so false positives are
  * essentially impossible without resorting to brittle natural-language intent
  * detection. "mute" is the canonical command; the rest are friendly aliases.
+ *
+ * `addressableNames` lets a command be prefixed by a name the bot answers to
+ * (e.g. the app name: "Archestra shut up", "Acme mute") without an explicit
+ * @mention — a leading addressable name is stripped before matching. Only those
+ * specific names are stripped, never an arbitrary word, so "joey shut up" (aimed
+ * at a person) is not treated as a mute.
  */
-export function isThreadMuteCommand(text: string): boolean {
-  const normalized = text
-    .trim()
-    .toLowerCase()
-    .replace(/[\s.!?]+$/, "");
-  return THREAD_MUTE_COMMANDS.has(normalized);
+export function isThreadMuteCommand(
+  text: string,
+  addressableNames: string[] = [],
+): boolean {
+  const normalized = normalizeMuteText(text);
+  if (THREAD_MUTE_COMMANDS.has(normalized)) return true;
+  for (const name of addressableNames) {
+    const prefix = name.trim().toLowerCase();
+    if (prefix && normalized.startsWith(prefix)) {
+      const rest = normalized.slice(prefix.length).replace(/^[\s,:]+/, "");
+      if (rest && THREAD_MUTE_COMMANDS.has(rest)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Cheap (no I/O) check for whether a message could be an
+ * "<addressable name> <mute command>" — i.e. it ends with a mute command after
+ * a prefix. Lets the gate resolve the (DB-backed) app name only when it might
+ * matter, instead of on every channel message.
+ */
+export function mightBeAddressedMuteCommand(text: string): boolean {
+  const normalized = normalizeMuteText(text);
+  for (const command of THREAD_MUTE_COMMANDS) {
+    if (normalized.endsWith(` ${command}`)) return true;
+  }
+  return false;
 }
 
 /**
@@ -116,6 +144,14 @@ export function resolveChannelGateAction(params: {
 // Internal Helpers
 // =============================================================================
 
+/** Normalize a message for whole-string mute-command matching. */
+function normalizeMuteText(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[\s.!?]+$/, "");
+}
+
 function activationKey(params: {
   provider: ChatOpsProviderType;
   channelId: string;
@@ -143,6 +179,7 @@ const THREAD_MUTE_COMMANDS = new Set([
   "stand down",
   "be quiet",
   "stay quiet",
+  "shut up",
 ]);
 
 /**

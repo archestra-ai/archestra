@@ -26,6 +26,7 @@ import {
   isMuteReaction,
   isThreadMuteCommand,
   markChannelThreadActive,
+  mightBeAddressedMuteCommand,
   resolveChannelGateAction,
 } from "./channel-activation";
 import {
@@ -163,6 +164,8 @@ describe("isThreadMuteCommand", () => {
     "stand down",
     "be quiet",
     "stay quiet",
+    "shut up",
+    "Shut up!",
   ])("treats %j as a mute command", (text) => {
     expect(isThreadMuteCommand(text)).toBe(true);
   });
@@ -177,8 +180,55 @@ describe("isThreadMuteCommand", () => {
     "please be quiet about the release date",
     "unmute",
     "mute mute",
+    "shut up about the deploy",
   ])("does not treat %j as a mute command", (text) => {
     expect(isThreadMuteCommand(text)).toBe(false);
+  });
+
+  describe("with an addressable name prefix (no explicit @mention)", () => {
+    const names = ["Archestra", "Acme Bot"];
+
+    test.each([
+      "Archestra shut up",
+      "archestra mute",
+      "Archestra, stand down",
+      "Acme Bot shut up",
+      "Acme Bot: be quiet",
+    ])("treats %j as a mute command", (text) => {
+      expect(isThreadMuteCommand(text, names)).toBe(true);
+    });
+
+    test.each([
+      "joey shut up", // aimed at a person, not the bot
+      "Archestra shut up the alerts channel", // not an exact command after the name
+      "Archestra what's the status", // addressed, but not a mute
+      "shut up Archestra", // name not a leading prefix
+    ])("does not treat %j as a mute command", (text) => {
+      expect(isThreadMuteCommand(text, names)).toBe(false);
+    });
+
+    test("a bare command still matches without any names passed", () => {
+      expect(isThreadMuteCommand("shut up")).toBe(true);
+    });
+  });
+});
+
+describe("mightBeAddressedMuteCommand", () => {
+  test.each([
+    "Archestra shut up",
+    "acme mute",
+    "potato-claw stop replying",
+  ])("flags %j as possibly an addressed mute (ends with a command)", (text) => {
+    expect(mightBeAddressedMuteCommand(text)).toBe(true);
+  });
+
+  test.each([
+    "shut up", // bare — handled without resolving a name
+    "hello there",
+    "let's mute the alerts channel",
+    "",
+  ])("does not flag %j", (text) => {
+    expect(mightBeAddressedMuteCommand(text)).toBe(false);
   });
 });
 

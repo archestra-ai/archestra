@@ -46,7 +46,7 @@ The bot responds with an **Adaptive Card dropdown** to select which agent handle
 
 In channels the bot stays silent until it is @mentioned. Once mentioned in a thread, it keeps replying to every message in that thread without further mentions. Starting a new thread needs a fresh mention. Direct messages and group chats always get a reply, no mention required.
 
-To stop the bot replying in a thread, send `mute` (or `@mention` it with `mute`), or react to one of its replies with the mute (🔇) or shushing-face (🤫) emoji. It goes quiet until the thread is @mentioned again.
+To stop the bot replying in a thread, send `mute` (you can address it by name with no @mention, e.g. `Archestra mute`), or react to one of its replies with the mute (🔇) or shushing-face (🤫) emoji. It goes quiet until the thread is @mentioned again.
 
 ### Commands
 

@@ -19,6 +19,7 @@ import {
   isChannelThreadActive,
   isThreadMuteCommand,
   markChannelThreadActive,
+  mightBeAddressedMuteCommand,
   resolveChannelGateAction,
 } from "@/agents/chatops/channel-activation";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
@@ -309,6 +310,15 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 threadId: message.threadId ?? message.channelId,
               };
               const botMentioned = provider.wasBotMentioned(context.activity);
+              // "mute" / "shut up" etc., optionally prefixed by a name the bot
+              // answers to ("Archestra shut up") with no explicit @mention. The
+              // app name is DB-backed, so only resolve it when it might matter.
+              let wantsMute = isThreadMuteCommand(message.text);
+              if (!wantsMute && mightBeAddressedMuteCommand(message.text)) {
+                wantsMute = isThreadMuteCommand(message.text, [
+                  await OrganizationModel.getAppName(),
+                ]);
+              }
               // isActive is only consulted when the bot wasn't mentioned (see
               // resolveChannelGateAction), so skip the cache read on mentions.
               const isActive = botMentioned
@@ -317,7 +327,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               switch (
                 resolveChannelGateAction({
                   botMentioned,
-                  wantsMute: isThreadMuteCommand(message.text),
+                  wantsMute,
                   isActive,
                 })
               ) {

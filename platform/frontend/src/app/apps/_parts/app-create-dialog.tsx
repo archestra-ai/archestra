@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCreateApp } from "@/lib/app.query";
-import { buildAppChatHandoffUrl } from "@/lib/apps/app-chat-handoff";
 
 type CreateFormValues = {
   name: string;
@@ -42,17 +41,21 @@ export function AppCreateDialog({
   };
 
   const onSubmit = form.handleSubmit(async (values) => {
+    // One round-trip: the backend creates the app, seeds a conversation with it
+    // already rendered, and returns the conversation id to open directly.
     const created = await createApp.mutateAsync({
       name: values.name.trim(),
       description: DEFAULT_APP_DESCRIPTION,
+      openInChat: true,
     });
     if (created) {
       handleOpenChange(false);
+      // Seeding is best-effort; if it was skipped (e.g. no LLM configured), open
+      // the app's standalone page instead of a chat.
       router.push(
-        buildAppChatHandoffUrl({
-          appId: created.id,
-          appName: values.name.trim(),
-        }),
+        created.conversationId
+          ? `/chat/${created.conversationId}`
+          : `/a/${created.id}`,
       );
     }
   });

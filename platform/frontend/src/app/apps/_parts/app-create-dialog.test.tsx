@@ -16,20 +16,22 @@ vi.mock("@/lib/app.query", () => ({
   useCreateApp: useCreateAppMock,
 }));
 
-import { buildAppChatHandoffUrl } from "@/lib/apps/app-chat-handoff";
 import { AppCreateDialog } from "./app-create-dialog";
 
 describe("AppCreateDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    createMutateMock.mockResolvedValue({ id: "app-123" });
+    createMutateMock.mockResolvedValue({
+      id: "app-123",
+      conversationId: "conv-456",
+    });
     useCreateAppMock.mockReturnValue({
       mutateAsync: createMutateMock,
       isPending: false,
     });
   });
 
-  it("creates a blank app with the seeded description and opens chat", async () => {
+  it("creates the app with openInChat and opens the seeded conversation", async () => {
     const user = userEvent.setup();
     render(<AppCreateDialog open onOpenChange={() => {}} />);
 
@@ -37,13 +39,20 @@ describe("AppCreateDialog", () => {
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(createMutateMock).toHaveBeenCalledTimes(1));
-    expect(createMutateMock).toHaveBeenCalledWith({
-      name: "My App",
-      description:
-        "To get started, send a prompt describing what you want to build.",
-    });
-    expect(pushMock).toHaveBeenCalledWith(
-      buildAppChatHandoffUrl({ appId: "app-123", appName: "My App" }),
+    expect(createMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "My App", openInChat: true }),
     );
+    expect(pushMock).toHaveBeenCalledWith("/chat/conv-456");
+  });
+
+  it("falls back to the app's standalone page when no conversation was seeded", async () => {
+    createMutateMock.mockResolvedValue({ id: "app-123" });
+    const user = userEvent.setup();
+    render(<AppCreateDialog open onOpenChange={() => {}} />);
+
+    await user.type(screen.getByLabelText("Name"), "My App");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/a/app-123"));
   });
 });

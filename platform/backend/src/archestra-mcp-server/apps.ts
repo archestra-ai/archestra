@@ -49,6 +49,7 @@ import {
   deleteAppBacking,
   syncAppBacking,
 } from "@/services/apps/app-mcp-backing";
+import { buildAppRenderResult } from "@/services/apps/app-render-result";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import {
   buildValidatedVersionPayload,
@@ -623,17 +624,7 @@ const registry = defineArchestraTools([
       if (!app) {
         return errorResult(`No app found with id ${args.appId}.`);
       }
-      const summary = {
-        id: app.id,
-        name: app.name,
-        description: app.description,
-        scope: app.scope,
-        latestVersion: app.latestVersion,
-      };
-      return structuredSuccessResult(
-        summary,
-        `${JSON.stringify(summary, null, 2)}\nRendered inline when viewed in chat; standalone page: /a/${app.id}`,
-      );
+      return buildAppRenderResult(app);
     },
   }),
   defineArchestraTool({

@@ -611,6 +611,7 @@ export const RouteId = {
   AssignToolToApp: "assignToolToApp",
   UnassignToolFromApp: "unassignToolFromApp",
   GetAppTemplates: "getAppTemplates",
+  OpenAppInChat: "openAppInChat",
   PostAppRenderDiagnostics: "postAppRenderDiagnostics",
   PostAppRenderScreenshot: "postAppRenderScreenshot",
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)

@@ -1434,6 +1434,32 @@ export function ChatPageContent({
     openRightPanelTab("runs");
   }, [scheduledRunTriggerId, conversationId, openRightPanelTab]);
 
+  // When a conversation has an app but no saved right-panel preference yet (the
+  // user hasn't manually opened/closed it in this chat), open the Apps tab once
+  // so the app shows immediately — e.g. landing on a freshly-seeded "open app"
+  // chat. A manual override is respected; once opened, openRightPanelTab persists
+  // the preference, so this never fights the restore effect.
+  const autoOpenedAppsRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!conversationId || isLoadingConversation) return;
+    if (mcpApps.length === 0) return;
+    if (autoOpenedAppsRef.current === conversationId) return;
+    autoOpenedAppsRef.current = conversationId;
+    if (
+      localStorage.getItem(
+        conversationStorageKeys(conversationId).rightPanelOpen,
+      ) !== null
+    ) {
+      return;
+    }
+    openRightPanelTab("apps");
+  }, [
+    conversationId,
+    isLoadingConversation,
+    mcpApps.length,
+    openRightPanelTab,
+  ]);
+
   const toggleRightPanel = useCallback(() => {
     if (isRightPanelOpen) {
       closeRightPanel();

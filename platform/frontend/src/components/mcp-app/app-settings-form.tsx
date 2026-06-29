@@ -121,19 +121,23 @@ export function AppSettingsForm({
   ];
 
   const teamSelectionMissing = scope === "team" && teamIds.length === 0;
+  // Tool assignments must land before saving (an unseeded selection would clear
+  // them), so this disables the button — but it is not a "Saving…" state.
+  const toolsLoading = !assignedTools;
+  // Only the mutation drives the button's loading label; data-loading does not.
   const saving =
-    !assignedTools ||
-    updateApp.isPending ||
-    assignTool.isPending ||
-    unassignTool.isPending;
+    updateApp.isPending || assignTool.isPending || unassignTool.isPending;
 
   // Drive the top bar's save button (it lives outside this form).
   useEffect(() => {
-    onStatusChange?.({ saving, disabled: saving || teamSelectionMissing });
-  }, [saving, teamSelectionMissing, onStatusChange]);
+    onStatusChange?.({
+      saving,
+      disabled: saving || toolsLoading || teamSelectionMissing,
+    });
+  }, [saving, toolsLoading, teamSelectionMissing, onStatusChange]);
 
   const onSubmit = form.handleSubmit(async (values) => {
-    if (saving || teamSelectionMissing) return;
+    if (saving || toolsLoading || teamSelectionMissing) return;
     // Visibility is editable on its own permissions; identity + environment only
     // when the caller can update the app, so omit those fields otherwise (mirrors
     // the field-limited bodies the old publish popover / rename dialog sent).

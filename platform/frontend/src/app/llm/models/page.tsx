@@ -97,7 +97,7 @@ export default function ModelsPage() {
     isPending,
     isLoadingError: isModelsLoadError,
     refetch,
-  } = useModelsWithApiKeys();
+  } = useModelsWithApiKeys({ toastOnError: false });
   const { data: apiKeys = [] } = useLlmProviderApiKeys();
   const syncModelsMutation = useSyncLlmModels();
   const updateModel = useUpdateModel();

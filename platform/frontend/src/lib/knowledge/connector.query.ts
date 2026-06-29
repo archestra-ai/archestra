@@ -72,7 +72,7 @@ export function useConnectorsPaginated(params: ConnectorsPaginatedParams) {
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getConnectors({ query: params });
-      throwOnApiError(error);
+      throwOnApiError(error, { toastOnError: false });
       return data;
     },
   });

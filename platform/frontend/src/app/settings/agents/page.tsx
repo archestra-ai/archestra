@@ -54,7 +54,7 @@ export default function AgentSettingsPage() {
     data: apiKeys,
     isLoadingError: isApiKeysLoadError,
     refetch: refetchApiKeys,
-  } = useAvailableLlmProviderApiKeys();
+  } = useAvailableLlmProviderApiKeys({ toastOnError: false });
   const { data: orgAgents } = useOrgScopedAgents();
 
   const [selectedApiKeyId, setSelectedApiKeyId] = useState<string>("");

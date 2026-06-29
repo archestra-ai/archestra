@@ -15,6 +15,7 @@ type LlmOauthClientsParams = {
   search?: string;
   providerApiKeyId?: string;
   enabled?: boolean;
+  toastOnError?: boolean;
 };
 
 export function useLlmOauthClients(params?: LlmOauthClientsParams) {
@@ -30,7 +31,7 @@ export function useLlmOauthClients(params?: LlmOauthClientsParams) {
           providerApiKeyId: providerApiKeyId || undefined,
         },
       });
-      throwOnApiError(error);
+      throwOnApiError(error, { toastOnError: params?.toastOnError ?? true });
       return data ?? [];
     },
     enabled: params?.enabled,

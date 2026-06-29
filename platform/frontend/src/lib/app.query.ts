@@ -21,14 +21,18 @@ type AppsParams = Pick<AppsQuery, "limit" | "offset" | "search">;
 
 // ===== Query hooks =====
 
-export function useApps(params: AppsParams, options?: { enabled?: boolean }) {
+export function useApps(
+  params: AppsParams,
+  options?: { enabled?: boolean; toastOnError?: boolean },
+) {
+  const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: ["apps", "paginated", params],
     enabled: options?.enabled ?? true,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getApps({ query: params });
-      throwOnApiError(error);
+      throwOnApiError(error, { toastOnError });
       return data;
     },
   });

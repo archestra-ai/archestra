@@ -250,6 +250,7 @@ function SessionsTable({
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
     search: searchFromUrl || undefined,
+    toastOnError: false,
   });
 
   const { data: agents } = useProfiles({

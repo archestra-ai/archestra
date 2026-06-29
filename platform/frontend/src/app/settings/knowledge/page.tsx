@@ -446,7 +446,7 @@ function KnowledgeSettingsContent() {
     isPending: areApiKeysPending,
     isLoadingError: isApiKeysLoadError,
     refetch: refetchApiKeys,
-  } = useAvailableLlmProviderApiKeys();
+  } = useAvailableLlmProviderApiKeys({ toastOnError: false });
   const updateKnowledgeSettings = useUpdateKnowledgeSettings(
     "Knowledge settings updated",
     "Failed to update knowledge settings",
@@ -468,7 +468,7 @@ function KnowledgeSettingsContent() {
     data: modelsWithApiKeys,
     isLoadingError: isModelsWithApiKeysLoadError,
     refetch: refetchModelsWithApiKeys,
-  } = useModelsWithApiKeys();
+  } = useModelsWithApiKeys({ toastOnError: false });
   const embeddingCapableKeyIds = useMemo(() => {
     const ids = new Set<string>();
     for (const model of modelsWithApiKeys ?? []) {

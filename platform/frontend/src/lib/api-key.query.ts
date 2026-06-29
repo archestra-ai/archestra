@@ -15,7 +15,7 @@ export function useApiKeys() {
     queryKey: ["api-keys"],
     queryFn: async () => {
       const { data, error } = await getApiKeys();
-      throwOnApiError(error);
+      throwOnApiError(error, { toastOnError: false });
 
       return data ?? [];
     },

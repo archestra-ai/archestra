@@ -91,6 +91,7 @@ function ProjectsList() {
     teamIds,
     authorIds,
     excludeAuthorIds,
+    toastOnError: false,
   });
   const {
     hasAnyApiKey,

@@ -117,12 +117,13 @@ export function useLlmModelsByProvider(params?: LlmModelsParams) {
   };
 }
 
-export function useModelsWithApiKeys() {
+export function useModelsWithApiKeys(options?: { toastOnError?: boolean }) {
+  const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: ["models-with-api-keys"],
     queryFn: async (): Promise<ModelWithApiKeys[]> => {
       const { data, error } = await getModelsWithApiKeys();
-      throwOnApiError(error);
+      throwOnApiError(error, { toastOnError });
       return data ?? [];
     },
   });

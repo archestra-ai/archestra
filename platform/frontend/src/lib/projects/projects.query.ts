@@ -44,13 +44,14 @@ type ProjectListFilters = NonNullable<
  * cache entry.
  */
 export function useProjects(
-  options?: { enabled?: boolean } & ProjectListFilters,
+  options?: { enabled?: boolean; toastOnError?: boolean } & ProjectListFilters,
 ) {
   const scope = options?.scope;
   const search = options?.search?.trim() || undefined;
   const teamIds = options?.teamIds;
   const authorIds = options?.authorIds;
   const excludeAuthorIds = options?.excludeAuthorIds;
+  const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: [
       "projects",
@@ -68,7 +69,7 @@ export function useProjects(
       const { data, error } = await getProjects({
         query: { scope, search, teamIds, authorIds, excludeAuthorIds },
       });
-      throwOnApiError(error);
+      throwOnApiError(error, { toastOnError });
       return data;
     },
   });

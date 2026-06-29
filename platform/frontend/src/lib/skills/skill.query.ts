@@ -35,16 +35,16 @@ type SkillsPaginatedParams = Pick<
 
 export function useSkillsPaginated(
   params: SkillsPaginatedParams,
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; toastOnError?: boolean },
 ) {
+  const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: ["skills", "paginated", params],
     enabled: options?.enabled ?? true,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getSkills({ query: params });
-      // Screen renders its own QueryLoadError panel; don't also toast.
-      throwOnApiError(error, { toastOnError: false });
+      throwOnApiError(error, { toastOnError });
       return data;
     },
   });

@@ -131,6 +131,7 @@ export default function VirtualKeysPage() {
       providerApiKeyIdFilter === "all" ? undefined : providerApiKeyIdFilter,
     keyType:
       keyTypeFilter === "all" ? undefined : (keyTypeFilter as VirtualKeyType),
+    toastOnError: false,
   });
   const virtualKeys = response?.data ?? [];
   const paginationMeta = response?.pagination;

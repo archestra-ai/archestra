@@ -87,12 +87,15 @@ function SkillsList() {
     isFetching,
     isLoadingError: isSkillsLoadError,
     refetch: refetchSkills,
-  } = useSkillsPaginated({
-    limit: pageSize,
-    offset: pageIndex * pageSize,
-    search: search || undefined,
-    sourceRepo: sourceRepo || undefined,
-  });
+  } = useSkillsPaginated(
+    {
+      limit: pageSize,
+      offset: pageIndex * pageSize,
+      search: search || undefined,
+      sourceRepo: sourceRepo || undefined,
+    },
+    { toastOnError: false },
+  );
   const { data: sourceReposData } = useSkillSourceRepos();
   const sourceRepos = sourceReposData?.repos ?? [];
 

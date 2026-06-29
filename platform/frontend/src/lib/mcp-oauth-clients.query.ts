@@ -27,7 +27,7 @@ export function useMcpOauthClients(params?: McpOauthClientsParams) {
           search: search || undefined,
         },
       });
-      throwOnApiError(error);
+      throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
     enabled: params?.enabled,

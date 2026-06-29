@@ -42,11 +42,14 @@ export default function AppsPage() {
 
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-  const { data, isPending, isLoadingError, refetch } = useApps({
-    limit: PAGE_SIZE,
-    offset: 0,
-    search: search || undefined,
-  });
+  const { data, isPending, isLoadingError, refetch } = useApps(
+    {
+      limit: PAGE_SIZE,
+      offset: 0,
+      search: search || undefined,
+    },
+    { toastOnError: false },
+  );
   const [createOpen, setCreateOpen] = useState(false);
 
   const apps = useMemo(() => data?.data ?? [], [data]);

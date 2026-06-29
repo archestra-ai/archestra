@@ -137,6 +137,7 @@ export function ScheduleTriggersIndexPage() {
         ? selectedAuthorIds
         : undefined,
     refetchInterval: 5_000,
+    toastOnError: false,
   });
   const { data: agents = [], isLoading: agentsLoading } = useProfiles({
     filters: { agentType: "agent" },

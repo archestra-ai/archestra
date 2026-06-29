@@ -175,6 +175,7 @@ export function useInteractionSessions({
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   initialData,
+  toastOnError,
 }: {
   profileId?: string;
   userId?: string;
@@ -187,6 +188,7 @@ export function useInteractionSessions({
   limit?: number;
   offset?: number;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
+  toastOnError?: boolean;
 } = {}) {
   // If the search value is a sessionId, we want to treat it as a sessionId search instead
   const isSessionIdSearch = search ? isSessionId(search) : false;
@@ -236,7 +238,7 @@ export function useInteractionSessions({
         },
       };
 
-      throwOnApiError(response.error);
+      throwOnApiError(response.error, { toastOnError });
       return response.data ?? emptyResponse;
     },
     initialData:

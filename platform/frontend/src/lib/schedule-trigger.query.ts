@@ -150,6 +150,7 @@ export function useScheduleTriggers(params?: {
   projectId?: string;
   showAll?: boolean;
   refetchInterval?: number | false;
+  toastOnError?: boolean;
 }) {
   const queryParams = getScheduleTriggerListQueryParams(params);
   const emptyResponse: PaginatedResponse<ScheduleTrigger> = {
@@ -180,8 +181,7 @@ export function useScheduleTriggers(params?: {
           ...(queryParams.showAll ? { showAll: queryParams.showAll } : {}),
         },
       });
-      // Screen renders its own QueryLoadError panel; don't also toast.
-      throwOnApiError(response.error, { toastOnError: false });
+      throwOnApiError(response.error, { toastOnError: params?.toastOnError });
       return (
         (response.data as PaginatedResponse<ScheduleTrigger>) ?? emptyResponse
       );

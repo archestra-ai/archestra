@@ -41,6 +41,7 @@ type LlmProviderApiKeysQueryParams = Partial<LlmProviderApiKeysQuery> & {
 type AvailableLlmProviderApiKeysParams =
   Partial<AvailableLlmProviderApiKeysQuery> & {
     enabled?: boolean;
+    toastOnError?: boolean;
   };
 
 const {
@@ -116,6 +117,7 @@ export function useAvailableLlmProviderApiKeys(
 ) {
   const provider = params?.provider;
   const includeKeyId = params?.includeKeyId;
+  const toastOnError = params?.toastOnError;
 
   return useQuery({
     queryKey: ["available-llm-provider-api-keys", provider, includeKeyId],
@@ -131,7 +133,7 @@ export function useAvailableLlmProviderApiKeys(
       const { data, error } = await getAvailableLlmProviderApiKeys({
         query: Object.keys(query).length > 0 ? query : undefined,
       });
-      throwOnApiError(error);
+      throwOnApiError(error, { toastOnError });
       return data ?? [];
     },
     enabled: params?.enabled,

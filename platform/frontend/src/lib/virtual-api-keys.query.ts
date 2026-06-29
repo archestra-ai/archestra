@@ -8,6 +8,7 @@ type AllVirtualApiKeysQuery = NonNullable<
 >;
 type AllVirtualApiKeysParams = Partial<AllVirtualApiKeysQuery> & {
   enabled?: boolean;
+  toastOnError?: boolean;
 };
 
 const {
@@ -128,6 +129,7 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
   const search = params?.search;
   const providerApiKeyId = params?.providerApiKeyId;
   const keyType = params?.keyType;
+  const toastOnError = params?.toastOnError;
   return useQuery({
     queryKey: [
       "all-virtual-api-keys",
@@ -147,7 +149,7 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
           keyType: keyType || undefined,
         },
       });
-      throwOnApiError(error);
+      throwOnApiError(error, { toastOnError });
       return (
         data ?? {
           data: [],

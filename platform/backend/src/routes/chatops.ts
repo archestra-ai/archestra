@@ -23,6 +23,7 @@ import {
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
+  CHATOPS_MUTE_THREAD_CARD_ACTION,
   CHATOPS_RATE_LIMIT,
   CHATOPS_THREAD_MUTED_NOTICE,
   SLACK_DEFAULT_CONNECTION_MODE,
@@ -177,6 +178,20 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const activityValue = context.activity.value as
               | { action?: string; channelId?: string; workspaceId?: string }
               | undefined;
+            // "Mute this thread" Adaptive Card button. Channel + thread come
+            // from the activity itself (not the card data) and we confirm only
+            // on a real active→muted transition.
+            if (activityValue?.action === CHATOPS_MUTE_THREAD_CARD_ACTION) {
+              const target = provider.muteTargetFor(context.activity);
+              if (target) {
+                await muteTeamsThreadAndNotify(context, {
+                  provider: "ms-teams",
+                  channelId: target.channelId,
+                  threadId: target.threadId,
+                });
+              }
+              return;
+            }
             if (activityValue?.action === "selectAgent") {
               // For card submissions, we need to construct a minimal message from the activity
               const cardMessage: IncomingChatMessage = {
@@ -266,6 +281,19 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               return;
             }
 
+            // Mute reaction: a 🔇/🤫 reaction on one of the bot's OWN channel
+            // replies mutes that thread. Pure side effect, handled before
+            // message parsing since reactions aren't messages.
+            const muteReaction = provider.parseMuteReaction(context.activity);
+            if (muteReaction) {
+              await muteTeamsThreadAndNotify(context, {
+                provider: "ms-teams",
+                channelId: muteReaction.channelId,
+                threadId: muteReaction.threadId,
+              });
+              return;
+            }
+
             // Parse the activity into our message format
             const message = await provider.parseWebhookNotification(
               context.activity,
@@ -296,15 +324,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               const wantsMute = isThreadMuteCommand(message.text);
               if (provider.wasBotMentioned(context.activity)) {
                 if (wantsMute) {
-                  await clearChannelThreadActive(activation);
-                  await context.sendActivity(CHATOPS_THREAD_MUTED_NOTICE);
+                  await muteTeamsThreadAndNotify(context, activation);
                   return;
                 }
                 await markChannelThreadActive(activation);
               } else if (await isChannelThreadActive(activation)) {
                 if (wantsMute) {
-                  await clearChannelThreadActive(activation);
-                  await context.sendActivity(CHATOPS_THREAD_MUTED_NOTICE);
+                  await muteTeamsThreadAndNotify(context, activation);
                   return;
                 }
               } else {
@@ -1823,6 +1849,20 @@ async function handleAgentSelection(
  */
 function isCommand(text: string): boolean {
   return text.trim().startsWith("/");
+}
+
+/**
+ * Mute a Teams channel thread, confirming ONLY on a real active→muted
+ * transition. Redelivered reaction activities / repeat mutes find the key
+ * already gone and stay silent, so no duplicate "muted" notices.
+ */
+async function muteTeamsThreadAndNotify(
+  context: TurnContext,
+  activation: { provider: "ms-teams"; channelId: string; threadId: string },
+): Promise<void> {
+  if (await clearChannelThreadActive(activation)) {
+    await context.sendActivity(CHATOPS_THREAD_MUTED_NOTICE);
+  }
 }
 
 /**

@@ -23,6 +23,7 @@ vi.mock("@/cache-manager", async (importOriginal) => {
 import {
   clearChannelThreadActive,
   isChannelThreadActive,
+  isMuteReaction,
   isThreadMuteCommand,
   markChannelThreadActive,
 } from "./channel-activation";
@@ -96,16 +97,49 @@ describe("channel-activation (sticky channel auto-reply)", () => {
     const other = { ...TEAMS, threadId: "other-thread" };
     await markChannelThreadActive(other);
 
-    await clearChannelThreadActive(TEAMS);
+    // Returns true: it actually transitioned this thread active → muted.
+    expect(await clearChannelThreadActive(TEAMS)).toBe(true);
 
     expect(await isChannelThreadActive(TEAMS)).toBe(false);
     // A different thread in the same channel is untouched.
     expect(await isChannelThreadActive(other)).toBe(true);
   });
 
-  test("clearing a never-active thread is a harmless no-op", async () => {
-    await expect(clearChannelThreadActive(TEAMS)).resolves.toBeUndefined();
+  test("clearing a never-active thread returns false (no transition)", async () => {
+    expect(await clearChannelThreadActive(TEAMS)).toBe(false);
     expect(await isChannelThreadActive(TEAMS)).toBe(false);
+  });
+
+  test("clearing an already-muted thread returns false (idempotent)", async () => {
+    await markChannelThreadActive(TEAMS);
+    expect(await clearChannelThreadActive(TEAMS)).toBe(true);
+    // Second clear (e.g. a redelivered event) is a no-op transition.
+    expect(await clearChannelThreadActive(TEAMS)).toBe(false);
+  });
+});
+
+describe("isMuteReaction", () => {
+  test.each([
+    "mute", // 🔇 Slack
+    "1f507_mutedspeaker", // 🔇 Teams
+    "shushing_face", // 🤫 Slack
+    "lipssealed", // 🤫 Teams
+    "MUTE", // case-insensitive
+    "  lipssealed  ", // surrounding whitespace
+  ])("treats %j as a mute reaction", (id) => {
+    expect(isMuteReaction(id)).toBe(true);
+  });
+
+  test.each([
+    "",
+    "like",
+    "heart",
+    "thumbsup",
+    "tada",
+    "1f44d_thumbsup",
+    "muted", // not an emoji id
+  ])("does not treat %j as a mute reaction", (id) => {
+    expect(isMuteReaction(id)).toBe(false);
   });
 });
 

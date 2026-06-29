@@ -82,6 +82,13 @@ export const CHATOPS_THREAD_MUTED_NOTICE =
   "🔇 Got it — I'll stop auto-replying in this thread. @mention me when you need me again.";
 
 /**
+ * `Action.Submit` data.action value for the Teams "Mute this thread" Adaptive
+ * Card button. Shared between the card builder (ms-teams-provider) and the
+ * webhook submit handler (routes/chatops) so the two can't drift.
+ */
+export const CHATOPS_MUTE_THREAD_CARD_ACTION = "muteThread";
+
+/**
  * In group conversations the agent hears every message but should not answer
  * every one. When it decides no reply is needed it answers with exactly this
  * token, and the chatops layer posts nothing instead of a message.

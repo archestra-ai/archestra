@@ -43,8 +43,10 @@ import type {
 } from "@/types";
 import { detectImageType } from "@/utils/detect-image-type";
 import { stripHtmlTags } from "@/utils/strip-html";
+import { isMuteReaction } from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
+  CHATOPS_MUTE_THREAD_CARD_ACTION,
   CHATOPS_TEAM_CACHE,
   CHATOPS_THREAD_HISTORY,
 } from "./constants";
@@ -352,6 +354,61 @@ class MSTeamsProvider implements ChatOpsProvider {
     );
   }
 
+  /**
+   * If this is a "mute the thread" reaction on one of the bot's channel
+   * messages, return the channel + thread to mute; otherwise null.
+   *
+   * Teams only delivers messageReaction events for the bot's OWN messages, so
+   * no sender check is needed. The thread is taken from `conversation.id`'s
+   * `;messageid=<root>` — NOT `replyToId`, which on a reaction points at the
+   * reacted (bot reply) message rather than the thread root the activation was
+   * keyed on. If the root can't be resolved we return null and the caller
+   * no-ops loudly (no false "muted") rather than guessing a key — guessing the
+   * channelId fallback could clear a different thread's activation.
+   */
+  parseMuteReaction(activity: {
+    type?: string;
+    conversation?: { id?: string; conversationType?: string };
+    channelData?: { channel?: { id?: string } };
+    reactionsAdded?: Array<{ type?: string } | null> | null;
+  }): { channelId: string; threadId: string } | null {
+    if (activity.type !== "messageReaction") return null;
+    const hasMuteReaction = Boolean(
+      activity.reactionsAdded?.some((r) => r?.type && isMuteReaction(r.type)),
+    );
+    if (!hasMuteReaction) return null;
+    return this.muteTargetFor(activity);
+  }
+
+  /**
+   * The channel + thread an activity refers to, for muting — or null if it's
+   * not a team channel or the thread root can't be resolved.
+   *
+   * Shared by the reaction path and the "Mute this thread" Adaptive Card submit.
+   * The thread is the `conversation.id` `;messageid=<root>` (the value the gate
+   * keyed activation on), NOT `replyToId` (which points at the reacted/clicked
+   * message). If the root can't be resolved we return null so the caller no-ops
+   * loudly rather than guessing a key that could clear a different thread.
+   */
+  muteTargetFor(activity: {
+    conversation?: { id?: string; conversationType?: string };
+    channelData?: { channel?: { id?: string } };
+  }): { channelId: string; threadId: string } | null {
+    // Sticky auto-reply (and thus muting) only applies in team channels.
+    if (activity.conversation?.conversationType !== "channel") return null;
+
+    const conversationId = activity.conversation?.id;
+    // Match how the gate derived the activation key's channelId
+    // (parseWebhookNotification): prefer channelData.channel.id, else the
+    // thread-suffix-stripped conversation id.
+    const channelId =
+      activity.channelData?.channel?.id ?? stripThreadSuffix(conversationId);
+    const threadId = extractThreadIdFromConversationId(conversationId);
+    if (!channelId || !threadId) return null;
+
+    return { channelId, threadId };
+  }
+
   async sendReply(options: ChatReplyOptions): Promise<string> {
     if (!this.adapter) {
       throw new Error("MSTeamsProvider not initialized");
@@ -361,6 +418,13 @@ class MSTeamsProvider implements ChatOpsProvider {
     if (options.footer) {
       replyText += `\n\n---\n\n${options.footer}`;
     }
+
+    // Offer a one-click "Mute this thread" on channel replies (sticky
+    // auto-reply, and thus muting, only applies in team channels).
+    const attachments =
+      options.originalMessage.metadata?.conversationType === "channel"
+        ? [buildMuteThreadCard()]
+        : undefined;
 
     // If a placeholder "Thinking..." message was sent (Teams channels),
     // update it with the actual response instead of sending a new message.
@@ -373,6 +437,7 @@ class MSTeamsProvider implements ChatOpsProvider {
           id: placeholderActivityId,
           type: ActivityTypes.Message,
           text: replyText,
+          ...(attachments && { attachments }),
         });
         return placeholderActivityId;
       } catch (error) {
@@ -400,7 +465,11 @@ class MSTeamsProvider implements ChatOpsProvider {
         this.config.appId,
         ref,
         async (context) => {
-          const response = await context.sendActivity(replyText);
+          const response = await context.sendActivity(
+            attachments
+              ? { type: ActivityTypes.Message, text: replyText, attachments }
+              : replyText,
+          );
           messageId = response?.id || "";
         },
       );
@@ -1665,6 +1734,10 @@ function needsBotAuth(contentUrl: string, serviceUrl: string): boolean {
 /**
  * Extract thread message ID from Teams activity.
  * Teams format: "channelId;messageid=messageId" for thread replies.
+ *
+ * Prefers replyToId, which on a normal message points at the thread root. For
+ * REACTION activities replyToId instead points at the reacted message, so the
+ * reaction path uses extractThreadIdFromConversationId directly instead.
  */
 function extractThreadId(activity: {
   conversation?: { id?: string };
@@ -1673,14 +1746,47 @@ function extractThreadId(activity: {
   if (activity.replyToId) {
     return activity.replyToId;
   }
+  return extractThreadIdFromConversationId(activity.conversation?.id);
+}
 
-  const conversationId = activity.conversation?.id;
-  if (conversationId?.includes(";messageid=")) {
-    const match = conversationId.match(/;messageid=(\d+)/);
-    return match?.[1];
-  }
+/** The `;messageid=<root>` thread id encoded in a Teams conversation id, if any. */
+function extractThreadIdFromConversationId(
+  conversationId?: string,
+): string | undefined {
+  return conversationId?.match(/;messageid=(\d+)/)?.[1];
+}
 
-  return undefined;
+/**
+ * Adaptive Card with a single "Mute this thread" Action.Submit button, attached
+ * to channel replies. The click arrives as a message activity carrying
+ * `value.action = CHATOPS_MUTE_THREAD_CARD_ACTION`; the webhook route resolves
+ * the channel/thread from the activity itself (not this data) and mutes.
+ */
+function buildMuteThreadCard(): {
+  contentType: string;
+  content: Record<string, unknown>;
+} {
+  return {
+    contentType: "application/vnd.microsoft.card.adaptive",
+    content: {
+      type: "AdaptiveCard",
+      $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+      version: "1.4",
+      body: [],
+      actions: [
+        {
+          type: "Action.Submit",
+          title: "🔇 Mute this thread",
+          data: { action: CHATOPS_MUTE_THREAD_CARD_ACTION },
+        },
+      ],
+    },
+  };
+}
+
+/** A Teams conversation id with any `;messageid=...` thread suffix removed. */
+function stripThreadSuffix(conversationId?: string): string | undefined {
+  return conversationId?.split(";messageid=")[0] || undefined;
 }
 
 /**

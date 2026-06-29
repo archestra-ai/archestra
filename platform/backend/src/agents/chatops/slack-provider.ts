@@ -40,6 +40,7 @@ import {
 import {
   clearChannelThreadActive,
   isChannelThreadActive,
+  isMuteReaction,
   isThreadMuteCommand,
   markChannelThreadActive,
 } from "./channel-activation";
@@ -111,6 +112,8 @@ class SlackProvider implements ChatOpsProvider {
       );
       return;
     }
+
+    if (await this.handleMuteThreadAction(payload)) return;
 
     const selection = this.parseInteractivePayload(payload);
     if (!selection) return;
@@ -260,6 +263,13 @@ class SlackProvider implements ChatOpsProvider {
 
     const event = body.event;
 
+    // Reaction-based mute: reacting with 🔇/🤫 on one of the bot's OWN channel
+    // replies mutes that thread. Pure side effect — never forwarded to the agent.
+    if (event.type === "reaction_added") {
+      await this.handleMuteReaction(event);
+      return null;
+    }
+
     // Only process message and app_mention events.
     // assistant_thread_started and assistant_thread_context_changed events are
     // subscribed in the manifest (required for "Agents & AI Apps" designation)
@@ -306,15 +316,13 @@ class SlackProvider implements ChatOpsProvider {
       const wantsMute = isThreadMuteCommand(cleanedText);
       if (hasBotMention) {
         if (wantsMute) {
-          await clearChannelThreadActive(activation);
-          await this.postThreadMutedNotice(event.channel, threadTs);
+          await this.muteThreadAndNotify(event.channel, threadTs);
           return null;
         }
         await markChannelThreadActive(activation);
       } else if (await isChannelThreadActive(activation)) {
         if (wantsMute) {
-          await clearChannelThreadActive(activation);
-          await this.postThreadMutedNotice(event.channel, threadTs);
+          await this.muteThreadAndNotify(event.channel, threadTs);
           return null;
         }
       } else {
@@ -431,6 +439,32 @@ class SlackProvider implements ChatOpsProvider {
         blocks.push({
           type: "context",
           elements: [{ type: "plain_text", text: options.footer, emoji: true }],
+        });
+      }
+
+      // Offer a one-click "Mute this thread" on the final message of channel /
+      // group replies (never DMs — nothing to mute there). This consumes one of
+      // the block-budget slots the splitter holds in reserve (see
+      // MAX_ESTIMATED_RENDERED_BLOCKS), so worst case stays under Slack's cap.
+      const conversationType =
+        options.originalMessage.metadata?.conversationType;
+      if (
+        isFinal &&
+        (conversationType === "channel" || conversationType === "groupChat")
+      ) {
+        blocks.push({
+          type: "actions",
+          elements: [
+            {
+              type: "button",
+              action_id: SLACK_MUTE_THREAD_ACTION_ID,
+              text: {
+                type: "plain_text",
+                text: "🔇 Mute this thread",
+                emoji: true,
+              },
+            },
+          ],
         });
       }
 
@@ -1318,6 +1352,100 @@ class SlackProvider implements ChatOpsProvider {
   // Private Methods
   // ===========================================================================
 
+  /**
+   * Mute a channel thread, confirming ONLY on a real active→muted transition.
+   * Redelivered events / repeat mutes find the key already gone and stay silent.
+   */
+  private async muteThreadAndNotify(
+    channelId: string,
+    threadTs: string,
+  ): Promise<void> {
+    const wasActive = await clearChannelThreadActive({
+      provider: this.providerId,
+      channelId,
+      threadId: threadTs,
+    });
+    if (wasActive) {
+      await this.postThreadMutedNotice(channelId, threadTs);
+    }
+  }
+
+  /**
+   * Handle a "Mute this thread" button click. Returns true if it was that
+   * action. Channel + thread are taken from the SIGNATURE-VERIFIED interactive
+   * payload (the message the button lives on), never the button's own value, so
+   * a forged/replayed payload can't target an arbitrary thread.
+   */
+  private async handleMuteThreadAction(payload: unknown): Promise<boolean> {
+    const p = payload as SlackInteractivePayload;
+    if (
+      p.type !== "block_actions" ||
+      p.actions?.[0]?.action_id !== SLACK_MUTE_THREAD_ACTION_ID
+    ) {
+      return false;
+    }
+    const channelId = p.channel?.id;
+    const threadTs = p.message?.thread_ts || p.message?.ts;
+    if (!channelId || !threadTs) return true;
+    await this.muteThreadAndNotify(channelId, threadTs);
+    return true;
+  }
+
+  /**
+   * Mute a thread when a 🔇/🤫 reaction lands on one of the bot's OWN channel
+   * messages. Slack reaction events carry only the reacted message's ts, not its
+   * thread_ts, so we resolve the thread root (the activation key) via the API.
+   */
+  private async handleMuteReaction(event: SlackReactionEvent): Promise<void> {
+    if (
+      !this.botUserId ||
+      event.item?.type !== "message" ||
+      event.item_user !== this.botUserId ||
+      !isMuteReaction(event.reaction ?? "")
+    ) {
+      return;
+    }
+    const channelId = event.item.channel;
+    // DMs have no sticky activation to clear; skip the wasted API lookup.
+    if (isSlackDmChannel(channelId)) return;
+
+    const threadTs = await this.resolveThreadRoot(channelId, event.item.ts);
+    if (!threadTs) return; // couldn't resolve — never claim a false "muted"
+    await this.muteThreadAndNotify(channelId, threadTs);
+  }
+
+  /**
+   * Resolve the thread root ts a message belongs to — the value the activation
+   * key was written with. conversations.replies returns the thread's parent as
+   * messages[0]; its ts (or thread_ts) is the root. Returns null on failure so
+   * callers don't post a false confirmation.
+   */
+  private async resolveThreadRoot(
+    channelId: string,
+    ts: string,
+  ): Promise<string | null> {
+    if (!this.client) return null;
+    try {
+      const result = await this.client.conversations.replies({
+        channel: channelId,
+        ts,
+        limit: 1,
+      });
+      const root = result.messages?.[0];
+      return (
+        (root?.thread_ts as string | undefined) ||
+        (root?.ts as string | undefined) ||
+        null
+      );
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), channelId, ts },
+        "[SlackProvider] Failed to resolve thread root for mute reaction",
+      );
+      return null;
+    }
+  }
+
   /** Confirm a thread was muted, threaded under the message that muted it. */
   private async postThreadMutedNotice(
     channelId: string,
@@ -1809,6 +1937,9 @@ export default SlackProvider;
 // Internal Helpers
 // =============================================================================
 
+/** Block Kit action_id for the "Mute this thread" button on bot replies. */
+const SLACK_MUTE_THREAD_ACTION_ID = "mute_thread";
+
 /**
  * Decode Slack's HTML entity encoding.
  * Slack encodes &, <, > as &amp;, &lt;, &gt; in event text outside of special
@@ -2114,9 +2245,16 @@ interface SlackEventPayload {
     ts: string;
     thread_ts?: string;
     files?: SlackFile[];
+    // reaction_added fields (channel/ts live under `item`, not at the top level)
+    reaction?: string;
+    item?: { type?: string; channel: string; ts: string };
+    item_user?: string;
   };
   challenge?: string;
 }
+
+/** A Slack `reaction_added` event (subset we use). */
+type SlackReactionEvent = NonNullable<SlackEventPayload["event"]>;
 
 interface SlackInteractivePayload {
   type: string;

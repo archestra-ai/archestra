@@ -135,6 +135,196 @@ describe("MSTeamsProvider.wasBotMentioned", () => {
   });
 });
 
+describe("MSTeamsProvider.parseMuteReaction", () => {
+  const CHANNEL = "19:abcdef@thread.tacv2";
+  const ROOT = "1700000000000";
+  const channelReaction = (overrides: Record<string, unknown> = {}) => ({
+    type: "messageReaction",
+    conversation: {
+      id: `${CHANNEL};messageid=${ROOT}`,
+      conversationType: "channel",
+    },
+    channelData: { channel: { id: CHANNEL } },
+    reactionsAdded: [{ type: "1f507_mutedspeaker" }],
+    ...overrides,
+  });
+
+  test("returns channel + thread (root from conversation id) for a mute reaction", () => {
+    const provider = createProvider();
+    expect(provider.parseMuteReaction(channelReaction())).toEqual({
+      channelId: CHANNEL,
+      threadId: ROOT,
+    });
+  });
+
+  test("accepts the shushing-face reaction id too", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({ reactionsAdded: [{ type: "lipssealed" }] }),
+      ),
+    ).not.toBeNull();
+  });
+
+  test("derives the thread root from conversation id, NOT replyToId", () => {
+    const provider = createProvider();
+    // replyToId points at the reacted (bot reply) message, which must be ignored.
+    const result = provider.parseMuteReaction(
+      channelReaction({ replyToId: "9999-bot-reply-message-id" }),
+    );
+    expect(result?.threadId).toBe(ROOT);
+  });
+
+  test("null for a non-mute reaction", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({ reactionsAdded: [{ type: "like" }] }),
+      ),
+    ).toBeNull();
+  });
+
+  test("null when the activity is not a messageReaction", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(channelReaction({ type: "message" })),
+    ).toBeNull();
+  });
+
+  test("null outside team channels (no sticky state to clear)", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({
+          conversation: {
+            id: `${CHANNEL};messageid=${ROOT}`,
+            conversationType: "groupChat",
+          },
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  test("null when the thread root can't be resolved (no false mute)", () => {
+    const provider = createProvider();
+    // conversation id without ;messageid= — we must NOT guess a key.
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({
+          conversation: { id: CHANNEL, conversationType: "channel" },
+        }),
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("MSTeamsProvider.muteTargetFor (Adaptive Card submit path)", () => {
+  const CHANNEL = "19:abcdef@thread.tacv2";
+  const ROOT = "1700000000000";
+
+  test("returns channel + thread (root) for a channel activity", () => {
+    const provider = createProvider();
+    expect(
+      provider.muteTargetFor({
+        conversation: {
+          id: `${CHANNEL};messageid=${ROOT}`,
+          conversationType: "channel",
+        },
+        channelData: { channel: { id: CHANNEL } },
+      }),
+    ).toEqual({ channelId: CHANNEL, threadId: ROOT });
+  });
+
+  test("null outside team channels", () => {
+    const provider = createProvider();
+    expect(
+      provider.muteTargetFor({
+        conversation: {
+          id: `${CHANNEL};messageid=${ROOT}`,
+          conversationType: "groupChat",
+        },
+      }),
+    ).toBeNull();
+  });
+
+  test("null when the thread root can't be resolved", () => {
+    const provider = createProvider();
+    expect(
+      provider.muteTargetFor({
+        conversation: { id: CHANNEL, conversationType: "channel" },
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("MSTeamsProvider.sendReply mute card", () => {
+  const CHANNEL = "19:abc@thread.tacv2";
+  const ROOT = "1700000000000";
+
+  function captureSend() {
+    const provider = createProvider();
+    let sent: unknown;
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — minimal adapter mock
+    (provider as any).adapter = {
+      continueConversationAsync: async (
+        _appId: unknown,
+        _ref: unknown,
+        cb: (ctx: {
+          sendActivity: (a: unknown) => Promise<{ id: string }>;
+        }) => Promise<void>,
+      ) => {
+        await cb({
+          sendActivity: async (activity: unknown) => {
+            sent = activity;
+            return { id: "sent-1" };
+          },
+        });
+      },
+    };
+    const send = (conversationType?: string) =>
+      provider.sendReply({
+        originalMessage: {
+          messageId: "m1",
+          channelId: CHANNEL,
+          workspaceId: "team-uuid",
+          threadId: ROOT,
+          senderId: "u1",
+          senderName: "User",
+          text: "hi",
+          rawText: "hi",
+          timestamp: new Date(),
+          isThreadReply: true,
+          metadata: {
+            conversationReference: {},
+            ...(conversationType ? { conversationType } : {}),
+          },
+        },
+        text: "here you go",
+      });
+    return { send, getSent: () => sent };
+  }
+
+  test("channel replies attach the mute card", async () => {
+    const { send, getSent } = captureSend();
+    await send("channel");
+    const sent = getSent() as {
+      attachments?: Array<{
+        content?: { actions?: Array<{ data?: { action?: string } }> };
+      }>;
+    };
+    expect(sent.attachments?.[0]?.content?.actions?.[0]?.data?.action).toBe(
+      "muteThread",
+    );
+  });
+
+  test("DM/personal replies are plain text with no card", async () => {
+    const { send, getSent } = captureSend();
+    await send("personal");
+    // The non-card path sends a plain string, not an activity with attachments.
+    expect(typeof getSent()).toBe("string");
+  });
+});
+
 describe("MSTeamsProvider.parseWebhookNotification is mention-agnostic", () => {
   test("channel message WITH @mention is parsed", async () => {
     const provider = createProvider();

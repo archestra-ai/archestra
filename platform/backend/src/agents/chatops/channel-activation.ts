@@ -10,9 +10,10 @@
  * Group chats and direct messages do not use this — the bot always replies
  * there, so callers should only consult these helpers for channel messages.
  *
- * A user can end the sticky behavior early by sending a mute command (see
- * isThreadMuteCommand) — clearChannelThreadActive drops the activation so the
- * bot goes quiet until it is @mentioned again.
+ * A user can end the sticky behavior early — a mute command (see
+ * isThreadMuteCommand), a mute reaction on a bot reply (see isMuteReaction), or
+ * a "Mute this thread" button all call clearChannelThreadActive, which drops the
+ * activation so the bot goes quiet until it is @mentioned again.
  */
 
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -41,13 +42,20 @@ export async function isChannelThreadActive(params: {
   return (await cacheManager.get<boolean>(activationKey(params))) === true;
 }
 
-/** Stop the bot auto-replying in a channel thread until it is @mentioned again. */
+/**
+ * Stop the bot auto-replying in a channel thread until it is @mentioned again.
+ *
+ * Returns whether the thread was active (i.e. whether this call actually muted
+ * it). Callers post the "muted" confirmation ONLY on a true active→muted
+ * transition, so redelivered events and double-clicks don't spam the thread and
+ * a no-op mute (already muted / never active) stays silent.
+ */
 export async function clearChannelThreadActive(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
-}): Promise<void> {
-  await cacheManager.delete(activationKey(params));
+}): Promise<boolean> {
+  return await cacheManager.delete(activationKey(params));
 }
 
 /**
@@ -66,6 +74,19 @@ export function isThreadMuteCommand(text: string): boolean {
     .toLowerCase()
     .replace(/[\s.!?]+$/, "");
   return THREAD_MUTE_COMMANDS.has(normalized);
+}
+
+/**
+ * Whether an emoji reaction on a bot reply means "mute this thread".
+ *
+ * Accepts either platform's identifier for the same two glyphs: 🔇 muted
+ * speaker (Slack `mute`, Teams `1f507_mutedspeaker`) and 🤫 shushing face
+ * (Slack `shushing_face`, Teams `lipssealed`). Matching a single shared Set
+ * avoids a per-provider mapping. Callers gate on the reaction being on the
+ * bot's OWN message before consulting this.
+ */
+export function isMuteReaction(reactionId: string): boolean {
+  return THREAD_MUTE_REACTIONS.has(reactionId.trim().toLowerCase());
 }
 
 // =============================================================================
@@ -99,4 +120,16 @@ const THREAD_MUTE_COMMANDS = new Set([
   "stand down",
   "be quiet",
   "stay quiet",
+]);
+
+/**
+ * Emoji reaction identifiers that mute a thread, across both providers (see
+ * isMuteReaction): 🔇 muted speaker and 🤫 shushing face. Slack sends short
+ * names; Teams sends its reactionType ids.
+ */
+const THREAD_MUTE_REACTIONS = new Set([
+  "mute", // 🔇 Slack
+  "1f507_mutedspeaker", // 🔇 Teams
+  "shushing_face", // 🤫 Slack
+  "lipssealed", // 🤫 Teams
 ]);

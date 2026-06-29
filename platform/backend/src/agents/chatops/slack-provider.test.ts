@@ -31,6 +31,7 @@ vi.mock("@/cache-manager", async (importOriginal) => {
 });
 
 import { CacheKey, cacheManager } from "@/cache-manager";
+import { markChannelThreadActive } from "./channel-activation";
 import SlackProvider from "./slack-provider";
 
 // =============================================================================
@@ -838,6 +839,150 @@ describe("SlackProvider.parseWebhookNotification — thread mute command", () =>
   });
 });
 
+describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
+  const BOT = "UBOT123";
+  const CHANNEL = "C_REACT";
+  const ROOT = "7777777777.000001";
+  const BOT_REPLY_TS = "7777777777.000002";
+
+  // These tests reuse one channel/thread, so reset the shared cache each time.
+  beforeEach(() => mockCacheStore.clear());
+
+  // Client with a postMessage spy and a conversations.replies that resolves the
+  // thread root (messages[0].ts) for the reacted message.
+  function createReactionProvider(rootTs: string | null = ROOT): {
+    provider: SlackProvider;
+    postMessage: ReturnType<typeof vi.fn>;
+    replies: ReturnType<typeof vi.fn>;
+  } {
+    const provider = createProvider({ botUserId: BOT });
+    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
+    const replies = vi.fn().mockResolvedValue({
+      messages: rootTs ? [{ ts: rootTs }] : [],
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
+    (provider as any).client = {
+      chat: { postMessage },
+      conversations: { replies },
+    };
+    return { provider, postMessage, replies };
+  }
+
+  function reactionPayload(
+    reaction: string,
+    overrides: Record<string, unknown> = {},
+  ) {
+    return makeEventPayload(
+      {},
+      {
+        type: "reaction_added",
+        // reaction events carry channel/ts under `item`, not at the top.
+        channel: undefined,
+        ts: undefined,
+        reaction,
+        item: { type: "message", channel: CHANNEL, ts: BOT_REPLY_TS },
+        item_user: BOT,
+        ...overrides,
+      },
+    );
+  }
+
+  test("🔇 on a bot reply in an active thread mutes it and posts the notice", async () => {
+    const { provider, postMessage, replies } = createReactionProvider();
+    await markChannelThreadActive({
+      provider: "slack",
+      channelId: CHANNEL,
+      threadId: ROOT,
+    });
+
+    const result = await provider.parseWebhookNotification(
+      reactionPayload("mute"),
+      {},
+    );
+
+    expect(result).toBeNull();
+    expect(replies).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: CHANNEL, ts: BOT_REPLY_TS }),
+    );
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(
+      await cacheManager.get(
+        `${CacheKey.SlackThreadActive}-${CHANNEL}::${ROOT}`,
+      ),
+    ).toBeUndefined();
+  });
+
+  test("🤫 (shushing_face) is also a mute reaction", async () => {
+    const { provider, postMessage } = createReactionProvider();
+    await markChannelThreadActive({
+      provider: "slack",
+      channelId: CHANNEL,
+      threadId: ROOT,
+    });
+
+    await provider.parseWebhookNotification(
+      reactionPayload("shushing_face"),
+      {},
+    );
+    expect(postMessage).toHaveBeenCalledTimes(1);
+  });
+
+  test("reaction on a NON-bot message is ignored (no API call, no notice)", async () => {
+    const { provider, postMessage, replies } = createReactionProvider();
+    await markChannelThreadActive({
+      provider: "slack",
+      channelId: CHANNEL,
+      threadId: ROOT,
+    });
+
+    const result = await provider.parseWebhookNotification(
+      reactionPayload("mute", { item_user: "U_SOMEONE_ELSE" }),
+      {},
+    );
+    expect(result).toBeNull();
+    expect(replies).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  test("a non-mute reaction is ignored", async () => {
+    const { provider, postMessage, replies } = createReactionProvider();
+    const result = await provider.parseWebhookNotification(
+      reactionPayload("thumbsup"),
+      {},
+    );
+    expect(result).toBeNull();
+    expect(replies).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  test("mute reaction on an inactive thread posts no notice (transition rule)", async () => {
+    const { provider, postMessage } = createReactionProvider();
+    // Thread was never activated → clearing is a no-op → no confirmation.
+    const result = await provider.parseWebhookNotification(
+      reactionPayload("mute"),
+      {},
+    );
+    expect(result).toBeNull();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  test("thread-root resolution failure posts no false 'muted'", async () => {
+    const { provider, postMessage } = createReactionProvider(null);
+    await markChannelThreadActive({
+      provider: "slack",
+      channelId: CHANNEL,
+      threadId: ROOT,
+    });
+
+    const result = await provider.parseWebhookNotification(
+      reactionPayload("mute"),
+      {},
+    );
+    expect(result).toBeNull();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+});
+
 // =============================================================================
 // sendReply
 // =============================================================================
@@ -1021,6 +1166,113 @@ describe("SlackProvider.sendReply", () => {
     expect(firstArgs.thread_ts).toBeUndefined();
     // Subsequent posts thread under the first message's ts.
     expect(secondArgs.thread_ts).toBe("2000.000001");
+  });
+});
+
+// =============================================================================
+// "Mute this thread" button
+// =============================================================================
+
+describe("SlackProvider mute button", () => {
+  const MUTE_ACTION_ID = "mute_thread";
+
+  function muteButtonFrom(
+    blocks: Array<{ type: string; elements?: unknown[] }>,
+  ) {
+    const actions = blocks.find((b) => b.type === "actions") as
+      | { elements: Array<{ action_id?: string; text?: { text?: string } }> }
+      | undefined;
+    return actions?.elements.find((e) => e.action_id === MUTE_ACTION_ID);
+  }
+
+  async function sendIn(conversationType?: string) {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+    await provider.sendReply({
+      originalMessage: {
+        messageId: "m1",
+        channelId: "C1",
+        workspaceId: "T1",
+        threadId: "111.000",
+        senderId: "U1",
+        senderName: "User",
+        text: "hi",
+        rawText: "hi",
+        timestamp: new Date(),
+        isThreadReply: true,
+        ...(conversationType ? { metadata: { conversationType } } : {}),
+      },
+      text: "here you go",
+      footer: "🤖 Agent",
+    });
+    return postMessage.mock.calls[0][0].blocks as Array<{
+      type: string;
+      elements?: unknown[];
+    }>;
+  }
+
+  test("channel replies carry the mute button", async () => {
+    const button = muteButtonFrom(await sendIn("channel"));
+    expect(button).toBeDefined();
+    expect(button?.text?.text).toContain("Mute this thread");
+  });
+
+  test("group (mpim) replies carry the mute button", async () => {
+    expect(muteButtonFrom(await sendIn("groupChat"))).toBeDefined();
+  });
+
+  test("DM replies do NOT carry the mute button", async () => {
+    expect(muteButtonFrom(await sendIn("personal"))).toBeUndefined();
+  });
+
+  test("replies with no conversation type (e.g. slash-command output) have no button", async () => {
+    expect(muteButtonFrom(await sendIn(undefined))).toBeUndefined();
+  });
+
+  test("clicking the button mutes the thread from the verified payload (not the button value)", async () => {
+    const provider = createProvider({ botUserId: "UBOT123" });
+    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+    mockCacheStore.clear();
+    await markChannelThreadActive({
+      provider: "slack",
+      channelId: "C_BTN",
+      threadId: "222.000",
+    });
+
+    await provider.handleInteractivePayload({
+      type: "block_actions",
+      actions: [{ action_id: MUTE_ACTION_ID }],
+      channel: { id: "C_BTN" },
+      // thread_ts is the thread root the activation was keyed on.
+      message: { ts: "222.999", thread_ts: "222.000" },
+    });
+
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(
+      await cacheManager.get(`${CacheKey.SlackThreadActive}-C_BTN::222.000`),
+    ).toBeUndefined();
+  });
+
+  test("a non-mute interactive action is not treated as a mute", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    await provider.handleInteractivePayload({
+      type: "block_actions",
+      actions: [
+        { action_id: "select_agent", selected_option: { value: "a1" } },
+      ],
+      channel: { id: "C1" },
+      message: { ts: "1.0" },
+    });
+
+    expect(postMessage).not.toHaveBeenCalled();
   });
 });
 

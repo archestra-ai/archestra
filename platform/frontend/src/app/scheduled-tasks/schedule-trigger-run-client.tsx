@@ -92,13 +92,15 @@ export function ScheduleTriggerRunPage({
   const [showDetails, setShowDetails] = useState(false);
   const [isArtifactOpen, setIsArtifactOpen] = useState(false);
 
-  const { data: trigger, isLoading: triggerLoading } = useScheduleTrigger(
-    triggerId,
-    {
-      enabled: !!triggerId,
-      refetchInterval: 5_000,
-    },
-  );
+  const {
+    data: trigger,
+    isLoading: triggerLoading,
+    isLoadingError: isTriggerLoadError,
+    refetch: refetchTrigger,
+  } = useScheduleTrigger(triggerId, {
+    enabled: !!triggerId,
+    refetchInterval: 5_000,
+  });
   const {
     data: run,
     isLoading: runLoading,
@@ -408,11 +410,14 @@ export function ScheduleTriggerRunPage({
     );
   }
 
-  if (isRunLoadError) {
+  if (isRunLoadError || isTriggerLoadError) {
     return (
       <QueryLoadError
         title="Couldn't load this run"
-        onRetry={() => refetchRun()}
+        onRetry={() => {
+          refetchRun();
+          refetchTrigger();
+        }}
       />
     );
   }

@@ -4,18 +4,10 @@ import type {
   archestraApiTypes,
   ResourceVisibilityScope,
 } from "@archestra/shared";
-import {
-  Globe,
-  MessageSquare,
-  MoreHorizontal,
-  User,
-  Users,
-} from "lucide-react";
+import { Globe, User, Users } from "lucide-react";
 import Link from "next/link";
-import { AppSettingsMenu } from "@/components/mcp-app/app-settings-menu";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { buildAppChatHandoffUrl } from "@/lib/apps/app-chat-handoff";
 
@@ -50,9 +42,8 @@ export function AppCard({
   );
 }
 
-// Clicking the card chats with the app; everything else lives in the top-right
-// kebab. The chat-link overlay sits under the content, so only the kebab (and
-// its portalled menu/dialogs) is raised above it.
+// Clicking the card opens the app in a new chat; the chat-link overlay covers
+// the whole card.
 function OwnedAppCard({
   app,
   currentUserId,
@@ -61,40 +52,14 @@ function OwnedAppCard({
   currentUserId: string | undefined;
 }) {
   return (
-    <Card className="group relative flex min-h-[194px] flex-col gap-0 p-5 transition-colors hover:border-primary/40 hover:shadow-sm">
+    <Card className="relative flex min-h-[194px] cursor-pointer flex-col gap-0 p-5 transition-shadow hover:shadow-md">
       <Link
         href={buildAppChatHandoffUrl({ appId: app.id, appName: app.name })}
         className="absolute inset-0 rounded-xl"
         aria-label={`Chat with ${app.name}`}
       />
 
-      {/* Hover scrim + centered chat CTA. pointer-events-none so the click
-          falls through to the chat link beneath; the kebab (z-10) stays above. */}
-      <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center rounded-xl bg-background/75 opacity-0 backdrop-blur-[1px] transition-opacity duration-150 group-hover:opacity-100">
-        <span className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
-          <MessageSquare className="h-4 w-4" />
-          Open in new chat
-        </span>
-      </div>
-
-      <div className="absolute right-3 top-3 z-10">
-        <AppSettingsMenu
-          app={app}
-          openInNewTab
-          trigger={
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="App actions"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          }
-        />
-      </div>
-
-      <div className="mb-4 flex flex-wrap items-center gap-1.5 pr-8">
+      <div className="mb-4 flex flex-wrap items-center gap-1.5">
         <ResourceVisibilityBadge
           scope={app.scope}
           teams={undefined}

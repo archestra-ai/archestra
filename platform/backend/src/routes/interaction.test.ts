@@ -232,6 +232,38 @@ describe("interaction routes", () => {
     });
   });
 
+  test("serializes a gemini:embeddings interaction (OpenAI-compatible shape)", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+    // Gemini embeddings are persisted via the OpenAI-compatible embedding
+    // client; the read schema must model this type or the whole list 500s.
+    await InteractionModel.create({
+      profileId: agent.id,
+      request: { model: "text-embedding-004", input: ["hello"] },
+      response: {
+        object: "list",
+        data: [{ object: "embedding", embedding: [0.1, 0.2], index: 0 }],
+        model: "text-embedding-004",
+        usage: { prompt_tokens: 1, total_tokens: 1 },
+      },
+      type: "gemini:embeddings",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/interactions?limit=10&offset=0&sortBy=createdAt&sortDirection=desc",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toHaveLength(1);
+    expect(response.json().data[0].type).toBe("gemini:embeddings");
+  });
+
   test("returns chat errors on interaction detail for chat sessions", async ({
     makeAgent,
   }) => {

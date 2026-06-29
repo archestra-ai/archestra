@@ -33,6 +33,8 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "openai:chatCompletions": (i) => new OpenAiChatCompletionInteraction(i),
   "openai:responses": (i) => new OpenAiResponsesInteraction(i),
   "openai:embeddings": (i) => new OpenAiEmbeddingInteraction(i),
+  // Gemini embeddings use the OpenAI-compatible embedding shape.
+  "gemini:embeddings": (i) => new OpenAiEmbeddingInteraction(i),
   "openrouter:chatCompletions": (i) =>
     new OpenrouterChatCompletionInteraction(i),
   "anthropic:messages": (i) => new AnthropicMessagesInteraction(i),

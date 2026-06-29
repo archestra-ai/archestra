@@ -193,6 +193,14 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: OpenAi.API.EmbeddingRequestSchema.nullable().optional(),
     response: withErrorResponse(OpenAi.API.EmbeddingResponseSchema),
   }),
+  // Gemini embeddings are persisted through the OpenAI-compatible embedding
+  // client, so they share OpenAI's embedding request/response shape.
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["gemini:embeddings"]),
+    request: OpenAi.API.EmbeddingRequestSchema,
+    processedRequest: OpenAi.API.EmbeddingRequestSchema.nullable().optional(),
+    response: withErrorResponse(OpenAi.API.EmbeddingResponseSchema),
+  }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["gemini:generateContent"]),
     request: Gemini.API.GenerateContentRequestSchema,

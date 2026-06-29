@@ -795,7 +795,7 @@ export class ChatOpsManager {
 
     let fullMessage = `${systemPrefix}\n\n${cleanedMessageText}`;
     if (contextMessages.length > 0) {
-      fullMessage = `${systemPrefix}\n\nPrevious conversation:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
+      fullMessage = `${systemPrefix}\n\nThe earlier messages in this thread are below — this is your shared history in this conversation, so you DO have access to it and remember it. Use it to answer follow-up questions and references to "earlier", "before", or "what I just asked".\n\nConversation so far:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
     }
 
     // Merge history attachments with current message attachments

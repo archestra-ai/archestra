@@ -2407,9 +2407,81 @@ describe("ChatOpsManager attachment passthrough", () => {
 
     expect(result.success).toBe(true);
     expect(getThreadHistorySpy).not.toHaveBeenCalled();
-    expect(JSON.stringify(executorSpy.mock.calls[0][0].messages)).not.toContain(
-      "Previous conversation:",
+    expect(JSON.stringify(executorSpy.mock.calls[0][0].message)).not.toContain(
+      "Conversation so far:",
     );
+  });
+
+  test("frames thread history as the agent's own, accessible memory", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "ok",
+        messageId: "m",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "m",
+          role: "assistant",
+          parts: [{ type: "text", text: "ok" }],
+        },
+      });
+
+    const user = await makeUser({ email: "thread-history@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "thread-history@example.com",
+    });
+    mockProvider.getThreadHistory = vi.fn().mockResolvedValue([
+      {
+        messageId: "old-1",
+        senderId: "u1",
+        senderName: "Joey",
+        text: "what's 2+2?",
+        timestamp: new Date(Date.now() - 60_000),
+        isFromBot: false,
+      },
+    ]);
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    await manager.processMessage({
+      message: createMockMessage({
+        threadId: "root-message-id",
+        isThreadReply: true,
+        text: "what was the math from earlier?",
+      }),
+      provider: mockProvider,
+    });
+
+    const sent = JSON.stringify(executorSpy.mock.calls[0][0].message);
+    expect(sent).toContain("Conversation so far:");
+    expect(sent).toContain("what's 2+2?");
+    // The directive that stops an empty-prompt agent denying it has context.
+    expect(sent).toContain("you DO have access to it and remember it");
   });
 
   test("hands off to swapped chatops agent in the same turn", async ({

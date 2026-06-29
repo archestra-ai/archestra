@@ -47,7 +47,7 @@ describe("AclMaterializer", () => {
     const userExternal = "external@example.com";
 
     // Create a team mapped to an external group
-    const team = await makeTeam(org.id);
+    const team = await makeTeam(org.id, user1.id);
     await TeamModel.addExternalGroup(team.id, "external-group-1");
     // Add user2 to the team
     await makeTeamMember(team.id, user2.id);
@@ -88,7 +88,7 @@ describe("AclMaterializer", () => {
     const user1 = await makeUser({ email: "user1@example.com" });
     await makeMember(user1.id, org.id, { role: "member" });
 
-    const team = await makeTeam(org.id);
+    const team = await makeTeam(org.id, user1.id);
     await TeamModel.addExternalGroup(team.id, "external-group-1");
     await makeTeamMember(team.id, user1.id);
 

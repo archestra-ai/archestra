@@ -5,7 +5,6 @@ import {
   type LucideIcon,
   Minimize2,
   PanelRight,
-  Pencil,
   RefreshCw,
   SquareArrowOutUpRight,
 } from "lucide-react";
@@ -191,10 +190,6 @@ export function McpAppRefreshButton({ onClick }: { onClick: () => void }) {
   return (
     <McpAppIconButton icon={RefreshCw} label="Reload app" onClick={onClick} />
   );
-}
-
-export function McpAppEditButton({ onClick }: { onClick: () => void }) {
-  return <McpAppIconButton icon={Pencil} label="Edit app" onClick={onClick} />;
 }
 
 export function McpAppFullscreenExitButton({

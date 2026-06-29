@@ -63,12 +63,6 @@ vi.mock("@/lib/app.query", () => ({
   useApp: vi.fn(() => ({ data: undefined })),
 }));
 
-// Stub the bottom meta bar (it fetches environments/session); its behavior is
-// covered by mcp-app-meta-bar.test.tsx.
-vi.mock("@/components/mcp-app/mcp-app-meta-bar", () => ({
-  McpAppMetaBar: () => <div data-testid="meta-bar" />,
-}));
-
 // Stub the side-panel management tabs: they pull the environment/teams/auth
 // query chains, which aren't this suite's concern (covered by their own tests).
 // Here we only assert the panel chrome wires them to the tabs.
@@ -778,12 +772,11 @@ describe("McpAppSection owned-app panel chrome", () => {
     return target;
   }
 
-  it("shows the settings menu and publish control, drops the bottom meta bar", async () => {
+  it("shows the settings menu and publish control", async () => {
     const target = await renderOwnedPanel();
 
     expect(within(target).getByTestId("settings-menu")).toBeInTheDocument();
     expect(within(target).getByTestId("publish-button")).toBeInTheDocument();
-    expect(screen.queryByTestId("meta-bar")).not.toBeInTheDocument();
     // The live iframe is the panel body — no settings overlay covers it.
     expect(target.querySelector("iframe")).toBeInTheDocument();
 

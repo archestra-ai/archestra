@@ -16,7 +16,6 @@ import {
   humanizeToolLabel,
   isSupersededRender,
 } from "@/components/chat/chat-messages.utils";
-import { AppEditModelContextDialog } from "@/components/mcp-app/app-edit-model-context-dialog.lazy";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
 import { AppPublishButton } from "@/components/mcp-app/app-publish-button";
 import { AppSettingsMenu } from "@/components/mcp-app/app-settings-menu";
@@ -24,7 +23,6 @@ import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
   McpAppAddressPill,
   McpAppChangelogPill,
-  McpAppEditButton,
   McpAppFullscreenExitButton,
   McpAppPanelButton,
   McpAppRefreshButton,
@@ -32,7 +30,6 @@ import {
   McpAppSwitcher,
   McpAppTopBar,
 } from "@/components/mcp-app/mcp-app-chrome";
-import { McpAppMetaBar } from "@/components/mcp-app/mcp-app-meta-bar";
 import {
   type AppResourceMeta,
   isRenderableMcpAppHtml,
@@ -41,7 +38,6 @@ import {
 } from "@/components/mcp-app/mcp-app-view";
 import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
 import { useApp } from "@/lib/app.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   getAppDiagnosticCounts,
   subscribeAppDiagnostics,
@@ -185,8 +181,6 @@ export function McpAppSection({
   // Owned apps can be renamed/re-described from the address bar. Read the live
   // app so the title stays in sync after an edit (the appName prop is captured
   // at render time) and to seed the edit dialog.
-  const { data: canEdit } = useHasPermissions({ app: ["update"] });
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const inlineHeightCap = useInlineHeightCap();
   const { data: ownedApp } = useApp(appId ?? null);
 
@@ -282,15 +276,33 @@ export function McpAppSection({
       </div>
     ) : null;
 
-  let pillActions: React.ReactNode = null;
-  if (appId) {
-    pillActions = <McpAppStandaloneButton appId={appId} />;
-  }
-
-  let editPencil: React.ReactNode = null;
-  if (appId && canEdit) {
-    editPencil = <McpAppEditButton onClick={() => setEditDialogOpen(true)} />;
-  }
+  // The address bar every surface shares: refresh as the leading icon and
+  // open-in-new-tab as the trailing in-pill action (matching the side panel).
+  // The switcher only applies in the single panel slot; inline renders are each
+  // their own card, so they always get the static pill.
+  const refreshLeading = <McpAppRefreshButton onClick={reload} />;
+  const standaloneAction = appId ? (
+    <McpAppStandaloneButton appId={appId} />
+  ) : null;
+  const addressBar =
+    renderInPanel && apps.length > 1 ? (
+      <McpAppSwitcher
+        value={selectedToolCallId}
+        options={apps.map((app) => ({
+          value: app.toolCallId,
+          label: app.label,
+        }))}
+        onChange={select}
+        leading={refreshLeading}
+        actions={standaloneAction}
+      />
+    ) : (
+      <McpAppAddressPill
+        label={headerName}
+        leading={refreshLeading}
+        actions={standaloneAction}
+      />
+    );
 
   const runtimeNode = (
     <McpAppRuntime
@@ -331,85 +343,32 @@ export function McpAppSection({
     />
   );
 
-  // The owned-app side panel gets a single-row header (address bar with the
-  // refresh / open-in-new-tab actions, a settings gear menu, and the publish
-  // control) and no bottom meta bar.
-  let topBar: React.ReactNode;
-  let body: React.ReactNode;
-  let bottomBar: React.ReactNode;
+  // Every surface shows the same centered address bar. The owned-app side panel
+  // adds the settings + publish controls on the right; the inline chat surface
+  // adds the fullscreen-exit (only while fullscreen) and show-in-panel controls.
+  let right: React.ReactNode;
   if (renderInPanel && appId && ownedApp) {
-    topBar = (
-      <McpAppTopBar
-        right={
-          <div className="flex items-center gap-2">
-            <AppSettingsMenu app={ownedApp} />
-            <AppPublishButton app={ownedApp} />
-          </div>
-        }
-      >
-        {apps.length > 1 ? (
-          <McpAppSwitcher
-            value={selectedToolCallId}
-            options={apps.map((app) => ({
-              value: app.toolCallId,
-              label: app.label,
-            }))}
-            onChange={select}
-            leading={<McpAppRefreshButton onClick={reload} />}
-            actions={<McpAppStandaloneButton appId={appId} />}
-          />
-        ) : (
-          <McpAppAddressPill
-            label={headerName}
-            leading={<McpAppRefreshButton onClick={reload} />}
-            actions={<McpAppStandaloneButton appId={appId} />}
-          />
-        )}
-      </McpAppTopBar>
+    right = (
+      <div className="flex items-center gap-2">
+        <AppSettingsMenu app={ownedApp} />
+        <AppPublishButton app={ownedApp} />
+      </div>
     );
-    body = runtimeNode;
-    bottomBar = undefined;
   } else {
-    topBar = (
-      <McpAppTopBar
-        left={<McpAppRefreshButton onClick={reload} />}
-        right={
-          <>
-            {displayMode === "fullscreen" && (
-              <McpAppFullscreenExitButton onClick={toggleFullscreen} />
-            )}
-            {toolCallId && !renderInPanel && (
-              <McpAppPanelButton onClick={handleShowInPanel} />
-            )}
-          </>
-        }
-      >
-        {renderInPanel && apps.length > 1 ? (
-          <McpAppSwitcher
-            value={selectedToolCallId}
-            options={apps.map((app) => ({
-              value: app.toolCallId,
-              label: app.label,
-            }))}
-            onChange={select}
-            leading={editPencil}
-            actions={pillActions}
-          />
-        ) : (
-          <McpAppAddressPill
-            label={headerName}
-            leading={editPencil}
-            actions={pillActions}
-          />
+    right = (
+      <>
+        {displayMode === "fullscreen" && (
+          <McpAppFullscreenExitButton onClick={toggleFullscreen} />
         )}
-      </McpAppTopBar>
+        {toolCallId && !renderInPanel && (
+          <McpAppPanelButton onClick={handleShowInPanel} />
+        )}
+      </>
     );
-    body = runtimeNode;
-    bottomBar =
-      appId && ownedApp ? (
-        <McpAppMetaBar app={ownedApp} version={appVersion ?? null} />
-      ) : undefined;
   }
+
+  const topBar = <McpAppTopBar right={right}>{addressBar}</McpAppTopBar>;
+  const body = runtimeNode;
 
   const liveSurface = (
     <McpAppErrorBoundary>
@@ -420,7 +379,6 @@ export function McpAppSection({
         fillContainer={renderInPanel}
         capInlineHeight
         topBar={topBar}
-        bottomBar={bottomBar}
       >
         {body}
       </McpAppCard>
@@ -449,16 +407,5 @@ export function McpAppSection({
     liveSurface
   );
 
-  return (
-    <>
-      {surface}
-      {editDialogOpen && ownedApp && (
-        <AppEditModelContextDialog
-          app={ownedApp}
-          open
-          onOpenChange={setEditDialogOpen}
-        />
-      )}
-    </>
-  );
+  return surface;
 }

@@ -436,6 +436,8 @@ async function dispatchTool({
     {
       conversationId: context.isolationKey ?? context.conversationId,
       availableTool: availableTool ?? undefined,
+      // Cancel the in-flight upstream call when the chat run is stopped.
+      abortSignal: context.abortSignal,
     },
   );
 

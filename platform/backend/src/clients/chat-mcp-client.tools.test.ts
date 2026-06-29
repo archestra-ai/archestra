@@ -333,6 +333,44 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
     );
   });
 
+  test("does not count a mid-call abort as a tool error metric", async () => {
+    const { baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__fetch_data")],
+    });
+    vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
+      decision: "proceed",
+      runs: [],
+    });
+    const metricsSpy = vi.spyOn(metrics.mcp, "reportMcpToolCall");
+
+    const controller = new AbortController();
+    // The gateway call is cancelled mid-flight when the run is stopped: the
+    // signal aborts and the upstream request rejects (mcp-client rethrows it).
+    vi.mocked(mcpClient.executeToolCallForOwner).mockImplementation(
+      async () => {
+        controller.abort();
+        throw new Error("MCP error -32001: The operation was aborted");
+      },
+    );
+
+    const tools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      abortSignal: controller.signal,
+    });
+
+    await expect(
+      tools.extsrv__fetch_data.execute?.(
+        { query: "q" },
+        execOptions("call-abort"),
+      ),
+    ).rejects.toThrow();
+
+    const errorMetricCalls = metricsSpy.mock.calls.filter(
+      ([arg]) => (arg as { isError?: boolean }).isError === true,
+    );
+    expect(errorMetricCalls).toEqual([]);
+  });
+
   test("a PreToolUse block short-circuits the gateway call and reports an error metric", async () => {
     const { baseParams } = await setupChatToolEnv({
       gatewayTools: [externalTool("extsrv__fetch_data")],

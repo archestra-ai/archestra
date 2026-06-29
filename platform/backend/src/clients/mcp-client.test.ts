@@ -209,6 +209,97 @@ describe("McpClient", () => {
     expect(mockConnect).toHaveBeenCalledTimes(1);
   });
 
+  test("forwards the abort signal to client.callTool", async () => {
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "github-mcp-server__list_repos",
+      description: "List repos",
+      parameters: {},
+      catalogId,
+    });
+    await AgentToolModel.create(agentId, tool.id, { mcpServerId });
+
+    mockCallTool.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    const controller = new AbortController();
+    await mcpClient.executeToolCallForOwner(
+      {
+        id: "call_abort_forward",
+        name: "github-mcp-server__list_repos",
+        arguments: { owner: "octocat" },
+      },
+      agentOwner(agentId),
+      undefined,
+      { abortSignal: controller.signal },
+    );
+
+    expect(mockCallTool).toHaveBeenCalledWith(
+      { name: "list_repos", arguments: { owner: "octocat" } },
+      undefined,
+      { signal: controller.signal },
+    );
+  });
+
+  test("rethrows an aborted call instead of retrying it", async () => {
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "github-mcp-server__list_repos",
+      description: "List repos",
+      parameters: {},
+      catalogId,
+    });
+    await AgentToolModel.create(agentId, tool.id, { mcpServerId });
+
+    // A stale-session error normally triggers a fresh-session retry. With the
+    // signal aborted it must short-circuit instead — no second callTool, no
+    // session teardown, and the error propagates rather than becoming a result.
+    mockCallTool.mockRejectedValue(new Error("Session not found"));
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      mcpClient.executeToolCallForOwner(
+        {
+          id: "call_abort_no_retry",
+          name: "github-mcp-server__list_repos",
+          arguments: {},
+        },
+        agentOwner(agentId),
+        undefined,
+        { abortSignal: controller.signal },
+      ),
+    ).rejects.toThrow();
+
+    expect(mockCallTool).toHaveBeenCalledTimes(1);
+    expect(mockClose).not.toHaveBeenCalled();
+  });
+
+  test("returns an error result (does not throw) for a non-abort failure", async () => {
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "github-mcp-server__list_repos",
+      description: "List repos",
+      parameters: {},
+      catalogId,
+    });
+    await AgentToolModel.create(agentId, tool.id, { mcpServerId });
+
+    mockCallTool.mockRejectedValue(new Error("upstream exploded"));
+
+    const result = await mcpClient.executeToolCallForOwner(
+      {
+        id: "call_non_abort_failure",
+        name: "github-mcp-server__list_repos",
+        arguments: {},
+      },
+      agentOwner(agentId),
+    );
+
+    expect(result.isError).toBe(true);
+    expect(mockCallTool).toHaveBeenCalledTimes(1);
+  });
+
   test("connectAndGetTools synthesizes read-resource tools when upstream has no tools/list", async () => {
     mockListTools.mockRejectedValueOnce(new Error("Method not found"));
     mockListResources.mockResolvedValueOnce({
@@ -1320,10 +1411,14 @@ describe("McpClient", () => {
         expect(mockGetHttpEndpointUrl).toHaveBeenCalledWith(localMcpServerId);
 
         // Verify tool was called via HTTP client
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "test_tool", // Server prefix stripped
-          arguments: { input: "test" },
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "test_tool", // Server prefix stripped
+            arguments: { input: "test" },
+          },
+          undefined,
+          { signal: undefined },
+        );
 
         // Verify result
 
@@ -1440,10 +1535,14 @@ describe("McpClient", () => {
         expect(mockK8sDeployment.getRunningPodName).toHaveBeenCalled();
 
         // Verify MCP SDK client was used
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "stdio_tool",
-          arguments: { input: "test" },
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "stdio_tool",
+            arguments: { input: "test" },
+          },
+          undefined,
+          { signal: undefined },
+        );
 
         // Verify result
         expect(result).toMatchObject({
@@ -1555,10 +1654,14 @@ describe("McpClient", () => {
         );
 
         // Verify the tool was called with just the tool name (stripped using catalogName)
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "prefix_test_tool",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "prefix_test_tool",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
 
         expect(result).toMatchObject({
           id: "call_prefix_test",
@@ -1610,10 +1713,14 @@ describe("McpClient", () => {
         );
 
         // Verify stripping worked using mcpServerName fallback
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "fallback_tool",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "fallback_tool",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
 
         expect(result).toMatchObject({
           id: "call_fallback_test",
@@ -1655,10 +1762,14 @@ describe("McpClient", () => {
         );
 
         // Verify the tool name was not mangled since no prefix matched
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "standalone_tool_name",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "standalone_tool_name",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
 
         expect(result).toMatchObject({
           id: "call_identity_test",
@@ -4752,10 +4863,14 @@ describe("McpClient", () => {
         await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
         // Verify callTool was called with the original camelCase name
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "getUserInfo",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "getUserInfo",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
       });
 
       test("resolves PascalCase tool name from remote server", async () => {
@@ -4788,10 +4903,14 @@ describe("McpClient", () => {
 
         await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "GetRepository",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "GetRepository",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
       });
 
       test("falls back to stripped name when listTools fails", async () => {
@@ -4823,10 +4942,14 @@ describe("McpClient", () => {
         await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
         // Falls back to the lowercased stripped name
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "sometool",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "sometool",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
       });
 
       test("falls back to stripped name when tool not in server list", async () => {
@@ -4860,10 +4983,14 @@ describe("McpClient", () => {
         await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
         // Falls back to stripped name since no match found
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "missingtool",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "missingtool",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
       });
 
       test("preserves already-correct lowercase tool name", async () => {
@@ -4896,10 +5023,14 @@ describe("McpClient", () => {
 
         await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "search_issues",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "search_issues",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
       });
     });
 

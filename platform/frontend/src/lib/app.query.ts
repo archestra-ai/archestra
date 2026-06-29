@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   getApps,
@@ -28,10 +28,7 @@ export function useApps(params: AppsParams, options?: { enabled?: boolean }) {
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getApps({ query: params });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error);
       return data;
     },
   });
@@ -47,10 +44,7 @@ export function useExternalApp(catalogId: string | null) {
       const { data, error } = await getExternalApp({
         path: { catalogId: catalogId as string },
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error, { allowNotFound: true });
       return data;
     },
   });
@@ -64,10 +58,7 @@ export function useApp(appId: string | null) {
       const { data, error } = await getApp({
         path: { appId: appId as string },
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error, { allowNotFound: true });
       return data;
     },
   });
@@ -81,10 +72,7 @@ export function useAppVersions(appId: string | null) {
       const { data, error } = await getAppVersions({
         path: { appId: appId as string },
       });
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error);
       return data;
     },
   });
@@ -98,10 +86,7 @@ export function useAppTools(appId: string | null) {
       const { data, error } = await getAppTools({
         path: { appId: appId as string },
       });
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error);
       return data;
     },
   });

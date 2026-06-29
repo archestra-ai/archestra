@@ -12,17 +12,7 @@ import {
   type UploadOutcome,
   validateUploadFile,
 } from "@/lib/files/file-upload";
-import { getApiErrorType, handleApiError } from "@/lib/utils";
-
-/**
- * A project the user is viewing can vanish — deleted in this tab, or by someone
- * else who shared it. The detail page already renders that gracefully ("Project
- * not found."), so a not-found is an expected empty state, not an error worth a
- * toast + Sentry capture. Other failures still surface normally.
- */
-function isProjectNotFound(error: unknown): boolean {
-  return getApiErrorType(error) === "api_not_found_error";
-}
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   createProject,
@@ -78,10 +68,7 @@ export function useProjects(
       const { data, error } = await getProjects({
         query: { scope, search, teamIds, authorIds, excludeAuthorIds },
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error);
       return data;
     },
   });
@@ -95,11 +82,8 @@ export function useProject(id: string | undefined) {
       const { data, error } = await getProject({
         path: { id: id as string },
       });
-      if (error) {
-        if (!isProjectNotFound(error)) handleApiError(error);
-        return null;
-      }
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
   });
 }
@@ -115,11 +99,8 @@ export function useProjectConversations(
       const { data, error } = await getProjectConversations({
         path: { id: id as string },
       });
-      if (error) {
-        if (!isProjectNotFound(error)) handleApiError(error);
-        return null;
-      }
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
   });
 }
@@ -134,11 +115,8 @@ export function useProjectFiles(id: string | undefined) {
       const { data, error } = await getProjectFiles({
         path: { id: id as string },
       });
-      if (error) {
-        if (!isProjectNotFound(error)) handleApiError(error);
-        return null;
-      }
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
   });
 }
@@ -152,11 +130,8 @@ export function useProjectInstructions(id: string | undefined) {
       const { data, error } = await getProjectInstructions({
         path: { id: id as string },
       });
-      if (error) {
-        if (!isProjectNotFound(error)) handleApiError(error);
-        return null;
-      }
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
   });
 }

@@ -7,7 +7,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { handleApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 export type { SupportedProvider };
 
@@ -65,16 +65,7 @@ export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
           search: search || undefined,
         },
       });
-      // Throw rather than swallowing into [] so the query enters its error
-      // state: a failed fetch (e.g. offline) must be distinguishable from a
-      // successful "no keys configured" response, which gates the new-chat and
-      // projects "Add an LLM Provider Key" prompt.
-      if (error) {
-        if (toastOnError) {
-          handleApiError(error);
-        }
-        throw toApiError(error);
-      }
+      throwOnApiError(error, { toastOnError });
       return data ?? [];
     },
     enabled: params?.enabled,
@@ -140,10 +131,7 @@ export function useAvailableLlmProviderApiKeys(
       const { data, error } = await getAvailableLlmProviderApiKeys({
         query: Object.keys(query).length > 0 ? query : undefined,
       });
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error);
       return data ?? [];
     },
     enabled: params?.enabled,

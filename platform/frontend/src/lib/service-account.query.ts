@@ -2,7 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { handleApiError, toApiError } from "./utils";
+import { handleApiError, throwOnApiError, toApiError } from "./utils";
 
 export type ServiceAccount =
   archestraApiTypes.GetServiceAccountsResponses["200"][number];
@@ -30,10 +30,7 @@ export function useServiceAccounts() {
     queryKey: ["service-accounts"],
     queryFn: async () => {
       const { data, error } = await getServiceAccounts();
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error);
 
       return data ?? [];
     },
@@ -51,10 +48,7 @@ export function useServiceAccount(id: string | null) {
     queryFn: async () => {
       if (!id) return null;
       const { data, error } = await getServiceAccount({ path: { id } });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error, { allowNotFound: true });
 
       return data ?? null;
     },

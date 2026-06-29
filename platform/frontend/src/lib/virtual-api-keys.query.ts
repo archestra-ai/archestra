@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 type AllVirtualApiKeysQuery = NonNullable<
   archestraApiTypes.GetAllVirtualApiKeysData["query"]
@@ -29,10 +29,7 @@ export function useVirtualApiKeys(providerApiKeyId: string | null) {
           offset: 0,
         },
       });
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error);
       return data?.data ?? [];
     },
     enabled: !!providerApiKeyId,
@@ -150,20 +147,7 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
           keyType: keyType || undefined,
         },
       });
-      if (error) {
-        handleApiError(error);
-        return {
-          data: [],
-          pagination: {
-            currentPage: 1,
-            limit,
-            total: 0,
-            totalPages: 0,
-            hasNext: false,
-            hasPrev: false,
-          },
-        };
-      }
+      throwOnApiError(error);
       return (
         data ?? {
           data: [],

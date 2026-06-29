@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { throwOnApiError } from "@/lib/utils";
 
 const {
   initiateOAuth,
@@ -40,9 +41,10 @@ export function useOAuthClientInfo(clientId: string | null) {
       const response = await getOAuthClientInfo({
         query: { client_id: clientId },
       });
-      if (response.error) {
-        return null;
-      }
+      throwOnApiError(response.error, {
+        allowNotFound: true,
+        toastOnError: false,
+      });
       return response.data;
     },
     enabled: !!clientId,

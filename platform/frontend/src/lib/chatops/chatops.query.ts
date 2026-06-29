@@ -6,17 +6,14 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 export function useChatOpsStatus() {
   return useQuery({
     queryKey: ["chatops", "status"],
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getChatOpsStatus();
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error);
       return data?.providers || [];
     },
   });
@@ -41,10 +38,7 @@ export function useChatOpsBindings(
           status: params.status,
         },
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error);
       return data;
     },
   });

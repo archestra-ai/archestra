@@ -3,7 +3,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { handleApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils";
 
 type MCPGatewayAuthMethod =
   archestraApiTypes.GetMcpToolCallResponses["200"]["authMethod"];
@@ -77,20 +77,7 @@ export function useMcpToolCalls({
           sortDirection,
         },
       });
-      if (response.error) {
-        handleApiError(response.error);
-        return {
-          data: [],
-          pagination: {
-            currentPage: 1,
-            limit,
-            total: 0,
-            totalPages: 0,
-            hasNext: false,
-            hasPrev: false,
-          },
-        };
-      }
+      throwOnApiError(response.error);
       return (
         response.data ?? {
           data: [],
@@ -131,10 +118,7 @@ export function useMcpToolCall({
     queryKey: ["mcpToolCalls", mcpToolCallId],
     queryFn: async () => {
       const response = await getMcpToolCall({ path: { mcpToolCallId } });
-      if (response.error) {
-        handleApiError(response.error);
-        return null;
-      }
+      throwOnApiError(response.error, { allowNotFound: true });
       return response.data ?? null;
     },
     initialData,

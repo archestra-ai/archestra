@@ -1,7 +1,11 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getApiErrorMessage, handleApiError } from "@/lib/utils";
+import {
+  getApiErrorMessage,
+  handleApiError,
+  throwOnApiError,
+} from "@/lib/utils";
 
 const {
   getSkills,
@@ -39,10 +43,7 @@ export function useSkillsPaginated(
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getSkills({ query: params });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error);
       return data;
     },
   });
@@ -53,10 +54,7 @@ export function useSkillSourceRepos() {
     queryKey: ["skills", "source-repos"],
     queryFn: async () => {
       const { data, error } = await getSkillSourceRepos();
-      if (error) {
-        handleApiError(error);
-        return { repos: [] as string[] };
-      }
+      throwOnApiError(error);
       return data;
     },
   });
@@ -89,11 +87,8 @@ export function useSkill(id: string | null) {
     queryKey: ["skills", id],
     queryFn: async () => {
       const { data, error } = await getSkill({ path: { id: id as string } });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
     enabled: !!id,
   });
@@ -216,10 +211,7 @@ export function usePreviewGithubSkill(
       const { data, error } = await previewGithubSkill({
         body: body as archestraApiTypes.PreviewGithubSkillData["body"],
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error);
       return data;
     },
   });

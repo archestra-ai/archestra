@@ -3,7 +3,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { handleApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils";
 
 const { getAuditLogs } = archestraApiSdk;
 
@@ -87,10 +87,7 @@ export function useAuditLogs({
           ...(search ? { search } : {}),
         },
       });
-      if (response.error) {
-        handleApiError(response.error);
-        return EMPTY_RESPONSE(limit);
-      }
+      throwOnApiError(response.error);
       return response.data ?? EMPTY_RESPONSE(limit);
     },
   });

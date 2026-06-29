@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 import websocketService from "@/lib/websocket/websocket";
 
 const {
@@ -45,7 +45,7 @@ export function useMcpServers(params?: McpServersParams) {
       },
     ],
     queryFn: async () => {
-      const response = await getMcpServers({
+      const { data, error } = await getMcpServers({
         query:
           params?.catalogId ||
           params?.assignmentScope ||
@@ -61,7 +61,8 @@ export function useMcpServers(params?: McpServersParams) {
               }
             : undefined,
       });
-      return response.data ?? [];
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
     },
     initialData: params?.initialData,
     enabled: params?.enabled,
@@ -238,11 +239,8 @@ export function useMcpServerTools(mcpServerId: string | null) {
       const { data, error } = await getMcpServerTools({
         path: { id: mcpServerId },
       });
-      if (error) {
-        // handleApiError not used to prevent "MCP server not found" error from being shown
-        console.error("Failed to fetch MCP server tools:", error);
-        return [];
-      }
+      // toastOnError is false to prevent "MCP server not found" error from being shown
+      throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
     enabled: !!mcpServerId,

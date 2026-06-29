@@ -21,11 +21,51 @@ Each connector has a visibility setting that determines which users can retrieve
 | ------------------------- | --------------------------------------------------------------------------------- |
 | **Org-wide**              | All documents accessible to every user in the organization.                       |
 | **Team-scoped**           | Documents accessible only to members of the assigned teams.                       |
-| **Auto-sync permissions** | ACL entries synced from the source system (user emails, groups). Coming soon — see [#3218](https://github.com/archestra-ai/archestra/issues/3218). |
+| **Auto-sync permissions** | ACL entries synced from the source system (user emails, groups) to control per-document access. |
 
 Users with the `knowledgeSource:admin` role can view and query every connector regardless of visibility.
 
 > **Enterprise feature** (team-scoped visibility and auto-synced ACLs) — see the [Pricing Model](/docs/platform-pricing-model).
+
+## Auto-sync Permissions
+
+When a connector's visibility is set to **Auto-sync permissions**, Archestra reads the ACL entries from the source system during each sync and translates them into per-document access rules.
+
+### Supported Connectors
+
+Auto-sync permissions is currently supported for **Jira** and **Confluence** connectors.
+
+### Identity Mapping
+
+ACL entries from the source system are resolved in two ways:
+
+| Source entry type | Mapping method |
+| ----------------- | -------------- |
+| **User email**    | Matched directly against organization member emails in Archestra. |
+| **Group**         | Mapped to an Archestra team via **External Group Mappings** configured on the team. |
+
+To map a source group, open the target team in Archestra and add the external group name under **External Group Mappings**. All members of that team then receive access to documents whose ACL includes the mapped group.
+
+### Fail-closed Behavior
+
+If a group from the source system has no corresponding team mapping in Archestra, the document's permission entry is marked as `skipped_unresolvable` and access is denied. This fail-closed approach ensures no accidental data leakage — access is only granted once the mapping is explicitly configured.
+
+### Automatic Recomputation
+
+Permissions are automatically recomputed when:
+
+- Team memberships change (members added or removed).
+- External group mappings on a team are updated.
+
+No manual re-sync of the connector is required for permission changes to take effect.
+
+### Enterprise Feature
+
+Auto-sync permissions requires the **Enterprise** knowledge base license. See the [Pricing Model](/docs/platform-pricing-model).
+
+### Troubleshooting
+
+Check the **Permission Sync** column in the connector's documents table to see the sync status for each document. Documents with unresolved group mappings show a `skipped_unresolvable` status — configure the missing external group mapping on the appropriate team to resolve.
 
 ## Jira
 

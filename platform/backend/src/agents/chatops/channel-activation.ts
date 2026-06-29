@@ -89,6 +89,29 @@ export function isMuteReaction(reactionId: string): boolean {
   return THREAD_MUTE_REACTIONS.has(reactionId.trim().toLowerCase());
 }
 
+/**
+ * Decide what an inbound channel message should trigger, given whether the bot
+ * was @mentioned, whether the message is a mute command, and whether the thread
+ * is already active. Pure, so the Slack and Teams gates share — and unit-test —
+ * the exact same branching instead of duplicating it.
+ *
+ * - "mute": a mute command while addressed or already active → drop activation
+ * - "activate": a fresh @mention → start sticky auto-reply, then process
+ * - "process": an un-mentioned message in an already-active thread → reply
+ * - "ignore": un-mentioned and inactive → stay quiet
+ */
+export type ChannelGateAction = "mute" | "activate" | "process" | "ignore";
+
+export function resolveChannelGateAction(params: {
+  botMentioned: boolean;
+  wantsMute: boolean;
+  isActive: boolean;
+}): ChannelGateAction {
+  if (params.botMentioned) return params.wantsMute ? "mute" : "activate";
+  if (params.isActive) return params.wantsMute ? "mute" : "process";
+  return "ignore";
+}
+
 // =============================================================================
 // Internal Helpers
 // =============================================================================

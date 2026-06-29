@@ -26,6 +26,7 @@ import {
   isMuteReaction,
   isThreadMuteCommand,
   markChannelThreadActive,
+  resolveChannelGateAction,
 } from "./channel-activation";
 import { CHATOPS_CHANNEL_AUTO_REPLY } from "./constants";
 
@@ -176,4 +177,25 @@ describe("isThreadMuteCommand", () => {
   ])("does not treat %j as a mute command", (text) => {
     expect(isThreadMuteCommand(text)).toBe(false);
   });
+});
+
+describe("resolveChannelGateAction", () => {
+  test.each([
+    // botMentioned, wantsMute, isActive -> action
+    [true, true, false, "mute"], // mentioned + "mute" -> mute
+    [true, true, true, "mute"], // mentioned + "mute" in active thread -> mute
+    [true, false, false, "activate"], // fresh mention -> activate
+    [true, false, true, "activate"], // mention re-affirms activation
+    [false, true, true, "mute"], // bare "mute" in active thread -> mute
+    [false, false, true, "process"], // un-mentioned reply in active thread -> reply
+    [false, true, false, "ignore"], // "mute" but thread inactive + not addressed
+    [false, false, false, "ignore"], // un-mentioned, inactive -> stay quiet
+  ] as const)(
+    "botMentioned=%s wantsMute=%s isActive=%s -> %s",
+    (botMentioned, wantsMute, isActive, expected) => {
+      expect(
+        resolveChannelGateAction({ botMentioned, wantsMute, isActive }),
+      ).toBe(expected);
+    },
+  );
 });

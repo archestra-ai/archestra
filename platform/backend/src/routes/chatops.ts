@@ -19,6 +19,7 @@ import {
   isChannelThreadActive,
   isThreadMuteCommand,
   markChannelThreadActive,
+  resolveChannelGateAction,
 } from "@/agents/chatops/channel-activation";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
@@ -321,20 +322,29 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 channelId: message.channelId,
                 threadId: message.threadId ?? message.channelId,
               };
-              const wantsMute = isThreadMuteCommand(message.text);
-              if (provider.wasBotMentioned(context.activity)) {
-                if (wantsMute) {
+              const botMentioned = provider.wasBotMentioned(context.activity);
+              // isActive is only consulted when the bot wasn't mentioned (see
+              // resolveChannelGateAction), so skip the cache read on mentions.
+              const isActive = botMentioned
+                ? false
+                : await isChannelThreadActive(activation);
+              switch (
+                resolveChannelGateAction({
+                  botMentioned,
+                  wantsMute: isThreadMuteCommand(message.text),
+                  isActive,
+                })
+              ) {
+                case "mute":
                   await muteTeamsThreadAndNotify(context, activation);
                   return;
-                }
-                await markChannelThreadActive(activation);
-              } else if (await isChannelThreadActive(activation)) {
-                if (wantsMute) {
-                  await muteTeamsThreadAndNotify(context, activation);
+                case "activate":
+                  await markChannelThreadActive(activation);
+                  break;
+                case "ignore":
                   return;
-                }
-              } else {
-                return;
+                case "process":
+                  break;
               }
             }
 
@@ -728,12 +738,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         const slackBody = body as {
           type?: string;
-          event?: { type?: string; ts?: string };
+          event?: { type?: string; ts?: string; event_ts?: string };
         };
 
         if (slackBody.type === "event_callback") {
-          // Quick in-memory dedup for Slack's duplicate message+app_mention events
-          const eventTs = slackBody.event?.ts;
+          // Quick in-memory dedup for Slack's duplicate message+app_mention events.
+          // Messages carry event.ts; reaction events carry event.event_ts.
+          const eventTs = slackBody.event?.ts ?? slackBody.event?.event_ts;
           if (eventTs && slackWebhookDedup.mark(eventTs)) {
             return reply.send({ ok: true });
           }

@@ -43,6 +43,7 @@ import {
   isMuteReaction,
   isThreadMuteCommand,
   markChannelThreadActive,
+  resolveChannelGateAction,
 } from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
@@ -313,20 +314,28 @@ class SlackProvider implements ChatOpsProvider {
         channelId: event.channel,
         threadId: threadTs,
       };
-      const wantsMute = isThreadMuteCommand(cleanedText);
-      if (hasBotMention) {
-        if (wantsMute) {
+      // isActive is only consulted when the bot wasn't mentioned (see
+      // resolveChannelGateAction), so skip the cache read on mentions.
+      const isActive = hasBotMention
+        ? false
+        : await isChannelThreadActive(activation);
+      switch (
+        resolveChannelGateAction({
+          botMentioned: hasBotMention,
+          wantsMute: isThreadMuteCommand(cleanedText),
+          isActive,
+        })
+      ) {
+        case "mute":
           await this.muteThreadAndNotify(event.channel, threadTs);
           return null;
-        }
-        await markChannelThreadActive(activation);
-      } else if (await isChannelThreadActive(activation)) {
-        if (wantsMute) {
-          await this.muteThreadAndNotify(event.channel, threadTs);
+        case "activate":
+          await markChannelThreadActive(activation);
+          break;
+        case "ignore":
           return null;
-        }
-      } else {
-        return null;
+        case "process":
+          break;
       }
     }
 
@@ -1601,8 +1610,12 @@ class SlackProvider implements ChatOpsProvider {
         switch (type) {
           case "events_api": {
             await safeAck();
-            const eventBody = body as { event?: { ts?: string } };
-            const eventTs = eventBody?.event?.ts;
+            // Messages carry event.ts; reaction events carry event.event_ts
+            // instead — fall back to it so reactions dedup on redelivery too.
+            const eventBody = body as {
+              event?: { ts?: string; event_ts?: string };
+            };
+            const eventTs = eventBody?.event?.ts ?? eventBody?.event?.event_ts;
             if (eventTs && this.socketDedup.mark(eventTs)) {
               break;
             }

@@ -400,9 +400,15 @@ class MSTeamsProvider implements ChatOpsProvider {
     const conversationId = activity.conversation?.id;
     // Match how the gate derived the activation key's channelId
     // (parseWebhookNotification): prefer channelData.channel.id, else the
-    // thread-suffix-stripped conversation id.
+    // thread-suffix-stripped conversation id. Uses `||` (not `??`) to match the
+    // gate exactly, so an empty channel.id falls through to the conversation id.
     const channelId =
-      activity.channelData?.channel?.id ?? stripThreadSuffix(conversationId);
+      activity.channelData?.channel?.id || stripThreadSuffix(conversationId);
+    // Assumes the activation key's threadId equals the conversation's
+    // `;messageid=<root>`. Teams channel threads are flat (every reply's
+    // replyToId is the root), so the gate's extractThreadId (replyToId-first)
+    // and this resolve to the same root. If a payload ever breaks that, the
+    // mute no-ops loudly (returns null → no false "muted") rather than guessing.
     const threadId = extractThreadIdFromConversationId(conversationId);
     if (!channelId || !threadId) return null;
 

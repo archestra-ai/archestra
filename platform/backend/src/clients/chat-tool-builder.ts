@@ -44,8 +44,16 @@ import {
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
-import type { GlobalToolPolicy, UnsafeContextBoundary } from "@/types";
-import { agentOwner, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
+import type {
+  DiscoveredToolPolicy,
+  GlobalToolPolicy,
+  UnsafeContextBoundary,
+} from "@/types";
+import {
+  agentOwner,
+  defaultDiscoveredToolPolicy,
+  UNSAFE_CONTEXT_BOUNDARY_REASON,
+} from "@/types";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
 export interface McpGatewayToken {
@@ -89,6 +97,7 @@ export interface ChatToolContext {
   hookRunCollector?: CollectedHookRun[];
   mcpGwToken: McpGatewayToken;
   globalToolPolicy: GlobalToolPolicy;
+  discoveredToolPolicy: DiscoveredToolPolicy;
   considerContextUntrusted: boolean;
   /**
    * Per-run guard against the model re-issuing the identical tool call forever.
@@ -590,6 +599,7 @@ function needsApprovalProps(params: {
           externalAgentId: getChatExternalAgentId(),
         },
         ctx.globalToolPolicy,
+        ctx.discoveredToolPolicy,
       );
     },
   };
@@ -627,7 +637,12 @@ async function executeWithToolSpan<R>(params: {
   } = params;
 
   if (ctx.blockOnApprovalRequired) {
-    await throwIfApprovalRequired(toolName, args, ctx.globalToolPolicy);
+    await throwIfApprovalRequired(
+      toolName,
+      args,
+      ctx.globalToolPolicy,
+      ctx.discoveredToolPolicy,
+    );
   }
 
   logger.info(
@@ -1124,6 +1139,12 @@ async function throwIfApprovalRequired(
   toolName: string,
   args: unknown,
   globalToolPolicy: GlobalToolPolicy,
+  // Defaults to the discovered-tool equivalent of globalToolPolicy so callers
+  // that don't distinguish discovered tools keep single-policy behavior; the
+  // chat path passes it explicitly.
+  discoveredToolPolicy: DiscoveredToolPolicy = defaultDiscoveredToolPolicy(
+    globalToolPolicy,
+  ),
 ): Promise<void> {
   const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
   const requiresApproval =
@@ -1135,6 +1156,7 @@ async function throwIfApprovalRequired(
         externalAgentId: getChatExternalAgentId(),
       },
       globalToolPolicy,
+      discoveredToolPolicy,
     );
   if (requiresApproval) {
     throw new Error(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);

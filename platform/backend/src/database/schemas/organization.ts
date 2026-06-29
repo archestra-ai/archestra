@@ -17,6 +17,7 @@ import {
 import type {
   ConnectionBaseUrl,
   ConnectionDefaultProviderKeys,
+  DiscoveredToolPolicy,
   GlobalToolPolicy,
   LimitCleanupInterval,
   NetworkPolicy,
@@ -56,6 +57,15 @@ const organizationsTable = pgTable("organization", {
     .$type<GlobalToolPolicy>()
     .notNull()
     .default("permissive"),
+  /**
+   * Policy for tools auto-discovered via the LLM proxy. Resolved independently
+   * of globalToolPolicy so a restrictive global posture does not block tools
+   * Claude Code / Claude Desktop discover by default. Defaults to "relaxed".
+   */
+  discoveredToolPolicy: varchar("discovered_tool_policy")
+    .$type<DiscoveredToolPolicy>()
+    .notNull()
+    .default("relaxed"),
   /**
    * Whether file uploads are allowed in chat.
    * Defaults to true. Security policies currently only work on text-based content,

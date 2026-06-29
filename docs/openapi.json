@@ -91705,6 +91705,13 @@
                             "restrictive"
                           ]
                         },
+                        "discoveredToolPolicy": {
+                          "type": "string",
+                          "enum": [
+                            "relaxed",
+                            "apply_policies"
+                          ]
+                        },
                         "incomingEmail": {
                           "type": "object",
                           "properties": {
@@ -91780,6 +91787,7 @@
                         "bedrockIamAuthEnabled",
                         "geminiVertexAiEnabled",
                         "globalToolPolicy",
+                        "discoveredToolPolicy",
                         "incomingEmail",
                         "mcpServerBaseImage",
                         "orchestratorK8sNamespace",
@@ -195246,6 +195254,13 @@
                         "restrictive"
                       ]
                     },
+                    "discoveredToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "relaxed",
+                        "apply_policies"
+                      ]
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -195618,6 +195633,7 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
+                    "discoveredToolPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -196174,6 +196190,13 @@
                         "restrictive"
                       ]
                     },
+                    "discoveredToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "relaxed",
+                        "apply_policies"
+                      ]
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -196546,6 +196569,7 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
+                    "discoveredToolPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -197268,6 +197292,13 @@
                       "restrictive"
                     ]
                   },
+                  "discoveredToolPolicy": {
+                    "type": "string",
+                    "enum": [
+                      "relaxed",
+                      "apply_policies"
+                    ]
+                  },
                   "allowChatFileUploads": {
                     "type": "boolean"
                   },
@@ -197375,6 +197406,13 @@
                       "enum": [
                         "permissive",
                         "restrictive"
+                      ]
+                    },
+                    "discoveredToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "relaxed",
+                        "apply_policies"
                       ]
                     },
                     "allowChatFileUploads": {
@@ -197749,6 +197787,7 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
+                    "discoveredToolPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -198163,6 +198202,13 @@
                         "restrictive"
                       ]
                     },
+                    "discoveredToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "relaxed",
+                        "apply_policies"
+                      ]
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -198535,6 +198581,7 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
+                    "discoveredToolPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -198960,6 +199007,13 @@
                         "restrictive"
                       ]
                     },
+                    "discoveredToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "relaxed",
+                        "apply_policies"
+                      ]
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -199332,6 +199386,7 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
+                    "discoveredToolPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -199829,6 +199884,13 @@
                         "restrictive"
                       ]
                     },
+                    "discoveredToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "relaxed",
+                        "apply_policies"
+                      ]
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -200201,6 +200263,7 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
+                    "discoveredToolPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -200668,6 +200731,13 @@
                         "restrictive"
                       ]
                     },
+                    "discoveredToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "relaxed",
+                        "apply_policies"
+                      ]
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -201040,6 +201110,7 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
+                    "discoveredToolPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -201452,6 +201523,13 @@
                         "restrictive"
                       ]
                     },
+                    "discoveredToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "relaxed",
+                        "apply_policies"
+                      ]
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -201824,6 +201902,7 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
+                    "discoveredToolPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -202249,6 +202328,13 @@
                         "restrictive"
                       ]
                     },
+                    "discoveredToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "relaxed",
+                        "apply_policies"
+                      ]
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -202621,6 +202707,7 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
+                    "discoveredToolPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -203013,6 +203100,13 @@
                         "restrictive"
                       ]
                     },
+                    "discoveredToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "relaxed",
+                        "apply_policies"
+                      ]
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -203385,6 +203479,7 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
+                    "discoveredToolPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -204090,6 +204185,13 @@
                         "restrictive"
                       ]
                     },
+                    "discoveredToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "relaxed",
+                        "apply_policies"
+                      ]
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -204462,6 +204564,7 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
+                    "discoveredToolPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",

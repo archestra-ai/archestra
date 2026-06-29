@@ -122,6 +122,7 @@ export interface LLMProxyContext<TRequest> {
   contextIsTrusted: boolean;
   enabledToolNames: Set<string>;
   globalToolPolicy: "permissive" | "restrictive";
+  discoveredToolPolicy: "relaxed" | "apply_policies";
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
@@ -703,9 +704,11 @@ export async function handleLLMProxy<
       }
     };
 
-    // Get global tool policy from organization (with fallback) - needed for both trusted data and tool invocation
-    const globalToolPolicy =
-      await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
+    // Get tool policies from organization (with fallback) - globalToolPolicy is
+    // needed for both trusted data and tool invocation; discoveredToolPolicy
+    // governs llm-proxy discovered tools during tool-invocation evaluation.
+    const { globalToolPolicy, discoveredToolPolicy } =
+      await utils.toolInvocation.getToolPolicies(resolvedAgentId);
 
     // Fetch the agent's teams (with labels) once. Used both for policy
     // evaluation context (trusted data) and for trace span team attributes.
@@ -940,6 +943,7 @@ export async function handleLLMProxy<
       contextIsTrusted,
       enabledToolNames,
       globalToolPolicy,
+      discoveredToolPolicy,
       toonStats,
       toonSkipReason,
       dualLlmAnalyses,
@@ -1048,6 +1052,7 @@ async function handleStreaming<
     contextIsTrusted,
     enabledToolNames,
     globalToolPolicy,
+    discoveredToolPolicy,
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
@@ -1313,6 +1318,7 @@ async function handleStreaming<
         contextIsTrusted,
         enabledToolNames,
         globalToolPolicy,
+        discoveredToolPolicy,
       );
 
       logger.info(
@@ -1510,6 +1516,7 @@ async function handleNonStreaming<
     contextIsTrusted,
     enabledToolNames,
     globalToolPolicy,
+    discoveredToolPolicy,
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
@@ -1666,6 +1673,7 @@ async function handleNonStreaming<
       contextIsTrusted,
       enabledToolNames,
       globalToolPolicy,
+      discoveredToolPolicy,
     );
 
     if (toolInvocationRefusal) {

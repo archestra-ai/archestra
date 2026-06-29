@@ -1,4 +1,7 @@
-import { getModelReadableMimeTypes } from "@archestra/shared";
+import {
+  getModelReadableMimeTypes,
+  INLINE_TEXT_MAX_BYTES,
+} from "@archestra/shared";
 import config from "@/config";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
@@ -70,7 +73,10 @@ test("rehydrates ref to inline data: URL and adds Anthropic cache_control", asyn
     },
   ];
 
-  const output = await materializeAttachments(inputMessages, conversation.id);
+  const output = await materializeAttachments({
+    messages: inputMessages,
+    conversationId: conversation.id,
+  });
 
   const filePart = expectPresent(output[0].parts?.[1]);
   expect(filePart.type).toBe("file");
@@ -105,10 +111,10 @@ test("legacy inline data: URL file parts keep the url but get Anthropic cache_co
     },
   ];
 
-  const output = await materializeAttachments(
-    input,
-    "00000000-0000-4000-8000-000000000000",
-  );
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: "00000000-0000-4000-8000-000000000000",
+  });
   const filePart = expectPresent(output[0].parts?.[0]);
   // URL is preserved verbatim — we don't rewrite or re-encode the bytes.
   expect(filePart.url).toBe(dataUrl);
@@ -137,10 +143,10 @@ test("preserves existing providerMetadata on data: URL file parts when adding ca
       ],
     },
   ];
-  const output = await materializeAttachments(
-    input,
-    "00000000-0000-4000-8000-000000000000",
-  );
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: "00000000-0000-4000-8000-000000000000",
+  });
   const filePart = expectPresent(output[0].parts?.[0]);
   expect(filePart.providerMetadata).toMatchObject({
     openai: { detail: "high" },
@@ -163,10 +169,10 @@ test("missing or malformed refs do not crash and leave the part as-is", async ()
     },
   ];
 
-  const output = await materializeAttachments(
+  const output = await materializeAttachments({
     messages,
-    "00000000-0000-4000-8000-000000000000",
-  );
+    conversationId: "00000000-0000-4000-8000-000000000000",
+  });
   expect(expectPresent(output[0].parts?.[0]).url).toBe(
     "/api/chat/attachments/00000000-0000-4000-8000-000000000000/content",
   );
@@ -210,7 +216,10 @@ test("refs scoped to a DIFFERENT conversation are silently ignored", async ({
   ];
 
   // Request claims to be in requestConvo but references otherConvo's attachment.
-  const output = await materializeAttachments(input, requestConvo.id);
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: requestConvo.id,
+  });
   // Ref URL stays as-is — the bytes did NOT leak into the LLM call payload.
   const outputPart = expectPresent(output[0].parts?.[0]);
   expect(outputPart.url).toBe(`/api/chat/attachments/${row.id}/content`);
@@ -254,7 +263,10 @@ test("batch-loads multiple refs in a single message", async ({
     },
   ];
 
-  const output = await materializeAttachments(input, conversation.id);
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+  });
   for (let i = 0; i < ids.length; i++) {
     expect(expectPresent(output[0].parts?.[i]).url).toBe(
       `data:text/plain;base64,${Buffer.from(`f${i}`, "utf8").toString("base64")}`,
@@ -298,11 +310,12 @@ test("references a non-ingestible attachment in the sandbox instead of inlining 
     },
   ];
 
-  const output = await materializeAttachments(
-    input,
-    conversation.id,
-    INGESTIBLE,
-  );
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: INGESTIBLE,
+    sandboxAvailable: true,
+  });
 
   const part = expectPresent(output[0].parts?.[0]);
   expect(part.type).toBe("text");
@@ -312,6 +325,154 @@ test("references a non-ingestible attachment in the sandbox instead of inlining 
   expect(part.text).toContain(JSON.stringify(originalName));
   expect(part.text).toContain("application/octet-stream");
   // The bytes are NOT inlined into the model payload.
+  expect(part.text).not.toContain("data:");
+  expect(part.url).toBeUndefined();
+});
+
+test("routes an oversized text document to the sandbox instead of inlining it", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  // text/csv IS model-ingestible here, so only its size — just over the inline
+  // budget — is what diverts it to the sandbox.
+  const bytes = Buffer.alloc(INLINE_TEXT_MAX_BYTES + 1, 0x61);
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "big.csv",
+    mimeType: "text/csv",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const input: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "text/csv",
+          filename: "big.csv",
+        },
+      ],
+    },
+  ];
+
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: new Set(["text/csv"]),
+    sandboxAvailable: true,
+  });
+
+  const part = expectPresent(output[0].parts?.[0]);
+  expect(part.type).toBe("text");
+  expect(part.text).toContain("/home/sandbox/attachments");
+  expect(part.text).not.toContain("data:");
+  expect(part.url).toBeUndefined();
+});
+
+test("inlines a text document that is within the inline budget", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const bytes = Buffer.alloc(INLINE_TEXT_MAX_BYTES, 0x61);
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "fits.csv",
+    mimeType: "text/csv",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const input: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "text/csv",
+          filename: "fits.csv",
+        },
+      ],
+    },
+  ];
+
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: new Set(["text/csv"]),
+    sandboxAvailable: false,
+  });
+
+  const filePart = expectPresent(output[0].parts?.[0]);
+  expect(filePart.type).toBe("file");
+  expect(filePart.url).toContain("data:text/csv");
+});
+
+test("a non-ingestible attachment is NOT pointed at the sandbox when it is unavailable for the agent", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const bytes = Buffer.from("SQLite header bytes", "utf8");
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "orders.sqlite",
+    mimeType: "application/octet-stream",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const input: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "application/octet-stream",
+          filename: "orders.sqlite",
+        },
+      ],
+    },
+  ];
+
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: INGESTIBLE,
+    sandboxAvailable: false,
+  });
+
+  // The model can't read it inline and has no sandbox — it gets a neutral
+  // notice that never names the sandbox dir or run_command, and the bytes
+  // are not inlined.
+  const part = expectPresent(output[0].parts?.[0]);
+  expect(part.type).toBe("text");
+  expect(part.text).not.toContain("/home/sandbox/attachments");
+  expect(part.text).not.toContain("run_command");
   expect(part.text).not.toContain("data:");
   expect(part.url).toBeUndefined();
 });
@@ -350,11 +511,12 @@ test("keeps an ingestible attachment inlined even when an ingestible set is give
     },
   ];
 
-  const output = await materializeAttachments(
-    input,
-    conversation.id,
-    INGESTIBLE,
-  );
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: INGESTIBLE,
+    sandboxAvailable: true,
+  });
 
   const part = expectPresent(output[0].parts?.[0]);
   expect(part.type).toBe("file");
@@ -398,11 +560,12 @@ test("an over-limit non-ingestible attachment is reported as unavailable, not st
     },
   ];
 
-  const output = await materializeAttachments(
-    input,
-    conversation.id,
-    INGESTIBLE,
-  );
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: INGESTIBLE,
+    sandboxAvailable: true,
+  });
 
   const part = expectPresent(output[0].parts?.[0]);
   expect(part.type).toBe("text");
@@ -414,7 +577,7 @@ test("an over-limit non-ingestible attachment is reported as unavailable, not st
   expect(part.text).not.toContain("data:");
 });
 
-test("inlined text-document also gets a sandbox pointer when the sandbox is enabled", async ({
+test("inlined text-document also gets a sandbox pointer when the sandbox is available for the agent", async ({
   makeAgent,
   makeConversation,
 }) => {
@@ -449,14 +612,11 @@ test("inlined text-document also gets a sandbox pointer when the sandbox is enab
     },
   ];
 
-  const prevEnabled = config.skillsSandbox.enabled;
-  config.skillsSandbox.enabled = true;
-  let output: ChatMessage[];
-  try {
-    output = await materializeAttachments(input, conversation.id);
-  } finally {
-    config.skillsSandbox.enabled = prevEnabled;
-  }
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    sandboxAvailable: true,
+  });
 
   // The bytes are still inlined for in-context reading...
   const filePart = expectPresent(output[0].parts?.[0]);
@@ -473,7 +633,7 @@ test("inlined text-document also gets a sandbox pointer when the sandbox is enab
   expect(output[0].parts).toHaveLength(2);
 });
 
-test("inlined text-document gets NO sandbox pointer when the sandbox is disabled", async ({
+test("inlined text-document gets NO sandbox pointer when the sandbox is unavailable for the agent", async ({
   makeAgent,
   makeConversation,
 }) => {
@@ -507,14 +667,11 @@ test("inlined text-document gets NO sandbox pointer when the sandbox is disabled
     },
   ];
 
-  const prevEnabled = config.skillsSandbox.enabled;
-  config.skillsSandbox.enabled = false;
-  let output: ChatMessage[];
-  try {
-    output = await materializeAttachments(input, conversation.id);
-  } finally {
-    config.skillsSandbox.enabled = prevEnabled;
-  }
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    sandboxAvailable: false,
+  });
 
   expect(output[0].parts).toHaveLength(1);
   expect(expectPresent(output[0].parts?.[0]).type).toBe("file");
@@ -554,12 +711,11 @@ test("applyAnthropicCacheControl=false suppresses cache_control but still inline
     },
   ];
 
-  const output = await materializeAttachments(
-    input,
-    conversation.id,
-    undefined,
-    false,
-  );
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    applyAnthropicCacheControl: false,
+  });
 
   const filePart = expectPresent(output[0].parts?.[0]);
   // Bytes are still inlined — the data: content is NOT dropped...
@@ -586,12 +742,11 @@ test("applyAnthropicCacheControl=false suppresses cache_control on legacy inline
     },
   ];
 
-  const output = await materializeAttachments(
-    input,
-    "00000000-0000-4000-8000-000000000000",
-    undefined,
-    false,
-  );
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: "00000000-0000-4000-8000-000000000000",
+    applyAnthropicCacheControl: false,
+  });
   const filePart = expectPresent(output[0].parts?.[0]);
   expect(filePart.url).toBe(dataUrl);
   expect(filePart.providerMetadata).toBeUndefined();
@@ -633,18 +788,20 @@ test("attachment routing is unchanged when cache_control is suppressed (non-inge
 
   // Suppressing cache_control must not add or remove the existing
   // non-ingestible → sandbox-pointer routing: same result as the cache-on path.
-  const off = await materializeAttachments(
-    input,
-    conversation.id,
-    INGESTIBLE,
-    false,
-  );
-  const on = await materializeAttachments(
-    input,
-    conversation.id,
-    INGESTIBLE,
-    true,
-  );
+  const off = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: INGESTIBLE,
+    applyAnthropicCacheControl: false,
+    sandboxAvailable: true,
+  });
+  const on = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: INGESTIBLE,
+    applyAnthropicCacheControl: true,
+    sandboxAvailable: true,
+  });
 
   for (const output of [off, on]) {
     const part = expectPresent(output[0].parts?.[0]);
@@ -690,21 +847,23 @@ test("reroutes a binary document to the sandbox on a non-native Anthropic endpoi
 
   // INGESTIBLE includes application/pdf, so the model CAN read it — but a
   // non-native Anthropic endpoint can't accept the document block, so reroute.
-  const nonNative = await materializeAttachments(
-    input,
-    conversation.id,
-    INGESTIBLE,
-    true,
-    true,
-  );
+  const nonNative = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: INGESTIBLE,
+    applyAnthropicCacheControl: true,
+    rerouteBinaryDocsToSandbox: true,
+    sandboxAvailable: true,
+  });
   // Native endpoint: the document block is fine, so it stays inlined.
-  const native = await materializeAttachments(
-    input,
-    conversation.id,
-    INGESTIBLE,
-    true,
-    false,
-  );
+  const native = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: INGESTIBLE,
+    applyAnthropicCacheControl: true,
+    rerouteBinaryDocsToSandbox: false,
+    sandboxAvailable: true,
+  });
 
   const rerouted = expectPresent(nonNative[0].parts?.[0]);
   expect(rerouted.type).toBe("text");
@@ -754,13 +913,14 @@ test("keeps an image inlined on a non-native Anthropic endpoint", async ({
   ];
 
   // Images travel as image blocks, which the endpoint accepts — not rerouted.
-  const output = await materializeAttachments(
-    input,
-    conversation.id,
-    INGESTIBLE,
-    true,
-    true,
-  );
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: INGESTIBLE,
+    applyAnthropicCacheControl: true,
+    rerouteBinaryDocsToSandbox: true,
+    sandboxAvailable: true,
+  });
   const part = expectPresent(output[0].parts?.[0]);
   expect(part.type).toBe("file");
   expect(part.url).toBe(`data:image/png;base64,${bytes.toString("base64")}`);
@@ -803,13 +963,14 @@ test("keeps a text-inlineable, model-readable document inlined on a non-native A
   // text/plain is in INGESTIBLE and is text-inlineable, so the binary-doc
   // reroute must NOT touch it — it stays a file part (prepare-for-provider
   // inlines it as text later).
-  const output = await materializeAttachments(
-    input,
-    conversation.id,
-    INGESTIBLE,
-    true,
-    true,
-  );
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: INGESTIBLE,
+    applyAnthropicCacheControl: true,
+    rerouteBinaryDocsToSandbox: true,
+    sandboxAvailable: true,
+  });
   const part = expectPresent(output[0].parts?.[0]);
   expect(part.type).toBe("file");
   expect(part.url).toBe(`data:text/plain;base64,${bytes.toString("base64")}`);
@@ -831,13 +992,12 @@ test("an inline data: binary document is dropped with a notice on a non-native e
     },
   ];
 
-  const output = await materializeAttachments(
-    input,
-    "00000000-0000-4000-8000-000000000000",
-    undefined,
-    true,
-    true,
-  );
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: "00000000-0000-4000-8000-000000000000",
+    applyAnthropicCacheControl: true,
+    rerouteBinaryDocsToSandbox: true,
+  });
   const part = expectPresent(output[0].parts?.[0]);
   expect(part.type).toBe("text");
   // The data: bytes are NOT emitted as a document block the endpoint rejects.
@@ -851,10 +1011,10 @@ test("no refs in messages returns a clone without DB hits", async () => {
     { role: "assistant", parts: [{ type: "text", text: "hi" }] },
   ];
 
-  const output = await materializeAttachments(
+  const output = await materializeAttachments({
     messages,
-    "00000000-0000-4000-8000-000000000000",
-  );
+    conversationId: "00000000-0000-4000-8000-000000000000",
+  });
   expect(output).toEqual(messages);
   // Confirm deep copy: mutating output does not affect input
   expectPresent(output[0].parts?.[0]).text = "mutated";

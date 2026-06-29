@@ -1849,6 +1849,73 @@ describe("LimitValidationService", () => {
       expect(result).not.toBeNull();
       expect(result?.[1]).toContain("organization-level");
     });
+
+    test("evaluates limits across all entity levels without an N+1", async ({
+      makeOrganization,
+      makeAdmin,
+      makeTeam,
+      makeMember,
+      makeAgent,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const admin = await makeAdmin();
+      const team = await makeTeam(org.id, admin.id);
+      const agent = await makeAgent({
+        name: "Test Agent",
+        organizationId: org.id,
+      });
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
+
+      // A token_cost limit (with usage) at every level the pre-request check
+      // inspects. Before batching, each level issued its own limit_model_usage
+      // and models lookups, so model pricing was fetched once per level.
+      const levels: {
+        entityType: "agent" | "user" | "team" | "organization" | "virtual_key";
+        entityId: string;
+      }[] = [
+        { entityType: "virtual_key", entityId: apiKey.id },
+        { entityType: "user", entityId: admin.id },
+        { entityType: "agent", entityId: agent.id },
+        { entityType: "team", entityId: team.id },
+        { entityType: "organization", entityId: org.id },
+      ];
+      for (const { entityType, entityId } of levels) {
+        const limit = await LimitModel.create({
+          entityType,
+          entityId,
+          limitType: "token_cost",
+          limitValue: 1_000_000,
+          model: ["gpt-4o"],
+        });
+        // Keep usage well under the limit so the request is allowed and every
+        // level is evaluated (no early-exit on a violation).
+        await LimitModel.updateTokenLimitUsage(
+          entityType,
+          entityId,
+          "gpt-4o",
+          1,
+          1,
+        );
+        await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+      }
+
+      const findByModelIdsOnlySpy = vi.spyOn(ModelModel, "findByModelIdsOnly");
+
+      const result = await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        userId: admin.id,
+        virtualKeyId: apiKey.id,
+      });
+
+      expect(result).toBeNull();
+      // One batched pricing lookup for the whole request, not one per level.
+      expect(findByModelIdsOnlySpy).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

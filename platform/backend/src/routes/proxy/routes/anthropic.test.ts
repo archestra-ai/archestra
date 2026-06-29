@@ -1051,3 +1051,143 @@ describe("Anthropic delta encoding (claude_code sessions)", () => {
     );
   });
 });
+
+describe("Anthropic input-token fallback", () => {
+  let stubOptions: {
+    zeroInputTokens?: boolean;
+    zeroOutputTokens?: boolean;
+    cacheReadInputTokens?: number;
+  };
+
+  beforeEach(() => {
+    stubOptions = {};
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+      () => createAnthropicTestClient(stubOptions) as never,
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function runRequest(
+    agentId: string,
+    extraPayload: Record<string, unknown> = {},
+  ) {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(anthropicProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-opus-4-20250514",
+      provider: "anthropic",
+      modelId: "claude-opus-4-20250514",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "15.00",
+      customPricePerMillionOutput: "75.00",
+      lastSyncedAt: new Date(),
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${agentId}/v1/messages`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+        "anthropic-version": "2023-06-01",
+        "x-api-key": "test-anthropic-key",
+      },
+      payload: {
+        model: "claude-opus-4-20250514",
+        messages: [{ role: "user", content: "Hello!" }],
+        max_tokens: 1024,
+        ...extraPayload,
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    return app;
+  }
+
+  async function latestInteraction(agentId: string) {
+    const { InteractionModel } = await import("@/models");
+    const interactions =
+      await InteractionModel.getAllInteractionsForProfile(agentId);
+    expect(interactions.length).toBeGreaterThan(0);
+    return interactions[interactions.length - 1];
+  }
+
+  test("non-streaming: zero provider input tokens are replaced by an estimate", async ({
+    makeAgent,
+  }) => {
+    stubOptions.zeroInputTokens = true;
+    const agent = await makeAgent({ name: "Zero Input NonStreaming" });
+
+    await runRequest(agent.id);
+
+    const interaction = await latestInteraction(agent.id);
+    expect(interaction.inputTokensEstimated).toBe(true);
+    // A real estimate of the prompt, not the provider's 0 nor the measured 12.
+    expect(interaction.inputTokens).toBeGreaterThan(0);
+    expect(interaction.inputTokens).not.toBe(12);
+    expect(interaction.cost).toBeTruthy();
+  });
+
+  test("streaming: zero provider input tokens are replaced by an estimate", async ({
+    makeAgent,
+  }) => {
+    stubOptions.zeroInputTokens = true;
+    const agent = await makeAgent({ name: "Zero Input Streaming" });
+
+    await runRequest(agent.id, { stream: true });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const interaction = await latestInteraction(agent.id);
+    expect(interaction.inputTokensEstimated).toBe(true);
+    expect(interaction.inputTokens).toBeGreaterThan(0);
+    expect(interaction.inputTokens).not.toBe(12);
+    expect(interaction.cost).toBeTruthy();
+  });
+
+  test("provider-reported input tokens are recorded as measured, not estimated", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Measured Input" });
+
+    await runRequest(agent.id);
+
+    const interaction = await latestInteraction(agent.id);
+    expect(interaction.inputTokensEstimated).toBe(false);
+    expect(interaction.inputTokens).toBe(12);
+  });
+
+  test("zero input with zero output is not estimated (no output to corroborate)", async ({
+    makeAgent,
+  }) => {
+    stubOptions.zeroInputTokens = true;
+    stubOptions.zeroOutputTokens = true;
+    const agent = await makeAgent({ name: "Zero Input Zero Output" });
+
+    await runRequest(agent.id);
+
+    const interaction = await latestInteraction(agent.id);
+    expect(interaction.inputTokensEstimated).toBe(false);
+    expect(interaction.inputTokens).toBe(0);
+  });
+
+  test("zero input with cache-read tokens is not estimated (legitimately cached)", async ({
+    makeAgent,
+  }) => {
+    stubOptions.zeroInputTokens = true;
+    stubOptions.cacheReadInputTokens = 2000;
+    const agent = await makeAgent({ name: "Zero Input Cached" });
+
+    await runRequest(agent.id);
+
+    const interaction = await latestInteraction(agent.id);
+    expect(interaction.inputTokensEstimated).toBe(false);
+    expect(interaction.inputTokens).toBe(0);
+    expect(interaction.cacheReadTokens).toBe(2000);
+  });
+});

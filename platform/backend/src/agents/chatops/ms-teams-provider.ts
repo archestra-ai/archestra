@@ -43,6 +43,7 @@ import type {
 } from "@/types";
 import { detectImageType } from "@/utils/detect-image-type";
 import { stripHtmlTags } from "@/utils/strip-html";
+import { isUuid } from "@/utils/uuid";
 import { isMuteReaction } from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
@@ -481,7 +482,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       // - Group chats: no workspaceId, or workspaceId starts with "19:" (thread ID format)
       // - Team channels: workspaceId is a UUID (the team's aadGroupId), channelId contains @thread.tacv2
       let workspaceId = params.workspaceId;
-      const isValidTeamId = workspaceId && UUID_REGEX.test(workspaceId);
+      const isValidTeamId = workspaceId && isUuid(workspaceId);
 
       // If workspaceId isn't a valid UUID but channel looks like a team channel,
       // try to look up the actual team ID
@@ -502,7 +503,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         }
       }
 
-      const isTeamIdValid = workspaceId && UUID_REGEX.test(workspaceId);
+      const isTeamIdValid = workspaceId && isUuid(workspaceId);
       const isTeamChannel = isTeamIdValid && looksLikeTeamChannel;
       const isGroupChat = !isTeamChannel;
 
@@ -1806,9 +1807,6 @@ function extractAdaptiveCardText(element: unknown): string {
 
   return parts.join("\n");
 }
-
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function normalizeTeamsId(id: string): string {
   return id.replace(/^28:/, "").toLowerCase();

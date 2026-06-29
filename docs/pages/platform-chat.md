@@ -66,3 +66,5 @@ When auto-compaction frees tokens, a note appears in the panel showing how many 
 ### File Attachments
 
 Chat attachments are scoped to their conversation. To reuse files across related sessions, add them to a [Project](./platform-projects) instead, where files are shared across all of the project's chats.
+
+Which files you can attach depends on the agent. Without a code sandbox, uploads are limited to types the model can read directly: images, PDFs, and common text documents (`.txt`, `.md`, `.csv`, `.tsv`, `.json`, `.xml`, `.yaml`, `.toml`); large text files are rejected rather than truncated. When the code sandbox is available for the agent, any file type can be attached and is staged into the sandbox for the agent to process.

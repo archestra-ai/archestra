@@ -24,6 +24,7 @@ import ArchestraPromptInput from "@/app/chat/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { LoadingSpinner } from "@/components/loading";
+import { QueryLoadError } from "@/components/query-load-error";
 import { StatusBadge } from "@/components/scheduled-tasks/status-badge";
 import { Button } from "@/components/ui/button";
 import { useInternalAgents } from "@/lib/agent.query";
@@ -91,21 +92,24 @@ export function ScheduleTriggerRunPage({
   const [showDetails, setShowDetails] = useState(false);
   const [isArtifactOpen, setIsArtifactOpen] = useState(false);
 
-  const { data: trigger, isLoading: triggerLoading } = useScheduleTrigger(
-    triggerId,
-    {
-      enabled: !!triggerId,
-      refetchInterval: 5_000,
-    },
-  );
-  const { data: run, isLoading: runLoading } = useScheduleTriggerRun(
-    triggerId,
-    runId,
-    {
-      enabled: !!triggerId && !!runId,
-      refetchInterval: 3_000,
-    },
-  );
+  const {
+    data: trigger,
+    isLoading: triggerLoading,
+    isLoadingError: isTriggerLoadError,
+    refetch: refetchTrigger,
+  } = useScheduleTrigger(triggerId, {
+    enabled: !!triggerId,
+    refetchInterval: 5_000,
+  });
+  const {
+    data: run,
+    isLoading: runLoading,
+    isLoadingError: isRunLoadError,
+    refetch: refetchRun,
+  } = useScheduleTriggerRun(triggerId, runId, {
+    enabled: !!triggerId && !!runId,
+    refetchInterval: 3_000,
+  });
   const ensureConversationMutation = useCreateScheduleTriggerRunConversation();
   const conversationId =
     run?.chatConversationId ?? bootstrappedConversationId ?? undefined;
@@ -403,6 +407,18 @@ export function ScheduleTriggerRunPage({
         <Loader2 className="h-4 w-4 animate-spin" />
         Loading scheduled run...
       </div>
+    );
+  }
+
+  if (isRunLoadError || isTriggerLoadError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load this run"
+        onRetry={() => {
+          refetchRun();
+          refetchTrigger();
+        }}
+      />
     );
   }
 

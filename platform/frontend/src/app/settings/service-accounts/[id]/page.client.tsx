@@ -16,6 +16,7 @@ import { useForm } from "react-hook-form";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { QueryLoadError } from "@/components/query-load-error";
 import {
   SettingsSaveBar,
   SettingsSectionStack,
@@ -75,8 +76,12 @@ export default function ServiceAccountDetailPage({
   const { data: canUpdateServiceAccounts } = useHasPermissions({
     serviceAccount: ["update"],
   });
-  const { data: serviceAccount, isPending } =
-    useServiceAccount(serviceAccountId);
+  const {
+    data: serviceAccount,
+    isPending,
+    isLoadingError,
+    refetch,
+  } = useServiceAccount(serviceAccountId);
   const updateMutation = useUpdateServiceAccount();
   const createTokenMutation = useCreateServiceAccountToken();
   const updateTokenMutation = useUpdateServiceAccountToken();
@@ -285,7 +290,12 @@ export default function ServiceAccountDetailPage({
 
   return (
     <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
-      {!serviceAccount ? (
+      {isLoadingError ? (
+        <QueryLoadError
+          title="Couldn't load this service account"
+          onRetry={() => refetch()}
+        />
+      ) : !serviceAccount ? (
         <Alert variant="destructive">
           <AlertTitle>Service account not found</AlertTitle>
           <AlertDescription>

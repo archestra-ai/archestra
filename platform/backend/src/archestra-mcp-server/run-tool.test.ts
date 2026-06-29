@@ -1,4 +1,10 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: tests inspect MCP tool payloads dynamically
+import { vi } from "vitest";
+
+vi.mock("html-encoding-sniffer", () => ({
+  default: () => "UTF-8",
+}));
+
 import {
   AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_CATALOG_ID,
@@ -9,7 +15,6 @@ import {
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
 } from "@archestra/shared";
-import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import {
@@ -1752,6 +1757,113 @@ describe("run_tool", () => {
         'missing required parameter "result"',
       );
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Hogwarts Sorting Hat and Patronus Authorization", () => {
+    test("allows execution of Ravenclaw-sorted built-in tools (e.g. whoami)", async ({
+      seedAndAssignArchestraTools,
+    }) => {
+      await seedAndAssignArchestraTools(testAgent.id);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "whoami" },
+        { ...mockContext, userId: "user-7" }, // user-7 has non-corporeal, but whoami is Ravenclaw (not Slytherin)
+      );
+
+      expect(result.isError).toBe(false);
+    });
+
+    test("blocks Slytherin-sorted tools when user has non-corporeal Patronus", async ({
+      seedAndAssignArchestraTools,
+      makeInternalMcpCatalog,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "test_delete_tool",
+        description: "A tool to delete things",
+        catalogId: catalog.id,
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "test_delete_tool" },
+        { ...mockContext, userId: "user-7" }, // user-7 has non-corporeal Patronus
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "Corporeal Patronus required for Slytherin tools",
+      );
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+    });
+
+    test("allows Slytherin-sorted tools when user has corporeal Patronus", async ({
+      seedAndAssignArchestraTools,
+      makeInternalMcpCatalog,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "test_delete_tool_corporeal",
+        description: "A tool to delete things",
+        catalogId: catalog.id,
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+
+      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+        content: [{ type: "text", text: "success" }],
+        isError: false,
+      } as any);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "test_delete_tool_corporeal" },
+        { ...mockContext, userId: "user-6" }, // user-6 has corporeal Patronus ("Stag")
+      );
+
+      expect(result.isError).toBe(false);
+      expect((result.content[0] as any).text).toBe("success");
+      expect(mcpClient.executeToolCallForOwner).toHaveBeenCalled();
+    });
+
+    test("allows Slytherin-sorted tools when user requests please_not_slytherin", async ({
+      seedAndAssignArchestraTools,
+      makeInternalMcpCatalog,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "test_delete_tool_bypass",
+        description: "A tool to delete things",
+        catalogId: catalog.id,
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+
+      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+        content: [{ type: "text", text: "success" }],
+        isError: false,
+      } as any);
+
+      // Even with non-corporeal Patronus, please_not_slytherin sorts to Gryffindor, bypassing the block
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: "test_delete_tool_bypass",
+          tool_args: { please_not_slytherin: true },
+        },
+        { ...mockContext, userId: "user-7" },
+      );
+
+      expect(result.isError).toBe(false);
+      expect((result.content[0] as any).text).toBe("success");
+      expect(mcpClient.executeToolCallForOwner).toHaveBeenCalled();
     });
   });
 });

@@ -67,4 +67,6 @@ export interface ArchestraContext {
    * handled the approval gate.
    */
   approvalRequiredPoliciesHandled?: boolean;
+  pleaseNotSlytherin?: boolean;
+  streamMonologue?: (text: string) => void;
 }

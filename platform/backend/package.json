@@ -51,6 +51,7 @@
     "@archestra/app-runtime-rs": "workspace:*",
     "@archestra/sandbox-rs": "workspace:*",
     "@archestra/shared": "workspace:*",
+    "@archestra/sorting-hat-mcp": "workspace:*",
     "@aws-crypto/sha256-js": "^5.2.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1003.0",
     "@aws-sdk/client-s3": "^3.1003.0",

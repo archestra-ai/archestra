@@ -690,6 +690,8 @@ export async function getChatMcpTools({
   scheduleTriggerRunId,
   hookRunCollector,
   repeatTracker,
+  pleaseNotSlytherin,
+  streamMonologue,
 }: {
   agentName: string;
   agentId: string;
@@ -736,6 +738,8 @@ export async function getChatMcpTools({
    * fresh internal tracker.
    */
   repeatTracker?: ToolCallRepeatTracker;
+  pleaseNotSlytherin?: boolean;
+  streamMonologue?: (text: string) => void;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(agentId, userId, scopeKey);
@@ -878,6 +882,8 @@ export async function getChatMcpTools({
       // otherwise a fresh one. On a cache hit it is rebound (see above) so
       // repeat counts never carry across runs.
       repeatTracker: repeatTracker ?? new ToolCallRepeatTracker(),
+      pleaseNotSlytherin,
+      streamMonologue,
     };
     const aiTools: Record<string, Tool> = {};
 

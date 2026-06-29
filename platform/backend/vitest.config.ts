@@ -6,6 +6,14 @@ const isCI = process.env.CI === "true";
 
 export default defineConfig({
   plugins: [rawPythonPlugin()],
+  ssr: {
+    noExternal: [
+      "@exodus/bytes",
+      "html-encoding-sniffer",
+      "whatwg-encoding",
+      "whatwg-html",
+    ],
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -56,6 +64,11 @@ export default defineConfig({
 
     // Hook timeout for beforeAll/afterAll (migrations can take time)
     hookTimeout: 60000,
+    server: {
+      deps: {
+        inline: ["@exodus/bytes", "html-encoding-sniffer", "whatwg-url"],
+      },
+    },
   },
 });
 

@@ -50,6 +50,7 @@ import {
   RightSidePanel,
 } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
+import { SortingHatMonologue } from "@/components/chat/sorting-hat-monologue";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread, {
@@ -890,6 +891,7 @@ export function ChatPageContent({
   const contextWindow = chatSession?.contextWindow ?? null;
   const contextCompaction = chatSession?.contextCompaction;
   const recordContextCompaction = chatSession?.recordContextCompaction;
+  const sortingHatMonologue = chatSession?.sortingHatMonologue ?? "";
 
   const syncPersistedMessageMetadata = useCallback(
     (persistedMessages: UIMessage[]) => {
@@ -2119,6 +2121,11 @@ export function ChatPageContent({
                   activeAgentId && (
                     <div className="sticky bottom-0 bg-background border-t p-4">
                       <div className="max-w-4xl mx-auto space-y-3">
+                        {sortingHatMonologue && (
+                          <SortingHatMonologue
+                            monologue={sortingHatMonologue}
+                          />
+                        )}
                         <ArchestraPromptInput
                           onSubmit={handleSubmit}
                           status={status}

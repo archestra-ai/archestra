@@ -19,6 +19,8 @@ const config: KnipConfig = {
   ignoreDependencies: [
     // Workspace dependency - resolved by pnpm
     "@archestra/shared",
+    // Sorting Hat MCP - workspace dependency with TypeScript-only exports
+    "@archestra/sorting-hat-mcp",
     // Native CommonJS addon loaded through package exports; knip does not
     // resolve the workspace package's generated N-API entrypoint correctly.
     "@archestra/sandbox-rs",

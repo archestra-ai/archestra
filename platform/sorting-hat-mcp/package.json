@@ -1,0 +1,26 @@
+{
+  "name": "@archestra/sorting-hat-mcp",
+  "version": "1.0.0",
+  "description": "Sorting Hat MCP Server for magical governance and Patronus-based tool authorization.",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "biome check",
+    "lint:fix": "biome check --write",
+    "type-check": "tsgo --noEmit",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "^25",
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^4.1.0"
+  }
+}

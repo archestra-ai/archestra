@@ -96,6 +96,8 @@ export interface ChatToolContext {
    * carries no cross-run state.
    */
   repeatTracker: ToolCallRepeatTracker;
+  pleaseNotSlytherin?: boolean;
+  streamMonologue?: (text: string) => void;
 }
 
 /**
@@ -199,6 +201,8 @@ export function buildMcpGatewayTool(params: {
                 elicitation: ctx.elicitation,
                 contextIsTrusted: toolExecutionContext.contextIsTrusted,
                 approvalRequiredPoliciesHandled: true,
+                pleaseNotSlytherin: ctx.pleaseNotSlytherin,
+                streamMonologue: ctx.streamMonologue,
                 tokenAuth: buildTokenAuthContext({
                   mcpGwToken: ctx.mcpGwToken,
                   organizationId: ctx.organizationId,
@@ -295,6 +299,8 @@ export function buildAgentDelegationTool(params: {
     scheduleTriggerRunId: ctx.scheduleTriggerRunId,
     delegationChain: ctx.delegationChain,
     abortSignal: ctx.abortSignal,
+    pleaseNotSlytherin: ctx.pleaseNotSlytherin,
+    streamMonologue: ctx.streamMonologue,
     tokenAuth: buildTokenAuthContext({
       mcpGwToken: ctx.mcpGwToken,
       organizationId: ctx.organizationId,

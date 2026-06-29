@@ -6,6 +6,8 @@ packages:
   - "archestra-rs/sandbox-rs"
   - "archestra-rs/app-runtime-rs"
   - "e2e-tests"
+  - "sorting-hat-mcp"
+
 
 catalog:
   ai: ^6.0.193

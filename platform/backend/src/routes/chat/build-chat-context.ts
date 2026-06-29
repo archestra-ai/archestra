@@ -32,6 +32,8 @@ export async function buildChatContext(params: {
   hookRunCollector: CollectedHookRun[];
   elicitation: ChatMcpElicitationBridge;
   abortSignal: AbortSignal;
+  pleaseNotSlytherin?: boolean;
+  streamMonologue?: (text: string) => void;
 }): Promise<{
   mcpTools: Record<string, Tool>;
   toolUiResourceUris: Record<string, string>;
@@ -82,6 +84,8 @@ export async function buildChatContext(params: {
       user,
       hookRunCollector,
       repeatTracker,
+      pleaseNotSlytherin: params.pleaseNotSlytherin,
+      streamMonologue: params.streamMonologue,
     }),
     getChatMcpToolUiResourceUris(agentId),
   ]);

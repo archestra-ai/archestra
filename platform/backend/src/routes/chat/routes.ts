@@ -452,6 +452,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       try {
         const { agentId, agent } = conversation;
+        const pleaseNotSlytherin =
+          request.headers["please_not_slytherin"] === "true" ||
+          request.headers["please-not-slytherin"] === "true";
 
         // Extract and ingest documents to agent's knowledge base (fire and forget)
         // This runs asynchronously to avoid blocking the chat response
@@ -502,6 +505,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 })
             : Promise.resolve(undefined);
 
+        let monologueStreamer: ((text: string) => void) | undefined = undefined;
+
         // Tools + system prompt, alongside the org settings the stream needs.
         const [
           {
@@ -526,6 +531,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               hookRunCollector,
               elicitation: chatMcpElicitation,
               abortSignal: chatAbortController.signal,
+              pleaseNotSlytherin,
+              streamMonologue: (text: string) => monologueStreamer?.(text),
             }),
           ),
           OrganizationModel.getSlimChatErrorUi(organizationId),
@@ -691,6 +698,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 });
               },
               execute: async ({ writer }) => {
+                monologueStreamer = (text: string) => {
+                  writer.write({
+                    type: "data-sorting-hat-monologue",
+                    data: { text },
+                  });
+                };
                 chatMcpElicitation.setWriter(writer);
 
                 // Create the LLM model here, inside execute, so a credential

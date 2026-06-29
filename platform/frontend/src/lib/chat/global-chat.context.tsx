@@ -158,6 +158,7 @@ interface ChatSession {
   setPendingCustomServerToolCall: (
     value: { toolCallId: string; toolName: string } | null,
   ) => void;
+  sortingHatMonologue: string;
   /** Token usage for the current/last response */
   tokenUsage: TokenUsage | null;
   contextTokensUsed: number | null;
@@ -437,6 +438,7 @@ function ChatSessionHook({
       input: unknown;
     }>
   >([]);
+  const [sortingHatMonologue, setSortingHatMonologue] = useState<string>("");
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
   const [contextTokensUsed, setContextTokensUsed] = useState<number | null>(
     null,
@@ -566,6 +568,7 @@ function ChatSessionHook({
     id: conversationId,
     onFinish: async ({ message, isAbort, isError }) => {
       setOptimisticToolCalls([]);
+      setSortingHatMonologue("");
       setPendingMcpElicitation(null);
       clearActiveContextCompaction();
       // The stream concluded — any auto-recovery (retry/reattach) is over.
@@ -665,6 +668,7 @@ function ChatSessionHook({
     onError: (chatError) => {
       errorSeqRef.current += 1;
       setOptimisticToolCalls([]);
+      setSortingHatMonologue("");
       clearActiveContextCompaction();
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
@@ -877,6 +881,15 @@ function ChatSessionHook({
 
       // Per-category breakdown of the assembled request, powering the Context
       // Window Visualizer panel. Emitted once per turn after assembly.
+      if (dataPart.type === "data-sorting-hat-monologue") {
+        const data = dataPart.data as { text?: string };
+        if (typeof data?.text === "string" && data.text) {
+          setSortingHatMonologue((prev) =>
+            prev ? `${prev}${data.text}` : (data.text ?? ""),
+          );
+        }
+      }
+
       if (dataPart.type === CONTEXT_WINDOW_BREAKDOWN_EVENT) {
         const parsed = ContextWindowBreakdownSchema.safeParse(dataPart.data);
         if (parsed.success) {
@@ -1113,6 +1126,7 @@ function ChatSessionHook({
     },
     optimisticToolCalls,
     setPendingCustomServerToolCall,
+    sortingHatMonologue,
     tokenUsage,
     contextTokensUsed,
     contextWindow,
@@ -1143,6 +1157,7 @@ function ChatSessionHook({
     pendingMcpElicitation,
     isRecoveringState,
     optimisticToolCalls,
+    sortingHatMonologue,
     tokenUsage,
     contextTokensUsed,
     contextWindow,

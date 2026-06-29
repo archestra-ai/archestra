@@ -5,6 +5,7 @@ import {
   isAgentTool,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
+import { getPatronusForUser, sortTool } from "@archestra/sorting-hat-mcp";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
@@ -305,10 +306,44 @@ async function dispatchTool({
   };
 
   if (route === "archestra") {
-    // Delegation (agent-<id>) names are gated here; executeArchestraTool
-    // enforces existence/assignment for genuinely unknown archestra names.
     const gateError = await checkConversationGate(resolvedName);
     if (gateError) return gateError;
+
+    // Hogwarts Sorting Hat classification & Patronus authorization
+    const entry = (toolEntries as Record<string, { description?: string }>)[
+      resolvedName
+    ];
+    const toolDescription = entry?.description ?? "";
+    const pleaseNotSlytherin =
+      context.pleaseNotSlytherin || !!args.tool_args?.please_not_slytherin;
+    const sortResult = sortTool(
+      resolvedName,
+      toolDescription,
+      pleaseNotSlytherin,
+    );
+
+    // If monologue streaming is supported, stream monologue word-by-word with a delay
+    if (context.streamMonologue && sortResult.monologue) {
+      const words = sortResult.monologue.split(/\s+/);
+      for (const word of words) {
+        if (word) {
+          context.streamMonologue(word + " ");
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+      context.streamMonologue("\n");
+    }
+
+    // Patronus authorization: Slytherin requires corporeal Patronus
+    if (sortResult.house === "slytherin") {
+      const userId = context.userId ?? "guest";
+      const patronus = getPatronusForUser(userId);
+      if (!patronus.corporeal) {
+        return errorResult(
+          `Unauthorized: Corporeal Patronus required for Slytherin tools. Your Patronus is a non-corporeal ${patronus.form}.`,
+        );
+      }
+    }
 
     // Dynamic import avoids the circular import between this file and
     // ./index (index.ts imports every tool group, including this one).
@@ -366,6 +401,42 @@ async function dispatchTool({
   }
 
   const toolInput = args.tool_args ?? {};
+
+  // Hogwarts Sorting Hat classification & Patronus authorization
+  const matched = assignedTools.find((t) => t.name === resolvedName);
+  const toolDescription =
+    matched?.description ?? availableTool?.description ?? "";
+  const pleaseNotSlytherin =
+    context.pleaseNotSlytherin || !!toolInput.please_not_slytherin;
+  const sortResult = sortTool(
+    resolvedName,
+    toolDescription,
+    pleaseNotSlytherin,
+  );
+
+  // If monologue streaming is supported, stream monologue word-by-word with a delay
+  if (context.streamMonologue && sortResult.monologue) {
+    const words = sortResult.monologue.split(/\s+/);
+    for (const word of words) {
+      if (word) {
+        context.streamMonologue(word + " ");
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+    context.streamMonologue("\n");
+  }
+
+  // Patronus authorization: Slytherin requires corporeal Patronus
+  if (sortResult.house === "slytherin") {
+    const userId = context.userId ?? "guest";
+    const patronus = getPatronusForUser(userId);
+    if (!patronus.corporeal) {
+      return errorResult(
+        `Unauthorized: Corporeal Patronus required for Slytherin tools. Your Patronus is a non-corporeal ${patronus.form}.`,
+      );
+    }
+  }
+
   // Reuse the set computed above so the policy gate does not re-query it.
   // A dynamically resolved tool is appended so the evaluator does not
   // refuse it as "disabled" — invocation policies still evaluate it.

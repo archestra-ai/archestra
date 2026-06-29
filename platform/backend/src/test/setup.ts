@@ -20,6 +20,12 @@ import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 import { getMigrationsSql, SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
 
+vi.mock("html-encoding-sniffer", () => {
+  return {
+    default: () => "UTF-8",
+  };
+});
+
 // Disable Sentry for tests - set BEFORE any config modules are loaded
 process.env.ARCHESTRA_SENTRY_BACKEND_DSN = "";
 process.env.ARCHESTRA_SENTRY_ENVIRONMENT = "test";

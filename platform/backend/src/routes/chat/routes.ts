@@ -5,6 +5,7 @@ import {
   type ChatErrorResponse,
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
+  getModelReadableMimeTypes,
   isModelSelectionComplete,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   RouteId,
@@ -89,6 +90,7 @@ import {
 } from "@/services/active-chat-run";
 import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
+import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { renderSystemPrompt } from "@/templating";
 import {
@@ -139,7 +141,11 @@ import {
 import { injectAppDiagnostics } from "./inject-app-diagnostics";
 import { injectSkillActivation } from "./inject-skill-activation";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
-import { extractInlineAttachments } from "./normalization/extract-inline-attachments";
+import {
+  assertInlineAttachmentsAcceptable,
+  extractInlineAttachments,
+  messagesHaveNewInlineAttachments,
+} from "./normalization/extract-inline-attachments";
 import {
   normalizeChatMessages,
   normalizeChatMessagesForPersistence,
@@ -322,6 +328,34 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           "The agent associated with this conversation has been deleted",
         );
+      }
+
+      // Gate uploaded attachments before any bytes are persisted: the model must
+      // be able to ingest the type, or it must be a small inlineable text
+      // document, or a sandbox must be available to stage arbitrary files. The
+      // frontend mirrors this for UX, but a custom client bypasses it, so this
+      // is the authoritative check. Runs before extractInlineAttachments and
+      // before the active run is acquired, so a rejected request stores nothing.
+      // Skipped (with its model/sandbox lookups) on the common turn that uploads
+      // nothing.
+      if (messagesHaveNewInlineAttachments(messages as ChatMessage[])) {
+        const attachmentModelRow = conversation.modelId
+          ? await ModelModel.findById(conversation.modelId)
+          : null;
+        assertInlineAttachmentsAcceptable({
+          messages: messages as ChatMessage[],
+          policy: {
+            ingestibleMimeTypes: getModelReadableMimeTypes(
+              attachmentModelRow?.inputModalities ?? null,
+            ),
+            sandboxAvailable: await isSkillSandboxAvailableForAgent({
+              userId: user.id,
+              organizationId,
+              agentId: conversation.agentId,
+            }),
+            sandboxByteLimit: config.skillsSandbox.artifactBytesLimit,
+          },
+        });
       }
 
       // Lifecycle hooks (SessionStart). Cheap no-op when the agent has no hooks or

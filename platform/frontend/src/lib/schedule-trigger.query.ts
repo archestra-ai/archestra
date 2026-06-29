@@ -1,7 +1,7 @@
 import { archestraApiSdk, type PaginationMeta } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "./utils";
+import { handleApiError, throwOnApiError } from "./utils";
 
 const {
   getScheduleTriggers,
@@ -150,6 +150,7 @@ export function useScheduleTriggers(params?: {
   projectId?: string;
   showAll?: boolean;
   refetchInterval?: number | false;
+  toastOnError?: boolean;
 }) {
   const queryParams = getScheduleTriggerListQueryParams(params);
   const emptyResponse: PaginatedResponse<ScheduleTrigger> = {
@@ -180,10 +181,7 @@ export function useScheduleTriggers(params?: {
           ...(queryParams.showAll ? { showAll: queryParams.showAll } : {}),
         },
       });
-      if (response.error) {
-        handleApiError(response.error);
-        return emptyResponse;
-      }
+      throwOnApiError(response.error, { toastOnError: params?.toastOnError });
       return (
         (response.data as PaginatedResponse<ScheduleTrigger>) ?? emptyResponse
       );
@@ -207,10 +205,7 @@ export function useScheduleTrigger(
       const response = await getScheduleTrigger({
         path: { id: triggerId as string },
       });
-      if (response.error) {
-        handleApiError(response.error);
-        return null;
-      }
+      throwOnApiError(response.error, { allowNotFound: true });
       return (response.data as ScheduleTrigger) ?? null;
     },
     enabled: !!triggerId && (params?.enabled ?? true),
@@ -247,10 +242,9 @@ export function useScheduleTriggerRuns(
           ...(queryParams.status ? { status: queryParams.status } : {}),
         },
       });
-      if (response.error) {
-        handleApiError(response.error);
-        return emptyResponse;
-      }
+      // A deleted/missing parent trigger 404s here; degrade to an empty runs
+      // list rather than an error state.
+      throwOnApiError(response.error, { allowNotFound: true });
       return (
         (response.data as PaginatedResponse<ScheduleTriggerRun>) ??
         emptyResponse
@@ -270,10 +264,7 @@ export function useHasActiveScheduleTriggers() {
       const response = await getScheduleTriggers({
         query: { enabled: true, limit: 1, offset: 0 },
       });
-      if (response.error) {
-        handleApiError(response.error);
-        return false;
-      }
+      throwOnApiError(response.error);
       const data = response.data as
         | PaginatedResponse<ScheduleTrigger>
         | undefined;
@@ -296,10 +287,7 @@ export function useScheduleTriggerRun(
       const response = await getScheduleTriggerRun({
         path: { id: triggerId as string, runId: runId as string },
       });
-      if (response.error) {
-        handleApiError(response.error);
-        return null;
-      }
+      throwOnApiError(response.error, { allowNotFound: true });
       return (response.data as ScheduleTriggerRun) ?? null;
     },
     enabled: !!triggerId && !!runId && (params?.enabled ?? true),

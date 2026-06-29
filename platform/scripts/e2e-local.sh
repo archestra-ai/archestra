@@ -109,7 +109,7 @@ docker run --rm \
   -v "$HOME/.kube:/root/.kube:ro" \
   -e KUBECONFIG=/root/.kube/config \
   "mcr.microsoft.com/playwright:v${PW_VERSION}-noble" \
-  /bin/bash -c "corepack enable && corepack prepare pnpm@11.5.2 --activate && pnpm test:e2e -- $PLAYWRIGHT_ARGS"
+  /bin/bash -c "corepack enable && corepack prepare pnpm@11.9.0 --activate && pnpm test:e2e -- $PLAYWRIGHT_ARGS"
 
 echo ""
 echo "=== E2E tests complete ==="

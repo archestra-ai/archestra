@@ -146,8 +146,14 @@ const useOptionalProviderAttachments = () =>
 export type PromptInputProviderProps = PropsWithChildren<{
   initialInput?: string;
   maxFileSize?: number;
+  /**
+   * Per-file policy check beyond the MIME `accept` and `maxFileSize` constraints.
+   * Returns a human-readable reason to reject the file, or null to accept it.
+   * Rejected files are dropped and reported via `onError` with code `rejected`.
+   */
+  validateFile?: (file: File) => string | null;
   onError?: (err: {
-    code: "max_files" | "max_file_size" | "accept";
+    code: "max_files" | "max_file_size" | "accept" | "rejected";
     message: string;
   }) => void;
 }>;
@@ -159,6 +165,7 @@ export type PromptInputProviderProps = PropsWithChildren<{
 export function PromptInputProvider({
   initialInput: initialTextInput = "",
   maxFileSize,
+  validateFile,
   onError,
   children,
 }: PromptInputProviderProps) {
@@ -198,6 +205,20 @@ export function PromptInputProvider({
         }
       }
 
+      if (validateFile) {
+        accepted = accepted.filter((f) => {
+          const rejection = validateFile(f);
+          if (rejection) {
+            onError?.({ code: "rejected", message: rejection });
+            return false;
+          }
+          return true;
+        });
+        if (accepted.length === 0) {
+          return;
+        }
+      }
+
       setAttachmentFiles((prev) =>
         prev.concat(
           accepted.map((file) => ({
@@ -210,7 +231,7 @@ export function PromptInputProvider({
         ),
       );
     },
-    [maxFileSize, onError],
+    [maxFileSize, validateFile, onError],
   );
 
   const remove = useCallback((id: string) => {

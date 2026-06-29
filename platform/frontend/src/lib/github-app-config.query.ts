@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   listGithubAppConfigs,
@@ -32,6 +32,7 @@ export function useGithubAppConfigs() {
     queryKey: githubAppConfigKeys.lists(),
     queryFn: async () => {
       const response = await listGithubAppConfigs();
+      throwOnApiError(response.error, { toastOnError: false });
       return response.data ?? [];
     },
     enabled: isAuthenticated && !!canRead,

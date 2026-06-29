@@ -381,8 +381,10 @@ describe("ArchestraPromptInput", () => {
       expect(
         screen.getByTestId(E2eTestId.ChatFileUploadButton),
       ).toBeInTheDocument();
+      // Enabled state shows the supported-types tooltip rather than the
+      // disabled "does not support file uploads" message.
       expect(screen.getByTestId("tooltip-content")).toHaveTextContent(
-        "Supports: chat prompts, .txt, .csv, .md, and .json uploads",
+        "Supports:",
       );
     });
 

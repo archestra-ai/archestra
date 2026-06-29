@@ -1,5 +1,5 @@
 import { isAgentTool } from "@archestra/shared";
-import { getArchestraMcpTools } from "@/archestra-mcp-server";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import { ToolModel } from "@/models";
 
@@ -38,23 +38,21 @@ export const persistTools = async (
     "[tools] persistTools: fetched existing tools globally",
   );
 
-  // Get Archestra built-in tool names
-  const archestraTools = getArchestraMcpTools();
-  const archestraToolNamesSet = new Set(
-    archestraTools.map((tool) => tool.name),
-  );
-  logger.debug(
-    { archestraToolCount: archestraTools.length },
-    "[tools] persistTools: fetched Archestra built-in tools",
-  );
-
-  // Filter out tools that already exist in the database, are Archestra built-in tools,
-  // or are agent delegation tools (agent__*). Also deduplicate by tool name to avoid constraint violations
+  // Filter out tools that already exist in the database, are Archestra built-in
+  // tools, or are agent delegation tools (agent__*). Also deduplicate by tool name
+  // to avoid constraint violations.
+  //
+  // Built-ins are matched with `archestraMcpBranding.isToolName`, which recognizes
+  // BOTH the default `archestra__` prefix and the org's branded prefix
+  // (e.g. `archestra_staging__`). A client (including chat routed through this proxy)
+  // can hand us a built-in under the off-brand prefix; matching only the current
+  // brand would auto-discover that twin, and seeding would later promote it into the
+  // catalog as a duplicate built-in.
   const seenToolNames = new Set<string>();
   const toolsToAutoDiscover = tools.filter(({ toolName }) => {
     if (
       existingToolNamesSet.has(toolName) ||
-      archestraToolNamesSet.has(toolName) ||
+      archestraMcpBranding.isToolName(toolName) ||
       isAgentTool(toolName) ||
       seenToolNames.has(toolName)
     ) {
@@ -73,7 +71,7 @@ export const persistTools = async (
         existingToolNamesSet.has(t.toolName),
       ).length,
       skippedArchestraTools: tools.filter((t) =>
-        archestraToolNamesSet.has(t.toolName),
+        archestraMcpBranding.isToolName(t.toolName),
       ).length,
       skippedAgentTools: tools.filter((t) => isAgentTool(t.toolName)).length,
     },

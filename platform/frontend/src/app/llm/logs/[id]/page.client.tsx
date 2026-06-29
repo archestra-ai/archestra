@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  calculateCostSavings,
-  DynamicInteraction,
-} from "@archestra/shared";
+import { type archestraApiTypes, DynamicInteraction } from "@archestra/shared";
 import { ArrowLeft, Database, Layers } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -12,6 +8,7 @@ import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread from "@/components/message-thread";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
+import { QueryLoadError } from "@/components/query-load-error";
 import { Savings } from "@/components/savings";
 import { SourceBadge } from "@/components/source-badge";
 import {
@@ -55,13 +52,27 @@ function LogDetail({
   };
   id: string;
 }) {
-  const { data: dynamicInteraction, isPending } = useInteraction({
+  const {
+    data: dynamicInteraction,
+    isPending,
+    isLoadingError,
+    refetch,
+  } = useInteraction({
     interactionId: id,
     initialData: initialData?.interaction,
   });
 
   if (isPending) {
     return <LoadingSpinner />;
+  }
+
+  if (isLoadingError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load this interaction"
+        onRetry={() => refetch()}
+      />
+    );
   }
 
   if (!dynamicInteraction) {
@@ -156,29 +167,24 @@ function LogDetail({
             <MetadataItem label="Cost">
               <div className="font-mono">
                 {dynamicInteraction.cost ? (
-                  (() => {
-                    const savings = calculateCostSavings(dynamicInteraction);
-                    const effectiveCost = dynamicInteraction.cost;
-                    const effectiveBaselineCost =
-                      dynamicInteraction.baselineCost ||
-                      dynamicInteraction.cost;
-                    return (
-                      <TooltipProvider>
-                        <Savings
-                          cost={effectiveCost}
-                          baselineCost={effectiveBaselineCost}
-                          toonCostSavings={dynamicInteraction.toonCostSavings}
-                          toonTokensSaved={savings.toonTokensSaved}
-                          toonSkipReason={dynamicInteraction.toonSkipReason}
-                          format="percent"
-                          tooltip="always"
-                          variant="interaction"
-                          baselineModel={dynamicInteraction.baselineModel}
-                          actualModel={dynamicInteraction.model}
-                        />
-                      </TooltipProvider>
-                    );
-                  })()
+                  <TooltipProvider>
+                    <Savings
+                      cost={dynamicInteraction.cost}
+                      baselineCost={
+                        dynamicInteraction.baselineCost ||
+                        dynamicInteraction.cost
+                      }
+                      toonCostSavings={dynamicInteraction.toonCostSavings}
+                      toonTokensBefore={dynamicInteraction.toonTokensBefore}
+                      toonTokensAfter={dynamicInteraction.toonTokensAfter}
+                      toonSkipReason={dynamicInteraction.toonSkipReason}
+                      format="percent"
+                      tooltip="always"
+                      variant="interaction"
+                      baselineModel={dynamicInteraction.baselineModel}
+                      actualModel={dynamicInteraction.model}
+                    />
+                  </TooltipProvider>
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}

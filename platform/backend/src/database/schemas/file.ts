@@ -24,7 +24,7 @@ const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
 
 /**
  * Persistent user files ("My Files" / PFS): everything `download_file` and
- * `save_result` produce.
+ * `save_file` produce.
  *
  * Ownership is direct, no folder indirection:
  *   - `user_id` — the AUTHOR (always set). A file with no `project_id` is the

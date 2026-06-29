@@ -47,6 +47,11 @@ provider = "openrouter"
 model = "minimax/minimax-m2.7"
 
 [[lane]]
+name = "minimax-3"
+provider = "openrouter"
+model = "minimax/minimax-m3"
+
+[[lane]]
 name = "gpt-54-nano"
 provider = "openrouter"
 model = "openai/gpt-5.4-nano"

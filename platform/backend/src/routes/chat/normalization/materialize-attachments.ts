@@ -1,3 +1,7 @@
+import {
+  INLINE_TEXT_MAX_BYTES,
+  isInlineableTextMimeType,
+} from "@archestra/shared";
 import config from "@/config";
 import logger from "@/logging";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
@@ -7,7 +11,6 @@ import {
   isAttachmentRefUrl,
   parseAttachmentIdFromUrl,
 } from "./extract-inline-attachments";
-import { isInlineableTextDocumentMimeType } from "./prepare-for-provider";
 
 type Attachment = Awaited<
   ReturnType<typeof ConversationAttachmentModel.findByIdsWithData>
@@ -28,10 +31,10 @@ type Attachment = Awaited<
  * Does NOT mutate the input — the caller retains refs in the persisted
  * messages.
  */
-export async function materializeAttachments(
-  messages: ChatMessage[],
-  conversationId: string,
-  ingestibleMimeTypes?: Set<string>,
+export async function materializeAttachments({
+  messages,
+  conversationId,
+  ingestibleMimeTypes,
   // Anthropic `cache_control` is an Anthropic-only request-body feature. Emit it
   // by default (it is inert metadata for non-Anthropic SDKs), but suppress it
   // when the call targets an Anthropic-compatible third-party endpoint that
@@ -42,7 +45,19 @@ export async function materializeAttachments(
   // document (e.g. a PDF) that such an endpoint can't accept is rerouted to the
   // sandbox instead of inlined as a block that 400s the whole turn.
   rerouteBinaryDocsToSandbox = false,
-): Promise<ChatMessage[]> {
+  // Whether the sandbox is genuinely usable for this agent
+  // (`isSkillSandboxAvailableForAgent`). When false, never point the model at
+  // the sandbox or `run_command`: a file it can't read inline gets a neutral
+  // "not processed this turn" notice instead. Fail-closed (defaults off).
+  sandboxAvailable = false,
+}: {
+  messages: ChatMessage[];
+  conversationId: string;
+  ingestibleMimeTypes?: Set<string>;
+  applyAnthropicCacheControl?: boolean;
+  rerouteBinaryDocsToSandbox?: boolean;
+  sandboxAvailable?: boolean;
+}): Promise<ChatMessage[]> {
   const refIds = collectRefIds(messages);
   // Even when there are no refs to rehydrate, we still walk every part —
   // data: URL file parts (legacy messages or same-tab follow-ups whose FE
@@ -75,6 +90,7 @@ export async function materializeAttachments(
           ingestibleMimeTypes,
           applyAnthropicCacheControl,
           rerouteBinaryDocsToSandbox,
+          sandboxAvailable,
         ),
       ),
     };
@@ -101,6 +117,7 @@ function materializePart(
   ingestibleMimeTypes: Set<string> | undefined,
   applyAnthropicCacheControl: boolean,
   rerouteBinaryDocsToSandbox: boolean,
+  sandboxAvailable: boolean,
 ): ChatMessagePart | ChatMessagePart[] {
   if (part.type !== "file" || typeof part.url !== "string") {
     return { ...part };
@@ -162,8 +179,14 @@ function materializePart(
   const endpointRejectsBinaryDoc =
     rerouteBinaryDocsToSandbox &&
     isNonInlineableBinaryDocMimeType(attachment.mimeType);
-  if (modelCannotRead || endpointRejectsBinaryDoc) {
-    return referenceSandboxFilePart(attachment);
+  // A text document over the inline budget is routed to the sandbox instead of
+  // being embedded in the prompt. The ingest gate only admits an over-budget
+  // text file when the sandbox is available, so it has been auto-staged there.
+  const textTooLargeToInline =
+    isInlineableTextMimeType(attachment.mimeType) &&
+    attachment.fileData.byteLength > INLINE_TEXT_MAX_BYTES;
+  if (modelCannotRead || endpointRejectsBinaryDoc || textTooLargeToInline) {
+    return referenceSandboxFilePart(attachment, sandboxAvailable);
   }
 
   // findByIdsWithData normalizes bytea to Buffer at the model boundary
@@ -199,29 +222,31 @@ function materializePart(
   // Dual availability: a text-document that is shown inline is ALSO auto-staged
   // into the sandbox (same byte limit), so the model can both read it in context
   // and process it with run_command. Point it there alongside the inline copy.
-  const pointer = dualAvailabilityPointer(attachment);
+  const pointer = dualAvailabilityPointer(attachment, sandboxAvailable);
   return pointer ? [filePart, pointer] : filePart;
 }
 
 /**
- * When the skill sandbox is enabled and a text-document attachment is within the
- * auto-staging size limit, it has been staged under
+ * When the sandbox is usable for this agent and a text-document attachment is
+ * within the auto-staging size limit, it has been staged under
  * {@link SKILL_SANDBOX_ATTACHMENTS_DIR}. Return a text part telling the model the
  * inlined file is ALSO available there (distinct from
  * {@link referenceSandboxFilePart}, which replaces an attachment the model can't
- * see inline). Returns null when the sandbox is off, the file is over the limit
- * (not staged), or the mime type is not an inlineable text-document.
+ * see inline). Returns null when the sandbox is not usable for this agent, the
+ * file is over the limit (not staged), or the mime type is not an inlineable
+ * text-document.
  *
  * `originalName` is client-controlled, so it is JSON-encoded to keep a crafted
  * filename from breaking out of this platform-generated notice.
  */
 function dualAvailabilityPointer(
   attachment: Attachment,
+  sandboxAvailable: boolean,
 ): ChatMessagePart | null {
-  if (
-    !config.skillsSandbox.enabled ||
-    !isInlineableTextDocumentMimeType(attachment.mimeType)
-  ) {
+  // `sandboxAvailable` already implies the feature flag is on; gating on it (not
+  // just the flag) keeps the pointer from advertising a sandbox the agent can't
+  // reach. The inline copy still goes through, so nothing is lost.
+  if (!sandboxAvailable || !isInlineableTextMimeType(attachment.mimeType)) {
     return null;
   }
   if (
@@ -244,7 +269,7 @@ function dualAvailabilityPointer(
  * other binaries) only travels as a `document` block the endpoint rejects.
  */
 function isNonInlineableBinaryDocMimeType(mime: string): boolean {
-  return !mime.startsWith("image/") && !isInlineableTextDocumentMimeType(mime);
+  return !mime.startsWith("image/") && !isInlineableTextMimeType(mime);
 }
 
 /** Mime of an inline `data:` file part, from `mediaType` or the URL prefix. */
@@ -278,22 +303,35 @@ function unavailableBinaryDocPart(
 }
 
 /**
- * Replace a non-ingestible attachment file part with a text part that points
- * the model at the file in its sandbox. Within the auto-staging size limit the
- * file lives under {@link SKILL_SANDBOX_ATTACHMENTS_DIR} — we name the directory
- * (not an exact path, since the staged filename is sanitized and deduplicated
- * by the runtime) and tell the model to list it. Over the limit the file is not
- * staged at all, so the model is told it is unavailable this turn rather than
- * pointed at a session-authed URL it cannot fetch from the sandbox.
+ * Replace a non-ingestible attachment file part with a text part. When the
+ * sandbox is usable for this agent and the file is within the auto-staging size
+ * limit, it lives under {@link SKILL_SANDBOX_ATTACHMENTS_DIR} — we name the
+ * directory (not an exact path, since the staged filename is sanitized and
+ * deduplicated by the runtime) and tell the model to list it. Over the limit the
+ * file is not staged, so the model is told it is unavailable this turn rather
+ * than pointed at a session-authed URL it cannot fetch from the sandbox. When
+ * the sandbox is not usable at all, there is no fallback surface, so the model is
+ * told the file could not be processed (so it can relay that to the user) — never
+ * pointed at a sandbox or `run_command` it cannot reach.
  *
  * `originalName` is client-controlled, so it is JSON-encoded to keep a crafted
  * filename from breaking out of this platform-generated notice.
  */
-function referenceSandboxFilePart(attachment: Attachment): ChatMessagePart {
+function referenceSandboxFilePart(
+  attachment: Attachment,
+  sandboxAvailable: boolean,
+): ChatMessagePart {
   const sizeBytes = attachment.fileData.byteLength;
   const name = JSON.stringify(attachment.originalName ?? "attachment");
   const label = `${name} (${attachment.mimeType}, ${sizeBytes} bytes)`;
   const limit = config.skillsSandbox.artifactBytesLimit;
+
+  if (!sandboxAvailable) {
+    return {
+      type: "text",
+      text: `[Attachment ${label} can't be read by this model and no code sandbox is available to process it this turn. Let the user know the file could not be used.]`,
+    };
+  }
 
   if (sizeBytes > limit) {
     return {

@@ -1,13 +1,14 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 type AllVirtualApiKeysQuery = NonNullable<
   archestraApiTypes.GetAllVirtualApiKeysData["query"]
 >;
 type AllVirtualApiKeysParams = Partial<AllVirtualApiKeysQuery> & {
   enabled?: boolean;
+  toastOnError?: boolean;
 };
 
 const {
@@ -29,10 +30,7 @@ export function useVirtualApiKeys(providerApiKeyId: string | null) {
           offset: 0,
         },
       });
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error);
       return data?.data ?? [];
     },
     enabled: !!providerApiKeyId,
@@ -131,6 +129,7 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
   const search = params?.search;
   const providerApiKeyId = params?.providerApiKeyId;
   const keyType = params?.keyType;
+  const toastOnError = params?.toastOnError;
   return useQuery({
     queryKey: [
       "all-virtual-api-keys",
@@ -150,20 +149,7 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
           keyType: keyType || undefined,
         },
       });
-      if (error) {
-        handleApiError(error);
-        return {
-          data: [],
-          pagination: {
-            currentPage: 1,
-            limit,
-            total: 0,
-            totalPages: 0,
-            hasNext: false,
-            hasPrev: false,
-          },
-        };
-      }
+      throwOnApiError(error, { toastOnError });
       return (
         data ?? {
           data: [],

@@ -1,12 +1,16 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 export function useNgrokConfig(enabled = true) {
   return useQuery({
     queryKey: ["chatops", "ngrok-config"],
-    queryFn: async () => (await archestraApiSdk.getNgrokConfig()).data ?? null,
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getNgrokConfig();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
     enabled,
   });
 }

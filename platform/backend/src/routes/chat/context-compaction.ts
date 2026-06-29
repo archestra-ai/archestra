@@ -23,6 +23,7 @@ import {
   ATTR_GENAI_PROVIDER_NAME,
   ATTR_GENAI_REQUEST_MODEL,
 } from "@/observability/tracing";
+import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { renderSystemPrompt } from "@/templating";
 import { getTokenizer } from "@/tokenizers";
 import type { ChatMessage, ChatMessagePart } from "@/types";
@@ -688,13 +689,28 @@ async function tryCreateInContextCompaction(params: {
       params.provider,
       params.selectedModel,
     ).catch(() => null);
-    const materializedCompactable = await materializeAttachments(
-      params.compactableMessages,
-      params.conversationId,
-      getModelReadableMimeTypes(compactionModelRow?.inputModalities ?? null),
-      params.provider !== "anthropic" || anthropicNativeEndpoint,
-      params.provider === "anthropic" && !anthropicNativeEndpoint,
-    );
+    // Gate the sandbox pointers on the chat agent's availability, not the
+    // compaction model's tools: the summary feeds the main turn, whose agent
+    // can run the sandbox, so a faithful summary must reflect that the file is
+    // reachable there. When the agent can't use the sandbox, the pointer is
+    // suppressed just like on the main path.
+    const sandboxAvailable = await isSkillSandboxAvailableForAgent({
+      userId: params.userId,
+      organizationId: params.organizationId,
+      agentId: params.agentId ?? undefined,
+    });
+    const materializedCompactable = await materializeAttachments({
+      messages: params.compactableMessages,
+      conversationId: params.conversationId,
+      ingestibleMimeTypes: getModelReadableMimeTypes(
+        compactionModelRow?.inputModalities ?? null,
+      ),
+      applyAnthropicCacheControl:
+        params.provider !== "anthropic" || anthropicNativeEndpoint,
+      rerouteBinaryDocsToSandbox:
+        params.provider === "anthropic" && !anthropicNativeEndpoint,
+      sandboxAvailable,
+    });
     const compactionMessages = buildInContextCompactionMessages({
       previousSummary: params.previousSummary,
       messages: materializedCompactable,

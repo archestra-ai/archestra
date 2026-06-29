@@ -121,7 +121,7 @@ const appToolFullNames = new Set<string>([
   ...Object.keys(appLlmToolEntries),
 ]);
 
-// search_files / read_file / save_result / edit_file / delete_file are the
+// search_files / read_file / save_file / edit_file / delete_file are the
 // persistent-files (Projects) surface of the sandbox tool group. Registered above
 // for unit tests, but hidden and non-dispatchable when the projects feature is dark.
 // Derived from the shared subgroup so this gate and the always-exposed /

@@ -155,27 +155,75 @@ describe("GET /api/projects (scope + search)", () => {
     ).toEqual(["other-private"]); // a specific other user
   });
 
-  test("admin default 'All' hides other members' private projects", async ({
+  test("admin default 'All' shows only accessible projects, hiding all oversight", async ({
     makeUser,
     makeMember,
+    makeTeam,
+    makeTeamMember,
   }) => {
     const admin = await makeUser({ email: "list-admin-all@test.com" });
     await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
     const other = await makeUser({ email: "list-other-all@test.com" });
     await makeMember(other.id, organizationId, {});
+
+    // A team the admin belongs to, and one they don't.
+    const myTeam = await makeTeam(organizationId, admin.id, { name: "Mine" });
+    await makeTeamMember(myTeam.id, admin.id);
+    const foreignTeam = await makeTeam(organizationId, other.id, {
+      name: "Foreign",
+    });
+
     await create(admin, "admin-private");
     await create(other, "other-private");
     const otherOrg = await create(other, "other-org");
     await share(other, otherOrg.id, "organization");
+    const sharedToMe = await create(other, "other-team-mine");
+    await share(other, sharedToMe.id, "team", [myTeam.id]);
+    const oversight = await create(other, "other-team-foreign");
+    await share(other, oversight.id, "team", [foreignTeam.id]);
     actingUser = admin;
 
-    // "All" mirrors the Agents filter: org/team-shared projects (even others')
-    // show, but other members' PRIVATE projects do not — those are reachable
-    // only via Personal → Other users.
+    // "All" shows only what the admin can actually access: their own projects,
+    // org-shared ones, and team-shared ones for a team they belong to. Every
+    // oversight row — other members' PRIVATE projects AND team-shared projects
+    // for teams the admin isn't in — is dropped. Those stay reachable via
+    // Personal → Other users and Team → pick that team.
     expect(names((await list()).body).sort()).toEqual([
       "admin-private",
       "other-org",
+      "other-team-mine",
     ]);
+
+    // The team-oversight project is still reachable by explicitly picking its team.
+    expect(
+      names((await list(`?scope=team&teamIds=${foreignTeam.id}`)).body),
+    ).toEqual(["other-team-foreign"]);
+  });
+
+  test("admin oversight of a team-shared project exposes its team names", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+  }) => {
+    const admin = await makeUser({ email: "list-admin-teamnames@test.com" });
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    const other = await makeUser({ email: "list-other-teamnames@test.com" });
+    await makeMember(other.id, organizationId, {});
+    const team = await makeTeam(organizationId, other.id, { name: "Finance" });
+    const p = await create(other, "team-proj");
+    await share(other, p.id, "team", [team.id]);
+    actingUser = admin;
+
+    // The admin isn't a Finance member, so they reach the project via oversight
+    // (viewerRole "admin") — and still get the team name(s) for the pill tooltip.
+    const items = JSON.parse((await list("?scope=team")).body) as Array<{
+      name: string;
+      viewerRole: string;
+      shareTeamNames: string[] | null;
+    }>;
+    const item = items.find((i) => i.name === "team-proj");
+    expect(item?.viewerRole).toBe("admin");
+    expect(item?.shareTeamNames).toEqual(["Finance"]);
   });
 
   test("the owner sub-filter is ignored for non-admins", async ({

@@ -9,6 +9,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -50,7 +51,12 @@ export default function ApiKeysSettingsPage() {
   const setActionButton = useSetSettingsAction();
   const { data: canReadApiKeys, isPending: isCheckingPermissions } =
     useHasPermissions({ apiKey: ["read"] });
-  const { data: apiKeys = [], isPending } = useApiKeys();
+  const {
+    data: apiKeys = [],
+    isPending,
+    isLoadingError: isApiKeysLoadError,
+    refetch: refetchApiKeys,
+  } = useApiKeys();
   const { data: canDeleteApiKeys } = useHasPermissions({ apiKey: ["delete"] });
   const createApiKeyMutation = useCreateApiKey();
   const deleteApiKeyMutation = useDeleteApiKey();
@@ -218,16 +224,23 @@ export default function ApiKeysSettingsPage() {
               objectNamePlural="API keys"
               searchFields={["key name"]}
             />
-            <DataTable
-              columns={columns}
-              data={filteredApiKeys}
-              emptyMessage="No API keys yet"
-              hasActiveFilters={search.trim().length > 0}
-              filteredEmptyMessage="No API keys match your search. Try adjusting your search."
-              onClearFilters={() =>
-                updateQueryParams({ search: null, page: "1" })
-              }
-            />
+            {isApiKeysLoadError ? (
+              <QueryLoadError
+                title="Couldn't load your API keys"
+                onRetry={() => refetchApiKeys()}
+              />
+            ) : (
+              <DataTable
+                columns={columns}
+                data={filteredApiKeys}
+                emptyMessage="No API keys yet"
+                hasActiveFilters={search.trim().length > 0}
+                filteredEmptyMessage="No API keys match your search. Try adjusting your search."
+                onClearFilters={() =>
+                  updateQueryParams({ search: null, page: "1" })
+                }
+              />
+            )}
           </div>
         </LoadingWrapper>
       )}

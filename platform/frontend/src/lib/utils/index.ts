@@ -2,6 +2,7 @@ export {
   getApiErrorMessage,
   getApiErrorType,
   handleApiError,
+  throwOnApiError,
   toApiError,
 } from "./api";
 export {

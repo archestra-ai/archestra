@@ -44,6 +44,7 @@ import {
   useDeleteScheduleTrigger,
   useDisableScheduleTrigger,
   useEnableScheduleTrigger,
+  useRunScheduleTriggerNow,
   useScheduleTriggerRuns,
   useScheduleTriggers,
   useUpdateScheduleTrigger,
@@ -105,11 +106,7 @@ export function ProjectSchedulesSection({
       ) : (
         <div className="space-y-2">
           {schedules.map((schedule) => (
-            <ScheduleRow
-              key={schedule.id}
-              schedule={schedule}
-              projectId={projectId}
-            />
+            <ScheduleRow key={schedule.id} schedule={schedule} />
           ))}
         </div>
       )}
@@ -119,18 +116,11 @@ export function ProjectSchedulesSection({
 
 // === internal components ===
 
-function ScheduleRow({
-  schedule,
-  projectId,
-}: {
-  schedule: ScheduleTrigger;
-  // The owning project id, guaranteed non-null here (the schedule's own
-  // projectId is nullable in the type); used for the runs-route link.
-  projectId: string;
-}) {
+function ScheduleRow({ schedule }: { schedule: ScheduleTrigger }) {
   const enableSchedule = useEnableScheduleTrigger();
   const disableSchedule = useDisableScheduleTrigger();
   const deleteSchedule = useDeleteScheduleTrigger();
+  const runNow = useRunScheduleTriggerNow();
   const [editOpen, setEditOpen] = useState(false);
 
   const { resolve, isResolving } = useResolveRunChat();
@@ -166,7 +156,9 @@ function ScheduleRow({
     ? runChatHref({ triggerId: schedule.id, run: lastRun })
     : null;
   // Last run has a chat → link straight to it. Last run without one (legacy) →
-  // create it on click, then open. No runs yet → the runs page (empty state).
+  // create it on click, then open. No runs/chats yet → plain label that does
+  // nothing (the empty runs page has nothing to show); "Run manually" in the
+  // overflow menu is how you kick off the first run.
   let nameNode: React.ReactNode;
   if (lastRunChatHref) {
     nameNode = (
@@ -187,12 +179,9 @@ function ScheduleRow({
     );
   } else {
     nameNode = (
-      <Link
-        href={`/projects/${projectId}/schedules/${schedule.id}`}
-        className={labelClassName}
-      >
+      <div className={cn("min-w-0 flex-1", !schedule.enabled && "opacity-60")}>
         {scheduleLabel}
-      </Link>
+      </div>
     );
   }
 
@@ -220,6 +209,13 @@ function ScheduleRow({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            disabled={runNow.isPending}
+            onSelect={() => runNow.mutate(schedule.id)}
+          >
+            <Play className="h-4 w-4" />
+            Run manually
+          </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() =>
               schedule.enabled

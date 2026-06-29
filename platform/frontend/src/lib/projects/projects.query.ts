@@ -1,17 +1,18 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  MAX_PROJECT_UPLOAD_BYTES,
+  MAX_PROJECT_UPLOAD_MB,
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getApiErrorType, handleApiError } from "@/lib/utils";
-
-/**
- * A project the user is viewing can vanish — deleted in this tab, or by someone
- * else who shared it. The detail page already renders that gracefully ("Project
- * not found."), so a not-found is an expected empty state, not an error worth a
- * toast + Sentry capture. Other failures still surface normally.
- */
-function isProjectNotFound(error: unknown): boolean {
-  return getApiErrorType(error) === "api_not_found_error";
-}
+import {
+  readFileAsBase64,
+  summarizeUploadResults,
+  type UploadOutcome,
+  validateUploadFile,
+} from "@/lib/files/file-upload";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   createProject,
@@ -28,6 +29,7 @@ const {
   setProjectShare,
   unpinProject,
   updateProject,
+  uploadProjectFiles,
 } = archestraApiSdk;
 
 type ProjectListFilters = NonNullable<
@@ -42,13 +44,14 @@ type ProjectListFilters = NonNullable<
  * cache entry.
  */
 export function useProjects(
-  options?: { enabled?: boolean } & ProjectListFilters,
+  options?: { enabled?: boolean; toastOnError?: boolean } & ProjectListFilters,
 ) {
   const scope = options?.scope;
   const search = options?.search?.trim() || undefined;
   const teamIds = options?.teamIds;
   const authorIds = options?.authorIds;
   const excludeAuthorIds = options?.excludeAuthorIds;
+  const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: [
       "projects",
@@ -66,10 +69,7 @@ export function useProjects(
       const { data, error } = await getProjects({
         query: { scope, search, teamIds, authorIds, excludeAuthorIds },
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error, { toastOnError });
       return data;
     },
   });
@@ -83,11 +83,8 @@ export function useProject(id: string | undefined) {
       const { data, error } = await getProject({
         path: { id: id as string },
       });
-      if (error) {
-        if (!isProjectNotFound(error)) handleApiError(error);
-        return null;
-      }
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
   });
 }
@@ -103,11 +100,8 @@ export function useProjectConversations(
       const { data, error } = await getProjectConversations({
         path: { id: id as string },
       });
-      if (error) {
-        if (!isProjectNotFound(error)) handleApiError(error);
-        return null;
-      }
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
   });
 }
@@ -122,11 +116,8 @@ export function useProjectFiles(id: string | undefined) {
       const { data, error } = await getProjectFiles({
         path: { id: id as string },
       });
-      if (error) {
-        if (!isProjectNotFound(error)) handleApiError(error);
-        return null;
-      }
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
   });
 }
@@ -140,11 +131,8 @@ export function useProjectInstructions(id: string | undefined) {
       const { data, error } = await getProjectInstructions({
         path: { id: id as string },
       });
-      if (error) {
-        if (!isProjectNotFound(error)) handleApiError(error);
-        return null;
-      }
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
   });
 }
@@ -354,6 +342,64 @@ export function useDeleteProjectFiles(projectId: string) {
         toast.error(
           `Deleted ${deleted} of ${total}; ${failedIds.length} failed`,
         );
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["projects", projectId, "files"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["conversation-files"] });
+    },
+  });
+}
+
+/**
+ * Upload dropped files into the project, one request per file, sequentially —
+ * so a multi-file drop never aggregates into one oversized body and one file's
+ * failure (oversize, server error) never aborts the rest. Over-limit / empty
+ * files are caught client-side before any request. A new project file is visible
+ * to every chat in the project, so it also refreshes chat Files panels
+ * (`["conversation-files", …]`).
+ */
+export function useUploadProjectFiles(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (files: File[]): Promise<UploadOutcome[]> => {
+      const results: UploadOutcome[] = [];
+      for (const file of files) {
+        const validation = validateUploadFile(file, MAX_PROJECT_UPLOAD_BYTES);
+        if (!validation.ok) {
+          results.push({
+            name: file.name,
+            ok: false,
+            reason: validation.reason,
+          });
+          continue;
+        }
+        try {
+          const dataBase64 = await readFileAsBase64(file);
+          const { error } = await uploadProjectFiles({
+            path: { id: projectId },
+            body: { name: file.name, mimeType: file.type, dataBase64 },
+          });
+          results.push({
+            name: file.name,
+            ok: error == null,
+            reason: error == null ? undefined : "server",
+          });
+        } catch {
+          results.push({ name: file.name, ok: false, reason: "server" });
+        }
+      }
+      return results;
+    },
+    onSuccess: (results) => {
+      for (const { type, message } of summarizeUploadResults(
+        results,
+        MAX_PROJECT_UPLOAD_MB,
+      )) {
+        if (type === "success") toast.success(message);
+        else toast.error(message);
       }
     },
     onSettled: () => {

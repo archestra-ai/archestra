@@ -1,3 +1,9 @@
+import {
+  ApiError,
+  type ChatUploadRejectionReason,
+  chatUploadRejectionReason,
+  INLINE_TEXT_MAX_BYTES,
+} from "@archestra/shared";
 import logger from "@/logging";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import type { ChatMessage, ChatMessagePart } from "@/types";
@@ -91,6 +97,69 @@ export async function extractInlineAttachments(args: {
       }
     }
   }
+}
+
+/**
+ * Policy describing which uploaded attachments this turn may accept, evaluated
+ * before any bytes are persisted. A file is acceptable when the model can ingest
+ * its type, OR it is an inlineable text document within the inline budget, OR a
+ * sandbox is available to stage it (within the sandbox artifact size limit).
+ */
+export type InlineAttachmentPolicy = {
+  ingestibleMimeTypes: Set<string>;
+  sandboxAvailable: boolean;
+  sandboxByteLimit: number;
+};
+
+/**
+ * Rejects the request (HTTP 400) when a newly uploaded inline attachment is not
+ * acceptable under {@link InlineAttachmentPolicy}. Must run before
+ * {@link extractInlineAttachments} so unacceptable bytes are never stored, and
+ * outside its per-part catch so the rejection is never swallowed. Only new
+ * inline `data:` parts are checked; server-side refs and already-persisted
+ * history (validated when first uploaded) are skipped.
+ */
+export function assertInlineAttachmentsAcceptable(args: {
+  messages: ChatMessage[];
+  policy: InlineAttachmentPolicy;
+}): void {
+  const { messages, policy } = args;
+  for (const message of messages) {
+    if (!message.parts) continue;
+    if (isAlreadyPersistedMessage(message)) continue;
+    for (const part of message.parts) {
+      if (!isExtractableFilePart(part)) continue;
+      const inspected = inspectInlineFilePart(part);
+      if (!inspected) continue;
+      const reason = chatUploadRejectionReason({
+        mimeType: inspected.mimeType,
+        byteLength: inspected.byteLength,
+        ingestibleMimeTypes: policy.ingestibleMimeTypes,
+        sandboxAvailable: policy.sandboxAvailable,
+        sandboxByteLimit: policy.sandboxByteLimit,
+      });
+      if (reason) {
+        throw new ApiError(400, rejectionMessage(reason, inspected, policy));
+      }
+    }
+  }
+}
+
+/**
+ * Whether the messages carry at least one new inline `data:` file part — i.e.
+ * the same parts {@link extractInlineAttachments} would persist. Lets the route
+ * skip resolving the attachment policy (model row + sandbox availability) on the
+ * common plain-text turn that uploads nothing.
+ */
+export function messagesHaveNewInlineAttachments(
+  messages: ChatMessage[],
+): boolean {
+  for (const message of messages) {
+    if (!message.parts) continue;
+    if (isAlreadyPersistedMessage(message)) continue;
+    if (message.parts.some(isExtractableFilePart)) return true;
+  }
+  return false;
 }
 
 function isExtractableFilePart(
@@ -253,6 +322,82 @@ export function parseAttachmentIdFromUrl(url: string): string | null {
   )
     ? id
     : null;
+}
+
+type InspectedInlineFile = {
+  mimeType: string;
+  byteLength: number;
+  filename: string;
+};
+
+// Reads the mime type, decoded byte length, and display name of an inline
+// `data:` file part WITHOUT allocating the decoded bytes — base64 length yields
+// the size directly. Mirrors the mime resolution `extractInlineAttachments`
+// stores (the part's mediaType wins over the data URL's).
+function inspectInlineFilePart(
+  part: ChatMessagePart & { url: string },
+): InspectedInlineFile | null {
+  const commaIdx = part.url.indexOf(",");
+  if (commaIdx < 5) return null;
+
+  const meta = part.url.slice(5, commaIdx);
+  const payload = part.url.slice(commaIdx + 1);
+  const isBase64 = meta.endsWith(";base64");
+  const urlMime =
+    (isBase64 ? meta.slice(0, -7) : meta) || "application/octet-stream";
+  const mimeType =
+    typeof part.mediaType === "string" && part.mediaType.length > 0
+      ? part.mediaType
+      : urlMime;
+  let byteLength: number;
+  if (isBase64) {
+    byteLength = base64ByteLength(payload);
+  } else {
+    try {
+      byteLength = Buffer.byteLength(decodeURIComponent(payload), "utf8");
+    } catch {
+      // Malformed percent-encoding — can't size it, so don't gate it here.
+      // extractInlineAttachments' own per-part catch handles the bad URL
+      // (logs and leaves it inline) without turning the request into a 500.
+      return null;
+    }
+  }
+  if (byteLength === 0) return null;
+
+  const filename =
+    typeof part.filename === "string" && part.filename.length > 0
+      ? part.filename
+      : "attachment";
+  return { mimeType, byteLength, filename };
+}
+
+function rejectionMessage(
+  reason: ChatUploadRejectionReason,
+  file: InspectedInlineFile,
+  policy: InlineAttachmentPolicy,
+): string {
+  const { mimeType, filename } = file;
+  switch (reason) {
+    case "text_too_large":
+      return `"${filename}" is too large to include (max ${formatBytes(INLINE_TEXT_MAX_BYTES)} of text without a sandbox).`;
+    case "too_large_for_sandbox":
+      return `"${filename}" is too large (max ${formatBytes(policy.sandboxByteLimit)}).`;
+    case "unsupported_type":
+      return `"${filename}" (${mimeType}) isn't supported by this model.`;
+  }
+}
+
+function base64ByteLength(payload: string): number {
+  const len = payload.length;
+  if (len === 0) return 0;
+  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+  return Math.floor((len * 3) / 4) - padding;
+}
+
+function formatBytes(bytes: number): string {
+  return bytes >= 1024 * 1024
+    ? `${Math.round(bytes / (1024 * 1024))} MB`
+    : `${Math.round(bytes / 1024)} KB`;
 }
 
 export { ATTACHMENT_URL_PREFIX, ATTACHMENT_URL_SUFFIX };

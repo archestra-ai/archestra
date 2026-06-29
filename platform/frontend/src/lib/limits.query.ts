@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const { getLimits, createLimit, getLimit, updateLimit, deleteLimit } =
   archestraApiSdk;
@@ -16,7 +16,7 @@ export function useLimits(params?: LimitsParams) {
   return useQuery({
     queryKey: ["limits", params],
     queryFn: async () => {
-      const response = await getLimits({
+      const { data, error } = await getLimits({
         query: params
           ? {
               ...(params.entityType && { entityType: params.entityType }),
@@ -25,7 +25,8 @@ export function useLimits(params?: LimitsParams) {
             }
           : undefined,
       });
-      return response.data ?? [];
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
     },
     // Automatically refetch every 5 seconds to keep usage data fresh
     refetchInterval: 5000,
@@ -38,8 +39,9 @@ export function useLimit(id: string) {
   return useQuery({
     queryKey: ["limits", id],
     queryFn: async () => {
-      const response = await getLimit({ path: { id } });
-      return response.data;
+      const { data, error } = await getLimit({ path: { id } });
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
     enabled: !!id,
   });

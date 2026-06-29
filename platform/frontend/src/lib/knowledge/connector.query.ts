@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   getConnectors,
@@ -53,10 +53,7 @@ export function useConnectors(params?: string | Partial<ConnectorsListParams>) {
           offset: offset ?? 0,
         },
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error);
       return data?.data ?? [];
     },
     enabled,
@@ -75,10 +72,7 @@ export function useConnectorsPaginated(params: ConnectorsPaginatedParams) {
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getConnectors({ query: params });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error, { toastOnError: false });
       return data;
     },
   });
@@ -89,11 +83,8 @@ export function useConnector(id: string) {
     queryKey: ["connectors", id],
     queryFn: async () => {
       const { data, error } = await getConnector({ path: { id } });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
     enabled: !!id,
     refetchInterval: (query) => {
@@ -109,10 +100,8 @@ export function useConnectorKnowledgeBases(connectorId: string) {
       const { data, error } = await getConnectorKnowledgeBases({
         path: { id: connectorId },
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      // A deleted connector 404s here; degrade gracefully instead of erroring.
+      throwOnApiError(error, { allowNotFound: true });
       return data;
     },
     enabled: !!connectorId,
@@ -279,11 +268,11 @@ export function useConnectorRuns(params: {
         path: { id: connectorId },
         query: { limit, offset },
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
+      // A deleted/missing connector 404s here; degrade to a null result rather
+      // than an error. Return null (not bare data) so react-query doesn't throw
+      // its own "data is undefined" when the 404 path skips the throw.
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
     enabled: !!connectorId,
     refetchInterval: (query) => {
@@ -311,11 +300,8 @@ export function useConnectorRun(params: {
       const { data, error } = await getConnectorRun({
         path: { id: connectorId, runId },
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
     enabled: !!connectorId && !!runId,
     refetchInterval: (query) => {

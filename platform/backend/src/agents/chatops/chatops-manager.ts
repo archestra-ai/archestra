@@ -980,10 +980,13 @@ export class ChatOpsManager {
       }
     }
 
-    // No known agent matched - return fallback with the message after delimiter
+    // The text contained ">" but the prefix is not a known agent name, so this
+    // was never an agent switch — it's ordinary message text that happens to
+    // contain ">". Return the full original message so nothing before the ">"
+    // is dropped (e.g. "compare A > B" must reach the agent intact).
     return {
       agentToUse: defaultAgent,
-      cleanedMessageText: messageAfterDelimiter || messageText,
+      cleanedMessageText: messageText,
     };
   }
 
@@ -1031,11 +1034,10 @@ export class ChatOpsManager {
         return `${sender}: ${text}`;
       });
 
-      // Collect image files from non-bot user messages in history
+      // Collect files from non-bot user messages in history
       const historyFiles = history
         .filter((msg) => !msg.isFromBot && msg.files && msg.files.length > 0)
-        .flatMap((msg) => msg.files ?? [])
-        .filter((f) => f.mimetype.startsWith("image/"));
+        .flatMap((msg) => msg.files ?? []);
 
       const historyAttachments: Array<{
         contentType: string;
@@ -1078,7 +1080,7 @@ export class ChatOpsManager {
                   downloadedCount: historyAttachments.length,
                   totalHistoryFiles: historyFiles.length,
                 },
-                "[ChatOps] Downloaded image attachments from thread history",
+                "[ChatOps] Downloaded attachments from thread history",
               );
             }
           } catch (error) {

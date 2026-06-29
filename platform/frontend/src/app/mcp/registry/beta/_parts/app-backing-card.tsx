@@ -142,25 +142,35 @@ export function AppBackingCard({ item }: { item: CatalogItem }) {
             />
           </div>
           {item.appId && (
-            <div className="flex items-center gap-2">
-              <Button asChild variant="outline" size="sm" className="flex-1">
+            <div className="flex items-stretch gap-2">
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="h-auto min-h-8 flex-1 whitespace-normal py-1.5 text-center leading-tight"
+              >
                 <Link
                   href={buildAppChatHandoffUrl({
                     appId: item.appId,
                     appName: item.name,
                   })}
                 >
-                  <MessageSquare className="h-4 w-4" />
+                  <MessageSquare className="h-4 w-4 shrink-0" />
                   Chat
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="sm" className="flex-1">
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="h-auto min-h-8 flex-1 whitespace-normal py-1.5 text-center leading-tight"
+              >
                 <Link
                   href={`/a/${item.appId}`}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  <ExternalLink className="h-4 w-4" />
+                  <ExternalLink className="h-4 w-4 shrink-0" />
                   Open in new tab
                 </Link>
               </Button>

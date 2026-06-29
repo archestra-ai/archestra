@@ -29,7 +29,7 @@ import json
 import re
 from dataclasses import dataclass, field
 
-from contracts import FrontMatter, FrontMatterValue
+from contracts import ContractError, FrontMatter, FrontMatterValue
 
 _FENCE = "---"
 _KEY_LINE = re.compile(r"^([A-Za-z0-9_.-]+):(.*)$")
@@ -203,7 +203,60 @@ def _parse_single_quoted(token: str) -> str | None:
     return None  # unterminated
 
 
+def fm_str(fm: FrontMatter, key: str) -> str | None:
+    """the value of a frontmatter key when it is a string, else None (a list-valued or absent key)."""
+    value = fm.get(key)
+    return value if isinstance(value, str) else None
+
+
 def emit_frontmatter(name: str, description: str) -> str:
     """emit a minimal, valid-YAML frontmatter block. json.dumps quoting means names or
     descriptions with YAML-significant characters cannot break the block."""
     return f"---\nname: {json.dumps(name)}\ndescription: {json.dumps(description)}\n---\n"
+
+
+# a leading scalar indicator means the value is a form we won't try to rewrite in place
+# (block scalar | >, anchor/alias & *, tag !, comment/null #, flow collection [ {).
+_UNREWRITABLE_NAME_VALUE = "|>&*!#[{"
+
+
+def set_name(content: str, name: str) -> str:
+    """return `content` with its top-level frontmatter `name` set to `name`.
+
+    archestra derives a migrated skill's name from the SKILL.md frontmatter (SkillCreate has no
+    name field), so a rename must edit the frontmatter, not a separate field. this is surgical:
+    it touches only the single non-indented `name:` line (or inserts/prepends one), leaving every
+    other line -- including unsupported-but-valid nested maps or block scalars -- verbatim.
+
+    no-op when the parsed top-level name already equals `name` (preserves the verbatim-skill
+    invariant). raises ContractError when an existing `name` value is a form we cannot safely
+    rewrite without risking the surrounding block."""
+    if parse_frontmatter(content).frontmatter.get("name") == name:
+        return content
+
+    name_line = f"name: {json.dumps(name)}"
+    lines = content.replace("\r\n", "\n").split("\n")
+    if not lines or lines[0] != _FENCE:
+        return f"{_FENCE}\n{name_line}\n{_FENCE}\n{content}"
+    close = next((i for i in range(1, len(lines)) if lines[i] == _FENCE), None)
+    if close is None:  # unterminated fence -> not real frontmatter; prepend a fresh block
+        return f"{_FENCE}\n{name_line}\n{_FENCE}\n{content}"
+
+    for i in range(1, close):
+        line = lines[i]
+        if line[:1].isspace():
+            continue
+        m = _KEY_LINE.match(line)
+        if m is None or m.group(1) != "name":
+            continue
+        value = m.group(2).strip()
+        if value == "" or value[0] in _UNREWRITABLE_NAME_VALUE:
+            raise ContractError(
+                f"cannot safely rewrite frontmatter name (value form {value!r}); "
+                "set the skill name in its SKILL.md by hand"
+            )
+        lines[i] = name_line
+        return "\n".join(lines)
+
+    lines.insert(1, name_line)
+    return "\n".join(lines)

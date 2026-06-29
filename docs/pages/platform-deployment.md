@@ -902,6 +902,11 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Default: `info`
   - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
 
+- **`ARCHESTRA_LOGGING_FORMAT`** - Console log format written to stdout. The OTLP log exporter is unaffected and always receives structured records.
+  - Default: `json`
+  - Supported values: `json` (machine-readable, single-line JSON), `pretty` (human-readable, colorized)
+  - The docker quickstart sets this to `pretty` by default; export `ARCHESTRA_LOGGING_FORMAT=json` to override.
+
 ### Authentication & Security
 
 - **`ARCHESTRA_AUTH_SECRET`** - Secret key used for signing authentication tokens, encrypting secrets stored in the database, and encrypting JWKS private keys.

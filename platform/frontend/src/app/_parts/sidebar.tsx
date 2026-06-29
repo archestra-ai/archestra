@@ -40,6 +40,7 @@ import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import { AppLogo } from "@/components/app-logo";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
+import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
   SidebarContent,
@@ -81,6 +82,7 @@ interface NavItem {
   customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
   onClick?: () => void;
   subItems?: NavSubItem[];
+  beta?: boolean;
 }
 
 interface NavGroup {
@@ -105,6 +107,7 @@ const chatsNavItems: NavItem[] = [
     url: "/projects",
     icon: FolderKanban,
     customIsActive: (pathname: string) => pathname.startsWith("/projects"),
+    beta: true,
   },
 ];
 
@@ -223,6 +226,7 @@ const contentNavGroups: NavGroup[] = [
         url: "/skills",
         icon: Sparkles,
         customIsActive: (pathname: string) => pathname.startsWith("/skills"),
+        beta: true,
       },
       {
         title: "Messaging Channels",
@@ -241,6 +245,7 @@ const contentNavGroups: NavGroup[] = [
         url: "/apps",
         icon: AppWindow,
         customIsActive: (pathname: string) => pathname === "/apps",
+        beta: true,
       },
     ],
   },
@@ -385,6 +390,14 @@ const NavPrimary = ({
         >
           <item.icon className={item.iconClassName} />
           <span>{item.title}</span>
+          {item.beta && (
+            <Badge
+              variant="secondary"
+              className="ml-auto px-1.5 py-0 text-[10px] group-data-[collapsible=icon]:hidden"
+            >
+              New
+            </Badge>
+          )}
         </SidebarPrefetchLink>
       </SidebarMenuButton>
       {item.subItems && item.subItems.length > 0 && (

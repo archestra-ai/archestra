@@ -263,7 +263,9 @@ class Inventory:
 @dataclass(frozen=True)
 class Decision:
     source_id: str
-    target_kind: TargetKind
+    # required only when action == "migrate" (it drives the payload build); a skip/manual decision
+    # never builds a payload, so it may leave this None rather than declare a kind it won't use.
+    target_kind: TargetKind | None
     scope: Scope
     action: Literal["migrate", "skip", "manual"] = "migrate"
     name_override: str | None = None
@@ -322,6 +324,14 @@ def require_str_field(obj: Mapping[str, JsonValue], key: str, *, ctx: str) -> st
     value = obj.get(key)
     if not isinstance(value, str) or not value:
         raise ContractError(f"{ctx}: field {key!r} must be a non-empty string, got {value!r}")
+    return value
+
+
+def _require_str_present(obj: Mapping[str, JsonValue], key: str, *, ctx: str) -> str:
+    """a required string that may be empty (e.g. a bundled file body for an empty __init__.py)."""
+    value = obj.get(key)
+    if not isinstance(value, str):
+        raise ContractError(f"{ctx}: field {key!r} must be a string, got {value!r}")
     return value
 
 
@@ -501,7 +511,7 @@ def parse_bundled_file(value: object, *, ctx: str) -> BundledFile:
     obj = require_dict(value, ctx=ctx)
     return BundledFile(
         path=require_str_field(obj, "path", ctx=ctx),
-        content=require_str_field(obj, "content", ctx=ctx),
+        content=_require_str_present(obj, "content", ctx=ctx),
         encoding=_require_literal(
             require_str_field(obj, "encoding", ctx=ctx), _ENCODINGS, what="encoding", ctx=ctx
         ),
@@ -629,19 +639,28 @@ def parse_inventory(value: object, *, ctx: str = "inventory") -> Inventory:
 
 def parse_decision(value: object, *, ctx: str) -> Decision:
     obj = require_dict(value, ctx=ctx)
+    action = _require_literal(
+        obj.get("action", "migrate"), _PLAN_ACTIONS, what="action", ctx=f"{ctx}.action"
+    )
     return Decision(
         source_id=require_str_field(obj, "source_id", ctx=ctx),
-        target_kind=_require_literal(
-            obj.get("target_kind"), _TARGET_KINDS, what="target kind", ctx=f"{ctx}.target_kind"
-        ),
+        target_kind=_parse_target_kind(obj.get("target_kind"), action, ctx=f"{ctx}.target_kind"),
         scope=_require_literal(obj.get("scope"), _SCOPES, what="scope", ctx=f"{ctx}.scope"),
-        action=_require_literal(
-            obj.get("action", "migrate"), _PLAN_ACTIONS, what="action", ctx=f"{ctx}.action"
-        ),
+        action=action,
         name_override=_opt_str(obj, "name_override", ctx=ctx),
         notes=_opt_str(obj, "notes", ctx=ctx),
         user_answers=require_dict(obj.get("user_answers", {}), ctx=f"{ctx}.user_answers"),
     )
+
+
+def _parse_target_kind(
+    value: object, action: Literal["migrate", "skip", "manual"], *, ctx: str
+) -> TargetKind | None:
+    """a migrate decision must name the target kind it builds; a skip/manual one may omit it (but
+    a value is still validated if present, so an explicit kind on a manual decision stays legal)."""
+    if action != "migrate" and value is None:
+        return None
+    return _require_literal(value, _TARGET_KINDS, what="target kind", ctx=ctx)
 
 
 def parse_plan(value: object, *, ctx: str = "plan") -> MigrationPlan:

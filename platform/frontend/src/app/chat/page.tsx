@@ -91,6 +91,7 @@ import {
 } from "@/lib/chat/app-diagnostics-store";
 import {
   fetchConversationEnabledTools,
+  invalidateConversationFileQueries,
   useClearChatErrors,
   useCompactConversation,
   useConversation,
@@ -1237,11 +1238,9 @@ export function ChatPageContent({
     if (!isWaitingForAssistant) return;
 
     const interval = setInterval(() => {
-      queryClient.invalidateQueries({
-        queryKey: ["conversation", conversationId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["conversation-files", conversationId],
+      invalidateConversationFileQueries(queryClient, {
+        conversationId,
+        projectId: conversation?.projectId,
       });
     }, 3000);
 
@@ -1249,6 +1248,7 @@ export function ChatPageContent({
   }, [
     conversationId,
     conversation?.messages,
+    conversation?.projectId,
     messages.length,
     status,
     queryClient,
@@ -1260,13 +1260,11 @@ export function ChatPageContent({
   // Files panel can follow the latest output.
   useEffect(() => {
     if (!conversationId || status !== "ready") return;
-    queryClient.invalidateQueries({
-      queryKey: ["conversation-files", conversationId],
+    invalidateConversationFileQueries(queryClient, {
+      conversationId,
+      projectId: conversation?.projectId,
     });
-    queryClient.invalidateQueries({
-      queryKey: ["conversation", conversationId],
-    });
-  }, [status, conversationId, queryClient]);
+  }, [status, conversationId, conversation?.projectId, queryClient]);
 
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
   // or when conversation loads (e.g., new chat created, hard refresh)

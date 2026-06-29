@@ -332,7 +332,7 @@ const registry = defineArchestraTools([
           resourceTeamIds: [],
         });
         // Scaffold always seeds the single default template.
-        const resolved = resolveCreateAppHtml({});
+        const resolved = resolveCreateAppHtml({ name: args.name });
         const validated = await buildValidatedVersionPayload({
           html: resolved.html,
           uiPermissions: args.uiPermissions,

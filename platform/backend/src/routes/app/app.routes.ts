@@ -255,6 +255,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       const { html, seededFromTemplate } = resolveCreateAppHtml({
         html: body.html,
+        name: body.name,
       });
       const { payload, warnings } = await buildValidatedVersionPayload({
         html,

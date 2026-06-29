@@ -1401,7 +1401,7 @@ describe("mcp server inspect route", () => {
     const response = await app.inject({
       method: "POST",
       url: `/api/mcp_server/${mcpServer.id}/reinstall`,
-      payload: { userConfigValues: {} },
+      payload: {},
     });
 
     expect(response.statusCode).toBe(400);

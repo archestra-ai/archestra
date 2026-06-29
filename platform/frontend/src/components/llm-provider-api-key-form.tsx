@@ -5,12 +5,14 @@ import {
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
   isProviderApiKeyOptional,
+  providerRequiresPerUserCredential,
 } from "@archestra/shared";
 import { Building2, CheckCircle2, Trash2, User, Users } from "lucide-react";
 import Link from "next/link";
-import { lazy, Suspense, useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -109,6 +111,8 @@ const PROVIDER_CONFIG: Record<
     consoleName: string;
     description?: string;
     baseUrlRequired?: boolean;
+    /** Whether this provider can be used for embeddings (defaults to true). */
+    supportsEmbeddings?: boolean;
   }
 > = {
   anthropic: {
@@ -252,6 +256,18 @@ const PROVIDER_CONFIG: Record<
     description:
       "Use your Azure OpenAI or Foundry URL for deployment discovery. If runtime traffic uses a different Azure OpenAI endpoint, set the optional inference URL below.",
   },
+  "github-copilot": {
+    name: "GitHub Copilot",
+    icon: "/icons/github-copilot.png",
+    placeholder: "Auto-filled after sign in (or paste a gho_… token)",
+    enabled: true,
+    consoleUrl: "https://github.com/settings/copilot",
+    consoleName: "GitHub Copilot Settings",
+    description:
+      "No API key to find — just use Sign in with GitHub below to connect your Copilot subscription. Keys are per-user: everyone using a Copilot model signs in with their own GitHub account.",
+    // Copilot only exposes chat-completion models through Archestra.
+    supportsEmbeddings: false,
+  },
 } as const;
 
 export { PROVIDER_CONFIG };
@@ -281,6 +297,8 @@ interface LlmProviderApiKeyFormProps {
   allowedProviders?: CreateLlmProviderApiKeyBody["provider"][];
   /** Hide scope and primary-key controls when the parent fixes those values. */
   hideScopeAndPrimary?: boolean;
+  /** When true, providers without embedding support are disabled in the picker. */
+  forEmbedding?: boolean;
 }
 
 export function LlmProviderApiKeyForm({
@@ -295,6 +313,7 @@ export function LlmProviderApiKeyForm({
   disableProvider = false,
   allowedProviders,
   hideScopeAndPrimary = false,
+  forEmbedding = false,
 }: LlmProviderApiKeyFormProps) {
   const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const byosEnabled = useFeature("byosEnabled");
@@ -322,6 +341,13 @@ export function LlmProviderApiKeyForm({
 
   const hasApiKeyChanged =
     apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER && apiKey !== "";
+  // GitHub Copilot hides the raw token field — a credential exists only when an
+  // existing key is being edited or the user just signed in (a real token is
+  // captured). Note: `apiKey` defaults to `null` on create, which `hasApiKeyChanged`
+  // treats as "changed" — so check for an actual token here, not that flag, or
+  // the "connected" card would show before sign-in.
+  const hasCopilotCredential =
+    isEditMode || (!!apiKey && apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER);
   const providerConfig = PROVIDER_CONFIG[provider];
   const isBaseUrlRequired =
     providerConfig.baseUrlRequired && !providerBaseUrls?.[provider];
@@ -372,6 +398,11 @@ export function LlmProviderApiKeyForm({
     );
   }, [existingKeys, provider, scope, teamId]);
 
+  // Per-user-credential providers (GitHub Copilot) hold an individual's token,
+  // so keys are personal-only — each user connects their own account.
+  const isPerUserProvider = providerRequiresPerUserCredential(provider);
+  const perUserScopeReason = `${providerConfig.name} keys are per-user — each person connects their own account, so they can only be personal.`;
+
   const visibilityOptions = useMemo(
     (): Array<
       VisibilityOption<NonNullable<CreateLlmProviderApiKeyBody["scope"]>>
@@ -387,25 +418,35 @@ export function LlmProviderApiKeyForm({
         label: "Team",
         description: "Available to members of one selected team",
         icon: Users,
-        disabled: !canReadTeams || teams.length === 0,
-        disabledReason: !canReadTeams
-          ? "Team sharing is unavailable without team:read permission"
-          : teams.length === 0
-            ? "Create a team before using team scope"
-            : undefined,
+        disabled: isPerUserProvider || !canReadTeams || teams.length === 0,
+        disabledReason: isPerUserProvider
+          ? perUserScopeReason
+          : !canReadTeams
+            ? "Team sharing is unavailable without team:read permission"
+            : teams.length === 0
+              ? "Create a team before using team scope"
+              : undefined,
       },
       {
         value: "org",
         label: "Organization",
         description: "Available to everyone in the organization",
         icon: Building2,
-        disabled: !isLlmProviderApiKeyAdmin,
-        disabledReason: !isLlmProviderApiKeyAdmin
-          ? "You need llmProviderApiKey:admin permission to share org-wide"
-          : undefined,
+        disabled: isPerUserProvider || !isLlmProviderApiKeyAdmin,
+        disabledReason: isPerUserProvider
+          ? perUserScopeReason
+          : !isLlmProviderApiKeyAdmin
+            ? "You need llmProviderApiKey:admin permission to share org-wide"
+            : undefined,
       },
     ],
-    [canReadTeams, isLlmProviderApiKeyAdmin, teams.length],
+    [
+      canReadTeams,
+      isLlmProviderApiKeyAdmin,
+      teams.length,
+      isPerUserProvider,
+      perUserScopeReason,
+    ],
   );
 
   useEffect(() => {
@@ -415,6 +456,30 @@ export function LlmProviderApiKeyForm({
 
     form.setValue("isPrimary", !hasAnyKeyForProvider);
   }, [form, hasAnyKeyForProvider, isEditMode]);
+
+  // Default the Name field to the provider's display name so it's one less
+  // field to fill. Only fill while the name is empty or still the previously
+  // auto-filled provider name — never clobber a name the user typed.
+  const autoFilledNameRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isEditMode) {
+      return;
+    }
+
+    const currentName = form.getValues("name");
+    if (currentName === "" || currentName === autoFilledNameRef.current) {
+      form.setValue("name", providerConfig.name);
+      autoFilledNameRef.current = providerConfig.name;
+    }
+  }, [form, isEditMode, providerConfig.name]);
+
+  // Force personal scope when the provider requires a per-user credential.
+  useEffect(() => {
+    if (isPerUserProvider && scope !== "personal") {
+      form.setValue("scope", "personal");
+      form.setValue("teamId", null);
+    }
+  }, [form, isPerUserProvider, scope]);
 
   useEffect(() => {
     if (allowedProviderSet.has(provider)) {
@@ -489,6 +554,8 @@ export function LlmProviderApiKeyForm({
                         providerKey === "gemini" && geminiVertexAiEnabled;
                       const isBedrockDisabledByIamAuth =
                         providerKey === "bedrock" && bedrockIamAuthEnabled;
+                      const isEmbeddingUnsupported =
+                        forEmbedding && config.supportsEmbeddings === false;
 
                       return {
                         value: providerKey,
@@ -498,7 +565,11 @@ export function LlmProviderApiKeyForm({
                           !allowedProviderSet.has(providerKey) ||
                           !config.enabled ||
                           isGeminiDisabledByVertexAi ||
-                          isBedrockDisabledByIamAuth,
+                          isBedrockDisabledByIamAuth ||
+                          isEmbeddingUnsupported,
+                        subtext: isEmbeddingUnsupported
+                          ? "Not supported for embeddings"
+                          : undefined,
                         showComingSoon: !config.enabled,
                         showGeminiVertexAiBadge: isGeminiDisabledByVertexAi,
                         showBedrockIamBadge: isBedrockDisabledByIamAuth,
@@ -615,63 +686,97 @@ export function LlmProviderApiKeyForm({
               </div>
             )}
 
-            {!isBedrockSigV4 && bedrockAuthMethod !== "iam" && (
-              <>
-                <Label htmlFor="llm-provider-api-key-value">
-                  API Key{" "}
-                  {isProviderApiKeyOptional({
-                    provider,
-                    azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
-                  }) ? (
-                    <span className="font-normal text-muted-foreground">
-                      (optional)
-                    </span>
-                  ) : (
-                    isEditMode && (
-                      <span className="font-normal text-muted-foreground">
-                        (leave blank to keep current)
-                      </span>
-                    )
+            {!isBedrockSigV4 &&
+              bedrockAuthMethod !== "iam" &&
+              (provider === "github-copilot" ? (
+                <>
+                  <Label>GitHub Copilot account</Label>
+                  {providerConfig.description && (
+                    <p className="text-xs text-muted-foreground">
+                      {providerConfig.description}
+                    </p>
                   )}
-                </Label>
-                {providerConfig.description && (
-                  <p className="text-xs text-muted-foreground">
-                    {providerConfig.description}
-                  </p>
-                )}
-                <div className="relative">
-                  <Input
-                    id="llm-provider-api-key-value"
-                    type="password"
-                    placeholder={providerConfig.placeholder}
+                  {hasCopilotCredential && (
+                    <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
+                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
+                      <div>
+                        <p className="font-medium text-green-600 dark:text-green-400">
+                          GitHub account connected
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          Your Copilot subscription is linked through your
+                          GitHub account.
+                          {isEditMode
+                            ? " Sign in again below to refresh the token."
+                            : ""}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  <GithubCopilotSignIn
                     disabled={isPending}
-                    autoComplete="new-password"
-                    data-1p-ignore
-                    data-lpignore="true"
-                    className={
-                      showConfiguredStyling ? "border-green-500 pr-10" : ""
+                    onToken={(token) =>
+                      form.setValue("apiKey", token, { shouldDirty: true })
                     }
-                    {...form.register("apiKey")}
                   />
-                  {showConfiguredStyling && (
-                    <CheckCircle2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-green-500" />
+                </>
+              ) : (
+                <>
+                  <Label htmlFor="llm-provider-api-key-value">
+                    API Key{" "}
+                    {isProviderApiKeyOptional({
+                      provider,
+                      azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+                    }) ? (
+                      <span className="font-normal text-muted-foreground">
+                        (optional)
+                      </span>
+                    ) : (
+                      isEditMode && (
+                        <span className="font-normal text-muted-foreground">
+                          (leave blank to keep current)
+                        </span>
+                      )
+                    )}
+                  </Label>
+                  {providerConfig.description && (
+                    <p className="text-xs text-muted-foreground">
+                      {providerConfig.description}
+                    </p>
                   )}
-                </div>
-                {showConsoleLink && (
-                  <p className="text-xs text-muted-foreground">
-                    Get your API key from{" "}
-                    <Link
-                      href={providerConfig.consoleUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline hover:text-foreground"
-                    >
-                      {providerConfig.consoleName}
-                    </Link>
-                  </p>
-                )}
-              </>
-            )}
+                  <div className="relative">
+                    <Input
+                      id="llm-provider-api-key-value"
+                      type="password"
+                      placeholder={providerConfig.placeholder}
+                      disabled={isPending}
+                      autoComplete="new-password"
+                      data-1p-ignore
+                      data-lpignore="true"
+                      className={
+                        showConfiguredStyling ? "border-green-500 pr-10" : ""
+                      }
+                      {...form.register("apiKey")}
+                    />
+                    {showConfiguredStyling && (
+                      <CheckCircle2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-green-500" />
+                    )}
+                  </div>
+                  {showConsoleLink && (
+                    <p className="text-xs text-muted-foreground">
+                      Get your API key from{" "}
+                      <Link
+                        href={providerConfig.consoleUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-foreground"
+                      >
+                        {providerConfig.consoleName}
+                      </Link>
+                    </p>
+                  )}
+                </>
+              ))}
 
             {isBedrockSigV4 && (
               <div className="space-y-3">

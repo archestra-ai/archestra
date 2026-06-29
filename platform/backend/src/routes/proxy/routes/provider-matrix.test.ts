@@ -34,6 +34,7 @@ import { cerebrasAdapterFactory } from "../adapters/cerebras";
 import { cohereAdapterFactory } from "../adapters/cohere";
 import { deepseekAdapterFactory } from "../adapters/deepseek";
 import { geminiAdapterFactory } from "../adapters/gemini";
+import { githubCopilotAdapterFactory } from "../adapters/github-copilot";
 import { groqAdapterFactory } from "../adapters/groq";
 import { minimaxAdapterFactory } from "../adapters/minimax";
 import { mistralAdapterFactory } from "../adapters/mistral";
@@ -52,6 +53,7 @@ import cerebrasProxyRoutes from "./cerebras";
 import cohereProxyRoutes from "./cohere";
 import deepseekProxyRoutes from "./deepseek";
 import geminiProxyRoutes from "./gemini";
+import githubCopilotProxyRoutes from "./github-copilot";
 import groqProxyRoutes from "./groq";
 import minimaxProxyRoutes from "./minimax";
 import mistralProxyRoutes from "./mistral";
@@ -1868,6 +1870,25 @@ const providerConfigsByProvider = {
     routePlugin: azureProxyRoutes,
     adapterFactory: azureAdapterFactory,
     endpoint: (agentId) => `/v1/azure/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
+    model: "gpt-4o",
+    optimizedModel: "gpt-4o-mini",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  "github-copilot": makeConfig({
+    providerName: "GitHub Copilot",
+    providerSlug: "github-copilot",
+    provider: "github-copilot",
+    family: "openai",
+    routePlugin: githubCopilotProxyRoutes,
+    adapterFactory: githubCopilotAdapterFactory,
+    endpoint: (agentId) => `/v1/github-copilot/${agentId}/chat/completions`,
     headers: () => ({
       Authorization: "Bearer test-key",
       "Content-Type": "application/json",

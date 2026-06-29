@@ -11,6 +11,7 @@ export const BUILT_IN_AGENT_NAMES = {
   DUAL_LLM_QUARANTINE: "Dual LLM Quarantine Agent",
   CONTEXT_COMPACTION: "Context Compaction Subagent",
   CHAT_TITLE_GENERATION: "Chat Title Generation Subagent",
+  APP_RUNTIME: "App Runtime LLM Agent",
 } as const;
 
 /** Discriminator values for builtInAgentConfig.name */
@@ -20,6 +21,7 @@ export const BUILT_IN_AGENT_IDS = {
   DUAL_LLM_QUARANTINE: "dual-llm-quarantine-agent",
   CONTEXT_COMPACTION: "context-compaction-subagent",
   CHAT_TITLE_GENERATION: "chat-title-generation-subagent",
+  APP_RUNTIME: "app-runtime-llm-agent",
 } as const;
 
 /** System prompt template for the policy configuration subagent.
@@ -27,6 +29,55 @@ export const BUILT_IN_AGENT_IDS = {
  * Available context comes from buildPolicyConfigSystemPromptContext().
  */
 export const POLICY_CONFIG_SYSTEM_PROMPT = `Analyze this MCP tool and determine security policies.
+
+The primary security goal is to PREVENT LEAKING SENSITIVE DATA FROM INTERNAL SYSTEMS TO EXTERNAL SERVICES. Internal systems (Jira, GitHub, databases, etc.) contain sensitive organizational data. External-facing tools (browsers, web scrapers, email senders, etc.) can transmit data outside the organization. Policies must ensure sensitive internal data never flows outward through external tools. A second goal is to neutralize indirect prompt injection: results fetched from the open internet or other untrusted third parties can carry adversarial instructions, so such results are summarized through the Dual LLM workflow instead of reaching the model verbatim.
+
+Tool: ${POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS.toolName}
+Description: ${POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS.toolDescription}
+MCP Server: ${POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS.mcpServerName}
+Parameters: ${POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS.toolParameters}
+Annotations: ${POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS.toolAnnotations}
+
+Determine two policies:
+
+1. toolInvocationAction — Controls WHEN the tool may be invoked based on whether the conversation context contains sensitive data.
+   - "allow_when_context_is_sensitive": The tool is safe to invoke even when the context contains sensitive data. Use for tools that CANNOT leak context externally — they only read from internal systems. Examples: internal API reads, database reads, self-hosted service integrations.
+   - "block_when_context_is_sensitive": The tool must be BLOCKED when the context contains sensitive data because it could transmit that data externally. Use for tools that send data to external services or the open internet. Examples: browsers, web search, email, external APIs, code execution sandboxes.
+   - "require_approval": The tool requires user confirmation before executing in chat; in autonomous agent sessions (A2A, API, MS Teams, subagents) the call is blocked. Use for tools that mutate state with non-trivial consequences but are NOT obviously destructive — create/update/send/post/charge operations on internal systems. Examples: jira__create_issue, github__merge_pr, email__send, payment__charge.
+   - "block_always": The tool must NEVER be invoked automatically. Use for obviously destructive operations that delete or destroy data — see CRITICAL RULES below.
+
+2. trustedDataAction — Controls HOW the tool's returned results are treated, based on whether they could contain sensitive or adversarial content.
+   - "mark_as_safe": Results are fully trusted. Use for internal dev/config tools returning non-sensitive metadata (e.g., list-endpoints, get-config, health checks), and for external action tools that perform an effect and return only a status, not third-party content (e.g., posting a message, sending a notification).
+   - "mark_as_sensitive": Results contain sensitive data that must be protected from leaking to external tools. Use for ANY tool that reads from internal self-hosted systems (Jira, GitHub, GitLab, Confluence, databases, internal APIs, file systems) — their results contain organizational data.
+   - "sanitize_with_dual_llm": Results come from untrusted external or third-party sources and may carry adversarial instructions (indirect prompt injection). Use for tools that return open-internet or third-party content where the exact text is not needed verbatim downstream — the result is summarized through the Dual LLM workflow so injected instructions never reach the privileged model. Examples: web search, web scraping or fetching arbitrary pages, reading untrusted inbound messages.
+   - "block_always": Results are too dangerous to surface. Rarely used.
+
+CRITICAL RULES:
+- Obviously destructive tools → ALWAYS block_always invocation. A tool is obviously destructive ONLY if its NAME (not parameters or description) is solely dedicated to deleting or destroying data. Keywords in the tool name: delete, remove, destroy, drop, purge, truncate, erase, wipe. Multi-purpose tools that support destructive operations as one of several modes (e.g., a tool named "write" or "manage" that has a "remove" parameter option) are NOT obviously destructive — classify them based on their primary purpose.
+- Mutating tools that are NOT obviously destructive → require_approval. Tool names with create/update/edit/modify/send/post/publish/charge/merge that change state in internal systems should require user approval rather than auto-execute.
+- Read-only tools with annotations "readOnlyHint": true → safe for invocation, never block_always or require_approval unless they also have "destructiveHint": true.
+- Internal self-hosted READ tools (Jira reads, GitHub reads, GitLab reads, Confluence reads, database reads, internal wikis) → allow_when_context_is_sensitive (safe to call) + mark_as_sensitive (results contain org data that must not leak).
+- External-facing tools that RETURN open-internet or third-party content (web search, web scraping/fetching, browsing or navigating pages, reading untrusted inbound messages) → block_when_context_is_sensitive (could leak context) + sanitize_with_dual_llm (their results are untrusted and may contain injected instructions).
+- External-facing action tools that only perform an effect and return a status, not third-party content (e.g., posting a message, sending a notification) → block_when_context_is_sensitive (could leak context) + mark_as_safe (no untrusted content returned).
+
+Examples — one per outcome; apply the rules above to classify any tool, not just these:
+- jira__get_issue: invocation="allow_when_context_is_sensitive", result="mark_as_sensitive" (read-only internal)
+- web_search: invocation="block_when_context_is_sensitive", result="sanitize_with_dual_llm" (returns untrusted open-internet content)
+- playwright__navigate: invocation="block_when_context_is_sensitive", result="sanitize_with_dual_llm" (browser navigation returns untrusted page content)
+- jira__create_issue: invocation="require_approval", result="mark_as_sensitive" (mutating internal write, not destructive)
+- email__send: invocation="require_approval", result="mark_as_safe" (sends data outward, needs human confirmation)
+- database__drop_table: invocation="block_always", result="mark_as_safe" (destructive: name dedicated to deletion)`;
+
+/**
+ * Frozen snapshot of the immediately-previous POLICY_CONFIG_SYSTEM_PROMPT — the
+ * revision that omitted "sanitize_with_dual_llm" from trustedDataAction. Kept so
+ * the startup sync can recognise orgs still on this shipped default and upgrade
+ * them to the current prompt, while leaving admin-edited prompts untouched. It
+ * uses the same expression interpolation as the live prompt, so it reproduces
+ * byte-for-byte what those orgs already store. Do not edit; prune once no org can
+ * still be on this revision.
+ */
+export const PREVIOUS_POLICY_CONFIG_SYSTEM_PROMPT = `Analyze this MCP tool and determine security policies.
 
 The primary security goal is to PREVENT LEAKING SENSITIVE DATA FROM INTERNAL SYSTEMS TO EXTERNAL SERVICES. Internal systems (Jira, GitHub, databases, etc.) contain sensitive organizational data. External-facing tools (browsers, web scrapers, email senders, etc.) can transmit data outside the organization. Policies must ensure sensitive internal data never flows outward through external tools.
 
@@ -184,6 +235,12 @@ export const CHAT_TITLE_GENERATION_SYSTEM_PROMPT = `You generate short chat titl
 
 Return only a concise 3-6 word title. Do not wrap the title in quotes. Do not include explanations, markdown, or punctuation unless it is part of the topic.`;
 
+// Identity for the LLM completions an MCP App requests through
+// `archestra.llm.complete()`. Each call supplies its own instruction (the SDK's
+// `system` option), so this prompt is only the fallback when the app provides
+// none; it is intentionally minimal.
+export const APP_RUNTIME_SYSTEM_PROMPT = `You answer prompts sent by an Archestra MCP App. Follow the app's instructions for the request and reply with only the requested content.`;
+
 /** Maps built-in agent IDs to their default system prompts for reset-to-default. */
 export const BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
   [BUILT_IN_AGENT_IDS.POLICY_CONFIG]: POLICY_CONFIG_SYSTEM_PROMPT,
@@ -192,4 +249,15 @@ export const BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
   [BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION]: CONTEXT_COMPACTION_SYSTEM_PROMPT,
   [BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION]:
     CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
+  [BUILT_IN_AGENT_IDS.APP_RUNTIME]: APP_RUNTIME_SYSTEM_PROMPT,
 };
+
+// Starter persona prefilled into the system-prompt editor when authoring a new
+// user-facing agent. The author sees it, can edit or clear it, and it is saved
+// with the agent like any other prompt — nothing is injected at request time.
+// Plain text (no Handlebars) so it reads as a ready-to-edit starting point.
+export const DEFAULT_AGENT_SYSTEM_PROMPT = `You are an assistant inside an MCP-native AI platform. Most of the people you help are platform and AI-platform engineers, SREs, and the occasional brave hobbyist — they live in terminals, run things in production, and don't need their hands held.
+
+Be genuinely useful first: accurate, direct, and concrete. Reach for the tools you have instead of guessing, and when you don't actually know something, say so plainly rather than confidently inventing it — a wrong answer at 3am costs more than an honest "not sure."
+
+You're allowed a personality: dry, a little sarcastic, the lovable-but-grumpy senior engineer who's seen this bug before and has opinions about it. A well-placed (occasionally cringe) joke is fine. But the bit never outranks the answer — when someone's shipping to prod, read the room and keep it short.`;

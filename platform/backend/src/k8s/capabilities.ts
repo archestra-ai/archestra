@@ -30,27 +30,41 @@ export async function getK8sCapabilitiesFromApi(
   if (cached) return cached;
 
   const [
+    calicoNetworkPolicy,
     ciliumNetworkPolicy,
     gkeFqdnNetworkPolicy,
     awsApplicationNetworkPolicy,
   ] = await Promise.all([
+    hasCalicoNetworkPolicyResource(customObjectsApi),
     hasCiliumNetworkPolicyResource(customObjectsApi),
     hasGkeFqdnNetworkPolicyResource(customObjectsApi),
     hasAwsApplicationNetworkPolicyResource(customObjectsApi),
   ]);
-  const provider = ciliumNetworkPolicy
-    ? "cilium"
-    : gkeFqdnNetworkPolicy
-      ? "gke-fqdn"
-      : awsApplicationNetworkPolicy
-        ? "aws-application-network-policy"
-        : "kubernetes";
   const supportsFqdn =
     ciliumNetworkPolicy || gkeFqdnNetworkPolicy || awsApplicationNetworkPolicy;
+  // A NetworkPolicy is only enforced if a dataplane agent backs it. Calico,
+  // Cilium, and the FQDN providers each install a provider-exclusive CRD group
+  // we can discover; absent all of them — e.g. GKE with the NetworkPolicy addon
+  // off, only `netd` running — the API accepts NetworkPolicy objects but nothing
+  // enforces them, so we report "none" rather than a false promise of isolation.
+  // Known limitation: plain GKE Dataplane V2 enforces standard NetworkPolicy but
+  // exposes no discoverable CRD (its FQDN CRD is feature-gated), so it is not
+  // detected here and would report "none". Acceptable while no environment runs
+  // plain Dataplane V2; revisit (probe the `anetd` DaemonSet) if one does.
+  const enforced = supportsFqdn || calicoNetworkPolicy;
+  const provider = !enforced
+    ? "none"
+    : ciliumNetworkPolicy
+      ? "cilium"
+      : gkeFqdnNetworkPolicy
+        ? "gke-fqdn"
+        : awsApplicationNetworkPolicy
+          ? "aws-application-network-policy"
+          : "kubernetes";
 
   const capabilities: K8sCapabilities = {
     networkPolicy: {
-      kubernetesNetworkPolicy: true,
+      kubernetesNetworkPolicy: enforced,
       ciliumNetworkPolicy,
       gkeFqdnNetworkPolicy,
       awsApplicationNetworkPolicy,
@@ -58,6 +72,7 @@ export async function getK8sCapabilitiesFromApi(
       supportsFqdn,
       supportsHttpMethods: false,
       message: capabilityMessage({
+        enforced,
         ciliumNetworkPolicy,
         gkeFqdnNetworkPolicy,
         awsApplicationNetworkPolicy,
@@ -127,6 +142,7 @@ async function hasCiliumNetworkPolicyResource(
 }
 
 function capabilityMessage(params: {
+  enforced: boolean;
   ciliumNetworkPolicy: boolean;
   gkeFqdnNetworkPolicy: boolean;
   awsApplicationNetworkPolicy: boolean;
@@ -141,10 +157,38 @@ function capabilityMessage(params: {
   if (params.awsApplicationNetworkPolicy) {
     return "AWS ApplicationNetworkPolicy API detected. Domain allowlists can be enforced by EKS Auto Mode.";
   }
-  if (!params.supportsFqdn) {
-    return "No supported FQDN policy provider detected. Kubernetes NetworkPolicy only enforces IP/CIDR egress.";
+  if (!params.enforced) {
+    return "No NetworkPolicy enforcer detected (no Calico, Cilium, or FQDN policy provider). NetworkPolicy objects are accepted by the API but not enforced.";
   }
-  return "Network policy capabilities detected.";
+  return "NetworkPolicy enforcement detected. IP/CIDR egress is enforced; domain allowlists require a supported FQDN policy provider.";
+}
+
+async function hasCalicoNetworkPolicyResource(
+  customObjectsApi: k8s.CustomObjectsApi,
+): Promise<boolean> {
+  // Calico (the legacy GKE NetworkPolicy addon or self-managed) installs the
+  // provider-exclusive `crd.projectcalico.org` group; `felixconfigurations` is
+  // its dataplane (Felix) config, present wherever Calico's CRDs are installed.
+  try {
+    const resourceList = await customObjectsApi.getAPIResources({
+      group: "crd.projectcalico.org",
+      version: "v1",
+    });
+    return (
+      resourceList.resources?.some(
+        (resource) => resource.name === "felixconfigurations",
+      ) ?? false
+    );
+  } catch (error) {
+    if (isK8sNotFoundError(error)) {
+      return false;
+    }
+    logger.warn(
+      { err: error },
+      "Failed to inspect Calico Kubernetes API resources",
+    );
+    return false;
+  }
 }
 
 async function hasGkeFqdnNetworkPolicyResource(

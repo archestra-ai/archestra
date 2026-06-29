@@ -5,7 +5,6 @@ export const E2eTestId = {
   CloneAgentButton: "clone-agent-button",
   DeleteAgentButton: "delete-agent-button",
   OnboardingNextButton: "onboarding-next-button",
-  OnboardingFinishButton: "onboarding-finish-button",
   OnboardingSkipButton: "onboarding-skip-button",
   SignInSubmitButton: "sign-in-submit-button",
   InviteMemberButton: "invite-member-button",
@@ -75,6 +74,8 @@ export const E2eTestId = {
     "inline-vault-secret-selector-secret-trigger-key",
   McpServerSettingsConnectionsNavButton:
     "mcp-server-settings-connections-nav-button",
+  McpServerSettingsConnectionsContent:
+    "mcp-server-settings-connections-content",
   ManageCredentialsSharedConnectionsSection:
     "manage-credentials-shared-connections-section",
   ManageCredentialsSharedConnectionsEmptyState:
@@ -82,6 +83,10 @@ export const E2eTestId = {
   ManageCredentialsAddToOrgButton: "manage-credentials-add-to-org-button",
   ManageCredentialsAddToTeamButton: "manage-credentials-add-to-team-button",
   ManageCredentialsAddToTeamOption: "manage-credentials-add-to-team-option",
+  ManageCredentialsAddServiceAccountButton:
+    "manage-credentials-add-service-account-button",
+  AddServiceAccountConfirmButton: "add-service-account-confirm-button",
+  ManageServiceAccountsTable: "manage-service-accounts-table",
   ManageMembersButton: "manage-members-button",
   // Chat Settings
   ChatApiKeysTable: "chat-api-keys-table",
@@ -106,6 +111,8 @@ export const E2eTestId = {
   // Chat Prompt Input
   ChatFileUploadButton: "chat-file-upload-button",
   ChatDisabledFileUploadButton: "chat-disabled-file-upload-button",
+  ChatContextUsageTrigger: "chat-context-usage-trigger",
+  ChatContextUsagePanel: "chat-context-usage-panel",
   ChatApiKeySelectorTrigger: "chat-api-key-selector-trigger",
   ChatApiKeySelectorSearchInput: "chat-api-key-selector-search-input",
   // Chat Model Selector

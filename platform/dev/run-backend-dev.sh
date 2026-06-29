@@ -37,7 +37,7 @@ if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-}" = "true" ]; then
   # even when the runner host is set. prod bakes the binary into the image
   # (see ../Dockerfile), so for local dev we mirror that by bootstrapping a
   # project-local copy here. version must match helm/dagger-runtime/Chart.yaml.
-  DAGGER_VERSION="0.21.0"
+  DAGGER_VERSION="0.21.5"
   DAGGER_BIN="$(pwd)/dev/bin/dagger"
   if [ ! -x "$DAGGER_BIN" ] || ! "$DAGGER_BIN" version 2>/dev/null | grep -q "v${DAGGER_VERSION}"; then
     OS="$(uname -s | tr '[:upper:]' '[:lower:]')"

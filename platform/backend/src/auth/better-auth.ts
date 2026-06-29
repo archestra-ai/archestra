@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
   ARCHESTRA_TOKEN_PREFIX,
   AUTO_PROVISIONED_INVITATION_STATUS,
@@ -26,6 +27,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { LOG_LEVEL } from "@/logging/log-level";
 // Import directly from files to avoid circular dependency through barrel export
@@ -38,16 +40,18 @@ import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import type { AuditEventName } from "@/types/audit-log";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// SSO config is always loaded. The middleware in src/middleware.ts and the
+// runtime checks below gate access via enterpriseTier so the small-team free
+// tier can enable SSO without the license env var.
+// biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
+import { ssoConfig, syncSsoRole, syncSsoTeams } from "./idp.ee";
 import { linkedIdentityProviderPlugin } from "./linked-idp";
+import { hashOauthClientSecret } from "./oauth-client-secret";
 
-const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
-    await import("./idp.ee")
-  : {
-      ssoConfig: undefined,
-      syncSsoRole: () => {},
-      syncSsoTeams: () => {},
-    };
+// SPDX-SnippetEnd
 
 const APP_NAME = DEFAULT_APP_NAME;
 const {
@@ -203,8 +207,17 @@ export const auth = betterAuth({
     oauthProvider({
       loginPage: OAUTH_PAGES.login,
       consentPage: OAUTH_PAGES.consent,
-      allowDynamicClientRegistration: true,
-      allowUnauthenticatedClientRegistration: true,
+      allowDynamicClientRegistration:
+        config.auth.dynamicClientRegistrationEnabled,
+      allowUnauthenticatedClientRegistration:
+        config.auth.dynamicClientRegistrationEnabled,
+      // Confidential MCP OAuth clients (authorization_code grant) are verified by
+      // better-auth at the token endpoint. It hashes the presented secret and
+      // compares it to the stored value, so the value the McpOauthClient model
+      // stores must be exactly this hash.
+      storeClientSecret: {
+        hash: (clientSecret) => hashOauthClientSecret(clientSecret),
+      },
       scopes: [...OAUTH_SCOPES],
       silenceWarnings: {
         oauthAuthServerConfig: true,
@@ -563,7 +576,7 @@ async function getTrustedOriginsForAuthRequest(request?: Request) {
 }
 
 async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
-  if (!config.enterpriseFeatures.core) {
+  if (!enterpriseTier.isCoreActive()) {
     return [...IDENTITY_TRUSTED_PROVIDER_IDS];
   }
 
@@ -1454,6 +1467,9 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         }
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       // SSO Role & Team Sync: Synchronize role and team memberships based on SSO claims
       // Only applies to SSO logins (not regular email/password logins)
       if (path.startsWith("/sso/callback")) {
@@ -1468,10 +1484,14 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         // Then sync teams (based on SSO groups)
         await syncSsoTeams(userId, user.email, providerIdHint);
       }
+      // SPDX-SnippetEnd
     }
   }
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 function getSsoCallbackProviderId(params: {
   path: string;
   requestUrl?: string;
@@ -1513,7 +1533,7 @@ async function assertSsoEmailDomainAllowed(params: {
   userId: string;
   sessionId: string;
 }) {
-  if (!config.enterpriseFeatures.core) {
+  if (!enterpriseTier.isCoreActive()) {
     return;
   }
 
@@ -1589,6 +1609,7 @@ async function cleanupRejectedSsoLogin(params: {
     }
   });
 }
+// SPDX-SnippetEnd
 
 /**
  * Writes a single auth-event row to audit_logs.

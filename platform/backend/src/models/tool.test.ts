@@ -14,9 +14,10 @@ import {
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq, sql } from "drizzle-orm";
-import { vi } from "vitest";
+import { afterAll, beforeAll, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
@@ -25,6 +26,18 @@ import TeamModel from "./team";
 import ToolModel, { parseArchestraBuiltInName } from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 import TrustedDataPolicyModel from "./trusted-data-policy";
+
+// these suites assert exact assigned-tool sets after agent creation; pin the
+// apps feature off so a local ARCHESTRA_APPS_ENABLED=true does not leak
+// auto-assigned app tools into them (app-tool assignment is covered in
+// tool-archestra-assignment.test.ts)
+const originalAppsEnabled = config.apps.enabled;
+beforeAll(() => {
+  (config.apps as { enabled: boolean }).enabled = false;
+});
+afterAll(() => {
+  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
+});
 
 describe("ToolModel", () => {
   describe("slugifyName", () => {
@@ -2975,6 +2988,33 @@ describe("ToolModel", () => {
       expect(secondRun).toEqual([]);
     });
 
+    test("keeps a feature-flagged-off built-in but prunes a truly-removed one", async () => {
+      // The suite pins config.apps.enabled = false, so getArchestraMcpTools()
+      // omits app tools. A pre-existing app-tool row must survive reseed (the
+      // definition still exists, the feature is merely dark); a row whose short
+      // name is gone from the registry is the only kind that is genuinely stale.
+      archestraMcpBranding.syncFromOrganization(null);
+      const catalogId = randomUUID();
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const flaggedOffName = "archestra__scaffold_app";
+      const removedName = "archestra__obsolete_tool";
+      await db.insert(schema.toolsTable).values([
+        { name: flaggedOffName, parameters: {}, catalogId, agentId: null },
+        { name: removedName, parameters: {}, catalogId, agentId: null },
+      ]);
+
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const survivors = await db
+        .select({ name: schema.toolsTable.name })
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, catalogId));
+      const names = new Set(survivors.map((t) => t.name));
+      expect(names.has(flaggedOffName)).toBe(true);
+      expect(names.has(removedName)).toBe(false);
+    });
+
     test("rejects a duplicate built-in tool row at the database level", async () => {
       archestraMcpBranding.syncFromOrganization(null);
       await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -3058,6 +3098,63 @@ describe("ToolModel", () => {
         );
       expect(catalogRows).toHaveLength(1);
     });
+
+    test("does not promote a default-prefixed discovery when the branded short-name twin is already cataloged", async () => {
+      const brandedOrg = { appName: "Acme Copilot", iconLogo: null };
+      archestraMcpBranding.syncFromOrganization(brandedOrg);
+
+      const brandedName = archestraMcpBranding.getToolName(
+        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+      );
+      const defaultName = getArchestraToolFullName(
+        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+        { appName: null, fullWhiteLabeling: false },
+      );
+      expect(brandedName).not.toBe(defaultName); // branded env: prefixes differ
+
+      await db.insert(schema.internalMcpCatalogTable).values({
+        id: ARCHESTRA_MCP_CATALOG_ID,
+        ...getArchestraMcpCatalogMetadata(),
+      });
+      // The canonical, branded built-in already lives in the catalog.
+      await db.insert(schema.toolsTable).values({
+        name: brandedName,
+        parameters: {},
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        agentId: null,
+      });
+      // Off-brand discovery: the same built-in arrived under the DEFAULT prefix as
+      // a shared proxy tool (catalog_id NULL) — what LLM-proxy auto-discovery used
+      // to persist before the persistTools guard recognized both prefixes.
+      const [discovered] = await db
+        .insert(schema.toolsTable)
+        .values({
+          name: defaultName,
+          parameters: {},
+          catalogId: null,
+          agentId: null,
+        })
+        .returning();
+
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID, brandedOrg);
+
+      // The discovered twin must NOT be promoted into the catalog…
+      const [after] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.id, discovered.id));
+      expect(after?.catalogId).toBeNull();
+
+      // …and the catalog holds exactly one row for the artifact_write short name.
+      const catalogRows = await db
+        .select({ name: schema.toolsTable.name })
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID));
+      const twins = catalogRows
+        .map((r) => r.name)
+        .filter((name) => name === brandedName || name === defaultName);
+      expect(twins).toEqual([brandedName]);
+    });
   });
 
   describe("findAllWithAssignments", () => {
@@ -3098,6 +3195,50 @@ describe("ToolModel", () => {
       const ids1 = result1.data.map((t) => t.id);
       const ids2 = result2.data.map((t) => t.id);
       expect(ids1).toEqual(ids2);
+    });
+
+    test("exposes MCP annotations stored in the tool's meta", async ({
+      makeAdmin,
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "AnnotationsAgent" });
+      const catalog = await makeInternalMcpCatalog();
+
+      const [withMeta] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "annotated-tool",
+          description: "Tool with annotations",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          meta: {
+            _meta: {},
+            annotations: { readOnlyHint: true, destructiveHint: false },
+          },
+        },
+      ]);
+      const plain = await ToolModel.create({
+        name: "plain-tool",
+        description: "Tool without meta",
+        parameters: {},
+      });
+      await makeAgentTool(agent.id, withMeta.id);
+      await makeAgentTool(agent.id, plain.id);
+
+      const result = await ToolModel.findAllWithAssignments({
+        userId: admin.id,
+        isAgentAdmin: true,
+      });
+
+      const annotated = result.data.find((t) => t.id === withMeta.id);
+      expect(annotated?.annotations).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+      });
+      const unannotated = result.data.find((t) => t.id === plain.id);
+      expect(unannotated?.annotations).toBeNull();
     });
 
     test("excludes the white-labeled knowledge tool from assignment listings", async ({

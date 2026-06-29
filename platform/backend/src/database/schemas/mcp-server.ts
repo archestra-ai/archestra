@@ -18,8 +18,8 @@ import secretTable from "./secret";
 import { team } from "./team";
 import usersTable from "./user";
 
-// OAuth refresh error codes:
-// - refresh_failed: refresh was attempted but failed
+// Terminal OAuth refresh error categories (transient failures persist nothing):
+// - refresh_failed: the authorization server rejected the refresh grant
 // - no_refresh_token: can't attempt recovery, no refresh token available
 export const oauthRefreshErrorEnum = pgEnum("oauth_refresh_error_enum", [
   "refresh_failed",
@@ -73,6 +73,9 @@ const mcpServerTable = pgTable(
       .$type<LocalMcpServerInstallationStatus>(),
     localInstallationError: text("local_installation_error"),
     oauthRefreshError: oauthRefreshErrorEnum("oauth_refresh_error"),
+    // Sanitized OAuth `error` code from the failed grant (e.g. "invalid_grant").
+    // Never holds token material, secrets, or URLs.
+    oauthRefreshErrorMessage: text("oauth_refresh_error_message"),
     oauthRefreshFailedAt: timestamp("oauth_refresh_failed_at", {
       mode: "date",
     }),

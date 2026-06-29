@@ -192,4 +192,65 @@ describe("formatZodErrorWithSchema", () => {
     const error = parseError(schema, { outer: "nested", inner: {} });
     expect(() => formatZodErrorWithSchema(error, schema)).not.toThrow();
   });
+
+  test("lists valid keys and suggests the closest for an unrecognized key", () => {
+    const schema = z.strictObject({
+      command: z.string(),
+      timeoutSeconds: z.number().optional(),
+    });
+    const error = parseError(schema, { command: "ls", timeout: 5 });
+    const message = formatZodErrorWithSchema(error, schema);
+    // a truncated name (`timeout` → `timeoutSeconds`) is matched by substring,
+    // not edit distance, which would be far too large.
+    expect(message).toBe(
+      'unrecognized key "timeout" (did you mean "timeoutSeconds"?) — ' +
+        'valid keys are "command", "timeoutSeconds"',
+    );
+  });
+
+  test("suggests the closest key for an ordinary typo", () => {
+    const schema = z.strictObject({ command: z.string(), cwd: z.string() });
+    const error = parseError(schema, { commnd: "ls" });
+    expect(formatZodErrorWithSchema(error, schema)).toContain(
+      'did you mean "command"?',
+    );
+  });
+
+  test("reports every unrecognized key in one issue", () => {
+    const schema = z.strictObject({ command: z.string() });
+    const error = parseError(schema, { command: "ls", foo: 1, bar: 2 });
+    const message = formatZodErrorWithSchema(error, schema);
+    expect(message).toContain("unrecognized keys");
+    expect(message).toContain('"foo"');
+    expect(message).toContain('"bar"');
+    expect(message).toContain('valid keys are "command"');
+  });
+
+  test("omits a coincidental edit-distance match on short keys", () => {
+    // `cmd` is one edit from `cwd` but four from `command`; suggesting `cwd`
+    // would mislead, so on short keys we list the valid keys without guessing.
+    const schema = z.strictObject({ command: z.string(), cwd: z.string() });
+    const error = parseError(schema, { cmd: "ls" });
+    const message = formatZodErrorWithSchema(error, schema);
+    expect(message).not.toContain("did you mean");
+    expect(message).toContain('valid keys are "command", "cwd"');
+  });
+
+  test("omits a suggestion when no key is close", () => {
+    const schema = z.strictObject({ command: z.string() });
+    const error = parseError(schema, { command: "ls", xyzzy: 1 });
+    const message = formatZodErrorWithSchema(error, schema);
+    expect(message).toContain('unrecognized key "xyzzy"');
+    expect(message).not.toContain("did you mean");
+  });
+
+  test("prefixes the path for an unrecognized key on a nested object", () => {
+    const schema = z.strictObject({
+      nested: z.strictObject({ command: z.string() }),
+    });
+    const error = parseError(schema, { nested: { command: "ls", timeout: 5 } });
+    expect(formatZodErrorWithSchema(error, schema)).toContain(
+      'nested: unrecognized key "timeout"',
+    );
+  });
 });

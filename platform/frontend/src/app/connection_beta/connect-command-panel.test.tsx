@@ -32,10 +32,30 @@ vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => true,
 }));
 
+const { availableKeysMock, createKeyMock } = vi.hoisted(() => ({
+  availableKeysMock: vi.fn(),
+  createKeyMock: vi.fn(),
+}));
+
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
-  useAvailableLlmProviderApiKeys: () => ({
-    data: [{ provider: "anthropic" }, { provider: "bedrock" }],
+  useAvailableLlmProviderApiKeys: () => availableKeysMock(),
+  useCreateLlmProviderApiKey: () => ({
+    mutateAsync: createKeyMock,
+    isPending: false,
   }),
+}));
+
+vi.mock("@/components/github-copilot-sign-in", () => ({
+  GithubCopilotSignIn: ({ onToken }: { onToken: (token: string) => void }) => (
+    <button type="button" onClick={() => onToken("gho_test")}>
+      Sign in with GitHub
+    </button>
+  ),
+}));
+
+vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
+  CreateLlmProviderApiKeyDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="add-provider-key-dialog" /> : null,
 }));
 
 function findClient(id: string) {
@@ -55,10 +75,10 @@ function renderPanel(
   return render(
     <ConnectCommandPanel
       client={claudeClient}
-      mcpGateways={[{ id: "g1", name: "My Gateway" }]}
+      mcpGateways={[{ id: "g1", name: "My Gateway", agentType: "mcp_gateway" }]}
       mcpGatewayId="g1"
       onMcpGatewaySelect={vi.fn()}
-      llmProxies={[{ id: "p1", name: "My Proxy" }]}
+      llmProxies={[{ id: "p1", name: "My Proxy", agentType: "llm_proxy" }]}
       llmProxyId="p1"
       onLlmProxySelect={vi.fn()}
       urlProvider={null}
@@ -75,6 +95,10 @@ function renderPanel(
 beforeEach(() => {
   vi.clearAllMocks();
   hasPermissionsMock.mockReturnValue({ data: true });
+  availableKeysMock.mockReturnValue({
+    data: [{ provider: "anthropic" }, { provider: "bedrock" }],
+  });
+  createKeyMock.mockResolvedValue({ id: "key-1" });
   fetchSkillsMock.mockResolvedValue(["s1", "s2"]);
   createSetupMock.mockResolvedValue({
     id: "setup-1",
@@ -91,6 +115,7 @@ describe("ConnectCommandPanel", () => {
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenCalledWith({
         clientId: "claude-code",
+        platform: "macos", // jsdom has no Windows UA → bash default
         baseUrl: "http://localhost:9000/v1",
         mcpGatewayId: "g1",
         llmProxyId: "p1",
@@ -126,6 +151,15 @@ describe("ConnectCommandPanel", () => {
     expect(screen.getByText("https://eu.example.com/v1")).toBeInTheDocument();
   });
 
+  it("shows the auto-detected platform in the review step", async () => {
+    renderPanel();
+    await screen.findByText(COMMAND);
+    // jsdom reports no Windows UA, so detection falls back to the bash option.
+    expect(screen.getByText(/Run on/)).toBeInTheDocument();
+    expect(screen.getByText("macOS / Linux")).toBeInTheDocument();
+    expect(screen.getByTestId("connect-change-platform")).toBeInTheDocument();
+  });
+
   it("regenerates without skills after opting out in Options", async () => {
     const user = userEvent.setup();
     renderPanel();
@@ -153,6 +187,22 @@ describe("ConnectCommandPanel", () => {
     expect(onProviderSelect).toHaveBeenCalledWith("bedrock");
   });
 
+  it("opens an inline add-provider-key dialog when no provider can mint a virtual key", async () => {
+    // No configured provider key, but the user may create one
+    // (hasPermissionsMock defaults to true for llmProviderApiKey:create).
+    availableKeysMock.mockReturnValue({ data: [] });
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByTestId("connect-change-proxy"));
+    await user.click(screen.getByRole("tab", { name: "Virtual key" }));
+    await user.click(
+      screen.getByRole("button", { name: /add a provider key/i }),
+    );
+
+    expect(screen.getByTestId("add-provider-key-dialog")).toBeInTheDocument();
+  });
+
   it("skips skills entirely for non-admin users", async () => {
     hasPermissionsMock.mockReturnValue({ data: false });
     renderPanel();
@@ -163,5 +213,66 @@ describe("ConnectCommandPanel", () => {
       ),
     );
     expect(fetchSkillsMock).not.toHaveBeenCalled();
+  });
+
+  describe("per-user provider (GitHub Copilot)", () => {
+    it("shows a connect gate instead of the command when the user has no Copilot key", async () => {
+      availableKeysMock.mockReturnValue({ data: [] });
+      renderPanel({
+        client: findClient("copilot-cli"),
+        urlProvider: "github-copilot",
+      });
+
+      expect(
+        await screen.findByRole("button", { name: /Sign in with GitHub/i }),
+      ).toBeInTheDocument();
+      // No command is generated until the user connects their own account.
+      expect(createSetupMock).not.toHaveBeenCalled();
+    });
+
+    it("creates a personal key when the user connects", async () => {
+      availableKeysMock.mockReturnValue({ data: [] });
+      const user = userEvent.setup();
+      renderPanel({
+        client: findClient("copilot-cli"),
+        urlProvider: "github-copilot",
+      });
+
+      await user.click(
+        await screen.findByRole("button", { name: /Sign in with GitHub/i }),
+      );
+
+      await waitFor(() =>
+        expect(createKeyMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider: "github-copilot",
+            scope: "personal",
+            apiKey: "gho_test",
+          }),
+        ),
+      );
+    });
+
+    it("generates the command normally once a Copilot key exists", async () => {
+      availableKeysMock.mockReturnValue({
+        data: [{ provider: "github-copilot" }],
+      });
+      renderPanel({
+        client: findClient("copilot-cli"),
+        urlProvider: "github-copilot",
+      });
+
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider: "github-copilot",
+            proxyAuth: "virtual-key",
+          }),
+        ),
+      );
+      expect(
+        screen.queryByRole("button", { name: /Sign in with GitHub/i }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

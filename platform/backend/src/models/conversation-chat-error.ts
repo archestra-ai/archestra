@@ -39,6 +39,14 @@ class ConversationChatErrorModel {
       error: normalizeChatErrorResponse(chatError.error),
     }));
   }
+
+  static async deleteByConversation(conversationId: string): Promise<void> {
+    await db
+      .delete(schema.conversationChatErrorsTable)
+      .where(
+        eq(schema.conversationChatErrorsTable.conversationId, conversationId),
+      );
+  }
 }
 
 function normalizeChatErrorResponse(

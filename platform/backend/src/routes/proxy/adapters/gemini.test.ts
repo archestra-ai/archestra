@@ -32,6 +32,9 @@ function createMockResponse(
       ...(usage?.cachedContentTokenCount !== undefined
         ? { cachedContentTokenCount: usage.cachedContentTokenCount }
         : {}),
+      ...(usage?.thoughtsTokenCount !== undefined
+        ? { thoughtsTokenCount: usage.thoughtsTokenCount }
+        : {}),
     },
     modelVersion: "gemini-2.5-pro",
     responseId: "gemini-test-response",
@@ -179,6 +182,7 @@ describe("GeminiResponseAdapter", () => {
         outputTokens: 75,
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
+        reasoningTokens: 0,
       });
     });
 
@@ -198,7 +202,20 @@ describe("GeminiResponseAdapter", () => {
         outputTokens: 75,
         cacheReadTokens: 120,
         cacheWriteTokens: 0,
+        reasoningTokens: 0,
       });
+    });
+
+    test("extracts thoughtsTokenCount as reasoning tokens", () => {
+      const response = createMockResponse([{ text: "Test" }], {
+        promptTokenCount: 150,
+        candidatesTokenCount: 75,
+        thoughtsTokenCount: 60,
+      });
+
+      const adapter = geminiAdapterFactory.createResponseAdapter(response);
+
+      expect(adapter.getUsage().reasoningTokens).toBe(60);
     });
   });
 
@@ -712,6 +729,7 @@ describe("GeminiStreamAdapter", () => {
         outputTokens: 50,
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
+        reasoningTokens: 0,
       });
     });
 

@@ -1,0 +1,5 @@
+{
+  "evidence_id": "prof_7c1a8f",
+  "failure_class": "negative_cache_ttl_refresh",
+  "root_cause_component": "mcp-gateway-auth-cache"
+}

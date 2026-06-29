@@ -1278,6 +1278,201 @@ describe("websocket MCP exec", () => {
     });
   });
 
+  // Shared harness for the close-reason tests: wires a mock K8s exec that lets
+  // the test drive both exec channels (status + output) and then close.
+  async function startExecSession(ctx: {
+    org: { id: string };
+    user: { id: string };
+    serverId: string;
+  }) {
+    const mockK8sWs = makeMockK8sWs();
+    let capturedOnStatus:
+      | ((status: { status?: string; message?: string }) => void)
+      | undefined;
+    vi.spyOn(McpServerRuntimeManager, "execIntoMcpServer").mockImplementation(
+      async (_id, _stdin, _stdout, _stderr, onStatus) => {
+        capturedOnStatus = onStatus;
+        return { k8sWs: mockK8sWs, podName: "mcp-test-pod" };
+      },
+    );
+    vi.spyOn(McpServerRuntimeManager, "getExecCommand").mockReturnValue(
+      "kubectl exec ...",
+    );
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      on: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: ctx.user.id,
+      organizationId: ctx.org.id,
+      userIsMcpServerAdmin: true,
+    });
+
+    await service.handleMessage(
+      { type: "subscribe_mcp_exec", payload: { serverId: ctx.serverId } },
+      ws,
+    );
+
+    const writeOutput = async (data: string) => {
+      service.mcpExecSubscriptions.get(ws)?.stdout.write(Buffer.from(data));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    };
+    const closedReason = (): unknown => {
+      const closed = (ws.send as ReturnType<typeof vi.fn>).mock.calls
+        .map((call) => JSON.parse(call[0] as string))
+        .find((m) => m.type === "mcp_exec_closed");
+      return closed?.payload?.reason;
+    };
+    return {
+      mockK8sWs,
+      setStatus: () => capturedOnStatus,
+      writeOutput,
+      closedReason,
+    };
+  }
+
+  test("surfaces the no-shell reason when the OCI error arrives on the output stream", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const session = await startExecSession({
+      org,
+      user,
+      serverId: mcpServer.id,
+    });
+
+    // The runtime here puts a generic exit code on the status channel and the
+    // real detail on stderr (the distroless repro on docker-desktop).
+    await session.writeOutput(
+      'OCI runtime exec failed: exec failed: unable to start container process: exec: "/bin/sh": stat /bin/sh: no such file or directory',
+    );
+    session.setStatus()?.({
+      status: "Failure",
+      message: "command terminated with non-zero exit code: exit code 127",
+    });
+    session.mockK8sWs.emit("close");
+
+    expect(session.closedReason()).toEqual(
+      expect.stringContaining("No shell found"),
+    );
+  });
+
+  test("surfaces the no-shell reason when it arrives on the status channel", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const session = await startExecSession({
+      org,
+      user,
+      serverId: mcpServer.id,
+    });
+
+    session.setStatus()?.({
+      status: "Failure",
+      message:
+        'OCI runtime exec failed: exec: "/bin/sh": stat /bin/sh: no such file or directory',
+    });
+    session.mockK8sWs.emit("close");
+
+    expect(session.closedReason()).toEqual(
+      expect.stringContaining("No shell found"),
+    );
+  });
+
+  test("keeps the generic closed message on a clean exit", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const session = await startExecSession({
+      org,
+      user,
+      serverId: mcpServer.id,
+    });
+
+    session.setStatus()?.({ status: "Success" });
+    session.mockK8sWs.emit("close");
+
+    expect(session.closedReason()).toBeUndefined();
+  });
+
+  test("does not misread ordinary shell 'no such file' output as a missing shell", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const session = await startExecSession({
+      org,
+      user,
+      serverId: mcpServer.id,
+    });
+
+    // A working shell where a command happens to fail — must NOT be mistaken
+    // for a missing shell.
+    await session.writeOutput("cat: /nope: No such file or directory\n");
+    session.setStatus()?.({ status: "Success" });
+    session.mockK8sWs.emit("close");
+
+    expect(session.closedReason()).toBeUndefined();
+  });
+
   test("forwards input from client to stdin", async ({
     makeOrganization,
     makeUser,

@@ -36,6 +36,7 @@ const PROVIDER_LOGO_NAME: Record<SupportedProvider, string> = {
   deepseek: "deepseek",
   minimax: "minimax",
   azure: "azure",
+  "github-copilot": "github-copilot",
 };
 
 export type LlmModelSelectOption = {

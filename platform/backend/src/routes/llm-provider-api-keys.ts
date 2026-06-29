@@ -1,6 +1,7 @@
 import type { IncomingHttpHeaders } from "node:http";
 import {
   isProviderApiKeyOptional,
+  providerRequiresPerUserCredential,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -270,8 +271,29 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamId: body.teamId,
         userId: user.id,
         organizationId,
+        provider: body.provider,
         headers,
       });
+
+      // Personal-scoped keys are self-service: any authenticated user can
+      // connect their own account / create a key only they can use (this is
+      // what lets "basic users" link GitHub Copilot without elevated rights).
+      // Shareable scopes (team, org) still require the create permission — org
+      // additionally requires llmProviderApiKey:admin, enforced above.
+      if (body.scope !== "personal") {
+        const canCreateSharedKeys = await userHasPermission(
+          user.id,
+          organizationId,
+          "llmProviderApiKey",
+          "create",
+        );
+        if (!canCreateSharedKeys) {
+          throw new ApiError(
+            403,
+            "You need the llmProviderApiKey:create permission to create team- or organization-scoped keys.",
+          );
+        }
+      }
 
       let secret: SelectSecret | null = null;
       let actualApiKeyValue: string | null = null;
@@ -603,6 +625,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamId: newTeamId,
           userId: user.id,
           organizationId,
+          provider: apiKeyFromDB.provider,
           headers,
         });
       }
@@ -913,9 +936,20 @@ async function validateScopeAndAuthorization(params: {
   teamId: string | null | undefined;
   userId: string;
   organizationId: string;
+  provider: SupportedProvider;
   headers: IncomingHttpHeaders;
 }): Promise<void> {
-  const { scope, teamId, userId, organizationId, headers } = params;
+  const { scope, teamId, userId, organizationId, provider, headers } = params;
+
+  // Per-user-credential providers (GitHub Copilot) hold an individual's token,
+  // so team/org scope would share one person's credential with everyone. Only
+  // personal keys are allowed; each user links their own account.
+  if (providerRequiresPerUserCredential(provider) && scope !== "personal") {
+    throw new ApiError(
+      400,
+      `${provider} keys are per-user — each user connects their own account, so only the "personal" scope is allowed.`,
+    );
+  }
 
   // Validate scope-specific requirements
   if (scope === "team" && !teamId) {

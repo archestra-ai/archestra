@@ -75,6 +75,7 @@ describe("OAuthClientModel", () => {
         redirectUris: ["http://localhost:8005/callback"],
         grantTypes: ["authorization_code"],
         responseTypes: ["code"],
+        scopes: ["mcp"],
         tokenEndpointAuthMethod: "none",
         isPublic: true,
         metadata: { cimd: true },
@@ -97,6 +98,7 @@ describe("OAuthClientModel", () => {
         redirectUris: ["http://localhost:8005/callback"],
         grantTypes: ["authorization_code"],
         responseTypes: ["code"],
+        scopes: ["mcp"],
         tokenEndpointAuthMethod: "none",
         isPublic: true,
         metadata: { cimd: true },
@@ -109,6 +111,7 @@ describe("OAuthClientModel", () => {
         redirectUris: ["http://localhost:9000/callback"],
         grantTypes: ["authorization_code", "refresh_token"],
         responseTypes: ["code"],
+        scopes: ["mcp"],
         tokenEndpointAuthMethod: "none",
         isPublic: true,
         metadata: { cimd: true, updated: true },
@@ -136,6 +139,7 @@ describe("OAuthClientModel", () => {
         redirectUris: ["http://localhost:8005/callback"],
         grantTypes: ["authorization_code"],
         responseTypes: ["code"],
+        scopes: ["mcp"],
         tokenEndpointAuthMethod: "none",
         isPublic: true,
         metadata: { cimd: true },
@@ -161,6 +165,7 @@ describe("OAuthClientModel", () => {
         redirectUris: ["http://localhost/callback"],
         grantTypes: ["authorization_code"],
         responseTypes: ["code"],
+        scopes: ["mcp"],
         tokenEndpointAuthMethod: "none",
         isPublic: true,
         metadata: { cimd: true },
@@ -173,6 +178,7 @@ describe("OAuthClientModel", () => {
         redirectUris: ["http://localhost/callback"],
         grantTypes: ["authorization_code"],
         responseTypes: ["code"],
+        scopes: ["mcp"],
         tokenEndpointAuthMethod: "none",
         isPublic: true,
         metadata: { cimd: true },
@@ -183,6 +189,68 @@ describe("OAuthClientModel", () => {
       expect(exists).toBe(true);
       const name = await OAuthClientModel.getNameByClientId(clientId);
       expect(name).toBe("Second");
+    });
+  });
+
+  describe("ensureOfflineAccessScope", () => {
+    test("adds offline_access to a refresh-capable client missing it", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "needs-offline",
+        scopes: ["mcp"],
+        grantTypes: ["authorization_code", "refresh_token"],
+      });
+
+      await OAuthClientModel.ensureOfflineAccessScope(client.clientId);
+
+      const found = await OAuthClientModel.findByClientId(client.clientId);
+      expect(found?.scopes).toEqual(["mcp", "offline_access"]);
+    });
+
+    test("is idempotent when the client already has offline_access", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "already-offline",
+        scopes: ["mcp", "offline_access"],
+        grantTypes: ["authorization_code", "refresh_token"],
+      });
+
+      await OAuthClientModel.ensureOfflineAccessScope(client.clientId);
+
+      const found = await OAuthClientModel.findByClientId(client.clientId);
+      expect(found?.scopes).toEqual(["mcp", "offline_access"]);
+    });
+
+    test("does nothing for a client without the refresh_token grant", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "no-refresh",
+        scopes: ["mcp"],
+        grantTypes: ["authorization_code"],
+      });
+
+      await OAuthClientModel.ensureOfflineAccessScope(client.clientId);
+
+      const found = await OAuthClientModel.findByClientId(client.clientId);
+      expect(found?.scopes).toEqual(["mcp"]);
+    });
+
+    test("seeds offline_access when the client has no stored scopes", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "null-scopes",
+        scopes: null,
+        grantTypes: ["authorization_code", "refresh_token"],
+      });
+
+      await OAuthClientModel.ensureOfflineAccessScope(client.clientId);
+
+      const found = await OAuthClientModel.findByClientId(client.clientId);
+      expect(found?.scopes).toEqual(["offline_access"]);
     });
   });
 
@@ -197,6 +265,7 @@ describe("OAuthClientModel", () => {
         redirectUris: ["http://127.0.0.1:3000/callback"],
         grantTypes: ["authorization_code"],
         responseTypes: ["code"],
+        scopes: ["mcp"],
         tokenEndpointAuthMethod: "none",
         isPublic: true,
         metadata: { cimd: true },
@@ -224,6 +293,7 @@ describe("OAuthClientModel", () => {
         redirectUris: ["http://127.0.0.1:3000/callback"],
         grantTypes: ["authorization_code"],
         responseTypes: ["code"],
+        scopes: ["mcp"],
         tokenEndpointAuthMethod: "none",
         isPublic: true,
         metadata: { cimd: true },
@@ -248,6 +318,7 @@ describe("OAuthClientModel", () => {
         redirectUris: ["http://127.0.0.1:3000/callback"],
         grantTypes: ["authorization_code"],
         responseTypes: ["code"],
+        scopes: ["mcp"],
         tokenEndpointAuthMethod: "none",
         isPublic: true,
         metadata: { cimd: true },

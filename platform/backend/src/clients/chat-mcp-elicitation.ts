@@ -44,9 +44,29 @@ export type ChatMcpElicitationWriter = {
   write: (chunk: UIMessageChunk) => void;
 };
 
+/**
+ * Result of eliciting from a built-in Archestra tool: either the user answered,
+ * or there is no chat stream writer to ask through (headless execution). The
+ * caller branches on `status` instead of catching a thrown error.
+ */
+export type ArchestraElicitationOutcome =
+  | { status: "answered"; result: ElicitResult }
+  | { status: "no_viewer" };
+
 export type ChatMcpElicitationBridge = {
   setWriter: (writer: ChatMcpElicitationWriter) => void;
   createHandler: (params: { toolName: string }) => McpElicitationHandler;
+  /**
+   * Elicit directly from a built-in Archestra tool (no external MCP server in
+   * the loop). Returns a typed `no_viewer` outcome rather than throwing when no
+   * chat stream writer is attached, so the tool can degrade gracefully instead
+   * of surfacing a fatal chat error.
+   */
+  elicit: (params: {
+    toolName: string;
+    message: string;
+    requestedSchema?: unknown;
+  }) => Promise<ArchestraElicitationOutcome>;
 };
 
 type ChatMcpElicitationResponse = z.infer<
@@ -62,6 +82,53 @@ export function createChatMcpElicitationBridge({
 }): ChatMcpElicitationBridge {
   let writer: ChatMcpElicitationWriter | null = null;
 
+  // Streams one elicitation request to the chat client and waits for the user's
+  // response. Throws when no writer is attached — callers that must degrade
+  // gracefully check `writer` first (see `elicit`).
+  function sendElicitationRequest(req: {
+    toolName: string;
+    message: string;
+    mode: "form" | "url";
+    requestedSchema?: unknown;
+    elicitationId?: string;
+    url?: string;
+  }): Promise<ElicitResult> {
+    if (!writer) {
+      throw new Error("MCP elicitation requested before chat stream opened");
+    }
+
+    const id = randomUUID();
+    writer.write({
+      type: "data-mcp-elicitation",
+      data: {
+        id,
+        conversationId,
+        toolName: req.toolName,
+        message: req.message,
+        mode: req.mode,
+        requestedSchema: req.requestedSchema,
+        elicitationId: req.elicitationId,
+        url: req.url,
+      } satisfies ChatMcpElicitationStreamData,
+    });
+
+    logger.info(
+      {
+        conversationId,
+        toolName: req.toolName,
+        mode: req.mode,
+        elicitationId: req.elicitationId,
+      },
+      "Waiting for chat MCP elicitation response",
+    );
+
+    return waitForChatMcpElicitationResponse({
+      id,
+      conversationId,
+      abortSignal,
+    });
+  }
+
   return {
     setWriter(nextWriter) {
       writer = nextWriter;
@@ -69,49 +136,31 @@ export function createChatMcpElicitationBridge({
 
     createHandler({ toolName }) {
       return async (request) => {
-        if (!writer) {
-          throw new Error(
-            "MCP elicitation requested before chat stream opened",
-          );
-        }
-
-        const id = randomUUID();
         const params = request.params;
-        const mode = params.mode ?? "form";
-
-        writer.write({
-          type: "data-mcp-elicitation",
-          data: {
-            id,
-            conversationId,
-            toolName,
-            message: params.message,
-            mode,
-            requestedSchema:
-              "requestedSchema" in params ? params.requestedSchema : undefined,
-            elicitationId:
-              "elicitationId" in params ? params.elicitationId : undefined,
-            url: "url" in params ? params.url : undefined,
-          } satisfies ChatMcpElicitationStreamData,
-        });
-
-        logger.info(
-          {
-            conversationId,
-            toolName,
-            mode,
-            elicitationId:
-              "elicitationId" in params ? params.elicitationId : undefined,
-          },
-          "Waiting for chat MCP elicitation response",
-        );
-
-        return waitForChatMcpElicitationResponse({
-          id,
-          conversationId,
-          abortSignal,
+        return sendElicitationRequest({
+          toolName,
+          message: params.message,
+          mode: params.mode ?? "form",
+          requestedSchema:
+            "requestedSchema" in params ? params.requestedSchema : undefined,
+          elicitationId:
+            "elicitationId" in params ? params.elicitationId : undefined,
+          url: "url" in params ? params.url : undefined,
         });
       };
+    },
+
+    async elicit({ toolName, message, requestedSchema }) {
+      if (!writer) {
+        return { status: "no_viewer" };
+      }
+      const result = await sendElicitationRequest({
+        toolName,
+        message,
+        mode: "form",
+        requestedSchema,
+      });
+      return { status: "answered", result };
     },
   };
 }

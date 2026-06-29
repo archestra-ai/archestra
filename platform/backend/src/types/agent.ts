@@ -6,6 +6,7 @@ import {
   MAX_DOMAIN_LENGTH,
   MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPTS,
+  SupportedProvidersSchema,
 } from "@archestra/shared";
 import {
   createInsertSchema,
@@ -75,6 +76,10 @@ const ChatTitleGenerationAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION),
 });
 
+const AppRuntimeAgentConfigSchema = z.object({
+  name: z.literal(BUILT_IN_AGENT_IDS.APP_RUNTIME),
+});
+
 // Discriminated union — add future built-in agents here
 export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   PolicyConfigAgentConfigSchema,
@@ -82,6 +87,7 @@ export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   DualLlmQuarantineAgentConfigSchema,
   ContextCompactionAgentConfigSchema,
   ChatTitleGenerationAgentConfigSchema,
+  AppRuntimeAgentConfigSchema,
 ]);
 
 export type BuiltInAgentConfig = z.infer<typeof BuiltInAgentConfigSchema>;
@@ -212,6 +218,28 @@ export const SelectAgentSchema = createSelectSchema(
     .array(SuggestedPromptInputSchema)
     .max(MAX_SUGGESTED_PROMPTS)
     .default([]),
+  /**
+   * The provider of the agent's configured default LLM, resolved server-side
+   * from `llmApiKeyId` (or `modelId` when only a model is pinned) so every
+   * viewer sees the agent's true provider — even one who can't access the
+   * owner's per-user key. Null when the agent has no LLM configured. Populated
+   * on read paths (list/get); absent on mutation responses (clients re-fetch).
+   */
+  resolvedLlmProvider: SupportedProvidersSchema.nullable().optional(),
+  /**
+   * The human-facing name of the agent's configured model (e.g. "gpt-4"),
+   * resolved server-side from `modelId` so a viewer who can't access the
+   * configured key still sees the model name rather than its UUID. Null when no
+   * model is configured.
+   */
+  resolvedLlmModelName: z.string().nullable().optional(),
+  /**
+   * Whether the agent's configured provider requires a per-user credential
+   * (e.g. GitHub Copilot). Lets the chat/dialog show a read-only model and
+   * prompt the viewer to connect their own account instead of silently
+   * substituting another model.
+   */
+  llmProviderRequiresPerUserCredential: z.boolean().optional(),
 });
 
 // Base schema without refinement - can be used with .partial()
@@ -312,9 +340,9 @@ export const PolicyConfigSchema = z.object({
     ])
     .describe(
       "How should the tool's results be treated? " +
-        "'mark_as_safe' - Results are safe and can be used directly (internal systems, databases, dev tools). " +
-        "'mark_as_sensitive' - Results are sensitive and will restrict subsequent tool usage (external/filesystem data where exact values are safe). " +
-        "'sanitize_with_dual_llm' - Results are processed through dual LLM security pattern (sensitive data that needs summarization). " +
+        "'mark_as_safe' - Results are fully trusted and used directly (internal dev/config metadata, or external action tools that return no third-party content). " +
+        "'mark_as_sensitive' - Results contain organizational data from internal self-hosted systems (Jira, GitHub, databases, internal APIs, file systems) that must not leak to external tools. " +
+        "'sanitize_with_dual_llm' - Results come from untrusted external/third-party sources and may carry injected instructions; they are summarized through the Dual LLM workflow so the raw content never reaches the privileged model (web search, scraping/fetching arbitrary pages, untrusted inbound messages). " +
         "'block_always' - Results are blocked entirely (highly sensitive or dangerous output).",
     ),
   reasoning: z

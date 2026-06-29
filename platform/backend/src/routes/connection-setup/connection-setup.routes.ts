@@ -10,7 +10,7 @@ import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
 import { userHasPermission } from "@/auth";
 import { CacheKey } from "@/cache-manager";
-import { getConnectionBaseUrlSources } from "@/config";
+import config, { getConnectionBaseUrlSources } from "@/config";
 import { withDbTransaction } from "@/database";
 import {
   AgentModel,
@@ -24,6 +24,7 @@ import {
 } from "@/models";
 import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@/models/connection-setup";
 import {
+  ensureConnectionPassthroughKey,
   ensureConnectionVirtualKey,
   readVirtualKeyValue,
 } from "@/services/connection-setup";
@@ -39,6 +40,7 @@ import {
   type ConnectionSetup,
   type ConnectionSetupClientId,
   ConnectionSetupClientIdSchema,
+  ConnectionSetupPlatformSchema,
   ConnectionSetupProxyAuthSchema,
   constructResponseSchema,
   type Organization,
@@ -68,17 +70,27 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
     "deepseek",
     "xai",
     "cerebras",
+    "github-copilot",
   ],
 };
 
 const CreateConnectionSetupBodySchema = z.object({
   clientId: ConnectionSetupClientIdSchema,
+  /** Target OS for the generated script; defaults to bash (macOS/Linux). */
+  platform: ConnectionSetupPlatformSchema.default("macos"),
   baseUrl: z.string().url().max(2048),
   mcpGatewayId: z.string().uuid().optional(),
   llmProxyId: z.string().uuid().optional(),
   provider: SupportedProvidersSchema.optional(),
   /** Passthrough by default; "virtual-key" auto-provisions a personal key. */
   proxyAuth: ConnectionSetupProxyAuthSchema.default("provider-key"),
+  /**
+   * In passthrough (provider-key) mode, auto-provision a personal passthrough
+   * key and inject the X-Archestra-Virtual-Key header so the proxy attributes
+   * requests to the user. Defaults on; the UI exposes an opt-out. Best-effort:
+   * silently skipped when the caller lacks llmVirtualKey:create.
+   */
+  attributePassthrough: z.boolean().default(true),
   skills: z
     .object({
       skillIds: z.array(z.string().uuid()).min(1).max(200),
@@ -92,6 +104,29 @@ const CreateConnectionSetupResponseSchema = z.object({
   command: z.string(),
   expiresAt: z.date(),
   tokenStart: z.string(),
+});
+
+const CreateConnectionVirtualKeyBodySchema = z.object({
+  provider: SupportedProvidersSchema,
+});
+
+const CreateConnectionVirtualKeyResponseSchema = z.object({
+  /** Raw virtual key value, returned exactly once for the user to paste. */
+  value: z.string(),
+  /** Display name of the key (for revocation guidance). */
+  name: z.string(),
+});
+
+const CreateConnectionPassthroughKeyBodySchema = z.object({
+  /** LLM proxy the passthrough key is scoped to (added to its allowed list). */
+  llmProxyId: z.string().uuid(),
+});
+
+const CreateConnectionPassthroughKeyResponseSchema = z.object({
+  /** Raw passthrough key value, returned exactly once for the user to paste. */
+  value: z.string(),
+  /** Display name of the key (for revocation guidance). */
+  name: z.string(),
 });
 
 const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -111,10 +146,12 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body, organizationId, user }, reply) => {
       const {
         clientId,
+        platform,
         mcpGatewayId,
         llmProxyId,
         provider,
         proxyAuth,
+        attributePassthrough,
         skills,
       } = body;
       const baseUrl = body.baseUrl.replace(/\/+$/, "");
@@ -163,8 +200,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           kind: "llmProxy",
         });
-        // provider-key mode is passthrough: the script only rewires the base
-        // URL, so there is nothing to provision.
         if (proxyAuth === "virtual-key") {
           // Minting a virtual key requires the same permission as the
           // dedicated create endpoint (RouteId.CreateVirtualApiKey).
@@ -189,6 +224,29 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             preferredProviderKeyId:
               organization.connectionDefaultProviderKeys?.[provider] ?? null,
           });
+        } else if (
+          // provider-key mode is passthrough: the script only rewires the base
+          // URL. For Claude Code's Anthropic subscription passthrough we also
+          // attribute requests to the user via X-Archestra-Virtual-Key, reusing
+          // the (otherwise-null) virtualApiKeyId column to carry the passthrough
+          // key id. Best-effort: silently skipped without llmVirtualKey:create.
+          attributePassthrough &&
+          clientId === "claude-code" &&
+          provider === "anthropic"
+        ) {
+          const canCreateVirtualKey = await userHasPermission(
+            user.id,
+            organizationId,
+            "llmVirtualKey",
+            "create",
+          );
+          if (canCreateVirtualKey) {
+            virtualApiKeyId = await ensureConnectionPassthroughKey({
+              organizationId,
+              userId: user.id,
+              userEmail: user.email,
+            });
+          }
         }
       }
 
@@ -204,6 +262,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
         clientId,
+        platform,
         baseUrl,
         mcpGatewayId: mcpGatewayId ?? null,
         llmProxyId: llmProxyId ?? null,
@@ -221,10 +280,131 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         command: buildSetupCommand({
           origin: proxyBaseUrlToOrigin(baseUrl),
           rawToken,
+          platform,
         }),
         expiresAt: setup.expiresAt,
         tokenStart: setup.tokenStart,
       });
+    },
+  );
+
+  fastify.post(
+    "/api/connection-setups/virtual-key",
+    {
+      schema: {
+        operationId: RouteId.CreateConnectionVirtualKey,
+        description:
+          "Provision (or reuse) the caller's personal connection virtual key " +
+          "for a provider and return its value once. Backs the manual " +
+          "/connection flow's virtual-key option; mirrors the auto-provisioning " +
+          "done by the one-command setup. Requires llmVirtualKey:create.",
+        tags: ["Connection Setups"],
+        body: CreateConnectionVirtualKeyBodySchema,
+        response: constructResponseSchema(
+          CreateConnectionVirtualKeyResponseSchema,
+        ),
+      },
+    },
+    async ({ body, organizationId, user }, reply) => {
+      const { provider } = body;
+
+      // Same gate as the virtual-key branch of CreateConnectionSetup: minting a
+      // key requires the dedicated create permission.
+      const canCreateVirtualKey = await userHasPermission(
+        user.id,
+        organizationId,
+        "llmVirtualKey",
+        "create",
+      );
+      if (!canCreateVirtualKey) {
+        throw new ApiError(
+          403,
+          "You need llmVirtualKey:create permission to use a virtual key. Use your own provider key instead.",
+        );
+      }
+
+      const organization = await OrganizationModel.getById(organizationId);
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      const virtualApiKeyId = await ensureConnectionVirtualKey({
+        organizationId,
+        userId: user.id,
+        userEmail: user.email,
+        userTeamIds: await TeamModel.getUserTeamIds(user.id),
+        provider,
+        preferredProviderKeyId:
+          organization.connectionDefaultProviderKeys?.[provider] ?? null,
+      });
+
+      const value = await readVirtualKeyValue(virtualApiKeyId);
+      const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
+      if (!value || !virtualKey) {
+        throw new ApiError(500, "Failed to provision a virtual key");
+      }
+
+      return reply.send({ value, name: virtualKey.name });
+    },
+  );
+
+  fastify.post(
+    "/api/connection-setups/passthrough-key",
+    {
+      schema: {
+        operationId: RouteId.CreateConnectionPassthroughKey,
+        description:
+          "Provision (or reuse) the caller's personal passthrough virtual key " +
+          "scoped to an LLM proxy and return its value once. Backs the manual " +
+          "/connection flow's X-Archestra-Virtual-Key attribution step for " +
+          "Claude Code and Claude Desktop. Requires llmVirtualKey:create.",
+        tags: ["Connection Setups"],
+        body: CreateConnectionPassthroughKeyBodySchema,
+        response: constructResponseSchema(
+          CreateConnectionPassthroughKeyResponseSchema,
+        ),
+      },
+    },
+    async ({ body, organizationId, user }, reply) => {
+      const { llmProxyId } = body;
+
+      // Same gate as the virtual-key route: minting a key requires the
+      // dedicated create permission.
+      const canCreateVirtualKey = await userHasPermission(
+        user.id,
+        organizationId,
+        "llmVirtualKey",
+        "create",
+      );
+      if (!canCreateVirtualKey) {
+        throw new ApiError(
+          403,
+          "You need llmVirtualKey:create permission to create a passthrough key.",
+        );
+      }
+
+      // We're generating a connection for this proxy, so the caller must be able
+      // to reach it.
+      await requireAgentAccess({
+        agentId: llmProxyId,
+        organizationId,
+        userId: user.id,
+        kind: "llmProxy",
+      });
+
+      const virtualApiKeyId = await ensureConnectionPassthroughKey({
+        organizationId,
+        userId: user.id,
+        userEmail: user.email,
+      });
+
+      const value = await readVirtualKeyValue(virtualApiKeyId);
+      const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
+      if (!value || !virtualKey) {
+        throw new ApiError(500, "Failed to provision a passthrough key");
+      }
+
+      return reply.send({ value, name: virtualKey.name });
     },
   );
 
@@ -397,6 +577,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
 
     let virtualKeyValue: string | null = null;
     let virtualKeyName: string | null = null;
+    let passthroughVirtualKey: string | null = null;
     if (setup.proxyAuth === "virtual-key") {
       if (!setup.virtualApiKeyId) throw GONE();
       const virtualKey = await VirtualApiKeyModel.findById(
@@ -411,6 +592,11 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
         throw GONE();
       }
       virtualKeyName = virtualKey.name;
+    } else if (setup.proxyAuth === "provider-key" && setup.virtualApiKeyId) {
+      // Passthrough attribution key (provider-key mode reuses virtualApiKeyId).
+      // Best-effort: a revoked key just drops the header — never throw GONE(),
+      // since the subscription credential still passes through unattributed.
+      passthroughVirtualKey = await readVirtualKeyValue(setup.virtualApiKeyId);
     }
 
     proxy = {
@@ -421,6 +607,18 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       proxyName: toProxyName(proxyAgent.name),
       virtualKey: virtualKeyValue,
       virtualKeyName,
+      passthroughVirtualKey,
+      // Passthrough Copilot setups run the GitHub device flow inside the
+      // script; virtual-key setups resolve the stored token server-side.
+      githubCopilot:
+        setup.provider === "github-copilot" &&
+        setup.proxyAuth === "provider-key"
+          ? {
+              tokenExchangeUrl: config.llm["github-copilot"].tokenExchangeUrl,
+              deviceAuthBaseUrl: config.llm["github-copilot"].deviceAuthBaseUrl,
+              clientId: config.llm["github-copilot"].clientId,
+            }
+          : null,
     };
   }
 
@@ -453,7 +651,13 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
   }
 
   return {
-    context: { clientId: setup.clientId, appName, mcp, proxy },
+    context: {
+      clientId: setup.clientId,
+      platform: setup.platform,
+      appName,
+      mcp,
+      proxy,
+    },
     skillRender,
   };
 }

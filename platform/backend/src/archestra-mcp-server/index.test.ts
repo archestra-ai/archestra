@@ -4,6 +4,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
+import { z } from "zod";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { __test, type ArchestraContext, executeArchestraTool } from ".";
@@ -111,23 +112,7 @@ describe("executeArchestraTool", () => {
 
     test("catches output schema errors in one spot", () => {
       const result = __test.validateToolResult(
-        {
-          safeParse: (value: unknown) =>
-            value && typeof value === "object" && "requiredField" in value
-              ? ({ success: true, data: value } as const)
-              : ({
-                  success: false,
-                  error: {
-                    issues: [
-                      {
-                        code: "custom",
-                        path: ["requiredField"],
-                        message: "Missing required field",
-                      },
-                    ],
-                  },
-                } as const),
-        } as any,
+        z.object({ requiredField: z.string() }),
         {
           content: [{ type: "text", text: "bad output" }],
           structuredContent: {},

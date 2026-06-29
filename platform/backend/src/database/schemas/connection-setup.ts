@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   ConnectionSetupClientId,
+  ConnectionSetupPlatform,
   ConnectionSetupProxyAuth,
 } from "@/types/connection-setup";
 import agentsTable from "./agent";
@@ -42,6 +43,11 @@ const connectionSetupsTable = pgTable(
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
     clientId: text("client_id").$type<ConnectionSetupClientId>().notNull(),
+    /** Target OS: "macos"/"linux" render bash, "windows" renders PowerShell. */
+    platform: text("platform")
+      .$type<ConnectionSetupPlatform>()
+      .notNull()
+      .default("macos"),
     baseUrl: text("base_url").notNull(),
     mcpGatewayId: uuid("mcp_gateway_id").references(() => agentsTable.id, {
       onDelete: "cascade",

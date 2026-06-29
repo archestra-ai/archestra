@@ -120,17 +120,25 @@ export async function isDatabaseHealthy(): Promise<boolean> {
     return false;
   }
 
+  let timeoutHandle: NodeJS.Timeout | undefined;
   try {
     await Promise.race([
       pool.query("SELECT 1"),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Health check timeout")), 3000),
-      ),
+      new Promise((_, reject) => {
+        timeoutHandle = setTimeout(
+          () => reject(new Error("Health check timeout")),
+          3000,
+        );
+      }),
     ]);
     return true;
   } catch (error) {
     logger.warn({ error }, "Database health check failed");
     return false;
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
   }
 }
 

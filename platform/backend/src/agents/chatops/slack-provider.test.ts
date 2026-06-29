@@ -1107,6 +1107,134 @@ describe("SlackProvider file attachment downloads", () => {
     expect(result?.attachments).toBeUndefined();
   });
 
+  test("file-only DM (empty text + files) is parsed with attachments", async () => {
+    const provider = createProviderWithConfig();
+    const fileContent = Buffer.from("file-only dm");
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(fileContent, { status: 200 }),
+    );
+
+    const payload = makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel: "D_FILE_ONLY",
+        channel_type: "im",
+        text: "",
+        files: [
+          {
+            id: "F_DM",
+            name: "report.pdf",
+            mimetype: "application/pdf",
+            size: fileContent.length,
+            url_private: "https://files.slack.com/files-pri/T123/report.pdf",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.text).toBe("");
+    expect(result?.attachments).toHaveLength(1);
+    expect(result?.attachments?.[0].name).toBe("report.pdf");
+  });
+
+  test("file-only DM whose download fails is dropped (no empty turn)", async () => {
+    const provider = createProviderWithConfig();
+
+    // The download fails (e.g. expired/oversized), so no attachment survives.
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 404 }));
+
+    const payload = makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel: "D_FILE_ONLY",
+        channel_type: "im",
+        text: "",
+        files: [
+          {
+            id: "F_DM",
+            name: "report.pdf",
+            mimetype: "application/pdf",
+            size: 1234,
+            url_private: "https://files.slack.com/files-pri/T123/report.pdf",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toBeNull();
+  });
+
+  test("file-only app_mention (empty text + files) is parsed with attachments", async () => {
+    const provider = createProviderWithConfig();
+    const fileContent = Buffer.from("file-only mention");
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(fileContent, { status: 200 }),
+    );
+
+    const payload = makeEventPayload(
+      {},
+      {
+        type: "app_mention",
+        text: "<@UBOT123>",
+        files: [
+          {
+            id: "F_MENTION",
+            name: "diagram.png",
+            mimetype: "image/png",
+            size: fileContent.length,
+            url_private: "https://files.slack.com/files-pri/T123/diagram.png",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.text).toBe("");
+    expect(result?.attachments).toHaveLength(1);
+    expect(result?.attachments?.[0].name).toBe("diagram.png");
+  });
+
+  test("file-only UNADDRESSED channel message (no mention, inactive thread) is dropped", async () => {
+    const provider = createProviderWithConfig();
+
+    const payload = makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel: "C_FILE_ONLY_UNADDRESSED",
+        channel_type: "channel",
+        text: "",
+        thread_ts: "7777777777.000001",
+        files: [
+          {
+            id: "F_UNADDRESSED",
+            name: "leak.png",
+            mimetype: "image/png",
+            size: 100,
+            url_private: "https://files.slack.com/files-pri/T123/leak.png",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toBeNull();
+    // Dropped before any download is attempted.
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   test("downloads file and returns attachment with base64 content", async () => {
     const provider = createProviderWithConfig();
     const fileContent = Buffer.from("hello image data");

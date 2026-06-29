@@ -36,7 +36,6 @@ export const RouteId = {
 
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",
-  GrantToolToAgent: "grantToolToAgent",
   BulkAssignTools: "bulkAssignTools",
   BulkUpdateAgentTools: "bulkUpdateAgentTools",
   AutoConfigureAgentToolPolicies: "autoConfigureAgentToolPolicies",
@@ -90,6 +89,7 @@ export const RouteId = {
   McpGatewayGet: "mcpGatewayGet",
   McpGatewayPost: "mcpGatewayPost",
   McpProxyPost: "mcpProxyPost", // Frontend session-based proxy to MCP Gateway
+  McpServerProxyPost: "mcpServerProxyPost", // Session-based proxy to one installed server's MCP App runtime
 
   // MCP Server Installation Request Routes
   GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
@@ -276,6 +276,19 @@ export const RouteId = {
     "minimaxChatCompletionsWithDefaultAgent",
   MinimaxChatCompletionsWithAgent: "minimaxChatCompletionsWithAgent",
 
+  // Proxy Routes - GitHub Copilot
+  GithubCopilotChatCompletionsWithDefaultAgent:
+    "githubCopilotChatCompletionsWithDefaultAgent",
+  GithubCopilotChatCompletionsWithAgent:
+    "githubCopilotChatCompletionsWithAgent",
+  GithubCopilotListModelsWithDefaultAgent:
+    "githubCopilotListModelsWithDefaultAgent",
+  GithubCopilotListModelsWithAgent: "githubCopilotListModelsWithAgent",
+
+  // GitHub Copilot device-flow sign-in (creates personal provider keys)
+  GithubCopilotDeviceAuthStart: "githubCopilotDeviceAuthStart",
+  GithubCopilotDeviceAuthPoll: "githubCopilotDeviceAuthPoll",
+
   // Proxy Routes - Azure AI Foundry
   AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
@@ -296,6 +309,7 @@ export const RouteId = {
   UpdateChatConversation: "updateChatConversation",
   SetConversationHooksDebug: "setConversationHooksDebug",
   DeleteChatConversation: "deleteChatConversation",
+  ClearChatConversationErrors: "clearChatConversationErrors",
   CompactChatConversation: "compactChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
   GetChatMcpTools: "getChatMcpTools",
@@ -309,7 +323,7 @@ export const RouteId = {
   GetSharedConversation: "getSharedConversation",
   ForkSharedConversation: "forkSharedConversation",
   GetChatAttachmentContent: "getChatAttachmentContent",
-  PromoteChatAttachmentToKnowledgeFile: "promoteChatAttachmentToKnowledgeFile",
+  DeleteChatAttachment: "deleteChatAttachment",
   GetLlmModels: "getLlmModels",
   SyncLlmModels: "syncLlmModels",
 
@@ -350,6 +364,13 @@ export const RouteId = {
   RotateLlmOauthClientSecret: "rotateLlmOauthClientSecret",
   DeleteLlmOauthClient: "deleteLlmOauthClient",
 
+  // MCP OAuth Client Routes
+  GetMcpOauthClients: "getMcpOauthClients",
+  CreateMcpOauthClient: "createMcpOauthClient",
+  UpdateMcpOauthClient: "updateMcpOauthClient",
+  RotateMcpOauthClientSecret: "rotateMcpOauthClientSecret",
+  DeleteMcpOauthClient: "deleteMcpOauthClient",
+
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
   UpdateModel: "updateModel",
@@ -360,6 +381,12 @@ export const RouteId = {
   GetLimit: "getLimit",
   UpdateLimit: "updateLimit",
   DeleteLimit: "deleteLimit",
+
+  // Per-environment default user limits
+  ListDefaultUserLimits: "listDefaultUserLimits",
+  CreateDefaultUserLimit: "createDefaultUserLimit",
+  UpdateDefaultUserLimit: "updateDefaultUserLimit",
+  DeleteDefaultUserLimit: "deleteDefaultUserLimit",
 
   // Organization Routes
   GetOrganization: "getOrganization",
@@ -511,13 +538,6 @@ export const RouteId = {
   GetConnectorRun: "getConnectorRun",
 
   // Knowledge File Routes
-  GetKnowledgeFiles: "getKnowledgeFiles",
-  UploadKnowledgeFiles: "uploadKnowledgeFiles",
-  GetKnowledgeFile: "getKnowledgeFile",
-  GetKnowledgeFileContent: "getKnowledgeFileContent",
-  UpdateKnowledgeFile: "updateKnowledgeFile",
-  DeleteKnowledgeFile: "deleteKnowledgeFile",
-  GetKnowledgeFileUploadConfig: "getKnowledgeFileUploadConfig",
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
@@ -545,6 +565,23 @@ export const RouteId = {
   GetSkillSourceRepos: "getSkillSourceRepos",
   EnableSkillToolDefaults: "enableSkillToolDefaults",
   GetSkillSandboxArtifact: "getSkillSandboxArtifact",
+  GetSkillSandboxConversationArtifacts: "getSkillSandboxConversationArtifacts",
+  CreateProject: "createProject",
+  CreateProjectFromConversation: "createProjectFromConversation",
+  GetProjects: "getProjects",
+  GetProject: "getProject",
+  UpdateProject: "updateProject",
+  SetProjectShare: "setProjectShare",
+  DeleteProject: "deleteProject",
+  GetProjectConversations: "getProjectConversations",
+  GetProjectFiles: "getProjectFiles",
+  UploadProjectFiles: "uploadProjectFiles",
+  GetProjectInstructions: "getProjectInstructions",
+  SetProjectInstructions: "setProjectInstructions",
+  PinProject: "pinProject",
+  UnpinProject: "unpinProject",
+  DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
+  UpdateSkillSandboxArtifactContent: "updateSkillSandboxArtifactContent",
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
@@ -564,6 +601,26 @@ export const RouteId = {
   // Connection Setup Routes
   CreateConnectionSetup: "createConnectionSetup",
   GetConnectionSetupScript: "getConnectionSetupScript",
+  CreateConnectionVirtualKey: "createConnectionVirtualKey",
+  CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
+
+  // MCP App Routes
+  GetApps: "getApps",
+  GetExternalApp: "getExternalApp",
+  CreateApp: "createApp",
+  GetApp: "getApp",
+  UpdateApp: "updateApp",
+  DeleteApp: "deleteApp",
+  GetAppVersions: "getAppVersions",
+  GetAppVersion: "getAppVersion",
+  GetAppTools: "getAppTools",
+  AssignToolToApp: "assignToolToApp",
+  UnassignToolFromApp: "unassignToolFromApp",
+  GetAppTemplates: "getAppTemplates",
+  PostAppRenderDiagnostics: "postAppRenderDiagnostics",
+  PostAppRenderScreenshot: "postAppRenderScreenshot",
+  // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
+  McpAppProxyPost: "mcpAppProxyPost",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

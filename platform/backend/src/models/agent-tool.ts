@@ -20,7 +20,7 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   createPaginatedResult,
@@ -555,8 +555,10 @@ class AgentToolModel {
     options?: Partial<
       Pick<InsertAgentTool, "mcpServerId" | "credentialResolutionMode">
     >,
+    tx?: Transaction,
   ): Promise<void> {
     if (agentIds.length === 0 || toolIds.length === 0) return;
+    const dbx = tx ?? db;
 
     // Build all possible combinations
     const assignments: Array<{
@@ -580,7 +582,7 @@ class AgentToolModel {
     }
 
     // Check which assignments already exist
-    const existingAssignments = await db
+    const existingAssignments = await dbx
       .select({
         agentId: schema.agentToolsTable.agentId,
         toolId: schema.agentToolsTable.toolId,
@@ -603,7 +605,7 @@ class AgentToolModel {
     );
 
     if (newAssignments.length > 0) {
-      await db
+      await dbx
         .insert(schema.agentToolsTable)
         .values(newAssignments)
         .onConflictDoNothing();
@@ -613,7 +615,7 @@ class AgentToolModel {
       (options?.mcpServerId || options?.credentialResolutionMode) &&
       existingAssignments.length > 0
     ) {
-      await db
+      await dbx
         .update(schema.agentToolsTable)
         .set({
           ...(options.mcpServerId ? { mcpServerId: options.mcpServerId } : {}),
@@ -1084,27 +1086,6 @@ class AgentToolModel {
     }
 
     return createPaginatedResult(data, Number(total), pagination);
-  }
-
-  /**
-   * Delete all static agent-tool assignments that use a specific MCP server.
-   */
-  static async deleteByExecutionSourceMcpServerId(
-    mcpServerId: string,
-  ): Promise<number> {
-    const result = await db
-      .delete(schema.agentToolsTable)
-      .where(eq(schema.agentToolsTable.mcpServerId, mcpServerId));
-    return result.rowCount ?? 0;
-  }
-
-  /**
-   * Delete all static agent-tool assignments that use a specific MCP server.
-   */
-  static async deleteByCredentialSourceMcpServerId(
-    mcpServerId: string,
-  ): Promise<number> {
-    return AgentToolModel.deleteByExecutionSourceMcpServerId(mcpServerId);
   }
 
   /**

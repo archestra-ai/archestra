@@ -1,6 +1,6 @@
 import type { archestraApiTypes } from "@archestra/shared";
 
-export type FileSource = "artifact" | "generated" | "attachment";
+export type FileSource = "artifact" | "generated" | "attachment" | "project";
 
 export type ConversationFileItem = {
   id: string;
@@ -17,14 +17,20 @@ type FilesResponse =
   | undefined;
 
 /**
- * Builds the two Files-panel sections from the API payload plus the in-memory
+ * Builds the Files-panel sections from the API payload plus the in-memory
  * markdown artifact. `artifact.md` is synthesized client-side and always sits
- * first in the Generated section.
+ * first in the Generated section. `projectFiles` is every file in the chat's
+ * project (project chats only), minus this conversation's own outputs; it is
+ * empty for a personal chat.
  */
 export function assembleFileSections(params: {
   files: FilesResponse;
   artifact: string | null | undefined;
-}): { generated: ConversationFileItem[]; attachments: ConversationFileItem[] } {
+}): {
+  generated: ConversationFileItem[];
+  attachments: ConversationFileItem[];
+  projectFiles: ConversationFileItem[];
+} {
   const generated: ConversationFileItem[] = [];
 
   if (params.artifact && params.artifact.trim().length > 0) {
@@ -57,5 +63,50 @@ export function assembleFileSections(params: {
     source: "attachment",
   }));
 
-  return { generated, attachments };
+  const projectFiles: ConversationFileItem[] = (
+    params.files?.projectFiles ?? []
+  ).map((f) => ({
+    id: f.id,
+    name: f.name,
+    mimeType: f.mimeType,
+    contentUrl: f.contentUrl,
+    source: "project",
+  }));
+
+  return { generated, attachments, projectFiles };
+}
+
+/**
+ * Header label + persistence-scope subtitle for the chat panel's group of
+ * persistent files (this chat's saved outputs, plus the project's shared files
+ * in a project chat). A project chat's files live with the project and are seen
+ * by everyone with access; a personal chat's files stay with the conversation.
+ * Attachments are labeled separately — see {@link ATTACHMENTS_SECTION}.
+ */
+export function persistentFilesSection(projectId: string | null | undefined): {
+  title: string;
+  description: string;
+} {
+  return projectId != null
+    ? { title: "Project files", description: "Shared with the project" }
+    : { title: "Chat files", description: "Created in this chat" };
+}
+
+/** Header label + subtitle for the user's uploaded inputs to a chat. */
+export const ATTACHMENTS_SECTION = {
+  title: "Attachments",
+  description: "Your uploads",
+} as const;
+
+/**
+ * Which delete endpoint removes a given file. Attachments have their own chat
+ * route; generated and project files are both persisted artifacts behind the
+ * skill-sandbox artifact route.
+ */
+export function deleteTargetFor(
+  item: ConversationFileItem,
+): { kind: "artifact" } | { kind: "attachment" } {
+  return item.source === "attachment"
+    ? { kind: "attachment" }
+    : { kind: "artifact" };
 }

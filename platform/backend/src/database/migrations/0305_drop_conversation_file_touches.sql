@@ -1,0 +1,3 @@
+-- drizzle-migration-linter: allow-breaking
+-- drizzle-migration-linter: reason=Removes the conversation_file_touches table that backed the now-deleted touched-files feature. The chat Files panel no longer reads it and no code writes it. It is a standalone touch log (a join of conversation and file) with no inbound foreign keys, so nothing else depends on it and removing it leaves no broken references. No rows are worth preserving because the feature itself is being removed.
+DROP TABLE "conversation_file_touches" CASCADE;

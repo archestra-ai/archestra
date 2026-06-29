@@ -1,0 +1,104 @@
+[[stages]]
+text = """Hi, can you help me get through this batch of supplier invoices? I've attached 10 of them (some PDFs, some Word, some Excel) plus our approved vendor list, approved_vendors.xlsx. Each invoice has an ID on it like INV-1001.
+
+Go through each one and tell me if we should pay it. Check them against the approved vendor list - if it's a supplier we've actually got approved and everything matches up, approve it and give me the exact amount we owe them. If something looks off or it doesn't line up with our list, flag it and I'll follow up.
+
+Send it back with submit_result: a list called invoices, and for each one put the invoice_id, a decision (approve or flag), and amount_cents - the amount to pay in whole cents (so $1,842.50 is 184250) if you're approving it, otherwise null."""
+
+  [[stages.files]]
+  src = "approved_vendors.xlsx"
+  dest = "/home/sandbox/attachments/approved_vendors.xlsx"
+  mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+  [[stages.files]]
+  src = "inv-1001.pdf"
+  dest = "/home/sandbox/attachments/inv-1001.pdf"
+  mime_type = "application/pdf"
+
+  [[stages.files]]
+  src = "inv-1002.docx"
+  dest = "/home/sandbox/attachments/inv-1002.docx"
+  mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+  [[stages.files]]
+  src = "inv-1003.xlsx"
+  dest = "/home/sandbox/attachments/inv-1003.xlsx"
+  mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+  [[stages.files]]
+  src = "inv-1004.pdf"
+  dest = "/home/sandbox/attachments/inv-1004.pdf"
+  mime_type = "application/pdf"
+
+  [[stages.files]]
+  src = "inv-1005.pdf"
+  dest = "/home/sandbox/attachments/inv-1005.pdf"
+  mime_type = "application/pdf"
+
+  [[stages.files]]
+  src = "inv-1006.docx"
+  dest = "/home/sandbox/attachments/inv-1006.docx"
+  mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+  [[stages.files]]
+  src = "inv-1007.xlsx"
+  dest = "/home/sandbox/attachments/inv-1007.xlsx"
+  mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+  [[stages.files]]
+  src = "inv-1008.docx"
+  dest = "/home/sandbox/attachments/inv-1008.docx"
+  mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+  [[stages.files]]
+  src = "inv-1009.pdf"
+  dest = "/home/sandbox/attachments/inv-1009.pdf"
+  mime_type = "application/pdf"
+
+  [[stages.files]]
+  src = "inv-1010.xlsx"
+  dest = "/home/sandbox/attachments/inv-1010.xlsx"
+  mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+[result_schema]
+type = "object"
+required = ["invoices"]
+additionalProperties = false
+
+  [result_schema.properties.invoices]
+  type = "array"
+  minItems = 10
+  maxItems = 10
+
+    [result_schema.properties.invoices.items]
+    type = "object"
+    required = ["invoice_id", "decision", "amount_cents"]
+    additionalProperties = false
+
+      [result_schema.properties.invoices.items.properties.invoice_id]
+      type = "string"
+
+      [result_schema.properties.invoices.items.properties.decision]
+      enum = ["approve", "flag"]
+
+      [result_schema.properties.invoices.items.properties.amount_cents]
+      type = ["integer", "null"]
+
+    # Co-constrain decision and amount_cents so a structurally-wrong submission (approve with no
+    # amount, or flag with an amount) is rejected at schema-validation time -- which grants the agent
+    # a format-correction retry -- rather than locking in and failing the verifier.
+    [result_schema.properties.invoices.items.if]
+    required = ["decision"]
+
+      [result_schema.properties.invoices.items.if.properties.decision]
+      const = "approve"
+
+    [result_schema.properties.invoices.items.then.properties.amount_cents]
+    type = "integer"
+    minimum = 1
+
+    [result_schema.properties.invoices.items.else.properties.amount_cents]
+    type = "null"
+
+[verifier]
+deps = ["openpyxl==3.1.5"]

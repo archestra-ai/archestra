@@ -1,3 +1,4 @@
+import { coerceMalformedToolInputs } from "@archestra/shared";
 import {
   convertToModelMessages,
   type FilePart,
@@ -18,7 +19,7 @@ import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway.utils";
 import type { A2AContext } from "@/types";
 import type { InteractionSource } from "../../../../shared";
-import { executeA2AMessage } from "../a2a-executor";
+import { type A2AAttachment, executeA2AMessage } from "../a2a-executor";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import {
   A2AContextManager,
@@ -194,29 +195,48 @@ export class A2AManager {
           : task && taskWasSwitchedToWorkingState
             ? task.history
             : [];
-      const contextUiMessages = contextDbMessages.map(
-        (m) => m.content as UIMessage,
+      // Repair malformed tool inputs at the source so both the provider request
+      // and the UI-continuation copy (`originalUiMessages` below) stay valid.
+      const contextUiMessages = coerceMalformedToolInputs(
+        contextDbMessages.map((m) => m.content as UIMessage),
       );
       const requestMessages: ModelMessage[] =
         await convertToModelMessages(contextUiMessages);
 
+      // The executor owns building the current user turn: it applies
+      // model-aware, provider-specific attachment handling, so we pass the
+      // turn's text + attachments rather than baking it into `requestMessages`
+      // (which stays prior-context only). Attachments are reconstructed from the
+      // protocol file parts, preserving filenames.
+      const currentTurnAttachments: A2AAttachment[] = (
+        request.message.parts || []
+      )
+        .filter((p) => p.raw !== undefined && p.mediaType !== undefined)
+        .map((p) => ({
+          contentType: p.mediaType as string,
+          contentBase64: Buffer.from(p.raw as Uint8Array).toString("base64"),
+          name: p.filename,
+        }));
+      const currentTurnText = messageParts
+        .filter((part): part is TextPart => part.type === "text")
+        .map((part) => part.text)
+        .join("\n");
+
       if (messageParts.length > 0) {
-        // We need to separately push user message to both contextUiMessages and requestMessages.
-        // Full contextUiMessages are passed to executeA2AMessage for proper processing of final uiMessage
-        // requestMessages are passed to executeA2AMessage for the agent execution.
+        // Mirror the current turn's text into contextUiMessages so the
+        // generated final UIMessage continues from it. Files are not supported
+        // in UI history, so only text parts are carried here.
         const uiMessageParts: TextUIPart[] = [];
         messageParts.forEach((part) => {
           if (part.type === "text") {
             uiMessageParts.push({ type: "text" as const, text: part.text });
           }
-          // Files are currently not supported in history.
         });
         contextUiMessages.push({
           id: request.message.messageId,
           parts: uiMessageParts,
           role: "user",
         });
-        requestMessages.push({ role: "user", content: messageParts });
       }
 
       const sessionId = systemParams?.sessionId ?? context?.id;
@@ -239,7 +259,11 @@ export class A2AManager {
         callback: async () => {
           return executeA2AMessage({
             agentId,
-            message: "",
+            message: currentTurnText,
+            attachments:
+              currentTurnAttachments.length > 0
+                ? currentTurnAttachments
+                : undefined,
             messages: requestMessages,
             organizationId: actor.organizationId,
             userId: actor.kind === "user" ? actor.id : "system",
@@ -342,21 +366,14 @@ export class A2AManager {
         // In approval flow user message must be created in the db even in the stateless mode.
         await saveUserMessageInDb();
 
-        if (!context) {
-          // This should never happen
-          throw new Error("[A2AManager] No context when creating message");
-        }
-        const { task: updatedTask } = await A2ATaskManager.addMessageToTask({
+        // In approval flow the agent message is persisted even in stateless mode.
+        const { task: updatedTask } = await this.persistAgentMessage({
+          context,
           task,
-          message: {
-            messageId: result.responseUiMessage.id,
-            contextId: context.id,
-            role: A2AProtocolRole.Agent,
-            parts: extractProtocolPartsFromUIMessage(result.responseUiMessage),
-          },
-          uiMessage: result.responseUiMessage,
+          responseUiMessage: result.responseUiMessage,
+          stateless: false,
         });
-        task = updatedTask;
+        task = updatedTask ?? task;
 
         return { task: A2ATaskManager.toProtocolTask(task) };
       }
@@ -366,61 +383,19 @@ export class A2AManager {
         await saveUserMessageInDb();
       }
 
-      let resultMessage: A2AProtocolMessage | undefined;
-      if (this.config.stateless) {
-        // In stateless mode we do not save messages in the db, but we need to return a message with id
-        resultMessage = {
-          messageId: result.responseUiMessage.id,
-          contextId: context?.id,
-          taskId: task?.id,
-          role: A2AProtocolRole.Agent,
-          parts: extractProtocolPartsFromUIMessage(result.responseUiMessage),
-        };
-      } else {
-        if (!context) {
-          // This should never happen: context is always defined in the stateful mode.
-          throw new Error("[A2AManager] No context when saving message to db");
-        }
+      const {
+        resultMessage,
+        task: persistedTask,
+        context: persistedContext,
+      } = await this.persistAgentMessage({
+        context,
+        task,
+        responseUiMessage: result.responseUiMessage,
+        stateless: Boolean(this.config.stateless),
+      });
+      task = persistedTask ?? task;
+      context = persistedContext ?? context;
 
-        if (task) {
-          // In case when we are within task execution, we should properly update the message
-          //   because it can be already created in the db as part of approval flow
-          const { task: updatedTask, protocolMessage } =
-            await A2ATaskManager.addMessageToTask({
-              task,
-              message: {
-                messageId: result.responseUiMessage.id,
-                contextId: context.id,
-                role: A2AProtocolRole.Agent,
-                parts: extractProtocolPartsFromUIMessage(
-                  result.responseUiMessage,
-                ),
-              },
-              uiMessage: result.responseUiMessage,
-            });
-          task = updatedTask;
-          resultMessage = protocolMessage;
-        } else {
-          const { context: updatedContext, protocolMessage } =
-            await A2AContextManager.addMessageToContext({
-              context,
-              message: {
-                messageId: result.responseUiMessage.id,
-                parts: extractProtocolPartsFromUIMessage(
-                  result.responseUiMessage,
-                ),
-                role: A2AProtocolRole.Agent,
-              },
-              uiMessage: result.responseUiMessage,
-            });
-          context = updatedContext;
-          resultMessage = protocolMessage;
-        }
-      }
-      if (!resultMessage) {
-        // This should never happen: resultMessage is always created above
-        throw new Error("[A2AManager] resultMessage is not defined");
-      }
       if (task && task.state !== A2AProtocolTaskState.Completed) {
         await A2ATaskManager.updateTaskState(
           task,
@@ -439,6 +414,70 @@ export class A2AManager {
       );
       throw error;
     }
+  }
+
+  /**
+   * Persist the agent response message and return the protocol message.
+   * - stateless: returns the message literal, no DB write.
+   * - task present: writes via addMessageToTask (updates an existing approval message in place).
+   * - context only: writes via addMessageToContext.
+   */
+  private async persistAgentMessage(args: {
+    context: A2AContext | undefined;
+    task: A2ATaskWithData | undefined;
+    responseUiMessage: UIMessage;
+    stateless: boolean;
+  }): Promise<{
+    resultMessage: A2AProtocolMessage;
+    task?: A2ATaskWithData;
+    context?: A2AContext;
+  }> {
+    const { context, task, responseUiMessage, stateless } = args;
+    const parts = extractProtocolPartsFromUIMessage(responseUiMessage);
+
+    if (stateless) {
+      return {
+        resultMessage: {
+          messageId: responseUiMessage.id,
+          contextId: context?.id,
+          taskId: task?.id,
+          role: A2AProtocolRole.Agent,
+          parts,
+        },
+      };
+    }
+
+    if (!context) {
+      // This should never happen: context is always defined in the stateful mode.
+      throw new Error("[A2AManager] No context when saving message to db");
+    }
+
+    if (task) {
+      const { task: updatedTask, protocolMessage } =
+        await A2ATaskManager.addMessageToTask({
+          task,
+          message: {
+            messageId: responseUiMessage.id,
+            contextId: context.id,
+            role: A2AProtocolRole.Agent,
+            parts,
+          },
+          uiMessage: responseUiMessage,
+        });
+      return { resultMessage: protocolMessage, task: updatedTask };
+    }
+
+    const { context: updatedContext, protocolMessage } =
+      await A2AContextManager.addMessageToContext({
+        context,
+        message: {
+          messageId: responseUiMessage.id,
+          role: A2AProtocolRole.Agent,
+          parts,
+        },
+        uiMessage: responseUiMessage,
+      });
+    return { resultMessage: protocolMessage, context: updatedContext };
   }
 
   async processTaskOps(params: {

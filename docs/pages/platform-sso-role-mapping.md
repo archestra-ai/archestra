@@ -3,7 +3,7 @@ title: "Role Mapping"
 category: Administration
 subcategory: Identity Providers
 description: "Map SSO claims to Archestra roles using Handlebars templates"
-order: 5
+order: 6
 lastUpdated: 2026-05-05
 ---
 
@@ -16,6 +16,8 @@ Identity Providers index.
 -->
 
 Archestra supports automatic role assignment based on user attributes from your identity provider using [Handlebars](https://handlebarsjs.com/) templates. This lets you map SSO groups, roles, or other claims to Archestra roles (Admin, Member, or any custom role you have defined).
+
+> **Enterprise feature** — see the [Pricing Model](/docs/platform-pricing-model).
 
 ## How role mapping works
 

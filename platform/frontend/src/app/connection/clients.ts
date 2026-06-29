@@ -90,6 +90,19 @@ export interface ProxyStep {
   language?: "json" | "toml" | "bash";
   /** Inline labelled values rendered as individual rows. Non-copyable rows render as plain text (e.g. for placeholder values the user must replace). */
   fields?: { label: string; value: string; copyable?: boolean }[];
+  /**
+   * When true, render the inline passthrough-key reveal beneath this step: it
+   * auto-provisions the user's personal passthrough virtual key and shows the
+   * X-Archestra-Virtual-Key header name + copyable value. Gated on
+   * llmVirtualKey:create. Used by the attribution step for manual clients.
+   */
+  showPassthroughKey?: boolean;
+  /**
+   * Reveal layout: "header" (default) shows separate name + value rows for a
+   * custom-headers UI (Claude Desktop); "env" shows one copyable
+   * ANTHROPIC_CUSTOM_HEADERS value for an env block (Claude Code).
+   */
+  passthroughKeyVariant?: "header" | "env";
 }
 
 export type ProxyInstruction =
@@ -226,12 +239,85 @@ claude`,
 }`,
             },
             {
-              title: "Restart Claude Code",
-              body: "New sessions will route through Archestra automatically.",
+              title: "Add your personal auth key header",
+              body: "Add ANTHROPIC_CUSTOM_HEADERS to the same env block and set to the value below to authenticate on the LLM Proxy.",
+              showPassthroughKey: true,
+              passthroughKeyVariant: "env",
             },
           ],
         };
       },
+    },
+  },
+  {
+    id: "claude-desktop",
+    label: "Claude Desktop",
+    sub: "Anthropic desktop app",
+    svg: CLAUDE_PATH,
+    iconColor: "#D97757",
+    tileBg: "#fff1ea",
+    mcp: {
+      kind: "custom",
+      supportedAuth: "oauth",
+      configFile: "Custom connector",
+      language: "json",
+      steps: [
+        {
+          title: "Enable developer mode",
+          body: "From the Claude menu choose Help → Troubleshooting → Enable Developer Mode.",
+        },
+        {
+          title: 'Open "Configure Third-Party Inference"',
+          body: "From the Claude menu choose Developer → Configure Third-Party Inference….",
+        },
+        {
+          title: "Add a Managed MCP server",
+          body: 'Go to "Connectors & extensions". Click "Add server" and select "Blank".',
+        },
+        {
+          title: "Paste the gateway URL",
+          terminalTitle: "Remote MCP server URL",
+          buildCommand: ({ url }) => url,
+        },
+        {
+          title: "Finish the OAuth flow",
+          body: 'Click "Sign in & test" — Claude Desktop opens your browser. Sign in and approve the gateway; the gateway tools then appear in chat.',
+        },
+      ],
+    },
+    proxy: {
+      kind: "custom",
+      supportedProviders: ["anthropic"],
+      build: ({ url }) => ({
+        kind: "steps",
+        steps: [
+          {
+            title: "Enable developer mode",
+            body: "From the Claude menu choose Help → Troubleshooting → Enable Developer Mode.",
+          },
+          {
+            title: 'Open "Configure Third-Party Inference"',
+            body: "From the Claude menu choose Developer → Configure Third-Party Inference….",
+          },
+          {
+            title: "Fill in the credential",
+            body: 'Paste the values below into the "API Key" and "Base URL" fields, then click "Save".',
+            fields: [
+              { label: "Gateway URL", value: url },
+              {
+                label: "API Key",
+                value: "<your-anthropic-api-key-or-standard-virtual-key>",
+                copyable: false,
+              },
+            ],
+          },
+          {
+            title: "Add your personal auth key header",
+            body: 'In the same form, expand "Custom headers" and add a header with the name and value below to authenticate on the LLM Proxy. This is in addition to the API key above, which Claude Desktop still needs.',
+            showPassthroughKey: true,
+          },
+        ],
+      }),
     },
   },
   {
@@ -397,22 +483,34 @@ requires_openai_auth = true`,
         "deepseek",
         "xai",
         "cerebras",
+        "github-copilot",
       ],
-      build: ({ providerLabel, url }) => ({
+      build: ({ provider, providerLabel, url }) => ({
         kind: "steps",
         steps: [
+          ...(provider === "github-copilot"
+            ? [
+                {
+                  title: "Get your GitHub OAuth token",
+                  body: 'GitHub Copilot has no static API keys — the proxy authenticates upstream with the GitHub OAuth token of an account that has a Copilot subscription. The Copilot CLI stores one in ~/.config/github-copilot/apps.json ("oauth_token"); the generated setup script obtains it for you automatically (reusing that file or running the GitHub sign-in flow).',
+                },
+              ]
+            : []),
           {
             title: "Export Copilot provider settings",
-            body: `Use a virtual key mapped to ${providerLabel}. COPILOT_PROVIDER_TYPE stays "openai" because Copilot is speaking the OpenAI-compatible protocol; the Archestra base URL still needs the selected provider path.`,
-            language: "bash",
+            body:
+              provider === "github-copilot"
+                ? 'COPILOT_PROVIDER_TYPE stays "openai" because Copilot speaks the OpenAI-compatible protocol; the API key is your GitHub OAuth token (or a virtual key mapped to a stored GitHub Copilot key).'
+                : `Use a virtual key mapped to ${providerLabel}. COPILOT_PROVIDER_TYPE stays "openai" because Copilot is speaking the OpenAI-compatible protocol; the Archestra base URL still needs the selected provider path.`,
+            language: "bash" as const,
             code: `export COPILOT_PROVIDER_TYPE="openai"
 export COPILOT_PROVIDER_BASE_URL="${url}"
-export COPILOT_PROVIDER_API_KEY="<your-archestra-virtual-key>"
+export COPILOT_PROVIDER_API_KEY="${provider === "github-copilot" ? "<your-github-oauth-token>" : "<your-archestra-virtual-key>"}"
 export COPILOT_MODEL="<model-name>"`,
           },
           {
             title: "Verify the proxy",
-            language: "bash",
+            language: "bash" as const,
             code: `copilot -p "Reply with exactly: archestra-copilot-cli-ok"`,
           },
         ],
@@ -501,6 +599,7 @@ export COPILOT_MODEL="<model-name>"`,
         "zhipuai",
         "minimax",
         "azure",
+        "github-copilot",
       ],
       build: ({ provider, providerLabel, url, tokenPlaceholder }) => {
         if (provider === "bedrock") {

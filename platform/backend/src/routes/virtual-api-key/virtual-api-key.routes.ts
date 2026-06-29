@@ -1,6 +1,7 @@
 import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
+  providerRequiresPerUserCredential,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -10,6 +11,7 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import {
   LlmProviderApiKeyModel,
+  MemberModel,
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -19,6 +21,7 @@ import {
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   type User,
+  VirtualApiKeyTypeSchema,
   VirtualApiKeyWithParentInfoSchema,
   VirtualApiKeyWithValueSchema,
 } from "@/types";
@@ -27,8 +30,9 @@ const UpdateVirtualApiKeyResponseSchema = VirtualApiKeyWithValueSchema.omit({
   value: true,
 });
 
-const CreateOrUpdateVirtualApiKeyBodySchema = z.object({
+const VirtualApiKeyBodyObjectSchema = z.object({
   name: z.string().min(1, "Name is required").max(256),
+  keyType: VirtualApiKeyTypeSchema.default("standard"),
   expiresAt: z.coerce.date().nullable().optional(),
   scope: ResourceVisibilityScopeSchema.default("org"),
   teams: z.array(z.string()).default([]),
@@ -39,10 +43,56 @@ const CreateOrUpdateVirtualApiKeyBodySchema = z.object({
         providerApiKeyId: z.string().uuid(),
       }),
     )
-    .min(1, "At least one provider API key is required"),
+    .default([]),
 });
 
-const CreateVirtualApiKeyBodySchema = CreateOrUpdateVirtualApiKeyBodySchema;
+/**
+ * Contextual validation: which fields are accepted depends on the key type.
+ * Standard keys map provider API keys; passthrough keys never carry provider
+ * credentials or team/org scope.
+ */
+function refineVirtualApiKeyBody(
+  value: z.infer<typeof VirtualApiKeyBodyObjectSchema>,
+  ctx: z.RefinementCtx,
+): void {
+  if (value.keyType === "passthrough") {
+    if (value.providerApiKeys.length > 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["providerApiKeys"],
+        message: "Passthrough virtual keys cannot map provider API keys",
+      });
+    }
+    if (value.teams.length > 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["teams"],
+        message: "Passthrough virtual keys cannot be assigned to teams",
+      });
+    }
+    return;
+  }
+
+  if (value.providerApiKeys.length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["providerApiKeys"],
+      message: "At least one provider API key is required",
+    });
+  }
+}
+
+const CreateOrUpdateVirtualApiKeyBodySchema =
+  VirtualApiKeyBodyObjectSchema.superRefine(refineVirtualApiKeyBody);
+
+const CreateVirtualApiKeyBodySchema = VirtualApiKeyBodyObjectSchema.extend({
+  /**
+   * Owner the key is created on behalf of. Defaults to the creator. Setting
+   * it to a different user requires llmVirtualKey:admin and that user must
+   * belong to the organization.
+   */
+  ownerId: z.string().optional(),
+}).superRefine(refineVirtualApiKeyBody);
 
 const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -56,6 +106,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: PaginationQuerySchema.extend({
           search: z.string().trim().min(1).optional(),
           providerApiKeyId: z.string().uuid().optional(),
+          keyType: VirtualApiKeyTypeSchema.optional(),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(VirtualApiKeyWithParentInfoSchema),
@@ -64,7 +115,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { limit, offset, search, providerApiKeyId },
+        query: { limit, offset, search, providerApiKeyId, keyType },
         organizationId,
         user,
       },
@@ -83,6 +134,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isAdmin: isVirtualKeyAdmin,
         search,
         providerApiKeyId,
+        keyType,
       });
       return reply.send(result);
     },
@@ -162,7 +214,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default virtualApiKeysRoutes;
 
 async function createVirtualApiKey(params: {
-  body: z.infer<typeof CreateOrUpdateVirtualApiKeyBodySchema>;
+  body: z.infer<typeof CreateVirtualApiKeyBodySchema>;
   organizationId: string;
   user: User;
 }): Promise<z.infer<typeof VirtualApiKeyWithValueSchema>> {
@@ -176,6 +228,34 @@ async function createVirtualApiKey(params: {
     TeamModel.getUserTeamIds(user.id),
     userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
   ]);
+  const ownerId = await resolveKeyOwner({
+    requestedOwnerId: body.ownerId,
+    creatorId: user.id,
+    organizationId,
+    isAdmin: isVirtualKeyAdmin,
+  });
+
+  // Passthrough keys are always personal and carry no provider keys; they only
+  // authenticate the acting user.
+  if (body.keyType === "passthrough") {
+    const created = await VirtualApiKeyModel.create({
+      organizationId,
+      name: body.name,
+      keyType: "passthrough",
+      expiresAt: body.expiresAt ?? null,
+      scope: "personal",
+      authorId: ownerId,
+    });
+
+    return {
+      ...created.virtualKey,
+      value: created.value,
+      teams: created.teams,
+      authorName: created.authorName,
+      providerApiKeys: created.providerApiKeys,
+    };
+  }
+
   await validateVirtualKeyScope({
     scope: body.scope,
     teamIds: body.teams,
@@ -187,15 +267,18 @@ async function createVirtualApiKey(params: {
   await validateProviderApiKeys({
     mappings: body.providerApiKeys,
     organizationId,
+    scope: body.scope,
+    userId: user.id,
   });
 
   const { virtualKey, value, teams, authorName, providerApiKeys } =
     await VirtualApiKeyModel.create({
       organizationId,
       name: body.name,
+      keyType: "standard",
       expiresAt: body.expiresAt ?? null,
       scope: body.scope,
-      authorId: user.id,
+      authorId: ownerId,
       teamIds: body.teams,
       providerApiKeys: body.providerApiKeys,
     });
@@ -237,28 +320,51 @@ async function updateVirtualApiKey(params: {
     organizationId,
     userTeamIds,
   });
-  await validateVirtualKeyScope({
-    scope: body.scope,
-    teamIds: body.teams,
-    userId: user.id,
-    organizationId,
-    userTeamIds,
-    isAdmin: isVirtualKeyAdmin,
-  });
-  await validateProviderApiKeys({
-    mappings: body.providerApiKeys,
-    organizationId,
-  });
 
-  const updatedVirtualKey = await VirtualApiKeyModel.update({
-    id,
-    name: body.name,
-    expiresAt: body.expiresAt ?? null,
-    scope: body.scope,
-    authorId: user.id,
-    teamIds: body.teams,
-    providerApiKeys: body.providerApiKeys,
-  });
+  // The key type is fixed at creation; only its own configuration is editable.
+  if (body.keyType !== accessContext.keyType) {
+    throw new ApiError(400, "Virtual key type cannot be changed");
+  }
+
+  let updatedVirtualKey: Awaited<ReturnType<typeof VirtualApiKeyModel.update>>;
+  if (accessContext.keyType === "passthrough") {
+    updatedVirtualKey = await VirtualApiKeyModel.update({
+      id,
+      name: body.name,
+      expiresAt: body.expiresAt ?? null,
+      scope: "personal",
+      // Preserve the key's owner; an edit must not transfer it to the editor.
+      authorId: accessContext.authorId,
+      teamIds: [],
+      providerApiKeys: [],
+    });
+  } else {
+    await validateVirtualKeyScope({
+      scope: body.scope,
+      teamIds: body.teams,
+      userId: user.id,
+      organizationId,
+      userTeamIds,
+      isAdmin: isVirtualKeyAdmin,
+    });
+    await validateProviderApiKeys({
+      mappings: body.providerApiKeys,
+      organizationId,
+      scope: body.scope,
+      userId: user.id,
+    });
+    updatedVirtualKey = await VirtualApiKeyModel.update({
+      id,
+      name: body.name,
+      expiresAt: body.expiresAt ?? null,
+      scope: body.scope,
+      // Preserve the key's owner; an edit must not transfer it to the editor
+      // (e.g. an admin editing a key minted on behalf of another user).
+      authorId: accessContext.authorId,
+      teamIds: body.teams,
+      providerApiKeys: body.providerApiKeys,
+    });
+  }
 
   if (!updatedVirtualKey) {
     throw new ApiError(404, "Virtual API key not found");
@@ -299,6 +405,36 @@ async function deleteVirtualApiKey(params: {
 
   await VirtualApiKeyModel.delete(id);
   return { success: true };
+}
+
+async function resolveKeyOwner(params: {
+  requestedOwnerId: string | undefined;
+  creatorId: string;
+  organizationId: string;
+  isAdmin: boolean;
+}): Promise<string> {
+  const { requestedOwnerId, creatorId, organizationId, isAdmin } = params;
+
+  if (!requestedOwnerId || requestedOwnerId === creatorId) {
+    return creatorId;
+  }
+
+  if (!isAdmin) {
+    throw new ApiError(
+      403,
+      "You need llmVirtualKey:admin permission to create a virtual key for another user",
+    );
+  }
+
+  const member = await MemberModel.getByUserId(
+    requestedOwnerId,
+    organizationId,
+  );
+  if (!member) {
+    throw new ApiError(404, "User is not a member of this organization");
+  }
+
+  return requestedOwnerId;
 }
 
 async function validateVirtualKeyScope(params: {
@@ -356,8 +492,10 @@ async function validateVirtualKeyScope(params: {
 async function validateProviderApiKeys(params: {
   mappings: Array<{ provider: SupportedProvider; providerApiKeyId: string }>;
   organizationId: string;
+  scope: ResourceVisibilityScope;
+  userId: string;
 }): Promise<void> {
-  const { mappings, organizationId } = params;
+  const { mappings, organizationId, scope, userId } = params;
   if (mappings.length === 0) {
     return;
   }
@@ -386,6 +524,26 @@ async function validateProviderApiKeys(params: {
         400,
         `Provider API key "${apiKey.name}" is for provider "${apiKey.provider}", not "${mapping.provider}".`,
       );
+    }
+
+    // Per-user-credential providers (GitHub Copilot) are individual tokens. A
+    // virtual key is itself a shareable secret, so it may only wrap a per-user
+    // key when it is the user's OWN personal key in their OWN personal virtual
+    // key, and never bundled with other providers (a shared model-router key
+    // would expose one user's token to everyone routing through it).
+    if (providerRequiresPerUserCredential(mapping.provider)) {
+      if (scope !== "personal" || mappings.length > 1) {
+        throw new ApiError(
+          400,
+          `${mapping.provider} is per-user: it can only be wrapped in your own personal virtual key on its own, not in a shared or multi-provider (model-router) key.`,
+        );
+      }
+      if (apiKey.scope !== "personal" || apiKey.userId !== userId) {
+        throw new ApiError(
+          403,
+          `You can only map your own personal ${mapping.provider} key.`,
+        );
+      }
     }
   }
 }

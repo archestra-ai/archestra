@@ -13,7 +13,7 @@ export class LlmProviderApiKeysPage {
   }
 
   async goto() {
-    await this.page.goto("/llm/model-providers/api-keys");
+    await this.page.goto("/llm/model-providers");
   }
 
   rowFor(name: string): Locator {

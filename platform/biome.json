@@ -19,7 +19,8 @@
       "!build",
       "!helm/**/*",
       "!**/*.gen.ts",
-      "!**/sandbox-rs/index.d.ts"
+      "!**/sandbox-rs/index.d.ts",
+      "!**/app-runtime-rs/index.d.ts"
     ]
   },
   "formatter": {

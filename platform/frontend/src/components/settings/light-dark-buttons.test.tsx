@@ -14,7 +14,7 @@ vi.mock("next-themes", () => ({
 
 import { LightDarkButtons } from "./light-dark-buttons";
 
-function setup(currentMode: "light" | "dark" = "dark") {
+function setup(currentMode: "system" | "light" | "dark" = "dark") {
   const setTheme = vi.fn();
   mockUseTheme.mockReturnValue({ theme: currentMode, setTheme });
   return { setTheme, ...render(<LightDarkButtons />) };
@@ -47,5 +47,23 @@ describe("LightDarkButtons", () => {
     const { setTheme } = setup("light");
     await userEvent.click(screen.getByRole("button", { name: /dark/i }));
     expect(setTheme).toHaveBeenCalledWith("dark");
+  });
+
+  it("marks the System button as aria-pressed when the system mode is active", () => {
+    setup("system");
+    expect(screen.getByRole("button", { name: /system/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /light/i })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it("calls setTheme('system') when the System button is clicked", async () => {
+    const { setTheme } = setup("light");
+    await userEvent.click(screen.getByRole("button", { name: /system/i }));
+    expect(setTheme).toHaveBeenCalledWith("system");
   });
 });

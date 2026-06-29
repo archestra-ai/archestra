@@ -45,8 +45,6 @@ type GlobalToolPolicy = NonNullable<
 
 type FileUploadsEnabled = "enabled" | "disabled";
 
-type ToolAutoAssignmentEnabled = "enabled" | "disabled";
-
 export default function AgentSettingsPage() {
   const { getToolName } = useArchestraMcpIdentity();
   const appName = useAppName();
@@ -60,8 +58,6 @@ export default function AgentSettingsPage() {
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
   const [toolPolicy, setToolPolicy] = useState<GlobalToolPolicy>("permissive");
   const [fileUploads, setFileUploads] = useState<FileUploadsEnabled>("enabled");
-  const [toolAutoAssignment, setToolAutoAssignment] =
-    useState<ToolAutoAssignmentEnabled>("enabled");
   const initializedRef = useRef(false);
   const savedStateRef = useRef<AgentSettingsState>({
     selectedApiKeyId: "",
@@ -71,7 +67,6 @@ export default function AgentSettingsPage() {
   const savedSecurityStateRef = useRef({
     toolPolicy: "permissive" as GlobalToolPolicy,
     fileUploads: "enabled" as FileUploadsEnabled,
-    toolAutoAssignment: "enabled" as ToolAutoAssignmentEnabled,
   });
 
   const { data: allModels, isPending: modelsLoading } = useLlmModels({
@@ -99,16 +94,11 @@ export default function AgentSettingsPage() {
     setFileUploads(
       (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled",
     );
-    setToolAutoAssignment(
-      (organization.allowToolAutoAssignment ?? true) ? "enabled" : "disabled",
-    );
     savedStateRef.current = state;
     savedSecurityStateRef.current = {
       toolPolicy: organization.globalToolPolicy ?? "permissive",
       fileUploads:
         (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled",
-      toolAutoAssignment:
-        (organization.allowToolAutoAssignment ?? true) ? "enabled" : "disabled",
     };
     initializedRef.current = true;
   }, [organization, apiKeys]);
@@ -124,8 +114,7 @@ export default function AgentSettingsPage() {
   const changes = detectChanges(localState, savedStateRef.current);
   const securityHasChanges =
     toolPolicy !== savedSecurityStateRef.current.toolPolicy ||
-    fileUploads !== savedSecurityStateRef.current.fileUploads ||
-    toolAutoAssignment !== savedSecurityStateRef.current.toolAutoAssignment;
+    fileUploads !== savedSecurityStateRef.current.fileUploads;
 
   const handleSave = async () => {
     if (!apiKeys) return;
@@ -140,12 +129,10 @@ export default function AgentSettingsPage() {
       await updateSecurityMutation.mutateAsync({
         globalToolPolicy: toolPolicy,
         allowChatFileUploads: fileUploads === "enabled",
-        allowToolAutoAssignment: toolAutoAssignment === "enabled",
       });
       savedSecurityStateRef.current = {
         toolPolicy,
         fileUploads,
-        toolAutoAssignment,
       };
     }
 
@@ -159,7 +146,6 @@ export default function AgentSettingsPage() {
     setDefaultAgentId(saved.defaultAgentId);
     setToolPolicy(savedSecurityStateRef.current.toolPolicy);
     setFileUploads(savedSecurityStateRef.current.fileUploads);
-    setToolAutoAssignment(savedSecurityStateRef.current.toolAutoAssignment);
   };
 
   const modelItems = useMemo(() => {
@@ -366,43 +352,6 @@ export default function AgentSettingsPage() {
             Security policies only apply to text content. File uploads (images,
             PDFs) bypass policy checks. File-based policies coming soon.
           </span>
-        }
-      />
-      <SettingsBlock
-        title="Tool Auto-Assignment"
-        description="Let agents discover catalog tools beyond their assigned set and assign them on first use, when the user has access to the tool's catalog and can modify the agent."
-        control={
-          <WithPermissions
-            permissions={{ agentSettings: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <Select
-                value={toolAutoAssignment}
-                onValueChange={(value: ToolAutoAssignmentEnabled) =>
-                  setToolAutoAssignment(value)
-                }
-                disabled={isSaving || !hasPermission}
-              >
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="enabled">Enabled</SelectItem>
-                  <SelectItem value="disabled">Disabled</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          </WithPermissions>
-        }
-        notice={
-          toolAutoAssignment === "disabled" ? (
-            <span className="text-muted-foreground">
-              Tool search and execution are limited to tools explicitly assigned
-              to each agent; skills referencing other tools will ask an admin to
-              assign them.
-            </span>
-          ) : undefined
         }
       />
       <SettingsSaveBar

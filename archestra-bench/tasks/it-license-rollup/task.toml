@@ -1,0 +1,24 @@
+[[stages]]
+text = """Hey, can you get me a quick baseline on Acme's monthly software-license spend? The seat
+inventory is in our IT service desk, one row per seat. Total the monthly seat costs across the whole
+inventory so we've got the list-price view to start from."""
+
+[[stages]]
+text = """Actually, finance needs the real monthly bill, not the seat list-price rollup -- the service
+desk has the contract terms behind those seats, so work from those. Send me the billed monthly total in
+whole cents. Call submit_result with result = {"total_billed_monthly_cents": <integer cents>}."""
+
+[result_schema]
+type = "object"
+required = ["total_billed_monthly_cents"]
+additionalProperties = false
+
+  [result_schema.properties.total_billed_monthly_cents]
+  type = "integer"
+  minimum = 1
+
+[state]
+rest = ["/api/agents/{{agent_id}}/tools"]
+
+[verifier]
+deps = []

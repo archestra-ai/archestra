@@ -303,6 +303,26 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(apiKey.scope).toBe("org");
   });
 
+  test("rejects non-personal scope for per-user providers (github-copilot)", async () => {
+    for (const scope of ["org", "team"] as const) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/llm-provider-api-keys",
+        payload: {
+          name: `Shared Copilot ${scope}`,
+          provider: "github-copilot",
+          apiKey: "gho_shared_token",
+          scope,
+          ...(scope === "team"
+            ? { teamId: "00000000-0000-0000-0000-000000000000" }
+            : {}),
+        },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("per-user");
+    }
+  });
+
   test("should get a specific LLM provider API key by ID", async () => {
     const createResponse = await app.inject({
       method: "POST",
@@ -801,6 +821,99 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(createResponse.json().error.message).toContain(
       "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials (Bedrock only) must be provided",
     );
+  });
+});
+
+describe("LLM Provider API Keys — personal scope is self-service", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  // A "basic user": no llmProviderApiKey:create / :admin, no team:create.
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    vi.clearAllMocks();
+    setupMemberApp();
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "member" });
+
+    app = await createApp(organizationId, user);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("a basic user can create a personal key (e.g. connect GitHub Copilot)", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "GitHub Copilot",
+        provider: "github-copilot",
+        apiKey: "gho_my_token",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().scope).toBe("personal");
+  });
+
+  test("a basic user can create a personal key for any provider", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "My OpenAI",
+        provider: "openai",
+        apiKey: "sk-my-openai-key",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+  });
+
+  test("a basic user cannot create an org-scoped key", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Org Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-org-key",
+        scope: "org",
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("a basic team member cannot create a team-scoped key without create permission", async ({
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, user.id);
+    await makeTeamMember(team.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Team Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-team-key",
+        scope: "team",
+        teamId: team.id,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(403);
+    expect(response.json().error.message).toContain("create");
   });
 });
 

@@ -34,6 +34,10 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
+import {
+  MCP_CONFIG_AUTOCOMPLETE,
+  MCP_SECRET_AUTOCOMPLETE,
+} from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import {
@@ -571,10 +575,11 @@ export function LocalServerInstallDialog({
 
       <SelectMcpServerCredentialTypeAndTeams
         onTeamChange={setSelectedTeamId}
-        catalogId={isReinstall ? undefined : catalogItem?.id}
+        catalogId={isReinstall || isReauth ? undefined : catalogItem?.id}
         onScopeChange={setScope}
         onCanInstallChange={setCanInstall}
         isReinstall={isReinstall}
+        isReauth={isReauth}
         existingTeamId={existingTeamId}
         existingScope={existingScope}
         personalOnly={
@@ -679,6 +684,7 @@ export function LocalServerInstallDialog({
                         env.default !== undefined ? String(env.default) : "0"
                       }
                       className="font-mono"
+                      autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                       disabled={isInstalling}
                     />
                   ) : (
@@ -691,6 +697,7 @@ export function LocalServerInstallDialog({
                       }
                       placeholder={`Enter value for ${env.key}`}
                       className="font-mono"
+                      autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                       disabled={isInstalling}
                       aria-invalid={
                         envVarRegexError(env.key, env.type) ? true : undefined
@@ -781,6 +788,7 @@ export function LocalServerInstallDialog({
                             }
                             placeholder={`Enter value for ${env.key}`}
                             className="font-mono"
+                            autoComplete={MCP_SECRET_AUTOCOMPLETE}
                             disabled={isInstalling}
                           />
                         )}
@@ -973,6 +981,7 @@ export function LocalServerInstallDialog({
                               : "0"
                           }
                           className="font-mono"
+                          autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                           disabled={isInstalling}
                         />
                       ) : fieldConfig.sensitive ? (
@@ -985,6 +994,7 @@ export function LocalServerInstallDialog({
                           }
                           placeholder={`Enter value for ${fieldConfig.title || fieldName}`}
                           className="font-mono"
+                          autoComplete={MCP_SECRET_AUTOCOMPLETE}
                           disabled={isInstalling}
                         />
                       ) : (
@@ -997,6 +1007,7 @@ export function LocalServerInstallDialog({
                           }
                           placeholder={`Enter value for ${fieldConfig.title || fieldName}`}
                           className="font-mono"
+                          autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                           disabled={isInstalling}
                           aria-invalid={
                             !fieldConfig.sensitive &&

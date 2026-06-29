@@ -1,89 +1,16 @@
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertSkillSandboxFile, SkillSandboxFile } from "@/types";
+import type { SkillSandboxFile } from "@/types";
 import { normalizeByteaField } from "@/utils/normalize-bytea";
 
-/** Artifact row without its bytes — what the Files panel needs to list outputs. */
-type SkillSandboxArtifactMeta = {
-  id: string;
-  path: string;
-  mimeType: string;
-  sizeBytes: number;
-  createdAt: Date;
-};
-
 /**
- * Read/write access to `skill_sandbox_files` for the `artifact` role — output
- * bytes exported via `download_file`. Uploaded inputs (`kind = 'upload'`) are
- * written by `SkillSandboxReplayEventModel` inside the replay-log transaction,
- * so they are not created here.
+ * Read access to `skill_sandbox_files`, which now serves the `upload` role
+ * only — input bytes replayed into containers. Uploaded inputs are WRITTEN by
+ * `SkillSandboxReplayEventModel` inside the replay-log transaction, so they are
+ * not created here. Persistent output files ("My Files") moved to the `files`
+ * table and its `FileModel`.
  */
 class SkillSandboxFileModel {
-  static async createArtifact(
-    artifact: Omit<InsertSkillSandboxFile, "kind">,
-  ): Promise<SkillSandboxFile> {
-    const [row] = await db
-      .insert(schema.skillSandboxFilesTable)
-      .values({ ...artifact, kind: "artifact" })
-      .returning();
-    if (!row) {
-      throw new Error("failed to insert sandbox artifact");
-    }
-    return normalizeByteaField(row, "data");
-  }
-
-  static async findArtifactById(id: string): Promise<SkillSandboxFile | null> {
-    const [row] = await db
-      .select()
-      .from(schema.skillSandboxFilesTable)
-      .where(
-        and(
-          eq(schema.skillSandboxFilesTable.id, id),
-          eq(schema.skillSandboxFilesTable.kind, "artifact"),
-        ),
-      );
-    return row ? normalizeByteaField(row, "data") : null;
-  }
-
-  /**
-   * Artifact-file metadata (no bytes) for every sandbox attached to a
-   * conversation within an org, oldest first. Joins through `skill_sandboxes`
-   * because files carry only a `sandboxId`, and filters on the join's
-   * `organizationId` so a conversation reused across orgs cannot leak.
-   */
-  static async listArtifactMetadataByConversationId(params: {
-    conversationId: string;
-    organizationId: string;
-  }): Promise<SkillSandboxArtifactMeta[]> {
-    return db
-      .select({
-        id: schema.skillSandboxFilesTable.id,
-        path: schema.skillSandboxFilesTable.path,
-        mimeType: schema.skillSandboxFilesTable.mimeType,
-        sizeBytes: schema.skillSandboxFilesTable.sizeBytes,
-        createdAt: schema.skillSandboxFilesTable.createdAt,
-      })
-      .from(schema.skillSandboxFilesTable)
-      .innerJoin(
-        schema.skillSandboxesTable,
-        eq(
-          schema.skillSandboxFilesTable.sandboxId,
-          schema.skillSandboxesTable.id,
-        ),
-      )
-      .where(
-        and(
-          eq(schema.skillSandboxFilesTable.kind, "artifact"),
-          eq(schema.skillSandboxesTable.conversationId, params.conversationId),
-          eq(schema.skillSandboxesTable.organizationId, params.organizationId),
-        ),
-      )
-      .orderBy(
-        asc(schema.skillSandboxFilesTable.createdAt),
-        asc(schema.skillSandboxFilesTable.id),
-      );
-  }
-
   /**
    * Look up an already-staged upload by its dedup id (stored as
    * `source_attachment_id`). Used by `uploadFile` to return a stable ref when

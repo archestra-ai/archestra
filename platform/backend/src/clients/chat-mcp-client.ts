@@ -1,4 +1,5 @@
 import {
+  ApiError,
   isAgentTool,
   isBrowserMcpTool,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
@@ -21,6 +22,7 @@ import {
   type ChatToolContext,
   type McpGatewayToken,
 } from "@/clients/chat-tool-builder";
+import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import logger from "@/logging";
@@ -44,6 +46,23 @@ import { buildMcpClientInfo } from "@/utils/mcp-client-info";
  * Derives from the configured API port to work in multi-pod deployments.
  */
 const MCP_GATEWAY_BASE_URL = `http://localhost:${config.api.port}/v1/mcp`;
+
+/**
+ * Raised when the agent's MCP tool set could not be fetched (no gateway token,
+ * the gateway connection failed, or `tools/list` threw) — as distinct from an
+ * agent that genuinely exposes no model-visible tools. Callers must not stream
+ * the model with an empty tool set on failure: the agent's system prompt still
+ * demands tool calls, so the model hallucinates them as text. Surfaces as a 503
+ * through the Fastify error handler; `internalCode` discriminates it from other
+ * 503s for callers and tests.
+ *
+ * @public — thrown from getChatMcpTools, asserted in its tests
+ */
+export class McpToolsUnavailableError extends ApiError {
+  constructor(reason: string) {
+    super(503, `MCP tools unavailable: ${reason}`, "mcp_tools_unavailable");
+  }
+}
 
 // Idle TTL for conversation-scoped MCP clients. These sessions are expensive
 // enough that we do not want them to linger forever after a chat/browser tab
@@ -88,6 +107,7 @@ const clientCache = new LRUCacheManager<Client>({
 const TOOL_CACHE_TTL_MS = 30 * TimeInMs.Second;
 const CLIENT_PING_TIMEOUT_MS = 5 * TimeInMs.Second;
 const CLIENT_PING_VALIDATION_INTERVAL_MS = 30 * TimeInMs.Second;
+const CLIENT_CONNECT_TIMEOUT_MS = 15 * TimeInMs.Second;
 
 /**
  * Maximum tool cache size to prevent unbounded memory growth.
@@ -108,7 +128,17 @@ const MAX_TOOL_CACHE_SIZE = 1000;
  * This degrades performance (repeated tool fetches from MCP Gateway) but
  * does not affect correctness - tools will still work, just slower.
  */
-const toolCache = new LRUCacheManager<Record<string, Tool>>({
+/**
+ * A cached tool set plus the `ChatToolContext` its wrappers close over. The
+ * context is retained so the per-run `repeatTracker` can be reset on each cache
+ * hit (the cache is keyed per agent/user/scope and outlives a single run).
+ */
+interface CachedToolSet {
+  tools: Record<string, Tool>;
+  context: ChatToolContext;
+}
+
+const toolCache = new LRUCacheManager<CachedToolSet>({
   maxSize: MAX_TOOL_CACHE_SIZE,
   defaultTtl: TOOL_CACHE_TTL_MS,
 });
@@ -552,7 +582,39 @@ export async function getChatMcpClient(
       { agentId, userId, url: mcpGatewayUrl },
       "Connecting to MCP Gateway...",
     );
-    await client.connect(transport);
+    // Bound the connect: a loopback gateway that stalls (e.g. during a deploy)
+    // would otherwise hang this await indefinitely and wedge the chat turn. A
+    // timeout surfaces as a connect failure → token fallback → typed throw.
+    let connectTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        client.connect(transport),
+        new Promise<never>((_, reject) => {
+          connectTimer = setTimeout(() => {
+            reject(
+              new Error(
+                `MCP Gateway connect timeout after ${CLIENT_CONNECT_TIMEOUT_MS}ms`,
+              ),
+            );
+          }, CLIENT_CONNECT_TIMEOUT_MS);
+          connectTimer.unref?.();
+        }),
+      ]);
+    } catch (connectError) {
+      // The race only stops awaiting; close the half-open client so a connect
+      // that completes after the timeout can't leak its transport and socket.
+      try {
+        await client.close();
+      } catch (closeError) {
+        logger.warn(
+          { agentId, userId, closeError },
+          "Error closing timed-out MCP client (non-fatal)",
+        );
+      }
+      throw connectError;
+    } finally {
+      if (connectTimer) clearTimeout(connectTimer);
+    }
     return client;
   };
 
@@ -678,6 +740,7 @@ export async function getChatMcpTools({
   blockOnApprovalRequired,
   scheduleTriggerRunId,
   hookRunCollector,
+  repeatTracker,
 }: {
   agentName: string;
   agentId: string;
@@ -716,6 +779,14 @@ export async function getChatMcpTools({
   scheduleTriggerRunId?: string;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];
+  /**
+   * Per-run repeated-tool-call tracker. Run entrypoints that own a `stopWhen`
+   * pass their own instance so the breaker records into the same tracker the
+   * run's `repeatCeilingStopCondition` reads (single source of truth). Callers
+   * with no stream (e.g. the tool-listing endpoint) and tests omit it and get a
+   * fresh internal tracker.
+   */
+  repeatTracker?: ToolCallRepeatTracker;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(agentId, userId, scopeKey);
@@ -723,18 +794,28 @@ export async function getChatMcpTools({
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
   // LRU eviction and TTL are handled automatically by LRUCacheManager
-  const cachedTools = shouldUseToolCache ? toolCache.get(toolCacheKey) : null;
-  if (cachedTools) {
+  const cached = shouldUseToolCache ? toolCache.get(toolCacheKey) : null;
+  if (cached) {
+    // Reset the per-run repeat tracker: this entry is keyed per agent/user/scope
+    // and lives for the cache TTL, so without this a later run on the same scope
+    // would inherit the previous run's repeat counts. getChatMcpTools is called
+    // once per run, and every wrapper reads the tracker through this context.
+    // Best-effort under concurrency: two overlapping no-abortSignal runs on the
+    // same scope share this context, so a reset can clear the other's in-flight
+    // streak — fail-open (the breaker under-fires, never falsely fires). When the
+    // caller owns the tracker, bind that instance so its stop condition reads the
+    // same streak the breaker records into.
+    cached.context.repeatTracker = repeatTracker ?? new ToolCallRepeatTracker();
     logger.info(
       {
         agentId,
         userId,
-        toolCount: Object.keys(cachedTools).length,
+        toolCount: Object.keys(cached.tools).length,
       },
       "Returning cached MCP tools for chat",
     );
     // Apply filtering if enabledToolIds provided and non-empty
-    return await filterToolsByEnabledIds(cachedTools, enabledToolIds);
+    return await filterToolsByEnabledIds(cached.tools, enabledToolIds);
   }
 
   // Log cache miss - in multi-pod deployments without sticky sessions,
@@ -759,9 +840,9 @@ export async function getChatMcpTools({
   if (!mcpGwToken) {
     logger.warn(
       { agentId, userId },
-      "No valid team token available for user - cannot execute tools",
+      "No valid team token available for user - cannot fetch tools",
     );
-    return {};
+    throw new McpToolsUnavailableError("no gateway token for user");
   }
 
   // Still use MCP client for listing tools (via MCP Gateway)
@@ -778,9 +859,9 @@ export async function getChatMcpTools({
   if (!client) {
     logger.warn(
       { agentId, userId },
-      "No MCP client available, returning empty tools",
+      "No MCP client available - failing the turn instead of streaming with empty tools",
     );
-    return {}; // No tools available
+    throw new McpToolsUnavailableError("could not connect to MCP Gateway");
   }
 
   try {
@@ -798,10 +879,15 @@ export async function getChatMcpTools({
       return !(uiVisibility && !uiVisibility.includes("model"));
     });
 
+    // rawToolCount vs toolCount makes a successful-but-model-empty fetch
+    // diagnosable: when the gateway returns tools but every one is filtered out
+    // (all app-only, or stripped as agent tools), the model still sees nothing.
+    // That is a legitimate state (we don't throw), but the gap is worth logging.
     logger.info(
       {
         agentId,
         userId,
+        rawToolCount: mcpTools.length,
         toolCount: filteredMcpTools.length,
         toolNames: filteredMcpTools.map((t) => t.name),
       },
@@ -844,6 +930,10 @@ export async function getChatMcpTools({
       considerContextUntrusted,
       teams,
       userTeams,
+      // One tracker per run: the caller's instance when it owns a stop policy,
+      // otherwise a fresh one. On a cache hit it is rebound (see above) so
+      // repeat counts never carry across runs.
+      repeatTracker: repeatTracker ?? new ToolCallRepeatTracker(),
     };
     const aiTools: Record<string, Tool> = {};
 
@@ -904,7 +994,7 @@ export async function getChatMcpTools({
 
     // Cache tools in-memory (LRU eviction and TTL handled by LRUCacheManager)
     if (shouldUseToolCache) {
-      toolCache.set(toolCacheKey, aiTools);
+      toolCache.set(toolCacheKey, { tools: aiTools, context: toolContext });
     }
 
     // Apply filtering if enabledToolIds provided and non-empty
@@ -914,7 +1004,22 @@ export async function getChatMcpTools({
       { agentId, userId, error },
       "Failed to fetch tools from MCP Gateway",
     );
-    return {};
+    // Evict the client so a transient tools/list failure self-heals on the next
+    // turn instead of reusing the same failing session until the idle TTL. The
+    // detail stays in the log above; the thrown message is kept generic so raw
+    // gateway error text never reaches the API client.
+    const cacheKey = getCacheKey(agentId, userId, scopeKey);
+    try {
+      await client.close();
+    } catch (closeError) {
+      logger.warn(
+        { agentId, userId, closeError },
+        "Error closing MCP client after tool fetch failure (non-fatal)",
+      );
+    }
+    clientCache.delete(cacheKey);
+    clientLastValidatedAt.delete(cacheKey);
+    throw new McpToolsUnavailableError("tool listing failed");
   }
 }
 
@@ -1035,7 +1140,8 @@ export async function fetchToolUiResource({
 /**
  * Filter tools by enabled tool IDs
  * If enabledToolIds is undefined, returns all tools (no custom selection = all enabled)
- * If enabledToolIds is empty array, returns no tools (explicit selection of zero tools)
+ * If enabledToolIds is empty array, returns only archestra built-in tools (a custom
+ *   selection of zero user-selectable tools; built-ins always bypass the selection)
  * If enabledToolIds has items, fetches tool names by IDs and filters to only include those
  *
  * @param tools - All available tools (keyed by tool name)
@@ -1058,25 +1164,15 @@ async function filterToolsByEnabledIds(
     return tools;
   }
 
-  // Empty array = explicit selection of zero tools
-  if (enabledToolIds.length === 0) {
-    logger.info(
-      {
-        totalTools: Object.keys(tools).length,
-        enabledToolIds: 0,
-        reason: "empty array - all tools explicitly disabled",
-      },
-      "All tools filtered out - user disabled all tools",
-    );
-    return {};
-  }
-
-  // Fetch tool names for the enabled IDs
+  // Fetch tool names for the enabled IDs (empty array -> empty set, leaving only
+  // the built-in bypass below to populate the result)
   const enabledToolNames = await ToolModel.getNamesByIds(enabledToolIds);
 
-  // Filter tools to only include enabled ones
+  // Filter tools to only include enabled ones.
   // Archestra built-in tools always bypass custom selection (they are auto-injected
-  // and hidden from the UI, so users cannot select them)
+  // and hidden from the UI, so users cannot select or deselect them). This is what
+  // keeps search_tools/run_tool available to search_and_run_only agents even when a
+  // conversation's custom selection enables zero user-selectable tools.
   const filteredTools: Record<string, Tool> = {};
   const excludedTools: string[] = [];
   for (const [name, tool] of Object.entries(tools)) {

@@ -4,12 +4,14 @@ import { isSupportedProvider, type SupportedProvider } from "@archestra/shared";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
+import { AgentSelector } from "@/components/agent-selector";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { ClientPicker } from "./client-grid";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectCommandPanel, isScriptClient } from "./connect-command-panel";
+import { ConnectConfigPanel, isConfigClient } from "./connect-config-panel";
 import {
   type ConnectionBaseUrl,
   resolveAdminDefaultBaseUrl,
@@ -20,7 +22,6 @@ import {
 import { ConnectionUrlStep } from "./connection-url-step";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
-import { SearchableSelect } from "./searchable-select";
 import {
   SkillsMarketplaceStep,
   useSkillsMarketplaceVisible,
@@ -172,12 +173,12 @@ export function ConnectionFlow({
 
   const skillsVisible = useSkillsMarketplaceVisible(client);
 
-  const agentOptions = (agents: typeof mcpGateways) =>
-    (agents ?? []).map((a) => ({ id: a.id, name: a.name }));
-
   // Manual flow (n8n / Any client): one wizard-rail entry per instruction
   // block, numbered after the client step.
-  const manualClient = client && !isScriptClient(client.id) ? client : null;
+  const manualClient =
+    client && !isScriptClient(client.id) && !isConfigClient(client.id)
+      ? client
+      : null;
   const manualSteps: {
     key: string;
     title: string;
@@ -207,14 +208,15 @@ export function ConnectionFlow({
         actions:
           manualClient.mcp.kind !== "unsupported" &&
           (mcpGateways?.length ?? 0) > 1 ? (
-            <SearchableSelect
-              options={(mcpGateways ?? []).map((g) => ({
-                value: g.id,
-                label: g.name,
-              }))}
-              value={effectiveMcpId}
+            <AgentSelector
+              mode="single"
+              flat
+              className="w-64"
+              agents={mcpGateways ?? []}
+              value={effectiveMcpId ?? ""}
               onValueChange={handleMcpSelect}
               placeholder="Select gateway"
+              searchPlaceholder="Search gateways…"
             />
           ) : undefined,
         content:
@@ -238,14 +240,15 @@ export function ConnectionFlow({
         actions:
           manualClient.proxy.kind !== "unsupported" &&
           (llmProxies?.length ?? 0) > 1 ? (
-            <SearchableSelect
-              options={(llmProxies ?? []).map((p) => ({
-                value: p.id,
-                label: p.name,
-              }))}
-              value={effectiveProxyId}
+            <AgentSelector
+              mode="single"
+              flat
+              className="w-64"
+              agents={llmProxies ?? []}
+              value={effectiveProxyId ?? ""}
               onValueChange={handleProxySelect}
               placeholder="Select proxy"
+              searchPlaceholder="Search proxies…"
             />
           ) : undefined,
         content: effectiveProxyId ? (
@@ -285,15 +288,32 @@ export function ConnectionFlow({
       {client && isScriptClient(client.id) && (
         <ConnectCommandPanel
           client={client}
-          mcpGateways={canReadMcpGateway ? agentOptions(mcpGateways) : null}
+          mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
           mcpGatewayId={effectiveMcpId}
           onMcpGatewaySelect={handleMcpSelect}
-          llmProxies={canReadLlmProxy ? agentOptions(llmProxies) : null}
+          llmProxies={canReadLlmProxy ? (llmProxies ?? []) : null}
           llmProxyId={effectiveProxyId}
           onLlmProxySelect={handleProxySelect}
           shownProviders={shownProviders}
           urlProvider={urlProvider}
           onProviderSelect={(p) => updateUrlParams({ providerId: p })}
+          baseUrl={baseUrl}
+          candidateBaseUrls={candidateBaseUrls}
+          baseUrlMetadata={connectionBaseUrls}
+          onBaseUrlChange={setUserBaseUrl}
+        />
+      )}
+
+      {/* Steps 2-4 (Claude Desktop) — review, download a config profile, import */}
+      {client && isConfigClient(client.id) && (
+        <ConnectConfigPanel
+          mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
+          mcpGatewayId={effectiveMcpId}
+          onMcpGatewaySelect={handleMcpSelect}
+          gatewaySlug={selectedMcp?.slug ?? effectiveMcpId}
+          llmProxies={canReadLlmProxy ? (llmProxies ?? []) : null}
+          llmProxyId={effectiveProxyId}
+          onLlmProxySelect={handleProxySelect}
           baseUrl={baseUrl}
           candidateBaseUrls={candidateBaseUrls}
           baseUrlMetadata={connectionBaseUrls}

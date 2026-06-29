@@ -1,38 +1,41 @@
 import crypto from "node:crypto";
 import {
-  buildUserSystemPromptContext,
+  getModelReadableMimeTypes,
   type InteractionSource,
   PLAYWRIGHT_MCP_CATALOG_ID,
-  TOOL_LOAD_SKILL_SHORT_NAME,
+  type SupportedProvider,
 } from "@archestra/shared";
 import type { ModelMessage, UIMessage, UserContent } from "ai";
 import {
   consumeStream as consumeReadableStream,
+  convertToModelMessages,
   NoOutputGeneratedError,
   stepCountIs,
-  streamText,
+  type streamText,
 } from "ai";
+import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
+import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
-import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
+import {
+  REPEAT_CALL_TERMINATION_NOTICE,
+  repeatCeilingStopCondition,
+  ToolCallRepeatTracker,
+} from "@/clients/tool-call-repeat-tracker";
 import logger from "@/logging";
-import { AgentModel, McpServerModel, TeamModel, UserModel } from "@/models";
+import { AgentModel, McpServerModel, ModelModel } from "@/models";
 import {
   formatUnavailableToolErrorDetails,
   getUnavailableToolErrorDetails,
   mapProviderError,
   ProviderError,
 } from "@/routes/chat/errors";
-import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
+import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
-import {
-  promptNeedsRendering,
-  renderSystemPrompt,
-  type UserSystemPromptContext,
-} from "@/templating";
+import type { ChatMessage } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 
 /**
@@ -194,29 +197,6 @@ export async function executeA2AMessage(
       userId,
     });
 
-  // Build system prompt from agent's systemPrompt field
-  let systemPrompt: string | undefined;
-
-  // Build template context only when prompts use Handlebars syntax
-  let promptContext: UserSystemPromptContext | null = null;
-  if (promptNeedsRendering(agent.systemPrompt)) {
-    const [userDetails, userTeams] = await Promise.all([
-      UserModel.getById(userId),
-      TeamModel.getUserTeamsForOrganization({ userId, organizationId }),
-    ]);
-    promptContext = buildUserSystemPromptContext({
-      userName: userDetails?.name ?? "",
-      userEmail: userDetails?.email ?? "",
-      userTeams: userTeams.map((t) => t.name),
-    });
-  }
-
-  const renderedPrompt = renderSystemPrompt(agent.systemPrompt, promptContext);
-
-  if (renderedPrompt) {
-    systemPrompt = renderedPrompt;
-  }
-
   // Track subagent execution so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
   // Only track delegated calls — direct A2A calls have no browser preview.
@@ -225,6 +205,10 @@ export async function executeA2AMessage(
   }
 
   try {
+    // One tracker per run, shared between the breaker (records each call) and the
+    // stop condition below (terminates the run once repeats hit the ceiling).
+    const repeatTracker = new ToolCallRepeatTracker();
+
     // Fetch MCP tools for the agent (including delegation tools)
     // Pass sessionId, delegationChain, and isolationKey for browser tab isolation
     const mcpTools = await getChatMcpTools({
@@ -241,24 +225,16 @@ export async function executeA2AMessage(
       abortSignal,
       blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
+      repeatTracker,
     });
 
-    // eagerly list the agent's skills in the prompt — autonomous runs have no
-    // human to type a slash command — but only when the agent can load them.
-    if (
-      archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME) in mcpTools
-    ) {
-      const skillCatalogPrompt = await buildSkillCatalogPrompt({
-        organizationId,
-        userId,
-        agentId: agent.id,
-      });
-      if (skillCatalogPrompt) {
-        systemPrompt =
-          [systemPrompt, skillCatalogPrompt].filter(Boolean).join("\n\n") ||
-          undefined;
-      }
-    }
+    const systemPrompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools,
+      organizationId,
+      userId,
+      agentId: agent.id,
+    });
 
     logger.info(
       {
@@ -267,7 +243,7 @@ export async function executeA2AMessage(
         orgId: organizationId,
         toolCount: Object.keys(mcpTools).length,
         model: selectedModel,
-        hasSystemPrompt: !!systemPrompt,
+        hasSystemPrompt: !!agent.systemPrompt,
         isolationKey,
         isDirectExecutionOutsideConversation,
       },
@@ -278,7 +254,7 @@ export async function executeA2AMessage(
     // Pass sessionId to group A2A requests with the calling session
     // Pass delegationChain as externalAgentId so agent names appear in logs
     // Pass agent's llmApiKeyId so it can be used without user access check
-    const { model } = await createLLMModelForAgent({
+    const { model, anthropicNativeEndpoint } = await createLLMModelForAgent({
       organizationId,
       userId,
       agentId: agent.id,
@@ -291,101 +267,123 @@ export async function executeA2AMessage(
       contextIsTrusted: parentContextIsTrusted,
     });
 
-    // Execute with AI SDK using streamText (required for long-running requests)
-    // We stream internally but collect the full result.
-    // Capture stream-level errors (e.g. API billing errors) via onError so we
-    // can surface the real cause instead of a generic NoOutputGeneratedError.
-
-    // Build multimodal user content when image attachments are present
-    const { content: userContent, skippedNote } = buildUserContent(
-      message,
-      attachments,
+    // Which attachment mime types this model can read. A missing model row
+    // (lookup failure or unknown model) falls back to the safe default set
+    // (text + images + PDF) rather than dropping everything.
+    const modelRow = await ModelModel.findByProviderAndModelId(
+      provider,
+      selectedModel,
+    ).catch(() => null);
+    const ingestibleMimeTypes = getModelReadableMimeTypes(
+      modelRow?.inputModalities ?? null,
     );
 
-    let capturedStreamError: unknown;
-    const onError = ({ error }: { error: unknown }) => {
-      capturedStreamError = error;
+    // Build the current user turn from the message + attachments, gated by the
+    // model's capabilities and normalized for the provider. `params.messages`
+    // carries only prior context; this turn is appended to it below.
+    const { content: userContent, skippedNote } = await buildUserContent(
+      message,
+      attachments,
+      { provider, anthropicNativeEndpoint, ingestibleMimeTypes },
+    );
+    const currentTurnText = message + skippedNote;
+
+    // Execute via the shared agent-run primitive: it owns the streamText call
+    // and transparently recovers empty/abortive/context-length turns before any
+    // result is collected. We stream internally but collect the full result.
+    // Behavior change: A2A (and its scheduled/email/ChatOps/delegation callers)
+    // previously had no recovery — a clean-but-empty turn returned an empty
+    // success. It now retries and, on exhaustion, throws (mapped to a
+    // ProviderError below), matching the interactive chat path.
+    // The executor owns the current user turn: `params.messages` (when present)
+    // is prior context only, and the turn built from `message`/`attachments` is
+    // appended to it. When there is no current turn (e.g. an approval-decision
+    // message with no text or attachments), the context is used as-is. Callers
+    // without context (delegation, scheduled, A2A v1) fall back to a plain
+    // `prompt` for text, or a single `messages` turn when attachments survive.
+    const baseConfig = {
+      model,
+      system: systemPrompt,
+      tools: mcpTools,
+      stopWhen: [
+        stepCountIs(MAX_AGENT_STEPS),
+        repeatCeilingStopCondition(repeatTracker),
+      ],
+      abortSignal,
     };
-
-    // By-pass "messages" param when it's provided
-    // Legacy:
-    // Use `messages` with content parts when we have images, otherwise `prompt` for plain text
-    const stream =
+    const currentTurn: { role: "user"; content: UserContent } | null =
+      userContent !== null
+        ? { role: "user", content: userContent }
+        : currentTurnText.trim().length > 0
+          ? { role: "user", content: currentTurnText }
+          : null;
+    const config: Parameters<typeof streamText>[0] =
       params.messages !== undefined
-        ? streamText({
-            model,
-            system: systemPrompt,
-            messages: params.messages,
-            tools: mcpTools,
-            stopWhen: stepCountIs(500),
-            abortSignal,
-            onError,
-          })
-        : userContent
-          ? streamText({
-              model,
-              system: systemPrompt,
-              messages: [{ role: "user" as const, content: userContent }],
-              tools: mcpTools,
-              stopWhen: stepCountIs(500),
-              abortSignal,
-              onError,
-            })
-          : streamText({
-              model,
-              system: systemPrompt,
-              prompt: message + skippedNote,
-              tools: mcpTools,
-              stopWhen: stepCountIs(500),
-              abortSignal,
-              onError,
-            });
-
-    let responseUiMessage: UIMessage | undefined;
-    const uiMessageStreamConsumption = consumeReadableStream({
-      stream: stream.toUIMessageStream<UIMessage>({
-        originalMessages: params.originalUiMessages,
-        generateMessageId: () => crypto.randomUUID(),
-        onFinish: ({ responseMessage }) => {
-          responseUiMessage = responseMessage;
-        },
-        onError: (error) => {
-          // a nonexistent-tool call is recoverable: the SDK already feeds the
-          // tool-error back to the model and continues the loop, so return the
-          // recovery text as the part's errorText instead of killing the run
-          const unavailableToolError = getUnavailableToolErrorDetails(error);
-          if (unavailableToolError) {
-            logger.info(
-              { agentId: agent.id, unavailableToolError },
-              "Returning unavailable tool error as tool-level error in A2A execution",
-            );
-            return formatUnavailableToolErrorDetails(unavailableToolError);
+        ? {
+            ...baseConfig,
+            messages: currentTurn
+              ? [...params.messages, currentTurn]
+              : params.messages,
           }
+        : currentTurn
+          ? { ...baseConfig, messages: [currentTurn] }
+          : { ...baseConfig, prompt: currentTurnText };
+
+    let finalText: string;
+    let usage: Awaited<ReturnType<typeof streamText>["usage"]>;
+    let finishReason: Awaited<ReturnType<typeof streamText>["finishReason"]>;
+    let responseUiMessage: UIMessage | undefined;
+    // Captures the committed attempt's stream-level error (e.g. API billing
+    // errors) so a generic NoOutputGeneratedError can surface the real cause.
+    let getCapturedStreamError: () => unknown = () => undefined;
+    try {
+      const runStream = await runAgentStream({
+        config,
+        recovery: { logContext: { agentId: agent.id, sessionId } },
+      });
+      const stream = runStream.result;
+      getCapturedStreamError = runStream.getCapturedStreamError;
+
+      const uiMessageStreamConsumption = consumeReadableStream({
+        stream: stream.toUIMessageStream<UIMessage>({
+          originalMessages: params.originalUiMessages,
+          generateMessageId: () => crypto.randomUUID(),
+          onFinish: ({ responseMessage }) => {
+            responseUiMessage = responseMessage;
+          },
+          onError: (error) => {
+            // a nonexistent-tool call is recoverable: the SDK already feeds the
+            // tool-error back to the model and continues the loop, so return the
+            // recovery text as the part's errorText instead of killing the run
+            const unavailableToolError = getUnavailableToolErrorDetails(error);
+            if (unavailableToolError) {
+              logger.info(
+                { agentId: agent.id, unavailableToolError },
+                "Returning unavailable tool error as tool-level error in A2A execution",
+              );
+              return formatUnavailableToolErrorDetails(unavailableToolError);
+            }
+            logger.error(
+              { agentId: agent.id, error },
+              "Error stream.toUIMessageStream when parsing A2A execution response",
+            );
+            throw error;
+          },
+        }),
+        onError: (error) => {
           logger.error(
             { agentId: agent.id, error },
-            "Error stream.toUIMessageStream when parsing A2A execution response",
+            "Error consuming UI message stream for A2A execution response",
           );
           throw error;
         },
-      }),
-      onError: (error) => {
-        logger.error(
-          { agentId: agent.id, error },
-          "Error consuming UI message stream for A2A execution response",
-        );
-        throw error;
-      },
-    });
+      });
 
-    // Wait for the stream to complete and get the final text.
-    // When the underlying provider returns an error (e.g. 400 insufficient
-    // credits), the stream produces zero steps and the AI SDK throws
-    // NoOutputGeneratedError.  Re-throw with the real error message so callers
-    // (and ultimately end-users) see what actually went wrong.
-    let finalText: string;
-    let usage: Awaited<typeof stream.usage>;
-    let finishReason: Awaited<typeof stream.finishReason>;
-    try {
+      // Wait for the stream to complete and get the final text.
+      // When the underlying provider returns an error (e.g. 400 insufficient
+      // credits), the stream produces zero steps and the AI SDK throws
+      // NoOutputGeneratedError.  Re-throw with the real error message so callers
+      // (and ultimately end-users) see what actually went wrong.
       [finalText, usage, finishReason] = await Promise.all([
         stream.text,
         stream.usage,
@@ -399,10 +397,21 @@ export async function executeA2AMessage(
           "A2A execution failed: no response UIMessage generated",
         );
       }
+
+      // The repeat-call ceiling stops the loop on a tool-call step, so the model
+      // never took a turn to produce assistant text and `finalText` is empty.
+      // Headless callers read only `text`, so surface why the run ended.
+      if (
+        finalText.trim() === "" &&
+        repeatTracker.hasReachedTerminationCeiling()
+      ) {
+        finalText = REPEAT_CALL_TERMINATION_NOTICE;
+      }
     } catch (streamError) {
+      const capturedStreamError = getCapturedStreamError();
       if (
         NoOutputGeneratedError.isInstance(streamError) &&
-        capturedStreamError
+        capturedStreamError !== undefined
       ) {
         throw new ProviderError(
           mapProviderError(capturedStreamError, provider),
@@ -464,22 +473,30 @@ export async function executeA2AMessage(
 // ============================================================================
 
 /**
- * Build AI SDK UserContent from a text message and optional attachments.
- * Returns `content: null` when there are no image attachments (caller should use plain `prompt` instead).
- * Returns `skippedNote` with a human-readable note about non-image attachments that were dropped,
- * so the caller can append it to the prompt for the LLM to mention.
+ * Build the current user turn's AI SDK content from a text message and optional
+ * attachments, gated by what the target model can read — mirroring the regular
+ * chat upload path.
  *
- * Only image attachments are currently supported as inline content parts.
- * Non-image attachments are noted so the LLM can inform the user.
+ * Images are always kept (subject to the tiny-broken-image filter). Non-image
+ * attachments are kept only when the model's input modalities include their
+ * mime type; otherwise they are dropped and named in `skippedNote` so the LLM
+ * can tell the user. Kept attachments are normalized for the provider via
+ * `prepareMessagesForProvider` and converted to AI SDK content. Returns
+ * `content: null` when no attachment survives, so the caller falls back to a
+ * plain text turn carrying `skippedNote`.
  * @public — exported for testability
  */
-export function buildUserContent(
+export async function buildUserContent(
   message: string,
-  attachments?: A2AAttachment[],
-): { content: UserContent | null; skippedNote: string } {
+  attachments: A2AAttachment[] | undefined,
+  opts: {
+    provider: SupportedProvider;
+    anthropicNativeEndpoint: boolean;
+    ingestibleMimeTypes: Set<string>;
+  },
+): Promise<{ content: UserContent | null; skippedNote: string }> {
   const allAttachments = attachments ?? [];
 
-  // Split into image and non-image attachments
   const imageAttachments = allAttachments.filter((a) =>
     a.contentType.startsWith("image/"),
   );
@@ -498,6 +515,14 @@ export function buildUserContent(
     return estimatedBytes < MIN_IMAGE_ATTACHMENT_SIZE;
   });
 
+  // Non-image attachments only reach the model when it can read their mime type.
+  const readableNonImageAttachments = nonImageAttachments.filter((a) =>
+    opts.ingestibleMimeTypes.has(a.contentType),
+  );
+  const unreadableNonImageAttachments = nonImageAttachments.filter(
+    (a) => !opts.ingestibleMimeTypes.has(a.contentType),
+  );
+
   if (tinyImageAttachments.length > 0) {
     logger.debug(
       {
@@ -512,40 +537,65 @@ export function buildUserContent(
     );
   }
 
-  if (nonImageAttachments.length > 0) {
+  if (unreadableNonImageAttachments.length > 0) {
     logger.debug(
       {
-        skippedCount: nonImageAttachments.length,
-        skippedTypes: nonImageAttachments.map(
+        skippedCount: unreadableNonImageAttachments.length,
+        skippedTypes: unreadableNonImageAttachments.map(
           (a) => `${a.name ?? "unnamed"} (${a.contentType})`,
         ),
       },
-      "Skipping non-image attachments in buildUserContent (only image/* is currently supported)",
+      "Skipping attachments the target model cannot read in buildUserContent",
     );
   }
 
   // Build a note about all skipped attachments so the LLM can mention them
-  const allSkipped = [...nonImageAttachments, ...tinyImageAttachments];
+  const allSkipped = [
+    ...unreadableNonImageAttachments,
+    ...tinyImageAttachments,
+  ];
   const skippedNote =
     allSkipped.length > 0
       ? `\n\n[Note: This message also included ${allSkipped.length} attachment(s) that could not be processed: ${allSkipped.map((a) => `${a.name ?? "unnamed"} (${a.contentType})`).join(", ")}]`
       : "";
 
-  if (validImageAttachments.length === 0) {
+  const keptAttachments = [
+    ...validImageAttachments,
+    ...readableNonImageAttachments,
+  ];
+  if (keptAttachments.length === 0) {
     return { content: null, skippedNote };
   }
 
-  return {
-    content: [
-      { type: "text" as const, text: message + skippedNote },
-      ...validImageAttachments.map((a) => ({
-        type: "file" as const,
-        data: Buffer.from(a.contentBase64, "base64"),
+  // Hand the kept attachments to the chat provider-normalization pipeline as a
+  // synthetic user message (data: URL file parts), so each provider's SDK
+  // receives documents in the shape it accepts (Anthropic documents, decoded
+  // text for OpenAI-compatible endpoints, etc.).
+  const text = message + skippedNote;
+  const userMessage: ChatMessage = {
+    role: "user",
+    parts: [
+      ...(text.length > 0 ? [{ type: "text", text }] : []),
+      ...keptAttachments.map((a) => ({
+        type: "file",
+        url: `data:${a.contentType};base64,${a.contentBase64}`,
         mediaType: a.contentType,
+        filename: a.name,
       })),
     ],
-    skippedNote,
   };
+
+  const [preparedMessage] = prepareMessagesForProvider({
+    messages: [userMessage],
+    provider: opts.provider,
+    anthropicNativeEndpoint: opts.anthropicNativeEndpoint,
+  });
+  const modelMessages = await convertToModelMessages([
+    preparedMessage,
+  ] as unknown as Omit<UIMessage, "id">[]);
+
+  const content = (modelMessages[0]?.content ?? null) as UserContent | null;
+  return { content, skippedNote };
 }
 
 // ============================================================================

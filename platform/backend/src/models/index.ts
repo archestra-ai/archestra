@@ -10,6 +10,13 @@ export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
 export { default as AgentVersionModel } from "./agent-version";
+export { default as AppModel } from "./app";
+export { default as AppAccessModel } from "./app-access";
+export { default as AppDataModel } from "./app-data";
+export { default as AppRenderDiagnosticsModel } from "./app-render-diagnostics";
+export { default as AppRenderScreenshotModel } from "./app-render-screenshot";
+export { default as AppToolModel } from "./app-tool";
+export { default as AppVersionModel } from "./app-version";
 export { default as AuditLogModel } from "./audit-log";
 export { default as BrowserTabStateModel } from "./browser-tab-state";
 export { default as ActiveChatRunModel } from "./chat-active-run";
@@ -26,6 +33,8 @@ export { default as ConversationCompactionModel } from "./conversation-compactio
 export { default as ConversationEnabledToolModel } from "./conversation-enabled-tool";
 export { default as ConversationShareModel } from "./conversation-share";
 export { default as EnvironmentModel } from "./environment";
+export { default as EnvironmentDefaultUserLimitModel } from "./environment-default-user-limit";
+export { default as FileModel, FileNameExistsError } from "./file";
 export { default as GithubAppConfigModel } from "./github-app-config";
 export { default as HookFileModel } from "./hook-file";
 export { default as InteractionModel } from "./interaction";
@@ -33,7 +42,6 @@ export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
 export { default as InvitationModel } from "./invitation";
 export { default as KbChunkModel } from "./kb-chunk";
 export { default as KbDocumentModel } from "./kb-document";
-export { default as KbUploadedFileModel } from "./kb-uploaded-file";
 export { default as KnowledgeBaseModel } from "./knowledge-base";
 export { default as KnowledgeBaseConnectorModel } from "./knowledge-base-connector";
 export { default as LimitModel, LimitValidationService } from "./limit";
@@ -46,6 +54,7 @@ export {
 } from "./llm-provider-api-key-model";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
 export { default as McpHttpSessionModel } from "./mcp-http-session";
+export { default as McpOauthClientModel } from "./mcp-oauth-client";
 export { default as McpServerModel } from "./mcp-server";
 export { default as McpServerInstallationRequestModel } from "./mcp-server-installation-request";
 export { default as McpToolCallModel } from "./mcp-tool-call";
@@ -54,9 +63,18 @@ export { default as MessageModel } from "./message";
 export { default as ModelModel } from "./model";
 export { default as OAuthAccessTokenModel } from "./oauth-access-token";
 export { default as OAuthClientModel } from "./oauth-client";
+export { default as OAuthRefreshTokenModel } from "./oauth-refresh-token";
 export { default as OptimizationRuleModel } from "./optimization-rule";
 export { default as OrganizationModel } from "./organization";
 export { default as OrganizationRoleModel } from "./organization-role";
+export {
+  ConversationNotOwnedError,
+  default as ProjectModel,
+  ProjectAlreadyAssignedError,
+  ProjectNameExistsError,
+} from "./project";
+export { default as ProjectPinModel } from "./project-pin";
+export { default as ProjectShareModel } from "./project-share";
 export { default as ScheduleTriggerModel } from "./schedule-trigger";
 export { default as ScheduleTriggerRunModel } from "./schedule-trigger-run";
 /** @public — re-exported for testability (consumed by src/test/fixtures.ts) */

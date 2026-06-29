@@ -9,7 +9,7 @@ import { expect, test } from "./fixtures";
 
 test.describe("Skills import", () => {
   test.beforeEach(async ({ mswControl }) => {
-    // /agents/skills/* is feature-gated and the base config seed ships with
+    // /skills/* is feature-gated and the base config seed ships with
     // the flag off, so every test flips it on before navigating.
     await mswControl.use({
       method: "get",

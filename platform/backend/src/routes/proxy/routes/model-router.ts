@@ -22,6 +22,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import type { Agent, LLMProvider } from "@/types";
 import {
   ApiError,
@@ -855,6 +856,9 @@ async function getModelRouterOAuthClientAuth(
     accessToken.refreshTokenRevoked
   ) {
     throw new ApiError(401, "Invalid LLM OAuth client access token.");
+  }
+  if (isAppConnectorAudienceRef(accessToken.referenceId)) {
+    throw new ApiError(403, "Access token is bound to an app connector.");
   }
   if (!accessToken.scopes?.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE)) {
     throw new ApiError(403, "Access token is missing Model Router scope.");

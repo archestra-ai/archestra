@@ -1,12 +1,14 @@
 import { TOOL_LOAD_SKILL_FULL_NAME } from "@archestra/shared";
 import { NoSuchToolError } from "ai";
-import { describe, expect, test, vi } from "vitest";
+import { describe, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
+import { expect, test } from "@/test";
 import {
   type A2AAttachment,
   buildUserContent,
   executeA2AMessage,
 } from "./a2a-executor";
+import { TOOL_DENIAL_INSTRUCTION } from "./agent-system-prompt";
 
 const {
   mockStreamText,
@@ -70,168 +72,117 @@ vi.mock("@/skills/skill-catalog-prompt", () => ({
     mockBuildSkillCatalogPrompt(...args),
 }));
 
-vi.mock("@/models", async () => {
-  const actual = await vi.importActual<typeof import("@/models")>("@/models");
-  return {
-    ...actual,
-    AgentModel: {
-      findById: vi.fn(),
-    },
-    McpServerModel: {
-      getUserPersonalServerForCatalog: vi.fn(),
-    },
-    TeamModel: {
-      getUserTeams: vi.fn(),
-    },
-    UserModel: {
-      getById: vi.fn(),
-    },
-  };
-});
-
-vi.mock("@/templating", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/templating")>("@/templating");
-  return {
-    ...actual,
-    promptNeedsRendering: vi.fn(() => false),
-    renderSystemPrompt: vi.fn((prompt: string) => prompt),
-  };
-});
-
-import { AgentModel, McpServerModel } from "@/models";
-
 // Base64 string large enough to pass the MIN_IMAGE_ATTACHMENT_SIZE (2KB) filter.
 // 2732 base64 chars → ~2048 decoded bytes.
 const VALID_IMAGE_BASE64 = "A".repeat(2732);
 
+// runAgentStream probes `fullStream` before committing the attempt; yield a
+// renderable event so a mocked streamText result commits on the first attempt.
+function renderableFullStream(): AsyncIterable<{ type: string }> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      yield { type: "text-delta" };
+      yield { type: "finish", finishReason: "stop" };
+    },
+  };
+}
+
 describe("buildUserContent", () => {
-  test("returns null content when no attachments are provided", () => {
-    const { content, skippedNote } = buildUserContent("Hello");
+  // gemini passes file parts through unchanged, so kept attachments surface as
+  // `file` content parts with their original mediaType — the simplest provider
+  // to assert which attachments survived.
+  const geminiOpts = (ingestibleMimeTypes: Set<string>) => ({
+    provider: "gemini" as const,
+    anthropicNativeEndpoint: false,
+    ingestibleMimeTypes,
+  });
+  const PDF_AND_IMAGES = new Set([
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/gif",
+    "image/webp",
+    "image/svg+xml",
+  ]);
+
+  // Returns the mediaTypes of all `file` content parts produced.
+  function fileMediaTypes(content: unknown): string[] {
+    if (!Array.isArray(content)) {
+      return [];
+    }
+    return content
+      .filter(
+        (p): p is { type: "file"; mediaType: string } =>
+          typeof p === "object" &&
+          p !== null &&
+          (p as { type?: unknown }).type === "file",
+      )
+      .map((p) => p.mediaType);
+  }
+
+  test("returns null content when no attachments are provided", async () => {
+    const { content, skippedNote } = await buildUserContent(
+      "Hello",
+      undefined,
+      geminiOpts(PDF_AND_IMAGES),
+    );
     expect(content).toBeNull();
     expect(skippedNote).toBe("");
   });
 
-  test("returns null content when attachments array is empty", () => {
-    const { content, skippedNote } = buildUserContent("Hello", []);
+  test("returns null content when attachments array is empty", async () => {
+    const { content, skippedNote } = await buildUserContent(
+      "Hello",
+      [],
+      geminiOpts(PDF_AND_IMAGES),
+    );
     expect(content).toBeNull();
     expect(skippedNote).toBe("");
   });
 
-  test("returns null content with skipped note when attachments contain no images", () => {
+  test("keeps a PDF when the model can read it", async () => {
     const attachments: A2AAttachment[] = [
       {
         contentType: "application/pdf",
         contentBase64: "JVBERi0xLjQ=",
         name: "doc.pdf",
       },
+    ];
+
+    const { content, skippedNote } = await buildUserContent(
+      "Summarize this",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
+
+    expect(fileMediaTypes(content)).toContain("application/pdf");
+    expect(skippedNote).toBe("");
+  });
+
+  test("drops a non-image the model cannot read and names it in the note", async () => {
+    const attachments: A2AAttachment[] = [
       {
-        contentType: "text/plain",
-        contentBase64: "SGVsbG8=",
-        name: "note.txt",
+        contentType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        contentBase64: "AAAA",
+        name: "report.docx",
       },
     ];
 
-    const { content, skippedNote } = buildUserContent("Hello", attachments);
+    const { content, skippedNote } = await buildUserContent(
+      "Read this",
+      attachments,
+      // Model reads PDFs/images but not docx.
+      geminiOpts(PDF_AND_IMAGES),
+    );
 
     expect(content).toBeNull();
-    expect(skippedNote).toContain("2 attachment(s)");
-    expect(skippedNote).toContain("doc.pdf");
-    expect(skippedNote).toContain("note.txt");
+    expect(skippedNote).toContain("1 attachment(s)");
+    expect(skippedNote).toContain("report.docx");
   });
 
-  test("builds content parts with a single image attachment", () => {
-    const attachments: A2AAttachment[] = [
-      {
-        contentType: "image/png",
-        contentBase64: VALID_IMAGE_BASE64,
-        name: "photo.png",
-      },
-    ];
-
-    const { content } = buildUserContent("Describe this image", attachments);
-
-    expect(content).toHaveLength(2);
-    expect(content?.[0]).toEqual({ type: "text", text: "Describe this image" });
-    expect(content?.[1]).toHaveProperty("type", "file");
-    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
-    expect(content?.[1]).toHaveProperty("data");
-    // Verify the data is a Buffer with the correct decoded bytes
-    const filePart = content?.[1] as { data: Buffer; mediaType: string };
-    expect(Buffer.isBuffer(filePart.data)).toBe(true);
-    expect(filePart.data.toString("base64")).toBe(VALID_IMAGE_BASE64);
-  });
-
-  test("builds content parts with multiple image attachments", () => {
-    const pngBase64 = "B".repeat(3000);
-    const jpegBase64 = "C".repeat(3000);
-    const attachments: A2AAttachment[] = [
-      {
-        contentType: "image/png",
-        contentBase64: pngBase64,
-        name: "image1.png",
-      },
-      {
-        contentType: "image/jpeg",
-        contentBase64: jpegBase64,
-        name: "image2.jpg",
-      },
-    ];
-
-    const { content } = buildUserContent(
-      "What's in these photos?",
-      attachments,
-    );
-
-    expect(content).toHaveLength(3); // 1 text + 2 files
-    expect(content?.[0]).toEqual({
-      type: "text",
-      text: "What's in these photos?",
-    });
-    expect(content?.[1]).toHaveProperty("type", "file");
-    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
-    expect(content?.[2]).toHaveProperty("type", "file");
-    expect(content?.[2]).toHaveProperty("mediaType", "image/jpeg");
-  });
-
-  test("filters out non-image attachments from mixed set and appends note", () => {
-    const attachments: A2AAttachment[] = [
-      {
-        contentType: "application/pdf",
-        contentBase64: "JVBERi0xLjQ=",
-        name: "doc.pdf",
-      },
-      {
-        contentType: "image/png",
-        contentBase64: VALID_IMAGE_BASE64,
-        name: "photo.png",
-      },
-      {
-        contentType: "text/plain",
-        contentBase64: "SGVsbG8=",
-        name: "note.txt",
-      },
-    ];
-
-    const { content, skippedNote } = buildUserContent(
-      "Check this",
-      attachments,
-    );
-
-    expect(content).toHaveLength(2); // 1 text + 1 file
-    expect(content?.[0]).toHaveProperty("type", "text");
-    // The text part should include the skipped note
-    expect((content?.[0] as { text: string }).text).toContain("Check this");
-    expect((content?.[0] as { text: string }).text).toContain(
-      "2 attachment(s)",
-    );
-    expect(content?.[1]).toHaveProperty("type", "file");
-    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
-    expect(skippedNote).toContain("doc.pdf");
-    expect(skippedNote).toContain("note.txt");
-  });
-
-  test("handles various image MIME types", () => {
+  test("keeps images regardless of the readable mime set, including image/jpg", async () => {
     const attachments: A2AAttachment[] = [
       {
         contentType: "image/png",
@@ -239,72 +190,87 @@ describe("buildUserContent", () => {
         name: "a.png",
       },
       {
-        contentType: "image/jpeg",
+        // Non-standard mime that is NOT in the model-readable set; images must
+        // still pass via the broad image/* check.
+        contentType: "image/jpg",
         contentBase64: VALID_IMAGE_BASE64,
         name: "b.jpg",
       },
-      {
-        contentType: "image/gif",
-        contentBase64: VALID_IMAGE_BASE64,
-        name: "c.gif",
-      },
-      {
-        contentType: "image/webp",
-        contentBase64: VALID_IMAGE_BASE64,
-        name: "d.webp",
-      },
-      {
-        contentType: "image/svg+xml",
-        contentBase64: VALID_IMAGE_BASE64,
-        name: "e.svg",
-      },
     ];
 
-    const { content } = buildUserContent("Describe", attachments);
+    const { content, skippedNote } = await buildUserContent(
+      "Describe",
+      attachments,
+      // Deliberately omit image/jpg from the readable set.
+      geminiOpts(new Set(["application/pdf"])),
+    );
 
-    expect(content).toHaveLength(6); // 1 text + 5 files
-    expect(content?.[0]).toHaveProperty("type", "text");
-    for (let i = 1; i < (content?.length ?? 0); i++) {
-      expect(content?.[i]).toHaveProperty("type", "file");
-    }
+    const mediaTypes = fileMediaTypes(content);
+    expect(mediaTypes).toContain("image/png");
+    expect(mediaTypes).toContain("image/jpg");
+    expect(skippedNote).toBe("");
   });
 
-  test("works with attachments that have no name", () => {
-    const attachments: A2AAttachment[] = [
-      {
-        contentType: "image/png",
-        contentBase64: VALID_IMAGE_BASE64,
-      },
-    ];
-
-    const { content } = buildUserContent("What is this?", attachments);
-
-    expect(content).toHaveLength(2);
-    expect(content?.[0]).toEqual({ type: "text", text: "What is this?" });
-    expect(content?.[1]).toHaveProperty("type", "file");
-    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
-  });
-
-  test("skipped note uses 'unnamed' for attachments without names", () => {
+  test("keeps readable attachments and notes unreadable ones in a mixed set", async () => {
     const attachments: A2AAttachment[] = [
       {
         contentType: "application/pdf",
         contentBase64: "JVBERi0xLjQ=",
+        name: "doc.pdf",
+      },
+      {
+        contentType: "image/png",
+        contentBase64: VALID_IMAGE_BASE64,
+        name: "photo.png",
+      },
+      {
+        contentType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        contentBase64: "AAAA",
+        name: "report.docx",
       },
     ];
 
-    const { skippedNote } = buildUserContent("Hello", attachments);
+    const { content, skippedNote } = await buildUserContent(
+      "Check this",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
 
-    expect(skippedNote).toContain("unnamed (application/pdf)");
+    const mediaTypes = fileMediaTypes(content);
+    expect(mediaTypes).toContain("application/pdf");
+    expect(mediaTypes).toContain("image/png");
+    expect(skippedNote).toContain("report.docx");
+    expect(skippedNote).toContain("1 attachment(s)");
+    // The note travels on the kept turn's text part too.
+    const textPart = (content as { type: string; text?: string }[]).find(
+      (p) => p.type === "text",
+    );
+    expect(textPart?.text).toContain("Check this");
+    expect(textPart?.text).toContain("report.docx");
   });
 
-  test("filters out tiny image attachments below MIN_IMAGE_ATTACHMENT_SIZE", () => {
-    // Create a tiny image (~988 bytes, like broken Outlook inline references)
-    // Base64 length of ~1317 chars → ~988 decoded bytes (below 2KB threshold)
-    const tinyBase64 = "A".repeat(1317);
+  test("skipped note uses 'unnamed' for attachments without names", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        contentBase64: "AAAA",
+      },
+    ];
 
-    // Create a valid-sized image (above 2KB threshold)
-    // Base64 length of ~2732 chars → ~2048 decoded bytes
+    const { skippedNote } = await buildUserContent(
+      "Hello",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
+
+    expect(skippedNote).toContain("unnamed");
+  });
+
+  test("filters out tiny image attachments below MIN_IMAGE_ATTACHMENT_SIZE", async () => {
+    // ~988 decoded bytes (below the 2KB threshold), like broken inline refs.
+    const tinyBase64 = "A".repeat(1317);
     const validBase64 = "B".repeat(2732);
 
     const attachments: A2AAttachment[] = [
@@ -320,44 +286,42 @@ describe("buildUserContent", () => {
       },
     ];
 
-    const { content, skippedNote } = buildUserContent(
+    const { content, skippedNote } = await buildUserContent(
       "Check this",
       attachments,
+      geminiOpts(PDF_AND_IMAGES),
     );
 
-    // Should include only the valid image
-    expect(content).toHaveLength(2); // 1 text + 1 file
-    expect(content?.[1]).toHaveProperty("type", "file");
-    expect(content?.[1]).toHaveProperty("mediaType", "image/jpeg");
-
-    // Skipped note should mention the filtered tiny image
+    expect(fileMediaTypes(content)).toEqual(["image/jpeg"]);
     expect(skippedNote).toContain("broken-inline-ref.png");
     expect(skippedNote).toContain("1 attachment(s)");
   });
 
-  test("returns null content when all images are below minimum size", () => {
-    const tinyBase64 = "A".repeat(100); // ~75 bytes
-
+  test("returns null content when all images are below minimum size", async () => {
     const attachments: A2AAttachment[] = [
       {
         contentType: "image/png",
-        contentBase64: tinyBase64,
+        contentBase64: "A".repeat(100), // ~75 bytes
         name: "tiny.png",
       },
     ];
 
-    const { content, skippedNote } = buildUserContent("Hello", attachments);
+    const { content, skippedNote } = await buildUserContent(
+      "Hello",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
 
     expect(content).toBeNull();
     expect(skippedNote).toContain("tiny.png");
   });
 
-  test("does not filter images at or above the minimum size threshold", () => {
-    // Create an image exactly at the threshold (2048 bytes = MIN_IMAGE_ATTACHMENT_SIZE)
-    // 2048 bytes → base64 length = ceil(2048 * 4/3) = 2731 chars
+  test("does not filter images at or above the minimum size threshold", async () => {
+    // 2048 bytes = MIN_IMAGE_ATTACHMENT_SIZE → base64 length 2731 chars.
     const thresholdBase64 = "C".repeat(2731);
-    const estimatedBytes = Math.ceil((2731 * 3) / 4);
-    expect(estimatedBytes).toBeGreaterThanOrEqual(MIN_IMAGE_ATTACHMENT_SIZE);
+    expect(Math.ceil((2731 * 3) / 4)).toBeGreaterThanOrEqual(
+      MIN_IMAGE_ATTACHMENT_SIZE,
+    );
 
     const attachments: A2AAttachment[] = [
       {
@@ -367,26 +331,133 @@ describe("buildUserContent", () => {
       },
     ];
 
-    const { content } = buildUserContent("Test", attachments);
+    const { content } = await buildUserContent(
+      "Test",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
 
-    expect(content).toHaveLength(2); // 1 text + 1 file
-    expect(content?.[1]).toHaveProperty("type", "file");
+    expect(fileMediaTypes(content)).toEqual(["image/png"]);
+  });
+});
+
+describe("executeA2AMessage current turn assembly", () => {
+  function primeStreamMocks() {
+    mockGetChatMcpTools.mockResolvedValue({});
+    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+      chatApiKeyId: "org-key",
+      selectedModel: "claude-sonnet-4-6",
+      selectedProvider: "anthropic",
+    });
+    mockCreateLLMModelForAgent.mockResolvedValue({
+      model: { provider: "mock" },
+      provider: "anthropic",
+      apiKeySource: "org",
+      anthropicNativeEndpoint: true,
+    });
+    mockStreamText.mockReturnValue({
+      toUIMessageStream: vi.fn((options) => {
+        const responseMessage = {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "ok" }],
+        };
+        options?.onFinish?.({
+          messages: [responseMessage],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage,
+          finishReason: "stop",
+        });
+        return new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        });
+      }),
+      fullStream: renderableFullStream(),
+      text: Promise.resolve("ok"),
+      usage: Promise.resolve(undefined),
+      finishReason: Promise.resolve("stop"),
+    });
+  }
+
+  test("appends exactly one current user turn to the provided history", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    primeStreamMocks();
+
+    const history = [
+      { role: "user" as const, content: "prior question" },
+      { role: "assistant" as const, content: "earlier reply" },
+    ];
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "current question",
+      messages: history,
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    const config = mockStreamText.mock.calls[0]?.[0];
+    expect(config.messages).toHaveLength(history.length + 1);
+    expect(config.messages.at(-1)).toEqual({
+      role: "user",
+      content: "current question",
+    });
+  });
+
+  test("uses history as-is when the current turn has no text or attachments", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    primeStreamMocks();
+
+    const history = [{ role: "user" as const, content: "prior question" }];
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "",
+      messages: history,
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    const config = mockStreamText.mock.calls[0]?.[0];
+    expect(config.messages).toEqual(history);
   });
 });
 
 describe("executeA2AMessage model selection", () => {
-  test("uses the shared conversation selection so delegated agents inherit the organization default model", async () => {
-    vi.mocked(AgentModel.findById).mockResolvedValue({
-      id: "agent-child",
-      name: "Child Agent",
+  test("uses the shared conversation selection so delegated agents inherit the organization default model", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
       agentType: "agent",
       systemPrompt: "Handle the task.",
-      llmApiKeyId: null,
-      modelId: null,
-    } as never);
-    vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
-      null,
-    );
+    });
+
     mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "gemini-2.5-pro",
@@ -420,16 +491,17 @@ describe("executeA2AMessage model selection", () => {
           },
         });
       }),
+      fullStream: renderableFullStream(),
       text: Promise.resolve("Delegated response"),
       usage: Promise.resolve(undefined),
       finishReason: Promise.resolve("stop"),
     });
 
-    const result = await executeA2AMessage({
-      agentId: "agent-child",
+    await executeA2AMessage({
+      agentId: agent.id,
       message: "Handle this",
-      organizationId: "org-1",
-      userId: "user-1",
+      organizationId: org.id,
+      userId: user.id,
       conversationId: "conv-1",
       parentDelegationChain: "agent-parent",
     });
@@ -439,42 +511,25 @@ describe("executeA2AMessage model selection", () => {
         llmApiKeyId: null,
         modelId: null,
       },
-      organizationId: "org-1",
-      userId: "user-1",
+      organizationId: org.id,
+      userId: user.id,
     });
     expect(mockCreateLLMModelForAgent).toHaveBeenCalledWith(
       expect.objectContaining({
-        organizationId: "org-1",
-        userId: "user-1",
-        agentId: "agent-child",
+        organizationId: org.id,
+        userId: user.id,
+        agentId: agent.id,
         model: "gemini-2.5-pro",
         provider: "gemini",
-        externalAgentId: "agent-parent:agent-child",
+        externalAgentId: `agent-parent:${agent.id}`,
       }),
     );
-    expect(result.text).toBe("Delegated response");
-    expect(result.responseUiMessage).toEqual({
-      id: "msg-1",
-      role: "assistant",
-      parts: [{ type: "text", text: "Delegated response" }],
-    });
   });
 });
 
 describe("executeA2AMessage isolation scope", () => {
   function primeExecutionMocks() {
     mockGetChatMcpTools.mockClear();
-    vi.mocked(AgentModel.findById).mockResolvedValue({
-      id: "agent-child",
-      name: "Child Agent",
-      agentType: "agent",
-      systemPrompt: "Handle the task.",
-      llmApiKeyId: null,
-      modelId: null,
-    } as never);
-    vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
-      null,
-    );
     mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "gemini-2.5-pro",
@@ -506,6 +561,7 @@ describe("executeA2AMessage isolation scope", () => {
           },
         });
       }),
+      fullStream: renderableFullStream(),
       text: Promise.resolve("ok"),
       usage: Promise.resolve(undefined),
       finishReason: Promise.resolve("stop"),
@@ -519,12 +575,21 @@ describe("executeA2AMessage isolation scope", () => {
     };
   }
 
-  test("headless executions never fabricate a conversation id for tools", async () => {
+  test("headless executions never fabricate a conversation id for tools", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
     primeExecutionMocks();
     await executeA2AMessage({
-      agentId: "agent-child",
+      agentId: agent.id,
       message: "Handle this",
-      organizationId: "org-1",
+      organizationId: org.id,
       userId: "user-1",
     });
 
@@ -535,12 +600,21 @@ describe("executeA2AMessage isolation scope", () => {
     expect(wiring.isolationKey).toEqual(expect.any(String));
   });
 
-  test("chat-delegated executions scope isolation by the real conversation id", async () => {
+  test("chat-delegated executions scope isolation by the real conversation id", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
     primeExecutionMocks();
     await executeA2AMessage({
-      agentId: "agent-child",
+      agentId: agent.id,
       message: "Handle this",
-      organizationId: "org-1",
+      organizationId: org.id,
       userId: "user-1",
       conversationId: "conv-1",
     });
@@ -550,12 +624,21 @@ describe("executeA2AMessage isolation scope", () => {
     expect(wiring.isolationKey).toBe("conv-1");
   });
 
-  test("headless delegation inherits the parent's isolation key", async () => {
+  test("headless delegation inherits the parent's isolation key", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
     primeExecutionMocks();
     await executeA2AMessage({
-      agentId: "agent-child",
+      agentId: agent.id,
       message: "Handle this",
-      organizationId: "org-1",
+      organizationId: org.id,
       userId: "user-1",
       isolationKey: "parent-execution-key",
     });
@@ -567,18 +650,17 @@ describe("executeA2AMessage isolation scope", () => {
 });
 
 describe("executeA2AMessage unavailable tool errors", () => {
-  test("recovers unavailable-tool stream errors instead of failing the run", async () => {
-    vi.mocked(AgentModel.findById).mockResolvedValue({
-      id: "agent-child",
-      name: "Child Agent",
+  test("recovers unavailable-tool stream errors instead of failing the run", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
       agentType: "agent",
       systemPrompt: "Handle the task.",
-      llmApiKeyId: null,
-      modelId: null,
-    } as never);
-    vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
-      null,
-    );
+    });
+
     mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "claude-sonnet-4-6",
@@ -615,15 +697,16 @@ describe("executeA2AMessage unavailable tool errors", () => {
           },
         });
       }),
+      fullStream: renderableFullStream(),
       text: Promise.resolve("Recovered response"),
       usage: Promise.resolve(undefined),
       finishReason: Promise.resolve("stop"),
     });
 
     await executeA2AMessage({
-      agentId: "agent-child",
+      agentId: agent.id,
       message: "Handle this",
-      organizationId: "org-1",
+      organizationId: org.id,
       userId: "user-1",
       conversationId: "conv-1",
     });
@@ -657,17 +740,6 @@ describe("executeA2AMessage skill catalog", () => {
   function primeMocks(tools: Record<string, unknown>) {
     mockStreamText.mockClear();
     mockBuildSkillCatalogPrompt.mockClear();
-    vi.mocked(AgentModel.findById).mockResolvedValue({
-      id: "agent-skill",
-      name: "Skill Agent",
-      agentType: "agent",
-      systemPrompt: "Handle the task.",
-      llmApiKeyId: null,
-      modelId: null,
-    } as never);
-    vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
-      null,
-    );
     mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "gemini-2.5-pro",
@@ -699,13 +771,23 @@ describe("executeA2AMessage skill catalog", () => {
           },
         });
       }),
+      fullStream: renderableFullStream(),
       text: Promise.resolve("done"),
       usage: Promise.resolve(undefined),
       finishReason: Promise.resolve("stop"),
     });
   }
 
-  test("appends the skill catalog to the system prompt when the agent can load skills", async () => {
+  test("appends the skill catalog to the system prompt when the agent can load skills", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
     primeMocks({
       [TOOL_LOAD_SKILL_FULL_NAME]: { description: "Load" },
     });
@@ -714,37 +796,48 @@ describe("executeA2AMessage skill catalog", () => {
     );
 
     await executeA2AMessage({
-      agentId: "agent-skill",
+      agentId: agent.id,
       message: "do it",
-      organizationId: "org-1",
+      organizationId: org.id,
       userId: "user-1",
       conversationId: "conv-1",
     });
 
     expect(mockBuildSkillCatalogPrompt).toHaveBeenCalledWith({
-      organizationId: "org-1",
+      organizationId: org.id,
       userId: "user-1",
-      agentId: "agent-skill",
+      agentId: agent.id,
     });
     const system = mockStreamText.mock.calls[0]?.[0].system;
     expect(system).toContain("Handle the task.");
     expect(system).toContain("<available_skills>");
   });
 
-  test("leaves the system prompt unchanged when no skill tools are available", async () => {
+  test("omits the skill catalog but keeps the shared tool instructions when no skill tools are available", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
     primeMocks({});
     mockBuildSkillCatalogPrompt.mockResolvedValue("<available_skills>...");
 
     await executeA2AMessage({
-      agentId: "agent-skill",
+      agentId: agent.id,
       message: "do it",
-      organizationId: "org-1",
+      organizationId: org.id,
       userId: "user-1",
       conversationId: "conv-1",
     });
 
     expect(mockBuildSkillCatalogPrompt).not.toHaveBeenCalled();
     const system = mockStreamText.mock.calls[0]?.[0].system;
-    expect(system).toBe("Handle the task.");
+    expect(system).toContain("Handle the task.");
+    expect(system).not.toContain("<available_skills>");
+    expect(system).toContain(TOOL_DENIAL_INSTRUCTION);
   });
 });

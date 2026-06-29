@@ -1,168 +1,138 @@
-# MCP-native Secure AI Platform
-
-Simplify AI usage in your company, providing user-friendly MCP toolbox, observability and control built on a strong security foundation.
-
 <div align="center">
 
-[![License](https://img.shields.io/github/license/archestra-ai/archestra)](LICENSE)
-<img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/archestra-ai/archestra"/>
-<img alt="GitHub Last Commit" src="https://img.shields.io/github/last-commit/archestra-ai/archestra"/>
-[![Contributors](https://img.shields.io/github/contributors/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/graphs/contributors)
+<img src="logo.svg" alt="Archestra" width="520" />
 
-<p align="center">
-  <a href="https://www.archestra.ai/docs/platform-quickstart">Getting Started</a>
-  - <a href="https://github.com/archestra-ai/archestra/releases">Releases</a>
-  - <a href="https://archestra.ai/join-slack">Slack Community</a>
-</p>
+**The all-in-one open-source enterprise AI platform.**
+
+*Built on a strong security and observability foundation: SSO and RBAC,
+sandboxed code execution, Dual-LLM and Lethal-Trifecta guardrails,
+OpenTelemetry traces, and Prometheus metrics — first-class, not bolted on.*
+
+[![License](https://img.shields.io/badge/License-AGPL%203.0%20%2F%20Enterprise-blue.svg)](LICENSE.md)
+[![Release](https://img.shields.io/github/v/release/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/releases)
+[![Contributors](https://img.shields.io/github/contributors/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/graphs/contributors)
+[![Last commit](https://img.shields.io/github/last-commit/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/commits/main)
+[![Commit activity](https://img.shields.io/github/commit-activity/m/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/pulse)
+
+[Quickstart](https://archestra.ai/docs/platform-quickstart) &nbsp;·&nbsp;
+[Docs](https://archestra.ai/docs/platform-overview) &nbsp;·&nbsp;
+[Releases](https://github.com/archestra-ai/archestra/releases) &nbsp;·&nbsp;
+[Slack](https://archestra.ai/join-slack)
+
+<br />
+
+<video src="https://github.com/user-attachments/assets/4b278679-9615-4d4a-9bd0-57d0585041c4" controls playsinline width="800"></video>
+
 </div>
 
-_For Platform teams:_
+---
 
-- Mitigate MCP chaos, move MCP servers from individual machines to a centralized orchestrator
-- Manage how MCP access data and credentials usage
-- Mitigate data exfiltration risks
-- Manage AI costs
-- AI Observability
+## What it does
 
-_For Developers:_
+Point your users — or your agents, or Claude / Codex / Cursor — at one URL. Archestra handles the rest:
 
-- Deploy your MCP servers org-wide
-- Build and deploy agents without worrying about security
+- 💬 **Chat for non-technical users.** Internal AI assistant with
+  [projects](https://archestra.ai/docs/platform-projects),
+  [MCP apps](https://archestra.ai/docs/platform-apps), and
+  [Slack](https://archestra.ai/docs/platform-slack),
+  [MS Teams](https://archestra.ai/docs/platform-ms-teams), and
+  [email](https://archestra.ai/docs/platform-agent-triggers-email)
+  front-ends.
+- 🛠️ **Developer LLM & MCP portal.** One token for Claude Code, Codex,
+  Cursor — see the [proxy](https://archestra.ai/docs/platform-llm-proxy).
+- 🚪 **LLM gateway** for [any provider](https://archestra.ai/docs/platform-supported-llm-providers)
+  (Anthropic, OpenAI, Azure, Bedrock, DeepSeek, …) with
+  [cost limits](https://archestra.ai/docs/platform-costs-and-limits),
+  [virtual API keys](https://archestra.ai/docs/platform-llm-proxy-authentication),
+  and [dynamic model routing](https://archestra.ai/docs/platform-model-router-client-credentials-example).
+- 🔌 **MCP gateway** with [OAuth + On-Behalf-Of](https://archestra.ai/docs/mcp-authentication)
+  so tools run as the user, not a shared service account.
+- 🤝 **A2A gateway** for [agent-to-agent triggers](https://archestra.ai/docs/platform-agent-triggers-webhook-a2a).
+- 📦 **Private MCP registry** so teams ship their own tools — see
+  [registry docs](https://archestra.ai/docs/platform-private-registry).
+- 🎼 **MCP orchestrator** with a
+  [Kubernetes operator](https://archestra.ai/docs/platform-orchestrator) and
+  [self-serve promotion](https://archestra.ai/docs/platform-environments).
+- 🤖 **Agent runtime** with [scheduled / email / webhook triggers](https://archestra.ai/docs/platform-agents),
+  [sub-agent delegation](https://archestra.ai/docs/platform-agents),
+  [reusable skills](https://archestra.ai/docs/platform-agent-skills-sharing),
+  sandboxed code execution, and a K8s-native filesystem.
+- 📚 **RAG knowledge base** plumbed via
+  [connectors](https://archestra.ai/docs/platform-knowledge-connectors) to
+  your existing stack.
+- 🧩 **Mini app builder** — see [apps](https://archestra.ai/docs/platform-apps).
+- 🛡️ **Deterministic guardrails** for [tool calls](https://archestra.ai/docs/platform-ai-tool-guardrails),
+  [Dual-LLM](https://archestra.ai/docs/platform-dual-llm) verification, and
+  [Lethal Trifecta](https://archestra.ai/docs/platform-lethal-trifecta) protections.
+- 🪪 **Identity & access** with [SSO](https://archestra.ai/docs/platform-sso)
+  (OIDC, SAML, Okta, Entra), [RBAC with role mapping & team sync](https://archestra.ai/docs/platform-access-control),
+  and [secrets management](https://archestra.ai/docs/platform-secrets-management).
+- 🌎 **Environments** with [per-env egress policies](https://archestra.ai/docs/platform-environments)
+  and [per-env cost limits](https://archestra.ai/docs/platform-costs-and-limits).
+- 🔭 **Observability** out of the box: OpenTelemetry traces, Prometheus
+  metrics, logs, [per-team cost tracking](https://archestra.ai/docs/platform-costs-and-limits).
 
-_For Management:_
+> Already running dangerous single-tenant agents like Claude Cowork,
+> OpenClaw, or Hermes in your enterprise? **[Migration Kit →](migration-kit/README.md)**
 
-- Bring 1-click MCP adoption to the whole organization for technical and non-technical users
-- Reduce AI costs up to 96%
-- Get full visibility on AI adoption, usage and data access
+## Quickstart
 
-## 🚀 Quickstart with docker
+```bash
+docker pull archestra/platform:latest
 
-```
-docker pull archestra/platform:latest;
-docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
+docker run \
+  -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
   -e ARCHESTRA_QUICKSTART=true \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v archestra-postgres-data:/var/lib/postgresql/data \
   -v archestra-app-data:/app/data \
-  archestra/platform;
+  archestra/platform
 ```
 
-[Full Quickstart Guide →](https://archestra.ai/docs/platform-quickstart)
+Open <http://localhost:3000>. Full Docker / Helm / Kubernetes instructions
+live in the [quickstart docs](https://archestra.ai/docs/platform-quickstart).
 
-## 🧳 Migrating an existing AI pilot
+## Ready for production
 
-Already have a Claude Code-style project, MCP config, local tools, hooks, or another hand-rolled
-agentic PoC? Use the migration kit to turn it into an Archestra pilot.
+- ✅ $13.5M total funding
+- ✅ Three Fortune-50 deployments
+- ✅ 31 ms at p95 — [performance benchmarks →](https://archestra.ai/docs/platform-performance-benchmarks)
+- ✅ [Terraform provider →](https://github.com/archestra-ai/terraform-provider-archestra)
+- ✅ [Helm chart →](https://archestra.ai/docs/platform-deployment#helm-deployment-recommended-for-production)
 
-[Migration Kit →](migration-kit/README.md)
+## Deeper docs
 
-## 👩‍💻 ChatGPT-like chat with MCPs
+- 📖 [**Platform overview**](https://archestra.ai/docs/platform-overview) —
+  what's in the box, how the pieces fit together.
+- 📐 [**Deployment**](https://archestra.ai/docs/platform-deployment) —
+  Docker, Helm, Kubernetes, every env var, secrets management.
+- 💰 [**Pricing model**](https://archestra.ai/docs/platform-pricing-model) —
+  Open Core, free for teams under 30 users, enterprise licensing.
+- 🛡️ [**Security & bug bounty**](https://archestra.ai/docs/security)
+- 🤝 [**Contributing**](https://archestra.ai/docs/contributing) —
+  set up the dev env, run e2e tests, open a PR.
 
-🎁 with private company-wide prompt registry!
-
-<div align="center">
-<img src="docs/assets/chat.webp" alt="ChatGPT-like chat" />
-</div>
-
-## 📋 Private MCP registry with governance
-
-Add MCPs to your private registry to share them with your team: self-hosted and remote, self-built and third-party.
-
-[Learn more about Private MCP Registry →](https://archestra.ai/docs/platform-private-registry)
-
-<div align="center">
-<img src="docs/assets/mcp-registry.webp" alt="MCP Registry" />
-</div>
-
-## ☁️ Kubernetes-native MCP orchestrator
-
-Run MCP servers in kubernetes, managing their state, API keys, OAuth.
-
-[Learn more about MCP Orchestrator →](https://archestra.ai/docs/platform-orchestrator)
-
-<div align="center">
-<img src="docs/assets/orchestrator.webp" alt="MCP Orchestrator" />
-</div>
-
-## 📚 RAG Knowledge Base
-
-Built-in retrieval-augmented Knowledge Base — no external vector database or separate retrieval service required.
-
-[Learn more about Knowledge Base →](https://archestra.ai/docs/platform-knowledge-bases)
-
-<div align="center">
-<img src="docs/assets/automated_screenshots/platform-knowledge-bases_chat-with-citations.webp" alt="RAG Knowledge Base" />
-</div>
-
-## 🤖 Security sub-agents
-
-Isolating dangerous tool responses from the main agent to prevent prompt injections.
-
-[Learn more about Dual LLM →](https://archestra.ai/docs/platform-dual-llm)
-
-<div align="center">
-<img src="docs/assets/dual-llm.webp" alt="Dual-LLM sub-agent" />
-</div>
-
-## 🚫 Non-probabilistic security to prevent data exfiltration
-
-Models could consume prompt injections via MCP uncontrollably (read your inbox, read your GitHub issues, read your customer's inquiries) and follow them resulting in data exfiltration.
-
-[Learn more about Tool Guardrails →](https://archestra.ai/docs/platform-ai-tool-guardrails) | [The Lethal Trifecta →](https://archestra.ai/docs/platform-lethal-trifecta)
-
-Live demo of archestra security engine preventing data leak from the private GitHub repo to the public repo:
-[![Archestra Demo](https://img.youtube.com/vi/SkmluS-xzmM/0.jpg)](https://www.youtube.com/watch?v=SkmluS-xzmM&t=2155s)
-
-Read more: [Simon Willison](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/), [The Economist](https://www.economist.com/leaders/2025/09/25/how-to-stop-ais-lethal-trifecta)
-
-Examples of hacks:
-[ChatGPT](https://simonwillison.net/2023/Apr/14/new-prompt-injection-attack-on-chatgpt-web-version-markdown-imag/) (April 2023), [ChatGPT Plugins](https://simonwillison.net/2023/May/19/chatgpt-prompt-injection/) (May 2023), [Google Bard](https://simonwillison.net/2023/Nov/4/hacking-google-bard-from-prompt-injection-to-data-exfiltration/) (November 2023), [Writer.com](https://simonwillison.net/2023/Dec/15/writercom-indirect-prompt-injection/) (December 2023), [Amazon Q](https://simonwillison.net/2024/Jan/19/aws-fixes-data-exfiltration/) (January 2024), [Google NotebookLM](https://simonwillison.net/2024/Apr/16/google-notebooklm-data-exfiltration/) (April 2024), [GitHub Copilot Chat](https://simonwillison.net/2024/Jun/16/github-copilot-chat-prompt-injection/) (June 2024), [Google AI Studio](https://simonwillison.net/2024/Aug/7/google-ai-studio-data-exfiltration-demo/) (August 2024), [Microsoft Copilot](https://simonwillison.net/2024/Aug/14/living-off-microsoft-copilot/) (August 2024), [Slack](https://simonwillison.net/2024/Aug/20/data-exfiltration-from-slack-ai/) (August 2024), [Mistral Le Chat](https://simonwillison.net/2024/Oct/22/imprompter/) (October 2024), [xAI's Grok](https://simonwillison.net/2024/Dec/16/security-probllms-in-xais-grok/) (December 2024), [Anthropic's Claude iOS app](https://simonwillison.net/2024/Dec/17/johann-rehberger/) (December 2024), [ChatGPT Operator](https://simonwillison.net/2025/Feb/17/chatgpt-operator-prompt-injection/) (February 2025), [Notion 3.0](https://www.codeintegrity.ai/blog/notion) (September 2024).
-
-## 💰 Cost monitoring, limits and dynamic optimization
-
-Per-team, per-agent or per-org cost monitoring and limitations. Dynamic optimizer allows to reduce cost up to 96% by simply switching to cheaper models automatically for simpler tasks.
-
-[Learn more about Costs & Limits →](https://archestra.ai/docs/platform-costs-and-limits)
-
-<div align="center">
-<img src="docs/assets/cost.webp" alt="Cost & Limits" />
-</div>
-
-## 📊 Observability
-
-Metrics, traces and logs allowing to come to a conclusion about per-org, per-agent and per-team token and tool usage, and performance.
-
-[Learn more about Observability →](https://archestra.ai/docs/platform-observability)
-
-<div align="center">
-<img src="docs/assets/observability.webp" alt="Observability" />
-</div>
-
-## 👍 Ready for production
-
-1. ✅ Lightning fast, 45ms at 95p: [Performance & Latency benchmarks →](https://archestra.ai/docs/platform-performance-benchmarks)
-2. ✅ [Terraform provider →](https://github.com/archestra-ai/terraform-provider-archestra)
-3. ✅ [Helm Chart →](https://archestra.ai/docs/platform-deployment#helm-deployment-recommended-for-production)
-
-## 🤝 Contributing
-
-We welcome contributions from the community!
-
-- [Contribution Guidelines →](https://archestra.ai/docs/contributing)
-- [Developer Quickstart →](https://archestra.ai/docs/platform-developer-quickstart)
-- [Security & Bug Bounty →](https://archestra.ai/docs/security)
-
-Thank you for contributing and continuously making <b>Archestra</b> better, <b>you're awesome</b> 🫶
+Thank you for continuously making **Archestra** better — you're awesome 🫶
 
 <a href="https://github.com/archestra-ai/archestra/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=archestra-ai/archestra" />
+  <img src="https://contrib.rocks/image?repo=archestra-ai/archestra" alt="Contributors" />
+</a>
+
+## Star history
+
+<a href="https://star-history.com/#archestra-ai/archestra&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=archestra-ai/archestra&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=archestra-ai/archestra&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=archestra-ai/archestra&type=Date" />
+  </picture>
 </a>
 
 ---
 
 <div align="center">
   <br />
-  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="./docs/assets/linux-foundation-logo.webp" height="50" alt="Linux Foundation" /></a>
+  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="docs/assets/linux-foundation-logo.webp" height="50" alt="Linux Foundation" /></a>
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="./docs/assets/cncf-logo.webp" height="50" alt="CNCF" /></a>
+  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="docs/assets/cncf-logo.webp" height="50" alt="CNCF" /></a>
 </div>

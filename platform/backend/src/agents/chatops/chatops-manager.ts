@@ -1031,11 +1031,10 @@ export class ChatOpsManager {
         return `${sender}: ${text}`;
       });
 
-      // Collect image files from non-bot user messages in history
+      // Collect files from non-bot user messages in history
       const historyFiles = history
         .filter((msg) => !msg.isFromBot && msg.files && msg.files.length > 0)
-        .flatMap((msg) => msg.files ?? [])
-        .filter((f) => f.mimetype.startsWith("image/"));
+        .flatMap((msg) => msg.files ?? []);
 
       const historyAttachments: Array<{
         contentType: string;
@@ -1078,7 +1077,7 @@ export class ChatOpsManager {
                   downloadedCount: historyAttachments.length,
                   totalHistoryFiles: historyFiles.length,
                 },
-                "[ChatOps] Downloaded image attachments from thread history",
+                "[ChatOps] Downloaded attachments from thread history",
               );
             }
           } catch (error) {

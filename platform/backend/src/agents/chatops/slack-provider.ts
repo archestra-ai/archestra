@@ -302,7 +302,12 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     const cleanedText = this.cleanBotMention(text);
-    if (!cleanedText && event.type !== "app_mention") {
+    // A file-only message (empty text but with attachments) is still meaningful
+    // — let it through in the same addressed contexts a text message would
+    // (DMs, or active/mentioned channel threads, already gated above). Only
+    // genuinely empty, attachment-less messages are dropped here.
+    const hasFiles = Boolean(event.files?.length);
+    if (!cleanedText && event.type !== "app_mention" && !hasFiles) {
       return null;
     }
 

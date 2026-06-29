@@ -220,7 +220,25 @@ class MSTeamsProvider implements ChatOpsProvider {
       "[MSTeamsProvider] Parsing activity",
     );
 
-    if (activity.type !== ActivityTypes.Message || !activity.text) {
+    if (activity.type !== ActivityTypes.Message) {
+      return null;
+    }
+
+    // A file-only message (empty text but with a real file attachment) is still
+    // meaningful, so accept it; only drop messages that carry neither text nor
+    // a downloadable file. Adaptive Cards / hero cards are not files (and are
+    // filtered out before download), so a card-only message stays dropped.
+    // Addressing/mention gating is enforced by the webhook route, not here, so
+    // this does not widen who the bot responds to.
+    const hasFileAttachment = Boolean(
+      activity.attachments?.some(
+        (a) =>
+          a.contentUrl &&
+          a.contentType &&
+          !a.contentType.startsWith("application/vnd.microsoft.card."),
+      ),
+    );
+    if (!activity.text && !hasFileAttachment) {
       return null;
     }
 
@@ -239,10 +257,10 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
 
     const cleanedText = cleanBotMention(
-      activity.text,
+      activity.text ?? "",
       activity.recipient?.name,
     );
-    if (!cleanedText) {
+    if (!cleanedText && !hasFileAttachment) {
       return null;
     }
 
@@ -273,7 +291,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       senderId: activity.from?.aadObjectId || activity.from?.id || "unknown",
       senderName: activity.from?.name || "Unknown User",
       text: cleanedText,
-      rawText: activity.text,
+      rawText: activity.text ?? "",
       timestamp: activity.timestamp ? new Date(activity.timestamp) : new Date(),
       isThreadReply,
       metadata: {

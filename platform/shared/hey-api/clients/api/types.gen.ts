@@ -30338,6 +30338,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -30534,6 +30535,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -30636,6 +30638,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -30714,6 +30717,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -30794,6 +30798,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31272,6 +31277,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31352,6 +31358,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31432,6 +31439,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31512,6 +31520,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31592,6 +31601,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31672,6 +31682,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31752,6 +31763,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31832,6 +31844,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31910,6 +31923,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31988,6 +32002,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -32068,6 +32083,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -32148,6 +32164,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -32869,6 +32886,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -32949,6 +32967,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -33096,6 +33115,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -33292,6 +33312,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -33793,6 +33814,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -33989,6 +34011,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34091,6 +34114,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34169,6 +34193,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34249,6 +34274,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34727,6 +34753,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34807,6 +34834,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34887,6 +34915,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34967,6 +34996,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35047,6 +35077,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35127,6 +35158,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35207,6 +35239,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35287,6 +35320,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35365,6 +35399,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35443,6 +35478,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35523,6 +35559,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35603,6 +35640,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -36324,6 +36362,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -36404,6 +36443,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -36551,6 +36591,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -36747,6 +36788,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;

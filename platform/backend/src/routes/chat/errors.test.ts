@@ -249,7 +249,7 @@ describe("mapProviderError - OpenAI", () => {
       const error = createOpenAIError(
         429,
         OpenAIErrorTypes.RATE_LIMIT,
-        "I cannot process this request because the organization-level token cost limit has been exceeded.",
+        "This request was blocked by Archestra (not the AI provider): the organization-level cost limit has been reached.",
         "token_cost_limit_exceeded",
         undefined,
         {
@@ -259,11 +259,15 @@ describe("mapProviderError - OpenAI", () => {
       );
       const result = mapProviderError(error, "openai");
 
-      expect(result.code).toBe(ChatErrorCode.RateLimit);
+      // An Archestra budget block is reclassified off the retryable RateLimit
+      // code onto the dedicated, non-retryable UsageLimitExceeded code so the UI
+      // attributes it to Archestra and drops the retry affordance.
+      expect(result.code).toBe(ChatErrorCode.UsageLimitExceeded);
+      expect(result.isRetryable).toBe(false);
       expect(result.usageLimitExceeded).toBe(true);
       expect(result.usageLimitEntityType).toBe("organization");
       expect(result.message).toBe(
-        "The organization usage limit budget has been exceeded.",
+        "Archestra blocked this request because the organization usage limit has been reached.",
       );
     });
   });
@@ -1803,9 +1807,10 @@ describe("ProviderError", () => {
   it("preserves usage-limit metadata in the frontend error payload", () => {
     expect(
       sanitizeChatErrorForFrontend({
-        code: ChatErrorCode.RateLimit,
-        message: "The organization usage limit budget has been exceeded.",
-        isRetryable: true,
+        code: ChatErrorCode.UsageLimitExceeded,
+        message:
+          "Archestra blocked this request because the organization usage limit has been reached.",
+        isRetryable: false,
         usageLimitExceeded: true,
         usageLimitEntityType: "organization",
         originalError: {
@@ -1815,9 +1820,10 @@ describe("ProviderError", () => {
         },
       }),
     ).toEqual({
-      code: ChatErrorCode.RateLimit,
-      message: "The organization usage limit budget has been exceeded.",
-      isRetryable: true,
+      code: ChatErrorCode.UsageLimitExceeded,
+      message:
+        "Archestra blocked this request because the organization usage limit has been reached.",
+      isRetryable: false,
       usageLimitExceeded: true,
       usageLimitEntityType: "organization",
     });

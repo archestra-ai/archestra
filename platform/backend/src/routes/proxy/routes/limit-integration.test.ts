@@ -564,7 +564,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const body = response.json();
     expect(body.error.code).toBe("token_cost_limit_exceeded");
     // virtual_key is checked first (most specific), so error should mention it
-    expect(body.error.message).toContain("virtual_key-level");
+    expect(body.error.message).toContain("virtual key-level");
   });
 
   test("records usage in team all-models limit after successful request", async ({
@@ -866,7 +866,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.statusCode).toBe(429);
     const body = response.json();
     expect(body.error.code).toBe("token_cost_limit_exceeded");
-    expect(body.error.message).toContain("virtual_key-level");
+    expect(body.error.message).toContain("virtual key-level");
   });
 
   test("blocks request with 429 when environment limit is exceeded", async ({

@@ -617,11 +617,16 @@ export async function handleLLMProxy<
         { resolvedAgentId, reason: "token_cost_limit_exceeded" },
         `${providerName} request blocked due to token cost limit`,
       );
-      // Preserve the proxy-compatible error envelope so chat clients can read structured limit metadata.
+      // Preserve the proxy-compatible error envelope so chat clients can read
+      // structured limit metadata. Use an Archestra-specific error `type` rather
+      // than the provider-style "rate_limit_exceeded": this block is an Archestra
+      // budget enforcement, not the provider throttling traffic, and labelling it
+      // as a rate limit made clients frame it as "not your usage limit". The
+      // stable `code` keeps backward-compatible structured detection working.
       return reply.status(429).send({
         error: {
           message: contentMessage,
-          type: "rate_limit_exceeded",
+          type: "usage_limit_exceeded",
           code: "token_cost_limit_exceeded",
           usage_limit: limitMetadata
             ? {

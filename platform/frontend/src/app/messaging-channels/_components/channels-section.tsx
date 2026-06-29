@@ -17,6 +17,7 @@ import { useCallback, useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import Divider from "@/components/divider";
 import { LoadingSpinner } from "@/components/loading";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -104,6 +105,8 @@ export function ChannelsSection({
     data: bindingsResponse,
     isLoading,
     isFetching,
+    isLoadingError,
+    refetch: refetchBindings,
   } = useChatOpsBindings({
     provider: providerConfig.provider,
     limit: pageSize,
@@ -352,6 +355,11 @@ export function ChannelsSection({
 
       {isLoading && !bindingsResponse ? (
         <ChannelTableSkeleton />
+      ) : isLoadingError ? (
+        <QueryLoadError
+          title="Couldn't load your channels"
+          onRetry={() => refetchBindings()}
+        />
       ) : hasAnyChannels ? (
         <>
           {/* Search + filters + bulk assign */}

@@ -892,6 +892,169 @@ describe("SlackProvider.sendReply", () => {
     // Subsequent posts thread under the first message's ts.
     expect(secondArgs.thread_ts).toBe("2000.000001");
   });
+
+  test("truncates the text fallback for large replies to avoid msg_too_large", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "3333333333.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    // 8,000 chars in a single paragraph → one chunk (under the 12k block cap),
+    // so the rendered markdown block carries the full text but the notification
+    // `text` fallback must be bounded.
+    const text = "A ".repeat(4000);
+    expect(text.length).toBe(8000);
+
+    await provider.sendReply({
+      originalMessage: {
+        messageId: "9999999999.000000",
+        channelId: "C12345",
+        workspaceId: "T12345",
+        threadId: "1111111111.000000",
+        senderId: "U_SENDER",
+        senderName: "Test User",
+        text: "long single paragraph",
+        rawText: "long single paragraph",
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+      text,
+    });
+
+    const args = postMessage.mock.calls[0][0];
+    // Fallback text is bounded well below Slack's text-length limit.
+    expect(args.text.length).toBeLessThanOrEqual(3000);
+    // Rendered content (the markdown block) is NOT truncated.
+    expect(args.blocks[0].text).toBe(text);
+  });
+});
+
+// =============================================================================
+// addApprovalRequestForm
+// =============================================================================
+
+describe("SlackProvider.addApprovalRequestForm", () => {
+  test("embeds only a slimmed-down original message in the button value (msg_too_large guard)", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    await provider.addApprovalRequestForm({
+      channelId: "C1",
+      threadId: "T1",
+      approvalId: "appr-1",
+      taskId: "task-1",
+      toolName: "dangerous_tool",
+      originalMessage: {
+        messageId: "1234567890.123456",
+        channelId: "C1",
+        workspaceId: "W1",
+        threadId: "T1",
+        senderId: "U_SENDER",
+        senderEmail: "user@example.com",
+        senderName: "Test User",
+        text: "x".repeat(100_000),
+        rawText: "x".repeat(100_000),
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+    });
+
+    const callArgs = postMessage.mock.calls[0][0];
+    const actionsBlock = callArgs.blocks.find(
+      (b: { type: string }) => b.type === "actions",
+    );
+    expect(actionsBlock).toBeDefined();
+    expect(actionsBlock.elements.length).toBeGreaterThan(0);
+
+    for (const btn of actionsBlock.elements) {
+      const parsed = JSON.parse(btn.value);
+      expect(parsed.originalMessage.text).toBeUndefined();
+      expect(parsed.originalMessage.rawText).toBeUndefined();
+      expect(parsed.originalMessage.attachments).toBeUndefined();
+      expect(parsed.originalMessage.senderEmail).toBe("user@example.com");
+      expect(parsed.originalMessage.channelId).toBe("C1");
+      expect(parsed.originalMessage.threadId).toBe("T1");
+      expect(btn.value.length).toBeLessThan(2000);
+    }
+  });
+});
+
+// =============================================================================
+// parseApprovalPayload
+// =============================================================================
+
+describe("SlackProvider.parseApprovalPayload", () => {
+  test("reconstructs the original message from a slimmed button value, preserving sender email", () => {
+    const provider = createProvider();
+
+    const value = JSON.stringify({
+      taskId: "task-1",
+      approvalId: "appr-1",
+      toolName: "dangerous_tool",
+      approved: true,
+      originalMessage: {
+        channelId: "C1",
+        threadId: "T1",
+        senderEmail: "user@example.com",
+      },
+    });
+
+    const decision = provider.parseApprovalPayload({
+      type: "block_actions",
+      actions: [{ action_id: "approval_decision_appr-1_approve", value }],
+      channel: { id: "C1" },
+      team: { id: "W1" },
+      user: { id: "U2", name: "Approver" },
+      message: { ts: "9.9", thread_ts: "T1" },
+      response_url: "https://hooks.slack.test/x",
+    });
+
+    expect(decision).not.toBeNull();
+    expect(decision?.originalMessage.senderEmail).toBe("user@example.com");
+    expect(decision?.originalMessage.channelId).toBe("C1");
+    expect(decision?.originalMessage.threadId).toBe("T1");
+    expect(decision?.approved).toBe(true);
+    expect(decision?.taskId).toBe("task-1");
+  });
+
+  test("still parses a legacy full-message button value", () => {
+    const provider = createProvider();
+
+    const value = JSON.stringify({
+      taskId: "task-1",
+      approvalId: "appr-1",
+      toolName: "dangerous_tool",
+      approved: true,
+      originalMessage: {
+        messageId: "1234567890.123456",
+        channelId: "C1",
+        workspaceId: "W1",
+        threadId: "T1",
+        senderId: "U_SENDER",
+        senderEmail: "legacy@example.com",
+        senderName: "Legacy User",
+        text: "do the thing",
+        rawText: "do the thing",
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+    });
+
+    const decision = provider.parseApprovalPayload({
+      type: "block_actions",
+      actions: [{ action_id: "approval_decision_appr-1_approve", value }],
+      channel: { id: "C1" },
+      team: { id: "W1" },
+      user: { id: "U2", name: "Approver" },
+      message: { ts: "9.9", thread_ts: "T1" },
+      response_url: "https://hooks.slack.test/x",
+    });
+
+    expect(decision).not.toBeNull();
+    expect(decision?.originalMessage.senderEmail).toBe("legacy@example.com");
+  });
 });
 
 // =============================================================================
@@ -1105,6 +1268,134 @@ describe("SlackProvider file attachment downloads", () => {
 
     expect(result).not.toBeNull();
     expect(result?.attachments).toBeUndefined();
+  });
+
+  test("file-only DM (empty text + files) is parsed with attachments", async () => {
+    const provider = createProviderWithConfig();
+    const fileContent = Buffer.from("file-only dm");
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(fileContent, { status: 200 }),
+    );
+
+    const payload = makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel: "D_FILE_ONLY",
+        channel_type: "im",
+        text: "",
+        files: [
+          {
+            id: "F_DM",
+            name: "report.pdf",
+            mimetype: "application/pdf",
+            size: fileContent.length,
+            url_private: "https://files.slack.com/files-pri/T123/report.pdf",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.text).toBe("");
+    expect(result?.attachments).toHaveLength(1);
+    expect(result?.attachments?.[0].name).toBe("report.pdf");
+  });
+
+  test("file-only DM whose download fails is dropped (no empty turn)", async () => {
+    const provider = createProviderWithConfig();
+
+    // The download fails (e.g. expired/oversized), so no attachment survives.
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 404 }));
+
+    const payload = makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel: "D_FILE_ONLY",
+        channel_type: "im",
+        text: "",
+        files: [
+          {
+            id: "F_DM",
+            name: "report.pdf",
+            mimetype: "application/pdf",
+            size: 1234,
+            url_private: "https://files.slack.com/files-pri/T123/report.pdf",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toBeNull();
+  });
+
+  test("file-only app_mention (empty text + files) is parsed with attachments", async () => {
+    const provider = createProviderWithConfig();
+    const fileContent = Buffer.from("file-only mention");
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(fileContent, { status: 200 }),
+    );
+
+    const payload = makeEventPayload(
+      {},
+      {
+        type: "app_mention",
+        text: "<@UBOT123>",
+        files: [
+          {
+            id: "F_MENTION",
+            name: "diagram.png",
+            mimetype: "image/png",
+            size: fileContent.length,
+            url_private: "https://files.slack.com/files-pri/T123/diagram.png",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.text).toBe("");
+    expect(result?.attachments).toHaveLength(1);
+    expect(result?.attachments?.[0].name).toBe("diagram.png");
+  });
+
+  test("file-only UNADDRESSED channel message (no mention, inactive thread) is dropped", async () => {
+    const provider = createProviderWithConfig();
+
+    const payload = makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel: "C_FILE_ONLY_UNADDRESSED",
+        channel_type: "channel",
+        text: "",
+        thread_ts: "7777777777.000001",
+        files: [
+          {
+            id: "F_UNADDRESSED",
+            name: "leak.png",
+            mimetype: "image/png",
+            size: 100,
+            url_private: "https://files.slack.com/files-pri/T123/leak.png",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toBeNull();
+    // Dropped before any download is attempted.
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   test("downloads file and returns attachment with base64 content", async () => {

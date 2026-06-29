@@ -19,7 +19,10 @@ import {
   ChatOpsManager,
   matchesAgentName,
 } from "./chatops-manager";
-import { CHATOPS_NO_REPLY_SENTINEL } from "./constants";
+import {
+  CHATOPS_ATTACHMENT_LIMITS,
+  CHATOPS_NO_REPLY_SENTINEL,
+} from "./constants";
 
 describe("matchesAgentName", () => {
   test("matches exact name", () => {
@@ -763,6 +766,146 @@ describe("ChatOpsManager security validation", () => {
     } finally {
       sendMessageSpy.mockRestore();
     }
+  });
+
+  // The "AgentName > message" syntax routes a single message to a different
+  // agent than the channel default. These tests pin both halves of that
+  // behavior: a real switch must still strip the prefix, while a message that
+  // merely contains ">" (no matching agent) must reach the agent intact.
+  // Regression guard for the silent-truncation bug (issue #5747).
+  describe("inline agent mention", () => {
+    /** Spy on sendMessage and return the text of the first part it received. */
+    function captureSentText(spy: ReturnType<typeof vi.spyOn>): string {
+      const call = spy.mock.calls[0]?.[0] as
+        | { request: { message: { parts: Array<{ text?: string }> } } }
+        | undefined;
+      return call?.request.message.parts[0]?.text ?? "";
+    }
+
+    test("keeps the full message when text contains '>' but no agent matches", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      const sendMessageSpy = vi
+        .spyOn(A2AManager.prototype, "sendMessage")
+        .mockResolvedValue({});
+
+      const user = await makeUser({ email: "inline@example.com" });
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+      await makeTeamMember(team.id, user.id);
+      const agent = await makeInternalAgent({
+        organizationId: org.id,
+        teams: [team.id],
+      });
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channelId: "test-channel-id",
+        workspaceId: "test-workspace-id",
+        agentId: agent.id,
+      });
+
+      const mockProvider = createMockProvider({
+        getUserEmail: async () => "inline@example.com",
+      });
+      const manager = new ChatOpsManager();
+      (
+        manager as unknown as { msTeamsProvider: ChatOpsProvider }
+      ).msTeamsProvider = mockProvider;
+
+      try {
+        await manager.processMessage({
+          message: createMockMessage({
+            text: "Remember the secret word is BANANA > what was the secret word?",
+          }),
+          provider: mockProvider,
+        });
+
+        // Routed to the channel's default agent (no switch happened)...
+        expect(sendMessageSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ agentId: agent.id }),
+        );
+        // ...and the whole message survived — nothing before ">" was dropped.
+        const sentText = captureSentText(sendMessageSpy);
+        expect(sentText).toContain(
+          "Remember the secret word is BANANA > what was the secret word?",
+        );
+      } finally {
+        sendMessageSpy.mockRestore();
+      }
+    });
+
+    test("switches agent and strips the prefix when the prefix is a real agent", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      const sendMessageSpy = vi
+        .spyOn(A2AManager.prototype, "sendMessage")
+        .mockResolvedValue({});
+
+      const user = await makeUser({ email: "switch@example.com" });
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+      await makeTeamMember(team.id, user.id);
+
+      const defaultAgent = await makeInternalAgent({
+        organizationId: org.id,
+        teams: [team.id],
+        name: "Support",
+      });
+      const salesAgent = await makeInternalAgent({
+        organizationId: org.id,
+        teams: [team.id],
+        name: "Sales",
+      });
+      await AgentTeamModel.assignTeamsToAgent(defaultAgent.id, [team.id]);
+      await AgentTeamModel.assignTeamsToAgent(salesAgent.id, [team.id]);
+
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channelId: "test-channel-id",
+        workspaceId: "test-workspace-id",
+        agentId: defaultAgent.id,
+      });
+
+      const mockProvider = createMockProvider({
+        getUserEmail: async () => "switch@example.com",
+      });
+      const manager = new ChatOpsManager();
+      (
+        manager as unknown as { msTeamsProvider: ChatOpsProvider }
+      ).msTeamsProvider = mockProvider;
+
+      try {
+        await manager.processMessage({
+          message: createMockMessage({
+            text: "Sales > what's the status?",
+          }),
+          provider: mockProvider,
+        });
+
+        // Routed to the named agent, not the channel default...
+        expect(sendMessageSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ agentId: salesAgent.id }),
+        );
+        // ...with the "Sales >" prefix stripped from what the agent sees.
+        const sentText = captureSentText(sendMessageSpy);
+        expect(sentText).toContain("what's the status?");
+        expect(sentText).not.toContain("Sales >");
+      } finally {
+        sendMessageSpy.mockRestore();
+      }
+    });
   });
 });
 
@@ -1640,9 +1783,7 @@ describe("ChatOpsManager attachment passthrough", () => {
         name: "screenshot.png",
       },
       {
-        // Don't use PDF because A2A message executor doesn't support it right now
-        // contentType: "application/pdf",
-        contentType: "image/jpg",
+        contentType: "application/pdf",
         contentBase64: Buffer.alloc(10_000).toString("base64"),
         name: "report.pdf",
       },
@@ -1655,20 +1796,19 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     expect(result.success).toBe(true);
+    // The manager forwards the attachments to the executor via the `attachments`
+    // param (preserving mime type + filename); model-capability gating and
+    // provider normalization happen inside the executor.
     expect(executorSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        messages: expect.arrayContaining([
+        attachments: expect.arrayContaining([
           expect.objectContaining({
-            content: expect.arrayContaining([
-              expect.objectContaining({
-                type: "file",
-                mediaType: "image/png",
-              }),
-              expect.objectContaining({
-                type: "file",
-                mediaType: "image/jpg",
-              }),
-            ]),
+            contentType: "image/png",
+            name: "screenshot.png",
+          }),
+          expect.objectContaining({
+            contentType: "application/pdf",
+            name: "report.pdf",
           }),
         ]),
       }),
@@ -1726,11 +1866,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     await manager.processMessage({ message, provider: mockProvider });
 
     const callArg = executorSpy.mock.calls[0][0];
-    for (const message of callArg.messages || []) {
-      expect(message.content).not.toEqual(
-        expect.arrayContaining([expect.objectContaining({ type: "file" })]),
-      );
-    }
+    expect(callArg.attachments).toBeUndefined();
   });
 
   test("includes image attachments from thread history in follow-up messages", async ({
@@ -1828,20 +1964,245 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     expect(result.success).toBe(true);
-    // The image from thread history should be included in the A2A call
+    // The image from thread history should be forwarded to the executor via the
+    // `attachments` param.
     expect(executorSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        messages: expect.arrayContaining([
+        attachments: expect.arrayContaining([
           expect.objectContaining({
-            content: expect.arrayContaining([
-              expect.objectContaining({
-                type: "file",
-                mediaType: historyImageAttachment.contentType,
-              }),
-            ]),
+            contentType: historyImageAttachment.contentType,
           }),
         ]),
       }),
+    );
+  });
+
+  test("includes non-image attachments (PDF) from thread history within budget", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const downloadedPdf = {
+      contentType: "application/pdf",
+      contentBase64: Buffer.alloc(10_000).toString("base64"),
+      name: "history.pdf",
+    };
+
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "I read the PDF from earlier",
+        messageId: "msg-3",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "response" }],
+        },
+      });
+
+    const user = await makeUser({ email: "pdf-history@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "pdf-history@example.com",
+    });
+    mockProvider.getThreadHistory = async () => [
+      {
+        messageId: "earlier-msg",
+        senderId: "test-sender-aad-id",
+        senderName: "Test User",
+        text: "Here is the report",
+        timestamp: new Date(Date.now() - 60_000),
+        isFromBot: false,
+        files: [
+          {
+            url: "https://files.slack.com/files-pri/T123/report.pdf",
+            mimetype: "application/pdf",
+            name: "history.pdf",
+            size: 1024,
+          },
+        ],
+      },
+    ];
+    const downloadFilesSpy = vi.fn().mockResolvedValue([downloadedPdf]);
+    mockProvider.downloadFiles = downloadFilesSpy;
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const message = createMockMessage({
+      threadId: "thread-123",
+      isThreadReply: true,
+      text: "Summarize the report",
+    });
+
+    const result = await manager.processMessage({
+      message,
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    // The PDF history file must be eligible for re-download (image-only filter removed)
+    expect(downloadFilesSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          mimetype: "application/pdf",
+          name: "history.pdf",
+        }),
+      ]),
+    );
+    // And, being within budget, it must be forwarded to the executor.
+    const forwardedAttachments =
+      executorSpy.mock.calls[0]?.[0]?.attachments ?? [];
+    expect(forwardedAttachments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentType: "application/pdf",
+          name: "history.pdf",
+        }),
+      ]),
+    );
+  });
+
+  test("skips a non-image history attachment that exceeds the total budget", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    // Current message already consumes almost the entire total budget, leaving
+    // only a tiny remainder for thread-history replay.
+    const currentPdf = {
+      contentType: "application/pdf",
+      contentBase64: Buffer.alloc(
+        CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE - 2000,
+      ).toString("base64"),
+      name: "current.pdf",
+    };
+    // The downloaded history file is well within the per-file size limit but
+    // larger than the remaining total budget, so it must be trimmed.
+    const downloadedHistoryPdf = {
+      contentType: "application/pdf",
+      contentBase64: Buffer.alloc(10_000).toString("base64"),
+      name: "history.pdf",
+    };
+
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "ok",
+        messageId: "msg-3",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "response" }],
+        },
+      });
+
+    const user = await makeUser({ email: "pdf-budget@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "pdf-budget@example.com",
+    });
+    mockProvider.getThreadHistory = async () => [
+      {
+        messageId: "earlier-msg",
+        senderId: "test-sender-aad-id",
+        senderName: "Test User",
+        text: "Here is the report",
+        timestamp: new Date(Date.now() - 60_000),
+        isFromBot: false,
+        files: [
+          {
+            url: "https://files.slack.com/files-pri/T123/report.pdf",
+            mimetype: "application/pdf",
+            name: "history.pdf",
+            size: 1024,
+          },
+        ],
+      },
+    ];
+    const downloadFilesSpy = vi.fn().mockResolvedValue([downloadedHistoryPdf]);
+    mockProvider.downloadFiles = downloadFilesSpy;
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const message = createMockMessage({
+      threadId: "thread-123",
+      isThreadReply: true,
+      text: "Summarize both reports",
+      attachments: [currentPdf],
+    });
+
+    const result = await manager.processMessage({
+      message,
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    // It is still eligible (download happens before budget trimming)...
+    expect(downloadFilesSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          mimetype: "application/pdf",
+          name: "history.pdf",
+        }),
+      ]),
+    );
+    // ...but it must NOT survive the total-budget trim, while the current
+    // attachment is preserved.
+    const forwardedAttachments =
+      executorSpy.mock.calls[0]?.[0]?.attachments ?? [];
+    expect(forwardedAttachments).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "history.pdf" }),
+      ]),
+    );
+    expect(forwardedAttachments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "current.pdf" }),
+      ]),
     );
   });
 

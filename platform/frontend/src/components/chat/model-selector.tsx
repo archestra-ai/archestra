@@ -3,6 +3,7 @@
 import {
   compareModelsForDisplay,
   E2eTestId,
+  isLegacyGeminiModel,
   isOpenRouterLatestAlias,
   type ModelInputModality,
   providerDisplayNames,
@@ -39,6 +40,7 @@ import {
   ConnectAccountBadge,
   FreeModelBadge,
   LatestModelBadge,
+  OldModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
 import { Button } from "@/components/ui/button";
@@ -894,6 +896,8 @@ export const ModelSelector = memo(function ModelSelector({
                       {isOpenRouterLatestAlias(provider, model.id) && (
                         <LatestModelBadge />
                       )}
+                      {provider === "gemini" &&
+                        isLegacyGeminiModel(model.id) && <OldModelBadge />}
                       <div className="ml-auto flex items-center gap-2">
                         <ModelCapabilityBadges
                           capabilities={model.capabilities}

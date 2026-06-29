@@ -32,6 +32,7 @@ export interface CimdUpsertData {
   redirectUris: string[];
   grantTypes: string[];
   responseTypes: string[];
+  scopes: string[];
   tokenEndpointAuthMethod: string;
   isPublic: boolean;
   metadata: Record<string, unknown>;

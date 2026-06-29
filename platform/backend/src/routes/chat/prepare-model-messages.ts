@@ -12,6 +12,7 @@ import {
   compactMessagesForChat,
 } from "./context-compaction";
 import { applyPromptCacheBreakpoints } from "./normalization/apply-prompt-cache";
+import { assertRequestWithinProviderPayloadLimit } from "./normalization/enforce-request-size-limit";
 import { materializeAttachments } from "./normalization/materialize-attachments";
 import { prepareMessagesForProvider } from "./normalization/prepare-for-provider";
 
@@ -145,6 +146,12 @@ async function buildModelMessagesForProvider(params: {
     applyAnthropicCacheControl,
     params.provider === "anthropic" && !anthropicNativeEndpoint,
   );
+  // Reject oversized inline attachments here, before the provider call, so the
+  // user gets an actionable size error instead of a generic provider rejection.
+  assertRequestWithinProviderPayloadLimit({
+    messages: materialized,
+    provider: params.provider,
+  });
   const providerPreparedMessages = prepareMessagesForProvider({
     messages: materialized,
     provider: params.provider,

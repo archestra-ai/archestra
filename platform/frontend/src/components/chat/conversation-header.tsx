@@ -12,6 +12,8 @@ import {
   Share2,
   Users,
 } from "lucide-react";
+import Link from "next/link";
+import { AgentIcon } from "@/components/agent-icon";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,6 +24,7 @@ import {
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
+import { useProject } from "@/lib/projects/projects.query";
 import { cn } from "@/lib/utils";
 import type { RightPanelTab } from "./right-side-panel";
 
@@ -89,7 +92,13 @@ export function ConversationHeader({
         {/* Left side - conversation title + actions */}
         <div className="flex items-center gap-1 min-w-0">
           {conversationId && conversation && (
-            <div className="flex items-center flex-shrink min-w-0">
+            <div className="flex items-center flex-shrink min-w-0 gap-1">
+              {/* Project chats read as "{ProjectName}/{Chat title}" — the
+                  project segment (emoji + name, like the sidebar) links to the
+                  project. Hidden for viewers without project access. */}
+              {conversation.projectId && (
+                <ProjectTitlePrefix projectId={conversation.projectId} />
+              )}
               {/* Skip TruncatedTooltip while the title animates: its resize
                   measurement re-renders on every TypingText tick, which loops
                   past React's nested-update cap. */}
@@ -206,6 +215,36 @@ export function ConversationHeader({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Clickable "{emoji ProjectName} /" segment shown before the chat title when a
+ * conversation belongs to a project. Fetches the project so the emoji matches
+ * the sidebar; renders nothing while loading or when the viewer can't read the
+ * project (the query resolves to null on a not-found, so no error surfaces).
+ */
+function ProjectTitlePrefix({ projectId }: { projectId: string }) {
+  const { data: project } = useProject(projectId);
+
+  if (!project) {
+    return null;
+  }
+
+  return (
+    <>
+      <Link
+        href={`/projects/${projectId}`}
+        title={project.name}
+        className="flex items-center gap-1 min-w-0 max-w-[180px] text-base font-normal text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <AgentIcon icon={project.icon} fallbackType="project" size={16} />
+        <span className="truncate">{project.name}</span>
+      </Link>
+      <span className="text-muted-foreground/50 select-none" aria-hidden="true">
+        /
+      </span>
+    </>
   );
 }
 

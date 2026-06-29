@@ -95,3 +95,40 @@ export function handleApiError(error: ApiSdkError) {
     .catch(() => undefined);
   console.error(sentryError);
 }
+
+/**
+ * Fail a query loud when the generated SDK returns an error, so the query
+ * enters its error state instead of swallowing a failed fetch into a default
+ * value. A swallowed error makes an outage indistinguishable from a genuinely
+ * empty result, which is how "Add an LLM Provider Key" showed up offline.
+ *
+ * Call right after the SDK call and keep the existing success return:
+ *
+ *   const { data, error } = await getApiKeys();
+ *   throwOnApiError(error);
+ *   return data ?? [];
+ *
+ * Toasts via `handleApiError` by default; screens that render their own error
+ * state (and would otherwise double-notify, plus re-toast on every retry) pass
+ * `toastOnError: false`. Detail endpoints where a 404 is a legitimate "does not
+ * exist" rather than an outage pass `allowNotFound: true` so the caller keeps
+ * returning its null default for that case.
+ */
+export function throwOnApiError(
+  error: unknown,
+  options?: { toastOnError?: boolean; allowNotFound?: boolean },
+): void {
+  if (!error) {
+    return;
+  }
+  if (
+    options?.allowNotFound &&
+    getApiErrorType(error) === "api_not_found_error"
+  ) {
+    return;
+  }
+  if (options?.toastOnError ?? true) {
+    handleApiError(error);
+  }
+  throw toApiError(error);
+}

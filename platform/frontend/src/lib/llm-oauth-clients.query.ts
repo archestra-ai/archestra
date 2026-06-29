@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 const {
   getLlmOauthClients,
@@ -15,6 +15,7 @@ type LlmOauthClientsParams = {
   search?: string;
   providerApiKeyId?: string;
   enabled?: boolean;
+  toastOnError?: boolean;
 };
 
 export function useLlmOauthClients(params?: LlmOauthClientsParams) {
@@ -30,10 +31,7 @@ export function useLlmOauthClients(params?: LlmOauthClientsParams) {
           providerApiKeyId: providerApiKeyId || undefined,
         },
       });
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error, { toastOnError: params?.toastOnError ?? true });
       return data ?? [];
     },
     enabled: params?.enabled,

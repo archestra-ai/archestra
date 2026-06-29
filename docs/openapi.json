@@ -75388,6 +75388,7 @@
                                     "invalid_request",
                                     "not_found",
                                     "context_too_long",
+                                    "request_too_large",
                                     "content_filtered",
                                     "server_error",
                                     "network_error",
@@ -76146,6 +76147,7 @@
                                   "invalid_request",
                                   "not_found",
                                   "context_too_long",
+                                  "request_too_large",
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
@@ -76875,6 +76877,7 @@
                                   "invalid_request",
                                   "not_found",
                                   "context_too_long",
+                                  "request_too_large",
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
@@ -77645,6 +77648,7 @@
                                   "invalid_request",
                                   "not_found",
                                   "context_too_long",
+                                  "request_too_large",
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
@@ -79875,6 +79879,7 @@
                                   "invalid_request",
                                   "not_found",
                                   "context_too_long",
+                                  "request_too_large",
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
@@ -81247,6 +81252,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -82932,6 +82938,7 @@
                                   "invalid_request",
                                   "not_found",
                                   "context_too_long",
+                                  "request_too_large",
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
@@ -83685,6 +83692,7 @@
                                   "invalid_request",
                                   "not_found",
                                   "context_too_long",
+                                  "request_too_large",
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
@@ -84430,6 +84438,7 @@
                                   "invalid_request",
                                   "not_found",
                                   "context_too_long",
+                                  "request_too_large",
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
@@ -85185,6 +85194,7 @@
                                   "invalid_request",
                                   "not_found",
                                   "context_too_long",
+                                  "request_too_large",
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
@@ -106951,6 +106961,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -107047,6 +107060,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -107205,6 +107219,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -107873,6 +107888,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -107969,6 +107987,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -108127,6 +108146,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -108503,6 +108523,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -108599,6 +108622,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -108746,6 +108770,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -108997,6 +109022,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -109093,6 +109121,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -109251,6 +109280,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -109502,6 +109532,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -109598,6 +109631,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -109756,6 +109790,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -111830,6 +111865,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -111926,6 +111964,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -112084,6 +112123,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -112335,6 +112375,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -112431,6 +112474,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -112589,6 +112633,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -112840,6 +112885,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -112936,6 +112984,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -113094,6 +113143,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -113345,6 +113395,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -113441,6 +113494,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -113599,6 +113653,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -113850,6 +113905,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -113946,6 +114004,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -114104,6 +114163,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -114355,6 +114415,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -114451,6 +114514,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -114609,6 +114673,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -114860,6 +114925,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -114956,6 +115024,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -115114,6 +115183,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -115365,6 +115435,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -115461,6 +115534,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -115608,6 +115682,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -115859,6 +115934,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -115955,6 +116033,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -116102,6 +116181,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -116353,6 +116433,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -116449,6 +116532,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -116607,6 +116691,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -116858,6 +116943,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -116954,6 +117042,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -117112,6 +117201,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -117363,6 +117453,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -117459,6 +117552,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -117617,6 +117711,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -120034,6 +120129,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -120130,6 +120228,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -120288,6 +120387,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -120539,6 +120639,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -120635,6 +120738,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -120793,6 +120897,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -121277,6 +121382,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -121373,6 +121481,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -121531,6 +121640,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -122199,6 +122309,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -122295,6 +122408,7 @@
                                             "invalid_request",
                                             "not_found",
                                             "context_too_long",
+                                            "request_too_large",
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
@@ -122453,6 +122567,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -124213,6 +124328,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -124309,6 +124427,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -124467,6 +124586,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -125135,6 +125255,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -125231,6 +125354,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -125389,6 +125513,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -125765,6 +125890,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -125861,6 +125989,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -126008,6 +126137,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -126259,6 +126389,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -126355,6 +126488,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -126513,6 +126647,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -126764,6 +126899,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -126860,6 +126998,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -127018,6 +127157,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -129092,6 +129232,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -129188,6 +129331,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -129346,6 +129490,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -129597,6 +129742,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -129693,6 +129841,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -129851,6 +130000,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -130102,6 +130252,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -130198,6 +130351,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -130356,6 +130510,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -130607,6 +130762,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -130703,6 +130861,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -130861,6 +131020,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -131112,6 +131272,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -131208,6 +131371,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -131366,6 +131530,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -131617,6 +131782,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -131713,6 +131881,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -131871,6 +132040,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -132122,6 +132292,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -132218,6 +132391,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -132376,6 +132550,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -132627,6 +132802,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -132723,6 +132901,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -132870,6 +133049,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -133121,6 +133301,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -133217,6 +133400,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -133364,6 +133548,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -133615,6 +133800,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -133711,6 +133899,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -133869,6 +134058,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -134120,6 +134310,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -134216,6 +134409,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -134374,6 +134568,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -134625,6 +134820,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -134721,6 +134919,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -134879,6 +135078,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -137296,6 +137496,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -137392,6 +137595,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -137550,6 +137754,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -137801,6 +138006,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -137897,6 +138105,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -138055,6 +138264,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -138539,6 +138749,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -138635,6 +138848,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -138793,6 +139007,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -139461,6 +139676,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -139557,6 +139775,7 @@
                                       "invalid_request",
                                       "not_found",
                                       "context_too_long",
+                                      "request_too_large",
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
@@ -139715,6 +139934,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -215047,6 +215267,7 @@
                                   "invalid_request",
                                   "not_found",
                                   "context_too_long",
+                                  "request_too_large",
                                   "content_filtered",
                                   "server_error",
                                   "network_error",

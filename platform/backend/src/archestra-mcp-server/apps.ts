@@ -18,10 +18,10 @@ import { DEFAULT_APP_TEMPLATE_ID, resolveCreateAppHtml } from "@/app-templates";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
+  AppAccessModel,
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
-  AppTeamModel,
   AppToolModel,
   AppVersionModel,
 } from "@/models";
@@ -471,7 +471,7 @@ const registry = defineArchestraTools([
           organizationId,
           scope: app.scope,
           authorId: app.authorId,
-          resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
@@ -579,7 +579,7 @@ const registry = defineArchestraTools([
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
       }
-      const accessibleAppIds = await AppTeamModel.getUserAccessibleAppIds({
+      const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
         organizationId: context.organizationId,
         userId: context.userId,
       });
@@ -708,7 +708,7 @@ const registry = defineArchestraTools([
           organizationId: context.organizationId,
           scope: app.scope,
           authorId: app.authorId,
-          resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
@@ -813,7 +813,7 @@ const registry = defineArchestraTools([
           organizationId,
           scope: app.scope,
           authorId: app.authorId,
-          resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
@@ -956,7 +956,8 @@ const registry = defineArchestraTools([
       let teamIds: string[];
       try {
         // Validate the requested teams exist in the caller's org before any auth
-        // or write, so a foreign-org or unknown team id can never reach app_team.
+        // or write, so a foreign-org or unknown team id can never be assigned to
+        // the app's backing catalog.
         teamIds =
           args.scope === "team"
             ? await resolveOrgTeamIds(args.teamIds, organizationId)
@@ -971,7 +972,7 @@ const registry = defineArchestraTools([
           organizationId,
           scope: app.scope,
           authorId: app.authorId,
-          resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
         await assertCallerMayModifyApp({
           userId,
@@ -1049,7 +1050,7 @@ const registry = defineArchestraTools([
           organizationId: context.organizationId,
           scope: app.scope,
           authorId: app.authorId,
-          resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
@@ -1235,7 +1236,7 @@ const registry = defineArchestraTools([
           organizationId: context.organizationId,
           scope: app.scope,
           authorId: app.authorId,
-          resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);

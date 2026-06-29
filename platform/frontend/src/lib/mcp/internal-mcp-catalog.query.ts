@@ -2,6 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { environmentKeys } from "@/lib/environment.query";
+import { throwOnApiError } from "@/lib/utils";
 
 const {
   createInternalMcpCatalogItem,
@@ -69,12 +70,13 @@ export function useInternalMcpCatalog(
   const includeApps = params?.includeApps ?? false;
   return useQuery({
     queryKey: includeApps ? ["mcp-catalog", "with-apps"] : ["mcp-catalog"],
-    queryFn: async () =>
-      (
-        await getInternalMcpCatalog(
-          includeApps ? { query: { includeApps } } : {},
-        )
-      ).data ?? [],
+    queryFn: async () => {
+      const { data, error } = await getInternalMcpCatalog(
+        includeApps ? { query: { includeApps } } : {},
+      );
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
     initialData: params?.initialData,
     enabled: params?.enabled,
   });
@@ -83,7 +85,11 @@ export function useInternalMcpCatalog(
 export function useMcpCatalogLabelKeys() {
   return useQuery({
     queryKey: ["mcp-catalog", "labels", "keys"],
-    queryFn: async () => (await getInternalMcpCatalogLabelKeys()).data ?? [],
+    queryFn: async () => {
+      const { data, error } = await getInternalMcpCatalogLabelKeys();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
   });
 }
 
@@ -93,9 +99,13 @@ export function useMcpCatalogLabelValues(
   const { key } = params || {};
   return useQuery({
     queryKey: ["mcp-catalog", "labels", "values", key],
-    queryFn: async () =>
-      (await getInternalMcpCatalogLabelValues({ query: key ? { key } : {} }))
-        .data ?? [],
+    queryFn: async () => {
+      const { data, error } = await getInternalMcpCatalogLabelValues({
+        query: key ? { key } : {},
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
     enabled: !!key,
   });
 }
@@ -283,10 +293,11 @@ export function useGetDeploymentYamlPreview(catalogId: string | null) {
     queryKey: ["mcp-catalog", catalogId, "deployment-yaml-preview"],
     queryFn: async () => {
       if (!catalogId) return null;
-      const response = await getDeploymentYamlPreview({
+      const { data, error } = await getDeploymentYamlPreview({
         path: { id: catalogId },
       });
-      return response.data;
+      throwOnApiError(error, { toastOnError: false });
+      return data;
     },
     enabled: !!catalogId,
   });
@@ -340,8 +351,9 @@ export function useK8sImagePullSecrets() {
   return useQuery({
     queryKey: ["k8s-image-pull-secrets"],
     queryFn: async () => {
-      const response = await getK8sImagePullSecrets();
-      return response.data ?? [];
+      const { data, error } = await getK8sImagePullSecrets();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
     },
   });
 }

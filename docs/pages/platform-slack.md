@@ -113,7 +113,7 @@ Admins can view autoprovisioned users on the **Settings → Members** page — f
 
 ## Attachments
 
-Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Image attachments are included inline in the agent's context; non-image attachments are noted but not processed as inline content.
+Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Files the selected model can read — images, PDFs, and text documents such as CSV, JSON, and Markdown — are included inline in the agent's context. Types the model cannot read are noted by name so the agent can tell the user. A message that contains only a file (no text) is processed too.
 
 **Limits:**
 - Max 20 attachments per message

@@ -1715,7 +1715,9 @@ describe("getChatMcpClient", () => {
 
       await vi.advanceTimersByTimeAsync(15_000);
 
-      // No fallback token here, so the timed-out connect yields a null client
+      // With resolveSessionExternalIdpToken mocked to null, the passed
+      // "internal-token" is the sole (primary) connect token and there is no
+      // fallback token to retry — so the timed-out connect yields a null client
       // (which getChatMcpTools turns into a McpToolsUnavailableError).
       expect(await clientPromise).toBeNull();
       expect(mockConnect).toHaveBeenCalledTimes(1);

@@ -12,6 +12,8 @@ import {
   Share2,
   Users,
 } from "lucide-react";
+import Link from "next/link";
+import { AgentIcon } from "@/components/agent-icon";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,6 +24,7 @@ import {
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
+import { useProject } from "@/lib/projects/projects.query";
 import { cn } from "@/lib/utils";
 import type { RightPanelTab } from "./right-side-panel";
 
@@ -68,6 +71,11 @@ export function ConversationHeader({
   onCreateProject,
   panel,
 }: ConversationHeaderProps) {
+  // When the chat belongs to a project, fetch it so the header can show a
+  // "<project> / <chat>" breadcrumb. `conversation` itself only carries the
+  // raw `projectId` (the single-conversation GET doesn't join project name/icon).
+  const { data: project } = useProject(conversation?.projectId ?? undefined);
+
   const actionsProps = {
     canManageShare,
     isShared,
@@ -89,7 +97,27 @@ export function ConversationHeader({
         {/* Left side - conversation title + actions */}
         <div className="flex items-center gap-1 min-w-0">
           {conversationId && conversation && (
-            <div className="flex items-center flex-shrink min-w-0">
+            <div className="flex items-center flex-shrink min-w-0 gap-1">
+              {/* Breadcrumb: link back to the project this chat lives in,
+                  keeping the project's emoji/icon, followed by a separator. */}
+              {project && (
+                <>
+                  <Link
+                    href={`/projects/${project.id}`}
+                    className="flex items-center gap-1 min-w-0 max-w-[200px] text-base font-normal text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <AgentIcon
+                      icon={project.icon}
+                      fallbackType="project"
+                      size={16}
+                    />
+                    <span className="truncate">{project.name}</span>
+                  </Link>
+                  <span className="text-base font-normal text-muted-foreground select-none">
+                    /
+                  </span>
+                </>
+              )}
               {/* Skip TruncatedTooltip while the title animates: its resize
                   measurement re-renders on every TypingText tick, which loops
                   past React's nested-update cap. */}

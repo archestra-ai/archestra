@@ -164,7 +164,7 @@ function inlinePdfMessage(base64Length: number): ChatMessage[] {
   ];
 }
 
-test("bedrock: an inline PDF whose payload exceeds the provider limit is rejected before the model call", async ({
+test("bedrock: an inline PDF whose payload exceeds the provider limit is rejected, reporting the decoded file size", async ({
   makeAgent,
   makeConversation,
 }) => {
@@ -172,19 +172,28 @@ test("bedrock: an inline PDF whose payload exceeds the provider limit is rejecte
   const conversation = await makeConversation(agent.id, {
     organizationId: agent.organizationId,
   });
-  // 33 MB of base64 > Bedrock/Claude's 32 MB request limit.
-  const messages = inlinePdfMessage(33 * 1024 * 1024);
+  // 40 MiB of base64 decodes to a ~30 MB file, over Bedrock/Claude's 32 MB
+  // (decimal) request limit once the base64 inflation is counted.
+  const messages = inlinePdfMessage(40 * 1024 * 1024);
 
   const prevEnabled = config.skillsSandbox.enabled;
   config.skillsSandbox.enabled = false;
   try {
-    await expect(
-      __test.buildModelMessagesForProvider({
+    const error = await __test
+      .buildModelMessagesForProvider({
         messages,
         provider: "bedrock",
         conversationId: conversation.id,
-      }),
-    ).rejects.toThrow(/exceeds the .*\bMB\b.* limit/i);
+      })
+      .then(
+        () => null,
+        (e) => e,
+      );
+    expect(error).toBeInstanceOf(Error);
+    // Reports the real decoded file size (30 MB), not the inflated ~40 MB wire size.
+    expect(error.message).toMatch(/\bThis file is 30 MB\b/);
+    expect(error.message).not.toMatch(/40 MB/);
+    expect(error.message).toContain("AWS Bedrock");
   } finally {
     config.skillsSandbox.enabled = prevEnabled;
   }

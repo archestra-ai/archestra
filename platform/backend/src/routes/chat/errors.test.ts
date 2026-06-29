@@ -50,19 +50,21 @@ describe("mapProviderError - per-user provider auth required", () => {
 });
 
 describe("mapProviderError - request too large", () => {
-  it("maps RequestTooLargeError to a non-retryable RequestTooLarge card naming the size and limit", () => {
+  it("maps RequestTooLargeError to a non-retryable RequestTooLarge card naming the decoded file size", () => {
     const result = mapProviderError(
       new RequestTooLargeError({
         provider: "bedrock",
-        payloadBytes: 65 * 1024 * 1024,
-        limitBytes: 32 * 1024 * 1024,
+        fileBytes: 49 * 1024 * 1024,
+        limitBytes: 32_000_000,
+        fileCount: 1,
       }),
       "bedrock",
     );
 
     expect(result.code).toBe(ChatErrorCode.RequestTooLarge);
     expect(result.isRetryable).toBe(false);
-    expect(result.message).toMatch(/exceeds the 32 MB size limit/i);
+    // The user-facing size is the real file size, not the inflated wire size.
+    expect(result.message).toMatch(/\bThis file is 49 MB\b/);
     expect(result.message).toContain("AWS Bedrock");
   });
 });

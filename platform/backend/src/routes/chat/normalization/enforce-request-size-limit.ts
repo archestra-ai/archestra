@@ -2,14 +2,16 @@ import type { SupportedProvider } from "@archestra/shared";
 import type { ChatMessage } from "@/types";
 
 /**
- * Claude rejects any request whose whole payload exceeds 32 MB, and on Amazon
- * Bedrock only base64-inline document sources are available — there is no
- * out-of-band file reference to keep the payload small. So a large attachment
- * is sent inline and trips the limit before the model ever reads it, surfacing
- * as a generic "Input is too long for requested model" provider error.
+ * Anthropic's documented request-size cap for Claude (PDFs and other documents
+ * included) is 32 MB, measured decimally: a Bedrock request just over
+ * 32,000,000 bytes is rejected with "Input is too long for requested model".
+ * On this path the document is base64-inlined into the request (Bedrock's
+ * out-of-band `s3Location` source isn't used yet), and base64 inflates the file
+ * ~33%, so a large attachment fills this budget and trips the cap before the
+ * model reads it.
  * @see https://platform.claude.com/docs/en/docs/build-with-claude/pdf-support
  */
-const CLAUDE_REQUEST_PAYLOAD_LIMIT_BYTES = 32 * 1024 * 1024;
+const CLAUDE_REQUEST_PAYLOAD_LIMIT_BYTES = 32_000_000;
 
 // Only providers whose request-size limit we know are guarded; everything else
 // is left to the provider so we never block a request a provider would accept.
@@ -24,29 +26,34 @@ const BASE64_MARKER = ";base64,";
 
 export class RequestTooLargeError extends Error {
   readonly provider: SupportedProvider;
-  readonly payloadBytes: number;
+  /** Decoded size of the attachment(s), i.e. the file size the user sees. */
+  readonly fileBytes: number;
   readonly limitBytes: number;
+  readonly fileCount: number;
 
   constructor(params: {
     provider: SupportedProvider;
-    payloadBytes: number;
+    fileBytes: number;
     limitBytes: number;
+    fileCount: number;
   }) {
     super(formatRequestTooLargeMessage(params));
     this.name = "RequestTooLargeError";
     this.provider = params.provider;
-    this.payloadBytes = params.payloadBytes;
+    this.fileBytes = params.fileBytes;
     this.limitBytes = params.limitBytes;
+    this.fileCount = params.fileCount;
   }
 }
 
 /**
  * Fail fast when inline attachments push the request past the provider's known
  * request-size limit, so the user gets an actionable "too large" message
- * instead of a generic provider error after a slow round trip. Counts only the
- * inline attachment payload — the dominant term in an over-limit request — so it
- * is a conservative lower bound: it never false-blocks, but a near-limit request
- * whose non-file content tips it over can still reach the provider.
+ * instead of a generic provider error after a slow round trip. Compares the
+ * base64 (wire) size against the limit — the dominant term in an over-limit
+ * request — so it is a conservative lower bound: it never false-blocks, but a
+ * near-limit request whose non-file content tips it over can still reach the
+ * provider.
  */
 export function assertRequestWithinProviderPayloadLimit(params: {
   messages: ChatMessage[];
@@ -57,18 +64,27 @@ export function assertRequestWithinProviderPayloadLimit(params: {
     return;
   }
 
-  const payloadBytes = measureInlineFilePayloadBytes(params.messages);
-  if (payloadBytes > limitBytes) {
+  const { encodedBytes, fileBytes, fileCount } = measureInlineAttachments(
+    params.messages,
+  );
+  if (encodedBytes > limitBytes) {
     throw new RequestTooLargeError({
       provider: params.provider,
-      payloadBytes,
+      fileBytes,
       limitBytes,
+      fileCount,
     });
   }
 }
 
-function measureInlineFilePayloadBytes(messages: ChatMessage[]): number {
-  let total = 0;
+function measureInlineAttachments(messages: ChatMessage[]): {
+  encodedBytes: number;
+  fileBytes: number;
+  fileCount: number;
+} {
+  let encodedBytes = 0;
+  let fileBytes = 0;
+  let fileCount = 0;
   for (const message of messages) {
     if (!message.parts?.length) {
       continue;
@@ -82,30 +98,46 @@ function measureInlineFilePayloadBytes(messages: ChatMessage[]): number {
         continue;
       }
       const markerIndex = part.url.indexOf(BASE64_MARKER);
-      if (markerIndex !== -1) {
-        // The base64 text is what travels on the wire; its length in chars is
-        // ~1 byte each, a close proxy for the bytes the provider counts.
-        total += part.url.length - (markerIndex + BASE64_MARKER.length);
+      if (markerIndex === -1) {
+        continue;
       }
+      // The base64 text is what travels on the wire (~1 byte per char, the unit
+      // the provider's size cap counts); the decoded file is 3/4 of that — the
+      // size the user recognizes and what the message reports.
+      const base64Length =
+        part.url.length - (markerIndex + BASE64_MARKER.length);
+      encodedBytes += base64Length;
+      fileBytes += Math.floor((base64Length * 3) / 4);
+      fileCount += 1;
     }
   }
-  return total;
+  return { encodedBytes, fileBytes, fileCount };
 }
 
 function formatRequestTooLargeMessage(params: {
   provider: SupportedProvider;
-  payloadBytes: number;
+  fileBytes: number;
   limitBytes: number;
+  fileCount: number;
 }): string {
-  const MB = 1024 * 1024;
-  // Round the payload up and the limit down so the two figures can never round
-  // to the same number and read as a self-contradictory "~32 MB exceeds 32 MB".
-  const payloadMB = Math.ceil(params.payloadBytes / MB);
-  const limitMB = Math.floor(params.limitBytes / MB);
+  const MiB = 1024 * 1024;
+  const fileMB = Math.round(params.fileBytes / MiB);
+  // The largest raw attachment that still fits once base64 inflates it (~×4/3).
+  // Floored so it always reads below the (rounded) file size — no "23 over 24".
+  const maxAttachmentMB = Math.floor((params.limitBytes * 3) / 4 / MiB);
+  const label = providerLabel(params.provider);
+  const subject =
+    params.fileCount > 1
+      ? `Your attachments total ${fileMB} MB`
+      : `This file is ${fileMB} MB`;
+  const recovery =
+    params.fileCount > 1
+      ? "Compress or split large files, or remove some, and try again."
+      : "Compress or split it, or attach a smaller one, and try again.";
   return (
-    `This request is ~${payloadMB} MB, which exceeds the ` +
-    `${limitMB} MB size limit for ${providerLabel(params.provider)}. ` +
-    `Compress or split large attachments — or remove some — and try again.`
+    `${subject}, over the ~${maxAttachmentMB} MB limit for ${label}. ` +
+    `Attachments are sent to the model inline (base64), which inflates them ~33%. ` +
+    recovery
   );
 }
 

@@ -21,11 +21,13 @@ import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
+import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { ProjectScopeFilter } from "@/components/project-scope-filter";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { ProjectVisibilityBadge } from "@/components/projects/project-visibility-badge";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -78,14 +80,25 @@ function ProjectsList() {
   const teamIds = csvParam("teamIds");
   const authorIds = csvParam("authorIds");
   const excludeAuthorIds = csvParam("excludeAuthorIds");
-  const { data, isPending } = useProjects({
+  const {
+    data,
+    isPending,
+    isLoadingError: isProjectsLoadError,
+    refetch: refetchProjects,
+  } = useProjects({
     scope: toApiProjectScope(scope),
     search,
     teamIds,
     authorIds,
     excludeAuthorIds,
+    toastOnError: false,
   });
-  const { hasAnyApiKey, isLoading: isApiKeyLoading } = useHasAnyApiKey();
+  const {
+    hasAnyApiKey,
+    isLoading: isApiKeyLoading,
+    isLoadError: isApiKeyLoadError,
+    refetch: refetchApiKeys,
+  } = useHasAnyApiKey();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<ProjectListItem | null>(
     null,
@@ -108,12 +121,37 @@ function ProjectsList() {
     !!authorIds ||
     !!excludeAuthorIds;
 
+  // The first keys fetch failed with no cached list (e.g. offline cold start).
+  // Show a retry state rather than the setup prompt, which would wrongly imply
+  // the user has no keys configured. `isLoadError` is scoped to the first-fetch
+  // failure, so a failed background refetch keeps the cached state instead.
+  if (!isApiKeyLoading && isApiKeyLoadError) {
+    return (
+      <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
+        <ApiKeyLoadError onRetry={refetchApiKeys} />
+      </PageLayout>
+    );
+  }
+
   // Mirror the new-chat screen: with no usable LLM key there's nothing to run a
   // project on, so prompt to add one instead of offering project creation.
   if (!isApiKeyLoading && !hasAnyApiKey) {
     return (
       <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
         <NoApiKeySetup description="Connect an LLM provider to start a project" />
+      </PageLayout>
+    );
+  }
+
+  // The projects list fetch failed with no cached data. Show a retry state so a
+  // failed fetch isn't misread as "No projects yet".
+  if (isProjectsLoadError) {
+    return (
+      <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
+        <QueryLoadError
+          title="Couldn't load your projects"
+          onRetry={() => refetchProjects()}
+        />
       </PageLayout>
     );
   }

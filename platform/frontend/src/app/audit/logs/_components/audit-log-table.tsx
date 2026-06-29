@@ -4,6 +4,7 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableFilters } from "@/components/table-filters";
 import { TruncatedText } from "@/components/truncated-text";
@@ -171,7 +172,12 @@ export function AuditLogTable() {
     ? (actorTypeFromUrl as AuditActorType)
     : undefined;
 
-  const { data: response, isFetching } = useAuditLogs({
+  const {
+    data: response,
+    isFetching,
+    isLoadingError: isAuditLogsLoadError,
+    refetch: refetchAuditLogs,
+  } = useAuditLogs({
     limit: pagination.pageSize,
     offset: pagination.pageIndex * pagination.pageSize,
     sortDirection,
@@ -370,6 +376,17 @@ export function AuditLogTable() {
       page: "1",
     });
   }, [dateTimePicker, updateUrlParams]);
+
+  if (isAuditLogsLoadError) {
+    return (
+      <div className="space-y-4">
+        <QueryLoadError
+          title="Couldn't load audit events"
+          onRetry={() => refetchAuditLogs()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

@@ -80,6 +80,7 @@ import {
   virtualKeyRateLimiter,
 } from "./llm-proxy-auth";
 import {
+  applyInputTokenFallback,
   buildInteractionRecord,
   calculateInteractionCosts,
   handleError,
@@ -1194,6 +1195,19 @@ async function handleStreaming<
 
         // Set response attributes on span per OTEL GenAI semconv
         const { state } = streamAdapter;
+        // Correct zero-input usage before any consumer (span cost, metrics, the
+        // finally-block cost/persistence) reads it — they all share state.usage.
+        if (state.usage) {
+          const fallbackAdapter =
+            provider.createRequestAdapter(originalRequest);
+          state.usage = applyInputTokenFallback({
+            usage: state.usage,
+            provider: providerName,
+            providerMessages: fallbackAdapter.getProviderMessages(),
+            tools: fallbackAdapter.getTools(),
+            model: actualModel,
+          });
+        }
         if (state.model) {
           llmSpan.setAttribute(ATTR_GENAI_RESPONSE_MODEL, state.model);
         }
@@ -1525,7 +1539,7 @@ async function handleNonStreaming<
   );
 
   // Execute request with tracing
-  const { responseAdapter } = await utils.tracing.startActiveLlmSpan({
+  const { responseAdapter, usage } = await utils.tracing.startActiveLlmSpan({
     operationName: provider.spanName,
     provider: providerName,
     model: actualModel,
@@ -1549,8 +1563,17 @@ async function handleNonStreaming<
       const result = await provider.execute(client, request);
       const adapter = provider.createResponseAdapter(result);
 
-      // Set response attributes on span per OTEL GenAI semconv
-      const usage = adapter.getUsage();
+      // Set response attributes on span per OTEL GenAI semconv. Correct zero-input
+      // usage here so the span cost and the downstream cost/persistence (which
+      // reuse this usage) all see the estimate.
+      const fallbackAdapter = provider.createRequestAdapter(originalRequest);
+      const usage = applyInputTokenFallback({
+        usage: adapter.getUsage(),
+        provider: providerName,
+        providerMessages: fallbackAdapter.getProviderMessages(),
+        tools: fallbackAdapter.getTools(),
+        model: actualModel,
+      });
       llmSpan.setAttribute(ATTR_GENAI_RESPONSE_MODEL, adapter.getModel());
       llmSpan.setAttribute(ATTR_GENAI_RESPONSE_ID, adapter.getId());
       // Per the GenAI semconv, gen_ai.usage.input_tokens includes cached tokens.
@@ -1621,7 +1644,7 @@ async function handleNonStreaming<
         }
       }
 
-      return { response: result, responseAdapter: adapter };
+      return { response: result, responseAdapter: adapter, usage };
     },
   });
 
@@ -1673,8 +1696,7 @@ async function handleNonStreaming<
         externalAgentId,
       });
 
-      // Record interaction with refusal
-      const usage = responseAdapter.getUsage();
+      // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
         baselineModel,
         actualModel,
@@ -1736,8 +1758,8 @@ async function handleNonStreaming<
     }
   }
 
-  // Tool calls allowed (or no tool calls) - return response
-  const usage = responseAdapter.getUsage();
+  // Tool calls allowed (or no tool calls) - return response.
+  // `usage` (corrected for zero-input above) is reused here.
 
   // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
   // for non-streaming requests. We only report cost here to avoid double counting.

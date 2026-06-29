@@ -239,8 +239,9 @@ export function useMcpServerTools(mcpServerId: string | null) {
       const { data, error } = await getMcpServerTools({
         path: { id: mcpServerId },
       });
-      // toastOnError is false to prevent "MCP server not found" error from being shown
-      throwOnApiError(error, { toastOnError: false });
+      // A not-yet-connected server 404s here; treat that as an empty tool list
+      // (no error state, no toast) rather than a failure.
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
       return data ?? [];
     },
     enabled: !!mcpServerId,

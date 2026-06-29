@@ -27,6 +27,7 @@ import { PageLayout } from "@/components/page-layout";
 import { ProjectScopeFilter } from "@/components/project-scope-filter";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { ProjectVisibilityBadge } from "@/components/projects/project-visibility-badge";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -79,7 +80,12 @@ function ProjectsList() {
   const teamIds = csvParam("teamIds");
   const authorIds = csvParam("authorIds");
   const excludeAuthorIds = csvParam("excludeAuthorIds");
-  const { data, isPending } = useProjects({
+  const {
+    data,
+    isPending,
+    isLoadingError: isProjectsLoadError,
+    refetch: refetchProjects,
+  } = useProjects({
     scope: toApiProjectScope(scope),
     search,
     teamIds,
@@ -132,6 +138,19 @@ function ProjectsList() {
     return (
       <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
         <NoApiKeySetup description="Connect an LLM provider to start a project" />
+      </PageLayout>
+    );
+  }
+
+  // The projects list fetch failed with no cached data. Show a retry state so a
+  // failed fetch isn't misread as "No projects yet".
+  if (isProjectsLoadError) {
+    return (
+      <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
+        <QueryLoadError
+          title="Couldn't load your projects"
+          onRetry={() => refetchProjects()}
+        />
       </PageLayout>
     );
   }

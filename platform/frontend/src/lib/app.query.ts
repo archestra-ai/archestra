@@ -45,7 +45,7 @@ export function useExternalApp(catalogId: string | null) {
         path: { catalogId: catalogId as string },
       });
       throwOnApiError(error, { allowNotFound: true });
-      return data;
+      return data ?? null;
     },
   });
 }
@@ -59,7 +59,7 @@ export function useApp(appId: string | null) {
         path: { appId: appId as string },
       });
       throwOnApiError(error, { allowNotFound: true });
-      return data;
+      return data ?? null;
     },
   });
 }
@@ -72,8 +72,8 @@ export function useAppVersions(appId: string | null) {
       const { data, error } = await getAppVersions({
         path: { appId: appId as string },
       });
-      throwOnApiError(error);
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? [];
     },
   });
 }
@@ -86,8 +86,8 @@ export function useAppTools(appId: string | null) {
       const { data, error } = await getAppTools({
         path: { appId: appId as string },
       });
-      throwOnApiError(error);
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? [];
     },
   });
 }

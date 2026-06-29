@@ -20,6 +20,7 @@ import {
   SourceFilterOption,
   UserFilterOption,
 } from "@/components/log-filter-option";
+import { QueryLoadError } from "@/components/query-load-error";
 import { Savings } from "@/components/savings";
 import { SearchInput } from "@/components/search-input";
 import { SourceBadge } from "@/components/source-badge";
@@ -230,7 +231,12 @@ function SessionsTable({
     [updateQueryParams],
   );
 
-  const { data: sessionsResponse, isFetching } = useInteractionSessions({
+  const {
+    data: sessionsResponse,
+    isFetching,
+    isLoadingError,
+    refetch: refetchSessions,
+  } = useInteractionSessions({
     limit: pageSize,
     offset,
     profileId: profileFilter !== "all" ? profileFilter : undefined,
@@ -508,6 +514,19 @@ function SessionsTable({
     ],
     [agents],
   );
+
+  // A failed fetch leaves no rows; show a retry state instead of the table's
+  // "No LLM proxy logs found" empty message, which would misrepresent the error.
+  if (isLoadingError) {
+    return (
+      <div className="space-y-4">
+        <QueryLoadError
+          title="Couldn't load logs"
+          onRetry={() => refetchSessions()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

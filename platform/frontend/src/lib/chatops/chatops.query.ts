@@ -38,7 +38,8 @@ export function useChatOpsBindings(
           status: params.status,
         },
       });
-      throwOnApiError(error);
+      // Screen renders its own QueryLoadError panel; don't also toast.
+      throwOnApiError(error, { toastOnError: false });
       return data;
     },
   });

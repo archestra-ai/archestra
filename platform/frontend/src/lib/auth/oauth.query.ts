@@ -45,7 +45,7 @@ export function useOAuthClientInfo(clientId: string | null) {
         allowNotFound: true,
         toastOnError: false,
       });
-      return response.data;
+      return response.data ?? null;
     },
     enabled: !!clientId,
   });

@@ -43,7 +43,8 @@ export function useSkillsPaginated(
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getSkills({ query: params });
-      throwOnApiError(error);
+      // Screen renders its own QueryLoadError panel; don't also toast.
+      throwOnApiError(error, { toastOnError: false });
       return data;
     },
   });

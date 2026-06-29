@@ -87,7 +87,8 @@ export function useAuditLogs({
           ...(search ? { search } : {}),
         },
       });
-      throwOnApiError(response.error);
+      // Screen renders its own QueryLoadError panel; don't also toast.
+      throwOnApiError(response.error, { toastOnError: false });
       return response.data ?? EMPTY_RESPONSE(limit);
     },
   });

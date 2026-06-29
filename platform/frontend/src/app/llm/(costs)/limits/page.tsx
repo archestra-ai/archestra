@@ -190,51 +190,23 @@ export default function LimitsPage() {
     isLoadingError: isLimitsLoadError,
     refetch: refetchLimits,
   } = useLimits();
-  const {
-    data: teams = [],
-    isLoadingError: isTeamsLoadError,
-    refetch: refetchTeams,
-  } = useTeams();
+  const { data: teams = [] } = useTeams();
   const { data: organization } = useOrganization();
-  const {
-    data: members = [],
-    isLoadingError: isMembersLoadError,
-    refetch: refetchMembers,
-  } = useOrganizationMembers();
+  const { data: members = [] } = useOrganizationMembers();
   const { data: defaultUserLimits = [] } = useDefaultUserLimits();
-  const {
-    data: virtualKeysData,
-    isLoadingError: isVirtualKeysLoadError,
-    refetch: refetchVirtualKeys,
-  } = useAllVirtualApiKeys({
+  const { data: virtualKeysData } = useAllVirtualApiKeys({
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
   });
   const virtualKeys = virtualKeysData?.data ?? [];
-  const {
-    data: agents = [],
-    isLoadingError: isAgentsLoadError,
-    refetch: refetchAgents,
-  } = useProfiles({
+  const { data: agents = [] } = useProfiles({
     filters: { agentTypes: ["agent"] },
   });
-  const {
-    data: llmProxies = [],
-    isLoadingError: isLlmProxiesLoadError,
-    refetch: refetchLlmProxies,
-  } = useProfiles({
+  const { data: llmProxies = [] } = useProfiles({
     filters: { agentTypes: ["llm_proxy"] },
   });
-  const {
-    data: environmentsData,
-    isLoadingError: isEnvironmentsLoadError,
-    refetch: refetchEnvironments,
-  } = useEnvironments();
+  const { data: environmentsData } = useEnvironments();
   const environments = environmentsData?.environments ?? [];
-  const {
-    data: modelsWithApiKeys = [],
-    isLoadingError: isModelsLoadError,
-    refetch: refetchModels,
-  } = useModelsWithApiKeys();
+  const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
   const deleteLimit = useDeleteLimit();
@@ -683,31 +655,15 @@ export default function LimitsPage() {
     (formState.isAllModels || formState.models.length > 0) &&
     (formState.entityType === "organization" || formState.entityId.length > 0);
 
-  const isLoadError =
-    isLimitsLoadError ||
-    isTeamsLoadError ||
-    isMembersLoadError ||
-    isVirtualKeysLoadError ||
-    isAgentsLoadError ||
-    isLlmProxiesLoadError ||
-    isEnvironmentsLoadError ||
-    isModelsLoadError;
-
-  if (isLoadError) {
+  // Gate the page on the limits list itself. The entity selectors (teams,
+  // members, virtual keys, agents, environments, models) degrade locally if
+  // their own fetch fails, so a secondary failure doesn't blank the page.
+  if (isLimitsLoadError) {
     return (
       <div className="space-y-4">
         <QueryLoadError
           title="Couldn't load usage limits"
-          onRetry={() => {
-            refetchLimits();
-            refetchTeams();
-            refetchMembers();
-            refetchVirtualKeys();
-            refetchAgents();
-            refetchLlmProxies();
-            refetchEnvironments();
-            refetchModels();
-          }}
+          onRetry={() => refetchLimits()}
         />
       </div>
     );

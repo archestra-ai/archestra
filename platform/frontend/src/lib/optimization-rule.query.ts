@@ -29,7 +29,8 @@ export function useOptimizationRules() {
     queryKey: ["optimization-rules"],
     queryFn: async () => {
       const response = await getOptimizationRules();
-      throwOnApiError(response.error);
+      // Screen renders its own QueryLoadError panel; don't also toast.
+      throwOnApiError(response.error, { toastOnError: false });
       return response.data ?? [];
     },
   });

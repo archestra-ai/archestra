@@ -3,10 +3,12 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockGetLlmProviderApiKeys, mockToastError } = vi.hoisted(() => ({
-  mockGetLlmProviderApiKeys: vi.fn(),
-  mockToastError: vi.fn(),
-}));
+const { mockGetLlmProviderApiKeys, mockToastError, mockHasPermissions } =
+  vi.hoisted(() => ({
+    mockGetLlmProviderApiKeys: vi.fn(),
+    mockToastError: vi.fn(),
+    mockHasPermissions: vi.fn(),
+  }));
 
 vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@archestra/shared")>();
@@ -24,7 +26,14 @@ vi.mock("sonner", () => ({
   toast: { error: mockToastError, success: vi.fn() },
 }));
 
-import { useLlmProviderApiKeys } from "./llm-provider-api-keys.query";
+vi.mock("@/lib/auth/auth.query", () => ({
+  useHasPermissions: () => mockHasPermissions(),
+}));
+
+import {
+  useHasAnyApiKey,
+  useLlmProviderApiKeys,
+} from "./llm-provider-api-keys.query";
 
 function wrapper({ children }: { children: ReactNode }) {
   const queryClient = new QueryClient({
@@ -81,5 +90,42 @@ describe("useLlmProviderApiKeys", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.isError).toBe(false);
     expect(result.current.data).toEqual([]);
+  });
+});
+
+describe("useHasAnyApiKey", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHasPermissions.mockReturnValue({ data: true });
+  });
+
+  it("reports a load error when the first keys fetch fails", async () => {
+    mockGetLlmProviderApiKeys.mockResolvedValue({
+      error: new Error("Network request failed"),
+    });
+
+    const { result } = renderHook(() => useHasAnyApiKey(), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoadError).toBe(true));
+    expect(result.current.hasAnyApiKey).toBe(false);
+  });
+
+  it("does not run the query or report a load error without read permission", async () => {
+    mockHasPermissions.mockReturnValue({ data: false });
+
+    const { result } = renderHook(() => useHasAnyApiKey(), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.isLoadError).toBe(false);
+    expect(mockGetLlmProviderApiKeys).not.toHaveBeenCalled();
+  });
+
+  it("reports a configured key when the fetch succeeds with keys", async () => {
+    mockGetLlmProviderApiKeys.mockResolvedValue({ data: [{ id: "key-1" }] });
+
+    const { result } = renderHook(() => useHasAnyApiKey(), { wrapper });
+
+    await waitFor(() => expect(result.current.hasAnyApiKey).toBe(true));
+    expect(result.current.isLoadError).toBe(false);
   });
 });

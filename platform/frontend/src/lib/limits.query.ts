@@ -41,7 +41,7 @@ export function useLimit(id: string) {
     queryFn: async () => {
       const { data, error } = await getLimit({ path: { id } });
       throwOnApiError(error, { allowNotFound: true });
-      return data;
+      return data ?? null;
     },
     enabled: !!id,
   });

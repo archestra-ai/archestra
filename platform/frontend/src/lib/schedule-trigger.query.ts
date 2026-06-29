@@ -180,7 +180,8 @@ export function useScheduleTriggers(params?: {
           ...(queryParams.showAll ? { showAll: queryParams.showAll } : {}),
         },
       });
-      throwOnApiError(response.error);
+      // Screen renders its own QueryLoadError panel; don't also toast.
+      throwOnApiError(response.error, { toastOnError: false });
       return (
         (response.data as PaginatedResponse<ScheduleTrigger>) ?? emptyResponse
       );

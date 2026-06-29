@@ -100,7 +100,8 @@ export function useConnectorKnowledgeBases(connectorId: string) {
       const { data, error } = await getConnectorKnowledgeBases({
         path: { id: connectorId },
       });
-      throwOnApiError(error);
+      // A deleted connector 404s here; degrade gracefully instead of erroring.
+      throwOnApiError(error, { allowNotFound: true });
       return data;
     },
     enabled: !!connectorId,

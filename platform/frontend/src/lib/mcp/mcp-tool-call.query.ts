@@ -77,7 +77,8 @@ export function useMcpToolCalls({
           sortDirection,
         },
       });
-      throwOnApiError(response.error);
+      // Screen renders its own QueryLoadError panel; don't also toast.
+      throwOnApiError(response.error, { toastOnError: false });
       return (
         response.data ?? {
           data: [],

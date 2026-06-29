@@ -71,7 +71,8 @@ export function useKnowledgeBasesPaginated(
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getKnowledgeBases({ query: params });
-      throwOnApiError(error);
+      // Screen renders its own QueryLoadError panel; don't also toast.
+      throwOnApiError(error, { toastOnError: false });
       return data;
     },
   });

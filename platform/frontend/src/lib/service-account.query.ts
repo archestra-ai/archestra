@@ -30,7 +30,8 @@ export function useServiceAccounts() {
     queryKey: ["service-accounts"],
     queryFn: async () => {
       const { data, error } = await getServiceAccounts();
-      throwOnApiError(error);
+      // Screen renders its own QueryLoadError panel; don't also toast.
+      throwOnApiError(error, { toastOnError: false });
 
       return data ?? [];
     },

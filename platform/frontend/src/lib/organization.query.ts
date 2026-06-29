@@ -21,8 +21,8 @@ export const appearanceKeys = {
  * Hook to fetch public appearance settings.
  * Used on login/auth pages where the user is not yet authenticated.
  * Returns theme, customFont, and logo without requiring authentication.
- * On API failure, returns null so React Query has a defined cache value while
- * callers keep using local fallback appearance values.
+ * On API failure the query enters its error state (no toast, since this is a
+ * pre-auth surface); callers keep using their local fallback appearance values.
  */
 export function useAppearanceSettings(enabled = true) {
   return useQuery({

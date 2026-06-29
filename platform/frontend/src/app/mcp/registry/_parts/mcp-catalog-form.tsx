@@ -1240,7 +1240,7 @@ export function McpCatalogForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Arguments (one per line)
+                          Arguments (one per line, or paste JSON array)
                           <ReinstallHint show={isArgumentsDirty} />
                         </FormLabel>
                         <FormControl>
@@ -1248,6 +1248,27 @@ export function McpCatalogForm({
                             placeholder={`/path/to/server.js\n--verbose`}
                             className="font-mono min-h-20"
                             {...field}
+                            onPaste={(e) => {
+                              const pasted = e.clipboardData.getData("text");
+                              const trimmed = pasted.trim();
+                              if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+                                try {
+                                  const parsed = JSON.parse(trimmed);
+                                  if (Array.isArray(parsed) && parsed.every(item => typeof item === "string")) {
+                                    e.preventDefault();
+                                    const converted = parsed.join("\n");
+                                    const target = e.currentTarget;
+                                    const start = target.selectionStart ?? target.value.length;
+                                    const end = target.selectionEnd ?? target.value.length;
+                                    const newValue = target.value.substring(0, start) + converted + target.value.substring(end);
+                                    field.onChange(newValue);
+                                    return;
+                                  }
+                                } catch {
+                                  // Not valid JSON, paste as-is
+                                }
+                              }
+                            }}
                           />
                         </FormControl>
                         <FormMessage />

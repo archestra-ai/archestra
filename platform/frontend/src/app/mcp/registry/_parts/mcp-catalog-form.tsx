@@ -103,6 +103,7 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+import { McpConfigImportDialog } from "./mcp-config-import-dialog";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -719,6 +720,13 @@ export function McpCatalogForm({
     { mode: "add" } | { mode: "edit"; index: number } | null
   >(null);
 
+  // Paste-to-create: import an MCP server config (issue #3859) and pre-fill the
+  // form. Imported keys overwrite their fields; everything else keeps its value.
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const handleImportConfig = (values: Partial<McpCatalogFormValues>) => {
+    form.reset({ ...form.getValues(), ...values });
+  };
+
   // Fetch available k8s docker-registry secrets for the "existing" dropdown
   const { data: k8sSecrets = [] } = useK8sImagePullSecrets();
   const imagePullSecretItems = useMemo(
@@ -890,6 +898,25 @@ export function McpCatalogForm({
           >
             {notice}
             {catalogButton}
+
+            {mode === "create" && (
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsImportOpen(true)}
+                >
+                  <Code className="mr-1 h-4 w-4" />
+                  Import from JSON
+                </Button>
+              </div>
+            )}
+            <McpConfigImportDialog
+              open={isImportOpen}
+              onOpenChange={setIsImportOpen}
+              onImport={handleImportConfig}
+            />
 
             <div className="space-y-4">
               <div className="flex items-stretch gap-3">

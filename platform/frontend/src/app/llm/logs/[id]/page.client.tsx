@@ -8,6 +8,7 @@ import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread from "@/components/message-thread";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
+import { QueryLoadError } from "@/components/query-load-error";
 import { Savings } from "@/components/savings";
 import { SourceBadge } from "@/components/source-badge";
 import {
@@ -51,13 +52,27 @@ function LogDetail({
   };
   id: string;
 }) {
-  const { data: dynamicInteraction, isPending } = useInteraction({
+  const {
+    data: dynamicInteraction,
+    isPending,
+    isLoadingError,
+    refetch,
+  } = useInteraction({
     interactionId: id,
     initialData: initialData?.interaction,
   });
 
   if (isPending) {
     return <LoadingSpinner />;
+  }
+
+  if (isLoadingError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load this interaction"
+        onRetry={() => refetch()}
+      />
+    );
   }
 
   if (!dynamicInteraction) {

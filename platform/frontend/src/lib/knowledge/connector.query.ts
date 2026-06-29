@@ -268,8 +268,11 @@ export function useConnectorRuns(params: {
         path: { id: connectorId },
         query: { limit, offset },
       });
-      throwOnApiError(error);
-      return data;
+      // A deleted/missing connector 404s here; degrade to a null result rather
+      // than an error. Return null (not bare data) so react-query doesn't throw
+      // its own "data is undefined" when the 404 path skips the throw.
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
     enabled: !!connectorId,
     refetchInterval: (query) => {

@@ -379,19 +379,19 @@ describe("McpClient", () => {
         serverType: "app",
       });
       const uri = "ui://archestra-app/clock-app";
-      const showApp = await ToolModel.create({
+      const openTool = await ToolModel.create({
         name: "clock_app__open",
         description: "Open the Clock App.",
         parameters: { type: "object", properties: {} },
         catalogId: appCatalog.id,
         meta: { _meta: { ui: { resourceUri: uri } } },
       });
-      await AgentToolModel.create(agentId, showApp.id, {
+      await AgentToolModel.create(agentId, openTool.id, {
         mcpServerId: appServer.id,
       });
 
       const result = await mcpClient.executeToolCallForOwner(
-        { id: "call_open", name: showApp.name, arguments: {} },
+        { id: "call_open", name: openTool.name, arguments: {} },
         agentOwner(agentId),
       );
 
@@ -411,7 +411,7 @@ describe("McpClient", () => {
       expect(row?.ownerType).toBe("agent");
       expect(row?.mcpServerName).toBe("Clock App");
       expect((row?.toolCall as { name?: string } | null)?.name).toBe(
-        showApp.name,
+        openTool.name,
       );
     });
   });

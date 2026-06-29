@@ -2,8 +2,8 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   AgentModel,
   AgentToolModel,
+  AppAccessModel,
   AppModel,
-  AppTeamModel,
   AppToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
@@ -530,7 +530,7 @@ async function getAppAssignmentTargetContext(
     throw new Error(`App with ID ${appId} not found`);
   }
 
-  const teamIds = await AppTeamModel.getTeamsForApp(appId);
+  const teamIds = await AppAccessModel.getTeamsForApp(appId);
 
   return {
     organizationId: app.organizationId,

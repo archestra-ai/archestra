@@ -99,6 +99,7 @@ test("anthropic non-native endpoint: bytes inlined as text, no cache_control, no
       conversationId: conversation.id,
       ingestibleMimeTypes: INGESTIBLE,
       anthropicNativeEndpoint: false,
+      sandboxAvailable: false,
     });
   } finally {
     config.skillsSandbox.enabled = prevEnabled;
@@ -137,6 +138,7 @@ test("native Anthropic (default flag): document file part survives with cache_co
       conversationId: conversation.id,
       ingestibleMimeTypes: INGESTIBLE,
       anthropicNativeEndpoint: true,
+      sandboxAvailable: false,
     });
   } finally {
     config.skillsSandbox.enabled = prevEnabled;

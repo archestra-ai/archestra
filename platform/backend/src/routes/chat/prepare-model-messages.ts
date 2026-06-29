@@ -5,6 +5,7 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import { convertToModelMessages, type ModelMessage, type UIMessage } from "ai";
+import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import type { ChatMessage } from "@/types";
 import {
   buildContextCompactionStreamData,
@@ -99,6 +100,14 @@ export async function buildModelMessages(params: {
     });
   }
 
+  // One availability lookup per LLM call (the system-prompt path pays the same),
+  // so attachment sandbox pointers are only emitted when the agent can run them.
+  const sandboxAvailable = await isSkillSandboxAvailableForAgent({
+    userId: compaction.userId,
+    organizationId: compaction.organizationId,
+    agentId: compaction.agentId ?? undefined,
+  });
+
   return applyPromptCacheBreakpoints({
     provider,
     model: selectedModel,
@@ -109,6 +118,7 @@ export async function buildModelMessages(params: {
       conversationId,
       ingestibleMimeTypes: getModelReadableMimeTypes(inputModalities),
       anthropicNativeEndpoint,
+      sandboxAvailable,
     }),
   });
 }
@@ -126,6 +136,7 @@ async function buildModelMessagesForProvider(params: {
   conversationId: string;
   ingestibleMimeTypes?: Set<string>;
   anthropicNativeEndpoint?: boolean;
+  sandboxAvailable: boolean;
 }) {
   const anthropicNativeEndpoint = params.anthropicNativeEndpoint ?? true;
   // `cache_control` is inert for non-Anthropic SDKs, so keep emitting it there;
@@ -138,13 +149,15 @@ async function buildModelMessagesForProvider(params: {
   // attachment id. Legacy inline data URLs pass through unchanged. Returns a
   // deep copy — the original messages keep their refs for any subsequent
   // persistence step.
-  const materialized = await materializeAttachments(
-    params.messages,
-    params.conversationId,
-    params.ingestibleMimeTypes,
+  const materialized = await materializeAttachments({
+    messages: params.messages,
+    conversationId: params.conversationId,
+    ingestibleMimeTypes: params.ingestibleMimeTypes,
     applyAnthropicCacheControl,
-    params.provider === "anthropic" && !anthropicNativeEndpoint,
-  );
+    rerouteBinaryDocsToSandbox:
+      params.provider === "anthropic" && !anthropicNativeEndpoint,
+    sandboxAvailable: params.sandboxAvailable,
+  });
   const providerPreparedMessages = prepareMessagesForProvider({
     messages: materialized,
     provider: params.provider,

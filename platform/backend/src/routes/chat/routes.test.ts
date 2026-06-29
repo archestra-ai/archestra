@@ -577,6 +577,7 @@ describe("buildModelMessagesForProvider", () => {
     const modelMessages = await __prepareTest.buildModelMessagesForProvider({
       provider: "openai",
       conversationId,
+      sandboxAvailable: false,
       messages: [
         { role: "user", parts: [{ type: "text", text: "hi" }] },
         {
@@ -601,6 +602,7 @@ describe("buildModelMessagesForProvider", () => {
     const modelMessages = await __prepareTest.buildModelMessagesForProvider({
       provider: "openai",
       conversationId,
+      sandboxAvailable: false,
       messages: [
         { role: "user", parts: [{ type: "text", text: "search please" }] },
         {

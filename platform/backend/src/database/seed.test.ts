@@ -5,6 +5,7 @@ import {
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   POLICY_CONFIG_SYSTEM_PROMPT,
+  PREVIOUS_POLICY_CONFIG_SYSTEM_PROMPT,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach } from "vitest";
@@ -71,6 +72,41 @@ describe("syncBuiltInAgents", () => {
       description:
         "Analyzes tool metadata with AI to generate deterministic security policies for handling untrusted data",
       systemPrompt: LEGACY_POLICY_CONFIG_SYSTEM_PROMPT,
+      builtInAgentConfig: {
+        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        autoConfigureOnToolDiscovery: false,
+      },
+    });
+
+    await syncBuiltInAgents();
+
+    const builtInAgent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      organization.id,
+    );
+
+    expect(builtInAgent?.systemPrompt).toBe(POLICY_CONFIG_SYSTEM_PROMPT);
+  });
+
+  test("upgrades the previous (pre-dual-llm) policy configuration prompt", async ({
+    makeOrganization,
+  }) => {
+    // Guards that the snapshot is a genuine prior revision, so the upgrade below
+    // is a real change rather than a no-op.
+    expect(PREVIOUS_POLICY_CONFIG_SYSTEM_PROMPT).not.toBe(
+      POLICY_CONFIG_SYSTEM_PROMPT,
+    );
+
+    const organization = await makeOrganization();
+
+    await db.insert(schema.agentsTable).values({
+      organizationId: organization.id,
+      name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+      agentType: "agent",
+      scope: "org",
+      description:
+        "Analyzes tool metadata with AI to generate deterministic security policies for handling untrusted data",
+      systemPrompt: PREVIOUS_POLICY_CONFIG_SYSTEM_PROMPT,
       builtInAgentConfig: {
         name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
         autoConfigureOnToolDiscovery: false,

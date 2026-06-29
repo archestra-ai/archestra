@@ -40,6 +40,13 @@ interface AppsContextValue {
   setPortalTarget: (el: HTMLElement | null) => void;
   /** Open the panel on the Apps tab and select this app. Wired by the chat page. */
   showInPanel: (toolCallId: string) => void;
+  /**
+   * Whether the panel's owned-app shows its inline settings form instead of the
+   * live app. Panel-level (not per-section) so it survives nothing across app
+   * switches: selecting another app or closing the panel resets it to the app.
+   */
+  settingsOpen: boolean;
+  setSettingsOpen: (open: boolean) => void;
 }
 
 const AppsContext = createContext<AppsContextValue | null>(null);
@@ -51,6 +58,8 @@ const NOOP_VALUE: AppsContextValue = {
   portalTarget: null,
   setPortalTarget: () => {},
   showInPanel: () => {},
+  settingsOpen: false,
+  setSettingsOpen: () => {},
 };
 
 export function AppsProvider({
@@ -68,6 +77,7 @@ export function AppsProvider({
     null,
   );
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // The panel shows the user's explicit choice while it's still present;
   // otherwise it defaults to the latest (most recently registered) app. A stale
@@ -89,13 +99,17 @@ export function AppsProvider({
     );
   }, [explicitSelection, apps]);
 
+  // Switching which app the panel shows always returns to the live app — the
+  // settings form belongs to the app that was open, not the one switched to.
   const select = useCallback((toolCallId: string) => {
     setExplicitSelection(toolCallId);
+    setSettingsOpen(false);
   }, []);
 
   const showInPanel = useCallback(
     (toolCallId: string) => {
       setExplicitSelection(toolCallId);
+      setSettingsOpen(false);
       onShowInPanel?.(toolCallId);
     },
     [onShowInPanel],
@@ -109,8 +123,10 @@ export function AppsProvider({
       portalTarget,
       setPortalTarget,
       showInPanel,
+      settingsOpen,
+      setSettingsOpen,
     }),
-    [apps, selectedToolCallId, select, portalTarget, showInPanel],
+    [apps, selectedToolCallId, select, portalTarget, showInPanel, settingsOpen],
   );
 
   return <AppsContext.Provider value={value}>{children}</AppsContext.Provider>;

@@ -63,14 +63,17 @@ vi.mock("@/lib/app.query", () => ({
   useApp: vi.fn(() => ({ data: undefined })),
 }));
 
-// Stub the side-panel management tabs: they pull the environment/teams/auth
-// query chains, which aren't this suite's concern (covered by their own tests).
-// Here we only assert the panel chrome wires them to the tabs.
-vi.mock("@/components/mcp-app/app-settings-menu", () => ({
-  AppSettingsMenu: () => <div data-testid="settings-menu" />,
-}));
-vi.mock("@/components/mcp-app/app-publish-button", () => ({
-  AppPublishButton: () => <div data-testid="publish-button" />,
+// Stub the inline settings form: it pulls the environment/teams/auth query
+// chains, which aren't this suite's concern (covered by their own tests). Here
+// we only assert the panel chrome toggles it from the gear.
+vi.mock("@/components/mcp-app/app-settings-form", () => ({
+  AppSettingsForm: ({ onBack }: { onBack: () => void }) => (
+    <div data-testid="settings-form">
+      <button type="button" onClick={onBack}>
+        mock back
+      </button>
+    </div>
+  ),
 }));
 
 // ── Import component under test after mocks ───────────────────────────────────
@@ -772,13 +775,41 @@ describe("McpAppSection owned-app panel chrome", () => {
     return target;
   }
 
-  it("shows the settings menu and publish control", async () => {
+  it("toggles the inline settings form from the panel gear", async () => {
+    const user = userEvent.setup();
     const target = await renderOwnedPanel();
 
-    expect(within(target).getByTestId("settings-menu")).toBeInTheDocument();
-    expect(within(target).getByTestId("publish-button")).toBeInTheDocument();
-    // The live iframe is the panel body — no settings overlay covers it.
+    // Chrome shows a single settings gear (no dropdown / publish popover) over
+    // the live app.
+    const gear = within(target).getByRole("button", { name: /app settings/i });
     expect(target.querySelector("iframe")).toBeInTheDocument();
+    expect(
+      within(target).queryByTestId("settings-form"),
+    ).not.toBeInTheDocument();
+
+    // Clicking it swaps the body for the settings form (live iframe unmounts).
+    await act(async () => {
+      await user.click(gear);
+    });
+    expect(within(target).getByTestId("settings-form")).toBeInTheDocument();
+    expect(target.querySelector("iframe")).not.toBeInTheDocument();
+
+    // In settings mode the bar shows a back arrow (cancel) and a save action;
+    // clicking back returns to the live app and restores the gear.
+    expect(
+      within(target).getByRole("button", { name: /save settings/i }),
+    ).toBeInTheDocument();
+    await act(async () => {
+      await user.click(
+        within(target).getByRole("button", { name: /back to app/i }),
+      );
+    });
+    expect(
+      within(target).queryByTestId("settings-form"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(target).getByRole("button", { name: /app settings/i }),
+    ).toBeInTheDocument();
 
     target.remove();
   });

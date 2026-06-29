@@ -1,11 +1,13 @@
 import * as SelectPrimitive from "@radix-ui/react-select";
 import {
   AppWindow,
+  ArrowLeft,
   ChevronDown,
   type LucideIcon,
   Minimize2,
   PanelRight,
   RefreshCw,
+  Settings,
   SquareArrowOutUpRight,
 } from "lucide-react";
 import Link from "next/link";
@@ -189,6 +191,71 @@ export function McpAppPanelButton({ onClick }: { onClick: () => void }) {
 export function McpAppRefreshButton({ onClick }: { onClick: () => void }) {
   return (
     <McpAppIconButton icon={RefreshCw} label="Reload app" onClick={onClick} />
+  );
+}
+
+// Sized to match the panel header's collapse button (h-8 w-8 / h-4 w-4) rather
+// than the smaller in-pill icons, so the gear's center lines up vertically with
+// the collapse button directly above it.
+export function McpAppSettingsButton({ onClick }: { onClick: () => void }) {
+  return (
+    <SettingsBarButton icon={Settings} label="App settings" onClick={onClick} />
+  );
+}
+
+// Settings mode's left control: cancel and return to the live app.
+export function McpAppBackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <SettingsBarButton icon={ArrowLeft} label="Back to app" onClick={onClick} />
+  );
+}
+
+// Settings mode's right control: submits the settings form (associated by id, so
+// it can live in the top bar outside the form).
+export function McpAppSaveButton({
+  formId,
+  disabled,
+  saving,
+}: {
+  formId: string;
+  disabled?: boolean;
+  saving?: boolean;
+}) {
+  return (
+    <Button
+      type="submit"
+      form={formId}
+      disabled={disabled}
+      aria-label="Save settings"
+      size="sm"
+      className="h-7 px-3 text-xs font-medium"
+    >
+      {saving ? "Saving…" : "Save"}
+    </Button>
+  );
+}
+
+function SettingsBarButton({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      variant="ghost"
+      size="icon"
+      className="h-8 w-8 text-muted-foreground"
+    >
+      <Icon className="h-4 w-4" />
+    </Button>
   );
 }
 

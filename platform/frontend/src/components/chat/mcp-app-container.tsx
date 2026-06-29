@@ -17,15 +17,17 @@ import {
   mcpToolLabel,
 } from "@/components/chat/chat-messages.utils";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
-import { AppPublishButton } from "@/components/mcp-app/app-publish-button";
-import { AppSettingsMenu } from "@/components/mcp-app/app-settings-menu";
+import { AppSettingsForm } from "@/components/mcp-app/app-settings-form";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
   McpAppAddressPill,
+  McpAppBackButton,
   McpAppChangelogPill,
   McpAppFullscreenExitButton,
   McpAppPanelButton,
   McpAppRefreshButton,
+  McpAppSaveButton,
+  McpAppSettingsButton,
   McpAppStandaloneButton,
   McpAppSwitcher,
   McpAppTopBar,
@@ -42,6 +44,11 @@ import {
   getAppDiagnosticCounts,
   subscribeAppDiagnostics,
 } from "@/lib/chat/app-diagnostics-store";
+
+// Ties the settings form to its top-bar save button via the HTML `form` attr.
+// Only the selected panel app shows settings (one at a time), so a single id is
+// safe.
+const APP_SETTINGS_FORM_ID = "app-settings-form";
 
 /**
  * Shape of MCP tool output stored by the backend in the AI SDK's tool result.
@@ -161,6 +168,12 @@ export function McpAppSection({
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
   );
+  // Mirrors the settings form's save state so the top bar's save button (which
+  // lives outside that form) can disable / show a spinner.
+  const [settingsSaveStatus, setSettingsSaveStatus] = useState({
+    saving: false,
+    disabled: false,
+  });
   const [resourceState, setResourceState] = useState<{
     key: string;
     state: "unknown" | "renderable" | "empty";
@@ -175,8 +188,15 @@ export function McpAppSection({
   const effectiveResourceState =
     resourceState.key === resourceKey ? resourceState.state : "unknown";
 
-  const { apps, selectedToolCallId, select, showInPanel, portalTarget } =
-    useApps();
+  const {
+    apps,
+    selectedToolCallId,
+    select,
+    showInPanel,
+    portalTarget,
+    settingsOpen,
+    setSettingsOpen,
+  } = useApps();
 
   // Owned apps can be renamed/re-described from the address bar. Read the live
   // app so the title stays in sync after an edit (the appName prop is captured
@@ -344,31 +364,55 @@ export function McpAppSection({
   );
 
   // Every surface shows the same centered address bar. The owned-app side panel
-  // adds the settings + publish controls on the right; the inline chat surface
-  // adds the fullscreen-exit (only while fullscreen) and show-in-panel controls.
-  let right: React.ReactNode;
-  if (renderInPanel && appId && ownedApp) {
-    right = (
-      <div className="flex items-center gap-2">
-        <AppSettingsMenu app={ownedApp} />
-        <AppPublishButton app={ownedApp} />
-      </div>
+  // adds a single settings gear on the right that swaps the body for the inline
+  // settings form; in settings mode the bar becomes cancel/save — a back arrow
+  // (left, discards edits) and a save action (right, submits the form). The
+  // inline chat surface adds the fullscreen-exit (only while fullscreen) and
+  // show-in-panel controls.
+  let topBar: React.ReactNode;
+  let body: React.ReactNode;
+  if (renderInPanel && appId && ownedApp && settingsOpen) {
+    topBar = (
+      <McpAppTopBar
+        left={<McpAppBackButton onClick={() => setSettingsOpen(false)} />}
+        right={
+          <McpAppSaveButton
+            formId={APP_SETTINGS_FORM_ID}
+            disabled={settingsSaveStatus.disabled}
+            saving={settingsSaveStatus.saving}
+          />
+        }
+      >
+        <span className="px-1 text-xs font-medium text-muted-foreground">
+          Settings
+        </span>
+      </McpAppTopBar>
+    );
+    body = (
+      <AppSettingsForm
+        app={ownedApp}
+        onBack={() => setSettingsOpen(false)}
+        formId={APP_SETTINGS_FORM_ID}
+        onStatusChange={setSettingsSaveStatus}
+      />
     );
   } else {
-    right = (
-      <>
-        {displayMode === "fullscreen" && (
-          <McpAppFullscreenExitButton onClick={toggleFullscreen} />
-        )}
-        {toolCallId && !renderInPanel && (
-          <McpAppPanelButton onClick={handleShowInPanel} />
-        )}
-      </>
-    );
+    const right =
+      renderInPanel && appId && ownedApp ? (
+        <McpAppSettingsButton onClick={() => setSettingsOpen(true)} />
+      ) : (
+        <>
+          {displayMode === "fullscreen" && (
+            <McpAppFullscreenExitButton onClick={toggleFullscreen} />
+          )}
+          {toolCallId && !renderInPanel && (
+            <McpAppPanelButton onClick={handleShowInPanel} />
+          )}
+        </>
+      );
+    topBar = <McpAppTopBar right={right}>{addressBar}</McpAppTopBar>;
+    body = runtimeNode;
   }
-
-  const topBar = <McpAppTopBar right={right}>{addressBar}</McpAppTopBar>;
-  const body = runtimeNode;
 
   const liveSurface = (
     <McpAppErrorBoundary>

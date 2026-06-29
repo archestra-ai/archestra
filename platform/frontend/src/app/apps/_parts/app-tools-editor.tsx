@@ -34,6 +34,7 @@ import {
   fetchCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import { cn } from "@/lib/utils";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -57,6 +58,7 @@ export function AppToolsEditor({
   environmentId,
   selectedToolIds,
   onSelectionChange,
+  unbounded = false,
 }: {
   appId: string;
   /**
@@ -74,6 +76,13 @@ export function AppToolsEditor({
    */
   selectedToolIds?: Set<string>;
   onSelectionChange?: (next: Set<string>) => void;
+  /**
+   * Let each server's tool list flow at its full height instead of capping it
+   * at a scrollable `max-h-96` box. Set when embedding in a surface that already
+   * scrolls (e.g. the inline settings form) so its wheel scroll isn't captured
+   * by a nested scroller.
+   */
+  unbounded?: boolean;
 }) {
   const { data: app } = useApp(appId);
   const { data: assigned, isPending } = useAppTools(appId);
@@ -297,7 +306,12 @@ export function AppToolsEditor({
                         </div>
                       </AccordionTrigger>
                       <AccordionContent>
-                        <div className="flex max-h-96 flex-col rounded-md border">
+                        <div
+                          className={cn(
+                            "flex flex-col rounded-md border",
+                            !unbounded && "max-h-96",
+                          )}
+                        >
                           <AppCatalogToolList
                             tools={catalogTools}
                             selectedToolIds={selectedInCatalog}

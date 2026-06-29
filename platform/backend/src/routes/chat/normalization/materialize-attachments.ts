@@ -218,8 +218,8 @@ function materializePart(
 }
 
 /**
- * When the skill sandbox is enabled and a text-document attachment is within the
- * auto-staging size limit, it has been staged under
+ * When the sandbox is usable for this agent and a text-document attachment is
+ * within the auto-staging size limit, it has been staged under
  * {@link SKILL_SANDBOX_ATTACHMENTS_DIR}. Return a text part telling the model the
  * inlined file is ALSO available there (distinct from
  * {@link referenceSandboxFilePart}, which replaces an attachment the model can't

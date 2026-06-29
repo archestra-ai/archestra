@@ -3,7 +3,7 @@ import config from "@/config";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
-import { __test } from "./prepare-model-messages";
+import { __test, buildModelMessages } from "./prepare-model-messages";
 
 const CSV = "a,b,c\n1,2,3";
 const INGESTIBLE = new Set(["text/csv"]);
@@ -147,4 +147,96 @@ test("native Anthropic (default flag): document file part survives with cache_co
   // Native path keeps the document as a file part and marks it for caching.
   expect(hasFilePart(modelMessages)).toBe(true);
   expect(anthropicCacheControlSeen(modelMessages)).toBe(true);
+});
+
+// End-to-end through the public entry point: buildModelMessages must resolve
+// the agent's sandbox availability itself and thread it into materialization,
+// so the sandbox pointer follows the agent — not just the global feature flag.
+test("buildModelMessages emits the sandbox pointer when the agent can use the sandbox", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeCustomRole,
+  makeAgent,
+  makeConversation,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const role = await makeCustomRole(org.id, {
+    permission: { sandbox: ["execute"] },
+  });
+  await makeMember(user.id, org.id, { role: role.role });
+  // accessAllTools makes the sandbox usable via dynamic dispatch, so this also
+  // covers the predicate's dynamic-access branch end-to-end.
+  const agent = await makeAgent({
+    organizationId: org.id,
+    accessAllTools: true,
+  });
+  const conversation = await makeConversation(agent.id, {
+    organizationId: org.id,
+  });
+  const messages = await csvRefMessage(conversation.id, user.id, org.id);
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = true;
+  let modelMessages: ModelMessage[];
+  try {
+    modelMessages = await buildModelMessages({
+      messages,
+      conversationId: conversation.id,
+      organizationId: org.id,
+      userId: user.id,
+      agentId: agent.id,
+      provider: "anthropic",
+      selectedModel: "claude-test-model",
+      emit: () => {},
+    });
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+
+  expect(textContent(modelMessages)).toContain("/home/sandbox/attachments");
+});
+
+test("buildModelMessages omits the sandbox pointer when the agent cannot use the sandbox", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeCustomRole,
+  makeAgent,
+  makeConversation,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const role = await makeCustomRole(org.id, {
+    permission: { sandbox: ["execute"] },
+  });
+  await makeMember(user.id, org.id, { role: role.role });
+  // No assigned sandbox tools and no accessAllTools: the agent can't run it,
+  // even though the feature flag is on below.
+  const agent = await makeAgent({ organizationId: org.id });
+  const conversation = await makeConversation(agent.id, {
+    organizationId: org.id,
+  });
+  const messages = await csvRefMessage(conversation.id, user.id, org.id);
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = true;
+  let modelMessages: ModelMessage[];
+  try {
+    modelMessages = await buildModelMessages({
+      messages,
+      conversationId: conversation.id,
+      organizationId: org.id,
+      userId: user.id,
+      agentId: agent.id,
+      provider: "anthropic",
+      selectedModel: "claude-test-model",
+      emit: () => {},
+    });
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+
+  expect(textContent(modelMessages)).not.toContain("/home/sandbox/attachments");
 });

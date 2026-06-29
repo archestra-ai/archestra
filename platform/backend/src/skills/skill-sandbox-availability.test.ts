@@ -82,6 +82,7 @@ describe("isSkillSandboxAvailableForAgent", () => {
     // No sandbox tools assigned, but accessAllTools lets a real user run them
     // via dynamic dispatch, so the sandbox is genuinely usable.
     const agent = await makeAgent({
+      organizationId: org.id,
       name: "Access-all Agent",
       accessAllTools: true,
     });
@@ -109,6 +110,7 @@ describe("isSkillSandboxAvailableForAgent", () => {
     });
     await makeMember(user.id, org.id, { role: role.role });
     const agent = await makeAgent({
+      organizationId: org.id,
       name: "Access-all Agent",
       accessAllTools: true,
     });

@@ -689,6 +689,11 @@ async function tryCreateInContextCompaction(params: {
       params.provider,
       params.selectedModel,
     ).catch(() => null);
+    // Gate the sandbox pointers on the chat agent's availability, not the
+    // compaction model's tools: the summary feeds the main turn, whose agent
+    // can run the sandbox, so a faithful summary must reflect that the file is
+    // reachable there. When the agent can't use the sandbox, the pointer is
+    // suppressed just like on the main path.
     const sandboxAvailable = await isSkillSandboxAvailableForAgent({
       userId: params.userId,
       organizationId: params.organizationId,

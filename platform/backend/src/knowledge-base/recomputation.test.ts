@@ -1,4 +1,4 @@
-import { describe, expect } from "vitest";
+import { describe, expect, vi } from "vitest";
 import { KbDocumentModel, TeamModel } from "@/models";
 import { test } from "@/test";
 import {
@@ -62,16 +62,22 @@ describe("recomputeConnectorPermissions", () => {
       acl: ["org:*"],
     });
 
-    // Force permissionSyncStatus to null (bypassing type constraints)
-    await KbDocumentModel.update(doc.id, {
-      permissionSyncStatus: null as unknown as "synced",
-    });
+    // Mock findAllByConnector to return the document with null permissionSyncStatus (bypassing DB constraints)
+    const spy = vi
+      .spyOn(KbDocumentModel, "findAllByConnector")
+      .mockResolvedValue([
+        {
+          ...doc,
+          permissionSyncStatus: null as unknown as "synced",
+        },
+      ]);
 
     await recomputeConnectorPermissions(connector.id);
 
     // Document should remain unchanged because permissionSyncStatus is null
     const updatedDoc = await KbDocumentModel.findById(doc.id);
     expect(updatedDoc?.acl).toEqual(["org:*"]);
+    spy.mockRestore();
   });
 
   test("skips docs without rawPermissions in metadata", async ({
@@ -146,7 +152,7 @@ describe("recomputeConnectorPermissions", () => {
     });
 
     // Now create the team mapping that was previously missing
-    const team = await makeTeam(org.id);
+    const team = await makeTeam(org.id, user1.id);
     await TeamModel.addExternalGroup(team.id, "ext-group-1");
     await makeTeamMember(team.id, user1.id);
 
@@ -276,7 +282,7 @@ describe("handleTeamOrGroupMappingChange", () => {
     });
 
     // Now create a team mapping
-    const team = await makeTeam(org.id);
+    const team = await makeTeam(org.id, user1.id);
     await TeamModel.addExternalGroup(team.id, "ext-group-mapping");
     await makeTeamMember(team.id, user1.id);
 

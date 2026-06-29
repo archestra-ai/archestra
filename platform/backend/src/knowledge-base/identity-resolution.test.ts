@@ -97,12 +97,12 @@ describe("IdentityResolutionService", () => {
       await makeMember(user1.id, org.id, { role: "member" });
       await makeMember(user2.id, org.id, { role: "member" });
 
-      const team = await makeTeam(org.id);
-      await TeamModel.addExternalGroup(team.id, "ext-group-A");
+      const team = await makeTeam(org.id, user1.id);
+      await TeamModel.addExternalGroup(team.id, "ext-group-a");
       await makeTeamMember(team.id, user1.id);
       await makeTeamMember(team.id, user2.id);
 
-      const result = await resolver.resolveGroupsToEmails(["ext-group-A"]);
+      const result = await resolver.resolveGroupsToEmails(["ext-group-a"]);
 
       expect(result.resolvedEmails.sort()).toEqual([
         "user1@example.com",
@@ -143,17 +143,17 @@ describe("IdentityResolutionService", () => {
       await makeMember(user.id, org.id, { role: "member" });
 
       // Create two teams, both mapped to different external groups, both containing the same user
-      const teamA = await makeTeam(org.id);
-      await TeamModel.addExternalGroup(teamA.id, "ext-group-X");
+      const teamA = await makeTeam(org.id, user.id);
+      await TeamModel.addExternalGroup(teamA.id, "ext-group-x");
       await makeTeamMember(teamA.id, user.id);
 
-      const teamB = await makeTeam(org.id);
-      await TeamModel.addExternalGroup(teamB.id, "ext-group-Y");
+      const teamB = await makeTeam(org.id, user.id);
+      await TeamModel.addExternalGroup(teamB.id, "ext-group-y");
       await makeTeamMember(teamB.id, user.id);
 
       const result = await resolver.resolveGroupsToEmails([
-        "ext-group-X",
-        "ext-group-Y",
+        "ext-group-x",
+        "ext-group-y",
       ]);
 
       // The same email should appear only once, deduplicated

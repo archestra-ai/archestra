@@ -161,6 +161,7 @@ describe("chat file upload helpers", () => {
     "text/xml",
     "application/xml",
     "application/x-yaml",
+    "application/yaml",
     "text/yaml",
     "application/toml",
     "text/x-toml",

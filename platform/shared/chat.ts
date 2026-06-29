@@ -415,6 +415,7 @@ export type SupportedChatUploadMimeType =
   | "application/toml"
   | "application/vnd.ms-excel"
   | "application/x-yaml"
+  | "application/yaml"
   | "application/xml"
   | "audio/flac"
   | "audio/mpeg"
@@ -461,6 +462,7 @@ const INLINEABLE_TEXT_MIME_TYPES = [
   "text/xml",
   "application/xml",
   "application/x-yaml",
+  "application/yaml",
   "text/yaml",
   "application/toml",
   "text/x-toml",

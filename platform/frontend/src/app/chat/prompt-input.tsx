@@ -8,6 +8,7 @@ import {
   getAcceptedFileTypes,
   getMediaType,
   getModelReadableMimeTypes,
+  INLINE_TEXT_MAX_BYTES,
   supportsFileUploads,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
@@ -761,7 +762,7 @@ const ArchestraPromptInput = ({
         case null:
           return null;
         case "text_too_large":
-          return `"${file.name}" is too large to include as text. Enable the sandbox to work with larger files.`;
+          return `"${file.name}" is too large to include as text (max ${formatBytes(INLINE_TEXT_MAX_BYTES)}). Enable the sandbox to work with larger files.`;
         case "too_large_for_sandbox":
           return `"${file.name}" exceeds the maximum size of ${formatBytes(sandboxByteLimit)}.`;
         case "unsupported_type":

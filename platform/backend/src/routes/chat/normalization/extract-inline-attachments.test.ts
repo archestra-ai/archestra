@@ -451,4 +451,20 @@ describe("assertInlineAttachmentsAcceptable", () => {
       ),
     ).toThrow();
   });
+
+  test("does not throw on a malformed (un-decodable) data: URL", () => {
+    // A bad percent-escape can't be sized; the gate must skip it (extraction's
+    // own per-part catch handles the bad URL) rather than throw a raw URIError.
+    const messages: ChatMessage[] = [
+      {
+        role: "user",
+        parts: [
+          { type: "file", url: "data:text/plain,%E0%A4%A", filename: "x.txt" },
+        ],
+      },
+    ];
+    expect(() =>
+      assertInlineAttachmentsAcceptable({ messages, policy: policy() }),
+    ).not.toThrow();
+  });
 });

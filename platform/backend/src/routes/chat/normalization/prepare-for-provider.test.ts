@@ -117,4 +117,16 @@ describe("prepareMessagesForProvider — generic and gemini providers", () => {
     );
     expect(inlined).toBeDefined();
   });
+
+  it("normalizes a broadened text type (YAML) to a text/plain document block for bedrock", () => {
+    const [message] = prepareMessagesForProvider({
+      messages: [yamlAttachmentMessage()],
+      provider: "bedrock",
+    });
+    // Bedrock has no native YAML document format, so it travels as a
+    // text/plain document block the SDK can relay.
+    expect(message.parts?.find((p) => p.type === "file")?.mediaType).toBe(
+      "text/plain",
+    );
+  });
 });

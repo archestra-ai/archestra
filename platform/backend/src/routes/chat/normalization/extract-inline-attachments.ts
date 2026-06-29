@@ -349,9 +349,19 @@ function inspectInlineFilePart(
     typeof part.mediaType === "string" && part.mediaType.length > 0
       ? part.mediaType
       : urlMime;
-  const byteLength = isBase64
-    ? base64ByteLength(payload)
-    : Buffer.byteLength(decodeURIComponent(payload), "utf8");
+  let byteLength: number;
+  if (isBase64) {
+    byteLength = base64ByteLength(payload);
+  } else {
+    try {
+      byteLength = Buffer.byteLength(decodeURIComponent(payload), "utf8");
+    } catch {
+      // Malformed percent-encoding — can't size it, so don't gate it here.
+      // extractInlineAttachments' own per-part catch handles the bad URL
+      // (logs and leaves it inline) without turning the request into a 500.
+      return null;
+    }
+  }
   if (byteLength === 0) return null;
 
   const filename =

@@ -150,7 +150,10 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
     enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
     localConfig: LocalConfigSelectSchema.nullable(),
     clonedFrom: z.string().uuid().nullable(),
-    catalogItemApprovalStatus: CatalogItemApprovalStatusSchema.nullable(),
+    // Serialized as a nullable string (not the enum) because the OpenAPI client
+    // generator drops `null` from a `nullable` enum; the column keeps its
+    // `$type<CatalogItemApprovalStatus>` and the model methods stay typed.
+    catalogItemApprovalStatus: z.string().nullable(),
     // Labels are loaded from the junction table, not from the DB row
     labels: z.array(CatalogLabelSchema).default([]),
     // Teams are loaded from the junction table, not from the DB row

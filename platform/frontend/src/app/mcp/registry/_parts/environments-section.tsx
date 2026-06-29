@@ -367,6 +367,7 @@ function EnvironmentEditorDialog({
     networkPolicy: NetworkPolicy | null;
     restricted: boolean;
     validationRegex: string | null;
+    trustedImageRegistries: string[] | null;
   };
   capabilities: ReturnType<typeof useK8sCapabilities>["data"];
 }) {
@@ -392,6 +393,8 @@ function EnvironmentEditorDialog({
   const [allowedCidrsText, setAllowedCidrsText] = useState("");
   const [restricted, setRestricted] = useState(false);
   const [validationRegex, setValidationRegex] = useState("");
+  const [trustedImageRegistriesText, setTrustedImageRegistriesText] =
+    useState("");
   const [showConfirm, setShowConfirm] = useState(false);
   const syncNetworkPolicyDraft = useCallback((policy: NetworkPolicy | null) => {
     const nextPolicy = policy ?? EMPTY_NETWORK_POLICY;
@@ -412,6 +415,9 @@ function EnvironmentEditorDialog({
         syncNetworkPolicyDraft(defaultEnvironment?.networkPolicy ?? null);
         setRestricted(defaultEnvironment?.restricted ?? false);
         setValidationRegex(defaultEnvironment?.validationRegex ?? "");
+        setTrustedImageRegistriesText(
+          (defaultEnvironment?.trustedImageRegistries ?? []).join("\n"),
+        );
       } else {
         setName(environment?.name ?? "");
         setNamespace(environment?.namespace ?? "");
@@ -419,6 +425,9 @@ function EnvironmentEditorDialog({
         syncNetworkPolicyDraft(environment?.networkPolicy ?? null);
         setRestricted(environment?.restricted ?? false);
         setValidationRegex(environment?.validationRegex ?? "");
+        setTrustedImageRegistriesText(
+          (environment?.trustedImageRegistries ?? []).join("\n"),
+        );
       }
     }
   }, [open, mode, environment, defaultEnvironment, syncNetworkPolicyDraft]);
@@ -432,6 +441,11 @@ function EnvironmentEditorDialog({
   const trimmedDescription = description.trim();
   const validationRegexValue =
     validationRegex.trim() === "" ? null : validationRegex;
+  const trustedImageRegistriesList = splitPolicyList(
+    trustedImageRegistriesText,
+  );
+  const trustedImageRegistriesValue =
+    trustedImageRegistriesList.length > 0 ? trustedImageRegistriesList : null;
   const validationRegexError =
     validationRegexValue !== null &&
     compileValidationRegex(validationRegexValue) === null
@@ -495,6 +509,7 @@ function EnvironmentEditorDialog({
           networkPolicy,
           restricted,
           validationRegex: validationRegexValue,
+          trustedImageRegistries: trustedImageRegistriesValue,
         },
         { onSuccess: (created) => created && onOpenChange(false) },
       );
@@ -507,6 +522,7 @@ function EnvironmentEditorDialog({
           networkPolicy,
           restricted,
           validationRegex: validationRegexValue,
+          trustedImageRegistries: trustedImageRegistriesValue,
         },
         { onSuccess: (updated) => updated && onOpenChange(false) },
       );
@@ -521,6 +537,7 @@ function EnvironmentEditorDialog({
             networkPolicy,
             restricted,
             validationRegex: validationRegexValue,
+            trustedImageRegistries: trustedImageRegistriesValue,
           },
         },
         { onSuccess: (updated) => updated && onOpenChange(false) },
@@ -657,6 +674,35 @@ function EnvironmentEditorDialog({
             <p className="text-xs text-destructive">{validationRegexError}</p>
           )}
         </div>
+        {runtimeEnabled && (
+          <div className="space-y-2">
+            <Label htmlFor="environment-trusted-registries">
+              Trusted image registries
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              One registry per line. A personal local server whose custom image
+              is not under a trusted registry is held for admin approval before
+              it can deploy. Leave empty to allow any image. Examples:{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                ghcr.io/acme
+              </code>{" "}
+              or{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                docker.io/library
+              </code>
+              .
+            </p>
+            <Textarea
+              id="environment-trusted-registries"
+              value={trustedImageRegistriesText}
+              onChange={(e) => setTrustedImageRegistriesText(e.target.value)}
+              placeholder={"ghcr.io/acme\ndocker.io/library"}
+              className="font-mono"
+              rows={3}
+              disabled={isPending}
+            />
+          </div>
+        )}
         <section className="space-y-4 border-t pt-4">
           <div className="space-y-1">
             <h3 className="font-medium text-sm">Network Egress Policy</h3>

@@ -13,9 +13,7 @@ import type { CatalogItemApprovalStatus } from "@/types";
 const UNTRUSTED_IMAGE = "ghcr.io/evil/x:1";
 const TRUSTED_IMAGE = "ghcr.io/acme/server:1";
 
-async function approvalStatus(
-  catalogId: string,
-): Promise<CatalogItemApprovalStatus | null> {
+async function approvalStatus(catalogId: string): Promise<string | null> {
   const item = await InternalMcpCatalogModel.findById(catalogId);
   return item?.catalogItemApprovalStatus ?? null;
 }

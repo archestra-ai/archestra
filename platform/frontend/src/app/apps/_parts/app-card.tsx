@@ -73,7 +73,7 @@ function OwnedAppCard({
       <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center rounded-xl bg-background/75 opacity-0 backdrop-blur-[1px] transition-opacity duration-150 group-hover:opacity-100">
         <span className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
           <MessageSquare className="h-4 w-4" />
-          Open in chat
+          Open in new chat
         </span>
       </div>
 

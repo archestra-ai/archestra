@@ -31,6 +31,7 @@ import {
 import { LlmModelPicker } from "@/components/llm-model-picker";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -183,24 +184,57 @@ function formatNumericInput(value: string) {
 
 export default function LimitsPage() {
   const setActionButton = useSetCostsAction();
-  const { data: limits = [], isPending } = useLimits();
-  const { data: teams = [] } = useTeams();
+  const {
+    data: limits = [],
+    isPending,
+    isLoadingError: isLimitsLoadError,
+    refetch: refetchLimits,
+  } = useLimits();
+  const {
+    data: teams = [],
+    isLoadingError: isTeamsLoadError,
+    refetch: refetchTeams,
+  } = useTeams();
   const { data: organization } = useOrganization();
-  const { data: members = [] } = useOrganizationMembers();
+  const {
+    data: members = [],
+    isLoadingError: isMembersLoadError,
+    refetch: refetchMembers,
+  } = useOrganizationMembers();
   const { data: defaultUserLimits = [] } = useDefaultUserLimits();
-  const { data: virtualKeysData } = useAllVirtualApiKeys({
+  const {
+    data: virtualKeysData,
+    isLoadingError: isVirtualKeysLoadError,
+    refetch: refetchVirtualKeys,
+  } = useAllVirtualApiKeys({
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
   });
   const virtualKeys = virtualKeysData?.data ?? [];
-  const { data: agents = [] } = useProfiles({
+  const {
+    data: agents = [],
+    isLoadingError: isAgentsLoadError,
+    refetch: refetchAgents,
+  } = useProfiles({
     filters: { agentTypes: ["agent"] },
   });
-  const { data: llmProxies = [] } = useProfiles({
+  const {
+    data: llmProxies = [],
+    isLoadingError: isLlmProxiesLoadError,
+    refetch: refetchLlmProxies,
+  } = useProfiles({
     filters: { agentTypes: ["llm_proxy"] },
   });
-  const { data: environmentsData } = useEnvironments();
+  const {
+    data: environmentsData,
+    isLoadingError: isEnvironmentsLoadError,
+    refetch: refetchEnvironments,
+  } = useEnvironments();
   const environments = environmentsData?.environments ?? [];
-  const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
+  const {
+    data: modelsWithApiKeys = [],
+    isLoadingError: isModelsLoadError,
+    refetch: refetchModels,
+  } = useModelsWithApiKeys();
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
   const deleteLimit = useDeleteLimit();
@@ -648,6 +682,36 @@ export default function LimitsPage() {
     Number(formState.limitValue) > 0 &&
     (formState.isAllModels || formState.models.length > 0) &&
     (formState.entityType === "organization" || formState.entityId.length > 0);
+
+  const isLoadError =
+    isLimitsLoadError ||
+    isTeamsLoadError ||
+    isMembersLoadError ||
+    isVirtualKeysLoadError ||
+    isAgentsLoadError ||
+    isLlmProxiesLoadError ||
+    isEnvironmentsLoadError ||
+    isModelsLoadError;
+
+  if (isLoadError) {
+    return (
+      <div className="space-y-4">
+        <QueryLoadError
+          title="Couldn't load usage limits"
+          onRetry={() => {
+            refetchLimits();
+            refetchTeams();
+            refetchMembers();
+            refetchVirtualKeys();
+            refetchAgents();
+            refetchLlmProxies();
+            refetchEnvironments();
+            refetchModels();
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

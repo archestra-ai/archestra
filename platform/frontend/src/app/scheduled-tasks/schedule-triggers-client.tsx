@@ -20,6 +20,7 @@ import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -120,7 +121,12 @@ export function ScheduleTriggersIndexPage() {
         })),
     [members, currentUserId],
   );
-  const { data: triggersResponse, isLoading } = useScheduleTriggers({
+  const {
+    data: triggersResponse,
+    isLoading,
+    isLoadingError: isTriggersLoadError,
+    refetch: refetchTriggers,
+  } = useScheduleTriggers({
     limit: pageSize,
     offset: pageIndex * pageSize,
     name: searchName || undefined,
@@ -400,6 +406,17 @@ export function ScheduleTriggersIndexPage() {
     ],
     [agents, openEditComposer, showOtherUsers],
   );
+
+  if (isTriggersLoadError) {
+    return (
+      <div className="flex w-full flex-col gap-5">
+        <QueryLoadError
+          title="Couldn't load your scheduled tasks"
+          onRetry={() => refetchTriggers()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex w-full flex-col gap-5">

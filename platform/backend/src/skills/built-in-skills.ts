@@ -156,7 +156,8 @@ environments).
    request body shape, and \`x-required-permissions\`. Omit \`path\` to list every
    route group. Always look the shape up here rather than guessing field names.
 2. **Make the call.** Call \`archestra__api\` with \`{ method, path, query?, body? }\`.
-   Request bodies are JSON in camelCase.
+   \`body\` is a JSON object (not a stringified string), camelCase — e.g. create an
+   agent with \`{ method: "POST", path: "/api/agents", body: { name: "support", scope: "personal" } }\`.
 3. **Handle the result.** You get back \`{ status, body }\`. A 4xx \`status\` is a
    real failure — read \`body\` for the reason. A 403 means your role lacks the
    route's \`x-required-permissions\`; tell the user which permission is missing

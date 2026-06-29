@@ -29,7 +29,9 @@ const ApiToolArgsSchema = z
     body: z
       .unknown()
       .optional()
-      .describe("Optional JSON request body for write methods."),
+      .describe(
+        'Optional request body for write methods, as a JSON object (e.g. {"name":"x"}) — not a stringified string.',
+      ),
   })
   .strict();
 
@@ -67,12 +69,26 @@ const registry = defineArchestraTools([
         return errorResult("path must be /openapi.json or start with /api/.");
       }
 
+      // Some models emit `body` as a JSON-encoded string rather than an object.
+      // Accept that by parsing it; an unparseable string is a clear caller error,
+      // surfaced here rather than as a confusing downstream 400.
+      let body = args.body;
+      if (typeof body === "string" && body.trim() !== "") {
+        try {
+          body = JSON.parse(body);
+        } catch {
+          return errorResult(
+            "body must be a JSON object (or omitted), not a non-JSON string.",
+          );
+        }
+      }
+
       try {
         const response = await callArchestraApi({
           method: args.method,
           path: args.path,
           query: args.query,
-          body: args.body,
+          body,
           context,
         });
 

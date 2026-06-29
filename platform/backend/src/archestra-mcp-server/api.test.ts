@@ -41,6 +41,26 @@ describe("archestra__api tool", () => {
     expect(content.text).toContain("/api/");
   });
 
+  test("rejects a body that is a non-JSON string", async () => {
+    const context: ArchestraContext = {
+      agent: { id: "agent-1", name: "Test Agent" },
+      userId: "user-1",
+      organizationId: "org-1",
+    };
+
+    // A JSON-encoded string body is parsed and accepted (some models emit that);
+    // a string that is not JSON is a caller error surfaced here, not downstream.
+    const result = await executeArchestraTool(
+      TOOL_API_FULL_NAME,
+      { method: "POST", path: "/api/agents", body: "not json {" },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    const [content] = result.content as Array<{ type: string; text: string }>;
+    expect(content.text).toContain("JSON object");
+  });
+
   test("rejects traversal that resolves outside the API surface", async () => {
     const context: ArchestraContext = {
       agent: { id: "agent-1", name: "Test Agent" },

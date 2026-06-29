@@ -1,15 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import {
-  AppWindow,
-  Globe,
-  LayoutGrid,
-  Plus,
-  Server,
-  Sparkles,
-  User,
-} from "lucide-react";
+import { AppWindow, Globe, LayoutGrid, Plus, Server, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -72,12 +64,10 @@ export default function AppsPage() {
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  const showCreateCard = tab === "apps" && !search;
-
   return (
     <PageLayout
       title="Apps"
-      description="Build and run sandboxed MCP Apps backed by their own data store and tools."
+      description="Custom, sandboxed UIs over your data and connected MCPs — describe what you want and build it in chat, no engineering required."
       actionButton={
         <PermissionButton
           permissions={{ app: ["create"] }}
@@ -174,7 +164,7 @@ export default function AppsPage() {
             title="Couldn't load your apps"
             onRetry={() => refetch()}
           />
-        ) : filtered.length === 0 && !showCreateCard ? (
+        ) : filtered.length === 0 ? (
           <div className="flex min-h-[40vh] flex-col items-center justify-center text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border bg-background shadow-sm">
               <AppWindow className="h-6 w-6 text-primary" />
@@ -199,21 +189,6 @@ export default function AppsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {showCreateCard ? (
-              <button
-                type="button"
-                onClick={() => setCreateOpen(true)}
-                className="flex min-h-[194px] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-5 text-center transition-colors hover:bg-muted/50"
-              >
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <Sparkles className="h-5 w-5" />
-                </span>
-                <span className="text-sm font-semibold">Create app</span>
-                <span className="text-xs text-muted-foreground">
-                  Describe it — we build it
-                </span>
-              </button>
-            ) : null}
             {filtered.map((app) => (
               <AppCard
                 key={app.source === "external" ? app.catalogId : app.id}

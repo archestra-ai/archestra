@@ -149,28 +149,30 @@ export function EditCatalogContent({
   return (
     <>
       {showApproveBanner && (
-        <div className="mb-3 space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-500">
-            <ShieldAlert className="h-4 w-4" />
-            This image needs approval
+        <div className="px-6 pt-6 pb-2">
+          <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-500">
+              <ShieldAlert className="h-4 w-4" />
+              This image needs approval
+            </div>
+            <p className="text-xs text-muted-foreground">
+              <span className="font-mono">{item.localConfig?.dockerImage}</span>{" "}
+              is not in the trusted image registries for this environment.
+              Review the configuration below, then approve to allow installs.
+            </p>
+            <Button
+              size="sm"
+              onClick={() =>
+                approveImage.mutate(item.id, {
+                  onSuccess: () => setApprovedNow(true),
+                })
+              }
+              disabled={approveImage.isPending}
+            >
+              <Check className="h-4 w-4" />
+              {approveImage.isPending ? "Approving..." : "Approve"}
+            </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            <span className="font-mono">{item.localConfig?.dockerImage}</span>{" "}
-            is not in the trusted image registries for this environment. Review
-            the configuration below, then approve to allow installs.
-          </p>
-          <Button
-            size="sm"
-            onClick={() =>
-              approveImage.mutate(item.id, {
-                onSuccess: () => setApprovedNow(true),
-              })
-            }
-            disabled={approveImage.isPending}
-          >
-            <Check className="h-4 w-4" />
-            {approveImage.isPending ? "Approving..." : "Approve"}
-          </Button>
         </div>
       )}
       <McpCatalogForm

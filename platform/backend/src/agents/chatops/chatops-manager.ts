@@ -980,10 +980,13 @@ export class ChatOpsManager {
       }
     }
 
-    // No known agent matched - return fallback with the message after delimiter
+    // The text contained ">" but the prefix is not a known agent name, so this
+    // was never an agent switch — it's ordinary message text that happens to
+    // contain ">". Return the full original message so nothing before the ">"
+    // is dropped (e.g. "compare A > B" must reach the agent intact).
     return {
       agentToUse: defaultAgent,
-      cleanedMessageText: messageAfterDelimiter || messageText,
+      cleanedMessageText: messageText,
     };
   }
 

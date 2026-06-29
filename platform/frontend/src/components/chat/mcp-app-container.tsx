@@ -13,8 +13,8 @@ import { createPortal } from "react-dom";
 import { useApps } from "@/components/chat/apps-context";
 import {
   getAppRenderVerb,
-  humanizeToolLabel,
   isSupersededRender,
+  mcpToolLabel,
 } from "@/components/chat/chat-messages.utils";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
 import { AppPublishButton } from "@/components/mcp-app/app-publish-button";
@@ -184,7 +184,7 @@ export function McpAppSection({
   const inlineHeightCap = useInlineHeightCap();
   const { data: ownedApp } = useApp(appId ?? null);
 
-  const headerName = ownedApp?.name || appName || humanizeToolLabel(toolName);
+  const headerName = ownedApp?.name || appName || mcpToolLabel(toolName);
   const isSelected = !!toolCallId && selectedToolCallId === toolCallId;
   const panelHostingActive = portalTarget !== null;
   // Only the *selected* app moves to the panel: its iframe is portaled into
@@ -250,7 +250,7 @@ export function McpAppSection({
   if (isSupersededRender({ apps, toolCallId, appId })) {
     return (
       <McpAppChangelogPill
-        appName={appName ?? humanizeToolLabel(toolName)}
+        appName={appName ?? mcpToolLabel(toolName)}
         version={appVersion ?? null}
         verb={getAppRenderVerb(toolName)}
       />

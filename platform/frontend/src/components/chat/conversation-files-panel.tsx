@@ -28,8 +28,10 @@ import {
   useDeleteConversationFile,
 } from "@/lib/chat/chat.query";
 import {
+  ATTACHMENTS_SECTION,
   assembleFileSections,
   type ConversationFileItem,
+  persistentFilesSection,
 } from "@/lib/chat/conversation-files";
 import { printMarkdownElementAsPdf } from "@/lib/chat/print-markdown";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
@@ -76,8 +78,10 @@ export function ConversationFilesPanel({
   );
   const [expanded, setExpanded] = useState(false);
 
-  // This chat's own outputs and the project's files are one group ("Results");
-  // only attachments stand apart.
+  // This chat's own outputs and the project's files are one persistent group —
+  // labeled "Project files" in a project chat, "Chat files" otherwise. Uploaded
+  // attachments stand apart, since they're transient inputs rather than saved
+  // work products.
   const results = [...generated, ...projectFiles];
   const all = [...results, ...attachments];
   const selected = all.find((f) => f.id === selectedId) ?? null;
@@ -259,8 +263,8 @@ export function ConversationFilesPanel({
       >
         <SelectableFileList<ConversationFileItem>
           sections={[
-            { title: "Results", items: results },
-            { title: "Attachments", items: attachments },
+            { ...persistentFilesSection(projectId), items: results },
+            { ...ATTACHMENTS_SECTION, items: attachments },
           ]}
           canManage={canManageFiles}
           selectedId={selectedId}

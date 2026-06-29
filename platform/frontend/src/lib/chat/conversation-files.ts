@@ -77,6 +77,28 @@ export function assembleFileSections(params: {
 }
 
 /**
+ * Header label + persistence-scope subtitle for the chat panel's group of
+ * persistent files (this chat's saved outputs, plus the project's shared files
+ * in a project chat). A project chat's files live with the project and are seen
+ * by everyone with access; a personal chat's files stay with the conversation.
+ * Attachments are labeled separately — see {@link ATTACHMENTS_SECTION}.
+ */
+export function persistentFilesSection(projectId: string | null | undefined): {
+  title: string;
+  description: string;
+} {
+  return projectId != null
+    ? { title: "Project files", description: "Shared with the project" }
+    : { title: "Chat files", description: "Created in this chat" };
+}
+
+/** Header label + subtitle for the user's uploaded inputs to a chat. */
+export const ATTACHMENTS_SECTION = {
+  title: "Attachments",
+  description: "Your uploads",
+} as const;
+
+/**
  * Which delete endpoint removes a given file. Attachments have their own chat
  * route; generated and project files are both persisted artifacts behind the
  * skill-sandbox artifact route.

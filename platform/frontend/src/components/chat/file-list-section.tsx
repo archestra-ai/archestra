@@ -36,12 +36,13 @@ export type FileListItem = {
 /**
  * The chat Files panel's list section, shared so every files surface (chat
  * sidebar, project pages) renders identically: icon per file type, row click
- * selects/previews, trailing download link. The title header is shown only when
- * a `title` is given — callers omit it when the panel holds a single group, so
- * a lone set of files needs no header to tell it apart.
+ * selects/previews, trailing download link. The title header (and its optional
+ * `description` subtitle) is shown only when a `title` is given — the project
+ * page passes a single untitled group, so its lone list needs no header.
  */
 export function FileSection({
   title,
+  description,
   items,
   selectedId,
   onSelect,
@@ -50,6 +51,8 @@ export function FileSection({
   selection,
 }: {
   title?: string;
+  /** A secondary line under the title (e.g. the group's persistence scope). */
+  description?: string;
   items: FileListItem[];
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -75,13 +78,19 @@ export function FileSection({
   if (items.length === 0 && !leading) return null;
   const selecting = selection != null;
   return (
-    <div className="mb-4">
+    <div className="mb-5">
       {title && (
-        <p className="mb-1 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          {title}
-        </p>
+        // One quiet line — the group name, then its persistence scope after a
+        // middot — echoing the inline "name · description" of the pinned
+        // instructions row below it.
+        <div className="mb-1.5 flex items-baseline gap-1 px-1 text-[11px] leading-none">
+          <span className="font-medium text-muted-foreground">{title}</span>
+          {description && (
+            <span className="text-muted-foreground/60">· {description}</span>
+          )}
+        </div>
       )}
-      <div className="overflow-hidden rounded-md border">
+      <div className="overflow-hidden rounded-lg border border-border/60">
         {leading}
         {items.map((item, i) => {
           const customActions = renderActions?.(item) ?? null;

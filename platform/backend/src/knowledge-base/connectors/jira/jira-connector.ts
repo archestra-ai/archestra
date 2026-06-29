@@ -146,13 +146,15 @@ export class JiraConnector extends BaseConnector {
       ? createV3Client(config, params.credentials, this.log)
       : createV2Client(config, params.credentials, this.log);
 
-    const projectIdOrKey = document.metadata?.projectKey || document.metadata?.projectId;
+    const projectIdOrKey =
+      document.metadata?.projectKey || document.metadata?.projectId;
     if (!projectIdOrKey) {
       return { isPublic: false };
     }
 
     try {
       // 1. Fetch the project's permission scheme
+      // biome-ignore lint/suspicious/noExplicitAny: API client response has dynamic/untyped permission scheme payload
       const schemeRes: any = await client.sendRequest(
         {
           url: `/api/3/project/${projectIdOrKey}/permissionscheme`,
@@ -161,11 +163,15 @@ export class JiraConnector extends BaseConnector {
             expand: "permissions",
           },
         },
+        // biome-ignore lint/suspicious/noExplicitAny: API client accepts any type
         undefined as any,
       );
 
       const permissions = schemeRes?.permissions || [];
-      const browsePermissions = permissions.filter((p: any) => p.permission === "BROWSE_PROJECTS");
+      const browsePermissions = permissions.filter(
+        // biome-ignore lint/suspicious/noExplicitAny: permission item has dynamic/untyped schema
+        (p: any) => p.permission === "BROWSE_PROJECTS",
+      );
 
       if (browsePermissions.length === 0) {
         return { isPublic: false };
@@ -186,46 +192,58 @@ export class JiraConnector extends BaseConnector {
           const accountId = holder.parameter || holder.user?.accountId;
           if (accountId) {
             try {
+              // biome-ignore lint/suspicious/noExplicitAny: API client response has dynamic/untyped user payload
               const userRes: any = await client.sendRequest(
                 {
                   url: `/api/3/user`,
                   method: "GET",
                   params: { accountId },
                 },
+                // biome-ignore lint/suspicious/noExplicitAny: API client accepts any type
                 undefined as any,
               );
               const email = userRes?.emailAddress || userRes?.email;
               if (email) users.push(email);
             } catch (err) {
-              this.log.warn({ accountId, error: extractErrorMessage(err) }, "Failed to fetch user email");
+              this.log.warn(
+                { accountId, error: extractErrorMessage(err) },
+                "Failed to fetch user email",
+              );
             }
           }
         } else if (holder.type === "projectRole") {
           const roleId = holder.parameter;
           if (roleId) {
             try {
+              // biome-ignore lint/suspicious/noExplicitAny: API client response has dynamic/untyped role payload
               const roleRes: any = await client.sendRequest(
                 {
                   url: `/api/3/project/${projectIdOrKey}/role/${roleId}`,
                   method: "GET",
                 },
+                // biome-ignore lint/suspicious/noExplicitAny: API client accepts any type
                 undefined as any,
               );
 
               if (roleRes?.actors) {
                 for (const actor of roleRes.actors) {
                   if (actor.type === "atlassian-user-role-actor") {
-                    const email = actor.user?.emailAddress || actor.user?.email || actor.email;
+                    const email =
+                      actor.user?.emailAddress ||
+                      actor.user?.email ||
+                      actor.email;
                     if (email) {
                       users.push(email);
                     } else if (actor.user?.accountId) {
                       try {
+                        // biome-ignore lint/suspicious/noExplicitAny: API client response has dynamic/untyped user payload
                         const userRes: any = await client.sendRequest(
                           {
                             url: `/api/3/user`,
                             method: "GET",
                             params: { accountId: actor.user.accountId },
                           },
+                          // biome-ignore lint/suspicious/noExplicitAny: API client accepts any type
                           undefined as any,
                         );
                         const email = userRes?.emailAddress || userRes?.email;
@@ -239,7 +257,10 @@ export class JiraConnector extends BaseConnector {
                 }
               }
             } catch (err) {
-              this.log.warn({ roleId, error: extractErrorMessage(err) }, "Failed to fetch project role actors");
+              this.log.warn(
+                { roleId, error: extractErrorMessage(err) },
+                "Failed to fetch project role actors",
+              );
             }
           }
         } else if (
@@ -254,24 +275,32 @@ export class JiraConnector extends BaseConnector {
 
       // 2. If the issue has a security level, restrict it further
       const securityLevel = document.metadata?.securityLevel;
-      if (securityLevel && securityLevel.id) {
+      if (securityLevel?.id) {
         try {
+          // biome-ignore lint/suspicious/noExplicitAny: API client response has dynamic/untyped security levels payload
           const secLevelsRes: any = await client.sendRequest(
             {
               url: `/api/3/project/${projectIdOrKey}/securitylevelwithdefault`,
               method: "GET",
             },
+            // biome-ignore lint/suspicious/noExplicitAny: API client accepts any type
             undefined as any,
           );
 
           const levels = secLevelsRes?.levels || [];
-          const matchedLevel = levels.find((l: any) => l.id === securityLevel.id);
+          const matchedLevel = levels.find(
+            // biome-ignore lint/suspicious/noExplicitAny: security level item has dynamic/untyped schema
+            (l: any) => l.id === securityLevel.id,
+          );
 
           if (matchedLevel) {
             isPublic = false;
           }
         } catch (err) {
-          this.log.warn({ securityLevel, error: extractErrorMessage(err) }, "Failed to fetch security levels");
+          this.log.warn(
+            { securityLevel, error: extractErrorMessage(err) },
+            "Failed to fetch security levels",
+          );
           isPublic = false;
         }
       }
@@ -282,7 +311,10 @@ export class JiraConnector extends BaseConnector {
         groups: [...new Set(groups)],
       };
     } catch (err) {
-      this.log.warn({ projectIdOrKey, error: extractErrorMessage(err) }, "Failed to fetch project permissions");
+      this.log.warn(
+        { projectIdOrKey, error: extractErrorMessage(err) },
+        "Failed to fetch project permissions",
+      );
     }
 
     return { isPublic: false };
@@ -788,7 +820,9 @@ function issueToDocument(params: {
       project: fields.project?.key,
       projectKey: fields.project?.key,
       projectName: fields.project?.name,
-      securityLevel: fields.security ? { id: fields.security.id, name: fields.security.name } : undefined,
+      securityLevel: fields.security
+        ? { id: fields.security.id, name: fields.security.name }
+        : undefined,
       resolution: fields.resolution?.name,
       resolutionDate: toDateOnly(fields.resolutiondate),
       parent: fields.parent?.key,

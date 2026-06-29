@@ -134,32 +134,41 @@ export class ConfluenceConnector extends BaseConnector {
     const client = createConfluenceClient(config, params.credentials, this.log);
 
     // 1. Get ancestors from document metadata
-    const ancestors = (document.metadata?.ancestors as any[]) || [];
+    const ancestors =
+      (document.metadata?.ancestors as Array<{ id: string }>) || [];
     // Check closest first: page itself, then closest ancestor (reverse order of ancestors)
-    const pageIdsToCheck = [document.id, ...ancestors.map((a) => a.id).reverse()];
+    const pageIdsToCheck = [
+      document.id,
+      ...ancestors.map((a) => a.id).reverse(),
+    ];
 
     for (const pageId of pageIdsToCheck) {
       try {
+        // biome-ignore lint/suspicious/noExplicitAny: API client response has dynamic/untyped payload
         const restrictionRes: any = await client.sendRequest(
           {
             url: `/api/content/${pageId}/restriction/byOperation`,
             method: "GET",
           },
+          // biome-ignore lint/suspicious/noExplicitAny: API client accepts any type
           undefined as any,
         );
 
         const readRestrictions = restrictionRes?.read;
-        if (readRestrictions && readRestrictions.restrictions) {
+        if (readRestrictions?.restrictions) {
           const userResults = readRestrictions.restrictions.user?.results || [];
-          const groupResults = readRestrictions.restrictions.group?.results || [];
+          const groupResults =
+            readRestrictions.restrictions.group?.results || [];
 
           // If there are specific users or groups restricted on this page or any parent,
           // then this page is NOT public and is limited to those users/groups.
           if (userResults.length > 0 || groupResults.length > 0) {
             const users = userResults
+              // biome-ignore lint/suspicious/noExplicitAny: API user payload properties
               .map((u: any) => u.email || u.emailAddress)
               .filter(Boolean);
             const groups = groupResults
+              // biome-ignore lint/suspicious/noExplicitAny: API group payload properties
               .map((g: any) => g.name || g.groupId)
               .filter(Boolean);
 
@@ -182,6 +191,7 @@ export class ConfluenceConnector extends BaseConnector {
     const spaceKey = document.metadata?.spaceKey;
     if (spaceKey) {
       try {
+        // biome-ignore lint/suspicious/noExplicitAny: API client response has dynamic/untyped space payload
         const spaceRes: any = await client.sendRequest(
           {
             url: `/api/space/${spaceKey}`,
@@ -190,6 +200,7 @@ export class ConfluenceConnector extends BaseConnector {
               expand: "permissions",
             },
           },
+          // biome-ignore lint/suspicious/noExplicitAny: API client accepts any type
           undefined as any,
         );
 
@@ -197,6 +208,7 @@ export class ConfluenceConnector extends BaseConnector {
 
         // Check if anonymous has view permission
         const isAnonymousPublic = permissions.some(
+          // biome-ignore lint/suspicious/noExplicitAny: space permissions are dynamic/untyped
           (p: any) =>
             p.anonymousAccess &&
             p.operation?.operation === "view" &&
@@ -297,7 +309,13 @@ export class ConfluenceConnector extends BaseConnector {
             cql,
             cursor,
             limit: batchSize,
-            expand: ["body.storage", "version", "space", "metadata.labels", "ancestors"],
+            expand: [
+              "body.storage",
+              "version",
+              "space",
+              "metadata.labels",
+              "ancestors",
+            ],
           });
         } else {
           // Server/DC: offset-based pagination — the SDK's searchContentByCQL
@@ -310,7 +328,13 @@ export class ConfluenceConnector extends BaseConnector {
                 cql,
                 start,
                 limit: batchSize,
-                expand: ["body.storage", "version", "space", "metadata.labels", "ancestors"],
+                expand: [
+                  "body.storage",
+                  "version",
+                  "space",
+                  "metadata.labels",
+                  "ancestors",
+                ],
               },
             },
             // biome-ignore lint/suspicious/noExplicitAny: SDK requires callback arg
@@ -559,7 +583,8 @@ function pageToDocument(
       labels:
         page.metadata?.labels?.results?.map((l: { name: string }) => l.name) ??
         [],
-      ancestors: page.ancestors?.map((a: any) => ({ id: a.id })) || [],
+      ancestors:
+        page.ancestors?.map((a: { id: string }) => ({ id: a.id })) || [],
     },
     updatedAt: page.version?.when ? new Date(page.version.when) : undefined,
   };

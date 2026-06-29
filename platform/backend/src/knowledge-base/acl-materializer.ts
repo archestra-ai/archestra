@@ -1,5 +1,5 @@
 import type { AclEntry } from "@/types";
-import { IdentityResolutionService } from "./identity-resolution";
+import type { IdentityResolutionService } from "./identity-resolution";
 
 export interface UpstreamPermissions {
   isPublic: boolean;
@@ -21,17 +21,26 @@ export class AclMaterializer {
     resolvedEmails: string[];
   }> {
     if (permissions.isPublic) {
-      return { acl: ["org:*"], complete: true, skippedGroups: [], resolvedEmails: [] };
+      return {
+        acl: ["org:*"],
+        complete: true,
+        skippedGroups: [],
+        resolvedEmails: [],
+      };
     }
 
     const rawEmails = permissions.users || [];
     const rawGroups = permissions.groups || [];
 
-    const resolvedUserEmails = await this.resolver.resolveEmailsToMembers(rawEmails);
-    const { resolvedEmails: groupEmails, unmappedGroups } = await this.resolver.resolveGroupsToEmails(rawGroups);
+    const resolvedUserEmails =
+      await this.resolver.resolveEmailsToMembers(rawEmails);
+    const { resolvedEmails: groupEmails, unmappedGroups } =
+      await this.resolver.resolveGroupsToEmails(rawGroups);
 
     const allEmails = [...new Set([...resolvedUserEmails, ...groupEmails])];
-    const aclEntries: AclEntry[] = allEmails.map((email): AclEntry => `user_email:${email.toLowerCase()}`);
+    const aclEntries: AclEntry[] = allEmails.map(
+      (email): AclEntry => `user_email:${email.toLowerCase()}`,
+    );
 
     // Fail-closed condition: if unmapped groups exist, resolution is incomplete
     const complete = unmappedGroups.length === 0;

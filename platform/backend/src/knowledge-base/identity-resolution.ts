@@ -9,8 +9,10 @@ export class IdentityResolutionService {
 
   async resolveEmailsToMembers(emails: string[]): Promise<string[]> {
     const activeMembers = await MemberModel.findAllByOrganization(this.orgId);
-    const memberEmails = new Set(activeMembers.map(m => m.email.toLowerCase()));
-    return emails.filter(email => memberEmails.has(email.toLowerCase()));
+    const memberEmails = new Set(
+      activeMembers.map((m) => m.email.toLowerCase()),
+    );
+    return emails.filter((email) => memberEmails.has(email.toLowerCase()));
   }
 
   async resolveGroupsToEmails(groupIds: string[]): Promise<{
@@ -21,7 +23,10 @@ export class IdentityResolutionService {
     const unmappedGroups: string[] = [];
 
     for (const groupId of groupIds) {
-      const teams = await TeamModel.findTeamsByExternalGroup(this.orgId, groupId);
+      const teams = await TeamModel.findTeamsByExternalGroup(
+        this.orgId,
+        groupId,
+      );
       if (teams.length === 0) {
         unmappedGroups.push(groupId);
         continue;

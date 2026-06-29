@@ -1,10 +1,9 @@
 import { describe, expect } from "vitest";
+import { KbDocumentModel, TeamModel } from "@/models";
 import { test } from "@/test";
-import { TeamModel } from "@/models";
-import { KbDocumentModel, KnowledgeBaseConnectorModel } from "@/models";
 import {
-  recomputeConnectorPermissions,
   handleTeamOrGroupMappingChange,
+  recomputeConnectorPermissions,
 } from "./recomputation";
 
 describe("recomputeConnectorPermissions", () => {
@@ -38,7 +37,7 @@ describe("recomputeConnectorPermissions", () => {
 
     // Document should remain unchanged because connector is not auto-sync
     const updatedDoc = await KbDocumentModel.findById(doc.id);
-    expect(updatedDoc!.acl).toEqual(["org:*"]);
+    expect(updatedDoc?.acl).toEqual(["org:*"]);
   });
 
   test("skips docs without permissionSyncStatus", async ({
@@ -65,14 +64,14 @@ describe("recomputeConnectorPermissions", () => {
 
     // Force permissionSyncStatus to null (bypassing type constraints)
     await KbDocumentModel.update(doc.id, {
-      permissionSyncStatus: null as any,
+      permissionSyncStatus: null as unknown as "synced",
     });
 
     await recomputeConnectorPermissions(connector.id);
 
     // Document should remain unchanged because permissionSyncStatus is null
     const updatedDoc = await KbDocumentModel.findById(doc.id);
-    expect(updatedDoc!.acl).toEqual(["org:*"]);
+    expect(updatedDoc?.acl).toEqual(["org:*"]);
   });
 
   test("skips docs without rawPermissions in metadata", async ({
@@ -105,7 +104,7 @@ describe("recomputeConnectorPermissions", () => {
 
     // Document should remain unchanged because rawPermissions is absent
     const updatedDoc = await KbDocumentModel.findById(doc.id);
-    expect(updatedDoc!.acl).toEqual(["org:*"]);
+    expect(updatedDoc?.acl).toEqual(["org:*"]);
   });
 
   test("re-materializes and updates ACL when group mappings change", async ({
@@ -155,9 +154,12 @@ describe("recomputeConnectorPermissions", () => {
     await recomputeConnectorPermissions(connector.id);
 
     const updatedDoc = await KbDocumentModel.findById(doc.id);
-    expect(updatedDoc!.acl).toEqual(["user_email:user1@example.com"]);
-    expect(updatedDoc!.permissionSyncStatus).toBe("synced");
-    expect((updatedDoc!.permissionSyncMetadata as any).skippedGroups).toEqual([]);
+    expect(updatedDoc?.acl).toEqual(["user_email:user1@example.com"]);
+    expect(updatedDoc?.permissionSyncStatus).toBe("synced");
+    expect(
+      (updatedDoc?.permissionSyncMetadata as { skippedGroups?: string[] })
+        ?.skippedGroups,
+    ).toEqual([]);
   });
 
   test("clears ACL when materialization is incomplete (fail-closed)", async ({
@@ -201,11 +203,12 @@ describe("recomputeConnectorPermissions", () => {
 
     const updatedDoc = await KbDocumentModel.findById(doc.id);
     // Fail-closed: ACL should be cleared (empty) when resolution is incomplete
-    expect(updatedDoc!.acl).toEqual([]);
-    expect(updatedDoc!.permissionSyncStatus).toBe("skipped_unresolvable");
-    expect((updatedDoc!.permissionSyncMetadata as any).skippedGroups).toEqual([
-      "unmapped-group",
-    ]);
+    expect(updatedDoc?.acl).toEqual([]);
+    expect(updatedDoc?.permissionSyncStatus).toBe("skipped_unresolvable");
+    expect(
+      (updatedDoc?.permissionSyncMetadata as { skippedGroups?: string[] })
+        ?.skippedGroups,
+    ).toEqual(["unmapped-group"]);
   });
 });
 
@@ -282,11 +285,11 @@ describe("handleTeamOrGroupMappingChange", () => {
 
     // Auto-sync connector's doc should be updated
     const updatedAutoSyncDoc = await KbDocumentModel.findById(docAutoSync.id);
-    expect(updatedAutoSyncDoc!.acl).toEqual(["user_email:user1@example.com"]);
-    expect(updatedAutoSyncDoc!.permissionSyncStatus).toBe("synced");
+    expect(updatedAutoSyncDoc?.acl).toEqual(["user_email:user1@example.com"]);
+    expect(updatedAutoSyncDoc?.permissionSyncStatus).toBe("synced");
 
     // Org connector's doc should remain unchanged (not an auto-sync connector)
     const updatedOrgDoc = await KbDocumentModel.findById(docOrg.id);
-    expect(updatedOrgDoc!.acl).toEqual(["org:*"]);
+    expect(updatedOrgDoc?.acl).toEqual(["org:*"]);
   });
 });

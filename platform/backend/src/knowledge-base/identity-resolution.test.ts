@@ -1,6 +1,6 @@
 import { describe, expect } from "vitest";
-import { test } from "@/test";
 import { TeamModel } from "@/models";
+import { test } from "@/test";
 import { IdentityResolutionService } from "./identity-resolution";
 
 describe("IdentityResolutionService", () => {

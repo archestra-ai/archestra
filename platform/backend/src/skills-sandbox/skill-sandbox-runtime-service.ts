@@ -1047,9 +1047,10 @@ function planAttachmentStaging(params: {
  * Map each conversation attachment to a deterministic, shell-safe absolute path
  * under {@link SKILL_SANDBOX_ATTACHMENTS_DIR}. Duplicate sanitized names get a short
  * attachment-id suffix; the input order (created_at, id) is stable, so a given
- * attachment always resolves to the same path across turns.
+ * attachment always resolves to the same path across turns. Also reused by the
+ * A2A attachment-staging path (see `agents/a2a/stage-attachments.ts`).
  */
-function assignAttachmentPaths(
+export function assignAttachmentPaths(
   attachments: { id: string; originalName: string | null }[],
 ): Map<string, string> {
   const used = new Set<string>();

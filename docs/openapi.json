@@ -108841,6 +108841,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -109095,6 +109098,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -109763,6 +109767,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -110017,6 +110024,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -110393,6 +110401,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -110636,6 +110647,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -110887,6 +110899,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -111141,6 +111156,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -111392,6 +111408,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -111646,6 +111665,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -113720,6 +113740,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -113974,6 +113997,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -114225,6 +114249,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -114479,6 +114506,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -114730,6 +114758,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -114984,6 +115015,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -115235,6 +115267,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -115489,6 +115524,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -115740,6 +115776,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -115994,6 +116033,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -116245,6 +116285,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -116499,6 +116542,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -116750,6 +116794,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -117004,6 +117051,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -117255,6 +117303,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -117498,6 +117549,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -117749,6 +117801,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -117992,6 +118047,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -118243,6 +118299,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -118497,6 +118556,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -118748,6 +118808,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -119002,6 +119065,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -119253,6 +119317,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -119507,6 +119574,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -121924,6 +121992,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -122178,6 +122249,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -122429,6 +122501,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -122683,6 +122758,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -123167,6 +123243,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -123421,6 +123500,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -124089,6 +124169,9 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
                               "outputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -124343,6 +124426,7 @@
                               "model",
                               "baselineModel",
                               "inputTokens",
+                              "inputTokensEstimated",
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
@@ -126103,6 +126187,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -126357,6 +126444,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -127025,6 +127113,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -127279,6 +127370,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -127655,6 +127747,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -127898,6 +127993,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -128149,6 +128245,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -128403,6 +128502,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -128654,6 +128754,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -128908,6 +129011,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -130982,6 +131086,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -131236,6 +131343,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -131487,6 +131595,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -131741,6 +131852,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -131992,6 +132104,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -132246,6 +132361,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -132497,6 +132613,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -132751,6 +132870,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -133002,6 +133122,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -133256,6 +133379,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -133507,6 +133631,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -133761,6 +133888,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -134012,6 +134140,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -134266,6 +134397,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -134517,6 +134649,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -134760,6 +134895,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -135011,6 +135147,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -135254,6 +135393,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -135505,6 +135645,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -135759,6 +135902,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -136010,6 +136154,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -136264,6 +136411,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -136515,6 +136663,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -136769,6 +136920,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -139186,6 +139338,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -139440,6 +139595,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -139691,6 +139847,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -139945,6 +140104,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -140429,6 +140589,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -140683,6 +140846,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
@@ -141351,6 +141515,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
                         "outputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -141605,6 +141772,7 @@
                         "model",
                         "baselineModel",
                         "inputTokens",
+                        "inputTokensEstimated",
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",

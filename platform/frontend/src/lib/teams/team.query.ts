@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useFeature } from "@/lib/config/config.query";
+import { throwOnApiError } from "@/lib/utils";
 
 const { getTeams, getTeamVaultFolder, getTeamLabelKeys, getTeamLabelValues } =
   archestraApiSdk;
@@ -36,7 +37,7 @@ export function useTeams(params?: {
       ...(name || labels ? [{ name, labels }] : []),
     ],
     queryFn: async () => {
-      const { data } = await getTeams({
+      const { data, error } = await getTeams({
         query: {
           limit: 100,
           offset: 0,
@@ -45,6 +46,7 @@ export function useTeams(params?: {
           ...(labels ? { labels } : {}),
         },
       });
+      throwOnApiError(error, { toastOnError: false });
       return data?.data ?? [];
     },
     initialData: params?.initialData as Team[] | undefined,
@@ -55,7 +57,11 @@ export function useTeams(params?: {
 export function useTeamLabelKeys() {
   return useQuery({
     queryKey: ["teams", "labels", "keys"],
-    queryFn: async () => (await getTeamLabelKeys()).data ?? [],
+    queryFn: async () => {
+      const { data, error } = await getTeamLabelKeys();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
   });
 }
 
@@ -63,8 +69,13 @@ export function useTeamLabelValues(params?: { key?: string }) {
   const { key } = params || {};
   return useQuery({
     queryKey: ["teams", "labels", "values", key],
-    queryFn: async () =>
-      (await getTeamLabelValues({ query: key ? { key } : {} })).data ?? [],
+    queryFn: async () => {
+      const { data, error } = await getTeamLabelValues({
+        query: key ? { key } : {},
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
     enabled: key !== undefined,
   });
 }
@@ -94,7 +105,8 @@ export function useTeamsPaginated(params: TeamsPaginatedParams) {
   return useQuery({
     queryKey: ["teams", "paginated", params],
     queryFn: async () => {
-      const { data } = await getTeams({ query: params });
+      const { data, error } = await getTeams({ query: params });
+      throwOnApiError(error, { toastOnError: false });
       return (
         data ?? {
           data: [] as Team[],

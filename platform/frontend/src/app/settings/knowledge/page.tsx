@@ -24,6 +24,7 @@ import {
   type LlmProviderApiKeyFormValues,
 } from "@/components/llm-provider-api-key-form";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsSaveBar,
@@ -440,8 +441,12 @@ function DropEmbeddingConfigDialog({
 
 function KnowledgeSettingsContent() {
   const { data: organization, isPending } = useOrganization();
-  const { data: apiKeys, isPending: areApiKeysPending } =
-    useAvailableLlmProviderApiKeys();
+  const {
+    data: apiKeys,
+    isPending: areApiKeysPending,
+    isLoadingError: isApiKeysLoadError,
+    refetch: refetchApiKeys,
+  } = useAvailableLlmProviderApiKeys({ toastOnError: false });
   const updateKnowledgeSettings = useUpdateKnowledgeSettings(
     "Knowledge settings updated",
     "Failed to update knowledge settings",
@@ -459,7 +464,11 @@ function KnowledgeSettingsContent() {
   const [rerankerModel, setRerankerModel] = useState<string | null>(null);
 
   const { data: embeddingModels } = useEmbeddingModels(embeddingChatApiKeyId);
-  const { data: modelsWithApiKeys } = useModelsWithApiKeys();
+  const {
+    data: modelsWithApiKeys,
+    isLoadingError: isModelsWithApiKeysLoadError,
+    refetch: refetchModelsWithApiKeys,
+  } = useModelsWithApiKeys({ toastOnError: false });
   const embeddingCapableKeyIds = useMemo(() => {
     const ids = new Set<string>();
     for (const model of modelsWithApiKeys ?? []) {
@@ -560,6 +569,20 @@ function KnowledgeSettingsContent() {
       setRerankerModel(null);
     }
   };
+
+  const isLoadError = isApiKeysLoadError || isModelsWithApiKeysLoadError;
+
+  if (!isInitialLoading && isLoadError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load your knowledge settings"
+        onRetry={() => {
+          refetchApiKeys();
+          refetchModelsWithApiKeys();
+        }}
+      />
+    );
+  }
 
   return (
     <LoadingWrapper

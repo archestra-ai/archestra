@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const { getRoles, createRole, getRole, updateRole, deleteRole } =
   archestraApiSdk;
@@ -31,6 +31,7 @@ export function useRoles(params?: {
       const response = await getRoles({
         query: { limit: DEFAULT_TABLE_LIMIT, offset: 0 },
       });
+      throwOnApiError(response.error, { toastOnError: false });
       return response.data?.data ?? [];
     },
     initialData: params?.initialData,
@@ -42,6 +43,7 @@ export function useRolesPaginated(params: RolesPaginatedParams) {
     queryKey: [...roleKeys.lists(), "paginated", params],
     queryFn: async () => {
       const response = await getRoles({ query: params });
+      throwOnApiError(response.error, { toastOnError: false });
       return (
         response.data ?? {
           data: [],
@@ -65,7 +67,14 @@ export function useRolesPaginated(params: RolesPaginatedParams) {
 export function useRole(roleId: string) {
   return useQuery({
     queryKey: roleKeys.detail(roleId),
-    queryFn: async () => (await getRole({ path: { roleId } })).data ?? null,
+    queryFn: async () => {
+      const response = await getRole({ path: { roleId } });
+      throwOnApiError(response.error, {
+        allowNotFound: true,
+        toastOnError: false,
+      });
+      return response.data ?? null;
+    },
     enabled: !!roleId,
   });
 }

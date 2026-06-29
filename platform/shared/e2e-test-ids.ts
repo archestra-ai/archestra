@@ -119,6 +119,7 @@ export const E2eTestId = {
   ChatModelSelectorTrigger: "chat-model-selector-trigger",
   ChatPromptTextarea: "chat-prompt-textarea",
   QuickstartAddApiKeyButton: "quickstart-add-api-key-button",
+  ApiKeysLoadErrorRetry: "api-keys-load-error-retry",
   // MCP Logs
   McpLogsDialog: "mcp-logs-dialog",
   McpLogsContent: "mcp-logs-content",

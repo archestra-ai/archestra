@@ -1579,6 +1579,8 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `tools[].description` | `string \| null` | Yes | Short tool description, if available. |
 | `tools[].source` | `"archestra" \| "mcp" \| "agent_delegation"` | Yes | Where the tool comes from. |
 | `tools[].server` | `string \| null` | Yes | MCP server prefix for third-party MCP tools when available. |
+| `tools[].available` | `boolean` | Yes | False when the tool's MCP connection is not installed; it stays discoverable but cannot run until reconnected. |
+| `tools[].unavailableReason` | `string \| null` | Yes | Compact reason and recovery action when available is false; null otherwise. |
 | `tools[].params` | `string` | Yes | Compact one-line input signature — a summary, not the full schema. Parameters are joined by '; ', each rendered as `name<!\|?>:<type>` where `!` marks required and `?` optional. Object parameters are expanded up to two levels as `{child<!\|?>:type{grandchild<!\|?>:type}, …}`, enums as `enum(<json-values>)`, and a trailing ` — description` is added when available. A trailing `…` on a type marks an object whose content is not fully shown (freeform or more deeply nested) — consult the task instructions or the full schema for its shape. Empty string when the tool takes no input. Pass matching values inside tool_args when calling run_tool; if a call is rejected as invalid, the error describes the expected input (for third-party tools, the full input schema). |
 
 #### run_tool

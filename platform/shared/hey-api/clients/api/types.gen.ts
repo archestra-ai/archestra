@@ -25768,6 +25768,7 @@ export type CreateConnectionSetupData = {
         llmProxyId?: string;
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         proxyAuth?: 'provider-key' | 'virtual-key';
+        attributePassthrough?: boolean;
         skills?: {
             skillIds: Array<string>;
             ttlDays: number | null;
@@ -25942,6 +25943,92 @@ export type CreateConnectionVirtualKeyResponses = {
 };
 
 export type CreateConnectionVirtualKeyResponse = CreateConnectionVirtualKeyResponses[keyof CreateConnectionVirtualKeyResponses];
+
+export type CreateConnectionPassthroughKeyData = {
+    body: {
+        llmProxyId: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/connection-setups/passthrough-key';
+};
+
+export type CreateConnectionPassthroughKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateConnectionPassthroughKeyError = CreateConnectionPassthroughKeyErrors[keyof CreateConnectionPassthroughKeyErrors];
+
+export type CreateConnectionPassthroughKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        value: string;
+        name: string;
+    };
+};
+
+export type CreateConnectionPassthroughKeyResponse = CreateConnectionPassthroughKeyResponses[keyof CreateConnectionPassthroughKeyResponses];
 
 export type GetConnectionSetupScriptData = {
     body?: never;
@@ -33276,6 +33363,10 @@ export type GetInteractionSessionsData = {
          * Filter by interaction source
          */
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
+        /**
+         * Filter by client/session source (e.g. claude_code, claude_desktop)
+         */
+        sessionSource?: 'claude_code' | 'claude_desktop';
         /**
          * Filter by session ID
          */
@@ -54591,6 +54682,97 @@ export type GetProjectFilesResponses = {
 
 export type GetProjectFilesResponse = GetProjectFilesResponses[keyof GetProjectFilesResponses];
 
+export type UploadProjectFilesData = {
+    body: {
+        name: string;
+        mimeType: string;
+        dataBase64: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/files';
+};
+
+export type UploadProjectFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UploadProjectFilesError = UploadProjectFilesErrors[keyof UploadProjectFilesErrors];
+
+export type UploadProjectFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        filename: string;
+        mimeType: string;
+    };
+};
+
+export type UploadProjectFilesResponse = UploadProjectFilesResponses[keyof UploadProjectFilesResponses];
+
 export type GetProjectInstructionsData = {
     body?: never;
     path: {
@@ -59333,6 +59515,97 @@ export type GetSkillSandboxArtifactResponses = {
     200: unknown;
 };
 
+export type UpdateSkillSandboxArtifactContentData = {
+    body: {
+        content: string;
+    };
+    path: {
+        artifactId: string;
+    };
+    query?: never;
+    url: '/api/skill-sandbox/artifacts/{artifactId}/content';
+};
+
+export type UpdateSkillSandboxArtifactContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateSkillSandboxArtifactContentError = UpdateSkillSandboxArtifactContentErrors[keyof UpdateSkillSandboxArtifactContentErrors];
+
+export type UpdateSkillSandboxArtifactContentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+        fileId: string;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+    };
+};
+
+export type UpdateSkillSandboxArtifactContentResponse = UpdateSkillSandboxArtifactContentResponses[keyof UpdateSkillSandboxArtifactContentResponses];
+
 export type GetSkillSandboxConversationArtifactsData = {
     body?: never;
     path: {
@@ -62809,10 +63082,6 @@ export type GetAllVirtualApiKeysResponses = {
                 providerApiKeyId: string;
                 providerApiKeyName: string;
             }>;
-            allowedLlmProxies: Array<{
-                id: string;
-                name: string;
-            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -62838,7 +63107,6 @@ export type CreateVirtualApiKeyData = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
         }>;
-        allowedLlmProxyIds?: Array<string>;
         ownerId?: string;
     };
     path?: never;
@@ -62937,10 +63205,6 @@ export type CreateVirtualApiKeyResponses = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
-        }>;
-        allowedLlmProxies: Array<{
-            id: string;
-            name: string;
         }>;
     };
 };
@@ -63043,7 +63307,6 @@ export type UpdateVirtualApiKeyData = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
         }>;
-        allowedLlmProxyIds?: Array<string>;
     };
     path: {
         id: string;
@@ -63142,10 +63405,6 @@ export type UpdateVirtualApiKeyResponses = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
-        }>;
-        allowedLlmProxies: Array<{
-            id: string;
-            name: string;
         }>;
     };
 };

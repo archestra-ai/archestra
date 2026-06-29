@@ -1,17 +1,15 @@
 "use client";
 
-import { calculateCostSavings, DynamicInteraction } from "@archestra/shared";
 import {
-  ArrowLeft,
-  Bot,
-  ExternalLink,
-  Layers,
-  Loader2,
-  User,
-} from "lucide-react";
+  calculateCostSavings,
+  DynamicInteraction,
+  getSessionClientLabel,
+} from "@archestra/shared";
+import { ArrowLeft, Bot, Layers, Loader2, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback } from "react";
+import MessageThread from "@/components/message-thread";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
 import { Savings } from "@/components/savings";
 import { SourceBadge } from "@/components/source-badge";
@@ -63,9 +61,22 @@ export default function SessionDetailPage({
     limit: 1,
   });
 
+  // Fetch the most recent interactions for the inline "Latest Conversation"
+  // block. This is intentionally decoupled from the table's pagination (always
+  // offset 0) so paging the table never changes the conversation shown. On
+  // page 1 it shares a query key with the table query above and is deduped.
+  const { data: latestConversationResponse } = useInteractions({
+    sessionId: sessionId,
+    limit: pageSize,
+    offset: 0,
+    sortBy: "createdAt",
+    sortDirection: "desc",
+  });
+
   const interactions = interactionsResponse?.data ?? [];
   const paginationMeta = interactionsResponse?.pagination;
   const sessionData = sessionResponse?.data?.[0];
+  const latestInteractions = latestConversationResponse?.data ?? [];
 
   const handlePageChange = useCallback(
     (newPage: number) => {
@@ -108,14 +119,8 @@ export default function SessionDetailPage({
   const totalToonCostSavings = sessionData?.totalToonCostSavings;
 
   // Session metadata from API
-  const sessionSource = sessionData?.sessionSource;
   // Badge label for the Claude clients (Code and Desktop); null for other sources.
-  const claudeSourceLabel =
-    sessionSource === "claude_code"
-      ? "Claude Code"
-      : sessionSource === "claude_desktop"
-        ? "Claude Desktop"
-        : null;
+  const claudeSourceLabel = getSessionClientLabel(sessionData?.sessionSource);
   const profileName = sessionData?.profileName;
   const userNames = sessionData?.userNames ?? [];
 
@@ -148,8 +153,10 @@ export default function SessionDetailPage({
 
   const sessionTitle = getSessionTitle();
 
-  // Find the last main request (requestType === "main" or first in delegation chain)
-  const lastMainRequest = interactions.find((interaction) => {
+  // Find the last main request (requestType === "main" or first in delegation
+  // chain) from the most recent interactions. This drives the inline
+  // "Latest Conversation" block.
+  const lastMainRequest = latestInteractions.find((interaction) => {
     const requestType =
       "requestType" in interaction
         ? (interaction.requestType ?? "main")
@@ -164,6 +171,17 @@ export default function SessionDetailPage({
       (externalAgentIdLabel && !externalAgentIdLabel.includes("→"))
     );
   });
+
+  // Build the conversation thread for the latest main interaction.
+  const lastMainInteraction = lastMainRequest
+    ? new DynamicInteraction(lastMainRequest)
+    : null;
+  const conversationMessages = lastMainInteraction
+    ? lastMainInteraction.mapToUiMessages(
+        lastMainRequest?.dualLlmAnalyses ?? [],
+      )
+    : [];
+  const conversationChatErrors = lastMainRequest?.chatErrors ?? [];
 
   return (
     <div className="space-y-6">
@@ -204,16 +222,6 @@ export default function SessionDetailPage({
               </Badge>
             ))}
           </>
-        }
-        action={
-          lastMainRequest ? (
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/llm/logs/${lastMainRequest.id}`}>
-                <ExternalLink className="h-4 w-4 mr-2" />
-                View
-              </Link>
-            </Button>
-          ) : undefined
         }
       >
         <MetadataItem label="Total Requests">
@@ -273,6 +281,28 @@ export default function SessionDetailPage({
           </MetadataItem>
         )}
       </MetadataCard>
+
+      {/* Latest Conversation */}
+      {lastMainRequest && conversationMessages.length > 0 && (
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Latest Conversation</h2>
+          <div className="border border-border rounded-lg bg-background overflow-hidden">
+            <div className="max-h-[600px] overflow-y-auto">
+              <MessageThread
+                messages={conversationMessages}
+                chatErrors={conversationChatErrors}
+                conversationId={lastMainRequest.sessionId ?? undefined}
+                containerClassName="h-auto"
+                hideDivider
+                profileId={lastMainRequest.profileId ?? undefined}
+                agentName={profileName ?? undefined}
+                selectedModel={lastMainInteraction?.modelName}
+                unsafeContextBoundary={lastMainRequest.unsafeContextBoundary}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Interactions Table */}
       <div className="rounded-md border overflow-x-auto">

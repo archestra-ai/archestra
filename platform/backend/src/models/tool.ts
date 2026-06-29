@@ -1994,19 +1994,6 @@ class ToolModel {
   }
 
   /**
-   * Delete all tools for a specific catalog item
-   * Used when the last MCP server installation for a catalog is removed
-   * Returns the number of tools deleted
-   */
-  static async deleteByCatalogId(catalogId: string): Promise<number> {
-    const result = await db
-      .delete(schema.toolsTable)
-      .where(eq(schema.toolsTable.catalogId, catalogId));
-
-    return result.rowCount || 0;
-  }
-
-  /**
    * Sync tools for a catalog item - updates existing tools and creates new ones.
    * Unlike bulkCreateToolsIfNotExists, this method:
    * - Matches tools by their RAW name (the part after `__`), not the full slugified name

@@ -896,8 +896,20 @@ class AgentModel {
       }
     }
 
-    // Apply access control filtering for non-agent admins
-    if (userId && !isAgentAdmin) {
+    // Access-control filtering. Non-admins are always restricted to the agents
+    // they can access (own personal + org + teams they belong to). An admin is
+    // restricted the same way ONLY in the default active "All" view (no explicit
+    // scope), so it shows just what they can access rather than the whole org —
+    // oversight (other users' personal agents and team agents for teams they
+    // aren't in) is dropped there. Explicit scopes keep the admin's full
+    // org-wide base (oversight stays reachable via Team → pick that team and
+    // Personal → Other users), and so does the admin-only deleted view, whose
+    // whole purpose is reviewing every removed agent.
+    const isDefaultActiveAllView =
+      filters?.scope === undefined &&
+      (filters?.status ?? "active") !== "deleted";
+    const restrictToAccessible = !isAgentAdmin || isDefaultActiveAllView;
+    if (userId && restrictToAccessible) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false,

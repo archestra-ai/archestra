@@ -18,10 +18,6 @@ import {
   Users,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  AgentSelector,
-  type AgentSelectorAgent,
-} from "@/components/agent-selector";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
@@ -60,7 +56,6 @@ import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
-import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -135,9 +130,6 @@ export default function VirtualKeysPage() {
   const paginationMeta = response?.pagination;
 
   const { data: apiKeys = [] } = useLlmProviderApiKeys();
-  const { data: llmProxies = [] } = useProfiles({
-    filters: { agentTypes: ["llm_proxy"] },
-  });
   const { data: session } = useSession();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: isVirtualKeyAdmin } = useHasPermissions({
@@ -204,14 +196,11 @@ export default function VirtualKeysPage() {
             teams={row.original.teams}
             authorId={row.original.authorId}
             authorName={row.original.authorName}
-            // Passthrough keys exist to attribute requests to a user, so always
-            // show the owner — including the current user's own key (skip the
-            // "Me is redundant" rule that standard personal keys use).
-            currentUserId={
-              row.original.keyType === "passthrough"
-                ? undefined
-                : session?.user?.id
-            }
+            currentUserId={session?.user?.id}
+            // The "Accessible to" column also lists team- and org-scoped keys, so
+            // label the current user's own personal key "Me" (rather than leaving
+            // it blank) to keep every row consistently attributed.
+            showSelfAsMe
           />
         ),
       },
@@ -223,17 +212,6 @@ export default function VirtualKeysPage() {
             {row.original.keyType === "passthrough"
               ? "N/A"
               : formatProviderKeySummary(row.original.providerApiKeys)}
-          </span>
-        ),
-      },
-      {
-        id: "llmProxies",
-        header: "LLM Proxies",
-        cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
-            {row.original.keyType === "passthrough"
-              ? formatPassthroughProxiesSummary(row.original.allowedLlmProxies)
-              : "Any LLM proxy"}
           </span>
         ),
       },
@@ -303,7 +281,6 @@ export default function VirtualKeysPage() {
     setCredentialsAction(
       <Button
         onClick={() => setIsCreateDialogOpen(true)}
-        disabled={parentableKeys.length === 0 && llmProxies.length === 0}
         data-testid={E2eTestId.AddVirtualKeyButton}
       >
         <Plus className="h-4 w-4" />
@@ -311,7 +288,7 @@ export default function VirtualKeysPage() {
       </Button>,
     );
     return () => setCredentialsAction(null);
-  }, [setCredentialsAction, parentableKeys.length, llmProxies.length]);
+  }, [setCredentialsAction]);
 
   return (
     <>
@@ -407,7 +384,6 @@ export default function VirtualKeysPage() {
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
         parentableKeys={parentableKeys}
-        llmProxies={llmProxies}
         defaultExpirationSeconds={defaultExpirationSeconds ?? null}
         visibilityOptions={visibilityOptions}
         teams={teams}
@@ -420,7 +396,6 @@ export default function VirtualKeysPage() {
         onOpenChange={(open) => !open && setEditingKey(null)}
         virtualKey={editingKey}
         providerApiKeys={parentableKeys}
-        llmProxies={llmProxies}
         visibilityOptions={visibilityOptions}
         teams={teams}
         canReadTeams={!!canReadTeams}
@@ -439,7 +414,6 @@ function CreateVirtualKeyDialog({
   open,
   onOpenChange,
   parentableKeys,
-  llmProxies,
   defaultExpirationSeconds,
   visibilityOptions,
   teams,
@@ -449,7 +423,6 @@ function CreateVirtualKeyDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   parentableKeys: LlmProviderApiKeyResponse[];
-  llmProxies: AgentSelectorAgent[];
   defaultExpirationSeconds: number | null;
   visibilityOptions: VisibilityOption<VirtualKeyScope>[];
   teams: Array<{ id: string; name: string }>;
@@ -469,7 +442,6 @@ function CreateVirtualKeyDialog({
   const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
     {},
   );
-  const [allowedLlmProxyIds, setAllowedLlmProxyIds] = useState<string[]>([]);
   const [createdKeyValue, setCreatedKeyValue] = useState<string | null>(null);
   const [createdKeyExpiresAt, setCreatedKeyExpiresAt] = useState<Date | null>(
     null,
@@ -489,7 +461,6 @@ function CreateVirtualKeyDialog({
       setScope(getDefaultVirtualKeyScope(visibilityOptions));
       setTeamIds([]);
       setProviderApiKeyIds({});
-      setAllowedLlmProxyIds([]);
       setOwnerId("");
     }
   }, [open, defaultExpirationSeconds, visibilityOptions]);
@@ -519,7 +490,6 @@ function CreateVirtualKeyDialog({
               name: newKeyName.trim(),
               keyType: "passthrough",
               expiresAt: expiresAt ?? undefined,
-              allowedLlmProxyIds,
               ownerId: owner,
             }
           : {
@@ -544,7 +514,6 @@ function CreateVirtualKeyDialog({
     createMutation,
     expiresAt,
     isPassthrough,
-    allowedLlmProxyIds,
     providerApiKeyIds,
     newKeyName,
     scope,
@@ -605,12 +574,6 @@ function CreateVirtualKeyDialog({
                   {showOwnerField && (
                     <OwnerSelectField value={ownerId} onChange={setOwnerId} />
                   )}
-
-                  <PassthroughLlmProxiesField
-                    llmProxies={llmProxies}
-                    value={allowedLlmProxyIds}
-                    onValueChange={setAllowedLlmProxyIds}
-                  />
 
                   <div className="space-y-2">
                     <ExpirationDateTimeField
@@ -688,7 +651,6 @@ function EditVirtualKeyDialog({
   onOpenChange,
   virtualKey,
   providerApiKeys,
-  llmProxies,
   visibilityOptions,
   teams,
   canReadTeams,
@@ -697,7 +659,6 @@ function EditVirtualKeyDialog({
   onOpenChange: (open: boolean) => void;
   virtualKey: VirtualKeyWithParent | null;
   providerApiKeys: LlmProviderApiKeyResponse[];
-  llmProxies: AgentSelectorAgent[];
   visibilityOptions: VisibilityOption<VirtualKeyScope>[];
   teams: Array<{ id: string; name: string }>;
   canReadTeams: boolean;
@@ -712,7 +673,6 @@ function EditVirtualKeyDialog({
   const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
     {},
   );
-  const [allowedLlmProxyIds, setAllowedLlmProxyIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open || !virtualKey) {
@@ -730,9 +690,6 @@ function EditVirtualKeyDialog({
           mapping.providerApiKeyId,
         ]),
       ),
-    );
-    setAllowedLlmProxyIds(
-      virtualKey.allowedLlmProxies.map((proxy) => proxy.id),
     );
   }, [open, virtualKey]);
 
@@ -752,7 +709,6 @@ function EditVirtualKeyDialog({
               name: name.trim(),
               keyType: "passthrough",
               expiresAt: expiresAt ?? undefined,
-              allowedLlmProxyIds,
             }
           : {
               name: name.trim(),
@@ -773,7 +729,6 @@ function EditVirtualKeyDialog({
   }, [
     expiresAt,
     isPassthrough,
-    allowedLlmProxyIds,
     providerApiKeyIds,
     name,
     onOpenChange,
@@ -802,7 +757,7 @@ function EditVirtualKeyDialog({
       title="Edit Virtual API Key"
       description={
         isPassthrough
-          ? "Update the passthrough key name, allowed LLM proxies, and expiration."
+          ? "Update the passthrough key name and expiration."
           : "Update the virtual key name, visibility, and expiration."
       }
       size="medium"
@@ -820,22 +775,14 @@ function EditVirtualKeyDialog({
           </div>
 
           {isPassthrough ? (
-            <>
-              <PassthroughLlmProxiesField
-                llmProxies={llmProxies}
-                value={allowedLlmProxyIds}
-                onValueChange={setAllowedLlmProxyIds}
+            <div className="space-y-2">
+              <ExpirationDateTimeField
+                value={expiresAt}
+                onChange={setExpiresAt}
+                noExpirationText="Key will never expire"
+                formatExpiration={formatExpiration}
               />
-
-              <div className="space-y-2">
-                <ExpirationDateTimeField
-                  value={expiresAt}
-                  onChange={setExpiresAt}
-                  noExpirationText="Key will never expire"
-                  formatExpiration={formatExpiration}
-                />
-              </div>
-            </>
+            </div>
           ) : (
             <>
               <VirtualKeyVisibilityField
@@ -1015,49 +962,8 @@ function KeyTypeField({
   );
 }
 
-function PassthroughLlmProxiesField({
-  llmProxies,
-  value,
-  onValueChange,
-}: {
-  llmProxies: AgentSelectorAgent[];
-  value: string[];
-  onValueChange: (value: string[]) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label>Allowed LLM proxies (optional)</Label>
-      <AgentSelector
-        mode="multiple"
-        flat
-        agents={llmProxies}
-        value={value}
-        onValueChange={onValueChange}
-        placeholder="Select LLM proxies"
-        searchPlaceholder="Search LLM proxies"
-        emptyMessage="No LLM proxies found"
-      />
-      <p className="text-sm text-muted-foreground">
-        Leave empty to allow any LLM proxy the key owner can access.
-      </p>
-    </div>
-  );
-}
-
 function formatExpiration(date: Date | string | null): string {
   return formatRelativeTime(date);
-}
-
-function formatPassthroughProxiesSummary(
-  proxies: VirtualKeyWithParent["allowedLlmProxies"],
-): string {
-  if (proxies.length === 0) {
-    return "Any LLM proxy";
-  }
-  if (proxies.length === 1) {
-    return proxies[0].name;
-  }
-  return `${proxies.length} LLM proxies`;
 }
 
 function computeDefaultExpiresAt(defaultSeconds: number | null): Date | null {

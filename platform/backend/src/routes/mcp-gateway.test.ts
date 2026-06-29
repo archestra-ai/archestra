@@ -585,6 +585,26 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(body.capabilities).toHaveProperty("tools", true);
   });
 
+  test("GET endpoint serves discovery info without tokenAuth for an invalid token", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders("archestra_invalid_token_12345"),
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toHaveProperty("name", `archestra-agent-${agent.id}`);
+    expect(body).toHaveProperty("agentId", agent.id);
+    expect(body).toHaveProperty("transport", "http");
+    expect(body.capabilities).toHaveProperty("tools", true);
+    expect(body.tokenAuth).toBeUndefined();
+  });
+
   test("handles whoami tool call successfully after initialize", async ({
     makeAgent,
     makeOrganization,

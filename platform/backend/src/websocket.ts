@@ -442,10 +442,20 @@ class WebSocketService {
     const stdout = new PassThrough();
     const stderr = new PassThrough();
 
-    // The K8s exec reports why a session ended (e.g. `/bin/sh` missing on a
-    // distroless image) on its status channel. Capture it so the close event
-    // can tell the user the real reason instead of a bare "Session terminated".
-    let closedReason: string | undefined;
+    // Why a session ended (e.g. `/bin/sh` missing on a distroless image) can
+    // arrive on two different K8s exec channels depending on the container
+    // runtime: the status channel (a V1Status) and/or the output stream (the
+    // OCI runtime's stderr). Capture both so the close event can tell the user
+    // the real reason instead of a bare "Session terminated".
+    let execStatus: k8s.V1Status | undefined;
+    let capturedOutput = "";
+    const captureExecOutput = (chunk: string) => {
+      if (capturedOutput.length >= EXEC_OUTPUT_CAPTURE_LIMIT) return;
+      capturedOutput += chunk.slice(
+        0,
+        EXEC_OUTPUT_CAPTURE_LIMIT - capturedOutput.length,
+      );
+    };
 
     try {
       const { k8sWs, podName } =
@@ -455,8 +465,7 @@ class WebSocketService {
           stdout,
           stderr,
           (status) => {
-            const reason = describeExecFailure(status);
-            if (reason) closedReason = reason;
+            execStatus = status;
           },
         );
 
@@ -476,33 +485,35 @@ class WebSocketService {
 
       // Bridge K8s stdout/stderr -> client
       stdout.on("data", (chunk: Buffer) => {
+        const data = chunk.toString();
+        captureExecOutput(data);
         if (ws.readyState === WS.OPEN) {
           this.sendToClient(ws, {
             type: "mcp_exec_output",
-            payload: { serverId, data: chunk.toString() },
+            payload: { serverId, data },
           });
         }
       });
 
       stderr.on("data", (chunk: Buffer) => {
+        const data = chunk.toString();
+        captureExecOutput(data);
         if (ws.readyState === WS.OPEN) {
           this.sendToClient(ws, {
             type: "mcp_exec_output",
-            payload: { serverId, data: chunk.toString() },
+            payload: { serverId, data },
           });
         }
       });
 
       // K8s WS close -> notify client
       k8sWs.on("close", () => {
-        logger.info(
-          { serverId, reason: closedReason },
-          "K8s exec WebSocket closed",
-        );
+        const reason = describeExecFailure(execStatus, capturedOutput);
+        logger.info({ serverId, reason }, "K8s exec WebSocket closed");
         if (ws.readyState === WS.OPEN) {
           this.sendToClient(ws, {
             type: "mcp_exec_closed",
-            payload: { serverId, reason: closedReason },
+            payload: { serverId, reason },
           });
         }
         this.unsubscribeMcpExec(ws);
@@ -924,26 +935,41 @@ export function broadcastMcpInstallationStatus(
 
 export default websocketService;
 
+// How much exec output we keep to diagnose why a session ended. The OCI
+// start-failure error is short and arrives first, so a small head is plenty.
+const EXEC_OUTPUT_CAPTURE_LIMIT = 4096;
+
+// Markers the container runtime emits when it can't start the exec'd binary
+// (i.e. the shell itself is missing). Deliberately specific — these are
+// runtime-generated and won't appear from a normal shell command's output, so
+// matching them won't misfire on e.g. `cat /missing` inside a working shell.
+const SHELL_START_FAILURE =
+  /OCI runtime exec failed|unable to start container process|exec:\s+".*?":.*?(?:no such file|not found)|executable file not found|exec format error/i;
+
 /**
- * Translate a K8s exec status into a human-readable reason for why an
- * interactive shell session ended. Returns undefined for a clean exit so the
- * UI keeps its generic "Session terminated" message. A `Failure` status is
- * where the real cause lives — most importantly, distroless MCP images have no
- * `/bin/sh`, which surfaces here as an OCI "no such file" error.
+ * Translate a K8s exec session's end into a human-readable reason. Returns
+ * undefined for a clean exit so the UI keeps its generic "Session terminated".
+ *
+ * The cause can land on either of two exec channels depending on the runtime:
+ * the status channel (`status.message`) or the output stream (the OCI error
+ * written to stderr). The most important case — a distroless MCP image with no
+ * `/bin/sh` — shows up as a "no such file"/"failed to start container process"
+ * error, which we turn into an actionable hint regardless of which channel
+ * carried it.
  */
-function describeExecFailure(status: k8s.V1Status): string | undefined {
-  if (status?.status !== "Failure") return undefined;
-
-  const message = status.message ?? "";
-
-  // The exec'd binary (the shell itself) is missing from the image.
-  if (
-    /no such file or directory|executable file not found|exec format error/i.test(
-      message,
-    )
-  ) {
+function describeExecFailure(
+  status: k8s.V1Status | undefined,
+  output: string,
+): string | undefined {
+  if (SHELL_START_FAILURE.test(`${status?.message ?? ""}\n${output}`)) {
     return "No shell found in this container image — it looks like a distroless/minimal image without /bin/sh. Use the Logs or Inspector tabs, or attach a debug container to inspect it.";
   }
 
-  return message || status.reason || "Session ended with a failure status.";
+  if (status?.status === "Failure") {
+    return (
+      status.message || status.reason || "Session ended with a failure status."
+    );
+  }
+
+  return undefined;
 }

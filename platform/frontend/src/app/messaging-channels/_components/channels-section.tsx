@@ -642,6 +642,7 @@ function ChannelRows({
               assignedAgent={undefined}
               isUpdating={isDmUpdating}
               onAssign={onDmAssignAgent}
+              isDm
             />
           </TableCell>
           <TableCell>
@@ -726,6 +727,7 @@ function ChannelRows({
                 assignedAgent={assignedAgent}
                 isUpdating={isUpdating}
                 onAssign={(agentId) => onAssignAgent(binding.id, agentId)}
+                isDm={binding.isDm}
               />
             </TableCell>
             <TableCell>
@@ -820,7 +822,16 @@ function BulkAssignButton({
           <Command>
             <CommandInput placeholder="Search agents..." />
             <CommandList>
-              <CommandEmpty>No agents found.</CommandEmpty>
+              <CommandEmpty>
+                <div className="px-2 py-3 text-center">
+                  <p className="text-sm">No agents found.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Only organization and team agents can be a channel's
+                    default. Personal agents are available in direct messages
+                    only.
+                  </p>
+                </div>
+              </CommandEmpty>
               <CommandGroup>
                 <CommandItem
                   onSelect={() => {
@@ -889,11 +900,13 @@ function AgentPicker({
   assignedAgent,
   isUpdating,
   onAssign,
+  isDm = false,
 }: {
   agents: Agent[];
   assignedAgent: Agent | undefined;
   isUpdating: boolean;
   onAssign: (agentId: string | null) => void;
+  isDm?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -932,7 +945,18 @@ function AgentPicker({
         <Command>
           <CommandInput placeholder="Search agents..." />
           <CommandList>
-            <CommandEmpty>No agents found.</CommandEmpty>
+            <CommandEmpty>
+              <div className="px-2 py-3 text-center">
+                <p className="text-sm">No agents found.</p>
+                {!isDm && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Only organization and team agents can be a channel's
+                    default. Personal agents are available in direct messages
+                    only.
+                  </p>
+                )}
+              </div>
+            </CommandEmpty>
             <CommandGroup>
               {assignedAgent && (
                 <>

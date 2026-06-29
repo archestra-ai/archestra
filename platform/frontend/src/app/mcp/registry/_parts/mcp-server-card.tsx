@@ -889,7 +889,7 @@ export function McpServerCard({
 
   const copyApprovalLink = () => {
     void navigator.clipboard.writeText(
-      `${window.location.origin}/mcp/registry?catalog=${item.id}`,
+      `${window.location.origin}/mcp/registry?${MCP_CATALOG_EDIT_QUERY_PARAM}=${item.id}`,
     );
     toast.success("Link copied — share it with an admin to approve this image");
   };

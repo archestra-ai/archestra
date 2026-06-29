@@ -784,7 +784,7 @@ export function McpServerCard({
 
   const copyApprovalLink = () => {
     void navigator.clipboard.writeText(
-      `${window.location.origin}/mcp/registry?catalog=${item.id}`,
+      `${window.location.origin}/mcp/registry/beta/${item.id}/edit`,
     );
     toast.success("Link copied — share it with an admin to approve this image");
   };

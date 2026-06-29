@@ -44,6 +44,7 @@ import type {
   UpdateAgent,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
+import { isUuid } from "@/utils/uuid";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
@@ -2459,7 +2460,7 @@ class AgentModel {
     // index and forces a sequential scan. Instead, only compare against `id`
     // when the input is itself a valid uuid (letting Postgres use the PK index),
     // and otherwise rely solely on the indexed `slug` lookup.
-    const matchesIdOrSlug = UUID_REGEX.test(idOrSlug)
+    const matchesIdOrSlug = isUuid(idOrSlug)
       ? or(
           eq(schema.agentsTable.id, idOrSlug),
           eq(schema.agentsTable.slug, idOrSlug),
@@ -2648,11 +2649,6 @@ class AgentModel {
     };
   }
 }
-
-// Canonical 8-4-4-4-12 hex UUID shape. Used to decide whether an id-or-slug
-// input can be matched against the uuid `agents.id` primary key without a cast.
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const PERSONAL_MCP_GATEWAY_NAME = "My Gateway";
 const PERSONAL_MCP_GATEWAY_DESCRIPTION =

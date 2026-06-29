@@ -15,13 +15,16 @@ import {
   isSsoConfigured,
 } from "@/agents/chatops/auto-provision";
 import {
+  clearChannelThreadActive,
   isChannelThreadActive,
+  isThreadMuteCommand,
   markChannelThreadActive,
 } from "@/agents/chatops/channel-activation";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
+  CHATOPS_THREAD_MUTED_NOTICE,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "@/agents/chatops/constants";
 import { EventDedupMap } from "@/agents/chatops/utils";
@@ -279,15 +282,32 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // further mentions. Group chats and DMs always reply (no gate).
             // Runs before sender resolution so we don't do Graph lookups for
             // the many un-mentioned channel messages the bot now receives.
+            //
+            // A mute command (e.g. "@bot mute") ends the sticky behavior early —
+            // honored both when the bot is mentioned and when the thread is
+            // already active (so muting needs no re-mention) — after which the
+            // bot stays quiet until @mentioned again.
             if (context.activity.conversation?.conversationType === "channel") {
               const activation = {
                 provider: "ms-teams" as const,
                 channelId: message.channelId,
                 threadId: message.threadId ?? message.channelId,
               };
+              const wantsMute = isThreadMuteCommand(message.text);
               if (provider.wasBotMentioned(context.activity)) {
+                if (wantsMute) {
+                  await clearChannelThreadActive(activation);
+                  await context.sendActivity(CHATOPS_THREAD_MUTED_NOTICE);
+                  return;
+                }
                 await markChannelThreadActive(activation);
-              } else if (!(await isChannelThreadActive(activation))) {
+              } else if (await isChannelThreadActive(activation)) {
+                if (wantsMute) {
+                  await clearChannelThreadActive(activation);
+                  await context.sendActivity(CHATOPS_THREAD_MUTED_NOTICE);
+                  return;
+                }
+              } else {
                 return;
               }
             }
@@ -358,6 +378,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                               value: "Show current agent binding",
                             },
                             { title: "/help", value: "Show this help message" },
+                            {
+                              title: "mute",
+                              value:
+                                "Stop auto-replies in this thread (@mention me to resume)",
+                            },
                           ],
                         },
                         {

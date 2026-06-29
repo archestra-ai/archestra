@@ -52,6 +52,8 @@ The bot responds with a list of options to choose which agent will handle messag
 
 In channels the bot stays silent until it is @mentioned. Once mentioned in a thread, it keeps replying to every message in that thread without further mentions. Starting a new thread needs a fresh mention. Direct messages always get a reply, no mention required.
 
+To stop the bot replying in a thread, send `mute` (or `@mention` it with `mute`). It goes quiet until the thread is @mentioned again.
+
 ### Commands
 
 Archestra uses native Slack slash commands — type them directly in the message box without mentioning the bot.

@@ -23,6 +23,9 @@ vi.mock("@/cache-manager", async (importOriginal) => {
         mockCacheStore.set(key, value);
         return true;
       },
+      async delete(key: string) {
+        return mockCacheStore.delete(key);
+      },
     },
   };
 });
@@ -705,6 +708,133 @@ describe("SlackProvider.parseWebhookNotification — sticky thread auto-reply", 
     );
 
     expect(topLevel).toBeNull();
+  });
+});
+
+describe("SlackProvider.parseWebhookNotification — thread mute command", () => {
+  // Wire a real postMessage mock so we can assert the muted-thread notice.
+  function createProviderWithPostMessage(): {
+    provider: SlackProvider;
+    postMessage: ReturnType<typeof vi.fn>;
+  } {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
+    (provider as any).client = { chat: { postMessage } };
+    return { provider, postMessage };
+  }
+
+  test("'@bot mute' in an active thread mutes it: returns null, posts a notice, and gates later replies", async () => {
+    const { provider, postMessage } = createProviderWithPostMessage();
+    const channel = "C_MUTE_MENTION";
+    const threadTs = "6666666666.000001";
+
+    // Activate via a mention.
+    const mention = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        { channel, text: "<@UBOT123> help me", thread_ts: threadTs },
+      ),
+      {},
+    );
+    expect(mention).not.toBeNull();
+
+    // "@bot mute" → muted. Nothing is handed to the agent.
+    const mute = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        { channel, text: "<@UBOT123> mute", thread_ts: threadTs },
+      ),
+      {},
+    );
+    expect(mute).toBeNull();
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ channel, thread_ts: threadTs }),
+    );
+
+    // A subsequent un-mentioned reply in the thread is gated again.
+    const afterMute = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel,
+          text: "are you still there?",
+          ts: "6666666666.000002",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(afterMute).toBeNull();
+  });
+
+  test("bare 'mute' (no mention) in an active thread mutes it without a re-mention", async () => {
+    const { provider, postMessage } = createProviderWithPostMessage();
+    const channel = "C_MUTE_BARE";
+    const threadTs = "6666666666.000003";
+
+    await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        { channel, text: "<@UBOT123> kick things off", thread_ts: threadTs },
+      ),
+      {},
+    );
+
+    const mute = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel,
+          text: "mute",
+          ts: "6666666666.000004",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(mute).toBeNull();
+    expect(postMessage).toHaveBeenCalledTimes(1);
+  });
+
+  test("'mute' in an inactive, un-mentioned thread is just a gated message — no mute notice", async () => {
+    const { provider, postMessage } = createProviderWithPostMessage();
+
+    const result = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel: "C_MUTE_INACTIVE",
+          text: "mute",
+          thread_ts: "6666666666.000005",
+        },
+      ),
+      {},
+    );
+    expect(result).toBeNull();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  test("a normal request mentioning the bot is not swallowed as a mute", async () => {
+    const { provider } = createProviderWithPostMessage();
+
+    const result = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          channel: "C_MUTE_REAL_REQUEST",
+          text: "<@UBOT123> mute the alerts channel for me",
+          thread_ts: "6666666666.000006",
+        },
+      ),
+      {},
+    );
+    expect(result).not.toBeNull();
+    expect(result?.text).toBe("mute the alerts channel for me");
   });
 });
 

@@ -64,11 +64,22 @@ export const CHATOPS_CHANNEL_DISCOVERY = {
  * The bot must be @mentioned to start replying in a channel thread; once
  * mentioned, it keeps replying to that thread without further mentions until
  * this TTL lapses (so stale threads stop auto-replying on their own).
+ *
+ * A user can also end it early — sending a mute command (see isThreadMuteCommand)
+ * drops the activation so the bot goes quiet until @mentioned again.
  */
 export const CHATOPS_CHANNEL_AUTO_REPLY = {
   /** How long a thread stays "active" after the last @mention (30 days) */
   ACTIVE_TTL_MS: TimeInMs.Day * 30,
 };
+
+/**
+ * Posted to confirm a thread was muted (see channel-activation). Plain text
+ * with no provider-specific markup so it renders identically in Slack and
+ * MS Teams.
+ */
+export const CHATOPS_THREAD_MUTED_NOTICE =
+  "🔇 Got it — I'll stop auto-replying in this thread. @mention me when you need me again.";
 
 /**
  * In group conversations the agent hears every message but should not answer

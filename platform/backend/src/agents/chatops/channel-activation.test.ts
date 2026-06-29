@@ -15,12 +15,15 @@ vi.mock("@/cache-manager", async (importOriginal) => {
         mockCache.set(key, value);
         mockSetCalls.push([key, value, ttl]);
       }),
+      delete: vi.fn(async (key: string) => mockCache.delete(key)),
     },
   };
 });
 
 import {
+  clearChannelThreadActive,
   isChannelThreadActive,
+  isThreadMuteCommand,
   markChannelThreadActive,
 } from "./channel-activation";
 import { CHATOPS_CHANNEL_AUTO_REPLY } from "./constants";
@@ -86,5 +89,57 @@ describe("channel-activation (sticky channel auto-reply)", () => {
     expect(key).toContain(CHANNEL);
     expect(value).toBe(true);
     expect(ttl).toBe(CHATOPS_CHANNEL_AUTO_REPLY.ACTIVE_TTL_MS);
+  });
+
+  test("clearing deactivates a thread (mute), scoped per thread", async () => {
+    await markChannelThreadActive(TEAMS);
+    const other = { ...TEAMS, threadId: "other-thread" };
+    await markChannelThreadActive(other);
+
+    await clearChannelThreadActive(TEAMS);
+
+    expect(await isChannelThreadActive(TEAMS)).toBe(false);
+    // A different thread in the same channel is untouched.
+    expect(await isChannelThreadActive(other)).toBe(true);
+  });
+
+  test("clearing a never-active thread is a harmless no-op", async () => {
+    await expect(clearChannelThreadActive(TEAMS)).resolves.toBeUndefined();
+    expect(await isChannelThreadActive(TEAMS)).toBe(false);
+  });
+});
+
+describe("isThreadMuteCommand", () => {
+  test.each([
+    "mute",
+    "Mute",
+    "  mute  ",
+    "mute.",
+    "mute!",
+    "/mute",
+    "mute thread",
+    "mute this thread",
+    "stop replying",
+    "stop responding",
+    "stop auto-replying",
+    "stand down",
+    "be quiet",
+    "stay quiet",
+  ])("treats %j as a mute command", (text) => {
+    expect(isThreadMuteCommand(text)).toBe(true);
+  });
+
+  test.each([
+    "",
+    "muted",
+    "mute the alerts channel",
+    "how do I mute notifications?",
+    "stop the deployment",
+    "can you stop replying to everyone but me",
+    "please be quiet about the release date",
+    "unmute",
+    "mute mute",
+  ])("does not treat %j as a mute command", (text) => {
+    expect(isThreadMuteCommand(text)).toBe(false);
   });
 });

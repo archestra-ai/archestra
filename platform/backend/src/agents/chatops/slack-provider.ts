@@ -38,12 +38,15 @@ import {
   isSsoConfigured,
 } from "./auto-provision";
 import {
+  clearChannelThreadActive,
   isChannelThreadActive,
+  isThreadMuteCommand,
   markChannelThreadActive,
 } from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_THREAD_HISTORY,
+  CHATOPS_THREAD_MUTED_NOTICE,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
 import { EventDedupMap, errorMessage, isSlackDmChannel } from "./utils";
@@ -283,25 +286,41 @@ class SlackProvider implements ChatOpsProvider {
     const hasBotMention =
       event.type === "app_mention" ||
       Boolean(this.botUserId && text.includes(`<@${this.botUserId}>`));
+    const cleanedText = this.cleanBotMention(text);
 
     // Channel auto-reply gate: in channels the bot stays quiet until
     // @mentioned (app_mention event or message text containing <@BOT_ID>),
     // then keeps replying to that thread without further mentions until the
     // activation TTL lapses. DMs are always processed without a mention.
+    //
+    // A user can end the sticky behavior early by sending a mute command (e.g.
+    // "@bot mute"). It's honored both when the bot is mentioned and when the
+    // thread is already active (so muting needs no re-mention), then the bot
+    // stays quiet until @mentioned again.
     if (!isDM) {
       const activation = {
         provider: this.providerId,
         channelId: event.channel,
         threadId: threadTs,
       };
+      const wantsMute = isThreadMuteCommand(cleanedText);
       if (hasBotMention) {
+        if (wantsMute) {
+          await clearChannelThreadActive(activation);
+          await this.postThreadMutedNotice(event.channel, threadTs);
+          return null;
+        }
         await markChannelThreadActive(activation);
-      } else if (!(await isChannelThreadActive(activation))) {
+      } else if (await isChannelThreadActive(activation)) {
+        if (wantsMute) {
+          await clearChannelThreadActive(activation);
+          await this.postThreadMutedNotice(event.channel, threadTs);
+          return null;
+        }
+      } else {
         return null;
       }
     }
-
-    const cleanedText = this.cleanBotMention(text);
 
     // Download file attachments first (we're already in an addressed context —
     // DM, mention, or active thread — gated above). A file-only message (empty
@@ -574,7 +593,8 @@ class SlackProvider implements ChatOpsProvider {
                 "*Available commands:*\n" +
                 `\`${SLACK_SLASH_COMMANDS.SELECT_AGENT}\` — Change the default agent handling requests in the channel\n` +
                 `\`${SLACK_SLASH_COMMANDS.STATUS}\` — Check the current agent handling requests in the channel\n` +
-                `\`${SLACK_SLASH_COMMANDS.HELP}\` — Show available commands`,
+                `\`${SLACK_SLASH_COMMANDS.HELP}\` — Show available commands\n` +
+                "`mute` — Reply with this (or `mute` me directly) to stop auto-replies in a thread; @mention me to resume",
             },
           },
           { type: "divider" },
@@ -1019,7 +1039,8 @@ class SlackProvider implements ChatOpsProvider {
             "*Available commands:*\n" +
             `\`${slashCommands.SELECT_AGENT}\` — Change the default agent\n` +
             `\`${slashCommands.STATUS}\` — Show current agent binding\n` +
-            `\`${slashCommands.HELP}\` — Show this help message\n\n` +
+            `\`${slashCommands.HELP}\` — Show this help message\n` +
+            "`mute` — Reply with this in a thread to stop auto-replies there; @mention me to resume\n\n" +
             "Or just send a message to interact with the assigned agent.",
         };
 
@@ -1296,6 +1317,26 @@ class SlackProvider implements ChatOpsProvider {
   // ===========================================================================
   // Private Methods
   // ===========================================================================
+
+  /** Confirm a thread was muted, threaded under the message that muted it. */
+  private async postThreadMutedNotice(
+    channelId: string,
+    threadTs: string,
+  ): Promise<void> {
+    if (!this.client) return;
+    try {
+      await this.client.chat.postMessage({
+        channel: channelId,
+        text: CHATOPS_THREAD_MUTED_NOTICE,
+        thread_ts: threadTs,
+      });
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[SlackProvider] Failed to post thread-muted notice",
+      );
+    }
+  }
 
   /**
    * Handle a slash command received via socket mode.

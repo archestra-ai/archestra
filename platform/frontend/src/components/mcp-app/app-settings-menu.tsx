@@ -1,8 +1,7 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
-import { Pencil, Settings, Trash2, Wrench } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { ExternalLink, Pencil, Settings, Trash2, Wrench } from "lucide-react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { AppDeleteDialog } from "@/app/apps/_parts/app-delete-dialog";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
 import { EnvironmentSelector } from "@/components/environment-selector";
@@ -16,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  useApp,
   useAppTools,
   useAssignToolToApp,
   useUnassignToolFromApp,
@@ -23,51 +23,66 @@ import {
 } from "@/lib/app.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 
-type App = archestraApiTypes.GetAppResponses["200"];
+// Identity fields are all the menu and its rename/delete dialogs need; the
+// environment + assigned tools are fetched lazily when Manage tools opens. This
+// minimal shape is shared by the full app (chat panel) and the gallery list item.
+type App = { id: string; name: string; description: string | null };
 
 type OpenDialog = "rename" | "tools" | "delete" | null;
 
-// Header gear menu for managing an owned app: rename (name/description), manage
-// its environment + enabled tools, or delete it. Each action opens its own
-// dialog. The Manage tools dialog stages the environment behind Save/Cancel; its
-// tool toggles persist live. Hidden when the caller can neither update nor
-// delete the app.
-export function AppSettingsMenu({ app }: { app: App }) {
+// Settings menu for managing an owned app: optionally open it in a new tab,
+// rename (name/description), manage its environment + enabled tools, or delete
+// it. Each action opens its own dialog. The Manage tools dialog stages the
+// environment behind Save/Cancel; its tool toggles persist live. Hidden when the
+// caller can do none of the available actions.
+export function AppSettingsMenu({
+  app,
+  trigger,
+  openInNewTab = false,
+}: {
+  app: App;
+  /** Overrides the default gear button (e.g. the gallery card's kebab). */
+  trigger?: ReactNode;
+  /** Adds an "Open in new tab" entry that opens the standalone run page. */
+  openInNewTab?: boolean;
+}) {
   const { data: canUpdate } = useHasPermissions({ app: ["update"] });
   const { data: canDelete } = useHasPermissions({ app: ["delete"] });
   const [dialog, setDialog] = useState<OpenDialog>(null);
+  const toolsOpen = dialog === "tools";
 
   const updateApp = useUpdateApp();
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();
-  const { data: assignedTools } = useAppTools(app.id);
+  // The full app (for its environment) and assigned tools are only needed while
+  // the Manage tools dialog is open, so fetch them lazily to keep gallery cards
+  // from each firing a detail request on mount.
+  const { data: fullApp } = useApp(toolsOpen ? app.id : null);
+  const { data: assignedTools } = useAppTools(toolsOpen ? app.id : null);
 
   // The Manage tools dialog stages both the environment and the tool selection,
-  // then commits them as a pair on Save. While the dialog is closed, keep the
-  // staged values synced to server state so they open fresh.
-  const [environmentId, setEnvironmentId] = useState<string | null>(
-    app.environmentId ?? null,
-  );
+  // then commits them as a pair on Save. Seed the staged values from server
+  // state once the dialog opens and the lazy fetches land.
+  const [environmentId, setEnvironmentId] = useState<string | null>(null);
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
     () => new Set(),
   );
-  const toolsOpen = dialog === "tools";
   useEffect(() => {
-    if (!toolsOpen) setEnvironmentId(app.environmentId ?? null);
-  }, [toolsOpen, app.environmentId]);
+    if (toolsOpen && fullApp) setEnvironmentId(fullApp.environmentId ?? null);
+  }, [toolsOpen, fullApp]);
   useEffect(() => {
-    if (!toolsOpen) {
-      setSelectedToolIds(new Set((assignedTools ?? []).map((t) => t.id)));
+    if (toolsOpen && assignedTools) {
+      setSelectedToolIds(new Set(assignedTools.map((t) => t.id)));
     }
   }, [toolsOpen, assignedTools]);
 
   // Cancel / dismiss discards the staged environment + tools (the effects above
-  // re-seed once closed).
+  // re-seed on the next open).
   const closeTools = () => setDialog(null);
 
   const handleToolsSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if ((environmentId ?? null) !== (app.environmentId ?? null)) {
+    if ((environmentId ?? null) !== (fullApp?.environmentId ?? null)) {
       const result = await updateApp.mutateAsync({
         appId: app.id,
         body: { environmentId },
@@ -93,26 +108,41 @@ export function AppSettingsMenu({ app }: { app: App }) {
   };
 
   const savingTools =
-    updateApp.isPending || assignTool.isPending || unassignTool.isPending;
+    !fullApp ||
+    updateApp.isPending ||
+    assignTool.isPending ||
+    unassignTool.isPending;
 
-  if (!canUpdate && !canDelete) return null;
+  if (!openInNewTab && !canUpdate && !canDelete) return null;
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 shrink-0 text-muted-foreground"
-            aria-label="App settings"
-            title="App settings"
-          >
-            <Settings className="h-3.5 w-3.5" />
-          </Button>
+          {trigger ?? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0 text-muted-foreground"
+              aria-label="App settings"
+              title="App settings"
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {openInNewTab && (
+            <DropdownMenuItem
+              onSelect={() =>
+                window.open(`/a/${app.id}`, "_blank", "noopener,noreferrer")
+              }
+            >
+              <ExternalLink />
+              Open in new tab
+            </DropdownMenuItem>
+          )}
           {canUpdate && (
             <>
               <DropdownMenuItem onSelect={() => setDialog("rename")}>

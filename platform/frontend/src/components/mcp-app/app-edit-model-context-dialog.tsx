@@ -1,6 +1,5 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
 import { useForm } from "react-hook-form";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -9,7 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useUpdateApp } from "@/lib/app.query";
 
-type App = archestraApiTypes.GetAppResponses["200"];
+// Only the identity fields are edited here, so accept the minimal shape shared
+// by the full app (detail) and the gallery list item.
+type App = { id: string; name: string; description: string | null };
 
 type EditFormValues = {
   name: string;
@@ -17,8 +18,8 @@ type EditFormValues = {
 };
 
 // Name + description are the app's model-facing metadata (what the LLM reads).
-// This is the trimmed variant of AppEditConfigDialog without the environment
-// selector — used from the app frame's address-bar pencil.
+// Shared rename/edit dialog for owned apps — used from the app frame's
+// address-bar pencil, the settings menu, and the gallery card.
 export function AppEditModelContextDialog({
   app,
   open,
@@ -53,8 +54,8 @@ export function AppEditModelContextDialog({
     <StandardFormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Edit model context"
-      description="What the model reads to decide whether this app is relevant and when to open it."
+      title={title}
+      description={description}
       size="medium"
       onSubmit={onSubmit}
       footer={

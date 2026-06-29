@@ -5,34 +5,19 @@ import type {
   ResourceVisibilityScope,
 } from "@archestra/shared";
 import {
-  ExternalLink,
   Globe,
   MessageSquare,
   MoreHorizontal,
-  Pencil,
-  Route,
-  Trash2,
   User,
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { AppSettingsMenu } from "@/components/mcp-app/app-settings-menu";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { buildAppChatHandoffUrl } from "@/lib/apps/app-chat-handoff";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { AppDeleteDialog } from "./app-delete-dialog";
-import { AppEditConfigDialog } from "./app-edit-config-dialog";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 type OwnedApp = Extract<AppListItem, { source: "owned" }>;
@@ -75,12 +60,6 @@ function OwnedAppCard({
   app: OwnedApp;
   currentUserId: string | undefined;
 }) {
-  const router = useRouter();
-  const [renameOpen, setRenameOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const { data: canUpdate } = useHasPermissions({ app: ["update"] });
-  const { data: canDelete } = useHasPermissions({ app: ["delete"] });
-
   return (
     <Card className="group relative flex min-h-[194px] flex-col gap-0 p-5 transition-colors hover:border-primary/40 hover:shadow-sm">
       <Link
@@ -99,8 +78,10 @@ function OwnedAppCard({
       </div>
 
       <div className="absolute right-3 top-3 z-10">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        <AppSettingsMenu
+          app={app}
+          openInNewTab
+          trigger={
             <Button
               variant="ghost"
               size="icon-sm"
@@ -109,46 +90,8 @@ function OwnedAppCard({
             >
               <MoreHorizontal className="h-4 w-4" />
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onSelect={() =>
-                window.open(`/a/${app.id}`, "_blank", "noopener,noreferrer")
-              }
-            >
-              <ExternalLink className="h-4 w-4" />
-              Open in new tab
-            </DropdownMenuItem>
-            {canUpdate && (
-              <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
-                <Pencil className="h-4 w-4" />
-                Rename
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem
-              onSelect={() =>
-                router.push(
-                  `/mcp/registry/beta?search=${encodeURIComponent(app.name)}`,
-                )
-              }
-            >
-              <Route className="h-4 w-4" />
-              Manage MCP
-            </DropdownMenuItem>
-            {canDelete && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onSelect={() => setDeleteOpen(true)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          }
+        />
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-1.5 pr-8">
@@ -167,17 +110,6 @@ function OwnedAppCard({
           {app.description}
         </CardDescription>
       ) : null}
-
-      <AppEditConfigDialog
-        app={app}
-        open={renameOpen}
-        onOpenChange={setRenameOpen}
-      />
-      <AppDeleteDialog
-        app={app}
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-      />
     </Card>
   );
 }

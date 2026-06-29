@@ -29,6 +29,7 @@ import {
 } from "@/archestra-mcp-server";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
+import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import type {
   RepeatSeverity,
   ToolCallRepeatTracker,
@@ -87,6 +88,13 @@ export interface ChatToolContext {
   blockOnApprovalRequired?: boolean;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];
+  /**
+   * Bridge that surfaces a delegated child agent's tool calls on the caller's
+   * conversation surface (chat path only). Threaded into the child run so its
+   * tool calls — and those of any deeper descendant — appear nested under the
+   * delegation call that spawned them.
+   */
+  subagentToolStream?: SubagentToolStreamBridge;
   mcpGwToken: McpGatewayToken;
   globalToolPolicy: GlobalToolPolicy;
   considerContextUntrusted: boolean;
@@ -346,6 +354,10 @@ export function buildAgentDelegationTool(params: {
           const response = await executeArchestraTool(agentTool.name, args, {
             ...archestraContext,
             contextIsTrusted: toolExecutionContext.contextIsTrusted,
+            // Surface the child's tool calls on the caller's conversation,
+            // attributed to this delegation call (options.toolCallId).
+            subagentToolStream: ctx.subagentToolStream,
+            currentToolCallId: options.toolCallId,
           });
 
           span.setAttribute(

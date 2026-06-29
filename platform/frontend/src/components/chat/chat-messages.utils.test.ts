@@ -1,9 +1,13 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { getArchestraToolShortName } from "@archestra/shared";
+import {
+  getArchestraToolShortName,
+  SUBAGENT_TOOL_CALL_PART_TYPE,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import type { PanelApp } from "./apps-context";
 import {
   collectBrowserToolCallIds,
+  collectSubagentToolCalls,
   deriveAppsFromMessages,
   extractFileAttachments,
   extractOwnedAppRender,
@@ -881,5 +885,75 @@ describe("getAppRenderVerb", () => {
 
   it("returns null for non-app tools", () => {
     expect(getAppRenderVerb("google__search")).toBeNull();
+  });
+});
+
+describe("collectSubagentToolCalls", () => {
+  const subagentPart = (
+    parentToolCallId: string,
+    toolCallId: string,
+    toolName = "web_search",
+  ) =>
+    ({
+      type: SUBAGENT_TOOL_CALL_PART_TYPE,
+      data: {
+        parentToolCallId,
+        toolCallId,
+        toolName,
+        state: "output-available",
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: minimal part stub
+    }) as any;
+
+  const message = (parts: unknown[]): UIMessage =>
+    ({ id: "m", role: "assistant", parts }) as UIMessage;
+
+  it("returns an empty map when no subagent parts exist", () => {
+    const map = collectSubagentToolCalls([
+      message([{ type: "text", text: "hi" }]),
+    ]);
+    expect(map.size).toBe(0);
+  });
+
+  it("groups children by their parent delegation call and preserves the chain (P1->C1,C2; C2->G1)", () => {
+    const map = collectSubagentToolCalls([
+      message([
+        { type: "tool-agent__child", toolCallId: "P1" },
+        subagentPart("P1", "C1", "web_search"),
+        subagentPart("P1", "C2", "agent__grandchild"),
+        subagentPart("C2", "G1", "fetch"),
+      ]),
+    ]);
+
+    expect(map.get("P1")?.map((e) => e.toolCallId)).toEqual(["C1", "C2"]);
+    expect(map.get("C2")?.map((e) => e.toolCallId)).toEqual(["G1"]);
+    // The nested delegation C2 is both a child of P1 and a parent of G1.
+    expect(map.has("C2")).toBe(true);
+    expect(map.get("P1")?.[0]).toMatchObject({
+      toolCallId: "C1",
+      toolName: "web_search",
+      state: "output-available",
+    });
+  });
+
+  it("collects across messages and dedupes a toolCallId present twice (live + persisted)", () => {
+    const map = collectSubagentToolCalls([
+      message([subagentPart("P1", "C1")]),
+      message([subagentPart("P1", "C1")]),
+    ]);
+    expect(map.get("P1")?.length).toBe(1);
+  });
+
+  it("ignores malformed subagent parts (missing ids)", () => {
+    const map = collectSubagentToolCalls([
+      message([
+        {
+          type: SUBAGENT_TOOL_CALL_PART_TYPE,
+          data: { toolName: "x" },
+          // biome-ignore lint/suspicious/noExplicitAny: malformed stub
+        } as any,
+      ]),
+    ]);
+    expect(map.size).toBe(0);
   });
 });

@@ -174,6 +174,11 @@ export async function handleDelegation(
       // delegation boundary. The child re-evaluates its own tool results and
       // records its own unsafe boundary instead of inheriting the parent's.
       parentContextIsTrusted: context.contextIsTrusted,
+      // Surface the child's tool calls on the caller's conversation, attributed
+      // to this delegation call. The shared bridge is threaded into the child
+      // run so deeper descendants surface too.
+      subagentToolStream: context.subagentToolStream,
+      delegationToolCallId: context.currentToolCallId,
     });
 
     return successResult(result.text);

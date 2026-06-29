@@ -125,7 +125,10 @@ export async function isDatabaseHealthy(): Promise<boolean> {
     await Promise.race([
       pool.query("SELECT 1"),
       new Promise((_, reject) => {
-        timeoutHandle = setTimeout(() => reject(new Error("Health check timeout")), 3000);
+        timeoutHandle = setTimeout(
+          () => reject(new Error("Health check timeout")),
+          3000,
+        );
       }),
     ]);
     return true;

@@ -168,16 +168,17 @@ interface WelcomeMessage {
 /**
  * Build the welcome message sent to auto-provisioned users via DM.
  */
-export function buildWelcomeMessage(params: {
+export async function buildWelcomeMessage(params: {
   invitationId: string;
   email: string;
   name: string;
-}): WelcomeMessage {
+}): Promise<WelcomeMessage> {
   const { invitationId, email, name } = params;
   const baseUrl = config.frontendBaseUrl;
+  const appName = await OrganizationModel.getAppName();
 
   return {
-    text: `Hey there 👋 We created an Archestra user for you (${email}). Finish signing up to access Archestra web app.`,
+    text: `Hey there 👋 We created a ${appName} user for you (${email}). Finish signing up to access the ${appName} web app.`,
     actionUrl: `${baseUrl}/auth/sign-up-with-invitation?invitationId=${invitationId}&email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`,
     actionLabel: "Finish Signup",
   };

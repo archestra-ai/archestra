@@ -100,7 +100,7 @@ export function isMuteReaction(reactionId: string): boolean {
  * - "process": an un-mentioned message in an already-active thread → reply
  * - "ignore": un-mentioned and inactive → stay quiet
  */
-export type ChannelGateAction = "mute" | "activate" | "process" | "ignore";
+type ChannelGateAction = "mute" | "activate" | "process" | "ignore";
 
 export function resolveChannelGateAction(params: {
   botMentioned: boolean;

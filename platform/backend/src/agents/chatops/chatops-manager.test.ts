@@ -234,6 +234,39 @@ describe("ChatOpsManager security validation", () => {
     expect(result.success).toBe(true);
   });
 
+  test("uses the sender's lone personal agent, without pinning it to the channel", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    mockA2AExecutor();
+    const org = await makeOrganization();
+    const user = await makeUser({ email: "joey@example.com" });
+    await makeInternalAgent({
+      organizationId: org.id,
+      scope: "personal",
+      authorId: user.id,
+    });
+    await unboundChannelBinding(org.id);
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const provider = createMockProvider({
+      getUserEmail: async () => "joey@example.com",
+      sendReply: sendReplySpy,
+    });
+
+    const result = await makeManagerWith(provider).processMessage({
+      message: createMockMessage({ senderEmail: "joey@example.com" }),
+      provider,
+    });
+
+    // The sender's personal agent handled the message...
+    expect(result.success).toBe(true);
+    // ...but a personal agent must NOT be pinned as the shared channel default
+    // (other members would be denied access to it).
+    expect((await refetchBinding())?.agentId).toBeNull();
+  });
+
   test("successful authorization - user exists and has team access", async ({
     makeUser,
     makeOrganization,

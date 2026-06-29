@@ -576,7 +576,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   inv.status?.startsWith(AUTO_PROVISIONED_INVITATION_STATUS),
                 );
                 if (autoProvInv) {
-                  const welcome = buildWelcomeMessage({
+                  const welcome = await buildWelcomeMessage({
                     invitationId: autoProvInv.id,
                     email: message.senderEmail,
                     name: message.senderName,
@@ -1946,10 +1946,11 @@ async function resolveAndVerifySenderForMSTeams(
       if (!isDm && !(await isSsoConfigured())) {
         const botId = context.activity.recipient.id;
         const dmDeepLink = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(botId)}`;
+        const appName = await OrganizationModel.getAppName();
         await context
           .sendActivity(
-            `Hey there 👋 We created an Archestra user for you (${message.senderEmail}). ` +
-              `To finish signing up so you can use Archestra web app, send me a direct message and I'll send you a link to finish signing up.\n\n` +
+            `Hey there 👋 We created a ${appName} user for you (${message.senderEmail}). ` +
+              `To finish signing up so you can use the ${appName} web app, send me a direct message and I'll send you a link to finish signing up.\n\n` +
               `[Open DM with me](${dmDeepLink})`,
           )
           .catch(() => {});

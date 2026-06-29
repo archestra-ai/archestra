@@ -721,34 +721,6 @@ class AgentModel {
   }
 
   /**
-   * Every internal agent in an organization regardless of scope (personal,
-   * team, or org) — used to auto-pick a channel's default when exactly one
-   * exists, so a fresh single-agent setup (even a lone personal agent) "just
-   * works" without an explicit assignment.
-   */
-  static async findAssignableChatopsAgents(
-    organizationId: string,
-  ): Promise<Pick<Agent, "id" | "name" | "scope" | "authorId">[]> {
-    return db
-      .select({
-        id: schema.agentsTable.id,
-        name: schema.agentsTable.name,
-        scope: schema.agentsTable.scope,
-        authorId: schema.agentsTable.authorId,
-      })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, organizationId),
-          eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
-          notDeleted(schema.agentsTable),
-        ),
-      )
-      .orderBy(asc(schema.agentsTable.name));
-  }
-
-  /**
    * Find all internal agents including personal ones authored by a specific user.
    * Used for DM agent selection where personal agents of the current user are allowed.
    */

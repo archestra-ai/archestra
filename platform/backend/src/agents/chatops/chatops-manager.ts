@@ -839,7 +839,7 @@ export class ChatOpsManager {
       // Skip welcome message when SSO is enabled — users just sign in via their IdP
       if (await isSsoConfigured()) return;
 
-      const welcome = buildWelcomeMessage({
+      const welcome = await buildWelcomeMessage({
         invitationId,
         email: message.senderEmail || "",
         name: displayName,
@@ -897,28 +897,46 @@ export class ChatOpsManager {
 
   /**
    * Pick a default agent for a channel that has none yet so onboarding "just
-   * works": the org-wide default agent if set, else the sole agent when the org
-   * has exactly one (a fresh single-agent setup, including a lone personal
-   * agent). Returns null when the choice is ambiguous (0 or 2+ candidates) so
-   * the caller prompts with the picker card instead.
+   * works": the org-wide default agent if set, else the sole agent available to
+   * the sender — INCLUDING their personal "My Assistant" — so a fresh per-user
+   * setup just works. Returns whether the agent should be pinned as the shared
+   * channel default (true for the org default / a shared agent; false for a
+   * personal agent, which is per-user). Returns null when the choice is
+   * ambiguous (0 or 2+ candidates) so the caller prompts with the picker card.
    */
-  private async autoResolveChannelAgentId(
-    organizationId: string,
-  ): Promise<string | null> {
-    const org = await OrganizationModel.getById(organizationId);
+  private async autoResolveChannelAgentId(params: {
+    organizationId: string;
+    senderEmail?: string;
+  }): Promise<{ agentId: string; persist: boolean } | null> {
+    // 1. Org-wide default — an explicit, shared choice; pin it to the channel.
+    const org = await OrganizationModel.getById(params.organizationId);
     if (org?.defaultAgentId) {
       const agent = await AgentModel.findById(org.defaultAgentId);
-      if (agent?.agentType === "agent") return org.defaultAgentId;
+      if (agent?.agentType === "agent") {
+        return { agentId: org.defaultAgentId, persist: true };
+      }
     }
-    const candidates =
-      await AgentModel.findAssignableChatopsAgents(organizationId);
-    return candidates.length === 1 ? candidates[0].id : null;
+    // 2. The sole agent available to this sender (incl. their personal agent).
+    //    A personal agent is per-user, so use it for this reply but DON'T pin
+    //    it as the shared default (other members would be denied access to it).
+    const accessible = await this.getAccessibleChatopsAgents({
+      senderEmail: params.senderEmail,
+      isDm: true,
+    });
+    if (accessible.length === 1) {
+      const agent = await AgentModel.findById(accessible[0].id);
+      return {
+        agentId: accessible[0].id,
+        persist: agent?.scope !== "personal",
+      };
+    }
+    return null;
   }
 
   /**
-   * Resolve a channel's default agent and persist it, or prompt with the picker
-   * card. Returns the assigned agent id, or null when the picker was sent (the
-   * caller should stop processing this message).
+   * Resolve a channel's default agent (pinning shared ones), or prompt with the
+   * picker card. Returns the agent id to use for this message, or null when the
+   * picker was sent (the caller should stop processing this message).
    */
   private async resolveOrPromptChannelAgent(params: {
     provider: ChatOpsProvider;
@@ -927,16 +945,25 @@ export class ChatOpsManager {
     isDm: boolean;
   }): Promise<string | null> {
     const { provider, message, binding, isDm } = params;
-    const agentId = await this.autoResolveChannelAgentId(
-      binding.organizationId,
-    );
-    if (agentId) {
-      await ChatOpsChannelBindingModel.update(binding.id, { agentId });
+    const resolved = await this.autoResolveChannelAgentId({
+      organizationId: binding.organizationId,
+      senderEmail: message.senderEmail,
+    });
+    if (resolved) {
+      if (resolved.persist) {
+        await ChatOpsChannelBindingModel.update(binding.id, {
+          agentId: resolved.agentId,
+        });
+      }
       logger.info(
-        { bindingId: binding.id, agentId },
-        "[ChatOps] Auto-assigned default agent to channel",
+        {
+          bindingId: binding.id,
+          agentId: resolved.agentId,
+          pinned: resolved.persist,
+        },
+        "[ChatOps] Resolved a default agent for an unassigned channel",
       );
-      return agentId;
+      return resolved.agentId;
     }
     await this.sendAgentSelectionCard({
       provider,

@@ -190,12 +190,9 @@ describe("resolveChannelGateAction", () => {
     [false, false, true, "process"], // un-mentioned reply in active thread -> reply
     [false, true, false, "ignore"], // "mute" but thread inactive + not addressed
     [false, false, false, "ignore"], // un-mentioned, inactive -> stay quiet
-  ] as const)(
-    "botMentioned=%s wantsMute=%s isActive=%s -> %s",
-    (botMentioned, wantsMute, isActive, expected) => {
-      expect(
-        resolveChannelGateAction({ botMentioned, wantsMute, isActive }),
-      ).toBe(expected);
-    },
-  );
+  ] as const)("botMentioned=%s wantsMute=%s isActive=%s -> %s", (botMentioned, wantsMute, isActive, expected) => {
+    expect(
+      resolveChannelGateAction({ botMentioned, wantsMute, isActive }),
+    ).toBe(expected);
+  });
 });

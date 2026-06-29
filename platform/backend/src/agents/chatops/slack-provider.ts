@@ -15,7 +15,11 @@ import {
   LRUCacheManager,
 } from "@/cache-manager";
 import logger from "@/logging";
-import { AgentModel, ChatOpsChannelBindingModel } from "@/models";
+import {
+  AgentModel,
+  ChatOpsChannelBindingModel,
+  OrganizationModel,
+} from "@/models";
 import type {
   AddApprovalRequestFormOptions,
   ChatOpsApprovalDecision,
@@ -1061,7 +1065,7 @@ class SlackProvider implements ChatOpsProvider {
 
     // Send welcome DM (fire-and-forget) — skip when SSO is enabled
     if (provisioned.invitationId !== null && !(await isSsoConfigured())) {
-      const welcome = buildWelcomeMessage({
+      const welcome = await buildWelcomeMessage({
         invitationId: provisioned.invitationId,
         email: senderEmail,
         name: displayName,
@@ -1322,11 +1326,14 @@ class SlackProvider implements ChatOpsProvider {
         ? `https://app.slack.com/app-settings/${this.teamId}/${this.config.appId}/oauth`
         : "https://api.slack.com/apps";
 
+    const appName = await OrganizationModel.getAppName();
     const text = [
-      ":warning: *Your Archestra Slack app is missing required scopes*",
+      `:warning: *Your ${appName} Slack app is missing required scopes*`,
       "",
       "The following scopes need to be added to your Slack app:",
       scopeList,
+      "",
+      "Until they're added, some features may not work fully.",
       "",
       "*To update your app:*",
       `1. Open your <${appSettingsUrl}|Slack app settings>`,

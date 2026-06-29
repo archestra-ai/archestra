@@ -7,8 +7,8 @@ import {
 } from "@archestra/shared";
 import { ArrowLeft, Bot, Layers, Loader2, User } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { use, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { use } from "react";
 import MessageThread from "@/components/message-thread";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
 import { Savings } from "@/components/savings";
@@ -24,8 +24,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   useInteractionSessions,
   useInteractions,
@@ -40,17 +42,14 @@ export default function SessionDetailPage({
   const rawParams = use(paramsPromise);
   const sessionId = decodeURIComponent(rawParams.sessionId);
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const pageFromUrl = searchParams.get("page");
-  const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = DEFAULT_TABLE_LIMIT;
+  const { pageIndex, pageSize, offset, setPagination } =
+    useDataTableQueryParams();
 
   const { data: interactionsResponse, isLoading: interactionsLoading } =
     useInteractions({
       sessionId: sessionId,
       limit: pageSize,
-      offset: pageIndex * pageSize,
+      offset,
       sortBy: "createdAt",
       sortDirection: "desc",
     });
@@ -62,12 +61,15 @@ export default function SessionDetailPage({
   });
 
   // Fetch the most recent interactions for the inline "Latest Conversation"
-  // block. This is intentionally decoupled from the table's pagination (always
-  // offset 0) so paging the table never changes the conversation shown. On
-  // page 1 it shares a query key with the table query above and is deduped.
+  // block. This is intentionally decoupled from the table's pagination: offset
+  // is always 0, and the limit is a fixed small window (not the user-selectable
+  // pageSize) so changing rows-per-page never alters this query. We fetch a
+  // window rather than a single row because the block shows the latest *main*
+  // request, and the newest interactions by createdAt may be subagent calls
+  // (see lastMainRequest find below) — requestType isn't filterable server-side.
   const { data: latestConversationResponse } = useInteractions({
     sessionId: sessionId,
-    limit: pageSize,
+    limit: DEFAULT_TABLE_LIMIT,
     offset: 0,
     sortBy: "createdAt",
     sortDirection: "desc",
@@ -77,22 +79,6 @@ export default function SessionDetailPage({
   const paginationMeta = interactionsResponse?.pagination;
   const sessionData = sessionResponse?.data?.[0];
   const latestInteractions = latestConversationResponse?.data ?? [];
-
-  const handlePageChange = useCallback(
-    (newPage: number) => {
-      const newParams = new URLSearchParams(searchParams.toString());
-      if (newPage === 0) {
-        newParams.delete("page");
-      } else {
-        newParams.set("page", String(newPage + 1));
-      }
-      router.push(
-        `/llm/logs/session/${encodeURIComponent(sessionId)}?${newParams.toString()}`,
-        { scroll: false },
-      );
-    },
-    [searchParams, router, sessionId],
-  );
 
   // Use session data from API for accurate totals, fall back to page data
   const totalInputTokens =
@@ -446,37 +432,21 @@ export default function SessionDetailPage({
             )}
           </TableBody>
         </Table>
-        {paginationMeta && paginationMeta.total > pageSize && (
-          <div className="flex items-center justify-between px-2 py-4">
-            <div className="text-sm text-muted-foreground">
-              Showing {pageIndex * pageSize + 1} to{" "}
-              {Math.min((pageIndex + 1) * pageSize, paginationMeta.total)} of{" "}
-              {paginationMeta.total} requests
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(pageIndex - 1)}
-                disabled={pageIndex === 0}
-              >
-                Previous
-              </Button>
-              <span className="text-sm">
-                Page {pageIndex + 1} of{" "}
-                {Math.ceil(paginationMeta.total / pageSize)}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(pageIndex + 1)}
-                disabled={
-                  pageIndex >= Math.ceil(paginationMeta.total / pageSize) - 1
-                }
-              >
-                Next
-              </Button>
-            </div>
+        {paginationMeta && paginationMeta.total > 0 && (
+          <div className="px-2 py-4">
+            <TablePagination
+              pageIndex={pageIndex}
+              pageSize={pageSize}
+              total={paginationMeta.total}
+              onPaginationChange={setPagination}
+              leftContent={
+                <>
+                  Showing {offset + 1} to{" "}
+                  {Math.min(offset + pageSize, paginationMeta.total)} of{" "}
+                  {paginationMeta.total} requests
+                </>
+              }
+            />
           </div>
         )}
       </div>

@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useInteractionSessions,
@@ -10,6 +10,7 @@ import SessionDetailPage from "./page.client";
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(),
   useSearchParams: vi.fn(),
+  usePathname: vi.fn(),
 }));
 
 vi.mock("@/lib/interactions/interaction.query", () => ({
@@ -33,6 +34,7 @@ describe("SessionDetailPage", () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
     );
+    vi.mocked(usePathname).mockReturnValue("/llm/logs/session/test-session");
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: undefined,
     } as unknown as ReturnType<typeof useInteractionSessions>);
@@ -136,6 +138,33 @@ describe("SessionDetailPage", () => {
     ).toBeVisible();
     expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
     expect(screen.queryByText("Claude Desktop")).not.toBeInTheDocument();
+  });
+
+  it("renders the rows-per-page selector when the session has interactions", async () => {
+    vi.mocked(useInteractions).mockReturnValue({
+      data: {
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 50,
+          total: 120,
+          totalPages: 3,
+          hasNext: true,
+          hasPrev: false,
+        },
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractions>);
+
+    renderSessionDetailPage();
+
+    // Both the desktop and mobile pagination layouts render the selector.
+    expect(
+      (await screen.findAllByText("Rows per page")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Showing 1 to 10 of 120 requests/).length,
+    ).toBeGreaterThan(0);
   });
 
   it("hides the cache line when the session used no caching", async () => {

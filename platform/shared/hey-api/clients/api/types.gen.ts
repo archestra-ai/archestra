@@ -30316,7 +30316,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
-            response: OpenAiChatCompletionResponse;
+            response: OpenAiChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -30466,9 +30468,6 @@ export type GetInteractionsResponses = {
                 user?: string;
                 [key: string]: unknown;
             } | null;
-            /**
-             * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
-             */
             response: {
                 id: string;
                 object: 'response';
@@ -30512,6 +30511,8 @@ export type GetInteractionsResponses = {
                     [key: string]: unknown;
                 };
                 [key: string]: unknown;
+            } | {
+                error: string;
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -30614,6 +30615,8 @@ export type GetInteractionsResponses = {
                     prompt_tokens: number;
                     total_tokens: number;
                 };
+            } | {
+                error: string;
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -30692,7 +30695,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: GeminiGenerateContentRequest;
             processedRequest?: GeminiGenerateContentRequest | null;
-            response: GeminiGenerateContentResponse;
+            response: GeminiGenerateContentResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -30772,7 +30777,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: AnthropicMessagesRequest;
             processedRequest?: AnthropicMessagesRequest | null;
-            response: AnthropicMessagesResponse;
+            response: AnthropicMessagesResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31250,6 +31257,8 @@ export type GetInteractionsResponses = {
                 serviceTier?: {
                     type?: 'default' | 'throughput';
                 };
+            } | {
+                error: string;
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -31330,7 +31339,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
-            response: CerebrasChatCompletionResponse;
+            response: CerebrasChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31410,7 +31421,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
-            response: MistralChatCompletionResponse;
+            response: MistralChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31490,7 +31503,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
-            response: PerplexityChatCompletionResponse;
+            response: PerplexityChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31570,7 +31585,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
-            response: GroqChatCompletionResponse;
+            response: GroqChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31650,7 +31667,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
-            response: XaiChatCompletionResponse;
+            response: XaiChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31730,7 +31749,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
-            response: OpenrouterChatCompletionResponse;
+            response: OpenrouterChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31810,7 +31831,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: VllmChatCompletionRequest;
             processedRequest?: VllmChatCompletionRequest | null;
-            response: VllmChatCompletionResponse;
+            response: VllmChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31888,7 +31911,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: OllamaChatCompletionRequest;
             processedRequest?: OllamaChatCompletionRequest | null;
-            response: OllamaChatCompletionResponse;
+            response: OllamaChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31966,7 +31991,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: CohereChatRequest;
             processedRequest?: CohereChatRequest | null;
-            response: CohereChatResponse;
+            response: CohereChatResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -32046,7 +32073,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: ZhipuaiChatCompletionRequest;
             processedRequest?: ZhipuaiChatCompletionRequest | null;
-            response: ZhipuaiChatCompletionResponse;
+            response: ZhipuaiChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -32126,7 +32155,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: DeepSeekChatCompletionRequest;
             processedRequest?: DeepSeekChatCompletionRequest | null;
-            response: DeepSeekChatCompletionResponse;
+            response: DeepSeekChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -32847,6 +32878,8 @@ export type GetInteractionsResponses = {
                     prompt_tokens_details?: unknown;
                 };
                 [key: string]: unknown;
+            } | {
+                error: string;
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -32927,7 +32960,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: MinimaxChatCompletionRequest;
             processedRequest?: MinimaxChatCompletionRequest | null;
-            response: MinimaxChatCompletionResponse;
+            response: MinimaxChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -33074,6 +33109,8 @@ export type GetInteractionsResponses = {
                     prompt_tokens_details?: unknown;
                 };
                 [key: string]: unknown;
+            } | {
+                error: string;
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -33224,9 +33261,6 @@ export type GetInteractionsResponses = {
                 user?: string;
                 [key: string]: unknown;
             } | null;
-            /**
-             * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
-             */
             response: {
                 id: string;
                 object: 'response';
@@ -33270,6 +33304,8 @@ export type GetInteractionsResponses = {
                     [key: string]: unknown;
                 };
                 [key: string]: unknown;
+            } | {
+                error: string;
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -33771,7 +33807,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
-        response: OpenAiChatCompletionResponse;
+        response: OpenAiChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -33921,9 +33959,6 @@ export type GetInteractionResponses = {
             user?: string;
             [key: string]: unknown;
         } | null;
-        /**
-         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
-         */
         response: {
             id: string;
             object: 'response';
@@ -33967,6 +34002,8 @@ export type GetInteractionResponses = {
                 [key: string]: unknown;
             };
             [key: string]: unknown;
+        } | {
+            error: string;
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -34069,6 +34106,8 @@ export type GetInteractionResponses = {
                 prompt_tokens: number;
                 total_tokens: number;
             };
+        } | {
+            error: string;
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -34147,7 +34186,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: GeminiGenerateContentRequest;
         processedRequest?: GeminiGenerateContentRequest | null;
-        response: GeminiGenerateContentResponse;
+        response: GeminiGenerateContentResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -34227,7 +34268,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: AnthropicMessagesRequest;
         processedRequest?: AnthropicMessagesRequest | null;
-        response: AnthropicMessagesResponse;
+        response: AnthropicMessagesResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -34705,6 +34748,8 @@ export type GetInteractionResponses = {
             serviceTier?: {
                 type?: 'default' | 'throughput';
             };
+        } | {
+            error: string;
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -34785,7 +34830,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
-        response: CerebrasChatCompletionResponse;
+        response: CerebrasChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -34865,7 +34912,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
-        response: MistralChatCompletionResponse;
+        response: MistralChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -34945,7 +34994,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
-        response: PerplexityChatCompletionResponse;
+        response: PerplexityChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35025,7 +35076,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
-        response: GroqChatCompletionResponse;
+        response: GroqChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35105,7 +35158,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
-        response: XaiChatCompletionResponse;
+        response: XaiChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35185,7 +35240,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
-        response: OpenrouterChatCompletionResponse;
+        response: OpenrouterChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35265,7 +35322,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: VllmChatCompletionRequest;
         processedRequest?: VllmChatCompletionRequest | null;
-        response: VllmChatCompletionResponse;
+        response: VllmChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35343,7 +35402,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: OllamaChatCompletionRequest;
         processedRequest?: OllamaChatCompletionRequest | null;
-        response: OllamaChatCompletionResponse;
+        response: OllamaChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35421,7 +35482,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: CohereChatRequest;
         processedRequest?: CohereChatRequest | null;
-        response: CohereChatResponse;
+        response: CohereChatResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35501,7 +35564,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: ZhipuaiChatCompletionRequest;
         processedRequest?: ZhipuaiChatCompletionRequest | null;
-        response: ZhipuaiChatCompletionResponse;
+        response: ZhipuaiChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35581,7 +35646,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: DeepSeekChatCompletionRequest;
         processedRequest?: DeepSeekChatCompletionRequest | null;
-        response: DeepSeekChatCompletionResponse;
+        response: DeepSeekChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -36302,6 +36369,8 @@ export type GetInteractionResponses = {
                 prompt_tokens_details?: unknown;
             };
             [key: string]: unknown;
+        } | {
+            error: string;
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -36382,7 +36451,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: MinimaxChatCompletionRequest;
         processedRequest?: MinimaxChatCompletionRequest | null;
-        response: MinimaxChatCompletionResponse;
+        response: MinimaxChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -36529,6 +36600,8 @@ export type GetInteractionResponses = {
                 prompt_tokens_details?: unknown;
             };
             [key: string]: unknown;
+        } | {
+            error: string;
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -36679,9 +36752,6 @@ export type GetInteractionResponses = {
             user?: string;
             [key: string]: unknown;
         } | null;
-        /**
-         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
-         */
         response: {
             id: string;
             object: 'response';
@@ -36725,6 +36795,8 @@ export type GetInteractionResponses = {
                 [key: string]: unknown;
             };
             [key: string]: unknown;
+        } | {
+            error: string;
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;

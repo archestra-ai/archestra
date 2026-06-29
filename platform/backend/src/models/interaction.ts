@@ -35,7 +35,10 @@ import type {
   SortingQuery,
   UserInfo,
 } from "@/types";
-import { InteractionAuthMethodSchema } from "@/types";
+import {
+  InteractionAuthMethodSchema,
+  normalizeInteractionResponse,
+} from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
@@ -460,6 +463,12 @@ class InteractionModel {
         request: full?.request ?? interaction.request,
         processedRequest:
           full?.processedRequest ?? interaction.processedRequest,
+        // Coerce a stored response that no longer matches its provider schema
+        // into a serializable sentinel so one bad row can't 500 the whole list.
+        response: normalizeInteractionResponse(
+          interaction.type,
+          interaction.response,
+        ),
         // computeRequestType must run on the reconstructed (full) request — it
         // inspects messages.length and the first/last message content.
         requestType: computeRequestType(
@@ -568,6 +577,12 @@ class InteractionModel {
       ...interaction,
       request: reconstructed.request,
       processedRequest: reconstructed.processedRequest,
+      // Coerce a stored response that no longer matches its provider schema
+      // into a serializable sentinel so a bad row can't 500 the detail route.
+      response: normalizeInteractionResponse(
+        interaction.type,
+        interaction.response,
+      ),
       chatErrors: await findChatErrorsForSessionId(interaction.sessionId),
     } as Interaction;
   }

@@ -171,6 +171,24 @@ export class DynamicInteraction implements InteractionUtils {
     return factory(interaction);
   }
 
+  /**
+   * A failed interaction is persisted with the provider `type` but a
+   * `{ error }` response instead of a provider response. Returns that error
+   * string, or null when the response is a normal provider response.
+   */
+  private getErrorResponseText(): string | null {
+    const response: unknown = this.interaction.response;
+    if (
+      response !== null &&
+      typeof response === "object" &&
+      "error" in response &&
+      typeof (response as { error: unknown }).error === "string"
+    ) {
+      return (response as { error: string }).error;
+    }
+    return null;
+  }
+
   isLastMessageToolCall(): boolean {
     return this.interactionClass.isLastMessageToolCall();
   }
@@ -180,18 +198,30 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   getToolNamesRefused(): string[] {
+    if (this.getErrorResponseText() !== null) {
+      return [];
+    }
     return this.interactionClass.getToolNamesRefused();
   }
 
   getToolNamesRequested(): string[] {
+    if (this.getErrorResponseText() !== null) {
+      return [];
+    }
     return this.interactionClass.getToolNamesRequested();
   }
 
   getToolNamesUsed(): string[] {
+    if (this.getErrorResponseText() !== null) {
+      return [];
+    }
     return this.interactionClass.getToolNamesUsed();
   }
 
   getToolRefusedCount(): number {
+    if (this.getErrorResponseText() !== null) {
+      return 0;
+    }
     return this.interactionClass.getToolRefusedCount();
   }
 
@@ -200,6 +230,10 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   getLastAssistantResponse(): string {
+    const errorText = this.getErrorResponseText();
+    if (errorText !== null) {
+      return errorText;
+    }
     return this.interactionClass.getLastAssistantResponse();
   }
 
@@ -207,7 +241,27 @@ export class DynamicInteraction implements InteractionUtils {
    * Map request messages, combining tool calls with their results and dual LLM analysis
    */
   mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
-    return this.interactionClass.mapToUiMessages(dualLlmAnalyses);
+    const errorText = this.getErrorResponseText();
+    if (errorText === null) {
+      return this.interactionClass.mapToUiMessages(dualLlmAnalyses);
+    }
+    // Failed interaction: the response is `{ error }`, not a provider response.
+    // Recover the request side when the provider mapper tolerates the missing
+    // response fields, then surface the error as the assistant turn.
+    let messages: PartialUIMessage[] = [];
+    try {
+      messages = this.interactionClass.mapToUiMessages(dualLlmAnalyses);
+    } catch {
+      messages = [];
+    }
+    return [
+      ...messages,
+      {
+        id: `${this.id}-error`,
+        role: "assistant",
+        parts: [{ type: "text", text: errorText }],
+      },
+    ];
   }
 
   /**

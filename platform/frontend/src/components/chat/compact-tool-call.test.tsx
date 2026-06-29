@@ -2,10 +2,12 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockIsToolName = vi.fn();
+const mockGetToolShortName = vi.fn();
 
 vi.mock("@/lib/mcp/archestra-mcp-server", () => ({
   useArchestraMcpIdentity: () => ({
     isToolName: mockIsToolName,
+    getToolShortName: mockGetToolShortName,
   }),
 }));
 
@@ -24,6 +26,10 @@ import { CompactToolGroup } from "./compact-tool-call";
 describe("CompactToolGroup", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: no tool is treated as `load_skill`, so CompactCircle stays on
+    // the default code path. Tests that exercise the SkillPill branch can
+    // override per-call.
+    mockGetToolShortName.mockReturnValue(null);
   });
 
   it("keeps the built-in MCP icon when the icon map temporarily lacks built-in tool metadata", () => {

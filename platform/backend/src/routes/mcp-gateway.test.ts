@@ -19,7 +19,7 @@ import {
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
-  TOOL_SAVE_RESULT_FULL_NAME,
+  TOOL_SAVE_FILE_FULL_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
@@ -585,6 +585,26 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(body.capabilities).toHaveProperty("tools", true);
   });
 
+  test("GET endpoint serves discovery info without tokenAuth for an invalid token", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders("archestra_invalid_token_12345"),
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toHaveProperty("name", `archestra-agent-${agent.id}`);
+    expect(body).toHaveProperty("agentId", agent.id);
+    expect(body).toHaveProperty("transport", "http");
+    expect(body.capabilities).toHaveProperty("tools", true);
+    expect(body.tokenAuth).toBeUndefined();
+  });
+
   test("handles whoami tool call successfully after initialize", async ({
     makeAgent,
     makeOrganization,
@@ -1111,7 +1131,7 @@ describe("MCP Gateway (stateless mode)", () => {
           TOOL_READ_FILE_FULL_NAME,
           TOOL_RUN_COMMAND_FULL_NAME,
           TOOL_RUN_TOOL_FULL_NAME,
-          TOOL_SAVE_RESULT_FULL_NAME,
+          TOOL_SAVE_FILE_FULL_NAME,
           TOOL_SEARCH_FILES_FULL_NAME,
           TOOL_SEARCH_TOOLS_FULL_NAME,
           TOOL_UPLOAD_FILE_FULL_NAME,
@@ -1201,7 +1221,7 @@ describe("MCP Gateway (stateless mode)", () => {
       // Persistent-files tools are gated by the Projects flag — absent here.
       expect(toolNames).not.toContain(TOOL_SEARCH_FILES_FULL_NAME);
       expect(toolNames).not.toContain(TOOL_READ_FILE_FULL_NAME);
-      expect(toolNames).not.toContain(TOOL_SAVE_RESULT_FULL_NAME);
+      expect(toolNames).not.toContain(TOOL_SAVE_FILE_FULL_NAME);
       expect(toolNames).not.toContain(TOOL_EDIT_FILE_FULL_NAME);
       expect(toolNames).not.toContain(TOOL_DELETE_FILE_FULL_NAME);
     } finally {

@@ -31,6 +31,7 @@ import {
 import { LlmModelPicker } from "@/components/llm-model-picker";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -183,7 +184,12 @@ function formatNumericInput(value: string) {
 
 export default function LimitsPage() {
   const setActionButton = useSetCostsAction();
-  const { data: limits = [], isPending } = useLimits();
+  const {
+    data: limits = [],
+    isPending,
+    isLoadingError: isLimitsLoadError,
+    refetch: refetchLimits,
+  } = useLimits();
   const { data: teams = [] } = useTeams();
   const { data: organization } = useOrganization();
   const { data: members = [] } = useOrganizationMembers();
@@ -648,6 +654,20 @@ export default function LimitsPage() {
     Number(formState.limitValue) > 0 &&
     (formState.isAllModels || formState.models.length > 0) &&
     (formState.entityType === "organization" || formState.entityId.length > 0);
+
+  // Gate the page on the limits list itself. The entity selectors (teams,
+  // members, virtual keys, agents, environments, models) degrade locally if
+  // their own fetch fails, so a secondary failure doesn't blank the page.
+  if (isLimitsLoadError) {
+    return (
+      <div className="space-y-4">
+        <QueryLoadError
+          title="Couldn't load usage limits"
+          onRetry={() => refetchLimits()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

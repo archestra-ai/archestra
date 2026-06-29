@@ -287,7 +287,6 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
           keyType: "passthrough",
           scope: "personal",
           authorId: owner.id,
-          allowedLlmProxyIds: [testAgent.id],
         });
 
       const response = await app.inject({

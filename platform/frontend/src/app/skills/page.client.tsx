@@ -13,11 +13,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -84,12 +85,17 @@ function SkillsList() {
     data: skills,
     isPending,
     isFetching,
-  } = useSkillsPaginated({
-    limit: pageSize,
-    offset: pageIndex * pageSize,
-    search: search || undefined,
-    sourceRepo: sourceRepo || undefined,
-  });
+    isLoadingError: isSkillsLoadError,
+    refetch: refetchSkills,
+  } = useSkillsPaginated(
+    {
+      limit: pageSize,
+      offset: pageIndex * pageSize,
+      search: search || undefined,
+      sourceRepo: sourceRepo || undefined,
+    },
+    { toastOnError: false },
+  );
   const { data: sourceReposData } = useSkillSourceRepos();
   const sourceRepos = sourceReposData?.repos ?? [];
 
@@ -114,6 +120,21 @@ function SkillsList() {
   const currentUserId = session?.user?.id;
 
   const items = skills?.data ?? [];
+
+  // Deep-link support: /skills?openEdit=<name> auto-opens the skill editor for
+  // the matching skill (e.g. from the chat SkillPill). The query param is
+  // stripped after we open the dialog so the URL doesn't keep re-triggering
+  // on refresh or back-navigation.
+  const openEdit = searchParams.get("openEdit");
+  useEffect(() => {
+    if (!openEdit || items.length === 0) return;
+    const match = items.find((s) => s.name === openEdit);
+    if (!match) return;
+    setEditingSkillId(match.id);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("openEdit");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [openEdit, items, searchParams, pathname, router]);
   const pagination = skills?.pagination;
   const totalSkills = pagination?.total ?? 0;
   const hasActiveFilters = !!search || !!sourceRepo;
@@ -251,6 +272,17 @@ function SkillsList() {
       },
     },
   ];
+
+  if (isSkillsLoadError) {
+    return (
+      <PageLayout title="Skills" description="">
+        <QueryLoadError
+          title="Couldn't load your skills"
+          onRetry={() => refetchSkills()}
+        />
+      </PageLayout>
+    );
+  }
 
   return (
     <LoadingWrapper

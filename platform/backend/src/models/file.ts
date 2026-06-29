@@ -127,7 +127,7 @@ class FileModel {
 
   /**
    * A user's headless (no-project, no-conversation) file by name. The orphan
-   * unique index makes the match at most one. Used so a headless `save_result`
+   * unique index makes the match at most one. Used so a headless `save_file`
    * with `overwrite` can replace the file it created on a previous run instead
    * of dead-ending on the orphan name collision.
    */

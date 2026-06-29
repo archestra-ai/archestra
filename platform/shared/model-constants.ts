@@ -240,7 +240,14 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "gpt-4.1",
     "gpt-4o",
   ],
-  gemini: ["gemini-3.1-pro-preview", "gemini-2.5-pro", "flash"],
+  gemini: [
+    "gemini-3.5-pro",
+    "gemini-3.5-flash",
+    "gemini-3.1-pro-preview",
+    "gemini-3-pro",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+  ],
   cerebras: ["zai-glm-4.7"],
   cohere: ["command-a-plus", "command-a", "command-r-plus", "command-r"],
   mistral: [

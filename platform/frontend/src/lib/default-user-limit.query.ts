@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   listDefaultUserLimits,
@@ -26,10 +26,7 @@ export function useDefaultUserLimits() {
     queryKey: QUERY_KEY,
     queryFn: async () => {
       const { data, error } = await listDefaultUserLimits();
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error);
       return data ?? [];
     },
   });

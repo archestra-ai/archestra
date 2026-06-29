@@ -90,6 +90,19 @@ export interface ProxyStep {
   language?: "json" | "toml" | "bash";
   /** Inline labelled values rendered as individual rows. Non-copyable rows render as plain text (e.g. for placeholder values the user must replace). */
   fields?: { label: string; value: string; copyable?: boolean }[];
+  /**
+   * When true, render the inline passthrough-key reveal beneath this step: it
+   * auto-provisions the user's personal passthrough virtual key and shows the
+   * X-Archestra-Virtual-Key header name + copyable value. Gated on
+   * llmVirtualKey:create. Used by the attribution step for manual clients.
+   */
+  showPassthroughKey?: boolean;
+  /**
+   * Reveal layout: "header" (default) shows separate name + value rows for a
+   * custom-headers UI (Claude Desktop); "env" shows one copyable
+   * ANTHROPIC_CUSTOM_HEADERS value for an env block (Claude Code).
+   */
+  passthroughKeyVariant?: "header" | "env";
 }
 
 export type ProxyInstruction =
@@ -225,10 +238,6 @@ claude`,
   }
 }`,
             },
-            {
-              title: "Restart Claude Code",
-              body: "New sessions will route through Archestra automatically.",
-            },
           ],
         };
       },
@@ -253,7 +262,7 @@ claude`,
         },
         {
           title: 'Open "Configure Third-Party Inference"',
-          body: 'From the Claude menu choose Developer → "Configure Third-Party Inference…".',
+          body: "From the Claude menu choose Developer → Configure Third-Party Inference….",
         },
         {
           title: "Add a Managed MCP server",
@@ -282,7 +291,7 @@ claude`,
           },
           {
             title: 'Open "Configure Third-Party Inference"',
-            body: 'From the Claude menu choose Developer → "Configure Third-Party Inference…".',
+            body: "From the Claude menu choose Developer → Configure Third-Party Inference….",
           },
           {
             title: "Fill in the credential",
@@ -291,14 +300,15 @@ claude`,
               { label: "Gateway URL", value: url },
               {
                 label: "API Key",
-                value: "<your-anthropic-api-key-or-virtual-key>",
+                value: "<your-anthropic-api-key-or-standard-virtual-key>",
                 copyable: false,
               },
             ],
           },
           {
-            title: "Restart and verify",
-            body: "Restart Claude Desktop and send a message in a new conversation. Requests appear in the Archestra LLM proxy logs.",
+            title: "Add your personal auth key header",
+            body: 'In the same form, expand "Custom headers" and add a header with the name and value below to authenticate on the LLM Proxy. This is in addition to the API key above, which Claude Desktop still needs.',
+            showPassthroughKey: true,
           },
         ],
       }),

@@ -135,6 +135,81 @@ export async function ensureConnectionVirtualKey(params: {
 }
 
 /**
+ * Ensures the per-user passthrough virtual key used to attribute /connection
+ * passthrough requests (Claude Code subscription, Claude Desktop API key) to the
+ * acting user via the X-Archestra-Virtual-Key header. The key carries NO provider
+ * credential — it only identifies the user. One key per user (named like the
+ * standard connection key); LLM proxy access is governed by the user's own
+ * access permissions at request time, so the key is not bound to any proxy.
+ *
+ * Reuses the existing key when present and still typed passthrough with a
+ * readable secret; recreates it otherwise. Creation happens only here (at
+ * setup-create time, never at render time) because secrets-manager writes do not
+ * roll back with a DB transaction. Returns the virtual key id; the raw value is
+ * re-read at render time via {@link readVirtualKeyValue}.
+ */
+export async function ensureConnectionPassthroughKey(params: {
+  organizationId: string;
+  userId: string;
+  userEmail: string;
+}): Promise<string> {
+  const { organizationId, userId, userEmail } = params;
+
+  const name = connectionPassthroughKeyName(userEmail);
+  const existing = await VirtualApiKeyModel.findByAuthorScopeName({
+    organizationId,
+    authorId: userId,
+    scope: "personal",
+    name,
+  });
+
+  if (existing) {
+    const secret =
+      existing.keyType === "passthrough"
+        ? await secretManager().getSecret(existing.secretId)
+        : null;
+    if (existing.keyType === "passthrough" && secret) {
+      return existing.id;
+    }
+    // Wrong type (name squatted) or secret revoked out from under us: replace
+    // the row so previously rendered scripts stay broken but new setups work.
+    logger.warn(
+      {
+        virtualApiKeyId: existing.id,
+        organizationId,
+        keyType: existing.keyType,
+      },
+      "ensureConnectionPassthroughKey: existing key not reusable; recreating",
+    );
+    await VirtualApiKeyModel.delete(existing.id);
+  }
+
+  const { virtualKey } = await VirtualApiKeyModel.create({
+    organizationId,
+    name,
+    keyType: "passthrough",
+    scope: "personal",
+    authorId: userId,
+  });
+
+  // Names are not unique, so two concurrent setups can both miss the lookup
+  // above and create twins. Re-resolve the deterministic winner (oldest row);
+  // the loser deletes its own key and converges on the winner.
+  const winner = await VirtualApiKeyModel.findByAuthorScopeName({
+    organizationId,
+    authorId: userId,
+    scope: "personal",
+    name,
+  });
+  if (winner && winner.id !== virtualKey.id) {
+    await VirtualApiKeyModel.delete(virtualKey.id);
+    return winner.id;
+  }
+
+  return virtualKey.id;
+}
+
+/**
  * Reads the raw virtual key value for script rendering. Returns null when the
  * key row or its secret is gone (revoked) — callers must treat that as a
  * render failure, never render a placeholder.
@@ -189,4 +264,10 @@ async function resolvePreferredProviderKey(params: {
 function connectionVirtualKeyName(userEmail: string): string {
   // Virtual key names cap at 256 chars; emails are well under that.
   return `Connection setup — ${userEmail}`.slice(0, 256);
+}
+
+function connectionPassthroughKeyName(userEmail: string): string {
+  // Distinct from connectionVirtualKeyName so findByAuthorScopeName never
+  // confuses a standard connection key with the passthrough attribution key.
+  return `Connection passthrough — ${userEmail}`.slice(0, 256);
 }

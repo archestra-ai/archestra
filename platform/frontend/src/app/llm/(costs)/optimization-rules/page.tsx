@@ -11,6 +11,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderOptionLabel } from "@/components/llm-provider-select-items";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { QueryLoadError } from "@/components/query-load-error";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -78,7 +79,12 @@ function getProviderLogoName(provider: keyof typeof providerDisplayNames) {
 
 export default function OptimizationRulesPage() {
   const setActionButton = useSetCostsAction();
-  const { data: rules = [], isPending } = useOptimizationRules();
+  const {
+    data: rules = [],
+    isPending,
+    isLoadingError: isRulesLoadError,
+    refetch: refetchRules,
+  } = useOptimizationRules();
   const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
   const { data: teams = [] } = useTeams();
   const { data: organization } = useOrganization();
@@ -355,20 +361,27 @@ export default function OptimizationRulesPage() {
         isPending={isPending}
         loadingFallback={<LoadingSpinner />}
       >
-        <DataTable
-          columns={columns}
-          data={filteredRules}
-          emptyMessage="No optimization rules configured yet"
-          hasActiveFilters={hasActiveFilters}
-          filteredEmptyMessage="No optimization rules match your filters. Try adjusting your search."
-          onClearFilters={() =>
-            updateQueryParams({
-              appliedTo: null,
-              provider: null,
-              targetModel: null,
-            })
-          }
-        />
+        {isRulesLoadError ? (
+          <QueryLoadError
+            title="Couldn't load your optimization rules"
+            onRetry={() => refetchRules()}
+          />
+        ) : (
+          <DataTable
+            columns={columns}
+            data={filteredRules}
+            emptyMessage="No optimization rules configured yet"
+            hasActiveFilters={hasActiveFilters}
+            filteredEmptyMessage="No optimization rules match your filters. Try adjusting your search."
+            onClearFilters={() =>
+              updateQueryParams({
+                appliedTo: null,
+                provider: null,
+                targetModel: null,
+              })
+            }
+          />
+        )}
       </LoadingWrapper>
 
       <FormDialog

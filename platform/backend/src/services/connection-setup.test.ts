@@ -1,6 +1,7 @@
 import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
 import { VirtualApiKeyModel } from "@/models";
 import {
+  ensureConnectionPassthroughKey,
   ensureConnectionVirtualKey,
   readVirtualKeyValue,
 } from "@/services/connection-setup";
@@ -342,5 +343,69 @@ describe("readVirtualKeyValue", () => {
 
     await VirtualApiKeyModel.delete(id);
     expect(await readVirtualKeyValue(id)).toBeNull();
+  });
+});
+
+describe("ensureConnectionPassthroughKey", () => {
+  test("creates a single personal passthrough key per user and reuses it", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+
+    const firstId = await ensureConnectionPassthroughKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+    });
+
+    const created = await VirtualApiKeyModel.findById(firstId);
+    expect(created?.keyType).toBe("passthrough");
+    expect(created?.scope).toBe("personal");
+    expect(created?.authorId).toBe(user.id);
+    expect(created?.name).toBe(`Connection passthrough — ${user.email}`);
+    // No provider credential — passthrough keys only attribute the user.
+    expect(await VirtualApiKeyModel.getProviderApiKeys(firstId)).toEqual([]);
+    expect(
+      (await readVirtualKeyValue(firstId))?.startsWith(ARCHESTRA_TOKEN_PREFIX),
+    ).toBe(true);
+
+    // Re-running returns the same per-user key.
+    const secondId = await ensureConnectionPassthroughKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+    });
+    expect(secondId).toBe(firstId);
+  });
+
+  test("recreates the key when the prior one was deleted", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+
+    const firstId = await ensureConnectionPassthroughKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+    });
+    await VirtualApiKeyModel.delete(firstId);
+
+    const secondId = await ensureConnectionPassthroughKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+    });
+    expect(secondId).not.toBe(firstId);
+    expect((await VirtualApiKeyModel.findById(secondId))?.keyType).toBe(
+      "passthrough",
+    );
   });
 });

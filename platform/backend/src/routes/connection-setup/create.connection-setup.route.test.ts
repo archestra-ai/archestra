@@ -322,8 +322,33 @@ describe("POST /api/connection-setups", () => {
       "No anthropic API key",
     );
 
-    // default (provider-key passthrough): nothing to provision
+    // provider-key passthrough with attribution off: nothing to provision
     const passthrough = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider: "anthropic",
+        attributePassthrough: false,
+      },
+    });
+    expect(passthrough.statusCode).toBe(200);
+    const rawToken = passthrough
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(setup?.proxyAuth).toBe("provider-key");
+    expect(setup?.virtualApiKeyId).toBeNull();
+  });
+
+  test("claude-code anthropic passthrough provisions an attribution key by default", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+
+    const response = await app.inject({
       method: "POST",
       url: "/api/connection-setups",
       payload: {
@@ -333,12 +358,44 @@ describe("POST /api/connection-setups", () => {
         provider: "anthropic",
       },
     });
-    expect(passthrough.statusCode).toBe(200);
-    const rawToken = passthrough
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
       .json()
       .command.match(/script\/([^']+)'/)?.[1] as string;
     const setup = await ConnectionSetupModel.findByToken(rawToken);
     expect(setup?.proxyAuth).toBe("provider-key");
+    expect(setup?.virtualApiKeyId).not.toBeNull();
+    const attributionKey = await VirtualApiKeyModel.findById(
+      setup?.virtualApiKeyId as string,
+    );
+    expect(attributionKey?.keyType).toBe("passthrough");
+    expect(attributionKey?.authorId).toBe(user.id);
+  });
+
+  test("passthrough attribution is best-effort: still 200 without llmVirtualKey:create, no key provisioned", async ({
+    makeAgent,
+  }) => {
+    mockUserHasPermission.mockImplementation(
+      async (_userId, _orgId, resource, action) =>
+        !(resource === "llmVirtualKey" && action === "create"),
+    );
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider: "anthropic",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
     expect(setup?.virtualApiKeyId).toBeNull();
   });
 

@@ -10,8 +10,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import {
-  AgentModel,
-  AgentTeamModel,
   LlmProviderApiKeyModel,
   MemberModel,
   TeamModel,
@@ -46,14 +44,12 @@ const VirtualApiKeyBodyObjectSchema = z.object({
       }),
     )
     .default([]),
-  /** LLM proxies a passthrough key may use (empty = any the owner can access). */
-  allowedLlmProxyIds: z.array(z.string().uuid()).default([]),
 });
 
 /**
  * Contextual validation: which fields are accepted depends on the key type.
- * Standard keys map provider API keys; passthrough keys select LLM proxies and
- * never carry provider credentials or team/org scope.
+ * Standard keys map provider API keys; passthrough keys never carry provider
+ * credentials or team/org scope.
  */
 function refineVirtualApiKeyBody(
   value: z.infer<typeof VirtualApiKeyBodyObjectSchema>,
@@ -82,13 +78,6 @@ function refineVirtualApiKeyBody(
       code: "custom",
       path: ["providerApiKeys"],
       message: "At least one provider API key is required",
-    });
-  }
-  if (value.allowedLlmProxyIds.length > 0) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["allowedLlmProxyIds"],
-      message: "Only passthrough virtual keys can select LLM proxies",
     });
   }
 }
@@ -235,10 +224,9 @@ async function createVirtualApiKey(params: {
     throw new ApiError(400, "Expiration date must be in the future");
   }
 
-  const [userTeamIds, isVirtualKeyAdmin, isAgentAdmin] = await Promise.all([
+  const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
     TeamModel.getUserTeamIds(user.id),
     userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
-    userHasPermission(user.id, organizationId, "agent", "admin"),
   ]);
   const ownerId = await resolveKeyOwner({
     requestedOwnerId: body.ownerId,
@@ -247,16 +235,9 @@ async function createVirtualApiKey(params: {
     isAdmin: isVirtualKeyAdmin,
   });
 
-  // Passthrough keys are always personal, carry no provider keys, and instead
-  // select the LLM proxies they may authenticate against.
+  // Passthrough keys are always personal and carry no provider keys; they only
+  // authenticate the acting user.
   if (body.keyType === "passthrough") {
-    await validateAllowedLlmProxies({
-      ids: body.allowedLlmProxyIds,
-      organizationId,
-      userId: user.id,
-      isAgentAdmin,
-    });
-
     const created = await VirtualApiKeyModel.create({
       organizationId,
       name: body.name,
@@ -264,7 +245,6 @@ async function createVirtualApiKey(params: {
       expiresAt: body.expiresAt ?? null,
       scope: "personal",
       authorId: ownerId,
-      allowedLlmProxyIds: body.allowedLlmProxyIds,
     });
 
     return {
@@ -273,7 +253,6 @@ async function createVirtualApiKey(params: {
       teams: created.teams,
       authorName: created.authorName,
       providerApiKeys: created.providerApiKeys,
-      allowedLlmProxies: created.allowedLlmProxies,
     };
   }
 
@@ -292,23 +271,17 @@ async function createVirtualApiKey(params: {
     userId: user.id,
   });
 
-  const {
-    virtualKey,
-    value,
-    teams,
-    authorName,
-    providerApiKeys,
-    allowedLlmProxies,
-  } = await VirtualApiKeyModel.create({
-    organizationId,
-    name: body.name,
-    keyType: "standard",
-    expiresAt: body.expiresAt ?? null,
-    scope: body.scope,
-    authorId: ownerId,
-    teamIds: body.teams,
-    providerApiKeys: body.providerApiKeys,
-  });
+  const { virtualKey, value, teams, authorName, providerApiKeys } =
+    await VirtualApiKeyModel.create({
+      organizationId,
+      name: body.name,
+      keyType: "standard",
+      expiresAt: body.expiresAt ?? null,
+      scope: body.scope,
+      authorId: ownerId,
+      teamIds: body.teams,
+      providerApiKeys: body.providerApiKeys,
+    });
 
   return {
     ...virtualKey,
@@ -316,7 +289,6 @@ async function createVirtualApiKey(params: {
     teams,
     authorName,
     providerApiKeys,
-    allowedLlmProxies,
   };
 }
 
@@ -338,10 +310,9 @@ async function updateVirtualApiKey(params: {
     throw new ApiError(400, "Expiration date must be in the future");
   }
 
-  const [userTeamIds, isVirtualKeyAdmin, isAgentAdmin] = await Promise.all([
+  const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
     TeamModel.getUserTeamIds(user.id),
     userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
-    userHasPermission(user.id, organizationId, "agent", "admin"),
   ]);
   await requireVirtualKeyModifyPermission({
     virtualKey: accessContext,
@@ -357,12 +328,6 @@ async function updateVirtualApiKey(params: {
 
   let updatedVirtualKey: Awaited<ReturnType<typeof VirtualApiKeyModel.update>>;
   if (accessContext.keyType === "passthrough") {
-    await validateAllowedLlmProxies({
-      ids: body.allowedLlmProxyIds,
-      organizationId,
-      userId: user.id,
-      isAgentAdmin,
-    });
     updatedVirtualKey = await VirtualApiKeyModel.update({
       id,
       name: body.name,
@@ -372,7 +337,6 @@ async function updateVirtualApiKey(params: {
       authorId: accessContext.authorId,
       teamIds: [],
       providerApiKeys: [],
-      allowedLlmProxyIds: body.allowedLlmProxyIds,
     });
   } else {
     await validateVirtualKeyScope({
@@ -399,7 +363,6 @@ async function updateVirtualApiKey(params: {
       authorId: accessContext.authorId,
       teamIds: body.teams,
       providerApiKeys: body.providerApiKeys,
-      allowedLlmProxyIds: [],
     });
   }
 
@@ -409,17 +372,13 @@ async function updateVirtualApiKey(params: {
 
   const visibilityMetadata =
     await VirtualApiKeyModel.getVisibilityForVirtualApiKeyIds([id]);
-  const [providerApiKeys, allowedLlmProxies] = await Promise.all([
-    VirtualApiKeyModel.getProviderApiKeys(id),
-    VirtualApiKeyModel.getLlmProxies(id),
-  ]);
+  const providerApiKeys = await VirtualApiKeyModel.getProviderApiKeys(id);
 
   return {
     ...updatedVirtualKey,
     teams: visibilityMetadata.teams.get(id) ?? [],
     authorName: visibilityMetadata.authorName.get(id) ?? null,
     providerApiKeys,
-    allowedLlmProxies,
   };
 }
 
@@ -585,36 +544,6 @@ async function validateProviderApiKeys(params: {
           `You can only map your own personal ${mapping.provider} key.`,
         );
       }
-    }
-  }
-}
-
-async function validateAllowedLlmProxies(params: {
-  ids: string[];
-  organizationId: string;
-  userId: string;
-  isAgentAdmin: boolean;
-}): Promise<void> {
-  const { ids, organizationId, userId, isAgentAdmin } = params;
-  if (ids.length === 0) {
-    // Empty list means "any LLM proxy the key owner can access" — resolved at
-    // request time, so nothing to validate here.
-    return;
-  }
-
-  for (const id of [...new Set(ids)]) {
-    // findById returns null when the proxy does not exist or, for non-admins,
-    // when the user has no access to it.
-    const agent = await AgentModel.findById(id, userId, isAgentAdmin);
-    if (
-      !agent ||
-      agent.organizationId !== organizationId ||
-      agent.agentType !== "llm_proxy"
-    ) {
-      throw new ApiError(
-        404,
-        "LLM proxy not found or you do not have access to it",
-      );
     }
   }
 }

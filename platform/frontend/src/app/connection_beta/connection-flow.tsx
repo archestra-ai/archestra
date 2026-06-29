@@ -11,6 +11,7 @@ import config from "@/lib/config/config";
 import { ClientPicker } from "./client-grid";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectCommandPanel, isScriptClient } from "./connect-command-panel";
+import { ConnectConfigPanel, isConfigClient } from "./connect-config-panel";
 import {
   type ConnectionBaseUrl,
   resolveAdminDefaultBaseUrl,
@@ -174,7 +175,10 @@ export function ConnectionFlow({
 
   // Manual flow (n8n / Any client): one wizard-rail entry per instruction
   // block, numbered after the client step.
-  const manualClient = client && !isScriptClient(client.id) ? client : null;
+  const manualClient =
+    client && !isScriptClient(client.id) && !isConfigClient(client.id)
+      ? client
+      : null;
   const manualSteps: {
     key: string;
     title: string;
@@ -293,6 +297,23 @@ export function ConnectionFlow({
           shownProviders={shownProviders}
           urlProvider={urlProvider}
           onProviderSelect={(p) => updateUrlParams({ providerId: p })}
+          baseUrl={baseUrl}
+          candidateBaseUrls={candidateBaseUrls}
+          baseUrlMetadata={connectionBaseUrls}
+          onBaseUrlChange={setUserBaseUrl}
+        />
+      )}
+
+      {/* Steps 2-4 (Claude Desktop) — review, download a config profile, import */}
+      {client && isConfigClient(client.id) && (
+        <ConnectConfigPanel
+          mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
+          mcpGatewayId={effectiveMcpId}
+          onMcpGatewaySelect={handleMcpSelect}
+          gatewaySlug={selectedMcp?.slug ?? effectiveMcpId}
+          llmProxies={canReadLlmProxy ? (llmProxies ?? []) : null}
+          llmProxyId={effectiveProxyId}
+          onLlmProxySelect={handleProxySelect}
           baseUrl={baseUrl}
           candidateBaseUrls={candidateBaseUrls}
           baseUrlMetadata={connectionBaseUrls}

@@ -4,6 +4,7 @@ import {
   useEnterpriseFeature,
   usePublicEnterpriseCoreActive,
 } from "@/lib/config/config.query";
+import { throwOnApiError } from "@/lib/utils";
 
 export const identityProviderReadKeys = {
   all: ["identity-provider"] as const,
@@ -16,7 +17,9 @@ export function usePublicIdentityProviders() {
   return useQuery({
     queryKey: identityProviderReadKeys.public,
     queryFn: async () => {
-      const { data } = await archestraApiSdk.getPublicIdentityProviders();
+      const { data, error } =
+        await archestraApiSdk.getPublicIdentityProviders();
+      throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
     retry: false,
@@ -30,7 +33,8 @@ export function useIdentityProviders(params?: { enabled?: boolean }) {
   return useQuery({
     queryKey: identityProviderReadKeys.all,
     queryFn: async () => {
-      const { data } = await archestraApiSdk.getIdentityProviders();
+      const { data, error } = await archestraApiSdk.getIdentityProviders();
+      throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
     retry: false,

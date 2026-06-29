@@ -76,32 +76,79 @@ def _summarize(aggregate_path: Path) -> _Summary:
     try:
         agg = json.loads(aggregate_path.read_text())
         passed, total = agg["passed"], agg["total"]
-        outcomes = " ".join(f"{k}={v}" for k, v in agg["outcomes"].items())
+        outcomes = agg["outcomes"]
         pass_rate = agg["pass_rate"]
+        per_lane = agg.get("per_lane") or []
     except (OSError, ValueError, KeyError, TypeError):
         logger.exception("could not parse %s", aggregate_path)
         return failed
     if total == 0 or passed == 0:
+        # One loud line is the right shape for a broken harness — there is no leaderboard to scan.
         return _Summary(
             healthy=False,
-            text=f"⚠️ {passed}/{total} passed — harness likely broken · {outcomes}",
+            text=f"⚠️ {passed}/{total} passed — harness likely broken · {_failures(outcomes)}",
         )
     rate = int(pass_rate * 100)
-    cost = _cost_fragment(agg.get("per_lane"))
-    return _Summary(
-        healthy=True, text=f"✅ {passed}/{total} passed ({rate}%) · {outcomes}{cost}"
+    lines = [f"✅ {passed}/{total} passed ({rate}%)"]
+    failures = _failures(outcomes)
+    if failures:
+        lines.append(f"failures: {failures}")
+    board = _leaderboard(per_lane)
+    if board:
+        lines.append(board)
+    cost = _total_cost(per_lane)
+    if cost:
+        lines.append(cost)
+    return _Summary(healthy=True, text="\n".join(lines))
+
+
+def _failures(outcomes: dict[str, int]) -> str:
+    # Non-pass outcomes, worst first; "passed" already lives in the headline.
+    items = sorted(
+        ((k, v) for k, v in outcomes.items() if k != "passed"),
+        key=lambda kv: (-kv[1], kv[0]),
     )
+    return " · ".join(f"{k} {v}" for k, v in items)
 
 
-def _cost_fragment(per_lane: list[dict] | None) -> str:
-    # Per-lane total spend (no average). Omitted entirely when nothing was priced (older runs, or
-    # every lane unmapped); unpriced lanes within a run are simply left out.
-    parts = [
-        f"{g['lane']}=${g['cost_usd']:.4f}"
-        for g in (per_lane or [])
-        if g.get("cost_usd") is not None
-    ]
-    return f" · cost {' '.join(parts)}" if parts else ""
+def _cost_key(cost: float | None) -> float:
+    return cost if cost is not None else float("inf")
+
+
+def _leaderboard(per_lane: list[dict]) -> str:
+    # One monospace row per lane (model), best pass rate first, ties broken by cheaper then name.
+    # Costs to cents — the 4-decimal precision belongs in aggregate.json, not a glance-able board.
+    if not per_lane:
+        return ""
+    lanes = sorted(
+        per_lane,
+        key=lambda g: (-g["pass_rate"], _cost_key(g.get("cost_usd")), g["lane"]),
+    )
+    pass_strs = {g["lane"]: f"{g['passed']}/{g['total']}" for g in lanes}
+    name_w = max(len("model"), *(len(g["lane"]) for g in lanes))
+    pass_w = max(len("pass"), *(len(s) for s in pass_strs.values()))
+
+    def row(name: str, passes: str, pct: str, cost: str) -> str:
+        return f"{name:<{name_w}}  {passes:>{pass_w}} {pct:>4}  {cost:>6}"
+
+    out = [row("model", "pass", "", "cost")]
+    for g in lanes:
+        cost = g.get("cost_usd")
+        cost_str = f"${cost:.2f}" if cost is not None else "n/a"
+        pct = f"{round(g['pass_rate'] * 100)}%"
+        out.append(row(g["lane"], pass_strs[g["lane"]], pct, cost_str))
+    return "```\n" + "\n".join(out) + "\n```"
+
+
+def _total_cost(per_lane: list[dict]) -> str:
+    # Sum of the fully-priced lanes. A lane that carried unpriceable spend nulls its own cost_usd, so
+    # its priced subtotal is unrecoverable here — flag the total incomplete off cost_unpriced_n (the
+    # honest "undercounts" signal) rather than off a null cost_usd, which a zero-spend lane shares.
+    priced = [g["cost_usd"] for g in per_lane if g.get("cost_usd") is not None]
+    if not priced:
+        return ""
+    incomplete = " (incomplete)" if any(g.get("cost_unpriced_n") for g in per_lane) else ""
+    return f"cost total: ${sum(priced):.2f}{incomplete}"
 
 
 def _upload(run_id: str, *, tb: Path, run_dir: Path, tarball: Path) -> list[str]:
@@ -165,12 +212,13 @@ def _post_slack(
         return
     text = summary.text
     if warnings:
-        text += " · ⚠️ " + "; ".join(warnings)
-    for label, url in links.items():
-        text += f" · <{url}|{label}>"
+        text += "\n⚠️ " + "; ".join(warnings)
+    link_bits = [f"<{url}|{label}>" for label, url in links.items()]
     run_url = os.environ.get("RUN_URL", "").strip()
     if run_url:
-        text += f" · <{run_url}|run>"
+        link_bits.append(f"<{run_url}|run>")
+    if link_bits:
+        text += "\n" + " · ".join(link_bits)
     payload = json.dumps({"text": text}).encode()
     request = urllib.request.Request(
         webhook, data=payload, headers={"Content-Type": "application/json"}

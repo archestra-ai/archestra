@@ -444,7 +444,7 @@ export const AUDIT_DECISIONS = {
   filesTable: {
     audited: false,
     reason:
-      "user's own PFS files; download_file/save_result outputs, no admin signal",
+      "user's own PFS files; download_file/save_file outputs, no admin signal",
   },
   skillSandboxReplayEventsTable: {
     audited: false,

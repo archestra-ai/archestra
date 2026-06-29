@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, MoreHorizontal, Trash2 } from "lucide-react";
+import { Download, ListChecks, MoreHorizontal, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import {
   type FileListItem,
@@ -21,11 +21,13 @@ import {
   selectionCheckState,
   toggleSelectedId,
 } from "@/lib/chat/file-selection";
+import { cn } from "@/lib/utils";
 
 /**
- * The list-view body shared by the chat and project Files panels: a "Select"
- * toggle, row checkboxes + "Select all", a bottom Download/Delete bar, and a
- * per-row "⋯" menu. The list/detail navigation and the delete confirm live in
+ * The list-view body shared by the chat and project Files panels. Multi-select
+ * is entered from a file's "⋯" menu ("Select", which also pre-checks that row);
+ * doing so reveals a "Select all"/Cancel bar at the top and a Download/Delete
+ * bar at the bottom. The list/detail navigation and the delete confirm live in
  * the caller; this component reports opens via `onOpen` and delete requests via
  * `onRequestDelete`.
  *
@@ -43,7 +45,7 @@ export function SelectableFileList<T extends FileListItem>({
   onRequestDelete,
   renderItemActions,
 }: {
-  sections: { title?: string; items: T[] }[];
+  sections: { title?: string; description?: string; items: T[] }[];
   leading?: ReactNode;
   canManage: boolean;
   /** The open file's id, highlighted in the list while it previews beside it. */
@@ -81,6 +83,12 @@ export function SelectableFileList<T extends FileListItem>({
     setSelectionMode(false);
     setSelectedIds(new Set());
   };
+  // Entering selection from a row's "⋯" menu pre-checks that row, so the action
+  // that started the selection isn't lost.
+  const enterSelectionWith = (id: string) => {
+    setSelectionMode(true);
+    setSelectedIds(new Set([id]));
+  };
   const selection = selectionMode
     ? {
         selectedIds,
@@ -96,79 +104,71 @@ export function SelectableFileList<T extends FileListItem>({
       else setSelectedIds(new Set(failedIds));
     });
 
-  // Headers only earn their place when more than one non-empty group shows.
-  const showHeaders = sections.filter((s) => s.items.length > 0).length > 1;
-
   const renderActions = (item: FileListItem): ReactNode => {
     const custom = renderItemActions?.(item as T);
     if (custom != null) return custom;
     if (!canManage || !isManageable(item)) return null;
     return (
-      <FileRowMenu item={item} onDelete={() => onRequestDelete([item as T])} />
+      <FileRowMenu
+        item={item}
+        onSelect={() => enterSelectionWith(item.id)}
+        onDelete={() => onRequestDelete([item as T])}
+      />
     );
   };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-2 px-3 pt-3 pb-2">
-        {selectionMode ? (
-          <>
-            <label
-              htmlFor="files-select-all"
-              className="flex items-center gap-2 text-xs text-muted-foreground"
-            >
-              <Checkbox
-                id="files-select-all"
-                checked={
-                  allChecked ? true : someChecked ? "indeterminate" : false
-                }
-                onCheckedChange={() =>
-                  setSelectedIds(
-                    selectAllIds(
-                      allChecked,
-                      managed.map((f) => f.id),
-                    ),
-                  )
-                }
-                aria-label="Select all files"
-              />
-              Select all
-            </label>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={exitSelection}
-            >
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <>
-            <span className="text-xs text-muted-foreground">
-              {managedCount} {managedCount === 1 ? "file" : "files"}
-            </span>
-            {canManage && managedCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => setSelectionMode(true)}
-              >
-                Select
-              </Button>
-            )}
-          </>
-        )}
-      </div>
+      {/* No idle toolbar — the list fills the panel and multi-select is entered
+          from a row's "⋯" menu. The "Select all"/Cancel bar appears only while
+          selecting, so nothing floats in an otherwise-empty band. */}
+      {selectionMode && (
+        <div className="flex shrink-0 items-center justify-between gap-2 px-3 pt-3 pb-2">
+          <label
+            htmlFor="files-select-all"
+            className="flex items-center gap-2 text-xs text-muted-foreground"
+          >
+            <Checkbox
+              id="files-select-all"
+              checked={
+                allChecked ? true : someChecked ? "indeterminate" : false
+              }
+              onCheckedChange={() =>
+                setSelectedIds(
+                  selectAllIds(
+                    allChecked,
+                    managed.map((f) => f.id),
+                  ),
+                )
+              }
+              aria-label="Select all files"
+            />
+            Select all
+          </label>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={exitSelection}
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
 
       {/* The open file's row stays highlighted while it previews beside the
           list (split view); harmless when expanded (list hidden) or idle. */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto px-3 pb-3",
+          !selectionMode && "pt-3",
+        )}
+      >
         {sections.map((section, i) => (
           <FileSection
             key={section.title ?? `section-${i}`}
-            title={showHeaders ? section.title : undefined}
+            title={section.title}
+            description={section.description}
             items={section.items}
             selectedId={selectedId ?? null}
             onSelect={onOpen}
@@ -219,12 +219,18 @@ function isManageable(item: FileListItem): boolean {
   return item.contentUrl !== "";
 }
 
-/** A "⋯" menu of single-file actions (Download + Delete) for a managed file. */
+/**
+ * A "⋯" menu of single-file actions for a managed file: Download, Select (enter
+ * multi-select), and Delete. "Select" is the entry point into selection mode,
+ * since the panel has no standing toolbar.
+ */
 function FileRowMenu({
   item,
+  onSelect,
   onDelete,
 }: {
   item: FileListItem;
+  onSelect: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -248,6 +254,15 @@ function FileRowMenu({
             </a>
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem
+          onSelect={(e) => {
+            e.preventDefault();
+            onSelect();
+          }}
+        >
+          <ListChecks className="h-4 w-4" />
+          Select
+        </DropdownMenuItem>
         <DropdownMenuItem
           className="text-destructive focus:text-destructive"
           onSelect={(e) => {

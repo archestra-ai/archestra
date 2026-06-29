@@ -26,7 +26,7 @@ import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution"
  * Two callers materialize this conversation:
  *   - the run handler, BEFORE execution, for project-scoped triggers — so the
  *     run executes against a real conversation whose `project_id` lets the file
- *     tools resolve project scope (save_result etc. land in the project).
+ *     tools resolve project scope (save_file etc. land in the project).
  *   - the run-view route, AFTER execution, to show the run as a chat.
  *
  * Creation is centralized here and linked with a compare-and-swap so the two

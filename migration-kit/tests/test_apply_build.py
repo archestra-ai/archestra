@@ -21,11 +21,12 @@ from apply import (
     BuiltSkill,
     _build_payload,
     _Built,
+    _execute,
     _flag_hook_collisions,
     _redacted_for_print,
     _require_skill_frontmatter,
 )
-from archestra_client import CatalogCreate, LlmKeyCreate, LocalConfig, McpEnvVar
+from archestra_client import ArchestraClient, CatalogCreate, LlmKeyCreate, LocalConfig, McpEnvVar
 from contracts import (
     ContractError,
     Decision,
@@ -490,3 +491,64 @@ def test_dry_run_writes_planned_result_without_network(tmp_path: Path) -> None:
     result = json.loads(result_path.read_text(encoding="utf-8"))
     assert result["summary"] == {"planned": 1}
     assert result["ops"][0]["target_kind"] == "agent"
+
+
+def test_dry_run_manual_decision_without_target_kind(tmp_path: Path) -> None:
+    """a manual decision needs no target_kind; it is reported by its action, not crashed."""
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("ARCHESTRA_BASE_URL", "ARCHESTRA_API_KEY")}
+    proc, result_path = _run_apply_cli(tmp_path, {
+        "schema_version": 1,
+        "default_scope": "personal",
+        "decisions": [{"source_id": "openclaw", "action": "manual", "scope": "personal",
+                       "notes": "port the openclaw config by hand"}],
+    }, "--dry-run", env=env)
+
+    assert proc.returncode == 0
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    op = result["ops"][0]
+    assert op["outcome"] == "manual"
+    assert op["target_kind"] == "manual"
+
+
+def test_install_execute_sends_catalog_name() -> None:
+    """apply wires the catalog item's name into the install payload (the live API requires `name`)."""
+    posted: list[dict[str, object]] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args: object) -> None:
+            pass
+
+        def _json(self, body: dict[str, object]) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(body).encode())
+
+        def do_GET(self) -> None:
+            if self.path == "/api/internal_mcp_catalog":
+                self._json({"items": [{"id": "cat-1", "name": "science-playwright", "scope": "personal"}]})
+            else:  # GET /api/mcp_server?catalogId=cat-1 -> no existing install
+                self._json({"items": []})
+
+        def do_POST(self) -> None:
+            raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            posted.append(json.loads(raw))
+            self._json({"id": "srv-1"})
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with ArchestraClient(f"http://127.0.0.1:{server.server_address[1]}") as client:
+            decision = Decision(source_id="mcp:playwright", target_kind="mcp_install", scope="personal")
+            built = BuiltInstall(catalog_name="science-playwright", scope="personal",
+                                 environment_values={}, agent_ids=[])
+            op = _execute(client, decision, "science-playwright", built)
+    finally:
+        server.shutdown()
+        thread.join()
+
+    assert op.outcome == "created"
+    assert posted[0]["catalogId"] == "cat-1"
+    assert posted[0]["name"] == "science-playwright"

@@ -70,6 +70,8 @@ Using `references/entity-mapping.md`, turn the inventory into `migration_plan.js
                    "user_answers": { } } ] }
 ```
 You author **decisions only** — never raw API payloads; `apply.py` builds and validates those.
+`target_kind` is required for `migrate` decisions (it drives the build); a `skip`/`manual` decision
+may omit it.
 
 Use `AskUserQuestion` only for genuine ambiguities, e.g.:
 - the single default scope (`personal`/`team`/`org`), plus any per-item exceptions;

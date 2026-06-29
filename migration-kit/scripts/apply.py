@@ -325,6 +325,12 @@ def _build_agent_ids(answers: dict[str, JsonValue], *, ctx: str) -> list[str]:
     return _str_answers(raw, ctx=f"{ctx}.agentIds")
 
 
+def _report_kind(decision: Decision) -> str:
+    """the kind to show in results/preview. migrate decisions carry a real target_kind; skip/manual
+    ones may omit it, so fall back to the action ("manual"/"skip") rather than printing None."""
+    return decision.target_kind or decision.action
+
+
 def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
     """return (display_name, typed built op) for a migrate decision.
     raises ContractError on anything that cannot be built deterministically."""
@@ -333,6 +339,10 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
     ctx = f"{decision.source_id}.user_answers"
 
     match decision.target_kind:
+        case None:
+            # unreachable for a migrate decision (parse_decision requires the kind there); kept so
+            # the match stays exhaustive over TargetKind | None for the type checker.
+            raise ContractError(f"{decision.source_id}: a migrate decision must declare a target_kind")
         case "agent":
             body, description = _agent_source(item)
             return name, BuiltAgent(AgentCreate(
@@ -571,7 +581,7 @@ def _preview_detail(built: Built) -> str:
 def _execute(client: ArchestraClient, decision: Decision, name: str, built: Built) -> ResultOp:
     def op(outcome: Outcome, *, archestra_id: str | None = None, error: str | None = None,
            detail: str | None = None) -> ResultOp:
-        return ResultOp(source_id=decision.source_id, target_kind=decision.target_kind, name=name,
+        return ResultOp(source_id=decision.source_id, target_kind=_report_kind(decision), name=name,
                         outcome=outcome, archestra_id=archestra_id, error=error, detail=detail)
 
     match built:
@@ -612,7 +622,8 @@ def _execute(client: ArchestraClient, decision: Decision, name: str, built: Buil
                 return op("skipped", archestra_id=require_str_field(existing[0], "id", ctx="mcp server"),
                           detail="an install of this catalog item at this scope already exists")
             created = client.install_mcp_server(McpInstall(
-                catalogId=catalog_id, scope=built.scope, environmentValues=built.environment_values,
+                catalogId=catalog_id, name=built.catalog_name, scope=built.scope,
+                environmentValues=built.environment_values,
                 agentIds=built.agent_ids, teamId=built.team_id,
             ))
             return op("created", archestra_id=require_str_field(created, "id", ctx="install response"))
@@ -733,7 +744,7 @@ def main() -> int:
         except ContractError as exc:
             built.append(_Built(decision, decision.source_id, None, str(exc)))
     built = _flag_hook_collisions(built)
-    built.sort(key=lambda b: _ORDER.get(b.decision.target_kind, 99))
+    built.sort(key=lambda b: _ORDER.get(b.decision.target_kind or "", 99))
 
     if args.dry_run:
         return _finish(_run_validation(built, verbose=args.verbose, label="dry-run"), args.out)
@@ -758,15 +769,15 @@ def _run_validation(built: list[_Built], *, verbose: bool, label: str) -> list[R
             result = _nonmigrate_or_invalid(b)
             detail = result.detail or result.error or ""
             suffix = f" -- {detail}" if detail else ""
-            print(f"[{label}] {_outcome_label(result.outcome)}: {b.decision.target_kind}: {b.name}{suffix}")
+            print(f"[{label}] {_outcome_label(result.outcome)}: {_report_kind(b.decision)}: {b.name}{suffix}")
             results.append(result)
             continue
         detail = _preview_detail(b.built)
-        print(f"[{label}] {_outcome_label('planned')}: {b.decision.target_kind}: {b.name} -- {detail}")
+        print(f"[{label}] {_outcome_label('planned')}: {_report_kind(b.decision)}: {b.name} -- {detail}")
         if verbose:
             shown = _redacted_for_print(b.built)
             print(json.dumps(shown, indent=2))
-        results.append(ResultOp(source_id=b.decision.source_id, target_kind=b.decision.target_kind,
+        results.append(ResultOp(source_id=b.decision.source_id, target_kind=_report_kind(b.decision),
                                 name=b.name, outcome="planned"))
     return results
 
@@ -800,7 +811,7 @@ def _run_apply(built: list[_Built], base_url: str, api_key: str) -> list[ResultO
             try:
                 op = _execute(client, b.decision, b.name, built_op)
             except (ArchestraApiError, ContractError) as exc:
-                op = ResultOp(source_id=b.decision.source_id, target_kind=b.decision.target_kind,
+                op = ResultOp(source_id=b.decision.source_id, target_kind=_report_kind(b.decision),
                               name=b.name, outcome="failed", error=str(exc))
             results.append(op)
             if op.target_kind == "agent" and op.outcome in ("created", "skipped") and op.archestra_id:
@@ -906,9 +917,9 @@ def _sandbox_warning(detail: str) -> ResultOp:
 
 def _nonmigrate_or_invalid(b: _Built) -> ResultOp:
     if b.decision.action != "migrate":
-        return ResultOp(source_id=b.decision.source_id, target_kind=b.decision.target_kind, name=b.name,
+        return ResultOp(source_id=b.decision.source_id, target_kind=_report_kind(b.decision), name=b.name,
                         outcome=_nonmigrate_outcome(b.decision.action), detail=b.decision.notes)
-    return ResultOp(source_id=b.decision.source_id, target_kind=b.decision.target_kind, name=b.name,
+    return ResultOp(source_id=b.decision.source_id, target_kind=_report_kind(b.decision), name=b.name,
                     outcome="invalid", error=b.error)
 
 

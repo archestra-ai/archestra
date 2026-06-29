@@ -56,7 +56,12 @@ import {
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
-import { EventDedupMap, errorMessage, isSlackDmChannel } from "./utils";
+import {
+  EventDedupMap,
+  errorMessage,
+  formatApprovalToolArgs,
+  isSlackDmChannel,
+} from "./utils";
 
 /**
  * Slack provider using Slack Web API.
@@ -538,6 +543,7 @@ class SlackProvider implements ChatOpsProvider {
       };
     };
 
+    const argsText = formatApprovalToolArgs(options.toolArgs);
     const postArgs = {
       channel: options.channelId,
       text: "",
@@ -549,6 +555,17 @@ class SlackProvider implements ChatOpsProvider {
             text: `\`${options.toolName}\``,
           },
         },
+        ...(argsText
+          ? [
+              {
+                type: "section" as const,
+                text: {
+                  type: "mrkdwn" as const,
+                  text: `\`\`\`\n${argsText}\n\`\`\``,
+                },
+              },
+            ]
+          : []),
         {
           type: "actions" as const,
           elements: [

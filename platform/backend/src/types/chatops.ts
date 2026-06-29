@@ -103,7 +103,16 @@ export interface AddApprovalRequestFormOptions {
   threadId?: string;
   approvalId: string;
   taskId: string;
+  /**
+   * The tool the user is approving. For a `run_tool` dispatch this is the
+   * underlying target tool, not the `run_tool` wrapper.
+   */
   toolName: string;
+  /**
+   * The arguments the tool will be invoked with, rendered as a code block in
+   * the approval prompt. Undefined/empty when there is nothing to show.
+   */
+  toolArgs?: Record<string, unknown>;
   originalMessage: IncomingChatMessage;
 }
 

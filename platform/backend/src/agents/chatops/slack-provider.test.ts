@@ -1254,6 +1254,83 @@ describe("SlackProvider.addApprovalRequestForm", () => {
       expect(btn.value.length).toBeLessThan(2000);
     }
   });
+
+  test("renders the tool's arguments as a code block when provided", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    await provider.addApprovalRequestForm({
+      channelId: "C1",
+      threadId: "T1",
+      approvalId: "appr-1",
+      taskId: "task-1",
+      toolName: "github__create_issue",
+      toolArgs: { repo: "octo/repo", title: "Bug" },
+      originalMessage: {
+        messageId: "1234567890.123456",
+        channelId: "C1",
+        workspaceId: "W1",
+        threadId: "T1",
+        senderId: "U_SENDER",
+        senderEmail: "user@example.com",
+        senderName: "Test User",
+        text: "do it",
+        rawText: "do it",
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+    });
+
+    const callArgs = postMessage.mock.calls[0][0];
+    const sectionTexts = callArgs.blocks
+      .filter((b: { type: string }) => b.type === "section")
+      .map((b: { text: { text: string } }) => b.text.text);
+    // The underlying tool name is shown...
+    expect(sectionTexts).toContain("`github__create_issue`");
+    // ...alongside a fenced code block carrying the arguments.
+    const argsBlock = sectionTexts.find((t: string) => t.startsWith("```"));
+    expect(argsBlock).toBeDefined();
+    expect(argsBlock).toContain('"repo": "octo/repo"');
+    expect(argsBlock).toContain('"title": "Bug"');
+  });
+
+  test("omits the arguments code block when there are no arguments", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    await provider.addApprovalRequestForm({
+      channelId: "C1",
+      threadId: "T1",
+      approvalId: "appr-1",
+      taskId: "task-1",
+      toolName: "dangerous_tool",
+      toolArgs: {},
+      originalMessage: {
+        messageId: "1234567890.123456",
+        channelId: "C1",
+        workspaceId: "W1",
+        threadId: "T1",
+        senderId: "U_SENDER",
+        senderEmail: "user@example.com",
+        senderName: "Test User",
+        text: "do it",
+        rawText: "do it",
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+    });
+
+    const callArgs = postMessage.mock.calls[0][0];
+    const sectionTexts = callArgs.blocks
+      .filter((b: { type: string }) => b.type === "section")
+      .map((b: { text: { text: string } }) => b.text.text);
+    expect(sectionTexts).toContain("`dangerous_tool`");
+    expect(sectionTexts.some((t: string) => t.startsWith("```"))).toBe(false);
+  });
 });
 
 // =============================================================================

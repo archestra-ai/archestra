@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
+import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import { userHasPermission } from "@/auth/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -1672,12 +1673,19 @@ export class ChatOpsManager {
       });
 
       for (const approvalRequest of approvalRequests) {
+        // `run_tool` is a meta wrapper; show the user the underlying tool and
+        // its arguments rather than the opaque wrapper name.
+        const { toolName, toolInput } = resolveRunToolTarget(
+          approvalRequest.toolName,
+          approvalRequest.toolInput,
+        );
         await provider.addApprovalRequestForm({
           approvalId: approvalRequest.approvalId,
           taskId: task.id,
           channelId: message.channelId,
           threadId: message.threadId,
-          toolName: approvalRequest.toolName,
+          toolName,
+          toolArgs: toolInput,
           originalMessage: message,
         });
       }

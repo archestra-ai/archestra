@@ -50,7 +50,7 @@ import {
   CHATOPS_TEAM_CACHE,
   CHATOPS_THREAD_HISTORY,
 } from "./constants";
-import { errorMessage } from "./utils";
+import { errorMessage, formatApprovalToolArgs } from "./utils";
 
 /**
  * MS Teams provider using Bot Framework SDK.
@@ -561,6 +561,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       },
     });
 
+    const argsText = formatApprovalToolArgs(options.toolArgs);
     const approvalCard = {
       type: "AdaptiveCard",
       $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
@@ -571,6 +572,17 @@ class MSTeamsProvider implements ChatOpsProvider {
           text: `\`${options.toolName}\``,
           wrap: true,
         },
+        ...(argsText
+          ? [
+              {
+                type: "TextBlock",
+                text: argsText,
+                wrap: true,
+                fontType: "Monospace",
+                spacing: "Small",
+              },
+            ]
+          : []),
         {
           type: "ActionSet",
           spacing: "Small",

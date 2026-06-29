@@ -807,3 +807,80 @@ describe("MSTeamsProvider.convertToThreadMessages file metadata", () => {
     ]);
   });
 });
+
+describe("MSTeamsProvider.addApprovalRequestForm", () => {
+  // Drives the form through the conversationReference branch (no live
+  // turnContext) and captures the Adaptive Card sent to the channel.
+  async function captureApprovalCard(options: {
+    toolName: string;
+    toolArgs?: Record<string, unknown>;
+  }): Promise<{ body: Array<Record<string, unknown>> }> {
+    const provider = createProvider();
+    const sendActivity = vi.fn().mockResolvedValue(undefined);
+    const continueConversationAsync = vi.fn(
+      async (
+        _appId: string,
+        _ref: unknown,
+        callback: (context: {
+          sendActivity: typeof sendActivity;
+        }) => Promise<void>,
+      ) => {
+        await callback({ sendActivity });
+      },
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock adapter
+    (provider as any).adapter = { continueConversationAsync };
+
+    await provider.addApprovalRequestForm({
+      channelId: "19:abc@thread.tacv2",
+      threadId: "19:abc@thread.tacv2",
+      approvalId: "appr-1",
+      taskId: "task-1",
+      toolName: options.toolName,
+      toolArgs: options.toolArgs,
+      originalMessage: {
+        messageId: "msg-1",
+        channelId: "19:abc@thread.tacv2",
+        workspaceId: "team-uuid",
+        senderId: "user-1",
+        senderEmail: "user@example.com",
+        senderName: "Alice",
+        text: "do it",
+        rawText: "do it",
+        timestamp: new Date(),
+        isThreadReply: false,
+        metadata: { conversationReference: { foo: "bar" } },
+      },
+    });
+
+    const activity = sendActivity.mock.calls[0][0];
+    return activity.attachments[0].content as {
+      body: Array<Record<string, unknown>>;
+    };
+  }
+
+  test("renders the tool's arguments as a monospace block when provided", async () => {
+    const card = await captureApprovalCard({
+      toolName: "github__create_issue",
+      toolArgs: { repo: "octo/repo", title: "Bug" },
+    });
+
+    const textBlocks = card.body.filter((b) => b.type === "TextBlock");
+    expect(textBlocks[0].text).toBe("`github__create_issue`");
+    const argsBlock = textBlocks.find((b) => b.fontType === "Monospace");
+    expect(argsBlock).toBeDefined();
+    expect(argsBlock?.text).toContain('"repo": "octo/repo"');
+    expect(argsBlock?.text).toContain('"title": "Bug"');
+  });
+
+  test("omits the arguments block when there are no arguments", async () => {
+    const card = await captureApprovalCard({
+      toolName: "dangerous_tool",
+      toolArgs: {},
+    });
+
+    const textBlocks = card.body.filter((b) => b.type === "TextBlock");
+    expect(textBlocks[0].text).toBe("`dangerous_tool`");
+    expect(textBlocks.some((b) => b.fontType === "Monospace")).toBe(false);
+  });
+});

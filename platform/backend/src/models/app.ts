@@ -14,7 +14,7 @@ import { softDelete } from "@/database/soft-delete";
 import { ApiError } from "@/types";
 import type { App, InsertApp } from "@/types/app";
 import { isUniqueConstraintError } from "@/utils/db";
-import AppTeamModel from "./app-team";
+import AppAccessModel from "./app-access";
 import AppVersionModel, { type VersionPayload } from "./app-version";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 
@@ -72,7 +72,7 @@ function buildOrgFilters(params: {
  * update fork an immutable `app_versions` snapshot in the same transaction
  * (with content-hash no-op suppression) and keep `apps.latest_version` pointing
  * at the head. Team assignments are written here transactionally; the read side
- * (accessibility + batch team loaders) lives in `AppTeamModel`.
+ * (accessibility + batch team loaders) lives in `AppAccessModel`.
  */
 class AppModel {
   /** Active apps in an org, newest first; `accessibleAppIds` applies scope filtering. */
@@ -180,7 +180,7 @@ class AppModel {
   }): Promise<App | null> {
     const app = await AppModel.findByIdInOrg(params.id, params.organizationId);
     if (!app) return null;
-    const allowed = await AppTeamModel.userHasAppAccess({
+    const allowed = await AppAccessModel.userHasAppAccess({
       organizationId: params.organizationId,
       userId: params.userId,
       app,

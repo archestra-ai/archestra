@@ -40,6 +40,7 @@ import {
   normalizeInteractionResponse,
 } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
+import { isUuid } from "@/utils/uuid";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import ConversationChatErrorModel from "./conversation-chat-error";
@@ -140,15 +141,6 @@ function computeRequestType(
   }
 
   return "main";
-}
-
-/**
- * Check if a string is a valid UUID format
- */
-function isUuid(str: string): boolean {
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(str);
 }
 
 /**

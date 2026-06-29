@@ -39,6 +39,7 @@ import {
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
 import { PageLayout } from "@/components/page-layout";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -91,7 +92,12 @@ import {
 } from "./models-page-utils";
 
 export default function ModelsPage() {
-  const { data: models = [], isPending, refetch } = useModelsWithApiKeys();
+  const {
+    data: models = [],
+    isPending,
+    isLoadingError: isModelsLoadError,
+    refetch,
+  } = useModelsWithApiKeys({ toastOnError: false });
   const { data: apiKeys = [] } = useLlmProviderApiKeys();
   const syncModelsMutation = useSyncLlmModels();
   const updateModel = useUpdateModel();
@@ -363,6 +369,22 @@ export default function ModelsPage() {
     ],
     [updateModel],
   );
+
+  if (isModelsLoadError) {
+    return (
+      <PageLayout
+        title="Models"
+        description='Models available from your configured providers. Use "Refresh Models" to re-fetch models and capabilities from providers.'
+        tabs={MODEL_NAV_TABS}
+        actionButton={refreshModelsButton}
+      >
+        <QueryLoadError
+          title="Couldn't load your models"
+          onRetry={() => refetch()}
+        />
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout

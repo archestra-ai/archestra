@@ -19,8 +19,10 @@ import logger from "@/logging";
 import { metrics } from "@/observability";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
+import { getTokenizer } from "@/tokenizers";
 import type {
   Agent,
+  CommonMcpToolDefinition,
   DualLlmAnalysis,
   InsertInteraction,
   InteractionAuthMethod,
@@ -32,6 +34,7 @@ import type {
   UsageView,
 } from "@/types";
 import * as utils from "./utils";
+import { estimateToolTokens } from "./utils/cost-optimization";
 import type { SessionSource } from "./utils/headers/session-id";
 
 /**
@@ -137,6 +140,72 @@ export async function calculateInteractionCosts(params: {
 }
 
 /**
+ * Some Anthropic-compatible endpoints (a non-Claude model behind a custom base
+ * URL) report `input_tokens: 0` even for a non-empty prompt, which would zero out
+ * this request's input-token cost and usage-limit accounting. When usage shows zero
+ * uncached input yet produced output, and no cache tokens explain the zero, replace
+ * `inputTokens` with a local estimate and mark the row estimated.
+ *
+ * Intentionally provider-agnostic: a zero-input-with-output response for a non-empty
+ * request is a provider accounting bug regardless of vendor, and the estimate is the
+ * right remedy for all of them. The normal path (any non-zero input, or a legitimately
+ * fully-cached prompt) returns untouched and is never tokenized. Estimation is
+ * best-effort: any failure degrades to the provider's (zero) value rather than
+ * breaking interaction recording.
+ */
+export function applyInputTokenFallback(params: {
+  usage: UsageView;
+  provider: SupportedProvider;
+  providerMessages: unknown;
+  tools: CommonMcpToolDefinition[];
+  model: string;
+}): UsageView {
+  const { usage } = params;
+  const hasCacheTokens =
+    (usage.cacheReadTokens ?? 0) !== 0 ||
+    (usage.cacheWriteTokens ?? 0) !== 0 ||
+    (usage.cacheWrite1hTokens ?? 0) !== 0;
+  if (usage.inputTokens !== 0 || usage.outputTokens <= 0 || hasCacheTokens) {
+    return usage;
+  }
+
+  let estimatedInputTokens: number;
+  try {
+    estimatedInputTokens = estimateRequestInputTokens({
+      provider: params.provider,
+      providerMessages: params.providerMessages,
+      tools: params.tools,
+    });
+  } catch (error) {
+    // An unexpected message shape must not break interaction recording — fall back
+    // to the provider's value (zero input) and surface the failure for triage.
+    logger.warn(
+      { err: error, provider: params.provider, model: params.model },
+      "Failed to estimate input tokens for a zero-input response; leaving it unrecorded",
+    );
+    return usage;
+  }
+  if (estimatedInputTokens <= 0) {
+    return usage;
+  }
+
+  logger.warn(
+    {
+      provider: params.provider,
+      model: params.model,
+      estimatedInputTokens,
+      outputTokens: usage.outputTokens,
+    },
+    "Provider reported 0 input tokens for a non-empty request; recording a local estimate",
+  );
+  return {
+    ...usage,
+    inputTokens: estimatedInputTokens,
+    inputTokensEstimated: true,
+  };
+}
+
+/**
  * Build the InsertInteraction record from proxy context and response data.
  * Pure function — callers handle `InteractionModel.create()` and error handling.
  */
@@ -196,6 +265,7 @@ export function buildInteractionRecord(params: {
     model: params.actualModel,
     baselineModel: params.baselineModel,
     inputTokens: params.usage.inputTokens,
+    inputTokensEstimated: params.usage.inputTokensEstimated ?? false,
     outputTokens: params.usage.outputTokens,
     cacheReadTokens: params.usage.cacheReadTokens ?? null,
     cacheWriteTokens: params.usage.cacheWriteTokens ?? null,
@@ -325,4 +395,23 @@ export function handleError(
   // Headers not sent yet - throw ApiError to let central handler return proper status code
   // This matches V1 handler behavior and ensures clients receive correct HTTP status
   throw new ApiError(statusCode, errorMessage, internalCode);
+}
+
+/**
+ * Estimate input tokens for a request from its provider messages + tool schemas,
+ * using the provider's tokenizer (mirrors the cost-optimization estimator). The
+ * system prompt is not separately counted, matching that path. May throw on an
+ * unexpected message shape; the caller (applyInputTokenFallback) contains that.
+ */
+function estimateRequestInputTokens(params: {
+  provider: SupportedProvider;
+  providerMessages: unknown;
+  tools: CommonMcpToolDefinition[];
+}): number {
+  const tokenizer = getTokenizer(params.provider);
+  const messageTokens = tokenizer.countTokens(
+    params.providerMessages as Parameters<typeof tokenizer.countTokens>[0],
+  );
+  const toolTokens = estimateToolTokens(params.tools, tokenizer);
+  return messageTokens + toolTokens;
 }

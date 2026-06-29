@@ -600,6 +600,13 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         expected: "gemini-2.5-flash",
       },
       {
+        // Current generation must outrank a legacy model so "best" is never a
+        // model the selector also badges "old".
+        provider: "gemini",
+        catalog: ["gemini-2.5-pro", "gemini-3.5-flash"],
+        expected: "gemini-3.5-flash",
+      },
+      {
         provider: "bedrock",
         catalog: ["anthropic.claude-sonnet-4-8"],
         expected: "anthropic.claude-sonnet-4-8",

@@ -17,6 +17,7 @@ import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/con
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { DataTable } from "@/components/ui/data-table";
@@ -76,6 +77,8 @@ function ConnectorsList() {
     data: connectors,
     isPending,
     isFetching,
+    isLoadingError: isConnectorsLoadError,
+    refetch: refetchConnectors,
   } = useConnectorsPaginated({
     limit: pageSize,
     offset,
@@ -250,25 +253,32 @@ function ConnectorsList() {
           </div>
         </div>
 
-        <DataTable
-          columns={columns}
-          data={items}
-          getRowId={(row) => row.id}
-          emptyMessage="No connectors found"
-          hasActiveFilters={!!search || connectorTypeFilter !== "all"}
-          onClearFilters={clearFilters}
-          filteredEmptyMessage="No connectors match your filters. Try adjusting your search."
-          hideSelectedCount
-          manualPagination
-          pagination={{
-            pageIndex,
-            pageSize,
-            total: pagination?.total ?? 0,
-          }}
-          onPaginationChange={handlePaginationChange}
-          isLoading={isFetching || isPending}
-          onRowClick={(row) => router.push(`/knowledge/connectors/${row.id}`)}
-        />
+        {isConnectorsLoadError ? (
+          <QueryLoadError
+            title="Couldn't load your connectors"
+            onRetry={() => refetchConnectors()}
+          />
+        ) : (
+          <DataTable
+            columns={columns}
+            data={items}
+            getRowId={(row) => row.id}
+            emptyMessage="No connectors found"
+            hasActiveFilters={!!search || connectorTypeFilter !== "all"}
+            onClearFilters={clearFilters}
+            filteredEmptyMessage="No connectors match your filters. Try adjusting your search."
+            hideSelectedCount
+            manualPagination
+            pagination={{
+              pageIndex,
+              pageSize,
+              total: pagination?.total ?? 0,
+            }}
+            onPaginationChange={handlePaginationChange}
+            isLoading={isFetching || isPending}
+            onRowClick={(row) => router.push(`/knowledge/connectors/${row.id}`)}
+          />
+        )}
 
         <CreateConnectorDialog
           open={isCreateDialogOpen}

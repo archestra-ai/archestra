@@ -441,6 +441,8 @@ export interface UsageView {
   cacheWrite1hTokens?: number;
   /** Output tokens spent on reasoning/extended thinking. Reported by OpenAI (reasoning_tokens) and Gemini (thoughtsTokenCount); absent elsewhere. */
   reasoningTokens?: number;
+  /** True when inputTokens is a locally-computed estimate, not a provider-reported count (see applyInputTokenFallback). Absent/false = provider-measured. */
+  inputTokensEstimated?: boolean;
 }
 
 /**

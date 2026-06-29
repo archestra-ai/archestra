@@ -1020,6 +1020,7 @@ describe("model router proxy routes", () => {
       redirectUris: ["http://localhost:3107/callback"],
       grantTypes: ["authorization_code"],
       responseTypes: ["code"],
+      scopes: ["mcp"],
       tokenEndpointAuthMethod: "none",
       isPublic: true,
       metadata: { demo: true },

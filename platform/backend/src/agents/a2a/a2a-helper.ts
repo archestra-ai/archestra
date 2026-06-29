@@ -1,4 +1,4 @@
-import { type A2AAttachment, buildUserContent } from "../a2a-executor";
+import type { A2AAttachment } from "../a2a-executor";
 import type {
   A2AArchestraApprovalRequest,
   A2AArchestraTaskApprovalDecision,
@@ -47,29 +47,20 @@ export function buildApprovalDecisionSendMessageRequest(params: {
   };
 }
 
+/**
+ * Convert source-agnostic attachments into A2A protocol file parts. Attachment
+ * type/capability filtering and provider normalization happen later in the
+ * executor (which knows the target model), so this is a straight byte mapping
+ * that preserves mediaType and filename.
+ */
 export function buildAttachmentsMessageParts(
   attachments: A2AAttachment[],
 ): A2AProtocolPart[] {
-  const parts = buildUserContent("", attachments).content;
-  if (!Array.isArray(parts) || parts.length === 0) {
-    return [];
-  }
-
-  const protocolParts: A2AProtocolPart[] = [];
-  parts.forEach((part) => {
-    if (part.type !== "file") {
-      return;
-    }
-    if (part.data instanceof Uint8Array) {
-      protocolParts.push({
-        raw: part.data,
-        mediaType: part.mediaType,
-      });
-      return;
-    }
-  });
-
-  return protocolParts;
+  return attachments.map((a) => ({
+    raw: Buffer.from(a.contentBase64, "base64"),
+    mediaType: a.contentType,
+    filename: a.name,
+  }));
 }
 
 export function extractApprovalRequestsFromSendMessageResult(

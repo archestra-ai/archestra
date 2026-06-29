@@ -3689,8 +3689,17 @@ export default class K8sDeployment {
     stdin: import("node:stream").Readable,
     stdout: import("node:stream").Writable,
     stderr: import("node:stream").Writable,
-    command: string[] = ["/bin/sh"],
+    options: {
+      command?: string[];
+      /**
+       * Invoked with the K8s exec status when the session ends. A `Failure`
+       * status carries the real reason (e.g. `/bin/sh` not found on a
+       * distroless image), which is otherwise dropped on the floor.
+       */
+      onStatus?: (status: k8s.V1Status) => void;
+    } = {},
   ) {
+    const { command = ["/bin/sh"], onStatus } = options;
     const pod = await this.findPodForDeployment();
     if (!pod?.metadata?.name) {
       throw new Error("No running pod found for this deployment");
@@ -3706,6 +3715,7 @@ export default class K8sDeployment {
       stderr,
       stdin,
       true, // tty
+      onStatus,
     );
 
     return { k8sWs, podName };

@@ -146,3 +146,108 @@ test("native Anthropic (default flag): document file part survives with cache_co
   expect(hasFilePart(modelMessages)).toBe(true);
   expect(anthropicCacheControlSeen(modelMessages)).toBe(true);
 });
+
+function inlinePdfMessage(base64Length: number): ChatMessage[] {
+  return [
+    {
+      role: "user",
+      parts: [
+        { type: "text", text: "Can you read this PDF?" },
+        {
+          type: "file",
+          url: `data:application/pdf;base64,${"A".repeat(base64Length)}`,
+          mediaType: "application/pdf",
+          filename: "big.pdf",
+        },
+      ],
+    },
+  ];
+}
+
+test("bedrock: an inline PDF whose payload exceeds the provider limit is rejected, reporting the decoded file size", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  // 40 MiB of base64 decodes to a ~30 MB file, over Bedrock's 20 MB cap.
+  const messages = inlinePdfMessage(40 * 1024 * 1024);
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = false;
+  try {
+    const error = await __test
+      .buildModelMessagesForProvider({
+        messages,
+        provider: "bedrock",
+        conversationId: conversation.id,
+      })
+      .then(
+        () => null,
+        (e) => e,
+      );
+    expect(error).toBeInstanceOf(Error);
+    // Reports the real decoded file size (30 MB), not the inflated ~40 MB wire size.
+    expect(error.message).toMatch(/\bThis file is 30 MB\b/);
+    expect(error.message).not.toMatch(/40 MB/);
+    expect(error.message).toContain("AWS Bedrock");
+    expect(error.message).toContain("20 MB");
+    expect(error.message).toContain(
+      "platform.claude.com/docs/en/api/overview#request-size-limits",
+    );
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+});
+
+test("bedrock: a file that rounds to the limit is not rejected", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  // base64 that decodes to ~20.25 MB — rounds to the 20 MB cap, so it must pass
+  // rather than reject with a contradictory "20 MB, max 20 MB".
+  const messages = inlinePdfMessage(27 * 1024 * 1024);
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = false;
+  try {
+    const modelMessages = await __test.buildModelMessagesForProvider({
+      messages,
+      provider: "bedrock",
+      conversationId: conversation.id,
+    });
+    expect(modelMessages.length).toBeGreaterThan(0);
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+});
+
+test("bedrock: a small inline PDF passes the size guard", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const messages = inlinePdfMessage(2048);
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = false;
+  try {
+    const modelMessages = await __test.buildModelMessagesForProvider({
+      messages,
+      provider: "bedrock",
+      conversationId: conversation.id,
+    });
+    expect(modelMessages.length).toBeGreaterThan(0);
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+});

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { OAUTH_SCOPES } from "@archestra/shared";
 import ipaddr from "ipaddr.js";
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -108,6 +109,16 @@ export async function ensureCimdClientRegistered(
 
   const metadata = await fetchAndValidateCimdDocument(clientIdUrl);
 
+  // Persist the client's scopes. The OAuth provider validates authorize-time
+  // scopes against the client's *stored* scopes, so leaving this null would let
+  // `ensureOfflineAccessScope` later coalesce it into a partial array that omits
+  // `mcp` (causing `invalid_scope`). Honor the scope declared in the CIMD
+  // document; when absent, default to the full supported set — matching the
+  // provider's own null-scopes fallback.
+  const scopes = metadata.scope
+    ? metadata.scope.split(" ").filter(Boolean)
+    : [...OAUTH_SCOPES];
+
   await OAuthClientModel.upsertFromCimd({
     id: crypto.randomUUID(),
     clientId: clientIdUrl,
@@ -115,6 +126,7 @@ export async function ensureCimdClientRegistered(
     redirectUris: metadata.redirect_uris,
     grantTypes: metadata.grant_types ?? ["authorization_code"],
     responseTypes: metadata.response_types ?? ["code"],
+    scopes,
     tokenEndpointAuthMethod: "none",
     isPublic: true,
     metadata: {

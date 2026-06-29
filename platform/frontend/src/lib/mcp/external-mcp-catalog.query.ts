@@ -4,7 +4,7 @@ import {
 } from "@archestra/shared";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { SelectedCategory } from "@/app/mcp/registry/_parts/CatalogFilters";
-import { handleApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils";
 
 type SearchResponse =
   archestraCatalogTypes.SearchMcpServerCatalogResponses[200];
@@ -30,7 +30,7 @@ export function useMcpRegistryServersInfinite(
       limit,
     ],
     queryFn: async ({ pageParam = 0 }): Promise<SearchResponse> => {
-      const response = await archestraCatalogSdk.searchMcpServerCatalog({
+      const { data, error } = await archestraCatalogSdk.searchMcpServerCatalog({
         query: {
           q: search?.trim(),
           category: categoryParam,
@@ -40,19 +40,16 @@ export function useMcpRegistryServersInfinite(
           worksInArchestra: true,
         },
       });
-      if (!response.data) {
-        handleApiError({
-          error: new Error("No data returned from the catalog"),
-        });
-        return {
+      throwOnApiError(error);
+      return (
+        data ?? {
           servers: [],
           totalCount: 0,
           limit,
           offset: pageParam,
           hasMore: false,
-        };
-      }
-      return response.data;
+        }
+      );
     },
     getNextPageParam: (lastPage) => {
       return lastPage.hasMore ? lastPage.offset + lastPage.limit : undefined;
@@ -70,15 +67,13 @@ export function useMcpRegistryServer(serverName: string | null) {
       if (!serverName) {
         return null;
       }
-      const response = await archestraCatalogSdk.getMcpServer({
+      const { data, error } = await archestraCatalogSdk.getMcpServer({
         path: {
           name: serverName,
         },
       });
-      if (!response.data) {
-        return null;
-      }
-      return response.data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
   });
 }
@@ -89,14 +84,10 @@ export function useMcpServerCategories() {
     queryFn: async (): Promise<
       archestraCatalogTypes.GetMcpServerCategoriesResponse["categories"]
     > => {
-      const response = await archestraCatalogSdk.getMcpServerCategories();
-      if (!response.data) {
-        handleApiError({
-          error: new Error("No categories returned from the catalog"),
-        });
-        return [];
-      }
-      return response.data.categories;
+      const { data, error } =
+        await archestraCatalogSdk.getMcpServerCategories();
+      throwOnApiError(error);
+      return data?.categories ?? [];
     },
   });
 }

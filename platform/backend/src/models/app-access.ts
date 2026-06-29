@@ -7,10 +7,9 @@ import type { ResourceVisibilityScope } from "@/types/visibility";
  * Read-side accessibility + team loaders for apps. An app's visibility (scope +
  * teams) lives on its backing catalog (serverType "app"), so these resolve
  * through `apps → mcp_server → internal_mcp_catalog` and the `mcp_catalog_team`
- * junction — the same model the MCP server registry uses — rather than a
- * per-app scope column or `app_team`.
+ * junction — the same model the MCP server registry uses.
  */
-class AppTeamModel {
+class AppAccessModel {
   /**
    * IDs of (non-deleted) apps a user can see, by the backing catalog's scope:
    * every `org` app, their own `personal` apps, and `team` apps whose backing
@@ -195,4 +194,4 @@ class AppTeamModel {
   }
 }
 
-export default AppTeamModel;
+export default AppAccessModel;

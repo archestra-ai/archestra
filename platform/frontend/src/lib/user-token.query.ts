@@ -1,6 +1,6 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { handleApiError } from "./utils";
+import { handleApiError, throwOnApiError } from "./utils";
 
 const { getUserToken, getUserTokenValue, rotateUserToken } = archestraApiSdk;
 
@@ -24,10 +24,7 @@ export function useUserToken() {
     queryKey: ["userToken"],
     queryFn: async () => {
       const { data, error } = await getUserToken();
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error);
       return data as UserToken;
     },
     retry: false,
@@ -42,9 +39,7 @@ export function useUserTokenValue() {
     queryKey: ["userTokenValue"],
     queryFn: async () => {
       const response = await getUserTokenValue();
-      if (response.error) {
-        handleApiError(response.error);
-      }
+      throwOnApiError(response.error);
       return response.data as { value: string };
     },
     enabled: false, // Only fetch on demand

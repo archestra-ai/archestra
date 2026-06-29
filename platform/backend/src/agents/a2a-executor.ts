@@ -1,11 +1,14 @@
 import crypto from "node:crypto";
 import {
+  getModelReadableMimeTypes,
   type InteractionSource,
   PLAYWRIGHT_MCP_CATALOG_ID,
+  type SupportedProvider,
 } from "@archestra/shared";
 import type { ModelMessage, UIMessage, UserContent } from "ai";
 import {
   consumeStream as consumeReadableStream,
+  convertToModelMessages,
   NoOutputGeneratedError,
   stepCountIs,
   type streamText,
@@ -23,14 +26,16 @@ import {
   ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
 import logger from "@/logging";
-import { AgentModel, McpServerModel } from "@/models";
+import { AgentModel, McpServerModel, ModelModel } from "@/models";
 import {
   formatUnavailableToolErrorDetails,
   getUnavailableToolErrorDetails,
   mapProviderError,
   ProviderError,
 } from "@/routes/chat/errors";
+import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
+import type { ChatMessage } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 
 /**
@@ -249,7 +254,7 @@ export async function executeA2AMessage(
     // Pass sessionId to group A2A requests with the calling session
     // Pass delegationChain as externalAgentId so agent names appear in logs
     // Pass agent's llmApiKeyId so it can be used without user access check
-    const { model } = await createLLMModelForAgent({
+    const { model, anthropicNativeEndpoint } = await createLLMModelForAgent({
       organizationId,
       userId,
       agentId: agent.id,
@@ -262,11 +267,26 @@ export async function executeA2AMessage(
       contextIsTrusted: parentContextIsTrusted,
     });
 
-    // Build multimodal user content when image attachments are present
-    const { content: userContent, skippedNote } = buildUserContent(
+    // Which attachment mime types this model can read. A missing model row
+    // (lookup failure or unknown model) falls back to the safe default set
+    // (text + images + PDF) rather than dropping everything.
+    const modelRow = await ModelModel.findByProviderAndModelId(
+      provider,
+      selectedModel,
+    ).catch(() => null);
+    const ingestibleMimeTypes = getModelReadableMimeTypes(
+      modelRow?.inputModalities ?? null,
+    );
+
+    // Build the current user turn from the message + attachments, gated by the
+    // model's capabilities and normalized for the provider. `params.messages`
+    // carries only prior context; this turn is appended to it below.
+    const { content: userContent, skippedNote } = await buildUserContent(
       message,
       attachments,
+      { provider, anthropicNativeEndpoint, ingestibleMimeTypes },
     );
+    const currentTurnText = message + skippedNote;
 
     // Execute via the shared agent-run primitive: it owns the streamText call
     // and transparently recovers empty/abortive/context-length turns before any
@@ -275,8 +295,12 @@ export async function executeA2AMessage(
     // previously had no recovery — a clean-but-empty turn returned an empty
     // success. It now retries and, on exhaustion, throws (mapped to a
     // ProviderError below), matching the interactive chat path.
-    // Prefer the explicit `messages` param; otherwise use a `messages` user turn
-    // when images are present, falling back to a plain `prompt` for text only.
+    // The executor owns the current user turn: `params.messages` (when present)
+    // is prior context only, and the turn built from `message`/`attachments` is
+    // appended to it. When there is no current turn (e.g. an approval-decision
+    // message with no text or attachments), the context is used as-is. Callers
+    // without context (delegation, scheduled, A2A v1) fall back to a plain
+    // `prompt` for text, or a single `messages` turn when attachments survive.
     const baseConfig = {
       model,
       system: systemPrompt,
@@ -287,15 +311,23 @@ export async function executeA2AMessage(
       ],
       abortSignal,
     };
+    const currentTurn: { role: "user"; content: UserContent } | null =
+      userContent !== null
+        ? { role: "user", content: userContent }
+        : currentTurnText.trim().length > 0
+          ? { role: "user", content: currentTurnText }
+          : null;
     const config: Parameters<typeof streamText>[0] =
       params.messages !== undefined
-        ? { ...baseConfig, messages: params.messages }
-        : userContent
-          ? {
-              ...baseConfig,
-              messages: [{ role: "user" as const, content: userContent }],
-            }
-          : { ...baseConfig, prompt: message + skippedNote };
+        ? {
+            ...baseConfig,
+            messages: currentTurn
+              ? [...params.messages, currentTurn]
+              : params.messages,
+          }
+        : currentTurn
+          ? { ...baseConfig, messages: [currentTurn] }
+          : { ...baseConfig, prompt: currentTurnText };
 
     let finalText: string;
     let usage: Awaited<ReturnType<typeof streamText>["usage"]>;
@@ -441,22 +473,30 @@ export async function executeA2AMessage(
 // ============================================================================
 
 /**
- * Build AI SDK UserContent from a text message and optional attachments.
- * Returns `content: null` when there are no image attachments (caller should use plain `prompt` instead).
- * Returns `skippedNote` with a human-readable note about non-image attachments that were dropped,
- * so the caller can append it to the prompt for the LLM to mention.
+ * Build the current user turn's AI SDK content from a text message and optional
+ * attachments, gated by what the target model can read — mirroring the regular
+ * chat upload path.
  *
- * Only image attachments are currently supported as inline content parts.
- * Non-image attachments are noted so the LLM can inform the user.
+ * Images are always kept (subject to the tiny-broken-image filter). Non-image
+ * attachments are kept only when the model's input modalities include their
+ * mime type; otherwise they are dropped and named in `skippedNote` so the LLM
+ * can tell the user. Kept attachments are normalized for the provider via
+ * `prepareMessagesForProvider` and converted to AI SDK content. Returns
+ * `content: null` when no attachment survives, so the caller falls back to a
+ * plain text turn carrying `skippedNote`.
  * @public — exported for testability
  */
-export function buildUserContent(
+export async function buildUserContent(
   message: string,
-  attachments?: A2AAttachment[],
-): { content: UserContent | null; skippedNote: string } {
+  attachments: A2AAttachment[] | undefined,
+  opts: {
+    provider: SupportedProvider;
+    anthropicNativeEndpoint: boolean;
+    ingestibleMimeTypes: Set<string>;
+  },
+): Promise<{ content: UserContent | null; skippedNote: string }> {
   const allAttachments = attachments ?? [];
 
-  // Split into image and non-image attachments
   const imageAttachments = allAttachments.filter((a) =>
     a.contentType.startsWith("image/"),
   );
@@ -475,6 +515,14 @@ export function buildUserContent(
     return estimatedBytes < MIN_IMAGE_ATTACHMENT_SIZE;
   });
 
+  // Non-image attachments only reach the model when it can read their mime type.
+  const readableNonImageAttachments = nonImageAttachments.filter((a) =>
+    opts.ingestibleMimeTypes.has(a.contentType),
+  );
+  const unreadableNonImageAttachments = nonImageAttachments.filter(
+    (a) => !opts.ingestibleMimeTypes.has(a.contentType),
+  );
+
   if (tinyImageAttachments.length > 0) {
     logger.debug(
       {
@@ -489,40 +537,65 @@ export function buildUserContent(
     );
   }
 
-  if (nonImageAttachments.length > 0) {
+  if (unreadableNonImageAttachments.length > 0) {
     logger.debug(
       {
-        skippedCount: nonImageAttachments.length,
-        skippedTypes: nonImageAttachments.map(
+        skippedCount: unreadableNonImageAttachments.length,
+        skippedTypes: unreadableNonImageAttachments.map(
           (a) => `${a.name ?? "unnamed"} (${a.contentType})`,
         ),
       },
-      "Skipping non-image attachments in buildUserContent (only image/* is currently supported)",
+      "Skipping attachments the target model cannot read in buildUserContent",
     );
   }
 
   // Build a note about all skipped attachments so the LLM can mention them
-  const allSkipped = [...nonImageAttachments, ...tinyImageAttachments];
+  const allSkipped = [
+    ...unreadableNonImageAttachments,
+    ...tinyImageAttachments,
+  ];
   const skippedNote =
     allSkipped.length > 0
       ? `\n\n[Note: This message also included ${allSkipped.length} attachment(s) that could not be processed: ${allSkipped.map((a) => `${a.name ?? "unnamed"} (${a.contentType})`).join(", ")}]`
       : "";
 
-  if (validImageAttachments.length === 0) {
+  const keptAttachments = [
+    ...validImageAttachments,
+    ...readableNonImageAttachments,
+  ];
+  if (keptAttachments.length === 0) {
     return { content: null, skippedNote };
   }
 
-  return {
-    content: [
-      { type: "text" as const, text: message + skippedNote },
-      ...validImageAttachments.map((a) => ({
-        type: "file" as const,
-        data: Buffer.from(a.contentBase64, "base64"),
+  // Hand the kept attachments to the chat provider-normalization pipeline as a
+  // synthetic user message (data: URL file parts), so each provider's SDK
+  // receives documents in the shape it accepts (Anthropic documents, decoded
+  // text for OpenAI-compatible endpoints, etc.).
+  const text = message + skippedNote;
+  const userMessage: ChatMessage = {
+    role: "user",
+    parts: [
+      ...(text.length > 0 ? [{ type: "text", text }] : []),
+      ...keptAttachments.map((a) => ({
+        type: "file",
+        url: `data:${a.contentType};base64,${a.contentBase64}`,
         mediaType: a.contentType,
+        filename: a.name,
       })),
     ],
-    skippedNote,
   };
+
+  const [preparedMessage] = prepareMessagesForProvider({
+    messages: [userMessage],
+    provider: opts.provider,
+    anthropicNativeEndpoint: opts.anthropicNativeEndpoint,
+  });
+  const modelMessages = await convertToModelMessages([
+    preparedMessage,
+  ] as unknown as Omit<UIMessage, "id">[]);
+
+  const content = (modelMessages[0]?.content ?? null) as UserContent | null;
+  return { content, skippedNote };
 }
 
 // ============================================================================

@@ -46,7 +46,7 @@
     "tsx": "^4.21.0",
     "turbo": "^2.9.14"
   },
-  "packageManager": "pnpm@11.5.2",
+  "packageManager": "pnpm@11.9.0",
   "dependencies": {
     "croner": "^10.0.1"
   }

@@ -44,6 +44,7 @@ import type {
   UpdateAgent,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
+import { isUuid } from "@/utils/uuid";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
@@ -2454,18 +2455,22 @@ class AgentModel {
    * Checks both the id and slug columns in a single query.
    */
   static async resolveIdFromIdOrSlug(idOrSlug: string): Promise<string | null> {
+    // `agents.id` is a uuid column. Casting it to text (`id::text = $1`) so it
+    // can be compared against a possibly-non-uuid slug defeats the primary-key
+    // index and forces a sequential scan. Instead, only compare against `id`
+    // when the input is itself a valid uuid (letting Postgres use the PK index),
+    // and otherwise rely solely on the indexed `slug` lookup.
+    const matchesIdOrSlug = isUuid(idOrSlug)
+      ? or(
+          eq(schema.agentsTable.id, idOrSlug),
+          eq(schema.agentsTable.slug, idOrSlug),
+        )
+      : eq(schema.agentsTable.slug, idOrSlug);
+
     const [row] = await db
       .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
-      .where(
-        and(
-          or(
-            sql`${schema.agentsTable.id}::text = ${idOrSlug}`,
-            eq(schema.agentsTable.slug, idOrSlug),
-          ),
-          notDeleted(schema.agentsTable),
-        ),
-      )
+      .where(and(matchesIdOrSlug, notDeleted(schema.agentsTable)))
       .limit(1);
 
     return row?.id ?? null;

@@ -54,6 +54,7 @@ import {
   ChatOpsChannelBindingResponseSchema,
   UpdateChatOpsChannelBindingSchema,
 } from "@/types/chatops-channel-binding";
+import { isUuid } from "@/utils/uuid";
 
 /**
  * Fastify preParsing hook that captures the raw request body before content-type
@@ -304,7 +305,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Resolve workspaceId to proper UUID (aadGroupId) for team channels.
             // Bot Framework may provide team.id (thread format) instead of aadGroupId.
             // TeamsInfo.getTeamDetails() uses RSC permissions — no Azure AD app permissions needed.
-            if (message.workspaceId && !isValidUUID(message.workspaceId)) {
+            if (message.workspaceId && !isUuid(message.workspaceId)) {
               try {
                 const teamDetails = await TeamsInfo.getTeamDetails(context);
                 if (teamDetails?.aadGroupId) {
@@ -2034,11 +2035,4 @@ function collectWorkspaceIds(teamData: {
   if (teamData.id) ids.add(teamData.id);
   if (teamData.aadGroupId) ids.add(teamData.aadGroupId);
   return [...ids];
-}
-
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isValidUUID(value: string): boolean {
-  return UUID_REGEX.test(value);
 }

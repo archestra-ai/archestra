@@ -51,7 +51,6 @@ import {
   fetchAllSkillIds,
   useTotalSkillCount,
 } from "./skills-marketplace-step";
-import { TestSetupStep } from "./test-setup-link";
 import { WizardStep } from "./wizard-step";
 
 type ScriptClientId = CreateConnectionSetupBody["clientId"];
@@ -588,11 +587,7 @@ export function ConnectCommandPanel({
         </ul>
       </WizardStep>
 
-      <WizardStep
-        n={3}
-        title="Run this command"
-        last={client.id !== "claude-code"}
-      >
+      <WizardStep n={3} title="Run this command" last>
         <div className="flex flex-col gap-3">
           <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
             {providers.length > 1 && proxyActive && (
@@ -665,22 +660,6 @@ export function ConnectCommandPanel({
           </div>
         </div>
       </WizardStep>
-
-      {client.id === "claude-code" && (
-        <WizardStep
-          n={4}
-          title="Restart Claude Code and send a test message"
-          last
-        >
-          <div className="space-y-3 text-sm text-muted-foreground">
-            <p>
-              Quit and reopen Claude Code, start a new chat, and send the
-              message below.
-            </p>
-            <TestSetupStep />
-          </div>
-        </WizardStep>
-      )}
 
       <CreateLlmProviderApiKeyDialog
         open={showAddProviderKey}

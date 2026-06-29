@@ -1774,6 +1774,46 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Validate required userConfig (connection-setting) fields on the same
+      // terms as env vars above. For non-BYOS a field already on the install's
+      // bag stays satisfied when the body omits it, so a partial reinstall that
+      // only touches env doesn't 400 on an unchanged stored header; "" is an
+      // explicit clear. BYOS validates against the body alone since vault
+      // references are re-supplied on every reinstall.
+      if (catalogItem.userConfig) {
+        const requiredUserConfigFields = Object.entries(
+          catalogItem.userConfig,
+        ).filter(([_fieldName, fieldConfig]) => {
+          return fieldConfig.promptOnInstallation && fieldConfig.required;
+        });
+
+        const missingUserConfigFields = requiredUserConfigFields.filter(
+          ([fieldName]) => {
+            const submitted = userConfigValues?.[fieldName];
+            if (isByosVault) {
+              return !submitted?.trim();
+            }
+            if (submitted === "") {
+              return true;
+            }
+            if (typeof submitted === "string" && submitted.trim()) {
+              return false;
+            }
+            const existing = existingSecrets[fieldName];
+            return typeof existing !== "string" || !existing.trim();
+          },
+        );
+
+        if (missingUserConfigFields.length > 0) {
+          throw new ApiError(
+            400,
+            `Missing required connection settings: ${missingUserConfigFields
+              .map(([fieldName]) => fieldName)
+              .join(", ")}`,
+          );
+        }
+      }
+
       // New env/userConfig values land in this install's secret bag. The
       // runtime reload below reads `secretId` to pick them up.
       if (
@@ -1788,30 +1828,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfigValues,
         });
 
-        if (catalogItem.userConfig) {
-          const requiredUserConfigFields = Object.entries(
-            catalogItem.userConfig,
-          ).filter(([_fieldName, fieldConfig]) => {
-            return fieldConfig.promptOnInstallation && fieldConfig.required;
-          });
-
-          const missingUserConfigFields = requiredUserConfigFields.filter(
-            ([fieldName]) => {
-              const value = userConfigValues?.[fieldName];
-              return !value?.trim();
-            },
-          );
-
-          if (missingUserConfigFields.length > 0) {
-            throw new ApiError(
-              400,
-              `Missing required connection settings: ${missingUserConfigFields
-                .map(([fieldName]) => fieldName)
-                .join(", ")}`,
-            );
-          }
-        }
-
         // Update or create secret with new values
         if (isByosVault) {
           // BYOS mode: values are vault references
@@ -1823,17 +1839,34 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
 
+          // BYOS vault bags hold only vault references. Plain (non-secret) env
+          // values are literals that belong on the install row's column
+          // (persisted below); spreading them here would have vault resolution
+          // misread a literal as a `path#key` reference. Restrict the env
+          // contribution to secret-typed keys.
+          const secretEnvKeys = new Set(
+            (catalogItem.localConfig?.environment ?? [])
+              .filter((envDef) => envDef.type === "secret")
+              .map((envDef) => envDef.key),
+          );
+          const submittedSecretEnv: Record<string, string> = {};
+          for (const [key, value] of Object.entries(submittedEnv)) {
+            if (secretEnvKeys.has(key)) {
+              submittedSecretEnv[key] = value;
+            }
+          }
+
           if (mcpServer.secretId) {
             await secretManager().updateSecret(mcpServer.secretId, {
               ...catalogStaticUserConfigValues,
-              ...submittedEnv,
+              ...submittedSecretEnv,
               ...(installUserConfigValues ?? {}),
             });
           } else {
             const secret = await secretManager().createSecret(
               {
                 ...catalogStaticUserConfigValues,
-                ...submittedEnv,
+                ...submittedSecretEnv,
                 ...(installUserConfigValues ?? {}),
               },
               `${mcpServer.name}-vault-secret`,
@@ -1841,14 +1874,36 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             await McpServerModel.update(id, { secretId: secret.id });
           }
         } else {
-          // Non-BYOS mode: merge new values with the existing bag fetched
-          // above for validation.
-          const mergedSecrets = {
+          // Non-BYOS: merge new values with the existing bag (fetched above for
+          // validation). userConfig is applied per field so an empty string is
+          // an explicit clear and an omitted field preserves the stored value;
+          // static catalog-only headers are owned by the catalog static spread
+          // and can't be overridden by an installer request.
+          const mergedSecrets: Record<string, unknown> = {
             ...existingSecrets,
             ...catalogStaticUserConfigValues,
             ...submittedEnv,
-            ...(installUserConfigValues ?? {}),
           };
+          for (const [fieldName, fieldConfig] of Object.entries(
+            catalogItem.userConfig ?? {},
+          )) {
+            if (
+              fieldConfig?.headerName &&
+              fieldConfig?.promptOnInstallation === false
+            ) {
+              continue;
+            }
+            const submitted = userConfigValues?.[fieldName];
+            if (submitted === "") {
+              // Explicit clear.
+              delete mergedSecrets[fieldName];
+            } else if (typeof submitted === "string" && submitted.trim()) {
+              mergedSecrets[fieldName] = submitted;
+            }
+            // A whitespace-only submission is treated as "no change" (matching
+            // validation's existing-bag fallback) so an accidental blank can't
+            // clobber a valid stored header.
+          }
 
           if (mcpServer.secretId) {
             await secretManager().updateSecret(

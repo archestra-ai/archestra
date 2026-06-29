@@ -242,6 +242,89 @@ describe("MSTeamsProvider file attachment downloads", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  test("file-only message (empty text + file attachment) is parsed with attachments", async () => {
+    const provider = createProvider();
+    const fileContent = Buffer.from("file-only teams message");
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(fileContent, { status: 200 }),
+    );
+
+    const result = await provider.parseWebhookNotification(
+      makeActivity({
+        text: undefined,
+        attachments: [
+          {
+            contentType: "application/pdf",
+            contentUrl: "https://teams.blob.core.windows.net/files/report.pdf",
+            name: "report.pdf",
+          },
+        ],
+      }),
+      {},
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.text).toBe("");
+    expect(result?.attachments).toHaveLength(1);
+    expect(result?.attachments?.[0].name).toBe("report.pdf");
+  });
+
+  test("message with neither text nor attachments returns null", async () => {
+    const provider = createProvider();
+
+    const result = await provider.parseWebhookNotification(
+      makeActivity({ text: undefined, attachments: undefined }),
+      {},
+    );
+
+    expect(result).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("file-only message whose download fails is dropped (no empty turn)", async () => {
+    const provider = createProvider();
+
+    // The download fails (e.g. expired/oversized), so no attachment survives.
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 404 }));
+
+    const result = await provider.parseWebhookNotification(
+      makeActivity({
+        text: undefined,
+        attachments: [
+          {
+            contentType: "application/pdf",
+            contentUrl: "https://teams.blob.core.windows.net/files/report.pdf",
+            name: "report.pdf",
+          },
+        ],
+      }),
+      {},
+    );
+
+    expect(result).toBeNull();
+  });
+
+  test("card-only message with empty text returns null (cards are not files)", async () => {
+    const provider = createProvider();
+
+    const result = await provider.parseWebhookNotification(
+      makeActivity({
+        text: undefined,
+        attachments: [
+          {
+            contentType: "application/vnd.microsoft.card.adaptive",
+            content: JSON.stringify({ type: "AdaptiveCard" }),
+          },
+        ],
+      }),
+      {},
+    );
+
+    expect(result).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   test("downloads file attachment and returns base64 content", async () => {
     const provider = createProvider();
     const fileContent = Buffer.from("image bytes here");

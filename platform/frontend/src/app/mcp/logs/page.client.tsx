@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProfileFilterOption } from "@/components/log-filter-option";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableFilters } from "@/components/table-filters";
 import { TruncatedText } from "@/components/truncated-text";
@@ -165,7 +166,12 @@ function McpToolCallsTable({
         ? "createdAt"
         : undefined;
 
-  const { data: mcpToolCallsResponse, isFetching } = useMcpToolCalls({
+  const {
+    data: mcpToolCallsResponse,
+    isFetching,
+    isLoadingError: isMcpToolCallsLoadError,
+    refetch: refetchMcpToolCalls,
+  } = useMcpToolCalls({
     agentId: profileFilter !== "all" ? profileFilter : undefined,
     limit: pagination.pageSize,
     offset: pagination.pageIndex * pagination.pageSize,
@@ -424,6 +430,17 @@ function McpToolCallsTable({
       paramName="search"
     />
   );
+
+  if (isMcpToolCallsLoadError) {
+    return (
+      <div className="space-y-4">
+        <QueryLoadError
+          title="Couldn't load logs"
+          onRetry={() => refetchMcpToolCalls()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/mcp/context7",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.method == 'initialize')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "transformers": ["response-template"],
+    "body": "{\"jsonrpc\": \"2.0\", \"id\": {{jsonPath request.body '$.id'}}, \"result\": {\"protocolVersion\": \"2024-11-05\", \"capabilities\": {\"tools\": {}}, \"serverInfo\": {\"name\": \"context7-mock\", \"version\": \"1.0.0\"}}}"
+  }
+}

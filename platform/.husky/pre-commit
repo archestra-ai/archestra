@@ -1,0 +1,7 @@
+cd platform
+if ! pnpm commit:check; then
+  echo ""
+  echo "💡 Tip: Run 'pnpm lint:fix -- --unsafe && pnpm -r knip --fix' to auto-fix formatting and unused exports."
+  echo ""
+  exit 1
+fi

@@ -1,0 +1,43 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/openai/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "benchmark-openai-tools"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "\"tools\""
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-benchmark-openai-tools",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "gpt-4o",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Benchmark response from WireMock."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 82,
+        "completion_tokens": 17,
+        "total_tokens": 99
+      }
+    }
+  }
+}

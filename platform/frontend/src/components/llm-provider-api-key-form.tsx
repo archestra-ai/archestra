@@ -1,0 +1,1069 @@
+"use client";
+
+import {
+  type archestraApiTypes,
+  DEFAULT_PROVIDER_BASE_URLS,
+  E2eTestId,
+  isProviderApiKeyOptional,
+  providerRequiresPerUserCredential,
+} from "@archestra/shared";
+import { Building2, CheckCircle2, Trash2, User, Users } from "lucide-react";
+import Link from "next/link";
+import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
+import { type UseFormReturn, useFieldArray } from "react-hook-form";
+import { ExternalDocsLink } from "@/components/external-docs-link";
+import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
+import {
+  type VisibilityOption,
+  VisibilitySelector,
+} from "@/components/visibility-selector";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useTeams } from "@/lib/teams/team.query";
+import { LlmProviderSelectItems } from "./llm-provider-select-items";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import { Switch } from "./ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
+
+const ExternalSecretSelector = lazy(
+  () =>
+    // biome-ignore lint/style/noRestrictedImports: lazy loading
+    import("@/components/external-secret-selector.ee"),
+);
+const InlineVaultSecretSelector = lazy(
+  () =>
+    // biome-ignore lint/style/noRestrictedImports: lazy loading
+    import("@/components/inline-vault-secret-selector.ee"),
+);
+
+type CreateLlmProviderApiKeyBody =
+  archestraApiTypes.CreateLlmProviderApiKeyData["body"];
+
+export type LlmProviderApiKeyFormValues = {
+  name: string;
+  provider: CreateLlmProviderApiKeyBody["provider"];
+  apiKey: string | null;
+  baseUrl: string | null;
+  inferenceBaseUrl: string | null;
+  /** Edited as an array of rows; serialized to Record<string, string> on submit. */
+  extraHeaders: Array<{ name: string; value: string }>;
+  scope: NonNullable<CreateLlmProviderApiKeyBody["scope"]>;
+  teamId: string | null;
+  vaultSecretPath: string | null;
+  vaultSecretKey: string | null;
+  isPrimary: boolean;
+  /**
+   * Bedrock auth method selector:
+   * - "api-key": Bearer API key (bedrock-api-key-... / ABSK...)
+   * - "sigv4": static AWS access keys (Access Key ID + Secret + optional Session Token)
+   * - "iam": IAM role via service account / instance profile (server-configured via ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED)
+   */
+  bedrockAuthMethod: "api-key" | "sigv4" | "iam";
+  awsAccessKeyId: string | null;
+  awsSecretAccessKey: string | null;
+  awsSessionToken: string | null;
+};
+
+/** Convert the form's array shape to the API's Record shape, dropping empty-name rows. */
+export function serializeExtraHeaders(
+  rows: LlmProviderApiKeyFormValues["extraHeaders"],
+): Record<string, string> | null {
+  const trimmed = rows
+    .map((row) => ({ name: row.name.trim(), value: row.value }))
+    .filter((row) => row.name.length > 0);
+  if (trimmed.length === 0) return null;
+  const result: Record<string, string> = {};
+  for (const row of trimmed) {
+    result[row.name] = row.value;
+  }
+  return result;
+}
+
+/** Convert a Record back into the form's array shape, used when editing an existing key. */
+export function deserializeExtraHeaders(
+  record: Record<string, string> | null | undefined,
+): LlmProviderApiKeyFormValues["extraHeaders"] {
+  if (!record) return [];
+  return Object.entries(record).map(([name, value]) => ({ name, value }));
+}
+
+export type LlmProviderApiKeyResponse =
+  archestraApiTypes.GetLlmProviderApiKeysResponses["200"][number];
+
+const PROVIDER_CONFIG: Record<
+  CreateLlmProviderApiKeyBody["provider"],
+  {
+    name: string;
+    icon: string;
+    placeholder: string;
+    enabled: boolean;
+    consoleUrl: string;
+    consoleName: string;
+    description?: string;
+    baseUrlRequired?: boolean;
+    /** Whether this provider can be used for embeddings (defaults to true). */
+    supportsEmbeddings?: boolean;
+  }
+> = {
+  anthropic: {
+    name: "Anthropic",
+    icon: "/icons/anthropic.png",
+    placeholder: "sk-ant-...",
+    enabled: true,
+    consoleUrl: "https://console.anthropic.com/settings/keys",
+    consoleName: "Anthropic Console",
+  },
+  openai: {
+    name: "OpenAI",
+    icon: "/icons/openai.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://platform.openai.com/api-keys",
+    consoleName: "OpenAI Platform",
+  },
+  gemini: {
+    name: "Gemini",
+    icon: "/icons/gemini.png",
+    placeholder: "AIza...",
+    enabled: true,
+    consoleUrl: "https://aistudio.google.com/app/apikey",
+    consoleName: "Google AI Studio",
+  },
+  cerebras: {
+    name: "Cerebras",
+    icon: "/icons/cerebras.png",
+    placeholder: "csk-...",
+    enabled: true,
+    consoleUrl: "https://cloud.cerebras.ai/platform",
+    consoleName: "Cerebras Cloud",
+  },
+  cohere: {
+    name: "Cohere",
+    icon: "/icons/cohere.png",
+    placeholder: "...",
+    enabled: true,
+    consoleUrl: "https://dashboard.cohere.com/api-keys",
+    consoleName: "Cohere Dashboard",
+  },
+  mistral: {
+    name: "Mistral AI",
+    icon: "/icons/mistral.png",
+    placeholder: "...",
+    enabled: true,
+    consoleUrl: "https://console.mistral.ai/api-keys",
+    consoleName: "Mistral AI Console",
+  },
+  perplexity: {
+    name: "Perplexity AI",
+    icon: "/icons/perplexity.png",
+    placeholder: "pplx-...",
+    enabled: true,
+    consoleUrl: "https://www.perplexity.ai/settings/api",
+    consoleName: "Perplexity Settings",
+  },
+  groq: {
+    name: "Groq",
+    icon: "/icons/groq.png",
+    placeholder: "gsk_...",
+    enabled: true,
+    consoleUrl: "https://console.groq.com/keys",
+    consoleName: "Groq Console",
+  },
+  xai: {
+    name: "xAI",
+    icon: "/icons/xai.png",
+    placeholder: "xai-...",
+    enabled: true,
+    consoleUrl: "https://x.ai/api",
+    consoleName: "xAI",
+  },
+  openrouter: {
+    name: "OpenRouter",
+    icon: "/icons/openrouter.png",
+    placeholder: "sk-or-v1-...",
+    enabled: true,
+    consoleUrl: "https://openrouter.ai/keys",
+    consoleName: "OpenRouter",
+  },
+  vllm: {
+    name: "vLLM",
+    icon: "/icons/vllm.png",
+    placeholder: "optional-api-key",
+    enabled: true,
+    consoleUrl: "https://docs.vllm.ai/",
+    consoleName: "vLLM Docs",
+  },
+  ollama: {
+    name: "Ollama",
+    icon: "/icons/ollama.png",
+    placeholder: "optional-api-key",
+    enabled: true,
+    consoleUrl: "https://ollama.ai/",
+    consoleName: "Ollama",
+    description: "For self-hosted Ollama, an API key is not required.",
+  },
+  zhipuai: {
+    name: "Zhipu AI",
+    icon: "/icons/zhipuai.png",
+    placeholder: "...",
+    enabled: true,
+    consoleUrl: "https://z.ai/model-api",
+    consoleName: "Zhipu AI Platform",
+  },
+  deepseek: {
+    name: "DeepSeek",
+    icon: "/icons/deepseek.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://platform.deepseek.com/api_keys",
+    consoleName: "DeepSeek Platform",
+  },
+  bedrock: {
+    name: "AWS Bedrock",
+    icon: "/icons/bedrock.png",
+    placeholder: "Bedrock API key (bedrock-api-key-... / ABSK...)",
+    enabled: true,
+    consoleUrl: "https://console.aws.amazon.com/bedrock",
+    consoleName: "AWS Console",
+    baseUrlRequired: true,
+  },
+  minimax: {
+    name: "MiniMax",
+    icon: "/icons/minimax.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://www.minimax.io/",
+    consoleName: "MiniMax Platform",
+  },
+  azure: {
+    name: "Azure AI Foundry",
+    icon: "/icons/azure.png",
+    placeholder: "your-azure-openai-api-key",
+    enabled: true,
+    consoleUrl:
+      "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI",
+    consoleName: "Azure Portal",
+    description:
+      "Use your Azure OpenAI or Foundry URL for deployment discovery. If runtime traffic uses a different Azure OpenAI endpoint, set the optional inference URL below.",
+  },
+  "github-copilot": {
+    name: "GitHub Copilot",
+    icon: "/icons/github-copilot.png",
+    placeholder: "Auto-filled after sign in (or paste a gho_… token)",
+    enabled: true,
+    consoleUrl: "https://github.com/settings/copilot",
+    consoleName: "GitHub Copilot Settings",
+    description:
+      "No API key to find — just use Sign in with GitHub below to connect your Copilot subscription. Keys are per-user: everyone using a Copilot model signs in with their own GitHub account.",
+    // Copilot only exposes chat-completion models through Archestra.
+    supportsEmbeddings: false,
+  },
+} as const;
+
+export { PROVIDER_CONFIG };
+
+export const LLM_PROVIDER_API_KEY_PLACEHOLDER = "••••••••••••••••";
+
+interface LlmProviderApiKeyFormProps {
+  /** Layout mode for the form container. */
+  mode?: "full" | "compact";
+  /** Whether to show the provider console/help link below the credential input. */
+  showConsoleLink?: boolean;
+  /** Existing key being edited; omitted for create flows. */
+  existingKey?: LlmProviderApiKeyResponse;
+  /** Visible sibling keys used for primary-key defaults and conflicts. */
+  existingKeys?: LlmProviderApiKeyResponse[];
+  /** Parent-owned React Hook Form instance. */
+  form: UseFormReturn<LlmProviderApiKeyFormValues>;
+  /** Disables interactive controls while a mutation is pending. */
+  isPending?: boolean;
+  /** Whether Gemini direct API keys are disabled in favor of Vertex AI. */
+  geminiVertexAiEnabled?: boolean;
+  /** Whether Bedrock IAM auth is enabled, making direct API key entry optional. */
+  bedrockIamAuthEnabled?: boolean;
+  /** Prevent changing the selected provider. */
+  disableProvider?: boolean;
+  /** Optional allowlist for provider selection. */
+  allowedProviders?: CreateLlmProviderApiKeyBody["provider"][];
+  /** Hide scope and primary-key controls when the parent fixes those values. */
+  hideScopeAndPrimary?: boolean;
+  /** When true, providers without embedding support are disabled in the picker. */
+  forEmbedding?: boolean;
+}
+
+export function LlmProviderApiKeyForm({
+  mode = "full",
+  showConsoleLink = true,
+  existingKey,
+  existingKeys,
+  form,
+  isPending = false,
+  geminiVertexAiEnabled = false,
+  bedrockIamAuthEnabled = false,
+  disableProvider = false,
+  allowedProviders,
+  hideScopeAndPrimary = false,
+  forEmbedding = false,
+}: LlmProviderApiKeyFormProps) {
+  const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
+  const byosEnabled = useFeature("byosEnabled");
+  const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
+  const { data: providerBaseUrls } = useProviderBaseUrls();
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  const { data: isLlmProviderApiKeyAdmin } = useHasPermissions({
+    llmProviderApiKey: ["admin"],
+  });
+  const { data: teams = [] } = useTeams();
+  const isEditMode = Boolean(existingKey);
+
+  const provider = form.watch("provider");
+  const apiKey = form.watch("apiKey");
+  const scope = form.watch("scope");
+  const teamId = form.watch("teamId");
+  const bedrockAuthMethod = form.watch("bedrockAuthMethod");
+  const isBedrockSigV4 =
+    provider === "bedrock" && bedrockAuthMethod === "sigv4";
+
+  const extraHeadersFieldArray = useFieldArray({
+    control: form.control,
+    name: "extraHeaders",
+  });
+
+  const hasApiKeyChanged =
+    apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER && apiKey !== "";
+  // GitHub Copilot hides the raw token field — a credential exists only when an
+  // existing key is being edited or the user just signed in (a real token is
+  // captured). Note: `apiKey` defaults to `null` on create, which `hasApiKeyChanged`
+  // treats as "changed" — so check for an actual token here, not that flag, or
+  // the "connected" card would show before sign-in.
+  const hasCopilotCredential =
+    isEditMode || (!!apiKey && apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER);
+  const providerConfig = PROVIDER_CONFIG[provider];
+  const isBaseUrlRequired =
+    providerConfig.baseUrlRequired && !providerBaseUrls?.[provider];
+
+  const allowedProviderSet = useMemo(
+    () =>
+      new Set<CreateLlmProviderApiKeyBody["provider"]>(
+        allowedProviders ??
+          (Object.keys(
+            PROVIDER_CONFIG,
+          ) as CreateLlmProviderApiKeyBody["provider"][]),
+      ),
+    [allowedProviders],
+  );
+  const showConfiguredStyling = isEditMode && !hasApiKeyChanged;
+
+  const existingPrimaryKey = useMemo(() => {
+    if (!existingKeys) {
+      return null;
+    }
+
+    const otherKeys = existingKey
+      ? existingKeys.filter((key) => key.id !== existingKey.id)
+      : existingKeys;
+
+    return (
+      otherKeys.find(
+        (key) =>
+          key.provider === provider &&
+          key.scope === scope &&
+          (scope !== "team" || key.teamId === teamId) &&
+          key.isPrimary,
+      ) ?? null
+    );
+  }, [existingKey, existingKeys, provider, scope, teamId]);
+
+  const hasAnyKeyForProvider = useMemo(() => {
+    if (!existingKeys) {
+      return false;
+    }
+
+    return existingKeys.some(
+      (key) =>
+        key.provider === provider &&
+        key.scope === scope &&
+        (scope !== "team" || key.teamId === teamId) &&
+        !key.isSystem,
+    );
+  }, [existingKeys, provider, scope, teamId]);
+
+  // Per-user-credential providers (GitHub Copilot) hold an individual's token,
+  // so keys are personal-only — each user connects their own account.
+  const isPerUserProvider = providerRequiresPerUserCredential(provider);
+  const perUserScopeReason = `${providerConfig.name} keys are per-user — each person connects their own account, so they can only be personal.`;
+
+  const visibilityOptions = useMemo(
+    (): Array<
+      VisibilityOption<NonNullable<CreateLlmProviderApiKeyBody["scope"]>>
+    > => [
+      {
+        value: "personal",
+        label: "Personal",
+        description: "Only you can use this key",
+        icon: User,
+      },
+      {
+        value: "team",
+        label: "Team",
+        description: "Available to members of one selected team",
+        icon: Users,
+        disabled: isPerUserProvider || !canReadTeams || teams.length === 0,
+        disabledReason: isPerUserProvider
+          ? perUserScopeReason
+          : !canReadTeams
+            ? "Team sharing is unavailable without team:read permission"
+            : teams.length === 0
+              ? "Create a team before using team scope"
+              : undefined,
+      },
+      {
+        value: "org",
+        label: "Organization",
+        description: "Available to everyone in the organization",
+        icon: Building2,
+        disabled: isPerUserProvider || !isLlmProviderApiKeyAdmin,
+        disabledReason: isPerUserProvider
+          ? perUserScopeReason
+          : !isLlmProviderApiKeyAdmin
+            ? "You need llmProviderApiKey:admin permission to share org-wide"
+            : undefined,
+      },
+    ],
+    [
+      canReadTeams,
+      isLlmProviderApiKeyAdmin,
+      teams.length,
+      isPerUserProvider,
+      perUserScopeReason,
+    ],
+  );
+
+  useEffect(() => {
+    if (isEditMode) {
+      return;
+    }
+
+    form.setValue("isPrimary", !hasAnyKeyForProvider);
+  }, [form, hasAnyKeyForProvider, isEditMode]);
+
+  // Default the Name field to the provider's display name so it's one less
+  // field to fill. Only fill while the name is empty or still the previously
+  // auto-filled provider name — never clobber a name the user typed.
+  const autoFilledNameRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isEditMode) {
+      return;
+    }
+
+    const currentName = form.getValues("name");
+    if (currentName === "" || currentName === autoFilledNameRef.current) {
+      form.setValue("name", providerConfig.name);
+      autoFilledNameRef.current = providerConfig.name;
+    }
+  }, [form, isEditMode, providerConfig.name]);
+
+  // Force personal scope when the provider requires a per-user credential.
+  useEffect(() => {
+    if (isPerUserProvider && scope !== "personal") {
+      form.setValue("scope", "personal");
+      form.setValue("teamId", null);
+    }
+  }, [form, isPerUserProvider, scope]);
+
+  useEffect(() => {
+    if (allowedProviderSet.has(provider)) {
+      return;
+    }
+
+    const firstAllowedProvider = Array.from(allowedProviderSet)[0];
+    if (firstAllowedProvider) {
+      form.setValue("provider", firstAllowedProvider);
+    }
+  }, [allowedProviderSet, form, provider]);
+
+  useEffect(() => {
+    if (scope === "team") {
+      return;
+    }
+
+    form.setValue("vaultSecretPath", null);
+    form.setValue("vaultSecretKey", null);
+  }, [form, scope]);
+
+  const vaultSecretSelector =
+    scope === "team" ? (
+      <InlineVaultSecretSelector
+        teamId={teamId}
+        selectedSecretPath={form.getValues("vaultSecretPath")}
+        selectedSecretKey={form.getValues("vaultSecretKey")}
+        onSecretPathChange={(value) => form.setValue("vaultSecretPath", value)}
+        onSecretKeyChange={(value) => form.setValue("vaultSecretKey", value)}
+      />
+    ) : (
+      <ExternalSecretSelector
+        selectedTeamId={teamId}
+        selectedSecretPath={form.getValues("vaultSecretPath")}
+        selectedSecretKey={form.getValues("vaultSecretKey")}
+        onTeamChange={(value) => form.setValue("teamId", value)}
+        onSecretChange={(value) => form.setValue("vaultSecretPath", value)}
+        onSecretKeyChange={(value) => form.setValue("vaultSecretKey", value)}
+      />
+    );
+
+  return (
+    <div data-testid={E2eTestId.ChatApiKeyForm}>
+      <div className="space-y-4">
+        <div className={mode === "full" ? "grid grid-cols-2 gap-4" : ""}>
+          <div className="space-y-2">
+            <Label htmlFor="llm-provider-api-key-provider">Provider</Label>
+            <Select
+              value={provider}
+              onValueChange={(value) =>
+                form.setValue(
+                  "provider",
+                  value as CreateLlmProviderApiKeyBody["provider"],
+                )
+              }
+              disabled={isEditMode || isPending || disableProvider}
+            >
+              <SelectTrigger
+                id="llm-provider-api-key-provider"
+                className="w-full"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <LlmProviderSelectItems
+                  options={Object.entries(PROVIDER_CONFIG)
+                    .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+                    .map(([key, config]) => {
+                      const providerKey =
+                        key as CreateLlmProviderApiKeyBody["provider"];
+                      const isGeminiDisabledByVertexAi =
+                        providerKey === "gemini" && geminiVertexAiEnabled;
+                      const isBedrockDisabledByIamAuth =
+                        providerKey === "bedrock" && bedrockIamAuthEnabled;
+                      const isEmbeddingUnsupported =
+                        forEmbedding && config.supportsEmbeddings === false;
+
+                      return {
+                        value: providerKey,
+                        icon: config.icon,
+                        name: config.name,
+                        disabled:
+                          !allowedProviderSet.has(providerKey) ||
+                          !config.enabled ||
+                          isGeminiDisabledByVertexAi ||
+                          isBedrockDisabledByIamAuth ||
+                          isEmbeddingUnsupported,
+                        subtext: isEmbeddingUnsupported
+                          ? "Not supported for embeddings"
+                          : undefined,
+                        showComingSoon: !config.enabled,
+                        showGeminiVertexAiBadge: isGeminiDisabledByVertexAi,
+                        showBedrockIamBadge: isBedrockDisabledByIamAuth,
+                      };
+                    })}
+                />
+              </SelectContent>
+            </Select>
+          </div>
+
+          {mode === "full" && (
+            <div className="space-y-2">
+              <Label htmlFor="llm-provider-api-key-name">
+                Name{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </Label>
+              <Input
+                id="llm-provider-api-key-name"
+                placeholder={providerConfig.name}
+                disabled={isPending}
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                {...form.register("name")}
+              />
+            </div>
+          )}
+        </div>
+
+        {byosEnabled ? (
+          <Suspense
+            fallback={
+              <div className="text-sm text-muted-foreground">Loading...</div>
+            }
+          >
+            {vaultSecretSelector}
+          </Suspense>
+        ) : (
+          <div className="space-y-2">
+            {provider === "bedrock" && (
+              <Tabs
+                value={bedrockAuthMethod}
+                onValueChange={(value) =>
+                  form.setValue(
+                    "bedrockAuthMethod",
+                    value as "api-key" | "sigv4" | "iam",
+                  )
+                }
+              >
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="api-key" disabled={isPending}>
+                    API Key
+                  </TabsTrigger>
+                  <TabsTrigger value="sigv4" disabled={isPending}>
+                    AWS SigV4
+                  </TabsTrigger>
+                  <TabsTrigger value="iam" disabled={isPending}>
+                    Service Account
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+
+            {provider === "bedrock" && bedrockAuthMethod === "iam" && (
+              <div className="space-y-3 text-sm">
+                <p className="text-muted-foreground">
+                  Authenticate Bedrock requests using IAM credentials picked up
+                  from the server's environment. Uses the AWS SDK credential
+                  chain — IRSA (IAM Roles for Service Accounts), EC2/ECS
+                  instance profiles, or environment variables — so no static
+                  keys are stored in Archestra.
+                </p>
+                {bedrockIamAuthEnabled ? (
+                  <div className="rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
+                    <p className="font-medium text-green-600 dark:text-green-400">
+                      Enabled on this server
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Bedrock requests will be signed automatically; you don't
+                      need to create an API key.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+                    <p className="font-semibold text-amber-700 dark:text-amber-400">
+                      Not enabled on this server
+                    </p>
+                    <p className="mt-2 text-foreground">
+                      An admin must enable IAM auth on the backend before this
+                      option can be used:
+                    </p>
+                    <ol className="mt-2 list-decimal space-y-1 pl-5 text-foreground">
+                      <li>
+                        Set the env var{" "}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                          ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED=true
+                        </code>{" "}
+                        on the Archestra backend.
+                      </li>
+                      <li>
+                        Grant the pod's service account (IRSA) or instance
+                        profile permission to call Bedrock (e.g.{" "}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                          bedrock:InvokeModel
+                        </code>
+                        ).
+                      </li>
+                      <li>Restart the backend to pick up the change.</li>
+                    </ol>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!isBedrockSigV4 &&
+              bedrockAuthMethod !== "iam" &&
+              (provider === "github-copilot" ? (
+                <>
+                  <Label>GitHub Copilot account</Label>
+                  {providerConfig.description && (
+                    <p className="text-xs text-muted-foreground">
+                      {providerConfig.description}
+                    </p>
+                  )}
+                  {hasCopilotCredential && (
+                    <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
+                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
+                      <div>
+                        <p className="font-medium text-green-600 dark:text-green-400">
+                          GitHub account connected
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          Your Copilot subscription is linked through your
+                          GitHub account.
+                          {isEditMode
+                            ? " Sign in again below to refresh the token."
+                            : ""}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  <GithubCopilotSignIn
+                    disabled={isPending}
+                    onToken={(token) =>
+                      form.setValue("apiKey", token, { shouldDirty: true })
+                    }
+                  />
+                </>
+              ) : (
+                <>
+                  <Label htmlFor="llm-provider-api-key-value">
+                    API Key{" "}
+                    {isProviderApiKeyOptional({
+                      provider,
+                      azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+                    }) ? (
+                      <span className="font-normal text-muted-foreground">
+                        (optional)
+                      </span>
+                    ) : (
+                      isEditMode && (
+                        <span className="font-normal text-muted-foreground">
+                          (leave blank to keep current)
+                        </span>
+                      )
+                    )}
+                  </Label>
+                  {providerConfig.description && (
+                    <p className="text-xs text-muted-foreground">
+                      {providerConfig.description}
+                    </p>
+                  )}
+                  <div className="relative">
+                    <Input
+                      id="llm-provider-api-key-value"
+                      type="password"
+                      placeholder={providerConfig.placeholder}
+                      disabled={isPending}
+                      autoComplete="new-password"
+                      data-1p-ignore
+                      data-lpignore="true"
+                      className={
+                        showConfiguredStyling ? "border-green-500 pr-10" : ""
+                      }
+                      {...form.register("apiKey")}
+                    />
+                    {showConfiguredStyling && (
+                      <CheckCircle2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-green-500" />
+                    )}
+                  </div>
+                  {showConsoleLink && (
+                    <p className="text-xs text-muted-foreground">
+                      Get your API key from{" "}
+                      <Link
+                        href={providerConfig.consoleUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-foreground"
+                      >
+                        {providerConfig.consoleName}
+                      </Link>
+                    </p>
+                  )}
+                </>
+              ))}
+
+            {isBedrockSigV4 && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-aws-access-key-id">
+                    Access Key ID
+                  </Label>
+                  <Input
+                    id="llm-provider-aws-access-key-id"
+                    type="password"
+                    placeholder="AKIA..."
+                    autoComplete="off"
+                    disabled={isPending}
+                    {...form.register("awsAccessKeyId")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-aws-secret-access-key">
+                    Secret Access Key
+                  </Label>
+                  <Input
+                    id="llm-provider-aws-secret-access-key"
+                    type="password"
+                    placeholder="••••••••"
+                    autoComplete="off"
+                    disabled={isPending}
+                    {...form.register("awsSecretAccessKey")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-aws-session-token">
+                    Session Token{" "}
+                    <span className="font-normal text-muted-foreground">
+                      (optional)
+                    </span>
+                  </Label>
+                  <Input
+                    id="llm-provider-aws-session-token"
+                    type="password"
+                    placeholder="Required for temporary credentials (STS / AssumeRole)"
+                    autoComplete="off"
+                    disabled={isPending}
+                    {...form.register("awsSessionToken")}
+                  />
+                </div>
+                {showConsoleLink && (
+                  <p className="text-xs text-muted-foreground">
+                    Manage IAM credentials in the{" "}
+                    <Link
+                      href="https://console.aws.amazon.com/iam/home#/users"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-foreground"
+                    >
+                      AWS IAM Console
+                    </Link>
+                    .
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!hideScopeAndPrimary && (
+          <>
+            <VisibilitySelector
+              label="Scope"
+              value={scope}
+              options={visibilityOptions}
+              onValueChange={(nextScope) => {
+                form.setValue("scope", nextScope);
+                if (nextScope !== "team") {
+                  form.setValue("teamId", null);
+                }
+              }}
+            >
+              <p className="text-xs text-muted-foreground">
+                Controls who can use this key.
+                {authDocsUrl && (
+                  <>
+                    {" "}
+                    <ExternalDocsLink
+                      href={`${authDocsUrl}#api-key-scoping`}
+                      className="text-inherit underline hover:text-foreground"
+                      showIcon={false}
+                    >
+                      Learn more
+                    </ExternalDocsLink>
+                  </>
+                )}
+              </p>
+
+              {scope === "team" && (
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-api-key-team">Team</Label>
+                  <Select
+                    value={teamId ?? undefined}
+                    onValueChange={(value) => form.setValue("teamId", value)}
+                    disabled={isPending || !canReadTeams || teams.length === 0}
+                  >
+                    <SelectTrigger
+                      id="llm-provider-api-key-team"
+                      className="w-full"
+                    >
+                      <SelectValue placeholder="Select a team" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((team) => (
+                        <SelectItem key={team.id} value={team.id}>
+                          {team.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </VisibilitySelector>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="llm-provider-api-key-is-primary">
+                  Primary key
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {existingPrimaryKey
+                    ? `"${existingPrimaryKey.name}" is already the primary key for this provider and scope`
+                    : "When multiple keys exist for the same provider and scope, the primary key is preferred"}
+                </p>
+              </div>
+              <Switch
+                id="llm-provider-api-key-is-primary"
+                checked={form.watch("isPrimary")}
+                onCheckedChange={(checked) =>
+                  form.setValue("isPrimary", checked)
+                }
+                disabled={isPending || Boolean(existingPrimaryKey)}
+              />
+            </div>
+          </>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="llm-provider-api-key-base-url">
+            Base URL{" "}
+            {!isBaseUrlRequired && (
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            )}
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Override the default API endpoint. Useful for self-hosted or proxy
+            setups.
+          </p>
+          <Input
+            id="llm-provider-api-key-base-url"
+            type="url"
+            placeholder={
+              providerBaseUrls?.[provider] ||
+              DEFAULT_PROVIDER_BASE_URLS[provider] ||
+              "https://..."
+            }
+            disabled={isPending}
+            {...form.register("baseUrl", {
+              validate: (value) => {
+                if (!value) {
+                  if (isBaseUrlRequired) {
+                    return "Base URL is required for this provider";
+                  }
+                  return true;
+                }
+
+                try {
+                  const url = new URL(value);
+                  if (!["http:", "https:"].includes(url.protocol)) {
+                    return "URL must use http or https protocol";
+                  }
+                  return true;
+                } catch {
+                  return "Please enter a valid URL (e.g. https://api.example.com)";
+                }
+              },
+            })}
+          />
+          {form.formState.errors.baseUrl && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.baseUrl.message}
+            </p>
+          )}
+        </div>
+
+        {provider === "azure" && (
+          <div className="space-y-2">
+            <Label htmlFor="llm-provider-api-key-inference-base-url">
+              Inference URL{" "}
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Runtime endpoint for chat and embeddings when it differs from the
+              Base URL used for Azure deployment discovery.
+            </p>
+            <Input
+              id="llm-provider-api-key-inference-base-url"
+              type="url"
+              placeholder="https://<resource>.openai.azure.com/openai"
+              disabled={isPending}
+              {...form.register("inferenceBaseUrl", {
+                validate: (value) => {
+                  if (!value) return true;
+
+                  try {
+                    const url = new URL(value);
+                    if (!["http:", "https:"].includes(url.protocol)) {
+                      return "URL must use http or https protocol";
+                    }
+                    return true;
+                  } catch {
+                    return "Please enter a valid URL (e.g. https://api.example.com)";
+                  }
+                },
+              })}
+            />
+            {form.formState.errors.inferenceBaseUrl && (
+              <p className="text-xs text-destructive">
+                {form.formState.errors.inferenceBaseUrl.message}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label>
+            Extra HTTP headers{" "}
+            <span className="font-normal text-muted-foreground">
+              (optional)
+            </span>
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Sent on every request to the provider. Useful for gateways that
+            require custom RBAC headers (e.g. <code>kubeflow-userid</code>).
+          </p>
+          {extraHeadersFieldArray.fields.length > 0 && (
+            <div className="space-y-2">
+              {extraHeadersFieldArray.fields.map((field, index) => (
+                <div key={field.id} className="flex items-start gap-2">
+                  <Input
+                    placeholder="Header name"
+                    disabled={isPending}
+                    className="flex-1"
+                    {...form.register(`extraHeaders.${index}.name` as const)}
+                  />
+                  <Input
+                    placeholder="Header value"
+                    disabled={isPending}
+                    className="flex-1"
+                    {...form.register(`extraHeaders.${index}.value` as const)}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={isPending}
+                    onClick={() => extraHeadersFieldArray.remove(index)}
+                    aria-label={`Remove header ${index + 1}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isPending}
+            onClick={() =>
+              extraHeadersFieldArray.append({ name: "", value: "" })
+            }
+          >
+            Add header
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

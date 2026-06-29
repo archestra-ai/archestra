@@ -1,0 +1,412 @@
+import { z } from "zod";
+
+/**
+ * MCP Logs defaults
+ */
+export const MCP_DEFAULT_LOG_LINES = 500;
+
+/**
+ * WebSocket Message Payload Schemas (Client -> Server)
+ */
+
+// Browser stream payloads
+const SubscribeBrowserStreamPayloadSchema = z.object({
+  conversationId: z.string().uuid(),
+  // Deprecated: tabIndex was derived from chat list ordering and is ignored.
+  tabIndex: z.number().int().min(0).optional(),
+  // Viewport dimensions for screenshots - frontend sends container size
+  viewportWidth: z.number().int().min(100).max(2000).optional(),
+  viewportHeight: z.number().int().min(100).max(2000).optional(),
+  // Initial URL to navigate to (for new conversations created from URL bar)
+  initialUrl: z.string().url().optional(),
+});
+
+const UnsubscribeBrowserStreamPayloadSchema = z.object({
+  conversationId: z.string().uuid(),
+});
+
+const BrowserNavigatePayloadSchema = z.object({
+  conversationId: z.string().uuid(),
+  url: z.string().url(),
+});
+
+const BrowserClickPayloadSchema = z.object({
+  conversationId: z.string().uuid(),
+  // Either element ref OR coordinates
+  element: z.string().optional(), // Element ref like "e123" from snapshot
+  x: z.number().optional(), // X coordinate for click
+  y: z.number().optional(), // Y coordinate for click
+});
+
+const BrowserTypePayloadSchema = z.object({
+  conversationId: z.string().uuid(),
+  text: z.string(),
+  element: z.string().optional(), // Optional element ref to focus first
+});
+
+const BrowserPressKeyPayloadSchema = z.object({
+  conversationId: z.string().uuid(),
+  key: z.string(), // Key name like "Enter", "Tab", "ArrowDown", "PageDown"
+});
+
+const BrowserGetSnapshotPayloadSchema = z.object({
+  conversationId: z.string().uuid(),
+});
+
+const BrowserNavigateBackPayloadSchema = z.object({
+  conversationId: z.string().uuid(),
+});
+
+const BrowserSetZoomPayloadSchema = z.object({
+  conversationId: z.string().uuid(),
+  zoomPercent: z.number().min(10).max(200), // Zoom percentage (10% to 200%)
+});
+
+// MCP Server Logs payloads
+const SubscribeMcpLogsPayloadSchema = z.object({
+  serverId: z.string().uuid(),
+  lines: z.number().int().min(1).max(10000).default(MCP_DEFAULT_LOG_LINES), // Number of initial lines to fetch
+});
+
+const UnsubscribeMcpLogsPayloadSchema = z.object({
+  serverId: z.string().uuid(),
+});
+
+// MCP Exec payloads
+const SubscribeMcpExecPayloadSchema = z.object({
+  serverId: z.string().uuid(),
+});
+const UnsubscribeMcpExecPayloadSchema = z.object({
+  serverId: z.string().uuid(),
+});
+const McpExecInputPayloadSchema = z.object({
+  serverId: z.string().uuid(),
+  data: z.string(),
+});
+const McpExecResizePayloadSchema = z.object({
+  serverId: z.string().uuid(),
+  cols: z.number().int().min(1),
+  rows: z.number().int().min(1),
+});
+
+// MCP Deployment Status payloads
+const SubscribeMcpDeploymentStatusesPayloadSchema = z.object({});
+const UnsubscribeMcpDeploymentStatusesPayloadSchema = z.object({});
+
+/**
+ * Discriminated union of all possible websocket messages (client -> server)
+ */
+export const ClientWebSocketMessageSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("subscribe_browser_stream"),
+    payload: SubscribeBrowserStreamPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("unsubscribe_browser_stream"),
+    payload: UnsubscribeBrowserStreamPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("browser_navigate"),
+    payload: BrowserNavigatePayloadSchema,
+  }),
+  z.object({
+    type: z.literal("browser_click"),
+    payload: BrowserClickPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("browser_type"),
+    payload: BrowserTypePayloadSchema,
+  }),
+  z.object({
+    type: z.literal("browser_press_key"),
+    payload: BrowserPressKeyPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("browser_get_snapshot"),
+    payload: BrowserGetSnapshotPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("browser_navigate_back"),
+    payload: BrowserNavigateBackPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("browser_set_zoom"),
+    payload: BrowserSetZoomPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("subscribe_mcp_logs"),
+    payload: SubscribeMcpLogsPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("unsubscribe_mcp_logs"),
+    payload: UnsubscribeMcpLogsPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("subscribe_mcp_exec"),
+    payload: SubscribeMcpExecPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("unsubscribe_mcp_exec"),
+    payload: UnsubscribeMcpExecPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("mcp_exec_input"),
+    payload: McpExecInputPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("mcp_exec_resize"),
+    payload: McpExecResizePayloadSchema,
+  }),
+  z.object({
+    type: z.literal("subscribe_mcp_deployment_statuses"),
+    payload: SubscribeMcpDeploymentStatusesPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("unsubscribe_mcp_deployment_statuses"),
+    payload: UnsubscribeMcpDeploymentStatusesPayloadSchema,
+  }),
+]);
+
+export type ClientWebSocketMessage = z.infer<
+  typeof ClientWebSocketMessageSchema
+>;
+
+/**
+ * All possible client message types (for handler maps)
+ */
+export type ClientWebSocketMessageType = ClientWebSocketMessage["type"];
+
+/**
+ * Server -> Client message types
+ */
+export type BrowserScreenshotMessage = {
+  type: "browser_screenshot";
+  payload: {
+    conversationId: string;
+    screenshot: string;
+    url?: string;
+    // Screenshot dimensions for accurate click mapping
+    viewportWidth?: number;
+    viewportHeight?: number;
+    // Navigation state for back button
+    canGoBack?: boolean;
+  };
+};
+
+export type BrowserNavigateResultMessage = {
+  type: "browser_navigate_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    url?: string;
+    error?: string;
+  };
+};
+
+export type BrowserStreamErrorMessage = {
+  type: "browser_stream_error";
+  payload: {
+    conversationId: string;
+    error: string;
+  };
+};
+
+export type BrowserClickResultMessage = {
+  type: "browser_click_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    error?: string;
+  };
+};
+
+export type BrowserTypeResultMessage = {
+  type: "browser_type_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    error?: string;
+  };
+};
+
+export type BrowserPressKeyResultMessage = {
+  type: "browser_press_key_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    error?: string;
+  };
+};
+
+export type BrowserSnapshotMessage = {
+  type: "browser_snapshot";
+  payload: {
+    conversationId: string;
+    snapshot?: string;
+    error?: string;
+  };
+};
+
+export type BrowserSetZoomResultMessage = {
+  type: "browser_set_zoom_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    error?: string;
+  };
+};
+
+export type BrowserNavigateBackResultMessage = {
+  type: "browser_navigate_back_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    error?: string;
+  };
+};
+
+// MCP Logs server -> client messages
+export type McpLogsMessage = {
+  type: "mcp_logs";
+  payload: {
+    serverId: string;
+    logs: string;
+    command?: string; // kubectl command for manual execution
+  };
+};
+
+export type McpLogsErrorMessage = {
+  type: "mcp_logs_error";
+  payload: {
+    serverId: string;
+    error: string;
+  };
+};
+
+export type McpLogsEndedMessage = {
+  type: "mcp_logs_ended";
+  payload: {
+    serverId: string;
+  };
+};
+
+// MCP Exec server -> client messages
+export type McpExecStartedMessage = {
+  type: "mcp_exec_started";
+  payload: {
+    serverId: string;
+    command: string;
+    podName: string;
+  };
+};
+
+export type McpExecOutputMessage = {
+  type: "mcp_exec_output";
+  payload: {
+    serverId: string;
+    data: string;
+  };
+};
+
+export type McpExecErrorMessage = {
+  type: "mcp_exec_error";
+  payload: {
+    serverId: string;
+    error: string;
+  };
+};
+
+export type McpExecClosedMessage = {
+  type: "mcp_exec_closed";
+  payload: {
+    serverId: string;
+    /**
+     * Human-readable reason the session ended, populated when the K8s exec
+     * reported a failure status (e.g. the image is distroless and has no
+     * `/bin/sh`). Absent on a clean exit.
+     */
+    reason?: string;
+  };
+};
+
+// MCP Deployment Status server -> client messages
+export const MCP_DEPLOYMENT_STATES = [
+  "not_created",
+  "pending",
+  "running",
+  "failed",
+  "succeeded",
+] as const;
+
+export type McpDeploymentState = (typeof MCP_DEPLOYMENT_STATES)[number];
+
+export type McpDeploymentStatusEntry = {
+  state: McpDeploymentState;
+  message: string;
+  error: string | null;
+  restartCount?: number;
+  podAge?: string; // e.g. "24m", "2h", "3d"
+  podName?: string;
+};
+
+export type McpDeploymentStatusesMessage = {
+  type: "mcp_deployment_statuses";
+  payload: {
+    statuses: Record<string, McpDeploymentStatusEntry>;
+  };
+};
+
+// MCP installation-status push (sent on every change in the DB row, no
+// subscription needed — clients filter by serverId in their query cache).
+export const LOCAL_MCP_INSTALLATION_STATES = [
+  "idle",
+  "pending",
+  "discovering-tools",
+  "success",
+  "error",
+] as const;
+
+export type LocalMcpInstallationState =
+  (typeof LOCAL_MCP_INSTALLATION_STATES)[number];
+
+export type McpInstallationStatusMessage = {
+  type: "mcp_installation_status";
+  payload: {
+    serverId: string;
+    status: LocalMcpInstallationState;
+    error: string | null;
+  };
+};
+
+export type ErrorMessage = {
+  type: "error";
+  payload: {
+    message: string;
+  };
+};
+
+export type ServerWebSocketMessage =
+  | BrowserScreenshotMessage
+  | BrowserNavigateResultMessage
+  | BrowserNavigateBackResultMessage
+  | BrowserStreamErrorMessage
+  | BrowserClickResultMessage
+  | BrowserTypeResultMessage
+  | BrowserPressKeyResultMessage
+  | BrowserSnapshotMessage
+  | BrowserSetZoomResultMessage
+  | McpLogsMessage
+  | McpLogsErrorMessage
+  | McpLogsEndedMessage
+  | McpExecStartedMessage
+  | McpExecOutputMessage
+  | McpExecErrorMessage
+  | McpExecClosedMessage
+  | McpDeploymentStatusesMessage
+  | McpInstallationStatusMessage
+  | ErrorMessage;
+
+/**
+ * All possible server message types (for handler maps)
+ */
+export type ServerWebSocketMessageType = ServerWebSocketMessage["type"];

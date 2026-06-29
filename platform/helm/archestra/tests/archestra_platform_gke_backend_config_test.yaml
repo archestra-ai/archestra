@@ -1,0 +1,270 @@
+suite: test archestra platform -- GKE BackendConfig
+templates:
+  - gke-backend-config.yaml
+tests:
+  - it: should not create BackendConfig resources when disabled
+    set:
+      archestra.gkeBackendConfig.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create both backend and frontend BackendConfig resources when enabled
+    set:
+      archestra.gkeBackendConfig.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should create backend BackendConfig with correct metadata
+    set:
+      archestra.gkeBackendConfig.enabled: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: BackendConfig
+      - equal:
+          path: apiVersion
+          value: cloud.google.com/v1
+      - matchRegex:
+          path: metadata.name
+          pattern: -backend-config$
+
+  - it: should create frontend BackendConfig with correct metadata
+    set:
+      archestra.gkeBackendConfig.enabled: true
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: BackendConfig
+      - equal:
+          path: apiVersion
+          value: cloud.google.com/v1
+      - matchRegex:
+          path: metadata.name
+          pattern: -frontend-config$
+
+  - it: should use correct naming with release name
+    set:
+      archestra.gkeBackendConfig.enabled: true
+    release:
+      name: "my-release"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.name
+          value: "my-release-archestra-platform-backend-config"
+
+  - it: should configure backend health check with default values
+    set:
+      archestra.gkeBackendConfig.enabled: true
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.healthCheck.checkIntervalSec
+          value: 15
+      - equal:
+          path: spec.healthCheck.timeoutSec
+          value: 10
+      - equal:
+          path: spec.healthCheck.healthyThreshold
+          value: 1
+      - equal:
+          path: spec.healthCheck.unhealthyThreshold
+          value: 10
+      - equal:
+          path: spec.healthCheck.type
+          value: HTTP
+      - equal:
+          path: spec.healthCheck.requestPath
+          value: /health
+      - equal:
+          path: spec.healthCheck.port
+          value: 9000
+
+  - it: should configure frontend health check with default values
+    set:
+      archestra.gkeBackendConfig.enabled: true
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.healthCheck.checkIntervalSec
+          value: 15
+      - equal:
+          path: spec.healthCheck.timeoutSec
+          value: 10
+      - equal:
+          path: spec.healthCheck.healthyThreshold
+          value: 1
+      - equal:
+          path: spec.healthCheck.unhealthyThreshold
+          value: 10
+      - equal:
+          path: spec.healthCheck.type
+          value: HTTP
+      - equal:
+          path: spec.healthCheck.requestPath
+          value: /health
+      - equal:
+          path: spec.healthCheck.port
+          value: 3000
+
+  - it: should allow custom backend health check configuration
+    set:
+      archestra.gkeBackendConfig.enabled: true
+      archestra.gkeBackendConfig.backend.healthCheck:
+        checkIntervalSec: 30
+        timeoutSec: 15
+        healthyThreshold: 2
+        unhealthyThreshold: 5
+        type: HTTPS
+        requestPath: /healthz
+        port: 8080
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.healthCheck.checkIntervalSec
+          value: 30
+      - equal:
+          path: spec.healthCheck.timeoutSec
+          value: 15
+      - equal:
+          path: spec.healthCheck.healthyThreshold
+          value: 2
+      - equal:
+          path: spec.healthCheck.unhealthyThreshold
+          value: 5
+      - equal:
+          path: spec.healthCheck.type
+          value: HTTPS
+      - equal:
+          path: spec.healthCheck.requestPath
+          value: /healthz
+      - equal:
+          path: spec.healthCheck.port
+          value: 8080
+
+  - it: should allow custom frontend health check configuration
+    set:
+      archestra.gkeBackendConfig.enabled: true
+      archestra.gkeBackendConfig.frontend.healthCheck:
+        checkIntervalSec: 20
+        timeoutSec: 8
+        healthyThreshold: 1
+        unhealthyThreshold: 3
+        type: HTTP
+        requestPath: /ready
+        port: 3001
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.healthCheck.checkIntervalSec
+          value: 20
+      - equal:
+          path: spec.healthCheck.timeoutSec
+          value: 8
+      - equal:
+          path: spec.healthCheck.healthyThreshold
+          value: 1
+      - equal:
+          path: spec.healthCheck.unhealthyThreshold
+          value: 3
+      - equal:
+          path: spec.healthCheck.type
+          value: HTTP
+      - equal:
+          path: spec.healthCheck.requestPath
+          value: /ready
+      - equal:
+          path: spec.healthCheck.port
+          value: 3001
+
+  - it: should configure backend timeoutSec when provided
+    set:
+      archestra.gkeBackendConfig.enabled: true
+      archestra.gkeBackendConfig.backend.timeoutSec: 600
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.timeoutSec
+          value: 600
+
+  - it: should configure frontend timeoutSec when provided
+    set:
+      archestra.gkeBackendConfig.enabled: true
+      archestra.gkeBackendConfig.frontend.timeoutSec: 300
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.timeoutSec
+          value: 300
+
+  - it: should not include timeoutSec when not provided
+    set:
+      archestra.gkeBackendConfig.enabled: true
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.timeoutSec
+
+  - it: should configure backend connectionDraining when provided
+    set:
+      archestra.gkeBackendConfig.enabled: true
+      archestra.gkeBackendConfig.backend.connectionDraining:
+        drainingTimeoutSec: 60
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.connectionDraining.drainingTimeoutSec
+          value: 60
+
+  - it: should configure frontend connectionDraining when provided
+    set:
+      archestra.gkeBackendConfig.enabled: true
+      archestra.gkeBackendConfig.frontend.connectionDraining:
+        drainingTimeoutSec: 30
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.connectionDraining.drainingTimeoutSec
+          value: 30
+
+  - it: should not include connectionDraining when not provided
+    set:
+      archestra.gkeBackendConfig.enabled: true
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.connectionDraining
+
+  - it: should not include connectionDraining when provided without drainingTimeoutSec (backend)
+    set:
+      archestra.gkeBackendConfig.enabled: true
+      archestra.gkeBackendConfig.backend.connectionDraining: {}
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.connectionDraining
+
+  - it: should not include connectionDraining when provided without drainingTimeoutSec (frontend)
+    set:
+      archestra.gkeBackendConfig.enabled: true
+      archestra.gkeBackendConfig.frontend.connectionDraining: {}
+    documentIndex: 1
+    asserts:
+      - notExists:
+          path: spec.connectionDraining
+
+  - it: should include chart labels
+    set:
+      archestra.gkeBackendConfig.enabled: true
+    documentIndex: 0
+    asserts:
+      - exists:
+          path: metadata.labels["helm.sh/chart"]
+      - exists:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - exists:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - exists:
+          path: metadata.labels["app.kubernetes.io/managed-by"]

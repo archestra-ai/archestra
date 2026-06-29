@@ -1,0 +1,1626 @@
+import { vi } from "vitest";
+
+// Mock dependencies before other imports
+vi.mock("@/k8s/mcp-server-runtime", () => ({
+  McpServerRuntimeManager: {
+    restartServer: vi.fn(),
+    getOrLoadDeployment: vi.fn(),
+    reinstallSharedDeployment: vi.fn(),
+  },
+}));
+
+vi.mock("@/models", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/models")>();
+  return {
+    InternalMcpCatalogModel: {
+      update: vi.fn(),
+    },
+    McpServerModel: {
+      constructServerName: original.McpServerModel.constructServerName,
+      findByCatalogId: vi.fn(),
+      getToolsFromServer: vi.fn(),
+      update: vi.fn(),
+    },
+    ToolModel: {
+      slugifyName: vi.fn(
+        (prefix: string, name: string) => `${prefix}__${name}`,
+      ),
+      syncToolsForCatalog: vi.fn(),
+    },
+  };
+});
+
+vi.mock("@/websocket", () => ({
+  broadcastMcpInstallationStatus: vi.fn(),
+}));
+
+import {
+  CASCADE_SCENARIOS,
+  CATALOG_SHAPES,
+  isMetadataOnlyEdit,
+} from "@archestra/shared";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
+import { beforeEach, describe, expect, test } from "@/test";
+import type { InternalMcpCatalog, McpServer } from "@/types";
+import {
+  autoReinstallServer,
+  onlyForwardCompatibleEnvDiff,
+  reinstallMultitenantCatalog,
+  requiresNewUserInputForReinstall,
+} from "./mcp-reinstall";
+
+describe("mcp-reinstall", () => {
+  describe("requiresNewUserInputForReinstall", () => {
+    // Helper to create a minimal local catalog item
+    const createLocalCatalog = (
+      environment: Array<{
+        key: string;
+        type: "plain_text" | "secret";
+        promptOnInstallation: boolean;
+        required?: boolean;
+      }> = [],
+      userConfig: Record<
+        string,
+        { type: string; required?: boolean; headerName?: string }
+      > = {},
+    ): InternalMcpCatalog =>
+      ({
+        id: "test-id",
+        name: "Test Server",
+        serverType: "local",
+        localConfig: {
+          command: "npm",
+          arguments: ["start"],
+          environment,
+        },
+        userConfig,
+      }) as InternalMcpCatalog;
+
+    // Helper to create a minimal remote catalog item
+    const createRemoteCatalog = (
+      userConfig: Record<string, { type: string; required?: boolean }> = {},
+      oauthConfig: object | null = null,
+    ): InternalMcpCatalog =>
+      ({
+        id: "test-id",
+        name: "Test Server",
+        serverType: "remote",
+        userConfig,
+        oauthConfig,
+      }) as InternalMcpCatalog;
+
+    describe("local servers", () => {
+      test("returns false when no env vars exist", () => {
+        const oldConfig = createLocalCatalog([]);
+        const newConfig = createLocalCatalog([]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns false when only non-prompted env vars exist", () => {
+        const oldConfig = createLocalCatalog([]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "STATIC_VAR",
+            type: "plain_text" as const,
+            promptOnInstallation: false,
+          },
+        ]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when a REQUIRED prompted env var is ADDED", () => {
+        // Existing installs are missing a value they're now required to
+        // provide → reinstall so the user can be re-prompted.
+        const oldConfig = createLocalCatalog([]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: true,
+          },
+        ]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns false when an OPTIONAL prompted env var is ADDED", () => {
+        // Schema-evolution: existing installs without the new optional
+        // var are still valid. They can adopt it on the next manual
+        // reinstall but shouldn't be force-flagged.
+        const oldConfig = createLocalCatalog([]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "OPTIONAL_HINT",
+            type: "plain_text" as const,
+            promptOnInstallation: true,
+            required: false,
+          },
+        ]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns false when prompted env var is UNCHANGED", () => {
+        const envVars = [
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ];
+        const oldConfig = createLocalCatalog(envVars);
+        const newConfig = createLocalCatalog(envVars);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when a new REQUIRED prompted env var is ADDED to existing ones", () => {
+        const oldConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+          {
+            key: "NEW_SECRET",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: true,
+          },
+        ]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns false when an OPTIONAL prompted env var is ADDED to existing ones", () => {
+        const oldConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+          {
+            key: "NEW_OPTIONAL",
+            type: "plain_text" as const,
+            promptOnInstallation: true,
+            required: false,
+          },
+        ]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when prompted env var required flag flips false → true", () => {
+        // An optional var becoming required invalidates installs that
+        // didn't fill it.
+        const oldConfig = createLocalCatalog([
+          {
+            key: "TOKEN",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: false,
+          },
+        ]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "TOKEN",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: true,
+          },
+        ]);
+
+        expect(requiresNewUserInputForReinstall(oldConfig, newConfig)).toBe(
+          true,
+        );
+      });
+
+      test("returns false when prompted env var required flag flips true → false", () => {
+        // A required var becoming optional doesn't invalidate any
+        // existing install (the value they already provided is still
+        // valid, it's just no longer mandatory).
+        const oldConfig = createLocalCatalog([
+          {
+            key: "TOKEN",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: true,
+          },
+        ]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "TOKEN",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: false,
+          },
+        ]);
+
+        expect(requiresNewUserInputForReinstall(oldConfig, newConfig)).toBe(
+          false,
+        );
+      });
+
+      test("returns true when prompted env var is REMOVED", () => {
+        const oldConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ]);
+        const newConfig = createLocalCatalog([]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns true when prompted env var TYPE changes", () => {
+        const oldConfig = createLocalCatalog([
+          {
+            key: "CONFIG_VAR",
+            type: "plain_text" as const,
+            promptOnInstallation: true,
+          },
+        ]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "CONFIG_VAR",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns true when prompted env var REQUIRED status changes", () => {
+        const oldConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: false,
+          },
+        ]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: true,
+          },
+        ]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns true when server NAME changes (even with no prompted env vars)", () => {
+        const oldConfig = {
+          ...createLocalCatalog([]),
+          name: "Old Server Name",
+        };
+        const newConfig = {
+          ...createLocalCatalog([]),
+          name: "New Server Name",
+        };
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns true when server NAME changes (with existing prompted env vars)", () => {
+        const envVars = [
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ];
+        const oldConfig = {
+          ...createLocalCatalog(envVars),
+          name: "Old Server Name",
+        };
+        const newConfig = {
+          ...createLocalCatalog(envVars),
+          name: "New Server Name",
+        };
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns true when command or args change", () => {
+        const envVars = [
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ];
+        const oldConfig = {
+          ...createLocalCatalog(envVars),
+          localConfig: {
+            command: "npm",
+            arguments: ["start"],
+            environment: envVars,
+          },
+        } as InternalMcpCatalog;
+        const newConfig = {
+          ...createLocalCatalog(envVars),
+          localConfig: {
+            command: "node",
+            arguments: ["index.js", "--verbose"],
+            environment: envVars,
+          },
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns true when docker or transport config changes", () => {
+        const oldConfig = {
+          ...createLocalCatalog([]),
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            dockerImage: "registry.example.com/mcp:1",
+            transportType: "stdio",
+            httpPort: undefined,
+            httpPath: undefined,
+            serviceAccount: "default",
+            environment: [],
+          },
+        } as InternalMcpCatalog;
+        const newConfig = {
+          ...createLocalCatalog([]),
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            dockerImage: "registry.example.com/mcp:2",
+            transportType: "streamable-http",
+            httpPort: 8080,
+            httpPath: "/mcp",
+            serviceAccount: "custom-sa",
+            environment: [],
+          },
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns false when docker image changes on a multi-tenant catalog (handled via catalogReinstallRequired)", () => {
+        // Multi-tenant local catalogs route execution-config drift through
+        // the catalog-level flag, not the per-install reinstall_required
+        // flag — so this branch must NOT fire for them.
+        const oldConfig = {
+          ...createLocalCatalog([]),
+          multitenant: true,
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            dockerImage: "registry.example.com/mcp:1",
+            transportType: "stdio",
+            environment: [],
+          },
+        } as InternalMcpCatalog;
+        const newConfig = {
+          ...createLocalCatalog([]),
+          multitenant: true,
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            dockerImage: "registry.example.com/mcp:2",
+            transportType: "stdio",
+            environment: [],
+          },
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when a prompted env var is added on a multi-tenant catalog (still install-scope)", () => {
+        // Multi-tenant gating is scoped to execution-config drift only —
+        // prompted env vars are install-scope and still need per-tenant
+        // input regardless of tenancy.
+        const oldConfig = {
+          ...createLocalCatalog([]),
+          multitenant: true,
+        } as InternalMcpCatalog;
+        const newConfig = {
+          ...createLocalCatalog([
+            {
+              key: "API_KEY",
+              type: "secret",
+              promptOnInstallation: true,
+              required: true,
+            },
+          ]),
+          multitenant: true,
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns false when only non-prompted env vars are added", () => {
+        const oldEnvVars = [
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ];
+        const newEnvVars = [
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+          {
+            key: "STATIC_VAR",
+            type: "plain_text" as const,
+            promptOnInstallation: false,
+          },
+        ];
+        const oldConfig = createLocalCatalog(oldEnvVars);
+        const newConfig = createLocalCatalog(newEnvVars);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns false when only non-prompted env vars are removed", () => {
+        const oldEnvVars = [
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+          {
+            key: "STATIC_VAR",
+            type: "plain_text" as const,
+            promptOnInstallation: false,
+          },
+        ];
+        const newEnvVars = [
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ];
+        const oldConfig = createLocalCatalog(oldEnvVars);
+        const newConfig = createLocalCatalog(newEnvVars);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("handles missing localConfig.environment gracefully", () => {
+        const oldConfig = {
+          id: "test-id",
+          name: "Test Server",
+          serverType: "local",
+          localConfig: {},
+        } as InternalMcpCatalog;
+        const newConfig = {
+          id: "test-id",
+          name: "Test Server",
+          serverType: "local",
+          localConfig: {},
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("handles null localConfig gracefully", () => {
+        const oldConfig = {
+          id: "test-id",
+          name: "Test Server",
+          serverType: "local",
+          localConfig: null,
+        } as InternalMcpCatalog;
+        const newConfig = {
+          id: "test-id",
+          name: "Test Server",
+          serverType: "local",
+          localConfig: null,
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when a required header userConfig field is ADDED", () => {
+        const oldConfig = createLocalCatalog([], {});
+        const newConfig = createLocalCatalog([], {
+          db_url: {
+            type: "string",
+            required: true,
+            headerName: "x-db-url",
+          },
+        });
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns false when an OPTIONAL userConfig field is added", () => {
+        const oldConfig = createLocalCatalog([], {});
+        const newConfig = createLocalCatalog([], {
+          tenant_id: {
+            type: "string",
+            required: false,
+            headerName: "x-tenant-id",
+          },
+        });
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+    });
+
+    describe("remote servers", () => {
+      test("returns false when no user config and no OAuth exists", () => {
+        const oldConfig = createRemoteCatalog({});
+        const newConfig = createRemoteCatalog({});
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns false when only optional user config exists", () => {
+        const oldConfig = createRemoteCatalog({});
+        const newConfig = createRemoteCatalog({
+          optionalField: { type: "string", required: false },
+        });
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns false when only name changes (no auth config)", () => {
+        const oldConfig = { ...createRemoteCatalog({}), name: "Old Name" };
+        const newConfig = { ...createRemoteCatalog({}), name: "New Name" };
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns false when only name changes (with existing OAuth)", () => {
+        const oauthConfig = { authorizationUrl: "https://example.com/auth" };
+        const oldConfig = {
+          ...createRemoteCatalog({}, oauthConfig),
+          name: "Old Name",
+        };
+        const newConfig = {
+          ...createRemoteCatalog({}, oauthConfig),
+          name: "New Name",
+        };
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns false when only name changes (with existing required userConfig)", () => {
+        const config = { field: { type: "string", required: true } };
+        const oldConfig = { ...createRemoteCatalog(config), name: "Old Name" };
+        const newConfig = { ...createRemoteCatalog(config), name: "New Name" };
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when required userConfig field is ADDED", () => {
+        const oldConfig = createRemoteCatalog({});
+        const newConfig = createRemoteCatalog({
+          field: { type: "string", required: true },
+        });
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns false when required userConfig is UNCHANGED", () => {
+        const config = { field: { type: "string", required: true } };
+        const oldConfig = createRemoteCatalog(config);
+        const newConfig = createRemoteCatalog(config);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns false when required userConfig field is fully REMOVED (auto path handles cleanup)", () => {
+        // The field is gone, so there's nothing to re-prompt the user
+        // for. The install's stored value becomes orphaned and the pod
+        // needs to restart so the value stops being injected — but the
+        // restart is the auto path's job (driven by
+        // `userConfigChangedBreakingly`), not a re-prompt case.
+        const oldConfig = createRemoteCatalog({
+          field: { type: "string", required: true },
+        });
+        const newConfig = createRemoteCatalog({});
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns false when required userConfig field is DEMOTED to optional", () => {
+        // Existing install supplied a value when the field was required.
+        // After demotion the value is still accepted; no re-prompt
+        // needed.
+        const oldConfig = createRemoteCatalog({
+          field: { type: "string", required: true },
+        });
+        const newConfig = createRemoteCatalog({
+          field: { type: "string", required: false },
+        });
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when optional userConfig field is PROMOTED to required", () => {
+        // Existing install may have skipped the optional field; once
+        // required, the install is missing a mandatory value and the
+        // user must re-supply it.
+        const oldConfig = createRemoteCatalog({
+          field: { type: "string", required: false },
+        });
+        const newConfig = createRemoteCatalog({
+          field: { type: "string", required: true },
+        });
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns true when required userConfig field TYPE changes", () => {
+        const oldConfig = createRemoteCatalog({
+          field: { type: "string", required: true },
+        });
+        const newConfig = createRemoteCatalog({
+          field: { type: "number", required: true },
+        });
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns true when OAuth config is ADDED", () => {
+        const oldConfig = createRemoteCatalog({}, null);
+        const newConfig = createRemoteCatalog(
+          {},
+          {
+            authorizationUrl: "https://example.com/auth",
+          },
+        );
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns false when OAuth config is UNCHANGED", () => {
+        const oauthConfig = { authorizationUrl: "https://example.com/auth" };
+        const oldConfig = createRemoteCatalog({}, oauthConfig);
+        const newConfig = createRemoteCatalog({}, oauthConfig);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when OAuth config is REMOVED", () => {
+        const oauthConfig = { authorizationUrl: "https://example.com/auth" };
+        const oldConfig = createRemoteCatalog({}, oauthConfig);
+        const newConfig = createRemoteCatalog({}, null);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns false when only optional userConfig is added (with existing required)", () => {
+        const oldConfig = createRemoteCatalog({
+          requiredField: { type: "string", required: true },
+        });
+        const newConfig = createRemoteCatalog({
+          requiredField: { type: "string", required: true },
+          optionalField: { type: "string", required: false },
+        });
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("handles null userConfig gracefully", () => {
+        const oldConfig = {
+          id: "test-id",
+          name: "Test Server",
+          serverType: "remote",
+          userConfig: null,
+          oauthConfig: null,
+        } as InternalMcpCatalog;
+        const newConfig = {
+          id: "test-id",
+          name: "Test Server",
+          serverType: "remote",
+          userConfig: null,
+          oauthConfig: null,
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+    });
+
+    describe("builtin servers", () => {
+      test("returns false for builtin servers", () => {
+        const oldConfig = { serverType: "builtin" } as InternalMcpCatalog;
+        const newConfig = { serverType: "builtin" } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+    });
+  });
+
+  describe("onlyForwardCompatibleEnvDiff", () => {
+    const baseLocal = (
+      environment: Array<{
+        key: string;
+        type: "plain_text" | "secret";
+        promptOnInstallation: boolean;
+        required?: boolean;
+        mounted?: boolean;
+      }>,
+    ): InternalMcpCatalog =>
+      ({
+        id: "test-id",
+        name: "Test Server",
+        serverType: "local",
+        localConfig: {
+          command: "npm",
+          arguments: ["start"],
+          environment,
+        },
+        userConfig: {},
+      }) as InternalMcpCatalog;
+
+    test("flipping `mounted` on an existing prompted env var returns false (pod restart needed, auto path)", () => {
+      // Same key + type + required, only `mounted` flips.
+      // `promptedEnvVarsChanged` is intentionally lenient here (no
+      // re-prompt needed). The runtime check has to catch it so the
+      // cascade fires via the auto path instead of silently skipping.
+      const oldConfig = baseLocal([
+        {
+          key: "API_KEY",
+          type: "secret",
+          promptOnInstallation: true,
+          required: false,
+          mounted: false,
+        },
+      ]);
+      const newConfig = baseLocal([
+        {
+          key: "API_KEY",
+          type: "secret",
+          promptOnInstallation: true,
+          required: false,
+          mounted: true,
+        },
+      ]);
+
+      expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(false);
+      // And NOT a re-prompt — the user already supplied the value.
+      expect(requiresNewUserInputForReinstall(oldConfig, newConfig)).toBe(
+        false,
+      );
+    });
+
+    test("static header `default` value change returns false (pod restart needed, auto path)", () => {
+      // `userConfigChangedBreakingly` would naively skip a `default`
+      // change as cosmetic, but for a static header-mapped userConfig
+      // entry (no install prompt) `default` IS the actual runtime
+      // header value the form writes from the admin's input. A change
+      // there must route through the auto path so pods restart and pick
+      // up the new value — install owners don't need to re-supply
+      // anything.
+      const oldConfig = {
+        ...baseLocal([]),
+        userConfig: {
+          header_x_region: {
+            type: "string",
+            title: "x-region",
+            description: "",
+            required: false,
+            headerName: "x-region",
+            sensitive: false,
+            promptOnInstallation: false,
+            default: "us-east-1",
+          },
+        },
+      } as InternalMcpCatalog;
+      const newConfig = {
+        ...baseLocal([]),
+        userConfig: {
+          header_x_region: {
+            type: "string",
+            title: "x-region",
+            description: "",
+            required: false,
+            headerName: "x-region",
+            sensitive: false,
+            promptOnInstallation: false,
+            default: "eu-west-1",
+          },
+        },
+      } as InternalMcpCatalog;
+
+      expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(false);
+      // Not a re-prompt — admin provides the value, install just needs
+      // a restart to pick it up.
+      expect(requiresNewUserInputForReinstall(oldConfig, newConfig)).toBe(
+        false,
+      );
+    });
+
+    test("prompted header `default` value change returns true (placeholder text, not runtime)", () => {
+      // For a prompted header, `default` is just a placeholder shown
+      // to the user at install time — they always supply their own
+      // value. Changing the placeholder text is cosmetic and must NOT
+      // trigger a cascade.
+      const oldConfig = {
+        ...baseLocal([]),
+        userConfig: {
+          header_x_api_key: {
+            type: "string",
+            title: "x-api-key",
+            description: "",
+            required: false,
+            headerName: "x-api-key",
+            sensitive: false,
+            promptOnInstallation: true,
+            default: "your-key-here",
+          },
+        },
+      } as InternalMcpCatalog;
+      const newConfig = {
+        ...baseLocal([]),
+        userConfig: {
+          header_x_api_key: {
+            type: "string",
+            title: "x-api-key",
+            description: "",
+            required: false,
+            headerName: "x-api-key",
+            sensitive: false,
+            promptOnInstallation: true,
+            default: "your-api-key",
+          },
+        },
+      } as InternalMcpCatalog;
+
+      expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(true);
+    });
+
+    test("snapshot-shape asymmetry (toolCount present on one side) does not over-fire", () => {
+      // When the parent PUT loop cascades to children, the old snapshot
+      // comes from `findChildren()` (with `attachListMetadata` adding
+      // `toolCount`) while the new snapshot comes from `update()`
+      // (which doesn't). A naive whole-row stringify would diff on
+      // these bookkeeping fields and over-fire for every parent edit.
+      // The predicate's strip step must normalize them out.
+      const oldWithListMetadata = {
+        ...baseLocal([]),
+        toolCount: 3,
+        labels: [{ key: "env", value: "prod" }],
+        teams: [],
+      } as InternalMcpCatalog;
+      const newWithoutListMetadata = {
+        ...baseLocal([]),
+        // No toolCount on the row returned by Model.update.
+        labels: [{ key: "env", value: "prod" }],
+        teams: [],
+        authorName: "Alice",
+      } as InternalMcpCatalog;
+
+      expect(
+        onlyForwardCompatibleEnvDiff(
+          oldWithListMetadata,
+          newWithoutListMetadata,
+        ),
+      ).toBe(true);
+    });
+
+    test("environment reassignment (environmentId change) returns false (pod must relocate)", () => {
+      // The environment determines the deployment namespace, so a change
+      // must route through the auto path and recreate the pod in the new
+      // namespace. Regression: environmentId was missing from the
+      // projection, so single-tenant reassignments were silently skipped
+      // and the pod kept running in the old namespace.
+      const oldConfig = {
+        ...baseLocal([]),
+        environmentId: "env-a",
+      } as InternalMcpCatalog;
+      const newConfig = {
+        ...baseLocal([]),
+        environmentId: "env-b",
+      } as InternalMcpCatalog;
+
+      expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(false);
+    });
+
+    test("assigning from default (null env) to an environment returns false", () => {
+      const oldConfig = {
+        ...baseLocal([]),
+        environmentId: null,
+      } as InternalMcpCatalog;
+      const newConfig = {
+        ...baseLocal([]),
+        environmentId: "env-a",
+      } as InternalMcpCatalog;
+
+      expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(false);
+    });
+
+    test("unassigning an environment (back to default/null) returns false", () => {
+      const oldConfig = {
+        ...baseLocal([]),
+        environmentId: "env-a",
+      } as InternalMcpCatalog;
+      const newConfig = {
+        ...baseLocal([]),
+        environmentId: null,
+      } as InternalMcpCatalog;
+
+      expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(false);
+    });
+  });
+
+  describe("autoReinstallServer", () => {
+    const createServer = (overrides: Partial<McpServer> = {}): McpServer =>
+      ({
+        id: "server-123",
+        name: "Test Server",
+        ownerId: "user-123",
+        catalogId: "catalog-123",
+        serverType: "local",
+        scope: "personal",
+        ...overrides,
+      }) as McpServer;
+
+    // Helper to create a minimal catalog item
+    const createCatalog = (
+      overrides: Partial<InternalMcpCatalog> = {},
+    ): InternalMcpCatalog =>
+      ({
+        id: "catalog-123",
+        name: "Test Catalog",
+        serverType: "local",
+        localConfig: {
+          command: "npm",
+          arguments: ["start"],
+        },
+        ...overrides,
+      }) as InternalMcpCatalog;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    test("throws error when restartServer fails for local server", async () => {
+      // Use name that already matches expected format so no name update happens before restart
+      const server = createServer({
+        serverType: "local",
+        name: "Test Catalog-user-123",
+      });
+      const catalog = createCatalog({ serverType: "local" });
+
+      vi.mocked(McpServerRuntimeManager.restartServer).mockRejectedValue(
+        new Error("K8s deployment failed"),
+      );
+
+      await expect(autoReinstallServer(server, catalog)).rejects.toThrow(
+        "K8s deployment failed",
+      );
+
+      // Verify restartServer was called
+      expect(McpServerRuntimeManager.restartServer).toHaveBeenCalledWith(
+        server.id,
+      );
+
+      // Verify reinstall flag update was NOT called since we threw before getting there
+      expect(McpServerModel.update).not.toHaveBeenCalledWith(server.id, {
+        reinstallRequired: false,
+      });
+    });
+
+    test("throws error when getToolsFromServer fails", async () => {
+      // Use matching name so no name update happens
+      const server = createServer({
+        serverType: "remote",
+        name: "Test Catalog",
+      });
+      const catalog = createCatalog({ serverType: "remote" });
+
+      vi.mocked(McpServerModel.getToolsFromServer).mockRejectedValue(
+        new Error("Failed to fetch tools from MCP server"),
+      );
+
+      await expect(autoReinstallServer(server, catalog)).rejects.toThrow(
+        "Failed to fetch tools from MCP server",
+      );
+
+      // Verify reinstall flag update was NOT called since we threw before completing
+      expect(McpServerModel.update).not.toHaveBeenCalled();
+    });
+
+    test("throws error when syncToolsForCatalog fails", async () => {
+      // Use matching name so no name update happens
+      const server = createServer({
+        serverType: "remote",
+        name: "Test Catalog",
+      });
+      const catalog = createCatalog({ serverType: "remote" });
+
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
+        { name: "test-tool", description: "A test tool", inputSchema: {} },
+      ]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockRejectedValue(
+        new Error("Database constraint violation"),
+      );
+
+      await expect(autoReinstallServer(server, catalog)).rejects.toThrow(
+        "Database constraint violation",
+      );
+
+      // Verify reinstall flag update was NOT called since we threw before completing
+      expect(McpServerModel.update).not.toHaveBeenCalled();
+    });
+
+    test("throws error when deployment waitForDeploymentReady times out", async () => {
+      // Use name that already matches expected format so no name update happens before restart
+      const server = createServer({
+        serverType: "local",
+        name: "Test Catalog-user-123",
+      });
+      const catalog = createCatalog({ serverType: "local" });
+
+      vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
+        undefined,
+      );
+      vi.mocked(McpServerRuntimeManager.getOrLoadDeployment).mockResolvedValue({
+        waitForDeploymentReady: vi
+          .fn()
+          .mockRejectedValue(new Error("Deployment timeout")),
+      } as never);
+
+      await expect(autoReinstallServer(server, catalog)).rejects.toThrow(
+        "Deployment timeout",
+      );
+
+      // Verify reinstall flag update was NOT called since we threw before completing
+      expect(McpServerModel.update).not.toHaveBeenCalledWith(server.id, {
+        reinstallRequired: false,
+      });
+    });
+
+    test("succeeds for remote server - updates name and clears reinstall flag", async () => {
+      const server = createServer({
+        serverType: "remote",
+        name: "Old Catalog Name",
+      });
+      const catalog = createCatalog({
+        serverType: "remote",
+        name: "New Catalog Name",
+      });
+
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
+        { name: "test-tool", description: "A test tool", inputSchema: {} },
+      ]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      });
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      // Remote servers get the catalog name directly (no suffix)
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        name: "New Catalog Name",
+      });
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        reinstallRequired: false,
+      });
+    });
+
+    test("reconstructs name with userId suffix when name already correct", async () => {
+      const server = createServer({
+        serverType: "local",
+        name: "microsoft__playwright-mcp-user-123",
+        ownerId: "user-123",
+      });
+      const catalog = createCatalog({
+        serverType: "local",
+        name: "microsoft__playwright-mcp",
+      });
+
+      vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
+        undefined,
+      );
+      vi.mocked(McpServerRuntimeManager.getOrLoadDeployment).mockResolvedValue({
+        waitForDeploymentReady: vi.fn().mockResolvedValue(undefined),
+      } as never);
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
+        { name: "tool1", description: "A tool", inputSchema: {} },
+      ]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      } as never);
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      // Name already matches, so no name update call — only reinstall flag cleared
+      expect(McpServerModel.update).toHaveBeenCalledTimes(1);
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        reinstallRequired: false,
+      });
+    });
+
+    test("updates name with userId suffix when catalog is renamed", async () => {
+      const server = createServer({
+        serverType: "local",
+        name: "old-catalog-name-user-123",
+        ownerId: "user-123",
+      });
+      const catalog = createCatalog({
+        serverType: "local",
+        name: "new-catalog-name",
+      });
+
+      vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
+        undefined,
+      );
+      vi.mocked(McpServerRuntimeManager.getOrLoadDeployment).mockResolvedValue({
+        waitForDeploymentReady: vi.fn().mockResolvedValue(undefined),
+      } as never);
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
+        { name: "tool1", description: "A tool", inputSchema: {} },
+      ]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      } as never);
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      // Name updated with new catalog name + userId suffix BEFORE restart
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        name: "new-catalog-name-user-123",
+      });
+      // Then reinstall flag cleared after restart
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        reinstallRequired: false,
+      });
+    });
+
+    test("updates name with teamId suffix for team servers on catalog rename", async () => {
+      const server = createServer({
+        serverType: "local",
+        name: "old-name-team-456",
+        ownerId: "user-123",
+        teamId: "team-456",
+        scope: "team",
+      });
+      const catalog = createCatalog({
+        serverType: "local",
+        name: "new-name",
+      });
+
+      vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
+        undefined,
+      );
+      vi.mocked(McpServerRuntimeManager.getOrLoadDeployment).mockResolvedValue({
+        waitForDeploymentReady: vi.fn().mockResolvedValue(undefined),
+      } as never);
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      } as never);
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      // teamId takes precedence over ownerId for the suffix
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        name: "new-name-team-456",
+      });
+    });
+
+    test("fixes legacy server missing userId suffix", async () => {
+      // Legacy server created before suffix logic was deployed
+      const server = createServer({
+        serverType: "local",
+        name: "microsoft__playwright-mcp",
+        ownerId: "user-123",
+      });
+      const catalog = createCatalog({
+        serverType: "local",
+        name: "microsoft__playwright-mcp",
+      });
+
+      vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
+        undefined,
+      );
+      vi.mocked(McpServerRuntimeManager.getOrLoadDeployment).mockResolvedValue({
+        waitForDeploymentReady: vi.fn().mockResolvedValue(undefined),
+      } as never);
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      } as never);
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      // Name updated to add the missing userId suffix
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        name: "microsoft__playwright-mcp-user-123",
+      });
+    });
+
+    test("passes _meta and annotations as meta when syncing tools", async () => {
+      const server = createServer({ serverType: "remote" });
+      const catalog = createCatalog({ serverType: "remote" });
+
+      const toolMeta = { ui: { resourceUri: "mcp://app/view" } };
+      const toolAnnotations = { readOnlyHint: true };
+
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
+        {
+          name: "ui-tool",
+          description: "Tool with UI",
+          inputSchema: {},
+          _meta: toolMeta,
+          annotations: toolAnnotations,
+        },
+      ]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      });
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      expect(ToolModel.syncToolsForCatalog).toHaveBeenCalledWith([
+        expect.objectContaining({
+          meta: { _meta: toolMeta, annotations: toolAnnotations },
+        }),
+      ]);
+    });
+
+    test("succeeds for local server with full flow", async () => {
+      const server = createServer({
+        serverType: "local",
+        name: "Test Catalog-user-123",
+      });
+      const catalog = createCatalog({ serverType: "local" });
+
+      vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
+        undefined,
+      );
+      vi.mocked(McpServerRuntimeManager.getOrLoadDeployment).mockResolvedValue({
+        waitForDeploymentReady: vi.fn().mockResolvedValue(undefined),
+      } as never);
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
+        { name: "tool1", description: "First tool", inputSchema: {} },
+        { name: "tool2", description: "Second tool", inputSchema: {} },
+      ]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [{ id: "new-tool" }],
+        updated: [{ id: "existing-tool" }],
+        unchanged: [],
+        deleted: [],
+      } as never);
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      // Verify restart was called
+      expect(McpServerRuntimeManager.restartServer).toHaveBeenCalledWith(
+        server.id,
+      );
+
+      // Verify tools were synced with correct data
+      expect(ToolModel.syncToolsForCatalog).toHaveBeenCalledWith([
+        expect.objectContaining({
+          name: "Test Catalog__tool1",
+          catalogId: catalog.id,
+          rawToolName: "tool1",
+        }),
+        expect.objectContaining({
+          name: "Test Catalog__tool2",
+          catalogId: catalog.id,
+          rawToolName: "tool2",
+        }),
+      ]);
+
+      // Verify reinstall flag was cleared (name already correct, no name update)
+      expect(McpServerModel.update).toHaveBeenCalledTimes(1);
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        reinstallRequired: false,
+      });
+    });
+  });
+
+  describe("reinstallMultitenantCatalog", () => {
+    const catalog = {
+      id: "catalog-mt",
+      name: "shared",
+      serverType: "local",
+      multitenant: true,
+      localConfig: { command: "npm", arguments: ["start"] },
+    } as InternalMcpCatalog;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    test("Phase 2 tool-sync failure flags the install for retry", async () => {
+      // Two tenants share the catalog. Pod recreate succeeds (Phase 1).
+      // Tool fetch fails for tenantB only (Phase 2). We expect tenantB to
+      // be flagged `reinstallRequired: true` so the per-install Reinstall
+      // button surfaces; otherwise the tenant is stuck with only the red
+      // error banner and no retry path.
+      const tenantA = {
+        id: "tenant-a",
+        name: "tenant-a",
+        catalogId: catalog.id,
+        serverType: "local",
+      } as McpServer;
+      const tenantB = {
+        id: "tenant-b",
+        name: "tenant-b",
+        catalogId: catalog.id,
+        serverType: "local",
+      } as McpServer;
+
+      vi.mocked(McpServerModel.findByCatalogId).mockResolvedValue([
+        tenantA,
+        tenantB,
+      ]);
+      vi.mocked(
+        McpServerRuntimeManager.reinstallSharedDeployment,
+      ).mockResolvedValue(undefined);
+      vi.mocked(McpServerModel.getToolsFromServer).mockImplementation(
+        async (server: McpServer) => {
+          if (server.id === tenantB.id) {
+            throw new Error("tool fetch boom");
+          }
+          return [];
+        },
+      );
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      } as never);
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+      vi.mocked(InternalMcpCatalogModel.update).mockResolvedValue(
+        {} as InternalMcpCatalog,
+      );
+
+      await reinstallMultitenantCatalog(catalog);
+
+      // The failing tenant must be marked for retry — this is the assertion
+      // the current code fails. Without `reinstallRequired: true`, the
+      // per-install Reinstall button stays hidden (mcp-server-card.tsx
+      // gates on this flag) and the tenant is stuck.
+      expect(McpServerModel.update).toHaveBeenCalledWith(
+        tenantB.id,
+        expect.objectContaining({
+          reinstallRequired: true,
+          localInstallationStatus: "error",
+        }),
+      );
+
+      // Sanity: the successful tenant is NOT flagged for retry.
+      const tenantACalls = vi
+        .mocked(McpServerModel.update)
+        .mock.calls.filter(([id]) => id === tenantA.id);
+      const tenantAFlaggedForRetry = tenantACalls.some(
+        ([, patch]) =>
+          (patch as { reinstallRequired?: boolean }).reinstallRequired === true,
+      );
+      expect(tenantAFlaggedForRetry).toBe(false);
+    });
+  });
+});
+
+/**
+ * Scenario-matrix sweep — runs every entry in `CASCADE_SCENARIOS` (the
+ * shared cross-layer cascade behavior contract) against the backend's
+ * cascade decision logic.
+ *
+ *   • Individual predicate checks — `isMetadataOnlyEdit`,
+ *     `requiresNewUserInputForReinstall`. Catches algebra changes in a
+ *     single predicate.
+ *
+ *   • Full-cascade-outcome — simulates the route's gate decision tree
+ *     (`isMetadataOnlyEdit` → `onlyForwardCompatibleEnvDiff` →
+ *     `requiresNewUserInputForReinstall` → auto), maps to a
+ *     `CascadeOutcome`, and asserts it equals the scenario's intent.
+ *     This is the authoritative end-to-end check the user actually
+ *     experiences.
+ *
+ * Adding a scenario to `shared/cascade-scenarios.ts` automatically
+ * extends both sweeps. Failures here mean the backend's behavior has
+ * diverged from the contract — either the code needs a fix, or the
+ * scenario's expectation needs an update with reviewer sign-off.
+ */
+
+/**
+ * Pure simulator of `cascadeReinstallForCatalog`'s gate decision tree
+ * (`backend/src/routes/internal-mcp-catalog.ts:1722-1739` at the time
+ * of writing). Returns the cascade outcome a real catalog edit would
+ * produce, without touching the DB, running setImmediate, or doing the
+ * actual pod restart. Keep in sync with the route's gate or this test
+ * will go quiet on real regressions.
+ */
+function simulateCascadeOutcome(
+  prev: InternalMcpCatalog,
+  next: InternalMcpCatalog,
+): "skip" | "auto" | "manual" {
+  if (
+    isMetadataOnlyEdit(
+      prev as unknown as Record<string, unknown>,
+      next as unknown as Record<string, unknown>,
+    )
+  ) {
+    return "skip";
+  }
+  if (onlyForwardCompatibleEnvDiff(prev, next)) {
+    return "skip";
+  }
+  if (requiresNewUserInputForReinstall(prev, next)) {
+    return "manual";
+  }
+  return "auto";
+}
+
+describe("cascade scenarios — backend predicate sweep", () => {
+  test.each(CASCADE_SCENARIOS)("$id ($expected): $userAction", (scenario) => {
+    const prev = CATALOG_SHAPES[
+      scenario.shape
+    ] as unknown as InternalMcpCatalog;
+    const next = scenario.edit(
+      CATALOG_SHAPES[scenario.shape],
+    ) as unknown as InternalMcpCatalog;
+
+    // 1. Shared predicate agreement (sanity — backend uses the same
+    //    predicate the shared baseline test verifies).
+    const isMetadataOnly = isMetadataOnlyEdit(
+      prev as unknown as Record<string, unknown>,
+      next as unknown as Record<string, unknown>,
+    );
+    const sharedExpected: Record<string, boolean> = {
+      "metadata-only-diff": true,
+      "non-metadata-diff": false,
+      "no-diff": false,
+    };
+    expect(isMetadataOnly).toBe(sharedExpected[scenario.sharedPredicate]);
+
+    // 2. Manual-vs-auto branch agreement (individual predicate level).
+    const needsManual = requiresNewUserInputForReinstall(prev, next);
+    const backendExpected =
+      scenario.knownBackendOverride?.actual ?? scenario.expected;
+    expect(needsManual).toBe(backendExpected === "manual");
+  });
+});
+
+describe("cascade scenarios — backend full-outcome sweep", () => {
+  test.each(
+    CASCADE_SCENARIOS,
+  )("$id full cascade decision ($expected): $userAction", (scenario) => {
+    const prev = CATALOG_SHAPES[
+      scenario.shape
+    ] as unknown as InternalMcpCatalog;
+    const next = scenario.edit(
+      CATALOG_SHAPES[scenario.shape],
+    ) as unknown as InternalMcpCatalog;
+    const outcome = simulateCascadeOutcome(prev, next);
+    const backendExpected =
+      scenario.knownBackendOverride?.actual ?? scenario.expected;
+    expect(outcome).toBe(backendExpected);
+  });
+});

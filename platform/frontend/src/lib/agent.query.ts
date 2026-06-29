@@ -1,0 +1,481 @@
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import {
+  DEFAULT_SORT_BY,
+  DEFAULT_SORT_DIRECTION,
+  DEFAULT_TABLE_LIMIT,
+} from "@/consts";
+import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
+
+const {
+  createAgent,
+  cloneAgent,
+  convertAgentToSkill,
+  suggestSkillDescription,
+  deleteAgent,
+  exportAgent,
+  getAgents,
+  getAllAgents,
+  getDefaultMcpGateway,
+  getDefaultLlmProxy,
+  getAgent,
+  importAgent,
+  restoreAgent,
+  updateAgent,
+  getLabelKeys,
+  getLabelValues,
+  getMemberDefaultAgent,
+} = archestraApiSdk;
+
+export const internalAgentsQueryKey = [
+  "agents",
+  "all",
+  { agentType: "agent", excludeBuiltIn: true },
+] as const;
+
+export async function fetchInternalAgents() {
+  const { data, error } = await getAllAgents({
+    query: { agentType: "agent", excludeBuiltIn: true },
+  });
+  throwOnApiError(error, { toastOnError: false });
+  return data ?? [];
+}
+
+// Returns all agents as an array
+export function useProfiles(
+  params: {
+    initialData?: archestraApiTypes.GetAllAgentsResponses["200"];
+    filters?: archestraApiTypes.GetAllAgentsData["query"];
+    enabled?: boolean;
+  } = {},
+) {
+  const filters = {
+    excludeBuiltIn: true,
+    ...params?.filters,
+  } satisfies archestraApiTypes.GetAllAgentsData["query"];
+  return useQuery({
+    queryKey: ["agents", "all", filters],
+    queryFn: async () => {
+      const { data, error } = await getAllAgents({ query: filters });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    initialData: params?.initialData,
+    enabled: params?.enabled,
+  });
+}
+
+export function useCloneAgent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data: responseData, error } = await cloneAgent({
+        path: { id },
+      });
+      if (error) {
+        handleApiError(error);
+      }
+      return responseData;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      if (data.id) {
+        queryClient.setQueryData(["agents", data.id], data);
+      }
+    },
+  });
+}
+
+type ConvertAgentToSkillArgs = {
+  id: string;
+} & archestraApiTypes.ConvertAgentToSkillData["body"];
+
+export function useConvertAgentToSkill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: ConvertAgentToSkillArgs) => {
+      const { data, error } = await convertAgentToSkill({
+        path: { id },
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      // the source agent may have been deleted, so refresh the agents list too.
+      if (data.deletedAgent) {
+        queryClient.invalidateQueries({ queryKey: ["agents"] });
+      }
+      toast.success(
+        data.deletedAgent
+          ? `Created skill "${data.skill.name}" and removed the agent`
+          : `Created skill "${data.skill.name}" from agent`,
+      );
+    },
+  });
+}
+
+/**
+ * Suggests a skill description for an agent (LLM-generated) for the
+ * convert-to-skill dialog. Read-only: it neither creates a skill nor mutates
+ * the agent, so it invalidates nothing — the caller fills the form field.
+ */
+export function useSuggestSkillDescription() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await suggestSkillDescription({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data?.description ?? null;
+    },
+  });
+}
+
+// Paginated hook for the agents page
+export function useProfilesPaginated(
+  params?: archestraApiTypes.GetAgentsData["query"] & {
+    initialData?: archestraApiTypes.GetAgentsResponses["200"];
+  },
+) {
+  const {
+    initialData,
+    limit,
+    offset,
+    sortBy,
+    sortDirection,
+    name,
+    agentTypes,
+    scope,
+    teamIds,
+    authorIds,
+    excludeAuthorIds,
+    excludeOtherPersonalAgents,
+    labels,
+    status,
+  } = params || {};
+
+  // Check if we can use initialData (server-side fetched data)
+  // Only use it for the first page (offset 0), default sorting, no search filter,
+  // no scope filter, AND matching default table page size
+  // Note: agentTypes is allowed since the server fetches with the page-specific agentTypes
+  const useInitialData =
+    offset === 0 &&
+    (sortBy === undefined || sortBy === DEFAULT_SORT_BY) &&
+    (sortDirection === undefined || sortDirection === DEFAULT_SORT_DIRECTION) &&
+    name === undefined &&
+    scope === undefined &&
+    teamIds === undefined &&
+    authorIds === undefined &&
+    excludeAuthorIds === undefined &&
+    excludeOtherPersonalAgents === undefined &&
+    labels === undefined &&
+    status === undefined &&
+    (limit === undefined || limit === DEFAULT_TABLE_LIMIT);
+
+  return useQuery({
+    queryKey: [
+      "agents",
+      {
+        limit,
+        offset,
+        sortBy,
+        sortDirection,
+        name,
+        agentTypes,
+        scope,
+        teamIds,
+        authorIds,
+        excludeAuthorIds,
+        excludeOtherPersonalAgents,
+        labels,
+        status,
+      },
+    ],
+    queryFn: async () => {
+      const { data, error } = await getAgents({
+        query: {
+          limit,
+          offset,
+          sortBy,
+          sortDirection,
+          name,
+          agentTypes,
+          scope,
+          teamIds,
+          authorIds,
+          excludeAuthorIds,
+          excludeOtherPersonalAgents,
+          labels,
+          status,
+        },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    initialData: useInitialData ? initialData : undefined,
+  });
+}
+
+export function useDefaultMcpGateway(params?: {
+  initialData?: archestraApiTypes.GetDefaultMcpGatewayResponses["200"];
+}) {
+  return useQuery({
+    queryKey: ["mcp-gateways", "default"],
+    queryFn: async () => {
+      const { data, error } = await getDefaultMcpGateway();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    initialData: params?.initialData,
+  });
+}
+
+export function useDefaultLlmProxy(params?: {
+  initialData?: archestraApiTypes.GetDefaultLlmProxyResponses["200"];
+}) {
+  return useQuery({
+    queryKey: ["llm-proxy", "default"],
+    queryFn: async () => {
+      const { data, error } = await getDefaultLlmProxy();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    initialData: params?.initialData,
+  });
+}
+
+export function useProfile(id: string | undefined) {
+  return useQuery({
+    queryKey: ["agents", id],
+    queryFn: async () => {
+      if (!id) return null;
+      const { data, error } = await getAgent({ path: { id } });
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
+      return data ?? null;
+    },
+    enabled: !!id,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+}
+
+export function useCreateProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: archestraApiTypes.CreateAgentData["body"]) => {
+      const { data: responseData, error } = await createAgent({ body: data });
+      if (error) {
+        handleApiError(error);
+      }
+      return responseData;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      // Invalidate profile tokens for the new profile
+      if (data?.id) {
+        queryClient.invalidateQueries({
+          queryKey: ["profileTokens", data.id],
+        });
+      }
+    },
+  });
+}
+
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: archestraApiTypes.UpdateAgentData["body"];
+    }) => {
+      const { data: responseData, error } = await updateAgent({
+        path: { id },
+        body: data,
+      });
+      if (error) {
+        handleApiError(error);
+      }
+      return responseData;
+    },
+    onSuccess: (data, variables) => {
+      if (!data) return;
+      // Immediately update the specific agent's cache so navigating to
+      // chat (or any other page using useProfile) shows fresh data
+      queryClient.setQueryData(["agents", variables.id], data);
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      // Invalidate profile tokens when teams change (tokens are auto-created/deleted)
+      queryClient.invalidateQueries({
+        queryKey: ["profileTokens", variables.id],
+      });
+      // Invalidate tokens queries since team changes affect which tokens are visible for a profile
+      queryClient.invalidateQueries({ queryKey: ["tokens"] });
+      queryClient.invalidateQueries({
+        queryKey: incomingEmailKeys.promptEmailAddress(variables.id),
+      });
+      // Invalidate knowledge bases when knowledgeBaseIds change (updates assignedAgents)
+      if (variables.data?.knowledgeBaseIds !== undefined) {
+        queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+      }
+    },
+  });
+}
+
+export function useDeleteProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await deleteAgent({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+}
+
+export function useRestoreProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await restoreAgent({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.setQueryData(["agents", data.id], data);
+    },
+  });
+}
+
+export function useLabelKeys() {
+  return useQuery({
+    queryKey: ["agents", "labels", "keys"],
+    queryFn: async () => {
+      const { data, error } = await getLabelKeys();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+  });
+}
+
+export function useLabelValues(params?: { key?: string }) {
+  const { key } = params || {};
+  return useQuery({
+    queryKey: ["agents", "labels", "values", key],
+    queryFn: async () => {
+      const { data, error } = await getLabelValues({
+        query: key ? { key } : {},
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: key !== undefined,
+  });
+}
+
+/**
+ * Get the current user's default agent ID.
+ */
+export function useDefaultAgentId() {
+  return useQuery({
+    queryKey: ["member-default-agent"],
+    queryFn: async () => {
+      const { data, error } = await getMemberDefaultAgent();
+      throwOnApiError(error, { toastOnError: false });
+      return data?.defaultAgentId ?? null;
+    },
+  });
+}
+
+export function useInternalAgents(params?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: internalAgentsQueryKey,
+    queryFn: fetchInternalAgents,
+    enabled: params?.enabled,
+    staleTime: 0,
+  });
+}
+
+export function useOrgScopedAgents() {
+  return useQuery({
+    queryKey: [
+      "agents",
+      "all",
+      { agentType: "agent", excludeBuiltIn: true, scope: "org" as const },
+    ],
+    queryFn: async () => {
+      const { data, error } = await getAllAgents({
+        query: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+  });
+}
+
+export function useExportAgent() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await exportAgent({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success(`Agent "${data.agent.name}" exported successfully`);
+    },
+  });
+}
+
+export function useImportAgent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: archestraApiTypes.ImportAgentData["body"]) => {
+      const { data, error } = await importAgent({ body: payload });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+
+      const warningCount = data.warnings.length;
+      if (warningCount > 0) {
+        toast.warning(
+          `Agent "${data.agent.name}" imported with ${warningCount} warning${warningCount !== 1 ? "s" : ""}`,
+        );
+      } else {
+        toast.success(`Agent "${data.agent.name}" imported successfully`);
+      }
+    },
+  });
+}

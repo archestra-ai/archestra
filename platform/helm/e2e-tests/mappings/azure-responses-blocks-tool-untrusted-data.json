@@ -1,0 +1,41 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/azure/openai/responses",
+    "headers": {
+      "Authorization": {
+        "contains": "azure-responses-blocks-tool-untrusted-data"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "resp_azure_tool_invocation_blocked",
+      "object": "response",
+      "created_at": 1234567890,
+      "status": "completed",
+      "model": "gpt-4.1",
+      "output": [
+        {
+          "id": "fc_test_123",
+          "type": "function_call",
+          "call_id": "call_test_123",
+          "name": "e2e_read_file_azure-responses",
+          "arguments": "{\"file_path\":\"/etc/passwd\"}",
+          "status": "completed"
+        }
+      ],
+      "usage": {
+        "input_tokens": 100,
+        "input_tokens_details": { "cached_tokens": 0 },
+        "output_tokens": 20,
+        "output_tokens_details": { "reasoning_tokens": 0 },
+        "total_tokens": 120
+      }
+    }
+  }
+}

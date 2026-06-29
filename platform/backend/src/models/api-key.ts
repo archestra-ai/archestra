@@ -1,0 +1,136 @@
+import { and, desc, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import logger from "@/logging";
+import type { ApiKeyResponse, SelectApiKey } from "@/types";
+
+class ApiKeyModel {
+  /**
+   * Current-user API keys are intentionally returned as a complete list.
+   * The UI presents these as a small user-scoped settings table rather than
+   * a server-paginated resource.
+   *
+   * If we add organization-scoped Better Auth API keys, these user-specific
+   * helpers and the `userId` API response mapping should be renamed and
+   * generalized around `referenceId`.
+   */
+  static async listByUserId(userId: string): Promise<ApiKeyResponse[]> {
+    const apiKeys = await db
+      .select()
+      .from(schema.apikeysTable)
+      .where(eq(schema.apikeysTable.referenceId, userId))
+      .orderBy(desc(schema.apikeysTable.createdAt));
+
+    return apiKeys.map(normalizeApiKey);
+  }
+
+  static async findByIdForUser(
+    id: string,
+    userId: string,
+  ): Promise<ApiKeyResponse | null> {
+    const [apiKey] = await db
+      .select()
+      .from(schema.apikeysTable)
+      .where(
+        and(
+          eq(schema.apikeysTable.id, id),
+          eq(schema.apikeysTable.referenceId, userId),
+        ),
+      )
+      .limit(1);
+
+    return apiKey ? normalizeApiKey(apiKey) : null;
+  }
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    // Defense-in-depth: an api key belongs to a user, and a user belongs to
+    // an org via `members`. Require both to match so an audit lookup never
+    // returns key metadata from a different organization.
+    const [row] = await db
+      .select({ apiKey: schema.apikeysTable })
+      .from(schema.apikeysTable)
+      .innerJoin(
+        schema.membersTable,
+        eq(schema.membersTable.userId, schema.apikeysTable.referenceId),
+      )
+      .where(
+        and(
+          eq(schema.apikeysTable.id, id),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+    const apiKey = row.apiKey;
+
+    // REDACTED: the raw `key` field is never included in audit snapshots.
+    return {
+      id: apiKey.id,
+      name: apiKey.name ?? null,
+      start: apiKey.start ?? null,
+      prefix: apiKey.prefix ?? null,
+      userId: apiKey.referenceId,
+      enabled: apiKey.enabled ?? null,
+      expiresAt: apiKey.expiresAt?.toISOString() ?? null,
+      createdAt: apiKey.createdAt.toISOString(),
+      updatedAt: apiKey.updatedAt.toISOString(),
+    };
+  }
+}
+
+export default ApiKeyModel;
+
+// === Internal helpers
+
+function normalizeApiKey(apiKey: SelectApiKey): ApiKeyResponse {
+  return {
+    id: apiKey.id,
+    name: apiKey.name,
+    start: apiKey.start,
+    prefix: apiKey.prefix,
+    userId: apiKey.referenceId,
+    enabled: apiKey.enabled,
+    lastRequest: apiKey.lastRequest,
+    expiresAt: apiKey.expiresAt,
+    createdAt: apiKey.createdAt,
+    updatedAt: apiKey.updatedAt,
+    metadata: parseJsonRecord(apiKey.metadata),
+    permissions: parsePermissions(apiKey.permissions),
+  };
+}
+
+function parsePermissions(
+  value: string | null,
+): Record<string, string[]> | null {
+  const parsed = parseJsonRecord(value);
+  if (!parsed) return null;
+
+  return Object.fromEntries(
+    Object.entries(parsed).map(([key, actions]) => [
+      key,
+      Array.isArray(actions)
+        ? actions.filter(
+            (action): action is string => typeof action === "string",
+          )
+        : [],
+    ]),
+  );
+}
+
+function parseJsonRecord(value: string | null): Record<string, unknown> | null {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch (error) {
+    logger.warn({ error, value }, "Failed to parse API key JSON record");
+    return null;
+  }
+
+  return null;
+}

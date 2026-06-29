@@ -1,0 +1,2 @@
+ALTER TABLE "tools" ADD COLUMN "allow_usage_when_untrusted_data_is_present" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "tools" ADD COLUMN "data_is_trusted_by_default" boolean DEFAULT false NOT NULL;

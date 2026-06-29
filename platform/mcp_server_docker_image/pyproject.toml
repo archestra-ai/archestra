@@ -1,0 +1,18 @@
+[project]
+name = "archestra-mcp-server-python-deps"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "mcp[cli]>=1.2.0",
+  "httpx",
+  "fastapi",
+  # starlette <= 1.0.0: CVE-2026-48710 (BadHost host-header path confusion)
+  "starlette>=1.0.1",
+  "uvicorn",
+  "requests>=2.31.0",
+  "python-dotenv>=1.0.0",
+  # urllib3 < 2.7.0: CVE-2026-44432 (data amplification), CVE-2026-44431 (info disclosure)
+  "urllib3>=2.7.0",
+  # python-multipart < 0.0.27: CVE-2026-42561 (unthrottled resource allocation)
+  "python-multipart>=0.0.27",
+]

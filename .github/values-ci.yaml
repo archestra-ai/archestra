@@ -1,0 +1,151 @@
+# CI-specific values for the Archestra Helm chart
+# This file is used for the shared non-quickstart E2E environment in GitHub Actions.
+
+archestra:
+  # Image will be set via --set during deployment
+  # image: archestra/platform:ci-test
+
+  # The shared non-quickstart CI environment now includes the Vault K8s startup
+  # scenario, which injects the database URL via an init container. Keep a single
+  # backend replica here to avoid concurrent first-boot migrations racing each
+  # other against a fresh CI database.
+  replicaCount: 1
+
+  # Override the chart's production CPU requests (2 vCPU per pod) for CI.
+  # On the resource-constrained E2E runners, 1 platform + 2 workers at 2 vCPU
+  # each reserves 6 vCPU before PostgreSQL and the e2e dependency pods are
+  # scheduled — which intermittently leaves no room, so PostgreSQL or the
+  # platform pod gets FailedScheduling ("Insufficient cpu") and the deploy
+  # stalls until the Helm timeout. CPU requests are only a scheduling
+  # reservation (there is no CPU limit), so a smaller request still lets the
+  # pods burst as needed while letting everything fit on the node.
+  resources:
+    requests:
+      cpu: "500m"
+
+  worker:
+    replicaCount: 2
+    resources:
+      requests:
+        cpu: "500m"
+
+  # Environment variables for e2e testing
+  env:
+    ENABLE_E2E_TEST_ENDPOINTS: "true"
+    ARCHESTRA_ANALYTICS: disabled
+    # LLM Proxy base URLs (for LLM proxy routes)
+    # Each provider uses a distinct path prefix to avoid WireMock stub conflicts
+    ARCHESTRA_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/openai/v1"
+    ARCHESTRA_ANTHROPIC_BASE_URL: "http://e2e-tests-wiremock:8080/anthropic"
+    ARCHESTRA_GEMINI_BASE_URL: "http://e2e-tests-wiremock:8080/gemini"
+    ARCHESTRA_COHERE_BASE_URL: "http://e2e-tests-wiremock:8080/cohere"
+    ARCHESTRA_CEREBRAS_BASE_URL: "http://e2e-tests-wiremock:8080/cerebras/v1"
+    ARCHESTRA_VLLM_BASE_URL: "http://e2e-tests-wiremock:8080/vllm/v1"
+    ARCHESTRA_OLLAMA_BASE_URL: "http://e2e-tests-wiremock:8080/ollama/v1"
+    ARCHESTRA_GROQ_BASE_URL: "http://e2e-tests-wiremock:8080/groq/v1"
+    ARCHESTRA_XAI_BASE_URL: "http://e2e-tests-wiremock:8080/xai/v1"
+    ARCHESTRA_OPENROUTER_BASE_URL: "http://e2e-tests-wiremock:8080/openrouter/api/v1"
+    ARCHESTRA_ZHIPUAI_BASE_URL: "http://e2e-tests-wiremock:8080/zhipuai/v4"
+    ARCHESTRA_MISTRAL_BASE_URL: "http://e2e-tests-wiremock:8080/mistral/v1"
+    ARCHESTRA_BEDROCK_BASE_URL: "http://e2e-tests-wiremock:8080/bedrock"
+    ARCHESTRA_PERPLEXITY_BASE_URL: "http://e2e-tests-wiremock:8080/perplexity/v1"
+    ARCHESTRA_DEEPSEEK_BASE_URL: "http://e2e-tests-wiremock:8080/deepseek"
+    ARCHESTRA_GITHUB_COPILOT_BASE_URL: "http://e2e-tests-wiremock:8080/github-copilot"
+    ARCHESTRA_GITHUB_COPILOT_TOKEN_EXCHANGE_URL: "http://e2e-tests-wiremock:8080/github/copilot_internal/v2/token"
+    ARCHESTRA_MINIMAX_BASE_URL: "http://e2e-tests-wiremock:8080/minimax/v1"
+    ARCHESTRA_AZURE_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/azure/openai/deployments/test-deployment"
+    ARCHESTRA_AZURE_OPENAI_API_VERSION: "2024-02-01"
+    # Chat API keys (for e2e testing)
+    ARCHESTRA_CHAT_OPENAI_API_KEY: test-key
+    ARCHESTRA_CHAT_ANTHROPIC_API_KEY: test-key
+    ARCHESTRA_CHAT_GEMINI_API_KEY: test-key
+    ARCHESTRA_CHAT_COHERE_API_KEY: test-key
+    ARCHESTRA_CHAT_CEREBRAS_API_KEY: test-key
+    ARCHESTRA_CHAT_VLLM_API_KEY: test-key
+    ARCHESTRA_CHAT_OLLAMA_API_KEY: test-key
+    ARCHESTRA_CHAT_GROQ_API_KEY: test-key
+    ARCHESTRA_CHAT_XAI_API_KEY: test-key
+    ARCHESTRA_CHAT_OPENROUTER_API_KEY: test-key
+    ARCHESTRA_CHAT_ZHIPUAI_API_KEY: test-key
+    ARCHESTRA_CHAT_MISTRAL_API_KEY: test-key
+    ARCHESTRA_CHAT_BEDROCK_API_KEY: test-key
+    ARCHESTRA_CHAT_PERPLEXITY_API_KEY: test-key
+    ARCHESTRA_CHAT_DEEPSEEK_API_KEY: test-key
+    ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY: test-key
+    ARCHESTRA_CHAT_MINIMAX_API_KEY: test-key
+    ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY: test-key
+    ARCHESTRA_METRICS_SECRET: "foo-bar"
+    ARCHESTRA_FRONTEND_URL: "http://localhost:3000"
+    ARCHESTRA_AUTH_SECRET: "e2e-auth-secret-must-be-32-chars-long"
+    # Enable enterprise license for e2e tests (required for SSO tests)
+    ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
+    # Enable test MCP server seeding
+    ENABLE_TEST_MCP_SERVER: "true"
+    # Enable user-authored MCP Apps for the apps e2e suite
+    ARCHESTRA_APPS_ENABLED: "true"
+    # Disable better-auth rate limit for e2e tests
+    ARCHESTRA_AUTH_RATE_LIMIT_DISABLED: "true"
+    # Add Keycloak as trusted origin for SSO e2e tests (OIDC discovery URL validation)
+    # Includes both the internal K8s service name and the NodePort URL that appears in OIDC discovery
+    ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS: "http://e2e-tests-keycloak:8080,http://localhost:30081"
+    # Shared CI secrets-manager configuration.
+    # Keep the generic suite on the standard DB-backed secrets manager. The
+    # readonly-vault coverage runs in its own dedicated job via a Helm override.
+    ARCHESTRA_SECRETS_MANAGER: "DB"
+    ARCHESTRA_HASHICORP_VAULT_ADDR: "http://vault:8200"
+    ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "K8S"
+    ARCHESTRA_HASHICORP_VAULT_K8S_ROLE: "archestra"
+    ARCHESTRA_HASHICORP_VAULT_KV_VERSION: "1"
+
+  # Load database and test values from Vault before the platform starts.
+  initContainers:
+    vaultSecrets:
+      enabled: true
+      secrets:
+        - envVar: ARCHESTRA_DATABASE_URL
+          path: kv/archestra/config
+          key: dburl
+        - envVar: TEST_VALUE
+          path: kv/archestra/config
+          key: dummy_var
+
+  orchestrator:
+    kubernetes:
+      networkPolicy:
+        # Enable SSRF protection for e2e testing
+        create: true
+        additionalEgressRules:
+          # Allow MCP server pods to reach Keycloak for JWT validation (e2e tests)
+          - to:
+              - podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: keycloak
+
+  # Use NodePort service type to expose services on fixed ports
+  service:
+    type: NodePort
+    nodePorts:
+      backend: 30000
+      metrics: 30050
+      frontend: 30300
+
+# PostgreSQL configuration for CI
+postgresql:
+  # Vault provides the connection URL, but we still deploy the PostgreSQL subchart.
+  external_database_url: "from_vault"
+  enabled: true
+  auth:
+    database: archestra_dev
+    username: archestra
+    password: vault_e2e_custom_pw
+  primary:
+    initdb:
+      scripts:
+        grant-superuser.sql: |
+          ALTER USER archestra WITH SUPERUSER;
+    service:
+      type: NodePort
+      nodePorts:
+        postgresql: 30432

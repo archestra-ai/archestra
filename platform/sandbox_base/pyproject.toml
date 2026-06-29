@@ -1,0 +1,12 @@
+# Sandbox base python dependencies. MUST mirror DEFAULT_PYTHON_REQUIREMENTS in
+# sandbox-core/src/backends/dagger.rs (enforced by `check:sandbox-base`), so a
+# prebuilt image carries the same venv the runtime warm-base builds.
+[project]
+name = "sandbox"
+version = "0.0.0"
+requires-python = ">=3.12"
+dependencies = [
+  "numpy",
+  "pandas",
+  "httpx",
+]

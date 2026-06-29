@@ -1,0 +1,954 @@
+archestra:
+  # The Docker image to use for the Archestra Platform
+  # This image contains both the backend API and frontend
+  image: archestra/platform
+
+  # The image tag for the Archestra Platform
+  #
+  # This value is automatically updated by release-please during releases.
+  # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
+  # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
+  # See: https://github.com/googleapis/release-please/issues/2195
+  imageTag: "1.2.74" # x-release-please-version
+
+  # Image pull policy for the Archestra container
+  # Options: Always, IfNotPresent, Never
+  imagePullPolicy: IfNotPresent
+
+  # Number of pod replicas for the Archestra Platform deployment
+  # Note: This value is ignored when horizontalPodAutoscaler.enabled is true,
+  # as the HPA will manage the replica count dynamically
+  replicaCount: 1
+
+  # Annotations to add to pods created by the Deployment
+  # This is useful for integrations that require pod-level annotations, such as:
+  # - Service mesh sidecars (Istio, Linkerd)
+  # - Prometheus scraping
+  # - Cloud provider features (AWS IAM roles, GKE Workload Identity)
+  # - Secrets injection (Vault agent, External Secrets Operator)
+  # Example:
+  #   podAnnotations:
+  #     prometheus.io/scrape: "true"
+  #     prometheus.io/port: "9050"
+  #     vault.hashicorp.com/agent-inject: "true"
+  #     sidecar.istio.io/inject: "true"
+  podAnnotations: {}
+
+  # Labels to add to pods created by the Deployment
+  # This is useful for integrations that require pod-level labels, such as:
+  # - Azure AKS Workload Identity
+  # Example:
+  #   podLabels:
+  #     azure.workload.identity/use: "true"
+  podLabels: {}
+
+  # Node selector for scheduling pods on specific nodes
+  # This is useful for targeting specific node pools or nodes with particular labels
+  # See: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+  # Example:
+  #   nodeSelector:
+  #     karpenter.sh/nodepool: general-purpose
+  #     kubernetes.io/os: linux
+  #     node.kubernetes.io/instance-type: m5.large
+  nodeSelector: {}
+
+  # Tolerations for scheduling pods on nodes with specific taints
+  # This is useful for running pods on dedicated or specialized nodes (e.g., GPU nodes, spot instances)
+  # See: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+  # Example:
+  #   tolerations:
+  #     - key: "foo.bar.com/role"
+  #       operator: "Equal"
+  #       value: "master"
+  #       effect: "NoSchedule"
+  #     - key: "node.kubernetes.io/not-ready"
+  #       operator: "Exists"
+  #       effect: "NoExecute"
+  #       tolerationSeconds: 300
+  tolerations: []
+
+  # Deployment strategy configuration for the Deployment
+  # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)
+  # Default is RollingUpdate with percentage-based surge/unavailability so larger
+  # deployments roll out faster while keeping most capacity available.
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: "25%"
+      maxSurge: "25%"
+
+  # Additional environment variables to pass to the container
+  # These will be merged with the default DATABASE_URL environment variable
+  #
+  # Supports Kubernetes environment variable expansion using $(VAR_NAME) syntax.
+  # This allows referencing other environment variables defined in the container.
+  # See: https://kubernetes.io/docs/tasks/inject-data-application/define-interdependent-environment-variables/
+  #
+  # Example:
+  #   env:
+  #     # External URL(s) for connection instructions (supports comma-separated list for multiple URLs)
+  #     ARCHESTRA_API_BASE_URL: "http://archestra.default.svc:9000,https://api.archestra.example.com"
+  #     CUSTOM_VAR: "custom-value"
+  #     # Reference another env var (defined via envWithValueFrom below)
+  #     ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://$(NODE_IP):4317"
+  #     # MCP App sandbox domain for full browser API access (localStorage, CORS, OAuth)
+  #     # Requires wildcard DNS (*.mcp.example.com) and wildcard TLS certificate
+  #     # Not needed for local dev — automatic localhost swap provides isolation
+  #     ARCHESTRA_MCP_SANDBOX_DOMAIN: "mcp.example.com"
+  env: {}
+
+  # Authentication secret source configuration.
+  #
+  # By default, the chart creates a <release>-auth Secret and auto-generates
+  # auth-secret on first install. For external secret managers, point the chart
+  # at an existing Secret instead.
+  authSecret:
+    # When set, the deployment reads ARCHESTRA_AUTH_SECRET from this Secret
+    # instead of the Helm-managed <release>-auth Secret.
+    existingSecretName: ""
+    # Key within existingSecretName containing the auth secret value.
+    existingSecretKey: auth-secret
+    # Extra key/value pairs to add to the Helm-managed <release>-auth Secret.
+    # This is useful when you want to mount additional secret-backed files from
+    # the same Secret via archestra.extraVolumes, without creating a second Secret.
+    # Values should be plain strings and will be base64-encoded by Helm.
+    extraData: {}
+
+  # Environment variables with valueFrom (for fieldRef, resourceFieldRef, configMapKeyRef)
+  # Use this for Kubernetes downward API or other valueFrom sources
+  # This is required if you want to use $(VAR_NAME) expansion referencing pod/node information
+  # See: https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/
+  #
+  # Example - expose node IP for OTEL collector endpoint:
+  #   envWithValueFrom:
+  #     - name: NODE_IP
+  #       valueFrom:
+  #         fieldRef:
+  #           fieldPath: status.hostIP
+  #     - name: POD_NAME
+  #       valueFrom:
+  #         fieldRef:
+  #           fieldPath: metadata.name
+  #     - name: POD_NAMESPACE
+  #       valueFrom:
+  #         fieldRef:
+  #           fieldPath: metadata.namespace
+  #     - name: MEMORY_LIMIT
+  #       valueFrom:
+  #         resourceFieldRef:
+  #           containerName: archestra-platform
+  #           resource: limits.memory
+  envWithValueFrom: []
+
+  # Environment variables from Kubernetes Secrets
+  # This allows you to inject sensitive data from secrets into the container
+  # See: https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#define-container-environment-variables-using-secret-data
+  # Example:
+  #   envFromSecrets:
+  #     - name: API_KEY
+  #       secretName: my-api-credentials
+  #       secretKey: api-key
+  #     - name: DATABASE_PASSWORD
+  #       secretName: db-credentials
+  #       secretKey: password
+  envFromSecrets: []
+
+  # Import all key-value pairs from Secrets or ConfigMaps as environment variables
+  # This is useful when you want to inject all keys from a Secret/ConfigMap without specifying each one individually
+  # See: https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#configure-all-key-value-pairs-in-a-secret-as-container-environment-variables
+  # Example:
+  #   envFrom:
+  #     - secretRef:
+  #         name: my-secret
+  #     - configMapRef:
+  #         name: my-configmap
+  #     - secretRef:
+  #         name: another-secret
+  #         optional: true
+  envFrom: []
+
+  # code execution runtime configuration.
+  # enables the sandbox tools (archestra__run_command / upload_file /
+  # download_file) and points the backend at a Dagger runtime pod. The
+  # execution image remains a backend default; override
+  # ARCHESTRA_DAGGER_RUNTIME_IMAGE through archestra.env only when required.
+  codeRuntime:
+    # enable or disable code execution runtime support.
+    enabled: false
+
+    # runtime limits (timeouts, concurrency, output caps) are env-driven via
+    # ARCHESTRA_SKILLS_SANDBOX_* / ARCHESTRA_DAGGER_RUNTIME_* in archestra.env.
+
+    dagger:
+      # explicit Dagger runner host. Leave empty to use the kube-pod:// pod target below.
+      # supported schemes are kube-pod:// for the secure default and tcp:// for
+      # explicit advanced deployments that provide their own transport security.
+      runnerHost: ""
+
+      managed:
+        # deploy a Dagger Engine as part of this Helm release. When false, point
+        # dagger.pod at an externally deployed Dagger Engine pod instead.
+        enabled: false
+        serviceAccount:
+          # create a tokenless service account for the privileged engine pod.
+          create: true
+          automountServiceAccountToken: false
+          annotations: {}
+
+      pod:
+        # pod created by the managed Dagger subchart or companion chart.
+        name: dagger-runtime-engine-0
+        # leave empty to use the release namespace when managed.enabled=true,
+        # or the default external companion-chart namespace (`dagger`) otherwise.
+        namespace: ""
+        container: dagger-engine
+        # optional kube context for out-of-cluster clients. leave empty for in-cluster use.
+        context: ""
+
+      rbac:
+        # create a narrow Role/RoleBinding that lets the Archestra ServiceAccount
+        # exec into the Dagger Engine pod when using kube-pod://.
+        create: true
+        # defaults to dagger.pod.namespace. set explicitly when runnerHost points
+        # at a kube-pod:// URL whose namespace differs from dagger.pod.namespace.
+        namespace: ""
+
+  # Additional volumes to mount into the platform and worker pods
+  # Useful for mounting credential files such as a Vertex AI service account key
+  # Example:
+  #   extraVolumes:
+  #     - name: vertex-ai-credentials
+  #       secret:
+  #         secretName: vertex-ai-credentials
+  #         items:
+  #           - key: service-account.json
+  #             path: vertex-ai-key.json
+  extraVolumes: []
+
+  # Additional volume mounts for the platform and worker containers
+  # Example:
+  #   extraVolumeMounts:
+  #     - name: vertex-ai-credentials
+  #       mountPath: /var/run/gcp
+  #       readOnly: true
+  extraVolumeMounts: []
+
+  # Persistent storage for Node diagnostic reports written to /var/diagnostics.
+  diagnostics:
+    enabled: false
+    # Use an existing PVC instead of creating one via this chart.
+    existingClaimName: ""
+    # StorageClass for the chart-managed PVC. Leave empty to use the cluster default.
+    storageClassName: ""
+    # Storage request for the diagnostics PVC.
+    size: 10Gi
+    # Access modes for the diagnostics PVC.
+    accessModes:
+      - ReadWriteOnce
+    # Optionally tell Node to write heap snapshots as it approaches the heap limit.
+    # Set to a positive integer such as 1 to enable during targeted investigations.
+    heapSnapshotsNearHeapLimit: 0
+
+  # Persistent "My Files" file storage. provider "db" (default) keeps bytes in
+  # Postgres; "filesystem" stores them on a PVC. When filesystem, the chart
+  # creates a PVC unless `existingClaim` names a pre-provisioned one.
+  fileStorage:
+    provider: db
+    filesystem:
+      mountPath: /data/archestra_results
+      size: 50Gi
+      # "" uses the cluster default StorageClass.
+      storageClassName: ""
+      # multi-replica / HPA needs ReadWriteMany.
+      accessModes:
+        - ReadWriteOnce
+      # set to reuse a pre-provisioned PVC instead of a chart-created one.
+      existingClaim: ""
+
+  # Init containers configuration
+  initContainers:
+    # Wait for PostgreSQL to be ready before starting the application
+    # Disable this if your database is always available (e.g., managed cloud database)
+    # or if you handle readiness checks in another way
+    waitForPostgres:
+      enabled: true
+      # Maximum seconds to wait for PostgreSQL to become reachable before the
+      # init container gives up and fails. Without a bound, a database that
+      # never comes up leaves the pod stuck in PodInitializing indefinitely
+      # (and any `helm install --atomic` hits its own timeout with no clear
+      # cause). The setup-postgres-extensions init container uses the same budget.
+      timeoutSeconds: 300
+
+    # Worker pods only: block startup until the web Deployment has applied
+    # database migrations. This gate covers fresh installs. Upgrades are covered
+    # by archestra.migrationJob, because the platform Service can still route to
+    # previous-revision web pods while the new release is rolling out.
+    waitForMigrations:
+      enabled: true
+      # Maximum seconds to wait for the web Deployment to finish migrations
+      # before the init container gives up and fails.
+      timeoutSeconds: 600
+
+    # Vault secret injection init container
+    # Similar to Vault Agent Injector (writes secrets to a shared volume) but:
+    # - No extra infrastructure needed (no Vault Agent Injector deployment)
+    # - Secrets are loaded as env vars, not files
+    # Uses the existing ARCHESTRA_HASHICORP_VAULT_* env vars for connectivity and auth
+    #
+    # Example:
+    #   vaultSecrets:
+    #     enabled: true
+    #     secrets:
+    #       - envVar: DATABASE_URL
+    #         path: secret/data/team/database_url
+    #         key: url
+    #       - envVar: MS_TEAMS_SECRET
+    #         path: secret/data/team/ms_teams_secret
+    #         key: value
+    vaultSecrets:
+      enabled: false
+      # Container entrypoint to exec after loading secrets (must match Dockerfile ENTRYPOINT)
+      entrypoint: /docker-entrypoint.sh
+      # Each entry: envVar (env var name), path (Vault API path after /v1/), key (key within secret data)
+      secrets: []
+
+    # Image used by the wait-for-postgres init container.
+    # Override to pull from a private registry when Docker Hub is inaccessible.
+    busyboxImage: "busybox:1.36"
+
+    # Resource requests/limits applied to ALL init containers.
+    # Required on clusters that enforce ResourceQuota (e.g., OpenShift restricted-v2 SCC).
+    resources: {}
+
+  # Database migration Job.
+  #
+  # Runs `pnpm db:migrate` as a Helm pre-upgrade hook so the target version's
+  # schema is applied before web and worker Deployments roll. Disable this if
+  # migrations are applied by an external deployment pipeline.
+  #
+  # Most external Postgres deployments should not need any migrationJob env
+  # settings. Prefer setting postgresql.external_database_url to a complete
+  # connection string; the chart stores it in a Secret and passes it to the
+  # migration Job automatically.
+  migrationJob:
+    enabled: true
+    # Number of retries before the Job is marked failed and aborts the upgrade.
+    backoffLimit: 3
+    # Hard cap on Job runtime. Set to null to disable the deadline.
+    activeDeadlineSeconds: 600
+    # Resource requests/limits for the migration container.
+    # If not set, inherits from archestra.resources.
+    resources: {}
+    # Extra environment variables rendered before the shared platform env. Use
+    # this only when ARCHESTRA_DATABASE_URL contains Kubernetes $(VAR)
+    # references, such as $(PGPASSWORD), that the hook must expand.
+    env: {}
+    # Extra secret-backed environment variables rendered before shared env. This
+    # is the recommended hook-only option when ARCHESTRA_DATABASE_URL contains
+    # $(PGPASSWORD):
+    #   - name: PGPASSWORD
+    #     secretName: my-db-secret
+    #     secretKey: password
+    envFromSecrets: []
+    # Extra valueFrom environment variables rendered before shared env.
+    envWithValueFrom: []
+    # Extra envFrom entries for the migration Job.
+    envFrom: []
+
+  # Resource requests and limits for the Archestra container
+  # See: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+  resources:
+    requests:
+      # Fastify recommends 2 vCPU per app instance for lowest latency, with the
+      # second vCPU helping GC/libuv avoid blocking the main thread.
+      # See: https://fastify.dev/docs/latest/Guides/Recommendations/#capacity-planning-for-production
+      cpu: "2"
+      memory: "2Gi"
+    limits:
+      memory: "3Gi"
+
+  # Kubernetes probe configuration for the platform and worker containers.
+  # See: https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/
+  #
+  # The /health endpoint returns immediately without any I/O — it only fails if the
+  # Node.js event loop is blocked. The /ready endpoint additionally verifies database
+  # connectivity. Defaults are deliberately lenient (timeoutSeconds 45) because killing
+  # a pod aborts every in-flight chat stream on it; a transient event-loop pause or a
+  # slow database health check should not cause a restart. With liveness timeoutSeconds
+  # 45 and failureThreshold 5, kubelet only restarts a pod that has been unresponsive
+  # for several minutes of consecutive probes.
+  probes:
+    startup:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 45
+      failureThreshold: 30
+    liveness:
+      periodSeconds: 10
+      timeoutSeconds: 45
+      failureThreshold: 5
+    readiness:
+      periodSeconds: 10
+      timeoutSeconds: 45
+      failureThreshold: 3
+
+  # Configuration for the MCP Server Runtime
+  orchestrator:
+    # Base image for MCP server containers
+    # If not set, defaults to "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest"
+    baseImage: ""
+
+    # Kubernetes configuration for MCP Server Runtime
+    # This controls how the Archestra platform connects to Kubernetes to manage MCP server pods
+    kubernetes:
+      # Namespace where MCP server pods will be created
+      # If not set, defaults to the namespace specified in the helm release
+      namespace: ""
+
+      # Kubernetes cluster DNS domain for internal service URL construction (streamable-http MCP servers)
+      # If not set, defaults to cluster.local
+      clusterDomain: ""
+
+      # Kubeconfig configuration
+      # Choose one of the following methods:
+
+      # Method 1: Use in-cluster configuration (recommended when running inside K8s)
+      # No additional configuration needed - the platform will automatically use the service account
+      loadKubeconfigFromCurrentCluster: true
+
+      # Method 2: Mount a kubeconfig file from a secret
+      # Set useInClusterConfig to false and configure the secret below
+      kubeconfig:
+        # Enable kubeconfig volume mount
+        enabled: false
+
+        # Name of the secret containing the kubeconfig file
+        # The secret should have a key named "config" containing the kubeconfig content
+        # Example of creating the secret:
+        #   kubectl create secret generic archestra-kubeconfig --from-file=config=/path/to/kubeconfig
+        secretName: ""
+
+        # Path where the kubeconfig will be mounted inside the container
+        # This will be set as the KUBECONFIG environment variable
+        mountPath: /etc/kubeconfig
+
+      # ServiceAccount configuration for the Archestra Platform
+      serviceAccount:
+        # Specifies whether a service account should be created
+        create: true
+        # Annotations to add to the service account
+        # Use this for cloud provider integrations like GKE Workload Identity or AWS IRSA
+        #
+        # GKE Workload Identity example (for Vertex AI authentication):
+        #   annotations:
+        #     iam.gke.io/gcp-service-account: my-gsa@my-project.iam.gserviceaccount.com
+        #
+        # AWS IRSA example:
+        #   annotations:
+        #     eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/my-role
+        annotations: {}
+        # The name of the service account to use.
+        # If not set and create is true, a name is generated using the fullname template
+        name: ""
+        # Image pull secrets to attach to the service account (automatically used by pods)
+        # This is the recommended way to configure image pull secrets
+        # Example:
+        #   imagePullSecrets:
+        #     - name: myregistrykey
+        imagePullSecrets: []
+
+      # RBAC (Role-Based Access Control) configuration
+      rbac:
+        # Specifies whether RBAC resources should be created
+        create: true
+
+        # Kubernetes namespaces backing deployment environments that the platform
+        # may deploy MCP servers into. The platform ServiceAccount only gets
+        # MCP-manager permissions in the release namespace by default, so an
+        # environment pointing at any other namespace fails with a 403 until that
+        # namespace is listed here.
+        #
+        # For each entry the chart creates a namespace-scoped Role + RoleBinding
+        # granting the platform ServiceAccount the same MCP-manager permissions it
+        # has in the release namespace. The namespaces MUST already exist before
+        # `helm upgrade` (a RoleBinding cannot be created in a missing namespace).
+        # An entry equal to the release namespace is ignored (already covered above).
+        #
+        # This list is also surfaced to the app (as ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES)
+        # so the environment editor offers a namespace dropdown instead of free text.
+        #
+        # Note: unlike mcpServerRbac.additionalRoleBindings (which only creates a
+        # binding to an externally-managed Role), this creates the Role too.
+        #
+        # Example:
+        #   environmentNamespaces:
+        #     - staging
+        #     - production
+        environmentNamespaces: []
+
+      # NetworkPolicy configuration for MCP server pods (SSRF protection)
+      # When enabled, creates a Kubernetes NetworkPolicy that prevents MCP server pods from
+      # accessing private/internal IP ranges, blocking SSRF attacks against cluster services,
+      # cloud metadata endpoints, and other internal infrastructure.
+      #
+      # The policy allows:
+      #   - DNS resolution (UDP/TCP port 53)
+      #   - Egress to the public internet
+      #
+      # The policy blocks (IPv4):
+      #   - 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 (RFC 1918 private ranges)
+      #   - 169.254.0.0/16 (link-local / cloud metadata endpoints like AWS IMDSv1, GCP, Azure)
+      #   - 100.64.0.0/10 (carrier-grade NAT / RFC 6598)
+      #   - 127.0.0.0/8 (loopback)
+      #   - 0.0.0.0/32 (some HTTP libraries treat 0.0.0.0 as localhost)
+      #
+      # The policy also blocks (IPv6, for dual-stack clusters):
+      #   - ::1/128 (IPv6 loopback)
+      #   - fc00::/7 (unique local addresses, equivalent to RFC 1918)
+      #   - fe80::/10 (link-local)
+      #
+      # IMPORTANT: This requires a CNI plugin that supports NetworkPolicies (e.g., Calico, Cilium, Weave).
+      # The default GKE CNI (kubenet) does NOT enforce NetworkPolicies unless Dataplane V2 or Calico is enabled.
+      # See: https://kubernetes.io/docs/concepts/services-networking/network-policies/
+      networkPolicy:
+        # Specifies whether the SSRF protection NetworkPolicy should be created
+        create: false
+
+        # Additional IPv4 CIDR ranges to block (appended to the default private ranges).
+        # Note: These are only added to the IPv4 egress rule. IPv6 private ranges
+        # (::1/128, fc00::/7, fe80::/10) are always blocked and not configurable.
+        # Example:
+        #   additionalDeniedCidrs:
+        #     - 198.51.100.0/24    # Documentation range
+        #     - 203.0.113.0/24     # Documentation range
+        additionalDeniedCidrs: []
+
+        # Additional egress rules to add to the NetworkPolicy.
+        # Use this to allow MCP server pods to reach specific internal Kubernetes
+        # services that would otherwise be blocked by the private range deny rules.
+        #
+        # IMPORTANT: MCP servers that need to connect to internal K8s services
+        # (e.g., via grafana.monitoring.svc.cluster.local) will be blocked by default
+        # because ClusterIPs fall within the denied private ranges. You must add
+        # explicit egress rules here to allow those connections.
+        #
+        # Example - allow access to Grafana in the monitoring namespace (by pod labels):
+        #   additionalEgressRules:
+        #     - to:
+        #         - namespaceSelector:
+        #             matchLabels:
+        #               kubernetes.io/metadata.name: monitoring
+        #           podSelector:
+        #             matchLabels:
+        #               app: grafana
+        #       ports:
+        #         - protocol: TCP
+        #           port: 3000
+        #
+        # Example - allow access by IP CIDR (e.g., internal API gateway subnet):
+        #   additionalEgressRules:
+        #     - to:
+        #         - ipBlock:
+        #             cidr: 10.0.50.0/24
+        #       ports:
+        #         - protocol: TCP
+        #           port: 443
+        additionalEgressRules: []
+
+      # RBAC configuration for MCP server pods that need Kubernetes API access
+      # Creates a dedicated service account with namespace-scoped permissions for K8s resources
+      # Permissions: manage pods, services, deployments, jobs (read-only for secrets removed)
+      # IMPORTANT: Only the Kubernetes MCP server uses this service account - all other MCP servers
+      # use the default service account with no permissions, maintaining proper isolation
+      mcpServerRbac:
+        # Specifies whether RBAC resources (ServiceAccount, Role, RoleBinding) should be created
+        create: true
+
+        # Additional ClusterRoleBindings to attach to the mcp-k8s-operator service account
+        # Use this to grant cluster-wide permissions (e.g., read access to all namespaces)
+        # The ClusterRoles must be created externally (e.g., via Terraform or kubectl)
+        # Example:
+        #   additionalClusterRoleBindings:
+        #     - clusterRoleName: cluster-reader
+        #     - clusterRoleName: custom-role
+        #       name: custom-binding-name  # Optional: override the auto-generated binding name
+        additionalClusterRoleBindings: []
+
+        # Additional RoleBindings to attach to the mcp-k8s-operator service account
+        # Use this to grant namespace-scoped permissions (e.g., full access to specific namespaces)
+        # The Roles must be created externally (e.g., via Terraform or kubectl) in the specified namespaces
+        # Example:
+        #   additionalRoleBindings:
+        #     - roleName: my-namespace-admin
+        #       namespace: my-app-namespace
+        #     - roleName: another-role
+        #       namespace: another-namespace
+        #       name: custom-binding-name  # Optional: override the auto-generated binding name
+        additionalRoleBindings: []
+
+  # Background worker configuration
+  # Deploys a separate Deployment for processing background jobs from the postgres queue
+  # (e.g., knowledge base connector syncs, batch embeddings).
+  #
+  # When enabled, the main platform pods run as web-only (ARCHESTRA_PROCESS_TYPE=web)
+  # and the worker pods handle all background job processing (ARCHESTRA_PROCESS_TYPE=worker).
+  # When disabled, the main platform pods run both the web server and the worker in-process.
+  worker:
+    # Enable or disable the separate worker Deployment
+    enabled: true
+
+    # Number of worker pod replicas
+    replicaCount: 1
+
+    # Resource requests and limits for worker pods
+    # If not set, inherits from archestra.resources
+    # Workers typically need less memory than the web server
+    resources:
+      requests:
+        # Fastify recommends 2 vCPU per app instance for lowest latency, with the
+        # second vCPU helping GC/libuv avoid blocking the main thread.
+        # See: https://fastify.dev/docs/latest/Guides/Recommendations/#capacity-planning-for-production
+        cpu: "2"
+        memory: "1Gi"
+      limits:
+        memory: "2Gi"
+
+    # Deployment strategy for the worker Deployment
+    deploymentStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: "25%"
+        maxSurge: "25%"
+
+    # Pod annotations for worker pods
+    # If not set, inherits from archestra.podAnnotations
+    podAnnotations: {}
+
+    # Node selector for worker pods
+    # If not set, inherits from archestra.nodeSelector
+    nodeSelector: {}
+
+    # Tolerations for worker pods
+    # If not set, inherits from archestra.tolerations
+    tolerations: []
+
+  # Service configuration
+  service:
+    # Service type - ClusterIP, NodePort, or LoadBalancer
+    type: ClusterIP
+    # Annotations to add to the Kubernetes Service
+    annotations: {}
+    # Node ports for NodePort service type (optional)
+    # Only used when service.type is NodePort
+    nodePorts:
+      backend: null
+      metrics: null
+      frontend: null
+
+  # Ingress configuration
+  ingress:
+    # Enable or disable ingress creation
+    enabled: false
+
+    # Annotations for the ingress resource
+    annotations: {}
+
+    # Complete ingress specification
+    # When using ARCHESTRA_MCP_SANDBOX_DOMAIN, add a wildcard rule for sandbox subdomains:
+    #   spec:
+    #     tls:
+    #       - hosts:
+    #           - "*.mcp.example.com"
+    #         secretName: mcp-sandbox-wildcard-tls
+    #     rules:
+    #       - host: "*.mcp.example.com"
+    #         http:
+    #           paths:
+    #             - path: /_sandbox/
+    #               pathType: Prefix
+    #               backend:
+    #                 service:
+    #                   name: archestra-platform
+    #                   port:
+    #                     number: 9000
+    spec: {}
+
+  # HorizontalPodAutoscaler configuration
+  # Automatically scales the number of replicas for the main archestra-platform Deployment
+  # based on observed metrics. This does not apply to the separate worker Deployment.
+  # See: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
+  horizontalPodAutoscaler:
+    # Enable or disable HorizontalPodAutoscaler creation
+    enabled: false
+
+    # Minimum number of replicas the autoscaler can scale down to
+    # Default keeps two web pods available when autoscaling is enabled.
+    minReplicas: 2
+
+    # Maximum number of replicas the autoscaler can scale up to
+    maxReplicas: 10
+
+    # Metrics used to determine scaling behavior
+    # Each metric can be of type: Resource, Pods, Object, External, or ContainerResource
+    # Example with CPU utilization:
+    #   metrics:
+    #     - type: Resource
+    #       resource:
+    #         name: cpu
+    #         target:
+    #           type: Utilization
+    #           averageUtilization: 80
+    # Default uses memory utilization because the chart already defines memory
+    # requests by default, while CPU requests are optional.
+    metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 70
+
+    # Scaling behavior configuration for scale up and scale down
+    # Allows fine-grained control over scaling speed and stabilization
+    # Example:
+    #   behavior:
+    #     scaleDown:
+    #       stabilizationWindowSeconds: 300
+    #       policies:
+    #         - type: Percent
+    #           value: 10
+    #           periodSeconds: 60
+    #     scaleUp:
+    #       stabilizationWindowSeconds: 0
+    #       policies:
+    #         - type: Percent
+    #           value: 100
+    #           periodSeconds: 15
+    behavior:
+      scaleUp:
+        stabilizationWindowSeconds: 0
+        selectPolicy: Max
+        policies:
+          - type: Percent
+            value: 100
+            periodSeconds: 60
+          - type: Pods
+            value: 2
+            periodSeconds: 60
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        selectPolicy: Min
+        policies:
+          - type: Percent
+            value: 25
+            periodSeconds: 60
+          - type: Pods
+            value: 1
+            periodSeconds: 60
+
+  # PodDisruptionBudget configuration
+  # Limits the number of pods that can be down simultaneously during voluntary disruptions
+  # See: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+  podDisruptionBudget:
+    # Enable or disable PodDisruptionBudget creation
+    enabled: false
+
+    # Minimum number of pods that must remain available during a disruption
+    # Can be an integer (e.g., 1) or a percentage string (e.g., "50%")
+    # Only one of minAvailable or maxUnavailable can be set
+    minAvailable: null
+
+    # Maximum number of pods that can be unavailable during a disruption
+    # Can be an integer (e.g., 1) or a percentage string (e.g., "25%")
+    # Only one of minAvailable or maxUnavailable can be set
+    maxUnavailable: null
+
+    # Policy for evicting unhealthy pods
+    # Options: IfHealthyBudget, AlwaysAllow
+    # - IfHealthyBudget: Running pods that are not yet healthy can be evicted only if the guarded application is not disrupted
+    # - AlwaysAllow: Running pods that are not yet healthy can be evicted regardless of whether the criteria in a PodDisruptionBudget is met
+    # See: https://kubernetes.io/docs/tasks/run-application/configure-pdb/#unhealthy-pod-eviction-policy
+    unhealthyPodEvictionPolicy: null
+
+  # GKE BackendConfig configuration
+  # Creates GKE-specific BackendConfig resources for configuring Google Cloud Load Balancer behavior
+  # See: https://cloud.google.com/kubernetes-engine/docs/how-to/ingress-configuration#configuring_backendconfig
+  #
+  # NOTE: These health check settings are tuned to work with Kubernetes startup probes that allow
+  # up to 305 seconds (30 * 10s + 5s) for pods to start.
+  # unhealthyThreshold=10 with checkIntervalSec=15 allows ~150 seconds before marking unhealthy,
+  # giving pods enough time to start during deployments while still detecting failures.
+  gkeBackendConfig:
+    # Enable or disable GKE BackendConfig resources
+    # When enabled, creates two BackendConfig resources: one for the backend (port 9000) and one for the frontend (port 3000)
+    enabled: false
+
+    # Backend API configuration (port 9000)
+    backend:
+      # Request timeout in seconds for the load balancer
+      # Recommended: 600 (10 minutes) for streaming responses and long-running MCP operations
+      # If not set, uses GKE default (30 seconds)
+      timeoutSec: null
+
+      # Connection draining configuration
+      # connectionDraining:
+      #   drainingTimeoutSec: 60
+
+      # Health check configuration for the backend service
+      healthCheck:
+        checkIntervalSec: 15
+        timeoutSec: 10
+        healthyThreshold: 1
+        unhealthyThreshold: 10
+        type: HTTP
+        requestPath: /health
+        port: 9000
+
+    # Frontend configuration (port 3000)
+    frontend:
+      # Request timeout in seconds for the load balancer
+      # If not set, uses GKE default (30 seconds)
+      timeoutSec: null
+
+      # Connection draining configuration
+      # connectionDraining:
+      #   drainingTimeoutSec: 60
+
+      # Health check configuration for the frontend service
+      healthCheck:
+        checkIntervalSec: 15
+        timeoutSec: 10
+        healthyThreshold: 1
+        unhealthyThreshold: 10
+        type: HTTP
+        requestPath: /health
+        port: 3000
+
+# dagger subchart values used only when archestra.codeRuntime.dagger.managed.enabled=true.
+# the Dagger Engine runs in the same namespace as the Archestra release so it can
+# be installed with the same `helm upgrade`.
+dagger:
+  fullnameOverride: dagger-runtime
+
+  engine:
+    kind: StatefulSet
+    # kube-pod:// uses kubectl exec + buildctl dial-stdio, so no TCP listener is
+    # needed by default. Set this to 1234 only when intentionally enabling the
+    # plaintext tcp:// transport through additional Service wiring.
+    port:
+
+    existingServiceAccount:
+      name: dagger-runtime
+
+    configJson: |
+      {
+        "logLevel": "info",
+        "security": {
+          "insecureRootCapabilities": false
+        },
+        "gc": {
+          "maxUsedSpace": "40GB",
+          "reservedSpace": "5GB",
+          "minFreeSpace": "20%"
+        }
+      }
+
+    resources:
+      requests:
+        cpu: "2"
+        memory: 8Gi
+      limits:
+        memory: 16Gi
+
+    statefulSet:
+      persistentVolumeClaim:
+        enabled: true
+        resources:
+          requests:
+            storage: 50Gi
+
+    hostPath:
+      dataVolume:
+        enabled: false
+      runVolume:
+        enabled: false
+
+    volumeMounts:
+      - name: run
+        mountPath: /run/dagger
+
+    volumes:
+      - name: run
+        emptyDir:
+          medium: Memory
+
+# PostgreSQL configuration
+postgresql:
+  # External database URL to use instead of deploying a PostgreSQL instance
+  # If null, a PostgreSQL instance will be deployed using the Bitnami PostgreSQL chart
+  # Accepts both postgres:// and postgresql:// URI schemes
+  #
+  # Option 1 - Set URL here (stored in K8s secret automatically):
+  #   external_database_url: postgres://username:password@host:5432/database
+  #
+  # Option 2 - Use pre-existing K8s secret (leave external_database_url as null):
+  #   archestra:
+  #     envFromSecrets:
+  #       - name: ARCHESTRA_DATABASE_URL
+  #         secretName: my-db-secret
+  #         secretKey: database-url
+  #
+  # Option 3 - Database URL from Vault init container (set to "vault"):
+  #   external_database_url: "from_vault"
+  #   This skips ARCHESTRA_DATABASE_URL secret creation and instead relies on the vault-secrets init container
+  #   to provide the database URL at runtime.
+  #
+  # IMPORTANT: When using external database, you MUST also set enabled=false
+  external_database_url: null
+
+  # Whether to deploy the bundled PostgreSQL instance
+  # Set to false when using external_database_url
+  enabled: true
+  auth:
+    database: archestra_dev
+    username: archestra
+    # Password is auto-generated by the Bitnami PostgreSQL chart and stored in a Kubernetes Secret.
+    # The password is persisted across helm upgrades (Bitnami uses lookup to preserve existing secrets).
+    # The secret is named <release>-archestra-platform-postgresql with key "password".
+    # To use a custom password, uncomment and set the password below:
+    # password: "your-custom-password"
+  # Resource configuration for PostgreSQL
+  # See: https://artifacthub.io/packages/helm/bitnami/postgresql for all options
+  primary:
+    # Grant superuser to the archestra user so migrations can create extensions (e.g., pgvector).
+    # Bitnami initdb scripts run as postgres superuser during DB initialization.
+    initdb:
+      scripts:
+        grant-superuser.sql: |
+          ALTER USER archestra WITH SUPERUSER;
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "1Gi"
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
+  # PostgreSQL exporter sidecar for Prometheus metrics (port 9187)
+  # Metrics are scraped by the observability stack (Grafana Alloy or Prometheus)
+  # and visualized in the Application Metrics Grafana dashboard (PostgreSQL section)
+  metrics:
+    enabled: true
+    service:
+      ports:
+        metrics: 9187
+  # NOTE: Bitnami is archiving their image.. see these github comments for details
+  # (this is essentially why we need to override image.repository and image.tag and global.security.allowInsecureImages)
+  #
+  # https://github.com/coder/coder/issues/19869#issuecomment-3305875979
+  # https://github.com/bitnami/containers/issues/83267
+  image:
+    repository: bitnamisecure/postgresql
+    tag: latest
+  global:
+    security:
+      allowInsecureImages: true

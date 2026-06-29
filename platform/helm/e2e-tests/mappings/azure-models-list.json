@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/azure/openai/deployments.*",
+    "headers": {
+      "api-key": { "matches": ".*" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "data": [
+        { "id": "gpt-4o", "model": "gpt-4o", "status": "succeeded" },
+        { "id": "gpt-4o-mini", "model": "gpt-4o-mini", "status": "succeeded" }
+      ]
+    }
+  }
+}

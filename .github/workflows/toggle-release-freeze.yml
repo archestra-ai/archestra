@@ -1,0 +1,81 @@
+name: Toggle Release Freeze
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_freeze:
+        description: "Set RELEASE_FREEZE to block/unblock release-please PR merges"
+        required: true
+        type: choice
+        options:
+          - "false"
+          - "true"
+        default: "false"
+
+permissions: {}
+
+concurrency:
+  group: toggle-release-freeze
+  cancel-in-progress: false
+
+jobs:
+  toggle-release-freeze:
+    name: Toggle Release Freeze
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Generate a token
+        id: generate-token
+        uses: ./.github/actions/generate-release-token
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Set RELEASE_FREEZE variable
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          RELEASE_FREEZE_VALUE: ${{ inputs.release_freeze }}
+        run: |
+          echo "Setting RELEASE_FREEZE to: $RELEASE_FREEZE_VALUE"
+
+          # Check if variable exists
+          if gh variable list | grep -q "^RELEASE_FREEZE"; then
+            # Update existing variable
+            gh variable set RELEASE_FREEZE --body "$RELEASE_FREEZE_VALUE"
+            echo "✅ Updated RELEASE_FREEZE variable to: $RELEASE_FREEZE_VALUE"
+          else
+            # Create new variable
+            gh variable set RELEASE_FREEZE --body "$RELEASE_FREEZE_VALUE"
+            echo "✅ Created RELEASE_FREEZE variable with value: $RELEASE_FREEZE_VALUE"
+          fi
+
+          if [ "$RELEASE_FREEZE_VALUE" = "true" ]; then
+            echo ""
+            echo "❄️ Release freeze is now ACTIVE"
+            echo "Release-please PRs will be blocked from merging until this is set to 'false'"
+          else
+            echo ""
+            echo "🚀 Release freeze is now INACTIVE"
+            echo "Release-please PRs can now be merged normally"
+          fi
+
+      - name: Block open release-please PR
+        if: inputs.release_freeze == 'true'
+        uses: ./.github/actions/release-freeze-review
+        with:
+          action: freeze
+          app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Unblock open release-please PR
+        if: inputs.release_freeze == 'false'
+        uses: ./.github/actions/release-freeze-review
+        with:
+          action: unfreeze
+          app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}

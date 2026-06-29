@@ -1,0 +1,119 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: archestra-platform
+  namespace: archestra-dev
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: archestra-platform-mcp-manager
+  namespace: archestra-dev
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods/attach"]
+  verbs: ["get", "create"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: archestra-platform-mcp-manager
+  namespace: archestra-dev
+subjects:
+- kind: ServiceAccount
+  name: archestra-platform
+  namespace: archestra-dev
+roleRef:
+  kind: Role
+  name: archestra-platform-mcp-manager
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: archestra-platform
+  namespace: archestra-dev
+spec:
+  type: NodePort
+  ports:
+    - port: 9000
+      targetPort: 9000
+      nodePort: 30900
+      name: backend
+    - port: 9050
+      targetPort: 9050
+      nodePort: 30905
+      name: metrics
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30300
+      name: frontend
+  selector:
+    app: archestra-platform
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: archestra-platform
+  namespace: archestra-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: archestra-platform
+  template:
+    metadata:
+      labels:
+        app: archestra-platform
+    spec:
+      serviceAccountName: archestra-platform
+      containers:
+        - name: archestra
+          image: archestra/platform-dev
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 9000
+            - containerPort: 9050
+            - containerPort: 3000
+          env:
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            - name: ARCHESTRA_DATABASE_URL
+              value: "postgresql://archestra:archestra_dev_password@postgresql.archestra-dev.svc:5432/archestra_dev?schema=public"
+            - name: ARCHESTRA_SECRETS_MANAGER
+              value: "READONLY_VAULT"
+            - name: ARCHESTRA_HASHICORP_VAULT_ADDR
+              value: "http://vault.archestra-dev.svc:8200"
+            - name: ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD
+              value: "K8S"
+            - name: ARCHESTRA_HASHICORP_VAULT_K8S_ROLE
+              value: "archestra"
+            - name: ARCHESTRA_HASHICORP_VAULT_KV_VERSION
+              value: "1"
+            - name: ARCHESTRA_HASHICORP_VAULT_SECRET_PATH
+              value: "kv/archestra"
+            - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
+              value: "true"
+            - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
+              value: "archestra-dev"
+            - name: ARCHESTRA_ANALYTICS
+              value: "disabled"
+            - name: ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED
+              value: "true"
+            - name: ARCHESTRA_DATABASE_URL_VAULT_REF
+              value: "kv/archestra/dbsecret:conn"

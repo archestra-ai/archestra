@@ -1,0 +1,114 @@
+# Integration resources
+
+local_resource(
+  'n8n',
+  serve_cmd='docker compose -f docker-compose-n8n.yml up n8n --no-deps',
+  serve_dir='.',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)
+
+local_resource(
+  'mcp-inspector',
+  serve_env={
+    'DANGEROUSLY_OMIT_AUTH': 'true'
+  },
+  serve_cmd='NODE_OPTIONS=--use-system-ca npx @modelcontextprotocol/inspector --transport http',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+)
+
+local_resource(
+  'observability',
+  serve_cmd='docker compose -f docker-compose.observability.yml up',
+  serve_dir='.',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)
+
+# HashiCorp Vault in Docker (manual trigger)
+# Start with: tilt trigger vault-docker
+# Uses dev mode: auto-unsealed, in-memory storage, root token: dev-root-token
+# KV v2 engine already enabled at secret/ by default
+# .env: ARCHESTRA_SECRETS_MANAGER=Vault, ARCHESTRA_HASHICORP_VAULT_ADDR=http://localhost:8200,
+#       ARCHESTRA_HASHICORP_VAULT_TOKEN=dev-root-token
+local_resource(
+  'vault-docker',
+  serve_cmd='docker compose -f docker-compose.vault.ee.yml up',
+  serve_dir='.',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)
+
+# HashiCorp Vault in K8s with K8s auth (manual trigger)
+# Start with: tilt trigger vault-k8s
+# Uses the e2e-tests helm chart with only vault enabled + K8s auth auto-configured
+# .env: ARCHESTRA_SECRETS_MANAGER=Vault, ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=K8S,
+#       ARCHESTRA_HASHICORP_VAULT_ADDR=http://vault.archestra-dev:8200,
+#       ARCHESTRA_HASHICORP_VAULT_K8S_ROLE=archestra
+load('ext://helm_resource', 'helm_resource')
+
+helm_resource(
+  'vault-k8s',
+  '../helm/e2e-tests',
+  namespace='archestra-dev',
+  flags=[
+    '--set', 'vault.enabled=true',
+    '--set', 'vault.service.type=ClusterIP',
+    '--set', 'vault.k8sAuth.enabled=true',
+    '--set', 'wiremock.enabled=false',
+    '--set', 'keycloak.enabled=false',
+    '--set', 'mcpExampleOAuth.enabled=false',
+    '--set', 'mcpServerJwks.enabled=false',
+    '--set', 'mcpServerIdJag.enabled=false',
+  ],
+  port_forwards=['8200:8200'],
+  labels=['integrations'],
+  auto_init=False,
+  resource_deps=[],
+)
+
+
+# Archestra running in K8s (for testing Vault K8s auth, etc.)
+# Start with: tilt trigger archestra-k8s
+# NOTE: This resource is skipped on Windows due to k8s_yaml() using heredoc syntax
+# which is not compatible with Windows CMD
+if os.name != 'nt':
+  docker_build(
+    'archestra/platform-dev',
+    context='..',
+    dockerfile='../Dockerfile',
+    only=[
+      'package.json',
+      'pnpm-lock.yaml',
+      'pnpm-workspace.yaml',
+      'turbo.json',
+      'backend',
+      'frontend',
+      'shared',
+      'docker-banner.sh',
+      'prev-static-assets',
+    ],
+    ignore=[
+      '**/node_modules',
+      '**/.next',
+      '**/dist',
+      '**/*.test.ts',
+      '**/*.spec.ts',
+    ]
+  )
+
+  k8s_yaml(read_file('./archestra-k8s.yaml'))
+
+  k8s_resource(
+    'archestra-platform',
+    port_forwards=['3000:3000', '9000:9000'],
+    labels=['integrations'],
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    auto_init=False,
+    resource_deps=['postgresql', 'vault-k8s']
+  )

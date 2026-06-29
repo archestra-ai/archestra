@@ -1,0 +1,39 @@
+{
+  "priority": 5,
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "gpt-4o",
+          "name": "GPT-4o"
+        },
+        {
+          "id": "gpt-4o-mini",
+          "name": "GPT-4o Mini"
+        },
+        {
+          "id": "text-embedding-3-small",
+          "name": "Text Embedding 3 Small"
+        },
+        {
+          "id": "text-embedding-3-large",
+          "name": "Text Embedding 3 Large"
+        }
+      ]
+    }
+  }
+}

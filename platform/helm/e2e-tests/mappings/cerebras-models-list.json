@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/cerebras/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "cerebras-gpt-13b",
+          "created": 1700000000,
+          "owned_by": "cerebras"
+        },
+        {
+          "id": "cerebras-gpt-2.7b",
+          "created": 1700000000,
+          "owned_by": "cerebras"
+        }
+      ]
+    }
+  }
+}

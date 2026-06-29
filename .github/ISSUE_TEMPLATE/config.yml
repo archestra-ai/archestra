@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 👋 Sign in
+    url: https://archestra.ai/contributor-onboard
+    about: Welcome! To keep our issues spam-free, everyone signs in with GitHub first. Takes 30 seconds. We don't store anything outside GitHub.

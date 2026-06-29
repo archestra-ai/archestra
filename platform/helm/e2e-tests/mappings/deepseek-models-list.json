@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/deepseek/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "deepseek-chat",
+          "created": 1700000000,
+          "owned_by": "deepseek"
+        },
+        {
+          "id": "deepseek-reasoner",
+          "created": 1700000000,
+          "owned_by": "deepseek"
+        }
+      ]
+    }
+  }
+}

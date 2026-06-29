@@ -1,0 +1,1 @@
+ALTER TABLE "sso_provider" ADD COLUMN "team_sync_config" text;

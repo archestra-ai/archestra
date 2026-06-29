@@ -1,0 +1,43 @@
+{
+  "name": "@archestra/shared",
+  "version": "1.2.74",
+  "description": "",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./index.ts",
+    "./access-control": "./access-control.ts",
+    "./e2e-test-ids": "./e2e-test-ids.ts",
+    "./permission.types": "./permission.types.ts",
+    "./test-mcp-server": "./test-mcp-server.ts"
+  },
+  "scripts": {
+    "lint": "biome check",
+    "lint:fix": "biome check --write",
+    "lint:fix:unsafe": "biome check --write --unsafe",
+    "type-check": "tsgo --noEmit",
+    "test": "vitest",
+    "codegen:api-client": "tsx hey-api/openapi-ts.ts && biome check --write ./hey-api/clients",
+    "codegen:theme-css": "tsx ./themes/generate-theme-css.ts",
+    "codegen": "pnpm codegen:api-client && pnpm codegen:theme-css",
+    "check:ci": "concurrently --kill-others-on-fail --group --names type-check,test,knip,biome 'pnpm type-check' 'pnpm test' 'pnpm knip' 'biome ci'",
+    "check:commit": "concurrently --kill-others-on-fail --group --names type-check,knip,biome 'pnpm type-check' 'pnpm knip' 'biome ci'",
+    "knip": "knip"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ai": "catalog:",
+    "better-auth": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "^0.94.0",
+    "@types/node": "^25",
+    "@typescript/native-preview": "catalog:",
+    "knip": "^5.85.0",
+    "typescript": "catalog:",
+    "vitest": "^4.1.0"
+  }
+}

@@ -1,0 +1,70 @@
+import {
+  IdentityProviderOidcConfigSchema,
+  IdentityProviderSamlConfigSchema,
+  IdpRoleMappingConfigSchema,
+  IdpTeamSyncConfigSchema,
+} from "@archestra/shared";
+import {
+  createInsertSchema,
+  createSelectSchema,
+  createUpdateSchema,
+} from "drizzle-zod";
+import { z } from "zod";
+import { schema } from "@/database";
+
+const extendedFields = {
+  oidcConfig: IdentityProviderOidcConfigSchema.optional(),
+  samlConfig: IdentityProviderSamlConfigSchema.optional(),
+  roleMapping: IdpRoleMappingConfigSchema.optional(),
+  teamSyncConfig: IdpTeamSyncConfigSchema.optional(),
+};
+
+export const SelectIdentityProviderSchema = createSelectSchema(
+  schema.identityProvidersTable,
+  extendedFields,
+);
+
+/**
+ * Minimal identity provider info for public/unauthenticated endpoints (e.g., login page).
+ * Contains only non-sensitive fields needed to display SSO login buttons.
+ */
+export const PublicIdentityProviderSchema = SelectIdentityProviderSchema.pick({
+  id: true,
+  providerId: true,
+});
+
+export const IdentityProviderLatestIdTokenClaimsSchema = z.object({
+  providerId: z.string(),
+  claims: z.record(z.string(), z.unknown()).nullable(),
+  accessTokenClaims: z.record(z.string(), z.unknown()).nullable(),
+  accessTokenExpiresAt: z.date().nullable(),
+  updatedAt: z.date().nullable(),
+});
+
+export const InsertIdentityProviderSchema = createInsertSchema(
+  schema.identityProvidersTable,
+  extendedFields,
+).omit({ id: true, organizationId: true });
+
+export const UpdateIdentityProviderSchema = createUpdateSchema(
+  schema.identityProvidersTable,
+  extendedFields,
+).omit({
+  id: true,
+  organizationId: true,
+  userId: true,
+});
+
+export type IdentityProvider = z.infer<typeof SelectIdentityProviderSchema>;
+export type PublicIdentityProvider = z.infer<
+  typeof PublicIdentityProviderSchema
+>;
+export type IdentityProviderLatestIdTokenClaims = z.infer<
+  typeof IdentityProviderLatestIdTokenClaimsSchema
+>;
+export type InsertIdentityProvider = z.infer<
+  typeof InsertIdentityProviderSchema
+>;
+export type UpdateIdentityProvider = z.infer<
+  typeof UpdateIdentityProviderSchema
+>;

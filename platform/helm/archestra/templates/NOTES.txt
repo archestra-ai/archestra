@@ -1,0 +1,34 @@
+Archestra Platform has been installed!
+
+{{- $frontendUrl := index .Values.archestra.env "ARCHESTRA_FRONTEND_URL" | default "" }}
+
+{{- if not $frontendUrl }}
+To access the platform, run the following commands:
+
+  # Forward the backend API (port 9000) and frontend (port 3000)
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "archestra-platform.fullname" . }} 9000:9000 3000:3000
+{{- end }}
+
+Then visit:
+  - Backend API: http://localhost:9000
+  - Frontend: {{ $frontendUrl | default "http://localhost:3000" }}
+
+{{- if .Values.archestra.worker.enabled }}
+
+Background worker:
+  Replicas: {{ .Values.archestra.worker.replicaCount }}
+  Process type: worker-only (separate Deployment)
+{{- else }}
+
+Background worker: running in-process (worker Deployment disabled)
+{{- end }}
+
+{{- if .Values.postgresql.external_database_url }}
+
+Using external PostgreSQL database: {{ .Values.postgresql.external_database_url }}
+{{- else }}
+
+Using internal PostgreSQL database:
+  Database: {{ .Values.postgresql.auth.database }}
+  Username: {{ .Values.postgresql.auth.username }}
+{{- end }}

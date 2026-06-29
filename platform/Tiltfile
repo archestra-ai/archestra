@@ -1,0 +1,56 @@
+# Kind contexts follow the pattern `kind-<cluster-name>`. Listed here are the
+# default (`kind-kind`, from `kind create cluster` without flags) and the
+# project-named one (`kind-archestra`). Contributors using a different cluster
+# name should add it here locally.
+allow_k8s_contexts(['orbstack', 'docker-desktop', 'kind-kind', 'kind-archestra', 'colima'])
+
+load('ext://dotenv', 'dotenv')
+
+is_prod = os.getenv('PROD') == 'true'
+
+if config.tilt_subcommand == 'down':
+  local('pnpm cleanup:dev:caches', command_bat='pnpm cleanup:dev:caches')
+
+# Check if .env exists, if not copy from .env.example
+if not os.path.exists('.env'):
+  local('cp .env.example .env', command_bat='copy .env.example .env')
+  print("📝 Created .env from .env.example, be sure to fill in any necessary unique values (ex. API keys)")
+else:
+  print("📝 .env already exists, skipping copy from .env.example")
+
+# Load .env file FIRST, before any env var syncing
+dotenv('./.env')
+
+# The dotenv extension does not interpolate, so a value like
+# `ARCHESTRA_CHAT_OPENROUTER_API_KEY=$OPENROUTER_API_KEY` is exported verbatim. Expand such
+# references for the chat provider keys against the shell env so the indirection actually resolves.
+for _ref_key in ['ARCHESTRA_CHAT_OPENROUTER_API_KEY', 'ARCHESTRA_CHAT_ANTHROPIC_API_KEY', 'ARCHESTRA_CHAT_GEMINI_API_KEY']:
+  _ref_val = os.getenv(_ref_key, '')
+  if _ref_val.startswith('$'):
+    os.putenv(_ref_key, os.getenv(_ref_val[1:].strip('{}'), ''))
+
+# Set default ARCHESTRA_AUTH_SECRET for local development if not configured in .env
+# "better-auth-secret-12345678901234567890" is the default set by better-auth when no secret is provided
+# https://github.com/better-auth/better-auth/blob/7a57b61f8ce512e80da3587af8d53b80a153ca45/packages/better-auth/src/utils/constants.ts
+if not os.getenv('ARCHESTRA_AUTH_SECRET'):
+  os.putenv('ARCHESTRA_AUTH_SECRET', 'better-auth-secret-12345678901234567890')
+
+# Watch .env file for changes - triggers Tiltfile re-evaluation and restarts pnpm-dev
+watch_file('.env')
+
+# Load sub-Tiltfiles by label
+load_dynamic('./dev/Tiltfile.database')
+
+# Code execution runtime (Dagger Engine) — loaded only when enabled, so a
+# privileged engine is not deployed unless ARCHESTRA_CODE_RUNTIME_ENABLED=true.
+if os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true':
+  load_dynamic('./dev/Tiltfile.coderuntime')
+
+# S3 file storage (MinIO) — only when the file-storage provider is s3, so the
+# default db-provider dev environment never deploys an object store.
+if os.getenv('ARCHESTRA_FILE_STORAGE_PROVIDER') == 's3':
+  load_dynamic('./dev/Tiltfile.minio')
+
+load_dynamic('./dev/Tiltfile.dev')
+load_dynamic('./dev/Tiltfile.test')
+load_dynamic('./dev/Tiltfile.integrations')

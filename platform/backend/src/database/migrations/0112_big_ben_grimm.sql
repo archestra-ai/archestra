@@ -1,0 +1,3 @@
+CREATE INDEX "interactions_created_at_idx" ON "interactions" USING btree ("created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "interactions_profile_created_at_idx" ON "interactions" USING btree ("profile_id","created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "interactions_session_created_at_idx" ON "interactions" USING btree ("session_id","created_at" DESC NULLS LAST);

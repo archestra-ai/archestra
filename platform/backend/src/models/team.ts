@@ -1,0 +1,1305 @@
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
+import { and, count, eq, getTableColumns, ilike, inArray } from "drizzle-orm";
+import db, { schema, withDbTransaction } from "@/database";
+import logger from "@/logging";
+import type {
+  AgentLabelWithDetails,
+  InsertTeam,
+  Team,
+  TeamExternalGroup,
+  TeamMember,
+  TeamMemberListItem,
+  UpdateTeam,
+} from "@/types";
+import { ApiError } from "@/types";
+import type { TeamMemberRole } from "@/types/team-role";
+import AgentLabelModel from "./agent-label";
+import TeamLabelModel from "./team-label";
+import TeamTokenModel from "./team-token";
+
+class TeamModel {
+  /**
+   * Create a new team
+   */
+  static async create(
+    input: Omit<InsertTeam, "id" | "createdAt" | "updatedAt"> & {
+      labels?: AgentLabelWithDetails[];
+    },
+  ): Promise<Team> {
+    logger.debug(
+      { name: input.name, organizationId: input.organizationId },
+      "TeamModel.create: creating team",
+    );
+    const teamId = crypto.randomUUID();
+    const now = new Date();
+    const { labels } = input;
+
+    // Insert the team row and its labels atomically so a failed label sync
+    // cannot leave a labelless team behind.
+    const team = await withDbTransaction(async (tx) => {
+      const [createdTeam] = await tx
+        .insert(schema.teamsTable)
+        .values({
+          id: teamId,
+          name: input.name,
+          description: input.description || null,
+          organizationId: input.organizationId,
+          createdBy: input.createdBy,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+
+      if (labels && labels.length > 0) {
+        await TeamLabelModel.syncTeamLabels(teamId, labels, tx);
+      }
+
+      return createdTeam;
+    });
+    // No prune needed here: on create, label sync only creates keys/values and
+    // inserts rows (never deletes), so nothing can be orphaned.
+
+    // Auto-create a team token. Kept outside the transaction (pre-existing
+    // behavior); the atomicity guarantee covers the team row + labels only.
+    await TeamTokenModel.createTeamToken(teamId, input.name);
+    logger.debug({ teamId }, "TeamModel.create: created team token");
+
+    logger.debug({ teamId }, "TeamModel.create: completed");
+    return {
+      ...team,
+      members: [],
+      labels: await TeamLabelModel.getLabelsForTeam(teamId),
+    };
+  }
+
+  /**
+   * Find all teams in an organization
+   */
+  static async findByOrganization(organizationId: string): Promise<Team[]> {
+    logger.debug(
+      { organizationId },
+      "TeamModel.findByOrganization: fetching teams",
+    );
+    const teams = await db
+      .select()
+      .from(schema.teamsTable)
+      .where(eq(schema.teamsTable.organizationId, organizationId));
+
+    // Batch fetch all members for all teams in one query
+    const teamIds = teams.map((t) => t.id);
+    const membersByTeam = await TeamModel.getTeamMembersBatch(teamIds);
+
+    const teamsWithMembers = teams.map((team) => ({
+      ...team,
+      members: membersByTeam.get(team.id) || [],
+    }));
+
+    logger.debug(
+      { organizationId, count: teamsWithMembers.length },
+      "TeamModel.findByOrganization: completed",
+    );
+    return teamsWithMembers;
+  }
+
+  /**
+   * Find all teams in an organization with pagination and optional name filter
+   */
+  static async findByOrganizationPaginated(params: {
+    organizationId: string;
+    limit: number;
+    offset: number;
+    name?: string;
+    labels?: Record<string, string[]>;
+  }): Promise<{ data: Team[]; total: number }> {
+    const { organizationId, limit, offset, name, labels } = params;
+    logger.debug(
+      { organizationId, limit, offset, name, labels },
+      "TeamModel.findByOrganizationPaginated: fetching teams",
+    );
+
+    const labelFilteredIds =
+      await TeamModel.resolveLabelFilteredTeamIds(labels);
+    if (labelFilteredIds?.length === 0) {
+      return { data: [], total: 0 };
+    }
+
+    const filters = [
+      eq(schema.teamsTable.organizationId, organizationId),
+      ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
+      ...(labelFilteredIds
+        ? [inArray(schema.teamsTable.id, labelFilteredIds)]
+        : []),
+    ];
+
+    const [teams, totalResult] = await Promise.all([
+      db
+        .select()
+        .from(schema.teamsTable)
+        .where(and(...filters))
+        .orderBy(schema.teamsTable.name)
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: count() })
+        .from(schema.teamsTable)
+        .where(and(...filters)),
+    ]);
+
+    const teamsWithRelations = await TeamModel.attachMembersAndLabels(teams);
+
+    const total = totalResult[0]?.count ?? 0;
+    logger.debug(
+      { organizationId, count: teamsWithRelations.length, total },
+      "TeamModel.findByOrganizationPaginated: completed",
+    );
+
+    return { data: teamsWithRelations, total };
+  }
+
+  /**
+   * Find a team by name within an organization
+   */
+  static async findByName(
+    name: string,
+    organizationId: string,
+  ): Promise<Team | null> {
+    logger.debug(
+      { name, organizationId },
+      "TeamModel.findByName: fetching team",
+    );
+    const [team] = await db
+      .select()
+      .from(schema.teamsTable)
+      .where(
+        and(
+          eq(schema.teamsTable.name, name),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!team) {
+      logger.debug(
+        { name, organizationId },
+        "TeamModel.findByName: team not found",
+      );
+      return null;
+    }
+
+    logger.debug(
+      { name, organizationId, teamId: team.id },
+      "TeamModel.findByName: completed",
+    );
+    return { ...team, members: [] };
+  }
+
+  /**
+   * Find a team by ID
+   */
+  static async findById(id: string): Promise<Team | null> {
+    logger.debug({ id }, "TeamModel.findById: fetching team");
+    const [team] = await db
+      .select()
+      .from(schema.teamsTable)
+      .where(eq(schema.teamsTable.id, id))
+      .limit(1);
+
+    if (!team) {
+      logger.debug({ id }, "TeamModel.findById: team not found");
+      return null;
+    }
+
+    const members = await TeamModel.getTeamMembers(id);
+
+    logger.debug(
+      { id, membersCount: members.length },
+      "TeamModel.findById: completed",
+    );
+    return { ...team, members };
+  }
+
+  /**
+   * Find multiple teams by their IDs
+   * Returns teams without members for performance
+   */
+  static async findByIds(teamIds: string[]): Promise<Team[]> {
+    logger.debug({ teamIds }, "TeamModel.findByIds: fetching teams");
+    if (teamIds.length === 0) {
+      logger.debug("TeamModel.findByIds: no team IDs provided");
+      return [];
+    }
+
+    const teams = await db
+      .select()
+      .from(schema.teamsTable)
+      .where(inArray(schema.teamsTable.id, teamIds));
+
+    logger.debug({ count: teams.length }, "TeamModel.findByIds: completed");
+    return teams.map((team) => ({
+      ...team,
+      members: [], // Members not fetched for performance
+    }));
+  }
+
+  /**
+   * Update a team
+   */
+  static async update(
+    id: string,
+    input: UpdateTeam & { labels?: AgentLabelWithDetails[] },
+  ): Promise<Team | null> {
+    logger.debug({ id, input }, "TeamModel.update: updating team");
+    const { labels, ...columns } = input;
+
+    const updatedTeam = await withDbTransaction(async (tx) => {
+      const [team] = await tx
+        .update(schema.teamsTable)
+        .set({
+          ...columns,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.teamsTable.id, id))
+        .returning();
+
+      if (!team) {
+        return null;
+      }
+
+      // Only touch labels when the caller explicitly provided them, so a PUT
+      // that omits labels leaves existing labels untouched.
+      if (labels !== undefined) {
+        await TeamLabelModel.syncTeamLabels(id, labels, tx);
+      }
+
+      return team;
+    });
+
+    if (!updatedTeam) {
+      logger.debug({ id }, "TeamModel.update: team not found");
+      return null;
+    }
+
+    // Prune orphaned keys/values after the transaction commits (label sync ran
+    // inside the transaction, so its own fire-and-forget prune was skipped).
+    if (labels !== undefined) {
+      AgentLabelModel.pruneKeysAndValues().catch(() => {});
+    }
+
+    const members = await TeamModel.getTeamMembers(id);
+
+    logger.debug({ id }, "TeamModel.update: completed");
+    return {
+      ...updatedTeam,
+      members,
+      labels: await TeamLabelModel.getLabelsForTeam(id),
+    };
+  }
+
+  /**
+   * Delete a team
+   */
+  static async delete(id: string): Promise<boolean> {
+    logger.debug({ id }, "TeamModel.delete: deleting team");
+    const rows = await db
+      .delete(schema.teamsTable)
+      .where(eq(schema.teamsTable.id, id))
+      .returning({ id: schema.teamsTable.id });
+    const deleted = rows.length > 0;
+    logger.debug({ id, deleted }, "TeamModel.delete: completed");
+    return deleted;
+  }
+
+  /**
+   * Get all members of a team
+   */
+  static async getTeamMembers(teamId: string): Promise<TeamMember[]> {
+    logger.debug({ teamId }, "TeamModel.getTeamMembers: fetching members");
+    const members = await db
+      .select()
+      .from(schema.teamMembersTable)
+      .where(eq(schema.teamMembersTable.teamId, teamId));
+
+    logger.debug(
+      { teamId, count: members.length },
+      "TeamModel.getTeamMembers: completed",
+    );
+    return members;
+  }
+
+  static async getTeamMembersWithUsers(
+    teamId: string,
+  ): Promise<TeamMemberListItem[]> {
+    logger.debug(
+      { teamId },
+      "TeamModel.getTeamMembersWithUsers: fetching members",
+    );
+    const members = await db
+      .select({
+        ...getTableColumns(schema.teamMembersTable),
+        name: schema.usersTable.name,
+        email: schema.usersTable.email,
+        image: schema.usersTable.image,
+      })
+      .from(schema.teamMembersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.teamMembersTable.userId, schema.usersTable.id),
+      )
+      .where(eq(schema.teamMembersTable.teamId, teamId))
+      .orderBy(schema.usersTable.name);
+
+    logger.debug(
+      { teamId, count: members.length },
+      "TeamModel.getTeamMembersWithUsers: completed",
+    );
+    return members;
+  }
+
+  /**
+   * Get members for multiple teams in a single query to avoid N+1
+   */
+  static async getTeamMembersBatch(
+    teamIds: string[],
+  ): Promise<Map<string, TeamMember[]>> {
+    if (teamIds.length === 0) {
+      return new Map();
+    }
+
+    const allMembers = await db
+      .select()
+      .from(schema.teamMembersTable)
+      .where(inArray(schema.teamMembersTable.teamId, teamIds));
+
+    const membersByTeam = new Map<string, TeamMember[]>();
+    for (const teamId of teamIds) {
+      membersByTeam.set(teamId, []);
+    }
+    for (const member of allMembers) {
+      membersByTeam.get(member.teamId)?.push(member);
+    }
+
+    return membersByTeam;
+  }
+
+  /**
+   * Add a member to a team
+   */
+  static async addMember(
+    teamId: string,
+    userId: string,
+    role: TeamMemberRole = MEMBER_ROLE_NAME,
+    syncedFromSso = false,
+  ): Promise<TeamMember> {
+    logger.debug(
+      { teamId, userId, role, syncedFromSso },
+      "TeamModel.addMember: adding member",
+    );
+    const memberId = crypto.randomUUID();
+    const now = new Date();
+
+    const [member] = await db
+      .insert(schema.teamMembersTable)
+      .values({
+        id: memberId,
+        teamId,
+        userId,
+        role,
+        syncedFromSso,
+        createdAt: now,
+      })
+      .returning();
+
+    logger.debug(
+      { teamId, userId, memberId },
+      "TeamModel.addMember: completed",
+    );
+    return member;
+  }
+
+  static async updateMemberRole(params: {
+    teamId: string;
+    userId: string;
+    role: TeamMemberRole;
+  }): Promise<TeamMember | null> {
+    const { teamId, userId, role } = params;
+    logger.debug(
+      { teamId, userId, role },
+      "TeamModel.updateMemberRole: updating member role",
+    );
+
+    const [member] = await db
+      .update(schema.teamMembersTable)
+      .set({ role })
+      .where(
+        and(
+          eq(schema.teamMembersTable.teamId, teamId),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .returning();
+
+    logger.debug(
+      { teamId, userId, updated: !!member },
+      "TeamModel.updateMemberRole: completed",
+    );
+    return member ?? null;
+  }
+
+  /**
+   * Remove a member from a team
+   */
+  static async removeMember(teamId: string, userId: string): Promise<boolean> {
+    logger.debug({ teamId, userId }, "TeamModel.removeMember: removing member");
+    const rows = await db
+      .delete(schema.teamMembersTable)
+      .where(
+        and(
+          eq(schema.teamMembersTable.teamId, teamId),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .returning({ teamId: schema.teamMembersTable.teamId });
+
+    const removed = rows.length > 0;
+    logger.debug(
+      { teamId, userId, removed },
+      "TeamModel.removeMember: completed",
+    );
+    return removed;
+  }
+
+  /**
+   * Get all teams a user is a member of
+   */
+  static async getUserTeams(userId: string): Promise<Team[]> {
+    logger.debug({ userId }, "TeamModel.getUserTeams: fetching user teams");
+    // Fetch user's team memberships
+    const teamMemberships = await db
+      .select()
+      .from(schema.teamMembersTable)
+      .where(eq(schema.teamMembersTable.userId, userId));
+
+    if (teamMemberships.length === 0) {
+      logger.debug({ userId, count: 0 }, "TeamModel.getUserTeams: completed");
+      return [];
+    }
+
+    const teamIds = teamMemberships.map((m) => m.teamId);
+
+    // Batch fetch teams and their members in parallel
+    const [teams, membersByTeam] = await Promise.all([
+      db
+        .select()
+        .from(schema.teamsTable)
+        .where(inArray(schema.teamsTable.id, teamIds)),
+      TeamModel.getTeamMembersBatch(teamIds),
+    ]);
+
+    const teamsWithMembers = teams.map((team) => ({
+      ...team,
+      members: membersByTeam.get(team.id) || [],
+    }));
+
+    logger.debug(
+      { userId, count: teamsWithMembers.length },
+      "TeamModel.getUserTeams: completed",
+    );
+    return teamsWithMembers;
+  }
+
+  /**
+   * Get the teams a user belongs to within a single organization. Unlike
+   * {@link getUserTeams}, this is scoped to one org, so callers that render
+   * user context into prompts (templated skills, agent system prompts) cannot
+   * leak team names from the user's other organizations.
+   */
+  static async getUserTeamsForOrganization(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<Team[]> {
+    const { userId, organizationId } = params;
+    return db
+      .select(getTableColumns(schema.teamsTable))
+      .from(schema.teamsTable)
+      .innerJoin(
+        schema.teamMembersTable,
+        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.teamMembersTable.userId, userId),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      );
+  }
+
+  /**
+   * Get the teams a user belongs to within an organization, with labels, shaped
+   * for trace span attributes. Org-scoped so spans never leak team metadata from
+   * the user's other organizations.
+   */
+  static async getTeamLabelInfoForUser(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<
+    Array<{ id: string; name: string; labels: AgentLabelWithDetails[] }>
+  > {
+    const teams = await TeamModel.getUserTeamsForOrganization(params);
+    if (teams.length === 0) {
+      return [];
+    }
+
+    const labelsByTeam = await TeamLabelModel.getLabelsForTeams(
+      teams.map((team) => team.id),
+    );
+
+    return teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      labels: labelsByTeam.get(team.id) ?? [],
+    }));
+  }
+
+  /**
+   * Get paginated teams a user belongs to with optional name filter
+   */
+  static async getUserTeamsPaginated(params: {
+    userId: string;
+    limit: number;
+    offset: number;
+    name?: string;
+    labels?: Record<string, string[]>;
+  }): Promise<{ data: Team[]; total: number }> {
+    const { userId, limit, offset, name, labels } = params;
+    logger.debug(
+      { userId, limit, offset, name, labels },
+      "TeamModel.getUserTeamsPaginated: fetching user teams",
+    );
+
+    const labelFilteredIds =
+      await TeamModel.resolveLabelFilteredTeamIds(labels);
+    if (labelFilteredIds?.length === 0) {
+      return { data: [], total: 0 };
+    }
+
+    const filters = [
+      eq(schema.teamMembersTable.userId, userId),
+      ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
+      ...(labelFilteredIds
+        ? [inArray(schema.teamsTable.id, labelFilteredIds)]
+        : []),
+    ];
+
+    const [teams, totalResult] = await Promise.all([
+      db
+        .select(getTableColumns(schema.teamsTable))
+        .from(schema.teamMembersTable)
+        .innerJoin(
+          schema.teamsTable,
+          eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+        )
+        .where(and(...filters))
+        .orderBy(schema.teamsTable.name)
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: count() })
+        .from(schema.teamMembersTable)
+        .innerJoin(
+          schema.teamsTable,
+          eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+        )
+        .where(and(...filters)),
+    ]);
+
+    const teamsWithRelations = await TeamModel.attachMembersAndLabels(teams);
+
+    const total = totalResult[0]?.count ?? 0;
+    logger.debug(
+      { userId, count: teamsWithRelations.length, total },
+      "TeamModel.getUserTeamsPaginated: completed",
+    );
+
+    return { data: teamsWithRelations, total };
+  }
+
+  /**
+   * Check if a user is a member of a team
+   */
+  static async isUserInTeam(teamId: string, userId: string): Promise<boolean> {
+    logger.debug(
+      { teamId, userId },
+      "TeamModel.isUserInTeam: checking membership",
+    );
+    const [membership] = await db
+      .select()
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          eq(schema.teamMembersTable.teamId, teamId),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    const isMember = !!membership;
+    logger.debug(
+      { teamId, userId, isMember },
+      "TeamModel.isUserInTeam: completed",
+    );
+    return isMember;
+  }
+
+  static async isUserTeamAdmin(
+    teamId: string,
+    userId: string,
+  ): Promise<boolean> {
+    logger.debug(
+      { teamId, userId },
+      "TeamModel.isUserTeamAdmin: checking admin role",
+    );
+    const [membership] = await db
+      .select({ id: schema.teamMembersTable.id })
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          eq(schema.teamMembersTable.teamId, teamId),
+          eq(schema.teamMembersTable.userId, userId),
+          eq(schema.teamMembersTable.role, ADMIN_ROLE_NAME),
+        ),
+      )
+      .limit(1);
+
+    const isAdmin = !!membership;
+    logger.debug(
+      { teamId, userId, isAdmin },
+      "TeamModel.isUserTeamAdmin: completed",
+    );
+    return isAdmin;
+  }
+
+  /**
+   * Check if a user is a member of any of the provided teams.
+   */
+  static async isUserInAnyTeam(
+    teamIds: string[],
+    userId: string,
+  ): Promise<boolean> {
+    if (teamIds.length === 0) {
+      return false;
+    }
+
+    logger.debug(
+      { teamIds, userId },
+      "TeamModel.isUserInAnyTeam: checking memberships",
+    );
+    const [membership] = await db
+      .select({ teamId: schema.teamMembersTable.teamId })
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          inArray(schema.teamMembersTable.teamId, teamIds),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    const isMember = !!membership;
+    logger.debug(
+      { teamIds, userId, isMember },
+      "TeamModel.isUserInAnyTeam: completed",
+    );
+    return isMember;
+  }
+
+  static async findUserIdsInAnyTeam(params: {
+    teamIds: string[];
+    userIds: string[];
+  }): Promise<string[]> {
+    if (params.teamIds.length === 0 || params.userIds.length === 0) {
+      return [];
+    }
+
+    logger.debug(
+      { teamIds: params.teamIds, userCount: params.userIds.length },
+      "TeamModel.findUserIdsInAnyTeam: checking memberships",
+    );
+    const rows = await db
+      .select({ userId: schema.teamMembersTable.userId })
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          inArray(schema.teamMembersTable.teamId, params.teamIds),
+          inArray(schema.teamMembersTable.userId, params.userIds),
+        ),
+      );
+
+    const userIds = [...new Set(rows.map((row) => row.userId))];
+    logger.debug(
+      { teamIds: params.teamIds, userCount: userIds.length },
+      "TeamModel.findUserIdsInAnyTeam: completed",
+    );
+    return userIds;
+  }
+
+  /**
+   * Get all team IDs a user is a member of (used for authorization)
+   */
+  static async getUserTeamIds(userId: string): Promise<string[]> {
+    logger.debug({ userId }, "TeamModel.getUserTeamIds: fetching team IDs");
+    const teamMemberships = await db
+      .select({ teamId: schema.teamMembersTable.teamId })
+      .from(schema.teamMembersTable)
+      .where(eq(schema.teamMembersTable.userId, userId));
+
+    const teamIds = teamMemberships.map((membership) => membership.teamId);
+    logger.debug(
+      { userId, count: teamIds.length },
+      "TeamModel.getUserTeamIds: completed",
+    );
+    return teamIds;
+  }
+
+  static async getUserAdminTeamIds(userId: string): Promise<string[]> {
+    logger.debug(
+      { userId },
+      "TeamModel.getUserAdminTeamIds: fetching admin team IDs",
+    );
+    const teamMemberships = await db
+      .select({ teamId: schema.teamMembersTable.teamId })
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          eq(schema.teamMembersTable.userId, userId),
+          eq(schema.teamMembersTable.role, ADMIN_ROLE_NAME),
+        ),
+      );
+
+    const teamIds = teamMemberships.map((membership) => membership.teamId);
+    logger.debug(
+      { userId, count: teamIds.length },
+      "TeamModel.getUserAdminTeamIds: completed",
+    );
+    return teamIds;
+  }
+
+  /**
+   * Get all user IDs that share at least one team with the given user
+   */
+  static async getTeammateUserIds(userId: string): Promise<string[]> {
+    logger.debug(
+      { userId },
+      "TeamModel.getTeammateUserIds: fetching teammate IDs",
+    );
+    // First get the user's team IDs
+    const userTeamIds = await TeamModel.getUserTeamIds(userId);
+
+    if (userTeamIds.length === 0) {
+      logger.debug(
+        { userId },
+        "TeamModel.getTeammateUserIds: user has no teams",
+      );
+      return [];
+    }
+
+    // Then get all users in those teams
+    const teammates = await db
+      .select({ userId: schema.teamMembersTable.userId })
+      .from(schema.teamMembersTable)
+      .where(inArray(schema.teamMembersTable.teamId, userTeamIds));
+
+    // Return unique user IDs (excluding the user themselves)
+    const teammateIds = [...new Set(teammates.map((t) => t.userId))];
+    const filteredIds = teammateIds.filter((id) => id !== userId);
+    logger.debug(
+      { userId, count: filteredIds.length },
+      "TeamModel.getTeammateUserIds: completed",
+    );
+    return filteredIds;
+  }
+
+  /**
+   * Get all teams for an agent with their compression settings
+   */
+  static async getTeamsForAgent(agentId: string): Promise<Team[]> {
+    logger.debug(
+      { agentId },
+      "TeamModel.getTeamsForAgent: fetching agent teams",
+    );
+    const agentTeams = await db
+      .select({
+        team: schema.teamsTable,
+      })
+      .from(schema.agentTeamsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+      )
+      .where(eq(schema.agentTeamsTable.agentId, agentId));
+
+    logger.debug(
+      { agentId, count: agentTeams.length },
+      "TeamModel.getTeamsForAgent: completed",
+    );
+    return agentTeams.map((result) => ({
+      ...result.team,
+      members: [], // Members not needed for compression logic
+    }));
+  }
+
+  // ==========================================
+  // External Group Sync Methods
+  // ==========================================
+
+  /**
+   * Get all external groups mapped to a team
+   */
+  static async getExternalGroups(teamId: string): Promise<TeamExternalGroup[]> {
+    logger.debug(
+      { teamId },
+      "TeamModel.getExternalGroups: fetching external groups",
+    );
+    const groups = await db
+      .select()
+      .from(schema.teamExternalGroupsTable)
+      .where(eq(schema.teamExternalGroupsTable.teamId, teamId));
+    logger.debug(
+      { teamId, count: groups.length },
+      "TeamModel.getExternalGroups: completed",
+    );
+    return groups;
+  }
+
+  /**
+   * Add an external group mapping to a team
+   */
+  static async addExternalGroup(
+    teamId: string,
+    groupIdentifier: string,
+  ): Promise<TeamExternalGroup> {
+    logger.debug(
+      { teamId, groupIdentifier },
+      "TeamModel.addExternalGroup: adding external group",
+    );
+    const id = crypto.randomUUID();
+
+    const [group] = await db
+      .insert(schema.teamExternalGroupsTable)
+      .values({
+        id,
+        teamId,
+        groupIdentifier,
+      })
+      .returning();
+
+    logger.debug(
+      { teamId, groupId: id },
+      "TeamModel.addExternalGroup: completed",
+    );
+    return group;
+  }
+
+  /**
+   * Remove an external group mapping from a team
+   */
+  static async removeExternalGroup(
+    teamId: string,
+    groupIdentifier: string,
+  ): Promise<boolean> {
+    logger.debug(
+      { teamId, groupIdentifier },
+      "TeamModel.removeExternalGroup: removing external group",
+    );
+    const rows = await db
+      .delete(schema.teamExternalGroupsTable)
+      .where(
+        and(
+          eq(schema.teamExternalGroupsTable.teamId, teamId),
+          eq(schema.teamExternalGroupsTable.groupIdentifier, groupIdentifier),
+        ),
+      )
+      .returning({ id: schema.teamExternalGroupsTable.id });
+
+    const removed = rows.length > 0;
+    logger.debug(
+      { teamId, groupIdentifier, removed },
+      "TeamModel.removeExternalGroup: completed",
+    );
+    return removed;
+  }
+
+  /**
+   * Remove an external group mapping by ID.
+   * Requires both the groupId and teamId to prevent IDOR attacks.
+   */
+  static async removeExternalGroupById(
+    teamId: string,
+    groupId: string,
+  ): Promise<boolean> {
+    logger.debug(
+      { teamId, groupId },
+      "TeamModel.removeExternalGroupById: removing external group",
+    );
+    const rows = await db
+      .delete(schema.teamExternalGroupsTable)
+      .where(
+        and(
+          eq(schema.teamExternalGroupsTable.id, groupId),
+          eq(schema.teamExternalGroupsTable.teamId, teamId),
+        ),
+      )
+      .returning({ id: schema.teamExternalGroupsTable.id });
+
+    const removed = rows.length > 0;
+    logger.debug(
+      { teamId, groupId, removed },
+      "TeamModel.removeExternalGroupById: completed",
+    );
+    return removed;
+  }
+
+  /**
+   * Find all teams in an organization that have a specific external group mapped.
+   * Used during SSO login to find which teams a user should be added to.
+   */
+  static async findTeamsByExternalGroup(
+    organizationId: string,
+    groupIdentifier: string,
+  ): Promise<Team[]> {
+    logger.debug(
+      { organizationId, groupIdentifier },
+      "TeamModel.findTeamsByExternalGroup: fetching teams",
+    );
+    const results = await db
+      .select({
+        team: schema.teamsTable,
+      })
+      .from(schema.teamExternalGroupsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamExternalGroupsTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          eq(
+            schema.teamExternalGroupsTable.groupIdentifier,
+            groupIdentifier.toLowerCase(),
+          ),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      );
+
+    logger.debug(
+      { organizationId, groupIdentifier, count: results.length },
+      "TeamModel.findTeamsByExternalGroup: completed",
+    );
+    return results.map((r) => ({
+      ...r.team,
+      members: [],
+    }));
+  }
+
+  /**
+   * Find all teams in an organization that have any of the given external groups mapped.
+   * Used during SSO login to find which teams a user should be added to based on their groups.
+   */
+  static async findTeamsByExternalGroups(
+    organizationId: string,
+    groupIdentifiers: string[],
+  ): Promise<Map<string, Team[]>> {
+    logger.debug(
+      { organizationId, groupCount: groupIdentifiers.length },
+      "TeamModel.findTeamsByExternalGroups: fetching teams",
+    );
+    if (groupIdentifiers.length === 0) {
+      logger.debug(
+        { organizationId },
+        "TeamModel.findTeamsByExternalGroups: no group identifiers provided",
+      );
+      return new Map();
+    }
+
+    // Normalize group identifiers to lowercase for case-insensitive matching
+    const normalizedGroups = groupIdentifiers.map((g) => g.toLowerCase());
+
+    const results = await db
+      .select({
+        team: schema.teamsTable,
+        groupIdentifier: schema.teamExternalGroupsTable.groupIdentifier,
+      })
+      .from(schema.teamExternalGroupsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamExternalGroupsTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          inArray(
+            schema.teamExternalGroupsTable.groupIdentifier,
+            normalizedGroups,
+          ),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      );
+
+    // Group results by team ID to avoid duplicates
+    const teamMap = new Map<string, Team>();
+    for (const result of results) {
+      if (!teamMap.has(result.team.id)) {
+        teamMap.set(result.team.id, {
+          ...result.team,
+          members: [],
+        });
+      }
+    }
+
+    // Return map of group -> teams for debugging/logging
+    const groupToTeams = new Map<string, Team[]>();
+    for (const result of results) {
+      const team = teamMap.get(result.team.id);
+      if (team) {
+        const existing = groupToTeams.get(result.groupIdentifier) || [];
+        existing.push(team);
+        groupToTeams.set(result.groupIdentifier, existing);
+      }
+    }
+
+    logger.debug(
+      { organizationId, teamsFound: teamMap.size },
+      "TeamModel.findTeamsByExternalGroups: completed",
+    );
+    return groupToTeams;
+  }
+
+  /**
+   * Get a user's current SSO-synced team memberships in an organization
+   */
+  static async getSsoSyncedMemberships(
+    userId: string,
+    organizationId: string,
+  ): Promise<Array<{ teamMember: TeamMember; team: Team }>> {
+    logger.debug(
+      { userId, organizationId },
+      "TeamModel.getSsoSyncedMemberships: fetching memberships",
+    );
+    const memberships = await db
+      .select({
+        teamMember: schema.teamMembersTable,
+        team: schema.teamsTable,
+      })
+      .from(schema.teamMembersTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.teamMembersTable.userId, userId),
+          eq(schema.teamMembersTable.syncedFromSso, true),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      );
+
+    logger.debug(
+      { userId, organizationId, count: memberships.length },
+      "TeamModel.getSsoSyncedMemberships: completed",
+    );
+    return memberships.map((m) => ({
+      teamMember: m.teamMember,
+      team: { ...m.team, members: [] },
+    }));
+  }
+
+  /**
+   * Synchronize a user's team memberships based on their SSO groups.
+   * - Adds user to teams mapped to their groups (if not already a member)
+   * - Removes user from teams they were previously synced to but no longer have groups for
+   * - Does NOT remove manually added memberships (syncedFromSso = false)
+   *
+   * @returns Object containing added and removed team IDs
+   */
+  static async syncUserTeams(
+    userId: string,
+    organizationId: string,
+    ssoGroups: string[],
+  ): Promise<{
+    added: string[];
+    removed: string[];
+    matchedExternalGroupCount: number;
+    matchedTeamCount: number;
+    unmappedGroupCount: number;
+  }> {
+    logger.debug(
+      { userId, organizationId, groupCount: ssoGroups.length },
+      "TeamModel.syncUserTeams: starting sync",
+    );
+    const added: string[] = [];
+    const removed: string[] = [];
+
+    // Get all teams in this organization the user should be in based on SSO groups
+    const groupToTeams = await TeamModel.findTeamsByExternalGroups(
+      organizationId,
+      ssoGroups,
+    );
+
+    // Flatten to unique team IDs
+    const shouldBeInTeamIds = new Set<string>();
+    for (const teams of groupToTeams.values()) {
+      for (const team of teams) {
+        shouldBeInTeamIds.add(team.id);
+      }
+    }
+    const distinctGroups = new Set(
+      ssoGroups.map((group) => group.toLowerCase()),
+    );
+    const matchedExternalGroupCount = groupToTeams.size;
+    const matchedTeamCount = shouldBeInTeamIds.size;
+    const unmappedGroupCount = distinctGroups.size - matchedExternalGroupCount;
+
+    // Get user's current SSO-synced team memberships in this organization
+    const currentSyncedMemberships = await TeamModel.getSsoSyncedMemberships(
+      userId,
+      organizationId,
+    );
+
+    // Add user to teams they should be in but aren't
+    for (const teamId of shouldBeInTeamIds) {
+      // Check if user is already a member (synced or manual)
+      const isAlreadyMember = await TeamModel.isUserInTeam(teamId, userId);
+      if (!isAlreadyMember) {
+        await TeamModel.addMember(teamId, userId, MEMBER_ROLE_NAME, true);
+        added.push(teamId);
+      }
+    }
+
+    // Remove user from teams they were synced to but should no longer be in
+    for (const membership of currentSyncedMemberships) {
+      if (!shouldBeInTeamIds.has(membership.teamMember.teamId)) {
+        await TeamModel.removeMember(membership.teamMember.teamId, userId);
+        removed.push(membership.teamMember.teamId);
+      }
+    }
+
+    logger.debug(
+      {
+        userId,
+        organizationId,
+        added: added.length,
+        removed: removed.length,
+        matchedExternalGroupCount,
+        matchedTeamCount,
+        unmappedGroupCount,
+      },
+      "TeamModel.syncUserTeams: completed",
+    );
+    return {
+      added,
+      removed,
+      matchedExternalGroupCount,
+      matchedTeamCount,
+      unmappedGroupCount,
+    };
+  }
+
+  /**
+   * Check if a user has access to a team.
+   * - Organization-level team managers have full access to all teams
+   * - Other users must be a member of the team
+   */
+  static async checkTeamAccess({
+    userId,
+    teamId,
+    canManageAllTeams,
+  }: {
+    userId: string;
+    teamId: string;
+    canManageAllTeams: boolean;
+  }): Promise<void> {
+    if (canManageAllTeams) {
+      return;
+    }
+
+    const isMember = await TeamModel.isUserInTeam(teamId, userId);
+    if (!isMember) {
+      throw new ApiError(403, "Not authorized to access this team");
+    }
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [team] = await db
+      .select()
+      .from(schema.teamsTable)
+      .where(
+        and(
+          eq(schema.teamsTable.id, id),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!team) return null;
+
+    // Fetch relational data (members, external groups, labels) to provide a
+    // complete picture in the audit log diff — without labels here, a
+    // labels-only update would produce an identical before/after snapshot.
+    const [members, externalGroups, labels] = await Promise.all([
+      TeamModel.getTeamMembersWithUsers(id),
+      TeamModel.getExternalGroups(id),
+      TeamLabelModel.getLabelsForTeam(id),
+    ]);
+
+    return {
+      id: team.id,
+      name: team.name,
+      description: team.description ?? null,
+      organizationId: team.organizationId,
+      members: members.map((m) => `${m.name} (${m.email})`).sort(),
+      externalGroups: externalGroups.map((g) => g.groupIdentifier).sort(),
+      labels: labels.map((l) => `${l.key}:${l.value}`).sort(),
+      createdBy: team.createdBy,
+      createdAt: team.createdAt.toISOString(),
+      updatedAt: team.updatedAt.toISOString(),
+    };
+  }
+
+  // ===========================================================================
+  // Private helpers
+  // ===========================================================================
+
+  /**
+   * Resolve the set of team IDs matching a parsed labels filter, or null when
+   * no labels filter is active. An empty array means the filter matched nothing.
+   */
+  private static async resolveLabelFilteredTeamIds(
+    labels: Record<string, string[]> | undefined,
+  ): Promise<string[] | null> {
+    if (!labels || Object.keys(labels).length === 0) {
+      return null;
+    }
+    return TeamLabelModel.getTeamIdsMatchingLabels(labels);
+  }
+
+  /**
+   * Batch-attach members and labels to a page of team rows (avoids N+1).
+   */
+  private static async attachMembersAndLabels(
+    teams: (typeof schema.teamsTable.$inferSelect)[],
+  ): Promise<Team[]> {
+    const teamIds = teams.map((t) => t.id);
+    const [membersByTeam, labelsByTeam] = await Promise.all([
+      TeamModel.getTeamMembersBatch(teamIds),
+      TeamLabelModel.getLabelsForTeams(teamIds),
+    ]);
+
+    return teams.map((team) => ({
+      ...team,
+      members: membersByTeam.get(team.id) || [],
+      labels: labelsByTeam.get(team.id) || [],
+    }));
+  }
+}
+
+export default TeamModel;

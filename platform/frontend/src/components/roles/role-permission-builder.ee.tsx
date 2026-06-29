@@ -1,0 +1,442 @@
+"use client";
+
+import {
+  type Action,
+  type Permissions,
+  type Resource,
+  resourceCategories,
+  resourceDescriptions,
+  resourceLabels,
+} from "@archestra/shared";
+import { allAvailableActions } from "@archestra/shared/access-control";
+import { Check, ChevronDown, ChevronRight } from "lucide-react";
+import { useCallback, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+interface RolePermissionBuilderProps {
+  permission: Permissions;
+  onChange: (permission: Permissions) => void;
+  userPermissions: Permissions;
+  readOnly?: boolean;
+  readOnlyTooltip?: string;
+}
+
+// Human-readable labels for actions
+const actionLabels: Record<Action, string> = {
+  create: "Create",
+  read: "Read",
+  update: "Update",
+  delete: "Delete",
+  "team-admin": "Team Admin",
+  admin: "Admin",
+  cancel: "Cancel",
+  enable: "Enable",
+  query: "Query",
+  execute: "Execute",
+  "deploy-to-restricted": "Deploy to Restricted",
+};
+
+const UNGRANTABLE_PERMISSION_TOOLTIP =
+  "You can only grant permissions that you currently have yourself.";
+
+export function RolePermissionBuilder({
+  permission,
+  onChange,
+  userPermissions,
+  readOnly = false,
+  readOnlyTooltip,
+}: RolePermissionBuilderProps) {
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
+    new Set(),
+  );
+
+  const toggleCategory = useCallback(
+    (category: string) => {
+      const newExpanded = new Set(expandedCategories);
+      if (newExpanded.has(category)) {
+        newExpanded.delete(category);
+      } else {
+        newExpanded.add(category);
+      }
+      setExpandedCategories(newExpanded);
+    },
+    [expandedCategories],
+  );
+
+  const toggleAction = useCallback(
+    (resource: Resource, action: Action) => {
+      const currentActions = permission[resource] || [];
+      const newActions = currentActions.includes(action)
+        ? currentActions.filter((a) => a !== action)
+        : [...currentActions, action];
+
+      if (newActions.length === 0) {
+        // Remove resource if no actions selected
+        const newPermission = { ...permission };
+        delete newPermission[resource];
+        onChange(newPermission);
+      } else {
+        onChange({
+          ...permission,
+          [resource]: newActions,
+        });
+      }
+    },
+    [permission, onChange],
+  );
+
+  const selectAllForResource = useCallback(
+    (resource: Resource) => {
+      const availableActions = userPermissions[resource] || [];
+      onChange({
+        ...permission,
+        [resource]: [...availableActions],
+      });
+    },
+    [permission, onChange, userPermissions],
+  );
+
+  const deselectAllForResource = useCallback(
+    (resource: Resource) => {
+      const newPermission = { ...permission };
+      delete newPermission[resource];
+      onChange(newPermission);
+    },
+    [permission, onChange],
+  );
+
+  const isResourceFullySelected = useCallback(
+    (resource: Resource): boolean => {
+      const currentActions = permission[resource] || [];
+      const availableActions = userPermissions[resource] || [];
+      return (
+        currentActions.length === availableActions.length &&
+        availableActions.length > 0
+      );
+    },
+    [permission, userPermissions],
+  );
+
+  const isResourcePartiallySelected = useCallback(
+    (resource: Resource): boolean => {
+      const currentActions = permission[resource] || [];
+      return currentActions.length > 0 && !isResourceFullySelected(resource);
+    },
+    [permission, isResourceFullySelected],
+  );
+
+  const getTotalPermissionCount = useCallback((): number => {
+    return Object.values(permission).reduce(
+      (sum, actions) => sum + actions.length,
+      0,
+    );
+  }, [permission]);
+
+  // Check if all resources in a category are fully selected
+  const isCategoryFullySelected = useCallback(
+    (category: string): boolean => {
+      const resources = resourceCategories[category] || [];
+      const visibleResources = resources.filter(
+        (resource) => userPermissions[resource],
+      );
+
+      if (visibleResources.length === 0) {
+        return false;
+      }
+
+      return visibleResources.every((resource) => {
+        return isResourceFullySelected(resource);
+      });
+    },
+    [userPermissions, isResourceFullySelected],
+  );
+
+  const getResourceCheckState = useCallback(
+    (resource: Resource): boolean | "indeterminate" => {
+      if (isResourceFullySelected(resource)) {
+        return true;
+      }
+
+      if (isResourcePartiallySelected(resource)) {
+        return "indeterminate";
+      }
+
+      return false;
+    },
+    [isResourceFullySelected, isResourcePartiallySelected],
+  );
+
+  const getCategoryCheckState = useCallback(
+    (category: string): boolean | "indeterminate" => {
+      if (isCategoryFullySelected(category)) {
+        return true;
+      }
+
+      const resources = resourceCategories[category] || [];
+      const hasSelectedResource = resources.some((resource) => {
+        const currentActions = permission[resource] || [];
+        return currentActions.length > 0;
+      });
+
+      if (hasSelectedResource) {
+        return "indeterminate";
+      }
+
+      return false;
+    },
+    [isCategoryFullySelected, permission],
+  );
+
+  // Select all permissions for all resources in a category
+  const selectAllForCategory = useCallback(
+    (category: string) => {
+      const resources = resourceCategories[category] || [];
+      const visibleResources = resources.filter(
+        (resource) => userPermissions[resource],
+      );
+
+      const newPermission = { ...permission };
+      visibleResources.forEach((resource) => {
+        const availableActions = userPermissions[resource] || [];
+        if (availableActions.length > 0) {
+          newPermission[resource] = [...availableActions];
+        }
+      });
+
+      onChange(newPermission);
+    },
+    [permission, onChange, userPermissions],
+  );
+
+  // Deselect all permissions for all resources in a category
+  const deselectAllForCategory = useCallback(
+    (category: string) => {
+      const resources = resourceCategories[category] || [];
+      const visibleResources = resources.filter(
+        (resource) => userPermissions[resource],
+      );
+
+      const newPermission = { ...permission };
+      visibleResources.forEach((resource) => {
+        delete newPermission[resource];
+      });
+
+      onChange(newPermission);
+    },
+    [permission, onChange, userPermissions],
+  );
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Selected Permissions</p>
+            <p className="text-xs text-muted-foreground">
+              {getTotalPermissionCount()} permission
+              {getTotalPermissionCount() !== 1 ? "s" : ""} across{" "}
+              {Object.keys(permission).length} resource
+              {Object.keys(permission).length !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onChange({})}
+                  disabled={readOnly || getTotalPermissionCount() === 0}
+                >
+                  Clear All
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {readOnly && readOnlyTooltip && (
+              <TooltipContent>{readOnlyTooltip}</TooltipContent>
+            )}
+          </Tooltip>
+        </div>
+      </Card>
+
+      <div className="space-y-3">
+        {Object.entries(resourceCategories).map(([category, resources]) => {
+          const categoryCheckState = getCategoryCheckState(category);
+
+          return (
+            <Card key={category} className="gap-0 p-3">
+              <div className="flex w-full items-center gap-2">
+                <button
+                  className="flex items-center text-left"
+                  onClick={() => toggleCategory(category)}
+                  type="button"
+                >
+                  {expandedCategories.has(category) ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </button>
+                <Checkbox
+                  aria-label={`${category} permissions`}
+                  id={`category-${category}`}
+                  checked={categoryCheckState}
+                  disabled={readOnly}
+                  className={
+                    categoryCheckState === "indeterminate" ? "opacity-50" : ""
+                  }
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      selectAllForCategory(category);
+                    } else {
+                      deselectAllForCategory(category);
+                    }
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                />
+                <button
+                  className="flex-1 text-left"
+                  onClick={() => toggleCategory(category)}
+                  type="button"
+                >
+                  <span className="font-semibold text-sm">{category}</span>
+                </button>
+              </div>
+
+              {expandedCategories.has(category) && (
+                <div className="mt-2 space-y-2">
+                  {resources.map((resource) => {
+                    const availableActions = userPermissions[resource] || [];
+                    const allActions = allAvailableActions[resource] || [];
+                    const selectedActions = permission[resource] || [];
+                    const resourceCheckState = getResourceCheckState(resource);
+                    const isPartiallySelected =
+                      resourceCheckState === "indeterminate";
+
+                    return (
+                      <div
+                        key={resource}
+                        className="rounded-md border bg-card p-3"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              aria-label={`${
+                                resourceLabels[resource] || resource
+                              } permissions`}
+                              id={`${resource}-all`}
+                              checked={resourceCheckState}
+                              disabled={readOnly}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  selectAllForResource(resource);
+                                } else {
+                                  deselectAllForResource(resource);
+                                }
+                              }}
+                              className={
+                                isPartiallySelected ? "opacity-50" : ""
+                              }
+                            />
+                            <div>
+                              <Label
+                                htmlFor={`${resource}-all`}
+                                className="font-medium cursor-pointer"
+                              >
+                                {resourceLabels[resource] || resource}
+                                {isPartiallySelected && (
+                                  <span className="text-xs text-muted-foreground ml-1">
+                                    (Partial)
+                                  </span>
+                                )}
+                              </Label>
+                              {resourceDescriptions[resource] && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {resourceDescriptions[resource]}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          {selectedActions.length > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              {selectedActions.length}/{availableActions.length}
+                            </span>
+                          )}
+                        </div>
+
+                        <Separator className="my-3" />
+
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                          {allActions.map((action) => {
+                            const isSelected = selectedActions.includes(action);
+                            const canGrantAction =
+                              availableActions.includes(action);
+                            const shouldDisableAction =
+                              readOnly || (!canGrantAction && !isSelected);
+
+                            return (
+                              <div
+                                key={action}
+                                className="flex items-center gap-2"
+                              >
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center gap-2">
+                                      <Checkbox
+                                        id={`${resource}-${action}`}
+                                        checked={isSelected}
+                                        disabled={shouldDisableAction}
+                                        onCheckedChange={() => {
+                                          toggleAction(resource, action);
+                                        }}
+                                      />
+                                      <Label
+                                        htmlFor={`${resource}-${action}`}
+                                        className={`text-sm ${
+                                          shouldDisableAction
+                                            ? "cursor-not-allowed text-muted-foreground"
+                                            : "cursor-pointer"
+                                        }`}
+                                      >
+                                        {actionLabels[action]}
+                                        {isSelected && (
+                                          <Check className="ml-1 inline h-3 w-3" />
+                                        )}
+                                      </Label>
+                                    </div>
+                                  </TooltipTrigger>
+                                  {shouldDisableAction &&
+                                    !readOnly &&
+                                    !canGrantAction && (
+                                      <TooltipContent>
+                                        {UNGRANTABLE_PERMISSION_TOOLTIP}
+                                      </TooltipContent>
+                                    )}
+                                </Tooltip>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

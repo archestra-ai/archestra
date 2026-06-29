@@ -1,0 +1,346 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
+import { useEnvironments } from "@/lib/environment.query";
+import { McpCatalogForm } from "./mcp-catalog-form";
+
+const { useIdentityProvidersMock, useK8sImagePullSecretsMock } = vi.hoisted(
+  () => ({
+    useIdentityProvidersMock: vi.fn(() => ({ data: [] })),
+    useK8sImagePullSecretsMock: vi.fn(() => ({ data: [] })),
+  }),
+);
+
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: vi.fn((feature: string) => {
+    if (feature === "mcpServerBaseImage") return "";
+    if (feature === "orchestratorK8sRuntime") return true;
+    if (feature === "byosEnabled") return false;
+    return undefined;
+  }),
+  useEnterpriseFeature: vi.fn(() => false),
+}));
+
+vi.mock("@/lib/config/config", () => ({
+  default: {
+    enterpriseFeatures: {
+      core: true,
+    },
+  },
+}));
+
+vi.mock("@/lib/auth/auth.query", () => ({
+  useHasPermissions: vi.fn(() => ({ data: true })),
+}));
+
+vi.mock("@/lib/organization.query", () => ({
+  useDefaultEnvironment: vi.fn(() => ({
+    name: "Default",
+    namespace: null,
+    description: null,
+    networkPolicy: null,
+    restricted: false,
+  })),
+}));
+
+vi.mock("@/lib/environment.query", () => ({
+  useEnvironments: vi.fn(() => ({
+    data: { environments: [], defaultAssignedCatalogCount: 0 },
+  })),
+}));
+
+vi.mock("@/lib/auth/identity-provider-read.query", () => ({
+  useIdentityProviders: useIdentityProvidersMock,
+}));
+
+vi.mock("@/lib/teams/team.query", () => ({
+  useTeams: vi.fn(() => ({ data: [] })),
+  useMyTeams: vi.fn(() => ({ data: [] })),
+  useAssignableTeams: vi.fn(() => ({ data: [] })),
+}));
+
+vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useK8sImagePullSecrets: useK8sImagePullSecretsMock,
+}));
+
+vi.mock("@/lib/secrets.query", () => ({
+  useGetSecret: vi.fn(() => ({ data: null })),
+}));
+
+vi.mock("@/lib/docs/docs", () => ({
+  getVisibleDocsUrl: vi.fn(() => "https://docs.example.com"),
+  getFrontendDocsUrl: vi.fn(() => "https://docs.example.com/mcp-auth"),
+}));
+
+vi.mock("@/lib/hooks/use-app-name", () => ({
+  useAppName: vi.fn(() => "Archestra"),
+}));
+
+vi.mock("@/components/agent-icon-picker", () => ({
+  AgentIconPicker: () => <div data-testid="agent-icon-picker" />,
+}));
+
+vi.mock("@/components/agent-labels", () => ({
+  ProfileLabels: () => <div data-testid="profile-labels" />,
+}));
+
+vi.mock("@/components/environment-variables-form-field", () => ({
+  EnvironmentVariablesFormField: () => (
+    <div data-testid="environment-variables-form-field" />
+  ),
+}));
+
+vi.mock("@/components/visibility-selector", () => ({
+  VisibilitySelector: () => <div data-testid="visibility-selector" />,
+}));
+
+describe("McpCatalogForm enterprise gating", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useFeature).mockImplementation((feature: string) => {
+      if (feature === "mcpServerBaseImage") return "";
+      if (feature === "orchestratorK8sRuntime") return true;
+      if (feature === "byosEnabled") return false;
+      return undefined;
+    });
+    useIdentityProvidersMock.mockReturnValue({ data: [] });
+    useK8sImagePullSecretsMock.mockReturnValue({ data: [] });
+    global.ResizeObserver = class ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+  });
+
+  it("renders enterprise auth options as disabled when the enterprise license is disabled", () => {
+    render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
+
+    expect(
+      screen.getByRole("button", { name: /IdP token exchange/ }),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByRole("button", { name: /IdP signed JWT/ }),
+    ).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("shows enterprise-managed credentials when the enterprise license is enabled", async () => {
+    vi.mocked(useEnterpriseFeature).mockReturnValue(true);
+    useIdentityProvidersMock.mockReturnValue({
+      data: [
+        {
+          id: "idp-1",
+          providerId: "okta",
+          issuer: "https://idp.example.com",
+          oidcConfig: { clientId: "client-id" },
+        },
+      ] as never,
+    });
+
+    render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
+
+    expect(screen.getByText("IdP token exchange")).toBeInTheDocument();
+    expect(screen.getByText("IdP signed JWT")).toBeInTheDocument();
+  });
+
+  it("renders enterprise auth options as disabled when no OIDC identity providers are configured", () => {
+    vi.mocked(useEnterpriseFeature).mockReturnValue(true);
+
+    render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
+
+    expect(
+      screen.getByRole("button", { name: /IdP token exchange/ }),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByRole("button", { name: /IdP signed JWT/ }),
+    ).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("resets an existing enterprise auth selection to none when OIDC providers become unavailable", () => {
+    vi.mocked(useEnterpriseFeature).mockReturnValue(true);
+    useIdentityProvidersMock.mockReturnValue({
+      data: [
+        {
+          id: "idp-1",
+          providerId: "okta",
+          issuer: "https://idp.example.com",
+          oidcConfig: { clientId: "client-id" },
+        },
+      ] as never,
+    });
+
+    const initialValues = {
+      id: "catalog-1",
+      name: "Remote MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      oauthConfig: null,
+      userConfig: {},
+      enterpriseManagedConfig: {
+        identityProviderId: "idp-1",
+        assertionMode: "exchange",
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "authorization_bearer",
+      },
+      localConfig: null,
+      deploymentSpecYaml: null,
+      scope: "personal",
+      teams: [],
+      labels: [],
+    } as never;
+
+    const { rerender } = render(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={vi.fn()}
+        initialValues={initialValues}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /IdP token exchange/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    useIdentityProvidersMock.mockReturnValue({ data: [] });
+
+    rerender(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={vi.fn()}
+        initialValues={initialValues}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /^None/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("disables browser autofill for MCP config forms and secret fields", () => {
+    const { container } = render(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={vi.fn()}
+        initialValues={
+          {
+            id: "catalog-1",
+            name: "Remote MCP",
+            description: "",
+            icon: null,
+            serverType: "remote",
+            serverUrl: "https://mcp.example.com",
+            oauthConfig: {
+              name: "Remote MCP",
+              server_url: "https://mcp.example.com",
+              client_id: "client-id",
+              client_secret: "client-secret",
+              grant_type: "authorization_code",
+              redirect_uris: ["https://app.example.com/oauth-callback"],
+              scopes: ["read"],
+              default_scopes: ["read"],
+              supports_resource_metadata: true,
+            },
+            userConfig: {},
+            enterpriseManagedConfig: null,
+            localConfig: null,
+            deploymentSpecYaml: null,
+            scope: "personal",
+            teams: [],
+            labels: [],
+          } as never
+        }
+      />,
+    );
+
+    expect(container.querySelector("form")).toHaveAttribute(
+      "autocomplete",
+      "off",
+    );
+    expect(screen.getByLabelText("Client Secret")).toHaveAttribute(
+      "autocomplete",
+      "new-password",
+    );
+  });
+
+  it("shows a disabled default environment selector when no custom environments are available", () => {
+    vi.mocked(useEnvironments).mockReturnValue({
+      data: { environments: [], defaultAssignedCatalogCount: 0 },
+    } as never);
+
+    render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
+
+    expect(screen.getByText("Environment")).toBeInTheDocument();
+    expect(screen.getAllByText("Default").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText("Only the default environment is available."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Manage environments" }),
+    ).toHaveAttribute("href", "/settings/environments");
+  });
+
+  it("labels image pull secret options by registry server", async () => {
+    useK8sImagePullSecretsMock.mockReturnValue({
+      data: [
+        {
+          name: "mcp-server-123-regcred-containerregistry-example-com-user",
+          registryServers: ["containerregistry.example.com/strangepod"],
+        },
+      ] as never,
+    });
+
+    const { container } = render(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={vi.fn()}
+        initialValues={
+          {
+            id: "catalog-1",
+            name: "Local MCP",
+            description: "",
+            icon: null,
+            serverType: "local",
+            serverUrl: "",
+            oauthConfig: null,
+            userConfig: {},
+            enterpriseManagedConfig: null,
+            localConfig: {
+              command: "",
+              arguments: [],
+              environment: [],
+              envFrom: [],
+              dockerImage: "containerregistry.example.com/strangepod/server",
+              transportType: "stdio",
+              httpPort: "",
+              httpPath: "/mcp",
+              imagePullSecrets: [{ source: "existing", name: "" }],
+            },
+            deploymentSpecYaml: null,
+            scope: "personal",
+            teams: [],
+            labels: [],
+          } as never
+        }
+      />,
+    );
+
+    const imagePullSecretSelect = container.querySelector(
+      '[data-slot="popover-trigger"][role="combobox"]',
+    );
+    expect(imagePullSecretSelect).toBeInTheDocument();
+
+    await userEvent.click(imagePullSecretSelect as HTMLElement);
+
+    expect(
+      screen.getByText("containerregistry.example.com/strangepod"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "mcp-server-123-regcred-containerregistry-example-com-user",
+      ),
+    ).toBeInTheDocument();
+  });
+});

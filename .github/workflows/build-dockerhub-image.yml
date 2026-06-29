@@ -1,0 +1,70 @@
+# https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images#publishing-images-to-docker-hub
+name: Build Docker Hub image
+
+on:
+  workflow_call:
+    inputs:
+      image_directory:
+        description: "Directory containing the Dockerfile"
+        required: true
+        type: string
+      image_name:
+        description: "Name of the Docker image"
+        required: true
+        type: string
+      version:
+        description: "Version tag for the Docker image"
+        required: true
+        type: string
+      push_image:
+        description: "Whether to push the image to Docker Hub"
+        required: true
+        type: boolean
+      checkout_ref:
+        description: "Optional ref to checkout when building the image"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      DOCKER_USERNAME:
+        required: false
+      DOCKER_PASSWORD:
+        required: false
+      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN:
+        required: false
+      TURBOREPO_REMOTE_CACHING_TOKEN:
+        required: false
+      TURBOREPO_REMOTE_CACHING_TEAM:
+        required: false
+
+permissions: {}
+
+concurrency:
+  group: build-dockerhub-image-${{ inputs.image_name }}-${{ inputs.version }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-dockerhub-image:
+    name: Build Docker Hub image
+    permissions:
+      contents: read # Required to checkout the repository and build the image.
+      id-token: write # Required for Workload Identity Federation when pushing images.
+    uses: ./.github/workflows/build-native-multi-arch-image.yml
+    with:
+      image_directory: ${{ inputs.image_directory }}
+      image_name: ${{ inputs.image_name }}
+      image_registry: docker.io/archestra
+      version: ${{ inputs.version }}
+      push_image: ${{ inputs.push_image }}
+      auth_provider: dockerhub
+      include_latest_tag: ${{ inputs.version != 'dev' }}
+      checkout_fetch_depth: 0
+      checkout_ref: ${{ inputs.checkout_ref }}
+      # supply-chain-policy: allow-latest internal release channel
+      previous_image: docker.io/archestra/${{ inputs.image_name }}:latest
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
+      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}

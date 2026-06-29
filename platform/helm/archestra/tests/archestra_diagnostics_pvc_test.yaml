@@ -1,0 +1,52 @@
+suite: archestra diagnostics pvc
+templates:
+  - diagnostics-pvc.yaml
+tests:
+  - it: does not create a diagnostics pvc by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: creates a diagnostics pvc when enabled
+    set:
+      archestra.diagnostics.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PersistentVolumeClaim
+      - matchRegex:
+          path: metadata.name
+          pattern: -archestra-platform-diagnostics$
+      - equal:
+          path: spec.resources.requests.storage
+          value: 10Gi
+      - equal:
+          path: spec.accessModes[0]
+          value: ReadWriteOnce
+
+  - it: uses configured storage settings when creating a diagnostics pvc
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.diagnostics.storageClassName: fast-ssd
+      archestra.diagnostics.size: 25Gi
+      archestra.diagnostics.accessModes:
+        - ReadWriteMany
+    asserts:
+      - equal:
+          path: spec.storageClassName
+          value: fast-ssd
+      - equal:
+          path: spec.resources.requests.storage
+          value: 25Gi
+      - equal:
+          path: spec.accessModes[0]
+          value: ReadWriteMany
+
+  - it: does not create a diagnostics pvc when using an existing claim
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.diagnostics.existingClaimName: customer-diagnostics
+    asserts:
+      - hasDocuments:
+          count: 0

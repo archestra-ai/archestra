@@ -1,0 +1,1 @@
+ALTER TABLE "dual_llm_config" ADD COLUMN "enabled" boolean DEFAULT true NOT NULL;

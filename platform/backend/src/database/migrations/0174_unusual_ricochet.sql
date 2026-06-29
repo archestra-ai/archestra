@@ -1,0 +1,1 @@
+ALTER TABLE "connector_runs" ADD COLUMN "item_errors" integer DEFAULT 0;

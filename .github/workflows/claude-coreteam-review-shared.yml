@@ -1,0 +1,48 @@
+# Reusable workflow for core team Claude PR review.
+# Called by claude-coreteam-review.yml with user-specific OAuth tokens.
+name: Claude Core Team Review (Shared)
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        required: true
+        type: number
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: claude-coreteam-review-shared-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-review:
+    name: PR Review
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 30
+    permissions:
+      contents: read # Required to checkout the repository and inspect the PR diff.
+      pull-requests: write # Required to publish review comments.
+      id-token: write # Required by the Claude action's GitHub-backed auth flow.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+
+      - name: PR Review with Claude
+        uses: ./.github/actions/run-claude
+        with:
+          prompt: "/review-pr REPO: ${{ github.repository }} PR_NUMBER: ${{ inputs.pr_number }}"
+          allowed_tools: "Read,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          use_sticky_comment: "true"
+          track_progress: "true"
+          show_full_output: "true"

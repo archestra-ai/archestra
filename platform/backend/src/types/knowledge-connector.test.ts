@@ -1,0 +1,482 @@
+import { describe, expect, test } from "@/test";
+import {
+  ConfluenceConfigSchema,
+  ConnectorConfigSchema,
+  GithubConfigSchema,
+  GitlabConfigSchema,
+  JiraConfigSchema,
+  PerforceCheckpointSchema,
+  PerforceConfigSchema,
+  SalesforceCheckpointSchema,
+  SalesforceConfigSchema,
+  WebCrawlerConfigSchema,
+} from "./knowledge-connector";
+
+describe("knowledge-connector schemas", () => {
+  describe("JiraConfigSchema trailing slash normalization", () => {
+    test("strips trailing slash from jiraBaseUrl", () => {
+      const result = JiraConfigSchema.parse({
+        type: "jira",
+        jiraBaseUrl: "https://mycompany.atlassian.net/",
+        isCloud: true,
+      });
+      expect(result.jiraBaseUrl).toBe("https://mycompany.atlassian.net");
+    });
+
+    test("strips multiple trailing slashes from jiraBaseUrl", () => {
+      const result = JiraConfigSchema.parse({
+        type: "jira",
+        jiraBaseUrl: "https://mycompany.atlassian.net///",
+        isCloud: true,
+      });
+      expect(result.jiraBaseUrl).toBe("https://mycompany.atlassian.net");
+    });
+
+    test("leaves jiraBaseUrl unchanged when no trailing slash", () => {
+      const result = JiraConfigSchema.parse({
+        type: "jira",
+        jiraBaseUrl: "https://mycompany.atlassian.net",
+        isCloud: true,
+      });
+      expect(result.jiraBaseUrl).toBe("https://mycompany.atlassian.net");
+    });
+
+    test("produces identical output for URLs with and without trailing slash", () => {
+      const withSlash = JiraConfigSchema.parse({
+        type: "jira",
+        jiraBaseUrl: "https://mycompany.atlassian.net/",
+        isCloud: true,
+      });
+      const withoutSlash = JiraConfigSchema.parse({
+        type: "jira",
+        jiraBaseUrl: "https://mycompany.atlassian.net",
+        isCloud: true,
+      });
+      expect(withSlash.jiraBaseUrl).toBe(withoutSlash.jiraBaseUrl);
+    });
+  });
+
+  describe("ConfluenceConfigSchema trailing slash normalization", () => {
+    test("strips trailing slash from confluenceUrl", () => {
+      const result = ConfluenceConfigSchema.parse({
+        type: "confluence",
+        confluenceUrl: "https://mycompany.atlassian.net/",
+        isCloud: true,
+      });
+      expect(result.confluenceUrl).toBe("https://mycompany.atlassian.net");
+    });
+
+    test("strips multiple trailing slashes from confluenceUrl", () => {
+      const result = ConfluenceConfigSchema.parse({
+        type: "confluence",
+        confluenceUrl: "https://mycompany.atlassian.net///",
+        isCloud: true,
+      });
+      expect(result.confluenceUrl).toBe("https://mycompany.atlassian.net");
+    });
+
+    test("leaves confluenceUrl unchanged when no trailing slash", () => {
+      const result = ConfluenceConfigSchema.parse({
+        type: "confluence",
+        confluenceUrl: "https://mycompany.atlassian.net",
+        isCloud: true,
+      });
+      expect(result.confluenceUrl).toBe("https://mycompany.atlassian.net");
+    });
+
+    test("produces identical output for URLs with and without trailing slash", () => {
+      const withSlash = ConfluenceConfigSchema.parse({
+        type: "confluence",
+        confluenceUrl: "https://mycompany.atlassian.net/",
+        isCloud: true,
+      });
+      const withoutSlash = ConfluenceConfigSchema.parse({
+        type: "confluence",
+        confluenceUrl: "https://mycompany.atlassian.net",
+        isCloud: true,
+      });
+      expect(withSlash.confluenceUrl).toBe(withoutSlash.confluenceUrl);
+    });
+  });
+
+  describe("connectorUrlSchema protocol prepending", () => {
+    // Helper to parse a URL through connectorUrlSchema via JiraConfigSchema
+    function parseUrl(url: string): string {
+      return JiraConfigSchema.parse({
+        type: "jira",
+        jiraBaseUrl: url,
+        isCloud: true,
+      }).jiraBaseUrl;
+    }
+
+    test("prepends https:// when no protocol is provided", () => {
+      expect(parseUrl("mycompany.atlassian.net")).toBe(
+        "https://mycompany.atlassian.net",
+      );
+    });
+
+    test("prepends https:// for all connector types", () => {
+      expect(
+        ConfluenceConfigSchema.parse({
+          type: "confluence",
+          confluenceUrl: "mycompany.atlassian.net/wiki",
+          isCloud: true,
+        }).confluenceUrl,
+      ).toBe("https://mycompany.atlassian.net/wiki");
+
+      expect(
+        GithubConfigSchema.parse({
+          type: "github",
+          githubUrl: "api.github.com",
+          owner: "test-org",
+        }).githubUrl,
+      ).toBe("https://api.github.com");
+
+      expect(
+        GitlabConfigSchema.parse({
+          type: "gitlab",
+          gitlabUrl: "gitlab.com",
+        }).gitlabUrl,
+      ).toBe("https://gitlab.com");
+    });
+
+    test("preserves existing https:// protocol", () => {
+      expect(parseUrl("https://mycompany.atlassian.net")).toBe(
+        "https://mycompany.atlassian.net",
+      );
+    });
+
+    test("preserves existing http:// protocol", () => {
+      expect(parseUrl("http://jira.internal.company.com")).toBe(
+        "http://jira.internal.company.com",
+      );
+    });
+
+    test("preserves protocol case-insensitively", () => {
+      expect(parseUrl("HTTP://jira.example.com")).toBe(
+        "HTTP://jira.example.com",
+      );
+      expect(parseUrl("HTTPS://jira.example.com")).toBe(
+        "HTTPS://jira.example.com",
+      );
+      expect(parseUrl("Http://jira.example.com")).toBe(
+        "Http://jira.example.com",
+      );
+    });
+
+    test("preserves unsupported protocols without prepending", () => {
+      expect(parseUrl("ftp://files.example.com")).toBe(
+        "ftp://files.example.com",
+      );
+      expect(parseUrl("ssh://git.example.com")).toBe("ssh://git.example.com");
+    });
+
+    test("prepends https:// for URL with path but no protocol", () => {
+      expect(parseUrl("github.mycompany.com/api/v3")).toBe(
+        "https://github.mycompany.com/api/v3",
+      );
+    });
+
+    test("prepends https:// for URL with port but no protocol", () => {
+      expect(parseUrl("localhost:8080")).toBe("https://localhost:8080");
+    });
+
+    test("prepends https:// for URL with port and path but no protocol", () => {
+      expect(parseUrl("jira.local:8443/rest")).toBe(
+        "https://jira.local:8443/rest",
+      );
+    });
+
+    test("combines protocol prepending with trailing slash stripping", () => {
+      expect(parseUrl("mycompany.atlassian.net/")).toBe(
+        "https://mycompany.atlassian.net",
+      );
+      expect(parseUrl("mycompany.atlassian.net///")).toBe(
+        "https://mycompany.atlassian.net",
+      );
+    });
+
+    test("preserves path segments when stripping trailing slashes", () => {
+      expect(parseUrl("mycompany.atlassian.net/wiki/")).toBe(
+        "https://mycompany.atlassian.net/wiki",
+      );
+    });
+
+    test("produces identical output with and without protocol", () => {
+      expect(parseUrl("mycompany.atlassian.net")).toBe(
+        parseUrl("https://mycompany.atlassian.net"),
+      );
+    });
+  });
+
+  describe("ConnectorConfigSchema discriminated union", () => {
+    test("normalizes jira URL through discriminated union", () => {
+      const result = ConnectorConfigSchema.parse({
+        type: "jira",
+        jiraBaseUrl: "https://mycompany.atlassian.net/",
+        isCloud: true,
+      });
+      expect(result.type).toBe("jira");
+      if (result.type === "jira") {
+        expect(result.jiraBaseUrl).toBe("https://mycompany.atlassian.net");
+      }
+    });
+
+    test("normalizes confluence URL through discriminated union", () => {
+      const result = ConnectorConfigSchema.parse({
+        type: "confluence",
+        confluenceUrl: "https://mycompany.atlassian.net/",
+        isCloud: true,
+      });
+      expect(result.type).toBe("confluence");
+      if (result.type === "confluence") {
+        expect(result.confluenceUrl).toBe("https://mycompany.atlassian.net");
+      }
+    });
+  });
+
+  describe("WebCrawlerConfigSchema URL validation", () => {
+    test("normalizes web crawler start URLs without a protocol", () => {
+      const result = WebCrawlerConfigSchema.parse({
+        type: "web_crawler",
+        startUrl: "docs.example.com:8443/guide",
+      });
+
+      expect(result.startUrl).toBe("https://docs.example.com:8443/guide");
+    });
+
+    test("rejects explicit non-HTTP schemes before protocol normalization", () => {
+      for (const startUrl of [
+        "data:text/html,<main>Docs</main>",
+        "javascript:alert(1)",
+        "vbscript:msgbox('x')",
+        "ftp://docs.example.com/guide",
+      ]) {
+        const result = WebCrawlerConfigSchema.safeParse({
+          type: "web_crawler",
+          startUrl,
+        });
+
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues[0]?.message).toBe(
+            "startUrl must use HTTP or HTTPS",
+          );
+        }
+      }
+    });
+  });
+
+  describe("GitHub connector schema", () => {
+    test("accepts GitHub App authentication config", () => {
+      const result = GithubConfigSchema.parse({
+        type: "github",
+        githubUrl: "api.github.com",
+        owner: "test-org",
+        authMethod: "github_app",
+        githubAppConfigId: "123e4567-e89b-12d3-a456-426614174000",
+      });
+
+      expect(result.authMethod).toBe("github_app");
+      expect(result.githubAppConfigId).toBe(
+        "123e4567-e89b-12d3-a456-426614174000",
+      );
+      expect(result.githubUrl).toBe("https://api.github.com");
+    });
+
+    test("rejects a non-UUID githubAppConfigId", () => {
+      expect(() =>
+        GithubConfigSchema.parse({
+          type: "github",
+          githubUrl: "api.github.com",
+          owner: "test-org",
+          authMethod: "github_app",
+          githubAppConfigId: "not-a-uuid",
+        }),
+      ).toThrow();
+    });
+
+    test("accepts repository file type filters", () => {
+      const result = GithubConfigSchema.parse({
+        type: "github",
+        githubUrl: "api.github.com",
+        owner: "test-org",
+        includeRepositoryFiles: true,
+        fileTypes: [".md", ".yaml"],
+      });
+
+      expect(result.fileTypes).toEqual([".md", ".yaml"]);
+    });
+  });
+
+  describe("Jira connector schema", () => {
+    test("accepts comma-separated project keys", () => {
+      const result = JiraConfigSchema.parse({
+        type: "jira",
+        jiraBaseUrl: "mycompany.atlassian.net",
+        isCloud: true,
+        projectKey: "ENG, OPS",
+      });
+
+      expect(result.projectKey).toBe("ENG, OPS");
+      expect(result.jiraBaseUrl).toBe("https://mycompany.atlassian.net");
+    });
+  });
+
+  describe("Salesforce schemas", () => {
+    test("applies default loginUrl when omitted", () => {
+      const result = SalesforceConfigSchema.parse({
+        type: "salesforce",
+      });
+      expect(result.loginUrl).toBe("https://login.salesforce.com");
+    });
+
+    test("normalizes salesforce loginUrl and strips trailing slash", () => {
+      const result = SalesforceConfigSchema.parse({
+        type: "salesforce",
+        loginUrl: "login.salesforce.com/",
+      });
+      expect(result.loginUrl).toBe("https://login.salesforce.com");
+    });
+
+    test("accepts advancedObjectConfigJson when it is valid JSON object text", () => {
+      const result = SalesforceConfigSchema.safeParse({
+        type: "salesforce",
+        advancedObjectConfigJson: JSON.stringify({
+          Account: {
+            fields: ["Id", "Name"],
+            associations: { Contact: ["Id", "Email"] },
+          },
+        }),
+      });
+      expect(result.success).toBe(true);
+    });
+
+    test("rejects advancedObjectConfigJson when not valid JSON object text", () => {
+      const result = SalesforceConfigSchema.safeParse({
+        type: "salesforce",
+        advancedObjectConfigJson: "[1,2,3]",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    test("parses objectCursorMap in salesforce checkpoint schema", () => {
+      const result = SalesforceCheckpointSchema.parse({
+        type: "salesforce",
+        lastSyncedAt: "2026-01-01T00:00:00.000Z",
+        objectCursorMap: {
+          Account: "2026-01-01T00:00:00.000Z",
+          Contact: "2026-01-01T01:00:00.000Z",
+        },
+      });
+      expect(result.objectCursorMap?.Account).toBe("2026-01-01T00:00:00.000Z");
+      expect(result.objectCursorMap?.Contact).toBe("2026-01-01T01:00:00.000Z");
+    });
+  });
+
+  describe("Perforce connector schema", () => {
+    test("normalizes the REST API server URL like other connector URLs", () => {
+      const result = PerforceConfigSchema.parse({
+        type: "perforce",
+        serverUrl: "perforce.example.com:8080/",
+        depotPaths: ["//depot/docs"],
+      });
+      // ensureProtocol + stripTrailingSlashes, matching connectorUrlSchema.
+      expect(result.serverUrl).toBe("https://perforce.example.com:8080");
+    });
+
+    test("normalizes trailing /... and slashes on depot paths", () => {
+      const result = PerforceConfigSchema.parse({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: ["//depot/docs/...", "//depot/specs/", "//stream/main"],
+      });
+      expect(result.depotPaths).toEqual([
+        "//depot/docs",
+        "//depot/specs",
+        "//stream/main",
+      ]);
+    });
+
+    test("rejects depot paths with Perforce metacharacters or bad shape", () => {
+      for (const depotPath of [
+        "depot/docs",
+        "//depot/docs@123",
+        "//depot/docs#3",
+        "//depot/*/docs",
+        "//depot/%%1/docs",
+        "//depot/.../docs",
+        "//depot/has space",
+        "//",
+      ]) {
+        const result = PerforceConfigSchema.safeParse({
+          type: "perforce",
+          serverUrl: "https://perforce.example.com:8080",
+          depotPaths: [depotPath],
+        });
+        expect(result.success).toBe(false);
+      }
+    });
+
+    test("requires at least one depot path", () => {
+      const result = PerforceConfigSchema.safeParse({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: [],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    test("accepts extension filters and rejects filespec-unsafe ones", () => {
+      const ok = PerforceConfigSchema.parse({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: ["//depot/docs"],
+        fileTypes: [".md", "yaml"],
+      });
+      expect(ok.fileTypes).toEqual([".md", "yaml"]);
+
+      const bad = PerforceConfigSchema.safeParse({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: ["//depot/docs"],
+        fileTypes: ["*.md"],
+      });
+      expect(bad.success).toBe(false);
+    });
+
+    test("accepts exclude paths with the same normalization and rejection rules as depot paths", () => {
+      const ok = PerforceConfigSchema.parse({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: ["//depot/docs"],
+        excludePaths: ["//depot/docs/generated/...", "//depot/docs/vendor/"],
+      });
+      expect(ok.excludePaths).toEqual([
+        "//depot/docs/generated",
+        "//depot/docs/vendor",
+      ]);
+
+      const bad = PerforceConfigSchema.safeParse({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: ["//depot/docs"],
+        excludePaths: ["//depot/docs@123"],
+      });
+      expect(bad.success).toBe(false);
+    });
+
+    test("parses sweep cursor fields in checkpoint schema", () => {
+      const result = PerforceCheckpointSchema.parse({
+        type: "perforce",
+        lastSyncedAt: "2026-01-01T00:00:00.000Z",
+        lastChangelist: 100,
+        targetChangelist: 120,
+        filesOffset: 50,
+      });
+      expect(result.lastChangelist).toBe(100);
+      expect(result.targetChangelist).toBe(120);
+      expect(result.filesOffset).toBe(50);
+    });
+  });
+});

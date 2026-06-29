@@ -1,0 +1,23 @@
+# EditorConfig: https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 2
+quote_type = single
+end_of_line = lf
+insert_final_newline = true
+
+[Makefile]
+indent_style = tab
+
+[*.py]
+indent_size = 2
+
+[*.{yml,yaml,md}]
+quote_type = double
+
+[*.sh]
+indent_style = space
+indent_size = 2

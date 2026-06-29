@@ -1,0 +1,488 @@
+name: Setup Archestra Platform
+description: |
+  Spins up a Kind cluster, optionally builds the Archestra platform Docker image, and deploys it with Helm.
+  This action is designed for CI environments to run integration/acceptance tests against a local Archestra instance.
+
+inputs:
+  kind-config-path:
+    description: "Path to the Kind cluster configuration file"
+    required: false
+    default: ".github/kind.yaml"
+  kind-cluster-name:
+    description: "Name of the Kind cluster"
+    required: false
+    default: "archestra-ci-cluster"
+  helm-values-path:
+    description: "Path to the Helm values file for Archestra deployment"
+    required: false
+    default: ".github/values-ci.yaml"
+  deploy-e2e-dependencies:
+    description: "Whether to deploy e2e test dependencies (WireMock, Keycloak)"
+    required: false
+    default: "false"
+  e2e-dependencies-install-mode:
+    description: "Whether to install the e2e dependency chart in the background or before the platform deploy"
+    required: false
+    default: "background"
+  e2e-dependencies-extra-helm-set:
+    description: "Additional Helm --set flags for the e2e dependency chart (comma-separated key=value pairs)"
+    required: false
+    default: ""
+  e2e-dependencies-wait-for-vault:
+    description: "Whether to wait for the Vault pod in the e2e dependency chart"
+    required: false
+    default: "false"
+  helm-chart-ref:
+    description: "Helm chart reference - either a local path or OCI registry URL (e.g., oci://europe-west1-docker.pkg.dev/.../archestra-platform)"
+    required: false
+    default: ""
+  helm-chart-version:
+    description: "Helm chart version to install (only used with OCI registry)"
+    required: false
+    default: ""
+  build-platform-image:
+    description: "Whether to build the platform Docker image from source. Set to false to use a pre-built image (e.g., archestra/platform:latest)"
+    required: false
+    default: "true"
+  platform-image-tag:
+    description: "Tag for the platform Docker image (used for both building and loading into Kind)"
+    required: false
+    default: "archestra/platform:ci-test"
+  platform-context:
+    description: "Path to the platform directory containing Dockerfile (only used when build-platform-image is true)"
+    required: false
+    default: "./platform"
+  turbo-team:
+    description: "Turborepo remote caching team (only required when build-platform-image is true)"
+    required: false
+    default: ""
+  turbo-token:
+    description: "Turborepo remote caching token (only required when build-platform-image is true)"
+    required: false
+    default: ""
+  mcp-server-base-image-tag:
+    description: "Pre-built MCP server base image tag to load into Kind. If provided, skips building the image."
+    required: false
+    default: ""
+  extra-helm-set:
+    description: "Additional Helm --set flags (comma-separated key=value pairs, e.g. 'archestra.env.FOO=bar,archestra.replicaCount=1')"
+    required: false
+    default: ""
+
+outputs:
+  backend-url:
+    description: "URL of the Archestra backend API"
+    value: ${{ steps.urls.outputs.backend-url }}
+  frontend-url:
+    description: "URL of the Archestra frontend"
+    value: ${{ steps.urls.outputs.frontend-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Kind
+      uses: ./.github/actions/install-kind-cluster
+      with:
+        config: ${{ inputs.kind-config-path }}
+        cluster-name: ${{ inputs.kind-cluster-name }}
+
+    - name: Build Docker image
+      if: ${{ inputs.build-platform-image == 'true' }}
+      uses: ./.github/actions/build-docker-image
+      with:
+        context: ${{ inputs.platform-context }}
+        load: "true"
+        tags: ${{ inputs.platform-image-tag }}
+        turbo-team: ${{ inputs.turbo-team }}
+        turbo-token: ${{ inputs.turbo-token }}
+
+    - name: Pull Docker image (if not already present)
+      if: ${{ inputs.build-platform-image != 'true' }}
+      shell: bash
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
+      run: |
+        # Check if image already exists locally (e.g., loaded from artifact)
+        if docker image inspect "${PLATFORM_IMAGE_TAG}" > /dev/null 2>&1; then
+          echo "Image ${PLATFORM_IMAGE_TAG} already exists locally, skipping pull"
+        else
+          echo "Pulling image ${PLATFORM_IMAGE_TAG} from registry..."
+          docker pull "${PLATFORM_IMAGE_TAG}"
+        fi
+
+    - name: Cache MCP example OAuth server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      id: cache-oauth-image
+      uses: ./.github/actions/github-cache
+      with:
+        path: /tmp/mcp-oauth-server.tar
+        key: mcp-oauth-server-0.0.1-${{ runner.arch }}
+
+    - name: Cache MCP JWKS server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      id: cache-jwks-image
+      uses: ./.github/actions/github-cache
+      with:
+        path: /tmp/mcp-jwks-server.tar
+        key: mcp-jwks-server-0.0.3-${{ runner.arch }}
+
+    - name: Cache MCP ID-JAG server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      id: cache-id-jag-image
+      uses: ./.github/actions/github-cache
+      with:
+        path: /tmp/mcp-id-jag-server.tar
+        key: mcp-id-jag-server-0.0.4-${{ runner.arch }}
+
+    - name: Pull MCP example OAuth server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-oauth-image.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
+        docker pull "${MCP_OAUTH_IMAGE}"
+        docker save "${MCP_OAUTH_IMAGE}" > /tmp/mcp-oauth-server.tar
+
+    - name: Pull MCP JWKS server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-jwks-image.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
+        docker pull "${MCP_JWKS_IMAGE}"
+        docker save "${MCP_JWKS_IMAGE}" > /tmp/mcp-jwks-server.tar
+
+    - name: Pull MCP ID-JAG server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-id-jag-image.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
+        docker pull "${MCP_ID_JAG_IMAGE}"
+        docker save "${MCP_ID_JAG_IMAGE}" > /tmp/mcp-id-jag-server.tar
+
+    - name: Load cached MCP example OAuth server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-oauth-image.outputs.cache-hit == 'true' }}
+      shell: bash
+      run: docker load < /tmp/mcp-oauth-server.tar
+
+    - name: Load cached MCP JWKS server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-jwks-image.outputs.cache-hit == 'true' }}
+      shell: bash
+      run: docker load < /tmp/mcp-jwks-server.tar
+
+    - name: Load cached MCP ID-JAG server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-id-jag-image.outputs.cache-hit == 'true' }}
+      shell: bash
+      run: docker load < /tmp/mcp-id-jag-server.tar
+
+    - name: Load all images into Kind in parallel
+      shell: bash
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
+        MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
+        KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
+        DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
+      run: |
+        PIDS=()
+
+        echo "Loading platform image into Kind..."
+        kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}" &
+        PIDS+=($!)
+
+        if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
+          echo "Loading MCP server base image into Kind..."
+          kind load docker-image "${MCP_SERVER_BASE_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+        fi
+
+        if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
+          MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
+          MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
+          MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
+
+          echo "Loading MCP example OAuth server image into Kind..."
+          kind load docker-image "${MCP_OAUTH_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+
+          echo "Loading MCP JWKS server image into Kind..."
+          kind load docker-image "${MCP_JWKS_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+
+          echo "Loading MCP ID-JAG server image into Kind..."
+          kind load docker-image "${MCP_ID_JAG_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+        fi
+
+        echo "Waiting for all image loads to complete..."
+        FAILED=0
+        for pid in "${PIDS[@]}"; do
+          if ! wait "$pid"; then
+            FAILED=1
+          fi
+        done
+
+        if [ "$FAILED" -ne 0 ]; then
+          echo "One or more image loads failed"
+          exit 1
+        fi
+        echo "All images loaded into Kind successfully"
+
+    - name: Deploy with Helm
+      shell: bash
+      env:
+        HELM_CHART_REF: ${{ inputs.helm-chart-ref }}
+        HELM_CHART_VERSION: ${{ inputs.helm-chart-version }}
+        PLATFORM_CONTEXT: ${{ inputs.platform-context }}
+        HELM_VALUES_PATH: ${{ inputs.helm-values-path }}
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
+        MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
+        EXTRA_HELM_SET: ${{ inputs.extra-helm-set }}
+        DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
+        E2E_DEPS_INSTALL_MODE: ${{ inputs.e2e-dependencies-install-mode }}
+        E2E_DEPS_EXTRA_HELM_SET: ${{ inputs.e2e-dependencies-extra-helm-set }}
+        E2E_DEPS_WAIT_FOR_VAULT: ${{ inputs.e2e-dependencies-wait-for-vault }}
+      run: |
+        # Build extra --set flags if provided (comma-separated key=value pairs)
+        EXTRA_SET_FLAGS=""
+        if [ -n "${EXTRA_HELM_SET}" ]; then
+          IFS=',' read -ra PAIRS <<< "${EXTRA_HELM_SET}"
+          for pair in "${PAIRS[@]}"; do
+            EXTRA_SET_FLAGS="${EXTRA_SET_FLAGS} --set ${pair}"
+          done
+        fi
+
+        E2E_DEPS_SET_FLAGS=""
+        if [ -n "${E2E_DEPS_EXTRA_HELM_SET}" ]; then
+          IFS=',' read -ra PAIRS <<< "${E2E_DEPS_EXTRA_HELM_SET}"
+          for pair in "${PAIRS[@]}"; do
+            E2E_DEPS_SET_FLAGS="${E2E_DEPS_SET_FLAGS} --set ${pair}"
+          done
+        fi
+
+        install_e2e_dependencies() {
+          helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" ${E2E_DEPS_SET_FLAGS}
+        }
+
+        show_vault_diagnostics() {
+          echo "=== Vault Pod Status ==="
+          kubectl get pods -l app=vault -o wide || true
+          echo "=== Vault Pod Describe ==="
+          kubectl describe pod -l app=vault || true
+          echo "=== Vault Pod Logs ==="
+          kubectl logs -l app=vault --tail=200 || true
+          echo "=== Vault Pod Previous Logs ==="
+          kubectl logs -l app=vault --previous --tail=200 || true
+        }
+
+        # Start e2e-tests Helm install if needed
+        E2E_PID=""
+        if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
+          if [ "${E2E_DEPS_INSTALL_MODE}" = "foreground" ]; then
+            echo "Installing e2e-tests chart before platform deploy..."
+            install_e2e_dependencies
+            if [ "${E2E_DEPS_WAIT_FOR_VAULT}" = "true" ]; then
+              echo "Waiting for Vault pod before platform deploy..."
+              if ! kubectl wait --for=condition=Ready pod -l app=vault --timeout=180s; then
+                show_vault_diagnostics
+                exit 1
+              fi
+            fi
+          else
+            echo "Starting e2e-tests Helm install in background..."
+            install_e2e_dependencies &
+            E2E_PID=$!
+          fi
+        fi
+
+        # Determine chart reference
+        if [ -n "${HELM_CHART_REF}" ]; then
+          CHART_REF="${HELM_CHART_REF}"
+          VERSION_FLAG=""
+          if [ -n "${HELM_CHART_VERSION}" ]; then
+            VERSION_FLAG="--version ${HELM_CHART_VERSION}"
+          fi
+        else
+          CHART_REF="${PLATFORM_CONTEXT}/helm/archestra"
+          VERSION_FLAG=""
+        fi
+
+        # Build MCP server base image override flag if provided
+        MCP_SET_FLAG=""
+        if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
+          MCP_SET_FLAG="--set archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE_TAG}"
+        fi
+
+        echo "Deploying Archestra Platform..."
+        helm install archestra-platform "${CHART_REF}" \
+          ${VERSION_FLAG} \
+          --values "${HELM_VALUES_PATH}" \
+          --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
+          ${MCP_SET_FLAG} \
+          ${EXTRA_SET_FLAGS} \
+          --atomic --timeout=15m
+
+        # Wait for e2e-tests to complete (should already be done by now)
+        if [ -n "${E2E_PID}" ]; then
+          echo "Waiting for e2e-tests Helm install to complete..."
+          if wait "$E2E_PID"; then
+            echo "e2e-tests Helm install completed successfully"
+          else
+            echo "e2e-tests Helm install failed"
+            exit 1
+          fi
+        fi
+
+    - name: Wait for services to be healthy
+      shell: bash
+      env:
+        DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
+        E2E_DEPS_WAIT_FOR_VAULT: ${{ inputs.e2e-dependencies-wait-for-vault }}
+      run: |
+        echo "Waiting for platform pods to be ready..."
+        kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=90s
+        echo "Platform pods are ready"
+
+        echo "Verifying services are accessible..."
+        curl --retry 5 --retry-delay 1 --retry-connrefused http://127.0.0.1:3000/ || (echo "Frontend not accessible" && exit 1)
+        curl --retry 5 --retry-delay 1 --retry-connrefused http://127.0.0.1:9000/health || (echo "Backend not accessible" && exit 1)
+        echo "Platform services are ready"
+
+        if [ "$DEPLOY_E2E_DEPS" = "true" ]; then
+          echo "Waiting for e2e dependency pods to be ready..."
+          if [ "${E2E_DEPS_WAIT_FOR_VAULT}" = "true" ]; then
+            if ! kubectl wait --for=condition=Ready pod -l app=vault --timeout=180s; then
+              show_vault_diagnostics
+              exit 1
+            fi
+          fi
+          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=keycloak --timeout=180s
+          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=wiremock --timeout=60s
+          if ! kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=mcp-server-id-jag --timeout=60s; then
+            echo "=== MCP Server ID-JAG Pod Describe ==="
+            kubectl describe pod -l app.kubernetes.io/name=mcp-server-id-jag || true
+            echo "=== MCP Server ID-JAG Logs ==="
+            kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --tail=200 || true
+            echo "=== MCP Server ID-JAG Previous Logs ==="
+            kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --previous --tail=200 || true
+            exit 1
+          fi
+
+          echo "Starting local port-forwards for dependency health checks..."
+          kubectl port-forward service/e2e-tests-wiremock 30080:8080 >/tmp/wiremock-port-forward.log 2>&1 &
+          WIREMOCK_PORT_FORWARD_PID=$!
+          kubectl port-forward service/e2e-tests-keycloak 30081:8080 >/tmp/keycloak-port-forward.log 2>&1 &
+          KEYCLOAK_PORT_FORWARD_PID=$!
+
+          cleanup_port_forwards() {
+            kill "${WIREMOCK_PORT_FORWARD_PID}" "${KEYCLOAK_PORT_FORWARD_PID}" 2>/dev/null || true
+          }
+          trap cleanup_port_forwards EXIT
+
+          echo "Verifying WireMock is accessible and stubs are loaded..."
+          for i in $(seq 1 10); do
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:30080/__admin/health || true)
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "WireMock is accessible (HTTP $HTTP_CODE)"
+              break
+            fi
+            echo "WireMock returned HTTP $HTTP_CODE, retrying... ($i/10)"
+            sleep 2
+          done
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "ERROR: WireMock not accessible after 10 attempts"
+            kubectl get pods -l app.kubernetes.io/name=wiremock -o wide
+            kubectl logs -l app.kubernetes.io/name=wiremock --tail=30 2>/dev/null || true
+            cat /tmp/wiremock-port-forward.log 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "Verifying Keycloak is accessible..."
+          # kubectl wait already confirmed the pod is Ready, so Keycloak should respond quickly.
+          # Keycloak's /health/ready is on the management port (9000), NOT the main HTTP port (8080).
+          # The NodePort service routes to 8080, so we check the OIDC discovery endpoint instead.
+          for i in $(seq 1 10); do
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:30081/realms/archestra/.well-known/openid-configuration || true)
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "Keycloak is accessible (HTTP $HTTP_CODE)"
+              break
+            fi
+            echo "Keycloak returned HTTP $HTTP_CODE, retrying... ($i/10)"
+            sleep 2
+          done
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "ERROR: Keycloak not accessible after 10 attempts (last HTTP $HTTP_CODE)"
+            kubectl get pods -l app.kubernetes.io/name=keycloak -o wide
+            kubectl logs -l app.kubernetes.io/name=keycloak --tail=30 2>/dev/null || true
+            cat /tmp/keycloak-port-forward.log 2>/dev/null || true
+            exit 1
+          fi
+          echo "E2e dependency services are ready"
+        fi
+
+        echo "All services are ready"
+
+    - name: Set output URLs
+      id: urls
+      shell: bash
+      run: |
+        echo "backend-url=http://127.0.0.1:9000" >> $GITHUB_OUTPUT
+        echo "frontend-url=http://127.0.0.1:3000" >> $GITHUB_OUTPUT
+
+    - name: Show logs on failure
+      if: failure()
+      shell: bash
+      run: |
+        echo "=== Kubernetes Pods ==="
+        kubectl get pods -o wide
+
+        echo "=== Kubernetes Services ==="
+        kubectl get services
+
+        echo "=== Archestra Platform Logs ==="
+        kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200
+
+        echo "=== Archestra Worker Logs ==="
+        kubectl logs -l app.kubernetes.io/name=archestra-platform-worker --tail=200 || echo "No worker logs"
+
+        echo "=== PostgreSQL Logs ==="
+        kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 || echo "No PostgreSQL logs"
+
+        echo "=== Vault Logs ==="
+        kubectl logs -l app=vault --tail=200 || echo "No Vault logs"
+
+        echo "=== Vault Previous Logs ==="
+        kubectl logs -l app=vault --previous --tail=200 || echo "No previous Vault logs"
+
+        echo "=== Describe Vault Pod ==="
+        kubectl describe pod -l app=vault || echo "No Vault pod"
+
+        echo "=== MCP Example OAuth Server Logs ==="
+        kubectl logs -l app.kubernetes.io/name=mcp-example-oauth --tail=200 || echo "No MCP Example OAuth logs"
+
+        echo "=== MCP Example OAuth Server Previous Logs ==="
+        kubectl logs -l app.kubernetes.io/name=mcp-example-oauth --previous --tail=200 || echo "No previous MCP Example OAuth logs"
+
+        echo "=== Describe MCP Example OAuth Server Pod ==="
+        kubectl describe pod -l app.kubernetes.io/name=mcp-example-oauth || echo "No MCP Example OAuth pod"
+
+        echo "=== MCP Server JWKS Logs ==="
+        kubectl logs -l app.kubernetes.io/name=mcp-server-jwks --tail=200 || echo "No MCP Server JWKS logs"
+
+        echo "=== MCP Server JWKS Previous Logs ==="
+        kubectl logs -l app.kubernetes.io/name=mcp-server-jwks --previous --tail=200 || echo "No previous MCP Server JWKS logs"
+
+        echo "=== Describe MCP Server JWKS Pod ==="
+        kubectl describe pod -l app.kubernetes.io/name=mcp-server-jwks || echo "No MCP Server JWKS pod"
+
+        echo "=== MCP Server ID-JAG Logs ==="
+        kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --tail=200 || echo "No ID-JAG logs"
+
+        echo "=== MCP Server ID-JAG Previous Logs ==="
+        kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --previous --tail=200 || echo "No previous ID-JAG logs"
+
+        echo "=== Describe MCP Server ID-JAG Pod ==="
+        kubectl describe pod -l app.kubernetes.io/name=mcp-server-id-jag || echo "No ID-JAG pod"
+
+        echo "=== Describe Archestra Platform Pod ==="
+        kubectl describe pod -l app.kubernetes.io/name=archestra-platform
+
+        echo "=== Describe PostgreSQL Pod ==="
+        kubectl describe pod -l app.kubernetes.io/name=postgresql || echo "No PostgreSQL pod"

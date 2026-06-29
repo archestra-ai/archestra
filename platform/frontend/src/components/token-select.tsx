@@ -1,0 +1,201 @@
+"use client";
+
+import { type AgentScope, E2eTestId } from "@archestra/shared";
+import { Zap } from "lucide-react";
+import { useEffect } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
+import { cn } from "@/lib/utils";
+import Divider from "./divider";
+import { LoadingSpinner } from "./loading";
+
+// Special value for dynamic team credential option
+export const DYNAMIC_CREDENTIAL_VALUE = "__dynamic__";
+
+interface TokenSelectProps {
+  value?: string | null;
+  onValueChange: (value: string | null) => void;
+  disabled?: boolean;
+  className?: string;
+  /** Catalog ID to filter credentials - only shows credentials for the same catalog item */
+  catalogId: string;
+  assignmentScope?: AgentScope;
+  assignmentTeamIds?: string[];
+  shouldSetDefaultValue: boolean;
+  prefersEnterpriseManaged?: boolean;
+}
+
+/**
+ * Self-contained component for selecting credential source for MCP tool execution.
+ * Shows all available credentials with their owner emails and team assignments.
+ *
+ * Fetches all credentials for the specified catalogId (no agent filtering).
+ */
+export function TokenSelect({
+  value,
+  onValueChange,
+  disabled,
+  className,
+  catalogId,
+  assignmentScope,
+  assignmentTeamIds,
+  shouldSetDefaultValue,
+  prefersEnterpriseManaged = false,
+}: TokenSelectProps) {
+  const groupedCredentials = useMcpServersGroupedByCatalog({
+    catalogId,
+    assignmentScope,
+    assignmentTeamIds,
+  });
+
+  // Get credentials for this catalogId from the grouped response
+  const mcpServers = groupedCredentials?.[catalogId] ?? [];
+  const organizationCredentials = mcpServers.filter(
+    (server) => server.scope === "org",
+  );
+  const teamCredentials = mcpServers.filter(
+    (server) => server.scope === "team",
+  );
+  const userCredentials = mcpServers.filter(
+    (server) => server.scope === "personal",
+  );
+
+  const isLoading = !groupedCredentials;
+
+  const staticCredentialOutsideOfGroupedCredentials =
+    value &&
+    value !== DYNAMIC_CREDENTIAL_VALUE &&
+    !groupedCredentials?.[catalogId]?.some(
+      (credential) => credential.id === value,
+    );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
+  useEffect(() => {
+    if (shouldSetDefaultValue && !value) {
+      if (prefersEnterpriseManaged) {
+        onValueChange(DYNAMIC_CREDENTIAL_VALUE);
+      } else if (mcpServers.length > 0) {
+        // Default to the first credential
+        onValueChange(mcpServers[0].id);
+      } else {
+        // Default to dynamic credential when no static credentials available
+        onValueChange(DYNAMIC_CREDENTIAL_VALUE);
+      }
+    }
+  }, []);
+
+  if (isLoading) {
+    return <LoadingSpinner className="w-3 h-3 inline-block ml-2" />;
+  }
+
+  if (staticCredentialOutsideOfGroupedCredentials) {
+    return (
+      <span className="text-xs text-muted-foreground">
+        Connection unavailable for this scope
+      </span>
+    );
+  }
+
+  return (
+    <Select
+      value={value ?? ""}
+      onValueChange={onValueChange}
+      disabled={disabled || isLoading}
+    >
+      <SelectTrigger
+        className={cn(
+          "h-fit! w-fit! bg-transparent! border-none! shadow-none! ring-0! outline-none! focus:ring-0! focus:outline-none! focus:border-none! p-0! text-xs font-normal",
+          className,
+        )}
+        size="sm"
+        data-testid={E2eTestId.TokenSelect}
+      >
+        <SelectValue placeholder="Select connection..." />
+      </SelectTrigger>
+      <SelectContent>
+        <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+          Dynamic
+        </div>
+        <SelectItem
+          value={DYNAMIC_CREDENTIAL_VALUE}
+          className="cursor-pointer"
+          description={
+            prefersEnterpriseManaged
+              ? "Ask your identity provider for a runtime credential for this server."
+              : "Use the caller's available runtime credential instead of a fixed connection."
+          }
+        >
+          <div className="flex items-center gap-1">
+            <Zap className="h-3! w-3! text-amber-500" />
+            <span>Resolve at call time</span>
+          </div>
+        </SelectItem>
+        {mcpServers.length > 0 && (
+          <>
+            {organizationCredentials.length > 0 && (
+              <>
+                <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+                  Static - Organization Credentials
+                </div>
+                {organizationCredentials.map((server) => (
+                  <SelectItem
+                    key={server.id}
+                    value={server.id}
+                    className="cursor-pointer"
+                    data-testid={E2eTestId.StaticCredentialToUse}
+                    description="Available to the organization"
+                  >
+                    Organization
+                  </SelectItem>
+                ))}
+              </>
+            )}
+            <Divider className="my-2" />
+            {teamCredentials.length > 0 && (
+              <>
+                <div className="px-2 pt-1 pb-1 text-xs text-muted-foreground">
+                  Static - Team Credentials
+                </div>
+                {teamCredentials.map((server) => (
+                  <SelectItem
+                    key={server.id}
+                    value={server.id}
+                    className="cursor-pointer"
+                    data-testid={E2eTestId.StaticCredentialToUse}
+                    description={`Shared with team ${server.teamDetails?.name ?? "Unknown team"}`}
+                  >
+                    {server.teamDetails?.name ?? "Unknown team"}
+                  </SelectItem>
+                ))}
+              </>
+            )}
+            {userCredentials.length > 0 && (
+              <>
+                <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+                  Static - User Credentials
+                </div>
+                {userCredentials.map((server) => (
+                  <SelectItem
+                    key={server.id}
+                    value={server.id}
+                    className="cursor-pointer"
+                    data-testid={E2eTestId.StaticCredentialToUse}
+                    description={`Owned by ${server.ownerEmail || "Deleted user"}`}
+                  >
+                    {server.ownerEmail || "Deleted user"}
+                  </SelectItem>
+                ))}
+              </>
+            )}
+          </>
+        )}
+      </SelectContent>
+    </Select>
+  );
+}

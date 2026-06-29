@@ -1,0 +1,508 @@
+import {
+  EmbeddingDimensionsSchema,
+  OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
+  OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
+  OrganizationCustomFontSchema,
+  OrganizationThemeSchema,
+  SupportedProvidersSchema,
+} from "@archestra/shared";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import { z } from "zod";
+import { schema } from "@/database";
+import { sanitizeSvg } from "@/utils/sanitize-svg";
+import {
+  NetworkPolicyInputSchema,
+  NetworkPolicySchema,
+  ValidationRegexSchema,
+} from "./environment";
+import { LimitCleanupIntervalSchema } from "./limit";
+
+const DATA_URI_PREFIX = "data:image/png;base64,";
+const GIF_DATA_URI_PREFIX = "data:image/gif;base64,";
+const SVG_DATA_URI_PREFIX = "data:image/svg+xml;base64,";
+const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB decoded
+const PNG_MAGIC_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+// "GIF87a" or "GIF89a"
+const GIF87A_MAGIC_BYTES = [0x47, 0x49, 0x46, 0x38, 0x37, 0x61];
+const GIF89A_MAGIC_BYTES = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61];
+const MAX_CHAT_LINK_URL_LENGTH = 2000;
+
+/**
+ * Validates a Base64-encoded PNG data URI.
+ *
+ * Checks performed:
+ * 1. Correct `data:image/png;base64,` prefix
+ * 2. Valid Base64 encoding (round-trip check)
+ * 3. Decoded size ≤ 2 MB
+ * 4. PNG magic bytes (first 8 bytes of decoded data)
+ */
+const Base64PngSchema = z
+  .string()
+  .nullable()
+  .superRefine((val, ctx) => {
+    if (val === null) return;
+
+    if (!val.startsWith(DATA_URI_PREFIX)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Logo must be a PNG image in data URI format",
+      });
+      return;
+    }
+
+    const base64Payload = val.slice(DATA_URI_PREFIX.length);
+
+    // Validate Base64 encoding via round-trip
+    const decoded = Buffer.from(base64Payload, "base64");
+    if (decoded.toString("base64") !== base64Payload) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Logo contains invalid Base64 encoding",
+      });
+      return;
+    }
+
+    if (decoded.length > MAX_LOGO_SIZE_BYTES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Logo must be less than 2MB",
+      });
+      return;
+    }
+
+    // Verify PNG magic bytes
+    if (
+      decoded.length < PNG_MAGIC_BYTES.length ||
+      !PNG_MAGIC_BYTES.every((byte, i) => decoded[i] === byte)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Logo must contain valid PNG image data",
+      });
+    }
+  });
+
+/**
+ * Validates a Base64-encoded PNG or SVG data URI. SVGs are sanitized (script
+ * tags, event handlers, foreignObject, and javascript: URLs are stripped) and
+ * re-encoded; the returned value is the cleaned data URI.
+ */
+const Base64LogoSchema = z
+  .string()
+  .nullable()
+  .transform((val, ctx) => {
+    if (val === null) return val;
+
+    const isPng = val.startsWith(DATA_URI_PREFIX);
+    const isSvg = val.startsWith(SVG_DATA_URI_PREFIX);
+    if (!isPng && !isSvg) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Logo must be a PNG or SVG image in data URI format",
+      });
+      return z.NEVER;
+    }
+
+    const prefix = isPng ? DATA_URI_PREFIX : SVG_DATA_URI_PREFIX;
+    const base64Payload = val.slice(prefix.length);
+    const decoded = Buffer.from(base64Payload, "base64");
+    if (decoded.toString("base64") !== base64Payload) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Logo contains invalid Base64 encoding",
+      });
+      return z.NEVER;
+    }
+    if (decoded.length > MAX_LOGO_SIZE_BYTES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Logo must be less than 2MB",
+      });
+      return z.NEVER;
+    }
+
+    if (isPng) {
+      if (
+        decoded.length < PNG_MAGIC_BYTES.length ||
+        !PNG_MAGIC_BYTES.every((byte, i) => decoded[i] === byte)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Logo must contain valid PNG image data",
+        });
+        return z.NEVER;
+      }
+      return val;
+    }
+
+    const svgSource = decoded.toString("utf8");
+    const cleaned = sanitizeSvg(svgSource);
+    if (cleaned === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Logo must contain valid SVG image data",
+      });
+      return z.NEVER;
+    }
+    const cleanedBase64 = Buffer.from(cleaned, "utf8").toString("base64");
+    return `${SVG_DATA_URI_PREFIX}${cleanedBase64}`;
+  });
+
+/**
+ * Validates a Base64-encoded PNG or GIF data URI.
+ *
+ * Same 2MB cap as the PNG schema; also accepts GIF87a and GIF89a.
+ * Used for onboarding-wizard page images (GIFs allowed so admins can embed
+ * animated screen recordings).
+ */
+export const Base64ImageSchema = z
+  .string()
+  .nullable()
+  .superRefine((val, ctx) => {
+    if (val === null) return;
+
+    const isPng = val.startsWith(DATA_URI_PREFIX);
+    const isGif = val.startsWith(GIF_DATA_URI_PREFIX);
+    if (!isPng && !isGif) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Image must be a PNG or GIF in data URI format",
+      });
+      return;
+    }
+
+    const base64Payload = val.slice(
+      isPng ? DATA_URI_PREFIX.length : GIF_DATA_URI_PREFIX.length,
+    );
+
+    const decoded = Buffer.from(base64Payload, "base64");
+    if (decoded.toString("base64") !== base64Payload) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Image contains invalid Base64 encoding",
+      });
+      return;
+    }
+
+    if (decoded.length > MAX_LOGO_SIZE_BYTES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Image must be less than 2MB",
+      });
+      return;
+    }
+
+    if (isPng) {
+      if (
+        decoded.length < PNG_MAGIC_BYTES.length ||
+        !PNG_MAGIC_BYTES.every((byte, i) => decoded[i] === byte)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Image must contain valid PNG data",
+        });
+      }
+      return;
+    }
+
+    // GIF
+    const matchesGif87a =
+      decoded.length >= GIF87A_MAGIC_BYTES.length &&
+      GIF87A_MAGIC_BYTES.every((byte, i) => decoded[i] === byte);
+    const matchesGif89a =
+      decoded.length >= GIF89A_MAGIC_BYTES.length &&
+      GIF89A_MAGIC_BYTES.every((byte, i) => decoded[i] === byte);
+    if (!matchesGif87a && !matchesGif89a) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Image must contain valid GIF data",
+      });
+    }
+  });
+
+const ChatLinkUrlSchema = z
+  .string()
+  .trim()
+  .max(MAX_CHAT_LINK_URL_LENGTH)
+  .refine((value) => isValidHttpUrl(value), {
+    message: "Chat link URL must be a valid HTTP or HTTPS URL",
+  });
+
+export const OrganizationChatLinkSchema = z.object({
+  label: z.string().trim().min(1).max(25),
+  url: ChatLinkUrlSchema,
+});
+
+/**
+ * Admin-curated metadata for a connection base URL. The URL itself is still
+ * supplied via `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL`; this lets admins attach a
+ * human description and pick one as the default for the /connection page.
+ */
+export const ConnectionBaseUrlSchema = z.object({
+  url: z.string().trim().min(1).max(2000),
+  description: z.string().trim().max(500).default(""),
+  isDefault: z.boolean().default(false),
+  visible: z.boolean().default(true),
+});
+
+/** provider → llm_provider_api_keys.id for auto-provisioned connection virtual keys. */
+export const ConnectionDefaultProviderKeysSchema = z.partialRecord(
+  SupportedProvidersSchema,
+  z.string().uuid(),
+);
+export type ConnectionDefaultProviderKeys = z.infer<
+  typeof ConnectionDefaultProviderKeysSchema
+>;
+
+export const OnboardingWizardPageSchema = z.object({
+  image: Base64ImageSchema.optional(),
+  content: z.string(),
+});
+
+export const OnboardingWizardSchema = z.object({
+  label: z.string().trim().min(1).max(25),
+  pages: z.array(OnboardingWizardPageSchema).min(1).max(10),
+});
+
+/**
+ * Appearance settings schema - used for unauthenticated access to branding settings.
+ * Only exposes theme, logo, and font - no sensitive organization data.
+ */
+export const AppearanceSettingsSchema = z.object({
+  theme: OrganizationThemeSchema,
+  customFont: OrganizationCustomFontSchema,
+  logo: z.string().nullable(),
+  logoDark: z.string().nullable(),
+  favicon: z.string().nullable(),
+  iconLogo: z.string().nullable(),
+  iconLogoDark: z.string().nullable(),
+  appName: z.string().nullable(),
+  ogDescription: z.string().nullable(),
+  footerText: z.string().nullable(),
+  chatLinks: z.array(OrganizationChatLinkSchema).nullable(),
+  onboardingWizard: OnboardingWizardSchema.nullable(),
+  chatErrorSupportMessage: z.string().nullable(),
+  slimChatErrorUi: z.boolean(),
+  animateChatPlaceholders: z.boolean(),
+});
+
+export const OrganizationCompressionScopeSchema = z.enum([
+  "organization",
+  "team",
+]);
+
+export const GlobalToolPolicySchema = z.enum(["permissive", "restrictive"]);
+export const OAuthAccessTokenLifetimeSecondsSchema = z
+  .number()
+  .int()
+  .min(OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS)
+  .max(OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS);
+
+const extendedFields = {
+  theme: OrganizationThemeSchema,
+  customFont: OrganizationCustomFontSchema,
+  compressionScope: OrganizationCompressionScopeSchema,
+  globalToolPolicy: GlobalToolPolicySchema,
+  analyticsInstanceId: z.string().uuid(),
+  analyticsInstanceStartedAt: z.date().nullable(),
+  analyticsInstanceLastHeartbeatAt: z.date().nullable(),
+  embeddingModel: z.string().nullable(),
+  embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
+  defaultLlmModel: z.string().nullable(),
+  defaultLlmProvider: SupportedProvidersSchema.nullable(),
+  defaultUserLimitValue: z.number().int().positive().nullable(),
+  defaultUserLimitModel: z.array(z.string()).nullable(),
+  defaultUserLimitCleanupInterval: LimitCleanupIntervalSchema.nullable(),
+  defaultAgentId: z.string().uuid().nullable(),
+  favicon: z.string().nullable(),
+  iconLogo: z.string().nullable(),
+  iconLogoDark: z.string().nullable(),
+  appName: z.string().nullable(),
+  ogDescription: z.string().nullable(),
+  footerText: z.string().nullable(),
+  chatLinks: z.array(OrganizationChatLinkSchema).nullable(),
+  onboardingWizard: OnboardingWizardSchema.nullable(),
+  chatErrorSupportMessage: z.string().nullable(),
+  slimChatErrorUi: z.boolean(),
+  chatPlaceholders: z.array(z.string()).nullable(),
+  animateChatPlaceholders: z.boolean(),
+  showTwoFactor: z.boolean(),
+  oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
+  connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
+  connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
+  defaultNetworkPolicy: NetworkPolicySchema.nullable(),
+};
+
+const InternalSelectOrganizationSchema = createSelectSchema(
+  schema.organizationsTable,
+  extendedFields,
+);
+export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
+  analyticsInstanceStartedAt: true,
+  analyticsInstanceLastHeartbeatAt: true,
+  // Preset feature removed; columns retained in DB (non-destructive) but no
+  // longer exposed via the API.
+  presetEntityName: true,
+  presetEntityNamePlural: true,
+  presetEntityDefaultLabel: true,
+  presetEntityDefaultValidationRegex: true,
+});
+export const InsertOrganizationSchema = createInsertSchema(
+  schema.organizationsTable,
+  extendedFields,
+).omit({
+  // Preset feature removed; columns retained in DB (non-destructive) but no
+  // longer accepted by the API, mirroring SelectOrganizationSchema.
+  presetEntityName: true,
+  presetEntityNamePlural: true,
+  presetEntityDefaultLabel: true,
+  presetEntityDefaultValidationRegex: true,
+});
+export const UpdateAppearanceSettingsSchema = z.object({
+  theme: OrganizationThemeSchema.optional(),
+  customFont: OrganizationCustomFontSchema.optional(),
+  logo: Base64LogoSchema.optional(),
+  logoDark: Base64LogoSchema.optional(),
+  favicon: Base64PngSchema.optional(),
+  iconLogo: Base64LogoSchema.optional(),
+  iconLogoDark: Base64LogoSchema.optional(),
+  appName: z.string().max(100).nullable().optional(),
+  ogDescription: z.string().max(500).nullable().optional(),
+  footerText: z.string().max(500).nullable().optional(),
+  chatLinks: z.array(OrganizationChatLinkSchema).max(3).nullable().optional(),
+  onboardingWizard: OnboardingWizardSchema.nullable().optional(),
+  chatErrorSupportMessage: z.string().max(500).nullable().optional(),
+  slimChatErrorUi: z.boolean().optional(),
+  chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
+  animateChatPlaceholders: z.boolean().optional(),
+});
+
+export const UpdateSecuritySettingsSchema = z.object({
+  globalToolPolicy: GlobalToolPolicySchema.optional(),
+  allowChatFileUploads: z.boolean().optional(),
+  /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */
+  allowToolAutoAssignment: z.boolean().optional(),
+});
+
+export const UpdateLlmSettingsSchema = z.object({
+  convertToolResultsToToon: z.boolean().optional(),
+  compressionScope: OrganizationCompressionScopeSchema.optional(),
+});
+
+export const UpdateAgentSettingsSchema = z.object({
+  defaultModelId: z.string().uuid().nullable().optional(),
+  defaultLlmApiKeyId: z.string().uuid().nullable().optional(),
+  defaultAgentId: z.string().uuid().nullable().optional(),
+  skillSlashCommandsEnabled: z.boolean().optional(),
+});
+
+export const UpdateKnowledgeSettingsSchema = z.object({
+  embeddingModel: z.string().min(1).nullable().optional(),
+  embeddingChatApiKeyId: z.string().uuid().nullable().optional(),
+  rerankerChatApiKeyId: z.string().uuid().nullable().optional(),
+  rerankerModel: z.string().nullable().optional(),
+});
+
+export const UpdateAuthSettingsSchema = z.object({
+  oauthAccessTokenLifetimeSeconds:
+    OAuthAccessTokenLifetimeSecondsSchema.optional(),
+  showTwoFactor: z.boolean().optional(),
+});
+
+export const UpdateConnectionSettingsSchema = z.object({
+  connectionDefaultMcpGatewayId: z.string().uuid().nullable().optional(),
+  connectionDefaultProviderKeys:
+    ConnectionDefaultProviderKeysSchema.nullable().optional(),
+  connectionDefaultLlmProxyId: z.string().uuid().nullable().optional(),
+  connectionDefaultClientId: z.string().max(64).nullable().optional(),
+  connectionShownClientIds: z
+    .array(z.string().max(64))
+    .max(50)
+    .nullable()
+    .optional(),
+  connectionShownProviders: z
+    .array(SupportedProvidersSchema)
+    .nullable()
+    .optional(),
+  connectionBaseUrls: z
+    .array(ConnectionBaseUrlSchema)
+    .max(50)
+    .nullable()
+    .optional()
+    .superRefine((value, ctx) => {
+      if (!value) return;
+      const seen = new Set<string>();
+      let defaults = 0;
+      for (const item of value) {
+        if (seen.has(item.url)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Duplicate connection base URL",
+          });
+        }
+        seen.add(item.url);
+        if (item.isDefault) defaults += 1;
+      }
+      if (defaults > 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Only one connection base URL can be marked as default",
+        });
+      }
+    }),
+});
+
+/**
+ * Clean API shape for configuring the implicit "default" environment. The
+ * handler maps these to the org columns (`defaultEnvironmentName`,
+ * `defaultEnvironmentNamespace`, `defaultEnvironmentRestricted`,
+ * `defaultEnvironmentValidationRegex`). Omitting a field leaves it unchanged;
+ * an explicit null clears the nullable ones.
+ */
+export const UpdateDefaultEnvironmentSchema = z.object({
+  name: z.string().trim().min(1).max(50).nullable().optional(),
+  description: z.string().trim().max(500).nullable().optional(),
+  namespace: z.string().trim().max(253).nullable().optional(),
+  networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
+  restricted: z.boolean().optional(),
+  validationRegex: ValidationRegexSchema.nullable().optional(),
+});
+
+export type UpdateDefaultEnvironment = z.infer<
+  typeof UpdateDefaultEnvironmentSchema
+>;
+
+export const CompleteOnboardingSchema = z.object({
+  onboardingComplete: z.literal(true),
+});
+
+export type OrganizationCompressionScope = z.infer<
+  typeof OrganizationCompressionScopeSchema
+>;
+export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
+export type Organization = z.infer<typeof SelectOrganizationSchema>;
+export type OrganizationAnalyticsState = Pick<
+  z.infer<typeof InternalSelectOrganizationSchema>,
+  | "id"
+  | "analyticsInstanceId"
+  | "analyticsInstanceStartedAt"
+  | "analyticsInstanceLastHeartbeatAt"
+>;
+export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
+export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
+export type OrganizationChatLink = z.infer<typeof OrganizationChatLinkSchema>;
+export type OnboardingWizardPage = z.infer<typeof OnboardingWizardPageSchema>;
+export type OnboardingWizard = z.infer<typeof OnboardingWizardSchema>;
+export type OAuthAccessTokenLifetimeSeconds = z.infer<
+  typeof OAuthAccessTokenLifetimeSecondsSchema
+>;
+export type ConnectionBaseUrl = z.infer<typeof ConnectionBaseUrlSchema>;
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}

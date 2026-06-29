@@ -1,0 +1,2 @@
+ALTER TABLE "organization" ADD COLUMN "default_llm_api_key_id" uuid;
+ALTER TABLE "organization" ADD CONSTRAINT "organization_default_llm_api_key_id_chat_api_keys_id_fk" FOREIGN KEY ("default_llm_api_key_id") REFERENCES "chat_api_keys"("id") ON DELETE SET NULL;

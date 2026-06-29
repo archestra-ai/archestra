@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "icon_logo_dark" text;

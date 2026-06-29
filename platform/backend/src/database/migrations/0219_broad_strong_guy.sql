@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "agents_personal_gateway_per_member_idx" ON "agents" USING btree ("organization_id","author_id") WHERE "agents"."agent_type" = 'mcp_gateway' AND "agents"."is_personal_gateway" = true;

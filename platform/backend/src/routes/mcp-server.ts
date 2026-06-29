@@ -1,0 +1,2677 @@
+import type { IncomingHttpHeaders } from "node:http";
+import {
+  isPlaywrightCatalogItem,
+  OAUTH_TOKEN_TYPE,
+  RouteId,
+} from "@archestra/shared";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import { hasPermission, userHasPermission } from "@/auth";
+import mcpClient, {
+  McpServerConnectionTimeoutError,
+  McpServerNotReadyError,
+} from "@/clients/mcp-client";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import logger from "@/logging";
+import {
+  AccountModel,
+  AgentModel,
+  AgentToolModel,
+  InternalMcpCatalogModel,
+  McpServerModel,
+  TeamModel,
+  ToolModel,
+} from "@/models";
+import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { filterMcpServersAssignableToTarget } from "@/services/agent-tool-assignment";
+import { assertValuesMatchEnvironmentRegex } from "@/services/environments/environment";
+import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
+import { exchangeIdJagAtProtectedResource } from "@/services/identity-providers/enterprise-managed/broker";
+import { exchangeEnterpriseManagedCredential } from "@/services/identity-providers/enterprise-managed/exchange";
+import {
+  findExternalIdentityProviderById,
+  findExternalIdentityProviderByProviderId,
+} from "@/services/identity-providers/oidc";
+import { autoReinstallServer } from "@/services/mcp-reinstall";
+import {
+  type Account,
+  AgentScopeSchema,
+  ApiError,
+  constructResponseSchema,
+  DeleteObjectResponseSchema,
+  InsertMcpServerSchema,
+  type InternalMcpCatalogServerType,
+  LocalMcpServerInstallationStatusSchema,
+  type ResourceVisibilityScope,
+  ResourceVisibilityScopeSchema,
+  SelectMcpServerSchema,
+  UuidIdSchema,
+} from "@/types";
+import { broadcastMcpInstallationStatus } from "@/websocket";
+
+const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    "/api/mcp_server",
+    {
+      schema: {
+        operationId: RouteId.GetMcpServers,
+        description: "Get all installed MCP servers",
+        tags: ["MCP Server"],
+        querystring: z.object({
+          catalogId: z.string().optional(),
+          assignmentScope: AgentScopeSchema.optional(),
+          assignmentTeamIds: z
+            .preprocess(
+              (val) => (typeof val === "string" ? val.split(",") : val),
+              z.array(z.string()),
+            )
+            .optional(),
+        }),
+        response: constructResponseSchema(z.array(SelectMcpServerSchema)),
+      },
+    },
+    async ({ user, headers, query, organizationId }, reply) => {
+      const { assignmentScope, assignmentTeamIds, catalogId } = query;
+      const { success: isMcpServerAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        headers,
+      );
+      let allServers = await McpServerModel.findAll(user.id, isMcpServerAdmin);
+
+      // serverType:"app" backings are managed on the Apps surface, not listed as
+      // MCP servers — keep them out of the user-facing server list (and its
+      // consumers like the agent tool-assignment picker).
+      allServers = allServers.filter((s) => s.serverType !== "app");
+
+      // Filter by catalogId if provided
+      if (catalogId) {
+        allServers = allServers.filter((s) => s.catalogId === catalogId);
+      }
+
+      if (assignmentScope) {
+        const target = {
+          organizationId,
+          scope: assignmentScope,
+          authorId: user.id,
+          teamIds: assignmentTeamIds ?? [],
+        };
+
+        allServers = await filterMcpServersAssignableToTarget({
+          mcpServers: allServers,
+          target,
+        });
+      }
+
+      return reply.send(allServers);
+    },
+  );
+
+  fastify.get(
+    "/api/mcp_server/:id",
+    {
+      schema: {
+        operationId: RouteId.GetMcpServer,
+        description: "Get MCP server by ID",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectMcpServerSchema),
+      },
+    },
+    async ({ params: { id }, user, headers }, reply) => {
+      const { success: isMcpServerAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        headers,
+      );
+      const server = await McpServerModel.findById(
+        id,
+        user.id,
+        isMcpServerAdmin,
+      );
+
+      if (!server) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      return reply.send(server);
+    },
+  );
+
+  fastify.post(
+    "/api/mcp_server",
+    {
+      schema: {
+        operationId: RouteId.InstallMcpServer,
+        description: "Install an MCP server (from catalog or custom)",
+        tags: ["MCP Server"],
+        body: InsertMcpServerSchema.omit({
+          serverType: true,
+        }).extend({
+          scope: ResourceVisibilityScopeSchema.default("personal"),
+          agentIds: z.array(UuidIdSchema).optional(),
+          secretId: UuidIdSchema.optional(),
+          // For PAT tokens (like GitHub), send the token directly
+          // and we'll create a secret for it
+          accessToken: z.string().optional(),
+          // When true, environmentValues and userConfigValues contain vault references in "path#key" format
+          isByosVault: z.boolean().optional(),
+          // Kubernetes service account override for local MCP servers
+          serviceAccount: z.string().optional(),
+        }),
+        response: constructResponseSchema(SelectMcpServerSchema),
+      },
+    },
+    async ({ body, user, headers, organizationId }, reply) => {
+      let {
+        agentIds,
+        secretId,
+        accessToken,
+        isByosVault,
+        userConfigValues,
+        environmentValues,
+        serviceAccount,
+        ...restDataFromRequestBody
+      } = body;
+      const serverData: typeof restDataFromRequestBody & {
+        serverType: InternalMcpCatalogServerType;
+      } = {
+        ...restDataFromRequestBody,
+        serverType: "local",
+      };
+
+      // Set owner_id and userId to current user
+      serverData.ownerId = user.id;
+      serverData.userId = user.id;
+
+      // Track if we created a new secret (for cleanup on failure)
+      let createdSecretId: string | undefined;
+
+      // Fetch catalog item FIRST to determine server type
+      let catalogItem = null;
+      if (serverData.catalogId) {
+        catalogItem = await InternalMcpCatalogModel.findById(
+          serverData.catalogId,
+        );
+
+        if (!catalogItem) {
+          throw new ApiError(400, "Catalog item not found");
+        }
+
+        // App backing entities are created and managed via /api/apps and run
+        // in-process; they are not installable through the generic server route
+        // (which would deploy/discover them).
+        if (catalogItem.serverType === "app") {
+          throw new ApiError(
+            400,
+            "App servers are managed via the Apps API and cannot be installed here.",
+          );
+        }
+
+        // Playwright browser preview can only be installed as a personal server
+        if (
+          isPlaywrightCatalogItem(serverData.catalogId) &&
+          serverData.scope !== "personal"
+        ) {
+          throw new ApiError(
+            400,
+            "Playwright browser preview can only be installed as a personal server",
+          );
+        }
+
+        // Set serverType from catalog item
+        serverData.serverType = catalogItem.serverType;
+
+        // The catalog row is the source of truth for the install name.
+        serverData.name = catalogItem.name;
+
+        // Scope-based authorization (personal / team / org).
+        await validateScopeAndAuthorization({
+          scope: serverData.scope,
+          teamId: serverData.teamId,
+          userId: user.id,
+          organizationId,
+          headers,
+        });
+
+        // Enforce the governing environment's allowlist regex against the
+        // non-secret, free-text config values the user supplied.
+        await assertValuesMatchEnvironmentRegex({
+          environmentId: catalogItem.environmentId,
+          organizationId,
+          valueSets: [
+            collectValidatableInstallValues({
+              catalogItem,
+              userConfigValues,
+              environmentValues,
+            }),
+          ],
+        });
+
+        // Validate no duplicate installations for this catalog item
+        const existingServers = await McpServerModel.findByCatalogId(
+          serverData.catalogId,
+        );
+
+        // Check for duplicate personal installation (same user, no team)
+        // Return existing server instead of erroring (idempotent behavior)
+        if (serverData.scope === "personal") {
+          const existingPersonal = existingServers.find(
+            (s) => s.scope === "personal" && s.ownerId === user.id,
+          );
+          if (existingPersonal) {
+            const catalogTools = await ToolModel.findByCatalogId(
+              serverData.catalogId,
+            );
+            const toolIds = catalogTools.map((t) => t.id);
+            if (toolIds.length > 0) {
+              const personalGateway = await AgentModel.ensurePersonalMcpGateway(
+                {
+                  userId: user.id,
+                  organizationId,
+                },
+              );
+              const targetAgentIds = Array.from(
+                new Set([personalGateway.id, ...(agentIds ?? [])]),
+              );
+              await AgentToolModel.bulkCreateForAgentsAndTools(
+                targetAgentIds,
+                toolIds,
+                {
+                  mcpServerId: existingPersonal.id,
+                  credentialResolutionMode: catalogItem.enterpriseManagedConfig
+                    ? "enterprise_managed"
+                    : "static",
+                },
+              );
+            }
+            return reply.send(existingPersonal);
+          }
+        }
+
+        // Check for duplicate team installation (same team)
+        if (serverData.scope === "team") {
+          const existingTeam = existingServers.find(
+            (s) => s.scope === "team" && s.teamId === serverData.teamId,
+          );
+          if (existingTeam) {
+            throw new ApiError(
+              400,
+              "This team already has an installation of this MCP server",
+            );
+          }
+        }
+
+        if (serverData.scope === "org") {
+          const existingOrg = existingServers.find((s) => s.scope === "org");
+          if (existingOrg) {
+            throw new ApiError(
+              400,
+              "This organization already has an installation of this MCP server",
+            );
+          }
+        }
+
+        // Update catalog's serviceAccount if user provided a different value
+        const normalizedServiceAccount =
+          serviceAccount === "" ? undefined : serviceAccount;
+        if (
+          catalogItem?.serverType === "local" &&
+          normalizedServiceAccount !== undefined &&
+          catalogItem.localConfig?.serviceAccount !== normalizedServiceAccount
+        ) {
+          await InternalMcpCatalogModel.update(catalogItem.id, {
+            localConfig: {
+              ...catalogItem.localConfig,
+              serviceAccount: normalizedServiceAccount,
+            },
+          });
+          // Update local reference for deployment
+          if (catalogItem.localConfig) {
+            catalogItem.localConfig.serviceAccount = normalizedServiceAccount;
+          }
+        }
+      }
+
+      // For REMOTE servers: create secrets and validate connection
+      if (catalogItem?.serverType === "remote") {
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem.userConfig,
+        );
+        const installUserConfigValues = filterInstallUserConfigValues({
+          userConfig: catalogItem.userConfig,
+          userConfigValues,
+        });
+
+        // If isByosVault flag is set, use vault references from userConfigValues
+        if (isByosVault && installUserConfigValues && !secretId) {
+          if (!isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Readonly Vault is not enabled. " +
+                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+            );
+          }
+
+          // userConfigValues already contains vault references in "path#key" format
+          const secret = await secretManager().createSecret(
+            {
+              ...catalogStaticUserConfigValues,
+              ...installUserConfigValues,
+            } as Record<string, unknown>,
+            `${serverData.name}-vault-secret`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+          logger.info(
+            { keyCount: Object.keys(installUserConfigValues).length },
+            "Created Readonly Vault secret with per-field references for remote server",
+          );
+        }
+
+        // If accessToken is provided (PAT flow), create a secret for it
+        // Not allowed when Readonly Vault is enabled - use vault secrets instead
+        if (accessToken && !secretId) {
+          if (isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Manual PAT token input is not allowed when Readonly Vault is enabled. Please use Vault secrets instead.",
+            );
+          }
+          const secret = await secretManager().createSecret(
+            { ...catalogStaticUserConfigValues, access_token: accessToken },
+            `${serverData.name}-token`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+        }
+
+        if (installUserConfigValues && !secretId) {
+          const secret = await secretManager().createSecret(
+            {
+              ...catalogStaticUserConfigValues,
+              ...installUserConfigValues,
+            } as Record<string, unknown>,
+            `${serverData.name}-secret`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+        } else if (
+          !secretId &&
+          Object.keys(catalogStaticUserConfigValues).length > 0
+        ) {
+          const secret = await secretManager().createSecret(
+            catalogStaticUserConfigValues,
+            `${serverData.name}-secret`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+        }
+
+        // Validate connection for remote servers. Enterprise-managed catalogs
+        // skip this static-secret probe: their MCP servers typically require
+        // the per-user exchanged credential, which is only attached during the
+        // install discovery below, so probing here would hit the server
+        // without an Authorization header and fail the install.
+        if (secretId && !catalogItem.enterpriseManagedConfig) {
+          const { isValid, errorMessage } =
+            await McpServerModel.validateConnection(
+              serverData.name,
+              serverData.catalogId ?? undefined,
+              secretId,
+            );
+
+          if (!isValid) {
+            // Clean up the secret we just created if validation fails
+            if (createdSecretId) {
+              secretManager().deleteSecret(createdSecretId);
+            }
+
+            throw new ApiError(
+              400,
+              errorMessage ||
+                "Failed to connect to MCP server with provided credentials",
+            );
+          }
+        }
+      }
+
+      // For LOCAL servers: validate env vars and create secrets (no connection validation, since deployment will be started later)
+      if (catalogItem?.serverType === "local") {
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem.userConfig,
+        );
+        const installUserConfigValues = filterInstallUserConfigValues({
+          userConfig: catalogItem.userConfig,
+          userConfigValues,
+        });
+
+        // Validate required environment variables
+        if (catalogItem.localConfig?.environment) {
+          const requiredEnvVars = catalogItem.localConfig.environment.filter(
+            (env) => env.promptOnInstallation && env.required,
+          );
+
+          const missingEnvVars = requiredEnvVars.filter((env) => {
+            const value = environmentValues?.[env.key];
+            // For boolean type, check if value exists
+            if (env.type === "boolean") {
+              return !value;
+            }
+            // For other types, check if trimmed value is non-empty
+            return !value?.trim();
+          });
+
+          if (missingEnvVars.length > 0) {
+            throw new ApiError(
+              400,
+              `Missing required environment variables: ${missingEnvVars
+                .map((env) => env.key)
+                .join(", ")}`,
+            );
+          }
+        }
+
+        if (catalogItem.userConfig) {
+          const requiredUserConfigFields = Object.entries(
+            catalogItem.userConfig,
+          ).filter(([_fieldName, fieldConfig]) => {
+            return fieldConfig.promptOnInstallation && fieldConfig.required;
+          });
+
+          const missingUserConfigFields = requiredUserConfigFields.filter(
+            ([fieldName]) => {
+              const value = userConfigValues?.[fieldName];
+              return !value?.trim();
+            },
+          );
+
+          if (missingUserConfigFields.length > 0) {
+            throw new ApiError(
+              400,
+              `Missing required connection settings: ${missingUserConfigFields
+                .map(([fieldName]) => fieldName)
+                .join(", ")}`,
+            );
+          }
+        }
+
+        // If isByosVault flag is set, use vault references from environmentValues for secret env vars
+        if (isByosVault && !secretId && catalogItem.localConfig?.environment) {
+          if (!isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Readonly Vault is not enabled. " +
+                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+            );
+          }
+
+          // Collect secret env vars with vault references from environmentValues
+          const secretEnvVars: Record<string, string> = {
+            ...catalogStaticUserConfigValues,
+          };
+          for (const envDef of catalogItem.localConfig.environment) {
+            if (envDef.type === "secret") {
+              const value = envDef.promptOnInstallation
+                ? environmentValues?.[envDef.key]
+                : envDef.value;
+              if (value) {
+                // Value should already be in "path#key" format from frontend
+                secretEnvVars[envDef.key] = value;
+              }
+            }
+          }
+
+          if (installUserConfigValues) {
+            Object.assign(secretEnvVars, installUserConfigValues);
+          }
+
+          if (Object.keys(secretEnvVars).length > 0) {
+            const secret = await secretManager().createSecret(
+              secretEnvVars,
+              `${serverData.name}-vault-secret`,
+            );
+            secretId = secret.id;
+            createdSecretId = secret.id;
+            logger.info(
+              { keyCount: Object.keys(secretEnvVars).length },
+              "Created Readonly Vault secret with per-field references for local server",
+            );
+          }
+        } else if (!secretId) {
+          // Collect and store static catalog headers, prompted header values, and secret-type env vars.
+          // When Readonly Vault is enabled, only static (non-prompted) secrets are allowed to be stored in DB.
+          // User-prompted secrets must use Vault references via the isByosVault flow above.
+          const secretEnvVars: Record<string, string> = {
+            ...catalogStaticUserConfigValues,
+            ...(installUserConfigValues ?? {}),
+          };
+          let hasPromptedSecrets = false;
+
+          // Collect all secret-type env vars (static and prompted).
+          for (const envDef of catalogItem.localConfig?.environment ?? []) {
+            if (envDef.type === "secret") {
+              let value: string | undefined;
+              // Get value based on whether it's prompted or static
+              if (envDef.promptOnInstallation) {
+                // Prompted during installation - get from environmentValues
+                value = environmentValues?.[envDef.key];
+                if (value) {
+                  hasPromptedSecrets = true;
+                }
+              } else {
+                // Static value from catalog - get from envDef.value
+                value = envDef.value;
+              }
+              // Add to secret if value exists
+              if (value) {
+                secretEnvVars[envDef.key] = value;
+              }
+            }
+          }
+
+          // Block user-prompted secrets when Readonly Vault is enabled (they should use Vault)
+          // Static secrets from catalog are allowed since they're not manual user input
+          if (hasPromptedSecrets && isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Manual secret input is not allowed when Readonly Vault is enabled. Please use Vault secrets instead.",
+            );
+          }
+
+          // Create secret in database if there are any secret env vars
+          if (Object.keys(secretEnvVars).length > 0) {
+            const secret = await secretManager().createSecret(
+              secretEnvVars,
+              `mcp-server-${serverData.name}-env`,
+            );
+            secretId = secret.id;
+            createdSecretId = secret.id;
+            logger.info(
+              {
+                secretId: secret.id,
+                envVarCount: Object.keys(secretEnvVars).length,
+              },
+              "Created secret for local MCP server environment variables",
+            );
+          }
+        }
+
+        // For local servers, store accessToken as a secret if provided
+        // (e.g., for servers that require JWT auth during tool discovery)
+        if (accessToken) {
+          if (secretId) {
+            // Merge accessToken into existing secret (e.g., when catalog has secret-type env vars)
+            const existingSecret = await secretManager().getSecret(secretId);
+            if (
+              existingSecret?.secret &&
+              typeof existingSecret.secret === "object"
+            ) {
+              await secretManager().updateSecret(secretId, {
+                ...(existingSecret.secret as Record<string, string>),
+                access_token: accessToken,
+              });
+            }
+          } else {
+            const secret = await secretManager().createSecret(
+              { access_token: accessToken },
+              `${serverData.name}-token`,
+            );
+            secretId = secret.id;
+            createdSecretId = secret.id;
+          }
+        }
+
+        // For local servers with OAuth: inject access token as env var if access_token_env_var is configured.
+        // This allows stdio-transport servers to receive the OAuth token via environment variable.
+        // NOTE: The token is injected at pod startup and won't be refreshed when it expires.
+        // Stdio servers with short-lived OAuth tokens may need pod restarts to get fresh tokens.
+        // Streamable-http servers don't need this — they get the token via Bearer header on each request.
+        if (
+          catalogItem.oauthConfig?.access_token_env_var &&
+          secretId &&
+          catalogItem.localConfig?.transportType !== "streamable-http"
+        ) {
+          const oauthSecret = await secretManager().getSecret(secretId);
+          const tokenData = oauthSecret?.secret as
+            | { access_token?: string }
+            | undefined;
+          const oauthAccessToken = tokenData?.access_token;
+
+          if (oauthAccessToken) {
+            const envVarName = catalogItem.oauthConfig.access_token_env_var;
+            environmentValues = {
+              ...environmentValues,
+              [envVarName]: oauthAccessToken,
+            };
+            logger.info(
+              { envVarName, catalogId: catalogItem.id },
+              "Injected OAuth access token as environment variable for local server",
+            );
+          }
+        }
+      }
+
+      // Persist plain (non-secret) values for promptOnInstallation env
+      // vars onto the install row's `environmentValues` jsonb column.
+      // Secret-typed prompted values live in the K8s Secret bag handled
+      // by the block above.
+      const installEnvironmentValues: Record<string, string> = {};
+      for (const envDef of catalogItem?.localConfig?.environment ?? []) {
+        if (envDef.promptOnInstallation && envDef.type !== "secret") {
+          const value = environmentValues?.[envDef.key];
+          if (value !== undefined && value !== null && value !== "") {
+            installEnvironmentValues[envDef.key] = String(value);
+          }
+        }
+      }
+
+      // Create the MCP server with optional secret reference
+      const mcpServer = await McpServerModel.create({
+        ...serverData,
+        ...(secretId && { secretId }),
+        environmentValues: installEnvironmentValues,
+      });
+
+      try {
+        // For local servers, start the K8s deployment first
+        if (catalogItem?.serverType === "local") {
+          try {
+            // Capture catalogId before async callback to ensure it's available
+            const capturedCatalogId = catalogItem.id;
+            const capturedCatalogName = catalogItem.name;
+            const capturedCatalogItem = catalogItem;
+            const capturedEnterpriseManagedConfig =
+              catalogItem.enterpriseManagedConfig;
+
+            // Set status to pending before starting the deployment
+            await McpServerModel.update(mcpServer.id, {
+              localInstallationStatus: "pending",
+              localInstallationError: null,
+            });
+            broadcastMcpInstallationStatus(mcpServer.id, "pending", null);
+
+            await McpServerRuntimeManager.startServer(
+              mcpServer,
+              userConfigValues,
+              environmentValues,
+            );
+            fastify.log.info(
+              `Started K8s deployment for local MCP server: ${mcpServer.name}`,
+            );
+
+            // For local servers, return immediately without waiting for tools
+            // Tools will be fetched asynchronously after the deployment is ready
+            fastify.log.info(
+              `Skipping synchronous tool fetch for local server: ${mcpServer.name}. Tools will be fetched asynchronously.`,
+            );
+
+            // Start async tool fetching in the background (non-blocking)
+            (async () => {
+              try {
+                // Wait for the deployment to be fully ready before fetching tools
+                const k8sDeployment =
+                  await McpServerRuntimeManager.getOrLoadDeployment(
+                    mcpServer.id,
+                  );
+                if (!k8sDeployment) {
+                  throw new Error("Deployment manager not found");
+                }
+
+                fastify.log.info(
+                  `Waiting for deployment to be ready: ${mcpServer.name}`,
+                );
+
+                // Wait for deployment to be ready (with timeout)
+                await k8sDeployment.waitForDeploymentReady(60, 2000); // 60 attempts * 2s = 2 minutes max
+
+                fastify.log.info(
+                  `Deployment is ready, updating status to discovering-tools: ${mcpServer.name}`,
+                );
+
+                await McpServerModel.update(mcpServer.id, {
+                  localInstallationStatus: "discovering-tools",
+                  localInstallationError: null,
+                });
+                broadcastMcpInstallationStatus(
+                  mcpServer.id,
+                  "discovering-tools",
+                  null,
+                );
+
+                fastify.log.info(
+                  `Attempting to fetch tools from local server: ${mcpServer.name}`,
+                );
+                // Enterprise-managed local servers (streamable-http) may
+                // require the per-user exchanged credential for tools/list,
+                // so route discovery through the install-time exchange.
+                const tools = capturedEnterpriseManagedConfig
+                  ? await connectAndGetToolsForInstallation({
+                      catalogItem: capturedCatalogItem,
+                      mcpServerId: mcpServer.id,
+                      secretId: mcpServer.secretId ?? undefined,
+                      userId: user.id,
+                      allowCurrentUserTokenFallback: true,
+                    })
+                  : await McpServerModel.getToolsFromServer(mcpServer);
+
+                // Persist tools in the database
+                // Use catalog item name (without userId) for tool naming to avoid duplicates across users
+                const toolNamePrefix = capturedCatalogName || mcpServer.name;
+                const toolsToCreate = tools.map((tool) => ({
+                  name: ToolModel.slugifyName(toolNamePrefix, tool.name),
+                  description: tool.description ?? null,
+                  parameters: tool.inputSchema,
+                  meta: { _meta: tool._meta, annotations: tool.annotations },
+                  catalogId: capturedCatalogId,
+                }));
+
+                // Bulk create tools to avoid N+1 queries
+                const createdTools =
+                  await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+
+                // Clone reconciliation: if this catalog has provisional cloned
+                // tools (first install of a clone), confirm the ones the server
+                // actually exposes and drop the rest. Genuinely-new tools were
+                // just created above with default policies (+ configurator).
+                const provisionalCount =
+                  await ToolModel.countProvisionalForCatalog(capturedCatalogId);
+                let confirmedClonedToolIds: string[] = [];
+                if (provisionalCount > 0) {
+                  const discoveredToolNames = new Set(
+                    toolsToCreate.map((t) => t.name),
+                  );
+                  const { confirmedToolIds } =
+                    await ToolModel.reconcileClonedCatalogTools({
+                      catalogId: capturedCatalogId,
+                      discoveredToolNames,
+                    });
+                  confirmedClonedToolIds = confirmedToolIds;
+                }
+
+                // For personal installs, auto-assign every discovered tool to the
+                // installer's personal gateway alongside any explicit agentIds.
+                // Team-scoped installs only honor explicit agentIds.
+                {
+                  // Confirmed clone tools are usually already in `createdTools`
+                  // (bulkCreateToolsIfNotExists returns existing rows matched by
+                  // name); include them explicitly as defense-in-depth and dedupe.
+                  const toolIds = Array.from(
+                    new Set([
+                      ...createdTools.map((t) => t.id),
+                      ...confirmedClonedToolIds,
+                    ]),
+                  );
+                  if (toolIds.length > 0) {
+                    const targetAgentIds: string[] = [];
+                    if (!mcpServer.teamId) {
+                      const personalGateway =
+                        await AgentModel.ensurePersonalMcpGateway({
+                          userId: user.id,
+                          organizationId,
+                        });
+                      targetAgentIds.push(personalGateway.id);
+                    }
+                    if (agentIds && agentIds.length > 0) {
+                      targetAgentIds.push(...agentIds);
+                    }
+                    const dedupedAgentIds = Array.from(new Set(targetAgentIds));
+                    if (dedupedAgentIds.length > 0) {
+                      await AgentToolModel.bulkCreateForAgentsAndTools(
+                        dedupedAgentIds,
+                        toolIds,
+                        {
+                          mcpServerId: mcpServer.id,
+                          credentialResolutionMode:
+                            capturedEnterpriseManagedConfig
+                              ? "enterprise_managed"
+                              : "static",
+                        },
+                      );
+                    }
+                  }
+                }
+
+                // Set status to success after tools are fetched
+                await McpServerModel.update(mcpServer.id, {
+                  localInstallationStatus: "success",
+                  localInstallationError: null,
+                });
+                broadcastMcpInstallationStatus(mcpServer.id, "success", null);
+
+                fastify.log.info(
+                  `Successfully fetched and persisted ${tools.length} tools from local server: ${mcpServer.name}`,
+                );
+              } catch (toolError) {
+                const errorMessage =
+                  toolError instanceof Error
+                    ? toolError.message
+                    : "Unknown error";
+                fastify.log.error(
+                  `Failed to fetch tools from local server ${mcpServer.name}: ${errorMessage}`,
+                );
+
+                // Set status to error if tool fetching fails
+                await McpServerModel.update(mcpServer.id, {
+                  localInstallationStatus: "error",
+                  localInstallationError: errorMessage,
+                });
+                broadcastMcpInstallationStatus(
+                  mcpServer.id,
+                  "error",
+                  errorMessage,
+                );
+              }
+            })();
+
+            // Return the MCP server with pending status
+            return reply.send({
+              ...mcpServer,
+              localInstallationStatus: "pending",
+              localInstallationError: null,
+            });
+          } catch (podError) {
+            // If deployment fails to start, set status to error
+            const errorMessage =
+              podError instanceof Error ? podError.message : "Unknown error";
+            fastify.log.error(
+              `Failed to start K8s deployment for MCP server ${mcpServer.name}: ${errorMessage}`,
+            );
+
+            await McpServerModel.update(mcpServer.id, {
+              localInstallationStatus: "error",
+              localInstallationError: `Failed to start deployment: ${errorMessage}`,
+            });
+            broadcastMcpInstallationStatus(
+              mcpServer.id,
+              "error",
+              `Failed to start deployment: ${errorMessage}`,
+            );
+
+            // Return the server with error status instead of throwing 500
+            return reply.send({
+              ...mcpServer,
+              localInstallationStatus: "error",
+              localInstallationError: `Failed to start deployment: ${errorMessage}`,
+            });
+          }
+        }
+
+        // Catalog item must exist for remote servers
+        if (!catalogItem) {
+          throw new ApiError(400, "Catalog item not found for remote server");
+        }
+
+        // For non-local servers, fetch tools synchronously during installation.
+        // If discovery fails with auth and this is a personal install, retry once
+        // with the current user's linked IdP access token.
+        const tools = await connectAndGetToolsForInstallation({
+          catalogItem,
+          mcpServerId: mcpServer.id,
+          secretId: mcpServer.secretId ?? undefined,
+          userId: user.id,
+          // Shared enterprise-managed installs use the installer's linked IdP
+          // token only for discovery. Runtime tool calls exchange each caller's
+          // own linked IdP token.
+          allowCurrentUserTokenFallback:
+            mcpServer.scope === "personal" ||
+            catalogItem.enterpriseManagedConfig !== null,
+        });
+
+        // Persist tools in the database with source='mcp_server' and mcpServerId
+        // Note: For remote servers, mcpServer.name doesn't include userId, so we can use it directly
+        const toolsToCreate = tools.map((tool) => ({
+          name: ToolModel.slugifyName(mcpServer.name, tool.name),
+          description: tool.description ?? null,
+          parameters: tool.inputSchema,
+          meta: { _meta: tool._meta, annotations: tool.annotations },
+          catalogId: catalogItem.id,
+        }));
+
+        // Bulk create tools to avoid N+1 queries
+        const createdTools =
+          await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+
+        // Clone reconciliation: if this catalog has provisional cloned
+        // tools (first install of a clone), confirm the ones the server
+        // actually exposes and drop the rest. Genuinely-new tools were
+        // just created above with default policies (+ configurator).
+        const provisionalCount = await ToolModel.countProvisionalForCatalog(
+          catalogItem.id,
+        );
+        let confirmedClonedToolIds: string[] = [];
+        if (provisionalCount > 0) {
+          const discoveredToolNames = new Set(toolsToCreate.map((t) => t.name));
+          const { confirmedToolIds } =
+            await ToolModel.reconcileClonedCatalogTools({
+              catalogId: catalogItem.id,
+              discoveredToolNames,
+            });
+          confirmedClonedToolIds = confirmedToolIds;
+        }
+
+        // For personal installs, auto-assign every discovered tool to the
+        // installer's personal gateway alongside any explicit agentIds.
+        // Team-scoped installs only honor explicit agentIds.
+        {
+          // Confirmed clone tools are usually already in `createdTools`
+          // (bulkCreateToolsIfNotExists returns existing rows matched by
+          // name); include them explicitly as defense-in-depth and dedupe.
+          const toolIds = Array.from(
+            new Set([
+              ...createdTools.map((t) => t.id),
+              ...confirmedClonedToolIds,
+            ]),
+          );
+          if (toolIds.length > 0) {
+            const targetAgentIds: string[] = [];
+            if (!mcpServer.teamId) {
+              const personalGateway = await AgentModel.ensurePersonalMcpGateway(
+                {
+                  userId: user.id,
+                  organizationId,
+                },
+              );
+              targetAgentIds.push(personalGateway.id);
+            }
+            if (agentIds && agentIds.length > 0) {
+              targetAgentIds.push(...agentIds);
+            }
+            const dedupedAgentIds = Array.from(new Set(targetAgentIds));
+            if (dedupedAgentIds.length > 0) {
+              await AgentToolModel.bulkCreateForAgentsAndTools(
+                dedupedAgentIds,
+                toolIds,
+                {
+                  mcpServerId: mcpServer.id,
+                  credentialResolutionMode: catalogItem.enterpriseManagedConfig
+                    ? "enterprise_managed"
+                    : "static",
+                },
+              );
+            }
+          }
+        }
+
+        // Set status to success for non-local servers
+        await McpServerModel.update(mcpServer.id, {
+          localInstallationStatus: "success",
+          localInstallationError: null,
+        });
+        broadcastMcpInstallationStatus(mcpServer.id, "success", null);
+
+        return reply.send({
+          ...mcpServer,
+          localInstallationStatus: "success",
+          localInstallationError: null,
+        });
+      } catch (toolError) {
+        // If fetching/creating tools fails, clean up everything we created
+        await McpServerModel.delete(mcpServer.id);
+
+        // Also clean up the secret if we created one
+        if (createdSecretId) {
+          await secretManager().deleteSecret(createdSecretId);
+        }
+
+        throw new ApiError(
+          500,
+          `Failed to fetch tools from MCP server ${mcpServer.name}: ${toolError instanceof Error ? toolError.message : "Unknown error"}`,
+        );
+      }
+    },
+  );
+
+  /**
+   * Re-authenticate an MCP server by updating its secret
+   * Used when OAuth token refresh fails and user needs to re-authenticate
+   */
+  fastify.patch(
+    "/api/mcp_server/:id/reauthenticate",
+    {
+      schema: {
+        operationId: RouteId.ReauthenticateMcpServer,
+        description:
+          "Update MCP server secret after re-authentication (clears OAuth refresh errors)",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z.object({
+          secretId: UuidIdSchema.optional(),
+          accessToken: z.string().optional(),
+          userConfigValues: z.record(z.string(), z.string()).optional(),
+          environmentValues: z.record(z.string(), z.string()).optional(),
+          isByosVault: z.boolean().optional(),
+        }),
+        response: constructResponseSchema(SelectMcpServerSchema),
+      },
+    },
+    async (
+      {
+        params: { id },
+        body: {
+          secretId: providedSecretId,
+          accessToken,
+          userConfigValues,
+          environmentValues,
+          isByosVault,
+        },
+        user,
+        headers,
+        organizationId,
+      },
+      reply,
+    ) => {
+      // Validate that at least one credential field is provided
+      if (
+        !providedSecretId &&
+        !accessToken &&
+        !userConfigValues &&
+        !environmentValues
+      ) {
+        throw new ApiError(400, "At least one credential field is required");
+      }
+
+      // Get the existing MCP server
+      const mcpServer = await McpServerModel.findById(id);
+
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+      if (mcpServer.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App servers are managed via the Apps API and have no credentials to re-authenticate.",
+        );
+      }
+      // Check mcpServer create permission (required for re-authentication)
+      const { success: hasMcpServerCreatePermission } = await hasPermission(
+        { mcpServerInstallation: ["create"] },
+        headers,
+      );
+
+      if (!hasMcpServerCreatePermission) {
+        throw new ApiError(
+          403,
+          "You need MCP server create permission to re-authenticate",
+        );
+      }
+
+      // Scope-aware lifecycle authorization.
+      await assertScopedLifecycleAuthorization({
+        mcpServer,
+        userId: user.id,
+        headers,
+        action: "re-authenticate",
+      });
+
+      const catalogItem = mcpServer.catalogId
+        ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+        : null;
+
+      // Enforce the governing environment's allowlist regex against the newly
+      // submitted non-secret, free-text config values.
+      await assertValuesMatchEnvironmentRegex({
+        environmentId: catalogItem?.environmentId ?? null,
+        organizationId,
+        valueSets: [
+          collectValidatableInstallValues({
+            catalogItem,
+            userConfigValues,
+            environmentValues,
+          }),
+        ],
+      });
+
+      // Resolve the new secret ID: either provided directly, or create from raw credentials
+      let newSecretId = providedSecretId;
+
+      if (!newSecretId) {
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem?.userConfig,
+        );
+        const installUserConfigValues = filterInstallUserConfigValues({
+          userConfig: catalogItem?.userConfig,
+          userConfigValues,
+        });
+
+        if (accessToken) {
+          // PAT token flow
+          if (isByosVault && isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Manual PAT token input is not allowed when Readonly Vault is enabled",
+            );
+          }
+          const secret = await secretManager().createSecret(
+            { ...catalogStaticUserConfigValues, access_token: accessToken },
+            `${mcpServer.name}-token`,
+          );
+          newSecretId = secret.id;
+        } else if (installUserConfigValues) {
+          // Remote server user config fields
+          if (isByosVault) {
+            if (!isByosEnabled()) {
+              throw new ApiError(
+                400,
+                "Readonly Vault is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+              );
+            }
+          }
+          const secret = await secretManager().createSecret(
+            {
+              ...catalogStaticUserConfigValues,
+              ...installUserConfigValues,
+            } as Record<string, unknown>,
+            isByosVault
+              ? `${mcpServer.name}-vault-secret`
+              : `${mcpServer.name}-secret`,
+          );
+          newSecretId = secret.id;
+
+          // Validate connection for remote servers before committing the swap
+          if (catalogItem?.serverType === "remote") {
+            try {
+              await connectAndGetToolsForInstallation({
+                catalogItem,
+                mcpServerId: "validation",
+                secretId: newSecretId,
+                userId: user.id,
+                allowCurrentUserTokenFallback:
+                  mcpServer.scope === "personal" ||
+                  catalogItem.enterpriseManagedConfig !== null,
+              });
+            } catch (error) {
+              // Clean up the newly created secret
+              try {
+                await secretManager().deleteSecret(newSecretId);
+              } catch {
+                // Ignore cleanup errors
+              }
+              throw new ApiError(
+                400,
+                error instanceof Error
+                  ? error.message
+                  : "Failed to connect to MCP server with provided credentials",
+              );
+            }
+          }
+        } else if (
+          catalogItem?.serverType === "remote" &&
+          Object.keys(catalogStaticUserConfigValues).length > 0
+        ) {
+          const secret = await secretManager().createSecret(
+            catalogStaticUserConfigValues,
+            `${mcpServer.name}-secret`,
+          );
+          newSecretId = secret.id;
+        } else if (environmentValues || userConfigValues) {
+          // Local server environment variables
+          const localInstallUserConfigValues = filterInstallUserConfigValues({
+            userConfig: catalogItem?.userConfig,
+            userConfigValues,
+          });
+          if (isByosVault) {
+            if (!isByosEnabled()) {
+              throw new ApiError(
+                400,
+                "Readonly Vault is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+              );
+            }
+            // Vault references for secret env vars
+            const secret = await secretManager().createSecret(
+              {
+                ...catalogStaticUserConfigValues,
+                ...(environmentValues ?? {}),
+                ...(localInstallUserConfigValues ?? {}),
+              },
+              `${mcpServer.name}-vault-secret`,
+            );
+            newSecretId = secret.id;
+          } else if (catalogItem?.localConfig?.environment) {
+            // Collect only secret-type env vars
+            const secretEnvVars: Record<string, string> = {
+              ...catalogStaticUserConfigValues,
+            };
+            for (const envDef of catalogItem.localConfig.environment) {
+              if (envDef.type === "secret") {
+                const value = envDef.promptOnInstallation
+                  ? environmentValues?.[envDef.key]
+                  : (envDef.value as string | undefined);
+                if (value) {
+                  secretEnvVars[envDef.key] = value;
+                }
+              }
+            }
+            if (localInstallUserConfigValues) {
+              Object.assign(secretEnvVars, localInstallUserConfigValues);
+            }
+            if (Object.keys(secretEnvVars).length > 0) {
+              const secret = await secretManager().createSecret(
+                secretEnvVars,
+                `${mcpServer.name}-secret`,
+              );
+              newSecretId = secret.id;
+            }
+          } else if (
+            localInstallUserConfigValues &&
+            Object.keys(localInstallUserConfigValues).length > 0
+          ) {
+            const secret = await secretManager().createSecret(
+              {
+                ...catalogStaticUserConfigValues,
+                ...localInstallUserConfigValues,
+              },
+              `${mcpServer.name}-secret`,
+            );
+            newSecretId = secret.id;
+          }
+        }
+      }
+
+      if (!newSecretId) {
+        throw new ApiError(400, "Could not resolve credentials");
+      }
+
+      // Delete the old secret if it exists
+      if (mcpServer.secretId) {
+        try {
+          await secretManager().deleteSecret(mcpServer.secretId);
+          logger.info(
+            { mcpServerId: id, oldSecretId: mcpServer.secretId },
+            "Deleted old secret during re-authentication",
+          );
+        } catch (error) {
+          logger.error(
+            { err: error, mcpServerId: id },
+            "Failed to delete old secret during re-authentication",
+          );
+          // Continue with update even if old secret deletion fails
+        }
+      }
+
+      // Update the server with new secret and clear OAuth error fields
+      const updatedServer = await McpServerModel.update(id, {
+        secretId: newSecretId,
+        oauthRefreshError: null,
+        oauthRefreshErrorMessage: null,
+        oauthRefreshFailedAt: null,
+      });
+
+      // Re-auth swaps the secret behind the same MCP server ID. Cached MCP clients
+      // are keyed by server ID and can otherwise keep reusing the stale auth/session.
+      await mcpClient.invalidateConnectionsForServer(id);
+
+      // For local servers, trigger pod restart to pick up new credentials
+      if (mcpServer.serverType === "local") {
+        try {
+          await McpServerRuntimeManager.restartServer(id);
+          logger.info(
+            { mcpServerId: id },
+            "Triggered pod restart after re-authentication",
+          );
+        } catch (error) {
+          logger.warn(
+            { err: error, mcpServerId: id },
+            "Failed to restart pod after re-authentication (may not be running)",
+          );
+        }
+      }
+
+      if (!updatedServer) {
+        throw new ApiError(500, "Failed to update MCP server");
+      }
+
+      logger.info(
+        { mcpServerId: id, newSecretId },
+        "MCP server re-authenticated successfully",
+      );
+
+      return reply.send(updatedServer);
+    },
+  );
+
+  fastify.delete(
+    "/api/mcp_server/:id",
+    {
+      schema: {
+        operationId: RouteId.DeleteMcpServer,
+        description: "Delete/uninstall an MCP server",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id: mcpServerId }, user, headers }, reply) => {
+      // Fetch the MCP server first to get secretId and serverType
+      const mcpServer = await McpServerModel.findById(mcpServerId);
+
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      // Prevent deletion of built-in MCP servers
+      if (mcpServer.serverType === "builtin") {
+        throw new ApiError(400, "Cannot delete built-in MCP servers");
+      }
+
+      // App backing servers are owned by the Apps lifecycle. Deleting one here
+      // would orphan the app (FK set null) and strip its launch-tool surface — the
+      // app must be deleted via the Apps API instead.
+      if (mcpServer.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App servers are managed via the Apps API; delete the app instead.",
+        );
+      }
+
+      await assertScopedLifecycleAuthorization({
+        mcpServer,
+        userId: user.id,
+        headers,
+        action: "revoke",
+      });
+
+      // For local servers, stop the server (this will delete the K8s Secret)
+      if (mcpServer.serverType === "local") {
+        try {
+          await McpServerRuntimeManager.stopServer(mcpServerId);
+          logger.info(
+            { mcpServerId },
+            "Stopped K8s deployment and deleted K8s Secret for local MCP server",
+          );
+        } catch (error) {
+          logger.error(
+            { err: error, mcpServerId },
+            "Failed to stop local MCP server deployment",
+          );
+          // Continue with deletion even if pod stop fails
+        }
+      }
+
+      // Delete database secret if it exists and is for a local server
+      // (don't delete OAuth tokens for remote servers)
+      if (mcpServer.secretId && mcpServer.serverType === "local") {
+        try {
+          await secretManager().deleteSecret(mcpServer.secretId);
+          logger.info(
+            { mcpServerId },
+            "Deleted database secret for local MCP server",
+          );
+        } catch (error) {
+          logger.error(
+            { err: error, mcpServerId },
+            "Failed to delete database secret",
+          );
+          // Continue with MCP server deletion even if secret deletion fails
+        }
+      }
+
+      // Delete the MCP server record
+      const success = await McpServerModel.delete(mcpServerId);
+
+      return reply.send({ success });
+    },
+  );
+
+  fastify.get(
+    "/api/mcp_server/:id/installation-status",
+    {
+      schema: {
+        operationId: RouteId.GetMcpServerInstallationStatus,
+        description:
+          "Get the installation status of an MCP server (for polling during local server installation)",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(
+          z.object({
+            localInstallationStatus: LocalMcpServerInstallationStatusSchema,
+            localInstallationError: z.string().nullable(),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, user, headers }, reply) => {
+      const mcpServer = await findAccessibleMcpServer({
+        mcpServerId: id,
+        userId: user.id,
+        headers,
+      });
+
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      return reply.send({
+        localInstallationStatus: mcpServer.localInstallationStatus || "idle",
+        localInstallationError: mcpServer.localInstallationError || null,
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/mcp_server/:id/tools",
+    {
+      schema: {
+        operationId: RouteId.GetMcpServerTools,
+        description: "Get all tools for an MCP server",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              id: z.string(),
+              name: z.string(),
+              description: z.string().nullable(),
+              parameters: z.record(z.string(), z.any()),
+              createdAt: z.coerce.date(),
+              assignedAgentCount: z.number(),
+              assignedAgents: z.array(
+                z.object({
+                  id: z.string(),
+                  name: z.string(),
+                }),
+              ),
+            }),
+          ),
+        ),
+      },
+    },
+    async ({ params: { id }, user, headers }, reply) => {
+      const mcpServer = await findAccessibleMcpServer({
+        mcpServerId: id,
+        userId: user.id,
+        headers,
+      });
+
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      // Query tools by catalogId — all MCP servers have a catalogId
+      const tools = mcpServer.catalogId
+        ? await ToolModel.findByCatalogId(mcpServer.catalogId)
+        : [];
+
+      return reply.send(tools);
+    },
+  );
+
+  fastify.post(
+    "/api/mcp_server/:id/inspect",
+    {
+      schema: {
+        operationId: RouteId.InspectMcpServer,
+        description: "Inspect a running MCP server (list tools or call a tool)",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z.object({
+          method: z.enum(["tools/list", "tools/call"]),
+          toolName: z.string().optional(),
+          toolArguments: z.record(z.string(), z.unknown()).optional(),
+        }),
+        response: constructResponseSchema(z.record(z.string(), z.unknown())),
+      },
+    },
+    async ({ params: { id }, body, user, headers }, reply) => {
+      const mcpServer = await findAccessibleMcpServer({
+        mcpServerId: id,
+        userId: user.id,
+        headers,
+      });
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      const catalogItem = mcpServer.catalogId
+        ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+        : null;
+      if (!catalogItem) {
+        throw new ApiError(400, "No catalog item found for this MCP server");
+      }
+
+      let secrets: Record<string, unknown> = {};
+      if (mcpServer.secretId) {
+        const secretRecord = await secretManager().getSecret(
+          mcpServer.secretId,
+        );
+        if (secretRecord) {
+          secrets = secretRecord.secret;
+        }
+      }
+
+      try {
+        const result = await mcpClient.inspectServer({
+          catalogItem,
+          mcpServerId: mcpServer.id,
+          secrets,
+          method: body.method,
+          toolName: body.toolName,
+          toolArguments: body.toolArguments,
+        });
+
+        return reply.send(result as Record<string, unknown>);
+      } catch (error) {
+        if (
+          error instanceof McpServerNotReadyError ||
+          error instanceof McpServerConnectionTimeoutError
+        ) {
+          logger.warn(
+            { err: error, mcpServerId: mcpServer.id, statusCode: 409 },
+            `MCP server ${mcpServer.name} is not ready for inspection`,
+          );
+          throw new ApiError(409, error.message);
+        }
+
+        logger.error(
+          { err: error },
+          `Failed to inspect MCP server ${mcpServer.name}`,
+        );
+        throw new ApiError(
+          502,
+          `Failed to inspect MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+      }
+    },
+  );
+
+  /**
+   * Reinstall an MCP server without losing tool assignments and policies.
+   *
+   * Unlike delete + install, this endpoint:
+   * 1. Keeps the MCP server record (and its ID)
+   * 2. Updates secrets if new environment values are provided
+   * 3. Restarts the K8s deployment (for local servers)
+   * 4. Syncs tools (updates existing, creates new) instead of deleting
+   * 5. Preserves tool_invocation_policies, trusted_data_policies, and agent_tools
+   */
+  fastify.post(
+    "/api/mcp_server/:id/reinstall",
+    {
+      schema: {
+        operationId: RouteId.ReinstallMcpServer,
+        description:
+          "Reinstall an MCP server without losing tool assignments and policies",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z.object({
+          // Environment values for local servers (when new prompted env vars were added)
+          environmentValues: z.record(z.string(), z.string()).optional(),
+          userConfigValues: z.record(z.string(), z.string()).optional(),
+          // Whether environmentValues contains vault references in path#key format
+          isByosVault: z.boolean().optional(),
+          // Kubernetes service account override
+          serviceAccount: z.string().optional(),
+        }),
+        response: constructResponseSchema(SelectMcpServerSchema),
+      },
+    },
+    async ({ params: { id }, body, user, headers, organizationId }, reply) => {
+      const {
+        environmentValues,
+        userConfigValues,
+        isByosVault,
+        serviceAccount,
+      } = body;
+
+      // Get the existing MCP server
+      const mcpServer = await McpServerModel.findById(id);
+
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      if (mcpServer.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App servers run in-process and are not reinstallable; manage them via the Apps API.",
+        );
+      }
+
+      await assertScopedLifecycleAuthorization({
+        mcpServer,
+        userId: user.id,
+        headers,
+        action: "reinstall",
+      });
+
+      // Get catalog item
+      const catalogItem = mcpServer.catalogId
+        ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+        : null;
+
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found for this server");
+      }
+
+      // Enforce the governing environment's allowlist regex against the newly
+      // submitted non-secret, free-text config values.
+      await assertValuesMatchEnvironmentRegex({
+        environmentId: catalogItem.environmentId,
+        organizationId,
+        valueSets: [
+          collectValidatableInstallValues({
+            catalogItem,
+            userConfigValues,
+            environmentValues,
+          }),
+        ],
+      });
+
+      // Drop whitespace-only submissions for secret-typed env vars: such a
+      // value passes required-secret validation via the existing-bag fallback
+      // but would then clobber the stored secret with whitespace on merge,
+      // breaking the restarted server's credentials. "" is left intact as an
+      // explicit clear (required-secret validation still rejects it).
+      const submittedEnv: Record<string, string> = {
+        ...(environmentValues ?? {}),
+      };
+      for (const envDef of catalogItem.localConfig?.environment ?? []) {
+        if (envDef.type === "secret") {
+          const value = submittedEnv[envDef.key];
+          if (
+            typeof value === "string" &&
+            value !== "" &&
+            value.trim() === ""
+          ) {
+            delete submittedEnv[envDef.key];
+          }
+        }
+      }
+
+      // Build the post-merge plain-env view: existing column pruned to the
+      // catalog's current plain prompted keys (so a var removed from the
+      // catalog or flipped to secret-typed can't leave stale plaintext in the
+      // column or the pod env), then overridden by the request body with empty
+      // string treated as the delete signal. Reused to validate required vars
+      // and to persist back to mcp_server.environmentValues.
+      const plainPromptedKeys = new Set(
+        (catalogItem.localConfig?.environment ?? [])
+          .filter((env) => env.promptOnInstallation && env.type !== "secret")
+          .map((env) => env.key),
+      );
+      const mergedPlainEnv: Record<string, string> = {};
+      for (const [key, value] of Object.entries(
+        mcpServer.environmentValues ?? {},
+      )) {
+        if (plainPromptedKeys.has(key)) {
+          mergedPlainEnv[key] = value;
+        }
+      }
+      for (const envDef of catalogItem.localConfig?.environment ?? []) {
+        if (envDef.promptOnInstallation && envDef.type !== "secret") {
+          const value = submittedEnv[envDef.key];
+          if (value === "") {
+            delete mergedPlainEnv[envDef.key];
+          } else if (value !== undefined && value !== null) {
+            mergedPlainEnv[envDef.key] = String(value);
+          }
+        }
+      }
+
+      // Fetch the existing secret bag once so validation and the non-BYOS
+      // merge below can both consult it. BYOS replaces the bag wholesale
+      // (vault references are re-supplied per request), so it doesn't need
+      // the existing state.
+      const existingSecrets: Record<string, unknown> =
+        !isByosVault && mcpServer.secretId
+          ? ((await secretManager().getSecret(mcpServer.secretId))?.secret ??
+            {})
+          : {};
+
+      // Validate required env vars against the effective post-merge state
+      // regardless of whether the body carried values — an empty reinstall
+      // body must still 400 when a newly-added required var is unsatisfied
+      // rather than failing later at pod start. Plain types come from
+      // `mergedPlainEnv` (column + body, empty = clear); non-BYOS secret types
+      // are satisfied by the existing bag when the body omits them; BYOS
+      // requires the body alone.
+      if (catalogItem.localConfig?.environment) {
+        const requiredEnvVars = catalogItem.localConfig.environment.filter(
+          (env) => env.promptOnInstallation && env.required,
+        );
+
+        const missingEnvVars = requiredEnvVars.filter((env) => {
+          if (env.type === "secret") {
+            const submitted = submittedEnv[env.key];
+            if (isByosVault) {
+              return !submitted?.trim();
+            }
+            if (submitted === "") {
+              return true;
+            }
+            if (typeof submitted === "string" && submitted.trim()) {
+              return false;
+            }
+            const existing = existingSecrets[env.key];
+            return typeof existing !== "string" || !existing.trim();
+          }
+          const value = mergedPlainEnv[env.key];
+          if (env.type === "boolean") {
+            return !value;
+          }
+          return typeof value !== "string" || !value.trim();
+        });
+
+        if (missingEnvVars.length > 0) {
+          throw new ApiError(
+            400,
+            `Missing required environment variables: ${missingEnvVars
+              .map((env) => env.key)
+              .join(", ")}`,
+          );
+        }
+      }
+
+      // Validate required userConfig (connection-setting) fields on the same
+      // terms as env vars above. For non-BYOS a field already on the install's
+      // bag stays satisfied when the body omits it, so a partial reinstall that
+      // only touches env doesn't 400 on an unchanged stored header; "" is an
+      // explicit clear. BYOS validates against the body alone since vault
+      // references are re-supplied on every reinstall.
+      if (catalogItem.userConfig) {
+        const requiredUserConfigFields = Object.entries(
+          catalogItem.userConfig,
+        ).filter(([_fieldName, fieldConfig]) => {
+          return fieldConfig.promptOnInstallation && fieldConfig.required;
+        });
+
+        const missingUserConfigFields = requiredUserConfigFields.filter(
+          ([fieldName]) => {
+            const submitted = userConfigValues?.[fieldName];
+            if (isByosVault) {
+              return !submitted?.trim();
+            }
+            if (submitted === "") {
+              return true;
+            }
+            if (typeof submitted === "string" && submitted.trim()) {
+              return false;
+            }
+            const existing = existingSecrets[fieldName];
+            return typeof existing !== "string" || !existing.trim();
+          },
+        );
+
+        if (missingUserConfigFields.length > 0) {
+          throw new ApiError(
+            400,
+            `Missing required connection settings: ${missingUserConfigFields
+              .map(([fieldName]) => fieldName)
+              .join(", ")}`,
+          );
+        }
+      }
+
+      // New env/userConfig values land in this install's secret bag. The
+      // runtime reload below reads `secretId` to pick them up.
+      if (
+        (environmentValues && Object.keys(environmentValues).length > 0) ||
+        (userConfigValues && Object.keys(userConfigValues).length > 0)
+      ) {
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem.userConfig,
+        );
+        const installUserConfigValues = filterInstallUserConfigValues({
+          userConfig: catalogItem.userConfig,
+          userConfigValues,
+        });
+
+        // Update or create secret with new values
+        if (isByosVault) {
+          // BYOS mode: values are vault references
+          if (!isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Readonly Vault is not enabled. " +
+                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+            );
+          }
+
+          // BYOS vault bags hold only vault references. Plain (non-secret) env
+          // values are literals that belong on the install row's column
+          // (persisted below); spreading them here would have vault resolution
+          // misread a literal as a `path#key` reference. Restrict the env
+          // contribution to secret-typed keys.
+          const secretEnvKeys = new Set(
+            (catalogItem.localConfig?.environment ?? [])
+              .filter((envDef) => envDef.type === "secret")
+              .map((envDef) => envDef.key),
+          );
+          const submittedSecretEnv: Record<string, string> = {};
+          for (const [key, value] of Object.entries(submittedEnv)) {
+            if (secretEnvKeys.has(key)) {
+              submittedSecretEnv[key] = value;
+            }
+          }
+
+          if (mcpServer.secretId) {
+            await secretManager().updateSecret(mcpServer.secretId, {
+              ...catalogStaticUserConfigValues,
+              ...submittedSecretEnv,
+              ...(installUserConfigValues ?? {}),
+            });
+          } else {
+            const secret = await secretManager().createSecret(
+              {
+                ...catalogStaticUserConfigValues,
+                ...submittedSecretEnv,
+                ...(installUserConfigValues ?? {}),
+              },
+              `${mcpServer.name}-vault-secret`,
+            );
+            await McpServerModel.update(id, { secretId: secret.id });
+          }
+        } else {
+          // Non-BYOS: merge new values with the existing bag (fetched above for
+          // validation). userConfig is applied per field so an empty string is
+          // an explicit clear and an omitted field preserves the stored value;
+          // static catalog-only headers are owned by the catalog static spread
+          // and can't be overridden by an installer request.
+          const mergedSecrets: Record<string, unknown> = {
+            ...existingSecrets,
+            ...catalogStaticUserConfigValues,
+            ...submittedEnv,
+          };
+          for (const [fieldName, fieldConfig] of Object.entries(
+            catalogItem.userConfig ?? {},
+          )) {
+            if (
+              fieldConfig?.headerName &&
+              fieldConfig?.promptOnInstallation === false
+            ) {
+              continue;
+            }
+            const submitted = userConfigValues?.[fieldName];
+            if (submitted === "") {
+              // Explicit clear.
+              delete mergedSecrets[fieldName];
+            } else if (typeof submitted === "string" && submitted.trim()) {
+              mergedSecrets[fieldName] = submitted;
+            }
+            // A whitespace-only submission is treated as "no change" (matching
+            // validation's existing-bag fallback) so an accidental blank can't
+            // clobber a valid stored header.
+          }
+
+          if (mcpServer.secretId) {
+            await secretManager().updateSecret(
+              mcpServer.secretId,
+              mergedSecrets,
+            );
+          } else {
+            const secret = await secretManager().createSecret(
+              mergedSecrets,
+              `mcp-server-${mcpServer.name}-env`,
+            );
+            await McpServerModel.update(id, { secretId: secret.id });
+          }
+        }
+
+        logger.info(
+          {
+            serverId: id,
+            envVarCount: Object.keys(environmentValues ?? {}).length,
+            userConfigCount: Object.keys(installUserConfigValues ?? {}).length,
+          },
+          "Updated MCP server secrets for reinstall",
+        );
+      }
+
+      // Persist the merged plain-env view onto the install row's column so
+      // startServer can overlay it on every (re)deploy — the runtime manager's
+      // secret-bag reload keeps only secret-typed keys, so plain values would
+      // otherwise vanish on pod restart. Runs after the secret writes above so
+      // a validation or secret-write failure aborts before the column is
+      // mutated, and outside the body-non-empty guard so a catalog edit that
+      // removed a plain key (or flipped it to secret-typed) is still pruned on
+      // an empty-body (auto-cascade) reinstall.
+      if (catalogItem.serverType === "local") {
+        await McpServerModel.update(id, { environmentValues: mergedPlainEnv });
+      }
+
+      // Update service account if provided
+      if (
+        serviceAccount !== undefined &&
+        catalogItem.localConfig?.serviceAccount !== serviceAccount
+      ) {
+        await InternalMcpCatalogModel.update(catalogItem.id, {
+          localConfig: {
+            ...catalogItem.localConfig,
+            serviceAccount: serviceAccount || undefined,
+          },
+        });
+      }
+
+      // Set status to "pending" immediately so UI shows progress bar
+      await McpServerModel.update(id, {
+        localInstallationStatus: "pending",
+        localInstallationError: null,
+      });
+      broadcastMcpInstallationStatus(id, "pending", null);
+
+      // Refetch the server with updated status
+      const updatedServer = await McpServerModel.findById(id);
+      if (!updatedServer) {
+        throw new ApiError(500, "Server not found after update");
+      }
+
+      // Perform the reinstall asynchronously (don't block the response)
+      // Use setImmediate to fully detach from the request lifecycle
+      // This allows the frontend to show the progress bar immediately
+      setImmediate(async () => {
+        try {
+          await autoReinstallServer(updatedServer, catalogItem, {
+            getTools:
+              updatedServer.serverType === "remote"
+                ? async ({ server, catalogItem }) =>
+                    (
+                      await connectAndGetToolsForInstallation({
+                        catalogItem,
+                        mcpServerId: server.id,
+                        secretId: server.secretId ?? undefined,
+                        userId: user.id,
+                        allowCurrentUserTokenFallback:
+                          updatedServer.scope === "personal" ||
+                          catalogItem.enterpriseManagedConfig !== null,
+                      })
+                    ).map((tool) => ({
+                      name: tool.name,
+                      description: tool.description || `Tool: ${tool.name}`,
+                      inputSchema: tool.inputSchema,
+                      _meta: tool._meta,
+                      annotations: tool.annotations,
+                    }))
+                : undefined,
+          });
+          // Set status to success when done
+          await McpServerModel.update(id, {
+            localInstallationStatus: "success",
+          });
+          broadcastMcpInstallationStatus(id, "success", null);
+          logger.info(
+            { serverId: id, serverName: mcpServer.name },
+            "MCP server reinstalled successfully",
+          );
+        } catch (error) {
+          // Set status to error if reinstall fails
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+          await McpServerModel.update(id, {
+            localInstallationStatus: "error",
+            localInstallationError: errorMessage,
+          });
+          broadcastMcpInstallationStatus(id, "error", errorMessage);
+          logger.error(
+            { err: error, serverId: id },
+            "Failed to reinstall MCP server",
+          );
+        }
+      });
+
+      // Return the server immediately with "pending" status
+      return reply.send(updatedServer);
+    },
+  );
+};
+
+export default mcpServerRoutes;
+
+async function findAccessibleMcpServer(params: {
+  mcpServerId: string;
+  userId: string;
+  headers: IncomingHttpHeaders;
+}) {
+  const { success: isMcpServerAdmin } = await hasPermission(
+    { mcpServerInstallation: ["admin"] },
+    params.headers,
+  );
+
+  return McpServerModel.findById(
+    params.mcpServerId,
+    params.userId,
+    isMcpServerAdmin,
+  );
+}
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+/**
+ * Gate the three destructive lifecycle actions (revoke / reauth / reinstall)
+ * on an already-fetched MCP server by its scope. Rules:
+ *   - personal:
+ *       - revoke: owner OR mcpServerInstallation:update
+ *       - re-authenticate / reinstall: owner only (these replace the
+ *         connection's secret, so they must not be available to editors)
+ *   - team:     team:create OR literal team admin OR (mcpServerInstallation:update AND user-in-team)
+ *   - org:      mcpServerInstallation:admin (no owner fallback)
+ */
+async function assertScopedLifecycleAuthorization(params: {
+  mcpServer: {
+    scope: "personal" | "team" | "org";
+    ownerId: string | null;
+    teamId: string | null;
+  };
+  userId: string;
+  headers: IncomingHttpHeaders;
+  action: "revoke" | "re-authenticate" | "reinstall";
+}): Promise<void> {
+  const { mcpServer, userId, headers, action } = params;
+
+  switch (mcpServer.scope) {
+    case "personal": {
+      if (mcpServer.ownerId === userId) return;
+      if (action === "revoke") {
+        const { success: hasMcpServerUpdate } = await hasPermission(
+          { mcpServerInstallation: ["update"] },
+          headers,
+        );
+        if (hasMcpServerUpdate) return;
+        throw new ApiError(
+          403,
+          `Only the connection owner or an editor/admin can ${action} personal connections`,
+        );
+      }
+      throw new ApiError(
+        403,
+        `Only the connection owner can ${action} personal connections`,
+      );
+    }
+    case "team": {
+      if (!mcpServer.teamId) {
+        throw new ApiError(500, "Team-scoped MCP server is missing its teamId");
+      }
+      const { success: canManageAllTeams } = await hasPermission(
+        { team: ["create"] },
+        headers,
+      );
+      if (canManageAllTeams) return;
+
+      const isLiteralTeamAdmin = await TeamModel.isUserTeamAdmin(
+        mcpServer.teamId,
+        userId,
+      );
+      if (isLiteralTeamAdmin) return;
+
+      const { success: hasMcpServerUpdate } = await hasPermission(
+        { mcpServerInstallation: ["update"] },
+        headers,
+      );
+      if (!hasMcpServerUpdate) {
+        throw new ApiError(
+          403,
+          `You don't have permission to ${action} team connections`,
+        );
+      }
+      const isMember = await TeamModel.isUserInTeam(mcpServer.teamId, userId);
+      if (!isMember) {
+        throw new ApiError(
+          403,
+          `You can only ${action} connections for teams you are a member of`,
+        );
+      }
+      return;
+    }
+    case "org": {
+      const { success: isMcpServerInstallationAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        headers,
+      );
+      if (!isMcpServerInstallationAdmin) {
+        throw new ApiError(
+          403,
+          `Only mcpServerInstallation admins can ${action} organization-scoped connections`,
+        );
+      }
+      return;
+    }
+  }
+}
+
+async function connectAndGetToolsForInstallation(params: {
+  catalogItem: Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>;
+  mcpServerId: string;
+  secretId?: string;
+  userId: string;
+  allowCurrentUserTokenFallback: boolean;
+}) {
+  const { catalogItem } = params;
+  if (!catalogItem) {
+    throw new Error("Catalog item not found");
+  }
+
+  const secrets = await getSecretValues(params.secretId);
+  const installDiscoveryAccessToken =
+    params.allowCurrentUserTokenFallback && catalogItem.enterpriseManagedConfig
+      ? await getInstallDiscoveryAccessToken({
+          catalogItem,
+          userId: params.userId,
+        })
+      : undefined;
+  const discoverySecrets = installDiscoveryAccessToken
+    ? { ...secrets, access_token: installDiscoveryAccessToken }
+    : secrets;
+
+  if (catalogItem.enterpriseManagedConfig && !installDiscoveryAccessToken) {
+    const identityProvider = catalogItem.enterpriseManagedConfig
+      .identityProviderId
+      ? await findExternalIdentityProviderById(
+          catalogItem.enterpriseManagedConfig.identityProviderId,
+        )
+      : null;
+    const message = identityProvider
+      ? `Connect ${identityProvider.providerId} before installing this MCP server.`
+      : "Sign in with SSO to link your identity provider before installing this MCP server.";
+    throw new ApiError(401, message);
+  }
+
+  try {
+    return await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId: params.mcpServerId,
+      secrets: discoverySecrets,
+      secretId: params.secretId,
+    });
+  } catch (error) {
+    if (
+      catalogItem.enterpriseManagedConfig ||
+      !params.allowCurrentUserTokenFallback ||
+      !isInstallDiscoveryAuthError(error)
+    ) {
+      throw error;
+    }
+
+    const accessToken = await getInstallDiscoveryAccessToken({
+      catalogItem,
+      userId: params.userId,
+    });
+    if (!accessToken || discoverySecrets.access_token === accessToken) {
+      throw error;
+    }
+
+    logger.info(
+      {
+        catalogId: catalogItem.id,
+        mcpServerId: params.mcpServerId,
+        userId: params.userId,
+      },
+      "Retrying MCP install-time tool discovery with the current user's identity-provider access token",
+    );
+
+    return await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId: params.mcpServerId,
+      secrets: {
+        ...discoverySecrets,
+        access_token: accessToken,
+      },
+      secretId: params.secretId,
+    });
+  }
+}
+
+async function getCurrentIdentityProviderAccessToken(
+  userId: string,
+): Promise<string | undefined> {
+  const account =
+    await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(userId);
+  return account ? ensureFreshSsoAccessToken(account) : undefined;
+}
+
+async function getInstallDiscoveryAccessToken(params: {
+  catalogItem: NonNullable<
+    Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+  >;
+  userId: string;
+}): Promise<string | undefined> {
+  const enterpriseManagedConfig = params.catalogItem.enterpriseManagedConfig;
+  if (!enterpriseManagedConfig) {
+    const accessToken = await getCurrentIdentityProviderAccessToken(
+      params.userId,
+    );
+    return accessToken;
+  }
+
+  const fallbackIdentityProviderResult =
+    enterpriseManagedConfig.identityProviderId
+      ? null
+      : await findInstallDiscoveryFallbackIdentityProvider(params.userId);
+  const identityProvider = enterpriseManagedConfig.identityProviderId
+    ? await findExternalIdentityProviderById(
+        enterpriseManagedConfig.identityProviderId,
+      )
+    : fallbackIdentityProviderResult?.identityProvider;
+
+  if (!identityProvider) {
+    if (fallbackIdentityProviderResult?.account) {
+      return await ensureFreshSsoAccessToken(
+        fallbackIdentityProviderResult.account,
+      );
+    }
+
+    return undefined;
+  }
+
+  const account =
+    fallbackIdentityProviderResult?.account.providerId ===
+    identityProvider.providerId
+      ? fallbackIdentityProviderResult.account
+      : await AccountModel.getLatestSsoAccountByUserIdAndProviderId(
+          params.userId,
+          identityProvider.providerId,
+        );
+  if (!account) {
+    return undefined;
+  }
+
+  const assertion = await getInstallDiscoverySubjectToken({
+    account,
+    identityProvider,
+  });
+  if (!assertion) {
+    return undefined;
+  }
+
+  const credential = await exchangeEnterpriseManagedCredential({
+    identityProviderId: identityProvider.id,
+    assertion,
+    enterpriseManagedConfig,
+  });
+
+  if (shouldExchangeInstallIdJagAtProtectedResource(enterpriseManagedConfig)) {
+    const idJagAssertion = extractInstallDiscoveryCredentialValue({
+      credentialValue: credential.value,
+      responseFieldPath: enterpriseManagedConfig.responseFieldPath,
+    });
+    const protectedResourceCredential = await exchangeIdJagAtProtectedResource({
+      assertion: idJagAssertion,
+      identityProviderId: identityProvider.id,
+      enterpriseManagedConfig,
+    });
+
+    return extractInstallDiscoveryCredentialValue({
+      credentialValue: protectedResourceCredential.value,
+      responseFieldPath: enterpriseManagedConfig.responseFieldPath,
+    });
+  }
+
+  return extractInstallDiscoveryCredentialValue({
+    credentialValue: credential.value,
+    responseFieldPath: enterpriseManagedConfig.responseFieldPath,
+  });
+}
+
+async function findInstallDiscoveryFallbackIdentityProvider(userId: string) {
+  const account =
+    await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(userId);
+  if (!account) {
+    return null;
+  }
+
+  return {
+    account,
+    identityProvider: await findExternalIdentityProviderByProviderId(
+      account.providerId,
+    ),
+  };
+}
+
+async function getInstallDiscoverySubjectToken(params: {
+  account: NonNullable<
+    Awaited<
+      ReturnType<typeof AccountModel.getLatestSsoAccountByUserIdAndProviderId>
+    >
+  >;
+  identityProvider: NonNullable<
+    Awaited<ReturnType<typeof findExternalIdentityProviderById>>
+  >;
+}): Promise<string | undefined> {
+  if (shouldUseInstallDiscoveryIdToken(params.identityProvider)) {
+    return params.account.idToken ?? undefined;
+  }
+
+  return ensureFreshSsoAccessToken(params.account);
+}
+
+async function ensureFreshSsoAccessToken(
+  account: Pick<
+    Account,
+    | "id"
+    | "providerId"
+    | "accessToken"
+    | "accessTokenExpiresAt"
+    | "refreshToken"
+    | "refreshTokenExpiresAt"
+  >,
+): Promise<string | undefined> {
+  if (!account.accessToken) {
+    return undefined;
+  }
+
+  const isAccessTokenExpired =
+    !!account.accessTokenExpiresAt &&
+    account.accessTokenExpiresAt <= new Date();
+  if (!isAccessTokenExpired) {
+    return account.accessToken;
+  }
+
+  return await refreshLinkedIdentityProviderAccessToken({
+    account: {
+      id: account.id,
+      providerId: account.providerId,
+      refreshToken: account.refreshToken,
+      refreshTokenExpiresAt: account.refreshTokenExpiresAt,
+    },
+  });
+}
+
+function shouldUseInstallDiscoveryIdToken(
+  identityProvider: NonNullable<
+    Awaited<ReturnType<typeof findExternalIdentityProviderById>>
+  >,
+): boolean {
+  const enterpriseManagedCredentials =
+    identityProvider.oidcConfig?.enterpriseManagedCredentials;
+  return (
+    enterpriseManagedCredentials?.subjectTokenType ===
+      OAUTH_TOKEN_TYPE.IdToken ||
+    enterpriseManagedCredentials?.exchangeStrategy === "okta_managed"
+  );
+}
+
+function shouldExchangeInstallIdJagAtProtectedResource(
+  config: NonNullable<
+    NonNullable<
+      Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+    >["enterpriseManagedConfig"]
+  >,
+): boolean {
+  return (
+    config.requestedCredentialType === "id_jag" &&
+    config.resourceType === "oauth_protected_resource"
+  );
+}
+
+async function getSecretValues(
+  secretId?: string,
+): Promise<Record<string, unknown>> {
+  if (!secretId) {
+    return {};
+  }
+
+  const secretRecord = await secretManager().getSecret(secretId);
+  return secretRecord?.secret ?? {};
+}
+
+function isInstallDiscoveryAuthError(error: unknown): boolean {
+  if (
+    error instanceof Error &&
+    "code" in error &&
+    (error as { code?: number }).code !== undefined
+  ) {
+    const code = (error as { code?: number }).code;
+    if (code === 401 || code === 403) {
+      return true;
+    }
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("401") ||
+    lower.includes("403") ||
+    lower.includes("unauthorized") ||
+    lower.includes("forbidden") ||
+    lower.includes("authentication failed") ||
+    lower.includes("authentication required") ||
+    (lower.includes("missing") && lower.includes("authorization header")) ||
+    lower.includes("invalid authorization header") ||
+    lower.includes("invalid token") ||
+    lower.includes("access denied") ||
+    lower.includes("invalid credentials")
+  );
+}
+
+function extractInstallDiscoveryCredentialValue(params: {
+  credentialValue: string | Record<string, unknown>;
+  responseFieldPath?: string;
+}): string {
+  if (typeof params.credentialValue === "string") {
+    return params.credentialValue;
+  }
+
+  if (!params.responseFieldPath) {
+    throw new Error(
+      "Install-time enterprise-managed discovery returned a structured credential but no responseFieldPath was configured",
+    );
+  }
+
+  const extractedValue = params.responseFieldPath
+    .split(".")
+    .filter(Boolean)
+    .reduce<unknown>((current, segment) => {
+      if (
+        segment === "__proto__" ||
+        segment === "constructor" ||
+        segment === "prototype"
+      ) {
+        return undefined;
+      }
+
+      if (!current || typeof current !== "object" || Array.isArray(current)) {
+        return undefined;
+      }
+
+      return (current as Record<string, unknown>)[segment];
+    }, params.credentialValue);
+
+  if (typeof extractedValue !== "string") {
+    throw new Error(
+      `Install-time enterprise-managed discovery response field '${params.responseFieldPath}' did not resolve to a string`,
+    );
+  }
+
+  return extractedValue;
+}
+
+function getCatalogStaticUserConfigValues(
+  userConfig:
+    | Record<
+        string,
+        {
+          headerName?: string;
+          promptOnInstallation?: boolean;
+          default?: string | number | boolean | Array<string>;
+        }
+      >
+    | null
+    | undefined,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(userConfig ?? {})
+      .filter(([_fieldName, fieldConfig]) => {
+        return (
+          fieldConfig.headerName &&
+          fieldConfig.promptOnInstallation === false &&
+          (typeof fieldConfig.default === "string" ||
+            typeof fieldConfig.default === "number" ||
+            typeof fieldConfig.default === "boolean") &&
+          String(fieldConfig.default).length > 0
+        );
+      })
+      .map(([fieldName, fieldConfig]) => [
+        fieldName,
+        String(fieldConfig.default),
+      ]),
+  );
+}
+
+/**
+ * Select the prompted config values an environment's allowlist regex governs:
+ * non-secret, free-text fields (userConfig string/directory/file; env
+ * plain_text). Secret fields — including BYOS vault references, which live on
+ * secret-typed fields — and typed boolean/number fields are excluded, since the
+ * rule targets free-text values. Mirrors the frontend's per-field filtering.
+ */
+function collectValidatableInstallValues(params: {
+  catalogItem: {
+    userConfig?: Record<string, { type?: string; sensitive?: boolean }> | null;
+    localConfig?: {
+      environment?: Array<{ key: string; type: string }> | null;
+    } | null;
+  } | null;
+  userConfigValues: Record<string, string> | undefined;
+  environmentValues: Record<string, string> | undefined;
+}): Record<string, string> {
+  const { catalogItem, userConfigValues, environmentValues } = params;
+  const values: Record<string, string> = {};
+  for (const [key, def] of Object.entries(catalogItem?.userConfig ?? {})) {
+    if (def.sensitive || def.type === "number" || def.type === "boolean") {
+      continue;
+    }
+    const value = userConfigValues?.[key];
+    if (value) values[key] = value;
+  }
+  for (const env of catalogItem?.localConfig?.environment ?? []) {
+    if (env.type !== "plain_text") continue;
+    const value = environmentValues?.[env.key];
+    if (value) values[env.key] = value;
+  }
+  return values;
+}
+
+function filterInstallUserConfigValues(params: {
+  userConfig:
+    | Record<
+        string,
+        {
+          headerName?: string;
+          promptOnInstallation?: boolean;
+        }
+      >
+    | null
+    | undefined;
+  userConfigValues: Record<string, string> | undefined;
+}): Record<string, string> | undefined {
+  if (!params.userConfigValues || !params.userConfig) {
+    return undefined;
+  }
+
+  const filteredEntries = Object.entries(params.userConfigValues).filter(
+    ([fieldName]) => {
+      const fieldConfig = params.userConfig?.[fieldName];
+      if (!fieldConfig) {
+        return false;
+      }
+
+      return !(
+        fieldConfig.headerName && fieldConfig.promptOnInstallation === false
+      );
+    },
+  );
+
+  if (filteredEntries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(filteredEntries);
+}
+
+async function validateScopeAndAuthorization(params: {
+  scope: ResourceVisibilityScope;
+  teamId: string | null | undefined;
+  userId: string;
+  organizationId: string;
+  headers: IncomingHttpHeaders;
+}): Promise<void> {
+  const { scope, teamId, userId, organizationId, headers } = params;
+
+  if (scope === "team" && !teamId) {
+    throw new ApiError(
+      400,
+      "teamId is required for team-scoped MCP server installations",
+    );
+  }
+
+  if (scope === "personal" && teamId) {
+    throw new ApiError(
+      400,
+      "teamId should not be provided for personal-scoped MCP server installations",
+    );
+  }
+
+  if (scope === "org" && teamId) {
+    throw new ApiError(
+      400,
+      "teamId should not be provided for organization-scoped MCP server installations",
+    );
+  }
+
+  if (scope === "team" && teamId) {
+    const team = await TeamModel.findById(teamId);
+    if (!team) {
+      throw new ApiError(404, "Team not found");
+    }
+
+    const { success: canManageAllTeams } = await hasPermission(
+      { team: ["create"] },
+      headers,
+    );
+
+    if (!canManageAllTeams) {
+      const isLiteralTeamAdmin = await TeamModel.isUserTeamAdmin(
+        teamId,
+        userId,
+      );
+      if (isLiteralTeamAdmin) {
+        return;
+      }
+
+      const { success: hasMcpServerUpdate } = await hasPermission(
+        { mcpServerInstallation: ["update"] },
+        headers,
+      );
+      if (!hasMcpServerUpdate) {
+        throw new ApiError(
+          403,
+          "You don't have permission to create team MCP server installations",
+        );
+      }
+      const isMember = await TeamModel.isUserInTeam(teamId, userId);
+      if (!isMember) {
+        throw new ApiError(
+          403,
+          "You can only create MCP server installations for teams you are a member of",
+        );
+      }
+    }
+  }
+
+  if (scope === "org") {
+    const isMcpServerInstallationAdmin = await userHasPermission(
+      userId,
+      organizationId,
+      "mcpServerInstallation",
+      "admin",
+    );
+    if (!isMcpServerInstallationAdmin) {
+      throw new ApiError(
+        403,
+        "Only mcpServerInstallation admins can install organization-scoped MCP servers",
+      );
+    }
+  }
+}

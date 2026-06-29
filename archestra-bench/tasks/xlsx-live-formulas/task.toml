@@ -1,0 +1,56 @@
+artifact_key = "artifact"
+
+[[stages]]
+text = """Build a sales-bonus report as an Excel workbook (.xlsx) with live formulas (not precomputed
+numbers), then export it.
+
+Base it on the Q3 sales ledger -- one row per sale, with columns `sale_id`, `salesperson`, `team`,
+`units`, `unit_price`, and `commission_pct` (a fraction). The ledger is NOT attached to this message;
+locate it among the resources available to you in this instance and read it.
+
+Produce a new single-worksheet workbook with this exact layout:
+
+- Row 1 headers, columns A..G:
+  `sale_id, salesperson, team, units, unit_price, commission_pct, bonus`
+- One row per sale starting at row 2 (same order as the ledger). Copy A..F from the ledger. Column G
+  (`bonus`) MUST be a live formula equal to units * unit_price * commission_pct for that row, i.e.
+  `=D<row>*E<row>*F<row>`. Do not paste a computed number.
+- A team summary block in columns I and J: `I1` = `team`, `J1` = `total_bonus`; then one row per
+  distinct team starting at row 2 -- the team name in column I, and in column J a live
+  `=SUMIF(C2:C<last>, I<row>, G2:G<last>)` formula that totals that team's bonuses (referencing the
+  team name cell in column I as the criterion). Cover all sale rows in the ranges.
+
+Then export the workbook with download_file and call submit_result with:
+result = {"artifact": "<exported filename>", "team_bonuses": [{"team": "<name>", "total_bonus": <number>}, ...]}
+listing every team's total bonus (rounded to cents is fine)."""
+
+[result_schema]
+type = "object"
+required = ["artifact", "team_bonuses"]
+additionalProperties = false
+
+  [result_schema.properties.artifact]
+  type = "string"
+  minLength = 1
+
+  [result_schema.properties.team_bonuses]
+  type = "array"
+  minItems = 1
+
+    [result_schema.properties.team_bonuses.items]
+    type = "object"
+    required = ["team", "total_bonus"]
+    additionalProperties = false
+
+      [result_schema.properties.team_bonuses.items.properties.team]
+      type = "string"
+      minLength = 1
+
+      [result_schema.properties.team_bonuses.items.properties.total_bonus]
+      type = "number"
+
+[state]
+rest = ["/api/skills?search=sales-ledger&limit=100"]
+
+[verifier]
+deps = ["openpyxl==3.1.5"]

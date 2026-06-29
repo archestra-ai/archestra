@@ -1,0 +1,1 @@
+ALTER TABLE "internal_mcp_catalog" ADD COLUMN "multitenant" boolean DEFAULT false NOT NULL;

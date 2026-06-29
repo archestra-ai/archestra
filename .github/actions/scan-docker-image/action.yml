@@ -1,0 +1,42 @@
+name: Scan Docker Image
+description: |
+  Scans a Docker image for CVEs using Docker Scout.
+  Fails if critical or high severity CVEs with available fixes are found.
+
+inputs:
+  image:
+    description: "Docker image to scan (e.g., ghcr.io/org/repo:tag)"
+    required: true
+  dockerhub-user:
+    description: "Docker Hub username for Scout authentication"
+    required: true
+  dockerhub-password:
+    description: "Docker Hub password for Scout authentication"
+    required: true
+  only-severities:
+    description: "Comma-separated list of severities to check"
+    required: false
+    default: "critical,high"
+  only-fixed:
+    description: "Only report CVEs with available fixes"
+    required: false
+    default: "true"
+  exit-code:
+    description: "Exit with non-zero code if vulnerabilities are found"
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Docker Scout CVE Check
+      uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2
+      with:
+        command: cves
+        image: ${{ inputs.image }}
+        dockerhub-user: ${{ inputs.dockerhub-user }}
+        dockerhub-password: ${{ inputs.dockerhub-password }}
+        only-severities: ${{ inputs.only-severities }}
+        only-fixed: ${{ inputs.only-fixed }}
+        write-comment: false
+        exit-code: ${{ inputs.exit-code }}

@@ -1,0 +1,100 @@
+services:
+  # Grafana Tempo for distributed tracing storage
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: archestra-tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+      - tempo-storage:/var/tempo
+    ports:
+      - "3200:3200" # Tempo HTTP API (Grafana queries)
+    networks:
+      - archestra-observability
+    restart: unless-stopped
+
+  # Grafana Loki for log aggregation
+  loki:
+    image: grafana/loki:3.3.3
+    container_name: archestra-loki
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./loki.yaml:/etc/loki/loki.yaml
+      - loki-storage:/loki
+    ports:
+      - "3100:3100" # Loki HTTP API
+    networks:
+      - archestra-observability
+    restart: unless-stopped
+
+  # OpenTelemetry Collector — single ingestion point for traces and logs
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: archestra-otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - archestra-observability
+    depends_on:
+      - tempo
+      - loki
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: archestra-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-storage:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--enable-feature=exemplar-storage"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - archestra-observability
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: archestra-grafana
+    ports:
+      - "3002:3000"
+    environment:
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      # OTEL/Tempo data source
+      - GF_DATASOURCES_DEFAULT_ORG_ID=1
+      - GF_DATASOURCES_DEFAULT_ORG_NAME=Main Org.
+    volumes:
+      - ./grafana:/etc/grafana/provisioning
+      - grafana-storage:/var/lib/grafana
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - archestra-observability
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+    restart: unless-stopped
+
+networks:
+  archestra-observability:
+    external: false
+
+volumes:
+  grafana-storage:
+  prometheus-storage:
+  tempo-storage:
+  loki-storage:

@@ -1,0 +1,34 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/gemini/v1beta/models.*"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "models": [
+        {
+          "name": "models/gemini-2.5-pro",
+          "displayName": "Gemini 2.5 Pro",
+          "description": "Gemini 2.5 Pro model",
+          "supportedGenerationMethods": ["generateContent", "countTokens", "createCachedContent"]
+        },
+        {
+          "name": "models/gemini-2.5-flash",
+          "displayName": "Gemini 2.5 Flash",
+          "description": "Gemini 2.5 Flash model",
+          "supportedGenerationMethods": ["generateContent", "countTokens"]
+        },
+        {
+          "name": "models/gemini-embedding-001",
+          "displayName": "Gemini Embedding 001",
+          "description": "Gemini embedding model",
+          "supportedGenerationMethods": ["embedContent", "batchEmbedContents"]
+        }
+      ]
+    }
+  }
+}

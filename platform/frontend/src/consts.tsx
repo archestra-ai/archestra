@@ -1,0 +1,52 @@
+import { DocsPage, getDocsUrl } from "@archestra/shared";
+import { ExternalDocsLink } from "@/components/external-docs-link";
+
+export const DEFAULT_TABLE_LIMIT = 10;
+export const DEFAULT_SORT_BY = "createdAt" as const;
+export const DEFAULT_SORT_DIRECTION = "desc" as const;
+export const DEFAULT_FILTER_ALL = "all" as const;
+
+export const SHORTCUT_SEARCH = {
+  key: "k",
+  label: "K",
+} as const;
+
+export const SHORTCUT_NEW_CHAT = {
+  code: "KeyN",
+  label: "N",
+} as const;
+
+export const SHORTCUT_DELETE = {
+  key: "d",
+  label: "D",
+} as const;
+
+export const SHORTCUT_PIN = {
+  key: "p",
+  label: "P",
+} as const;
+
+export const SHORTCUT_SIDEBAR = {
+  key: "b",
+  label: "B",
+} as const;
+
+export const LOCAL_MCP_DISABLED_MESSAGE = (
+  <>
+    Unable to connect to Kubernetes cluster. Ensure K8s is running and the
+    orchestrator configuration is correct. Try restarting the backend.{" "}
+    <ExternalDocsLink
+      href={getDocsUrl(DocsPage.PlatformOrchestrator)}
+      className="text-primary hover:underline inline-flex items-center gap-1"
+      showIcon={false}
+    >
+      Learn more
+    </ExternalDocsLink>
+  </>
+);
+
+export const LOGS_LAYOUT_CONFIG = {
+  title: "Logs",
+  description:
+    "Monitor LLM proxy requests, MCP tool calls, and administrative activity across your organization.",
+};

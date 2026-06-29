@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/groq/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "llama-3.1-8b-instant",
+          "created": 1700000000,
+          "owned_by": "groq"
+        },
+        {
+          "id": "llama-3.1-70b-versatile",
+          "created": 1700000000,
+          "owned_by": "groq"
+        }
+      ]
+    }
+  }
+}

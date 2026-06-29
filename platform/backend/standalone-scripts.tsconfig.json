@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "@drizzle-migration-linter": ["../drizzle-migration-linter/src/index.ts"],
+      "@archestra/shared": ["../shared/index.ts"],
+      "@archestra/shared/*": ["../shared/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "test", "**/*spec.ts", "src/test/**/*"]
+}

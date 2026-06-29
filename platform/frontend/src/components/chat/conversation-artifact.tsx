@@ -1,0 +1,324 @@
+"use client";
+
+import { Copy, Download, FileText, GripVertical, X } from "lucide-react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Components } from "react-markdown";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { toast } from "sonner";
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+} from "@/components/ai-elements/code-block";
+import { Button } from "@/components/ui/button";
+import { printMarkdownElementAsPdf } from "@/lib/chat/print-markdown";
+import { cn } from "@/lib/utils";
+
+const MermaidDiagram = dynamic(
+  async () => {
+    const module = await import("@/components/mermaid-diagram");
+    return module.MermaidDiagram;
+  },
+  { ssr: false },
+);
+
+interface ConversationArtifactPanelProps {
+  artifact?: string | null;
+  isOpen: boolean;
+  onToggle: () => void;
+  className?: string;
+  /** When true, the panel fills its container and doesn't manage its own width/resize */
+  embedded?: boolean;
+  /** When true, hide the panel's own title + close button (the parent already provides them) */
+  hideHeader?: boolean;
+}
+
+export function ConversationArtifactPanel({
+  artifact,
+  isOpen,
+  onToggle,
+  className,
+  embedded = false,
+  hideHeader = false,
+}: ConversationArtifactPanelProps) {
+  const [width, setWidth] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("archestra-artifact-panel-width");
+      return saved ? Number.parseInt(saved, 10) : 500;
+    }
+    return 500;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+
+      const newWidth = window.innerWidth - e.clientX;
+      const minWidth = 300;
+      const maxWidth = window.innerWidth * 0.7;
+
+      const clampedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+      setWidth(clampedWidth);
+      localStorage.setItem(
+        "archestra-artifact-panel-width",
+        clampedWidth.toString(),
+      );
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    }
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isResizing]);
+
+  // Custom components for ReactMarkdown to handle Mermaid diagrams
+  const markdownComponents: Components = {
+    // Drop ReactMarkdown's default <pre>; CodeBlock renders its own wrapper for fenced code.
+    pre({ children }) {
+      return <>{children}</>;
+    },
+    table({ node, className, children, ...props }) {
+      return (
+        <div className="my-4 max-h-[420px] w-full overflow-auto rounded-md border border-border">
+          <table
+            className={cn(
+              "w-full min-w-max border-collapse text-sm",
+              className,
+            )}
+            {...props}
+          >
+            {children}
+          </table>
+        </div>
+      );
+    },
+    thead({ node, className, children, ...props }) {
+      return (
+        <thead className={cn("bg-muted", className)} {...props}>
+          {children}
+        </thead>
+      );
+    },
+    th({ node, className, children, ...props }) {
+      return (
+        <th
+          className={cn(
+            "sticky top-0 z-10 border-r border-b border-border bg-muted px-3 py-2 text-left font-semibold last:border-r-0",
+            className,
+          )}
+          {...props}
+        >
+          {children}
+        </th>
+      );
+    },
+    td({ node, className, children, ...props }) {
+      return (
+        <td
+          className={cn(
+            "border-r border-b border-border px-3 py-2 align-top last:border-r-0",
+            className,
+          )}
+          {...props}
+        >
+          {children}
+        </td>
+      );
+    },
+    code({ node, className, children, ...props }) {
+      const match = /language-(\w+)/.exec(className || "");
+      const language = match ? match[1] : "";
+
+      if (language === "mermaid") {
+        const code = String(children).replace(/\n$/, "");
+        return (
+          <div className="my-4 max-h-[600px] [&_svg]:!max-h-[600px] [&_svg]:!w-auto">
+            <MermaidDiagram chart={code} id={`mermaid-${Date.now()}`} />
+          </div>
+        );
+      }
+
+      if (language) {
+        const code = String(children).replace(/\n$/, "");
+        // Only reserve a top strip for the copy button when the first line is long
+        // enough that it would collide with the button in the top-right corner.
+        const FIRST_LINE_OVERLAP_THRESHOLD = 30;
+        const firstLineLength = code.split("\n")[0].length;
+        const needsTopPadding = firstLineLength > FIRST_LINE_OVERLAP_THRESHOLD;
+        return (
+          <CodeBlock
+            code={code}
+            language={language}
+            contentStyle={{
+              paddingTop: needsTopPadding ? "2.5rem" : "1rem",
+              paddingRight: needsTopPadding ? "1rem" : "2.5rem",
+            }}
+            contentClassName="[&_*]:!bg-transparent"
+          >
+            <CodeBlockCopyButton />
+          </CodeBlock>
+        );
+      }
+
+      // Inline code
+      return (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      );
+    },
+  };
+
+  const handleCopy = async () => {
+    if (!artifact) {
+      toast.error("No artifact to copy");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(artifact);
+      toast.success("Artifact copied to clipboard");
+    } catch (_error) {
+      toast.error("Failed to copy artifact");
+    }
+  };
+
+  const handleDownload = () => {
+    if (!artifact) {
+      toast.error("No artifact to download");
+      return;
+    }
+    printMarkdownElementAsPdf(contentRef.current, "Conversation Artifact");
+  };
+
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <div
+      ref={panelRef}
+      style={embedded ? undefined : { width: `${width}px` }}
+      className={cn(
+        "h-full bg-background flex flex-col relative",
+        !embedded && "border-l",
+        className,
+      )}
+    >
+      {/* Resize handle - only shown when not embedded */}
+      {!embedded && (
+        // biome-ignore lint/a11y/useSemanticElements: This is a draggable resize handle, not a semantic separator
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1 hover:w-2 cursor-col-resize bg-transparent hover:bg-primary/10 transition-all"
+          onMouseDown={handleMouseDown}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize artifact panel"
+          aria-valuenow={width}
+          aria-valuemin={300}
+          aria-valuemax={
+            typeof window !== "undefined" ? window.innerWidth * 0.7 : 1000
+          }
+          tabIndex={0}
+        >
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 opacity-0 hover:opacity-100 transition-opacity">
+            <GripVertical className="h-4 w-4 text-muted-foreground" />
+          </div>
+        </div>
+      )}
+
+      {/* Panel header. Hidden when embedded in the Files panel, which renders
+          its own header + actions — otherwise the controls would duplicate. */}
+      {!hideHeader && (
+        <div className="border-b px-2 pr-1 py-1 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <h3 className="font-medium text-xs">Conversation Artifact</h3>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={handleCopy}
+              title="Copy to clipboard"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={handleDownload}
+              title="Download as PDF"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={onToggle}
+              title="Close panel"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Panel content */}
+      <div className="flex-1 overflow-y-auto">
+        <div
+          ref={contentRef}
+          className={cn(
+            "py-4 max-w-none h-full",
+            // Embedded in a Files panel: match the file header's px-4 so the
+            // title and body line up. Standalone artifact keeps the roomier px-6.
+            embedded ? "px-4" : "px-6",
+          )}
+        >
+          {artifact ? (
+            <div className="size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_ul]:list-inside [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:my-2 [&_ol]:list-inside [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:my-2 [&_li]:my-1 [&_li>p]:inline [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:my-4 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:my-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:my-2 [&_p]:my-2 [&_code]:bg-muted [&_code]:text-foreground [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded [&_pre]:my-2 [&_pre]:overflow-x-auto">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={markdownComponents}
+              >
+                {artifact}
+              </ReactMarkdown>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+              <FileText className="h-12 w-12 mb-4" />
+              <p className="text-lg font-medium">No artifact yet</p>
+              <p className="text-sm mt-2 text-center">
+                The agent hasn't created an artifact in this conversation
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

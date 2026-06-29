@@ -1,0 +1,2 @@
+# This file ensures the directory exists for local Docker builds.
+# CI extracts previous version's static assets here during the build process.

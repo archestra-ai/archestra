@@ -1,0 +1,186 @@
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+  parseFullToolName,
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+} from "@archestra/shared";
+
+const DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
+  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+);
+const SKILL_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+);
+
+/**
+ * Given catalog items and a parallel array of tool lists, find the default
+ * Archestra tools and return their IDs plus the catalog index.
+ *
+ * Pass `includeSkillTools: true` when the org has opted in (via the skills
+ * empty-state enable action) so the skill tools also appear pre-selected on
+ * the new agent form, mirroring the server-side `assignSkillToolsToAgent`
+ * behavior on save.
+ *
+ * Returns null if the Archestra catalog isn't found, tools aren't loaded,
+ * or no default tools match.
+ */
+export function getDefaultArchestraToolIds(
+  catalogItems: { id: string; name: string }[],
+  toolsByCatalogIndex: ({ id: string; name: string }[] | undefined)[],
+  options: {
+    includeSkillTools?: boolean;
+  } = {},
+): { toolIds: Set<string>; catalogIndex: number } | null {
+  const catalogIndex = catalogItems.findIndex(
+    (c) => c.id === ARCHESTRA_MCP_CATALOG_ID,
+  );
+  if (catalogIndex === -1) return null;
+
+  const tools = toolsByCatalogIndex[catalogIndex];
+  if (!tools || tools.length === 0) return null;
+
+  const toolIds = new Set(
+    tools
+      .filter((t) => {
+        const shortName = parseFullToolName(t.name).toolName;
+        if (shortName === null) return false;
+        if (DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)) return true;
+        if (
+          options.includeSkillTools &&
+          SKILL_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)
+        ) {
+          return true;
+        }
+        return false;
+      })
+      .map((t) => t.id),
+  );
+
+  if (toolIds.size === 0) return null;
+
+  return { toolIds, catalogIndex };
+}
+
+type EnvScopedCatalog = {
+  id: string;
+  name: string;
+  serverType?: string | null;
+  environmentId?: string | null;
+};
+
+/**
+ * A catalog belongs to an agent's environment when it's a builtin (the
+ * Archestra platform tools, available in every environment) or its environment
+ * matches. `null`/`undefined` (Default runtime) is its own bucket.
+ */
+export function isCatalogInEnvironment(
+  catalog: EnvScopedCatalog,
+  agentEnvironmentId: string | null,
+): boolean {
+  return (
+    catalog.serverType === "builtin" ||
+    (catalog.environmentId ?? null) === (agentEnvironmentId ?? null)
+  );
+}
+
+/**
+ * The selected catalogs that don't belong to the agent's environment (builtins
+ * are always compatible). Drives the save-blocking conflict alert. Unknown
+ * catalog ids are skipped.
+ */
+export function computeMcpEnvConflicts(
+  catalogItems: EnvScopedCatalog[],
+  selectedCatalogIds: Iterable<string>,
+  agentEnvironmentId: string | null,
+): { catalogId: string; name: string }[] {
+  const byId = new Map(catalogItems.map((c) => [c.id, c]));
+  const conflicts: { catalogId: string; name: string }[] = [];
+  for (const catalogId of selectedCatalogIds) {
+    const catalog = byId.get(catalogId);
+    if (!catalog || isCatalogInEnvironment(catalog, agentEnvironmentId)) {
+      continue;
+    }
+    conflicts.push({ catalogId, name: catalog.name });
+  }
+  return conflicts;
+}
+
+export function sortCatalogItems<
+  T extends { id: string; name: string; serverType?: string | null },
+>(
+  catalogItems: T[],
+  getAssignedCount: (catalog: T) => number,
+  getToolCount: (catalog: T) => number,
+): T[] {
+  return [...catalogItems].sort((a, b) => {
+    const aIsBuiltIn = a.id === ARCHESTRA_MCP_CATALOG_ID ? 1 : 0;
+    const bIsBuiltIn = b.id === ARCHESTRA_MCP_CATALOG_ID ? 1 : 0;
+    if (aIsBuiltIn !== bIsBuiltIn) return bIsBuiltIn - aIsBuiltIn;
+
+    const aAssigned = getAssignedCount(a);
+    const bAssigned = getAssignedCount(b);
+
+    if (aAssigned > 0 && bAssigned === 0) return -1;
+    if (aAssigned === 0 && bAssigned > 0) return 1;
+    if (aAssigned !== bAssigned) return bAssigned - aAssigned;
+
+    const aCount = getToolCount(a);
+    const bCount = getToolCount(b);
+    if (aCount > 0 && bCount === 0) return -1;
+    if (aCount === 0 && bCount > 0) return 1;
+
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/**
+ * Filter tools by search query (matching formatted name or description)
+ * and sort with selected tools first.
+ */
+export function sortAndFilterTools<
+  T extends { id: string; name: string; description?: string | null },
+>(tools: T[], selectedToolIds: Set<string>, searchQuery: string): T[] {
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  let result: T[] = tools;
+  if (normalizedQuery) {
+    result = tools.filter((tool) => {
+      const formattedName = parseFullToolName(tool.name).toolName || tool.name;
+      return getToolSearchMatchScore(tool, formattedName, normalizedQuery) > 0;
+    });
+  }
+
+  // Use original index as tiebreaker so sort order is deterministic
+  // regardless of engine sort stability.
+  const indexMap = new Map(result.map((t, i) => [t.id, i]));
+  return [...result].sort((a, b) => {
+    const aSelected = selectedToolIds.has(a.id) ? 0 : 1;
+    const bSelected = selectedToolIds.has(b.id) ? 0 : 1;
+    if (aSelected !== bSelected) return aSelected - bSelected;
+    const aFormattedName = parseFullToolName(a.name).toolName || a.name;
+    const bFormattedName = parseFullToolName(b.name).toolName || b.name;
+    const aScore = normalizedQuery
+      ? getToolSearchMatchScore(a, aFormattedName, normalizedQuery)
+      : 0;
+    const bScore = normalizedQuery
+      ? getToolSearchMatchScore(b, bFormattedName, normalizedQuery)
+      : 0;
+    if (aScore !== bScore) return bScore - aScore;
+    return (indexMap.get(a.id) ?? 0) - (indexMap.get(b.id) ?? 0);
+  });
+}
+
+function getToolSearchMatchScore<T extends { description?: string | null }>(
+  tool: T,
+  formattedName: string,
+  query: string,
+) {
+  const name = formattedName.toLowerCase();
+  const description = tool.description?.toLowerCase() ?? "";
+
+  if (name === query) return 5;
+  if (name.startsWith(query)) return 4;
+  if (name.includes(query)) return 3;
+  if (description.startsWith(query)) return 2;
+  if (description.includes(query)) return 1;
+  return 0;
+}

@@ -1,0 +1,34 @@
+# Local Claude settings
+**/.claude/settings.local.json
+
+# Editor directories and files
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+*.log
+
+platform/CLAUDE_LOCAL.md
+.pnpm-store/
+
+*.pyc
+__pycache__/
+
+.claude/worktrees/
+.claude/*.lock
+.turbo/
+.dev-stack.pid
+
+# playwright-cli runtime cache (snapshots, console logs, screenshots)
+.playwright-cli/
+
+docs/superpowers/plans
+docs/superpowers/specs
+
+archestra-bench/experiments/
+archestra-bench/analyzer/target/
+archestra-bench/**/.trajectory-analysis-*/

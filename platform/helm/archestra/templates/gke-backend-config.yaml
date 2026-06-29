@@ -1,0 +1,63 @@
+{{/*
+GKE BackendConfig resources for configuring Google Cloud Load Balancer behavior.
+These are GKE-specific CRDs that control health checks, timeouts, and connection draining.
+
+NOTE: These settings are tuned to work with Kubernetes startup probes that allow
+up to 305 seconds (30 * 10s + 5s) for pods to start.
+unhealthyThreshold=10 with checkIntervalSec=15 allows ~150 seconds before marking unhealthy,
+giving pods enough time to start during deployments while still detecting failures.
+*/}}
+{{- if .Values.archestra.gkeBackendConfig.enabled -}}
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-backend-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+spec:
+  {{- with .Values.archestra.gkeBackendConfig.backend.timeoutSec }}
+  timeoutSec: {{ . }}
+  {{- end }}
+  {{- with .Values.archestra.gkeBackendConfig.backend.connectionDraining }}
+  {{- if .drainingTimeoutSec }}
+  connectionDraining:
+    drainingTimeoutSec: {{ .drainingTimeoutSec }}
+  {{- end }}
+  {{- end }}
+  healthCheck:
+    checkIntervalSec: {{ .Values.archestra.gkeBackendConfig.backend.healthCheck.checkIntervalSec }}
+    timeoutSec: {{ .Values.archestra.gkeBackendConfig.backend.healthCheck.timeoutSec }}
+    healthyThreshold: {{ .Values.archestra.gkeBackendConfig.backend.healthCheck.healthyThreshold }}
+    unhealthyThreshold: {{ .Values.archestra.gkeBackendConfig.backend.healthCheck.unhealthyThreshold }}
+    type: {{ .Values.archestra.gkeBackendConfig.backend.healthCheck.type }}
+    requestPath: {{ .Values.archestra.gkeBackendConfig.backend.healthCheck.requestPath }}
+    port: {{ .Values.archestra.gkeBackendConfig.backend.healthCheck.port }}
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-frontend-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+spec:
+  {{- with .Values.archestra.gkeBackendConfig.frontend.timeoutSec }}
+  timeoutSec: {{ . }}
+  {{- end }}
+  {{- with .Values.archestra.gkeBackendConfig.frontend.connectionDraining }}
+  {{- if .drainingTimeoutSec }}
+  connectionDraining:
+    drainingTimeoutSec: {{ .drainingTimeoutSec }}
+  {{- end }}
+  {{- end }}
+  healthCheck:
+    checkIntervalSec: {{ .Values.archestra.gkeBackendConfig.frontend.healthCheck.checkIntervalSec }}
+    timeoutSec: {{ .Values.archestra.gkeBackendConfig.frontend.healthCheck.timeoutSec }}
+    healthyThreshold: {{ .Values.archestra.gkeBackendConfig.frontend.healthCheck.healthyThreshold }}
+    unhealthyThreshold: {{ .Values.archestra.gkeBackendConfig.frontend.healthCheck.unhealthyThreshold }}
+    type: {{ .Values.archestra.gkeBackendConfig.frontend.healthCheck.type }}
+    requestPath: {{ .Values.archestra.gkeBackendConfig.frontend.healthCheck.requestPath }}
+    port: {{ .Values.archestra.gkeBackendConfig.frontend.healthCheck.port }}
+{{- end }}

@@ -1,0 +1,95 @@
+# compiled output
+dist
+node_modules
+build
+target
+*.node
+.next
+.next-*
+next-env.d.ts
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS
+.DS_Store
+
+# Tests
+coverage
+.nyc_output
+
+# IDEs and editors
+.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# temp directory
+.temp
+.tmp
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# OS crash dumps
+core
+
+# Diagnostic reports (https://nodejs.org/api/report.html)
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# turbopack
+.turbo
+
+# Previous version static assets (extracted during CI builds)
+# Keep .gitkeep but ignore everything else in this directory
+prev-static-assets/*
+!prev-static-assets/.gitkeep
+
+tsconfig.tsbuildinfo
+benchmark-config.env
+archestra-rs/sandbox-rs/index.js
+archestra-rs/app-runtime-rs/index.js
+
+# Playwright
+/playwright/
+.playwright-mcp/
+.playwright-cli/
+playwright-report/
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
+
+# Local planning specs
+specs/
+
+# project-local binaries bootstrapped by dev scripts (e.g., dagger CLI)
+dev/bin/
+
+# local kubeconfigs (may embed live ServiceAccount tokens) — never commit
+*.kubeconfig

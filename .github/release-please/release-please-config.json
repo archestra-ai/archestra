@@ -1,0 +1,97 @@
+{
+  "bootstrap-sha": "975dd9685457d367d96d55cb50c198715f4dc365",
+  "changelog-path": "CHANGELOG.md",
+  "changelog-type": "default",
+  "pull-request-footer": "",
+  "include-v-in-tag": true,
+  "separate-pull-requests": true,
+  "changelog-sections": [
+    {
+      "section": "Features",
+      "type": "feat",
+      "hidden": false
+    },
+    {
+      "section": "Bug Fixes",
+      "type": "fix",
+      "hidden": false
+    },
+    {
+      "section": "Performance Improvements",
+      "type": "perf",
+      "hidden": false
+    },
+    {
+      "section": "Documentation",
+      "type": "docs",
+      "hidden": false
+    },
+    {
+      "section": "Dependencies",
+      "type": "deps",
+      "hidden": false
+    },
+    {
+      "section": "CI/CD",
+      "type": "ci",
+      "hidden": true
+    },
+    {
+      "section": "Code Refactoring",
+      "type": "refactor",
+      "hidden": false
+    },
+    {
+      "section": "Reverts",
+      "type": "revert",
+      "hidden": false
+    },
+    {
+      "section": "Tests",
+      "type": "test",
+      "hidden": true
+    },
+    {
+      "section": "Miscellaneous Chores",
+      "type": "chore",
+      "hidden": false
+    },
+    {
+      "section": "Other",
+      "type": "*",
+      "hidden": false
+    }
+  ],
+  "packages": {
+    "platform": {
+      "component": "platform",
+      "release-type": "node",
+      "versioning": "always-bump-patch",
+      "prerelease": false,
+      "initial-version": "0.0.1",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "shared/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "frontend/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "backend/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "generic",
+          "path": "helm/archestra/values.yaml"
+        }
+      ]
+    }
+  },
+  "plugins": [],
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "organization_role" ADD COLUMN "description" text;

@@ -1,0 +1,333 @@
+import { randomBytes } from "node:crypto";
+import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
+import { and, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import logger from "@/logging";
+import { secretManager } from "@/secrets-manager";
+import type { SelectUserToken } from "@/types";
+
+/**
+ * User tokens always use DB storage (forceDB: true) because:
+ * 1. They are auto-created on user joining an organization
+ * 2. They might not work with BYOS Vault (which is read-only from customer's Vault)
+ */
+const FORCE_DB = true;
+
+/** Raised by `create` when a concurrent request already created the (org, user) token. */
+class UserTokenConflictError extends Error {
+  constructor(userId: string, organizationId: string) {
+    super(
+      `user token already exists for user ${userId} in organization ${organizationId}`,
+    );
+    this.name = "UserTokenConflictError";
+  }
+}
+
+/** Length of random part (16 bytes = 32 hex chars) */
+const TOKEN_RANDOM_LENGTH = 16;
+
+/** Length of token start to store (for display) */
+const TOKEN_START_LENGTH = 14;
+
+/**
+ * Generate a secure random token with the current platform token prefix.
+ * Total length: 42 characters
+ */
+function generateToken(): string {
+  const randomPart = randomBytes(TOKEN_RANDOM_LENGTH).toString("hex");
+  return `${ARCHESTRA_TOKEN_PREFIX}${randomPart}`;
+}
+
+/**
+ * Get the display prefix from a token
+ */
+function getTokenStart(token: string): string {
+  return token.substring(0, TOKEN_START_LENGTH);
+}
+
+class UserTokenModel {
+  /**
+   * Create a new user token
+   * Returns the token with its full value (only returned once at creation)
+   */
+  static async create(
+    userId: string,
+    organizationId: string,
+    name = "Personal Token",
+  ): Promise<{ token: SelectUserToken; value: string }> {
+    logger.debug(
+      { userId, organizationId },
+      "UserTokenModel.create: creating token",
+    );
+
+    // Generate a secure random token
+    const tokenValue = generateToken();
+    const tokenStart = getTokenStart(tokenValue);
+
+    const secretName = `user-token-${userId}-${organizationId}`;
+    const secret = await secretManager().createSecret(
+      { token: tokenValue },
+      secretName,
+      FORCE_DB,
+    );
+
+    // Create token record. onConflictDoNothing makes the UNIQUE(org, user) constraint race-safe:
+    // concurrent first-time creates no longer 500, the loser just gets no row back.
+    const [token] = await db
+      .insert(schema.userTokensTable)
+      .values({
+        userId,
+        organizationId,
+        name,
+        secretId: secret.id,
+        tokenStart,
+      })
+      .onConflictDoNothing({
+        target: [
+          schema.userTokensTable.organizationId,
+          schema.userTokensTable.userId,
+        ],
+      })
+      .returning();
+
+    if (!token) {
+      // Lost the race: the secret we minted now references no token, so delete it before surfacing
+      // the conflict -- otherwise it leaks (nothing else points at it).
+      await secretManager().deleteSecret(secret.id);
+      throw new UserTokenConflictError(userId, organizationId);
+    }
+
+    logger.info(
+      { userId, organizationId, tokenId: token.id },
+      "UserTokenModel.create: token created successfully",
+    );
+
+    return { token, value: tokenValue };
+  }
+
+  /**
+   * Find a token by ID
+   */
+  static async findById(id: string): Promise<SelectUserToken | null> {
+    const [token] = await db
+      .select()
+      .from(schema.userTokensTable)
+      .where(eq(schema.userTokensTable.id, id))
+      .limit(1);
+
+    return token ?? null;
+  }
+
+  /**
+   * Find a user's token for a specific organization
+   */
+  static async findByUserAndOrg(
+    userId: string,
+    organizationId: string,
+  ): Promise<SelectUserToken | null> {
+    const [token] = await db
+      .select()
+      .from(schema.userTokensTable)
+      .where(
+        and(
+          eq(schema.userTokensTable.userId, userId),
+          eq(schema.userTokensTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    return token ?? null;
+  }
+
+  /**
+   * Update last used timestamp for a token
+   */
+  static async updateLastUsed(id: string): Promise<void> {
+    await db
+      .update(schema.userTokensTable)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(schema.userTokensTable.id, id));
+  }
+
+  /**
+   * Delete a token and its associated secret
+   */
+  static async delete(id: string): Promise<boolean> {
+    const token = await UserTokenModel.findById(id);
+    if (!token) return false;
+
+    logger.debug({ tokenId: id }, "UserTokenModel.delete: deleting token");
+
+    // Delete the token (secret will be cascade deleted)
+    await db
+      .delete(schema.userTokensTable)
+      .where(eq(schema.userTokensTable.id, id));
+
+    // Also delete the secret explicitly
+    await secretManager().deleteSecret(token.secretId);
+
+    logger.info({ tokenId: id }, "UserTokenModel.delete: token deleted");
+
+    return true;
+  }
+
+  /**
+   * Delete all tokens for a user in an organization
+   */
+  static async deleteByUserAndOrg(
+    userId: string,
+    organizationId: string,
+  ): Promise<boolean> {
+    const token = await UserTokenModel.findByUserAndOrg(userId, organizationId);
+    if (!token) return false;
+
+    return UserTokenModel.delete(token.id);
+  }
+
+  /**
+   * Rotate a token - generates new value while keeping other metadata
+   * Returns the new token value (only returned once)
+   */
+  static async rotate(id: string): Promise<{ value: string } | null> {
+    const token = await UserTokenModel.findById(id);
+    if (!token) return null;
+
+    logger.debug({ tokenId: id }, "UserTokenModel.rotate: rotating token");
+
+    // Generate new token value
+    const newTokenValue = generateToken();
+    const newTokenStart = getTokenStart(newTokenValue);
+
+    // Update secret with new value
+    await secretManager().updateSecret(token.secretId, {
+      token: newTokenValue,
+    });
+
+    // Update token start
+    await db
+      .update(schema.userTokensTable)
+      .set({ tokenStart: newTokenStart })
+      .where(eq(schema.userTokensTable.id, id));
+
+    logger.info({ tokenId: id }, "UserTokenModel.rotate: token rotated");
+
+    return { value: newTokenValue };
+  }
+
+  /**
+   * Validate a token value and return token info
+   * Returns the token with userId and organizationId if valid
+   */
+  static async validateToken(
+    tokenValue: string,
+  ): Promise<SelectUserToken | null> {
+    // Use tokenStart (first 14 chars) to narrow candidates instead of scanning all tokens.
+    // tokenStart has very low collision rate (prefix + leading random chars), so this
+    // typically returns 0-1 candidates.
+    const tokenStart = getTokenStart(tokenValue);
+    const candidates = await db
+      .select()
+      .from(schema.userTokensTable)
+      .where(eq(schema.userTokensTable.tokenStart, tokenStart));
+    if (candidates.length === 0) return null;
+
+    const secretsById = new Map(
+      await Promise.all(
+        candidates.map(
+          async (token) =>
+            [
+              token.secretId,
+              await secretManager().getSecret(token.secretId),
+            ] as const,
+        ),
+      ),
+    );
+
+    // Match the provided token value against stored secrets
+    for (const token of candidates) {
+      const secret = secretsById.get(token.secretId);
+      if (
+        secret?.secret &&
+        (secret.secret as { token?: string }).token === tokenValue
+      ) {
+        // Update last used timestamp
+        await UserTokenModel.updateLastUsed(token.id);
+        return token;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Get token value by ID (for copying to clipboard)
+   */
+  static async getTokenValue(id: string): Promise<string | null> {
+    const token = await UserTokenModel.findById(id);
+    if (!token) return null;
+
+    const secret = await secretManager().getSecret(token.secretId);
+    if (!secret?.secret) return null;
+
+    return (secret.secret as { token?: string }).token ?? null;
+  }
+
+  /**
+   * Ensure user has a token for the organization, create if missing
+   */
+  static async ensureUserToken(
+    userId: string,
+    organizationId: string,
+  ): Promise<SelectUserToken> {
+    const existing = await UserTokenModel.findByUserAndOrg(
+      userId,
+      organizationId,
+    );
+    if (existing) return existing;
+
+    try {
+      const { token } = await UserTokenModel.create(userId, organizationId);
+      return token;
+    } catch (error) {
+      if (error instanceof UserTokenConflictError) {
+        // A concurrent request won the race and created the token; return that one.
+        const winner = await UserTokenModel.findByUserAndOrg(
+          userId,
+          organizationId,
+        );
+        if (winner) return winner;
+      }
+      throw error;
+    }
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.userTokensTable)
+      .where(
+        and(
+          eq(schema.userTokensTable.id, id),
+          eq(schema.userTokensTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      userId: row.userId,
+      organizationId: row.organizationId,
+      name: row.name,
+      tokenStart: row.tokenStart,
+      createdAt: row.createdAt.toISOString(),
+      lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
+    };
+  }
+}
+
+export default UserTokenModel;

@@ -1,0 +1,319 @@
+import { LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
+import { describe, expect, test } from "@/test";
+import OAuthAccessTokenModel from "./oauth-access-token";
+
+describe("OAuthAccessTokenModel", () => {
+  describe("create", () => {
+    test("should create a new OAuth access token row", async ({
+      makeUser,
+      makeOAuthClient,
+    }) => {
+      const user = await makeUser();
+      const client = await makeOAuthClient({ userId: user.id });
+      const expiresAt = new Date(Date.now() + 3600000);
+
+      const created = await OAuthAccessTokenModel.create({
+        tokenHash: "created-token-hash",
+        clientId: client.clientId,
+        userId: user.id,
+        expiresAt,
+        scopes: ["mcp"],
+        referenceId: "mcp-resource:test-gateway-id",
+      });
+
+      expect(created.token).toBe("created-token-hash");
+      expect(created.clientId).toBe(client.clientId);
+      expect(created.userId).toBe(user.id);
+      expect(created.expiresAt).toEqual(expiresAt);
+      expect(created.scopes).toEqual(["mcp"]);
+      expect(created.referenceId).toBe("mcp-resource:test-gateway-id");
+
+      const found =
+        await OAuthAccessTokenModel.getByTokenHash("created-token-hash");
+      expect(found?.id).toBe(created.id);
+    });
+
+    test("should persist a null referenceId when omitted", async ({
+      makeUser,
+      makeOAuthClient,
+    }) => {
+      const user = await makeUser();
+      const client = await makeOAuthClient({ userId: user.id });
+
+      const created = await OAuthAccessTokenModel.create({
+        tokenHash: "created-token-without-reference",
+        clientId: client.clientId,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 3600000),
+        scopes: ["mcp"],
+      });
+
+      expect(created.referenceId).toBeNull();
+    });
+  });
+
+  describe("createClientCredentialsToken", () => {
+    test("should create a client credentials token without a user", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "client-credentials-client",
+      });
+      const expiresAt = new Date(Date.now() + 3600000);
+
+      const created = await OAuthAccessTokenModel.createClientCredentialsToken({
+        tokenHash: "client-credentials-token-hash",
+        clientId: client.clientId,
+        expiresAt,
+        scopes: [LLM_PROXY_OAUTH_SCOPE],
+        referenceId: "llm-proxy:test-client-id",
+      });
+
+      expect(created.token).toBe("client-credentials-token-hash");
+      expect(created.clientId).toBe(client.clientId);
+      expect(created.userId).toBeNull();
+      expect(created.expiresAt).toEqual(expiresAt);
+      expect(created.scopes).toEqual([LLM_PROXY_OAUTH_SCOPE]);
+      expect(created.referenceId).toBe("llm-proxy:test-client-id");
+
+      const found = await OAuthAccessTokenModel.getByTokenHash(
+        "client-credentials-token-hash",
+      );
+      expect(found?.id).toBe(created.id);
+      expect(found?.refreshTokenRevoked).toBeNull();
+    });
+
+    test("should persist a null referenceId when omitted", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient();
+
+      const created = await OAuthAccessTokenModel.createClientCredentialsToken({
+        tokenHash: "client-credentials-token-without-reference",
+        clientId: client.clientId,
+        expiresAt: new Date(Date.now() + 3600000),
+        scopes: [LLM_PROXY_OAUTH_SCOPE],
+      });
+
+      expect(created.userId).toBeNull();
+      expect(created.referenceId).toBeNull();
+    });
+  });
+
+  describe("getByTokenHash", () => {
+    test("should return access token when hash matches", async ({
+      makeUser,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+    }) => {
+      const user = await makeUser();
+      const client = await makeOAuthClient({ userId: user.id });
+      const accessToken = await makeOAuthAccessToken(client.clientId, user.id, {
+        token: "hashed-token-value",
+      });
+
+      const found =
+        await OAuthAccessTokenModel.getByTokenHash("hashed-token-value");
+
+      expect(found).toBeDefined();
+      expect(found?.id).toBe(accessToken.id);
+      expect(found?.userId).toBe(user.id);
+      expect(found?.clientId).toBe(client.clientId);
+      expect(found?.refreshTokenRevoked).toBeNull();
+    });
+
+    test("should return undefined when hash does not match", async () => {
+      const found =
+        await OAuthAccessTokenModel.getByTokenHash("nonexistent-hash");
+
+      expect(found).toBeUndefined();
+    });
+
+    test("should return token even if expired (expiry checked by caller)", async ({
+      makeUser,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+    }) => {
+      const user = await makeUser();
+      const client = await makeOAuthClient({ userId: user.id });
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: "expired-token-hash",
+        expiresAt: new Date(Date.now() - 3600000), // expired 1h ago
+      });
+
+      const found =
+        await OAuthAccessTokenModel.getByTokenHash("expired-token-hash");
+
+      // Model returns the token regardless; expiry checking is the caller's job
+      expect(found).toBeDefined();
+      expect(found?.token).toBe("expired-token-hash");
+    });
+
+    test("should return refreshTokenRevoked as null when no refresh token", async ({
+      makeUser,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+    }) => {
+      const user = await makeUser();
+      const client = await makeOAuthClient({ userId: user.id });
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: "no-refresh-token-hash",
+      });
+
+      const found = await OAuthAccessTokenModel.getByTokenHash(
+        "no-refresh-token-hash",
+      );
+
+      expect(found).toBeDefined();
+      expect(found?.refreshTokenRevoked).toBeNull();
+    });
+
+    test("should return refreshTokenRevoked as null when refresh token is not revoked", async ({
+      makeUser,
+      makeOAuthClient,
+      makeOAuthRefreshToken,
+      makeOAuthAccessToken,
+    }) => {
+      const user = await makeUser();
+      const client = await makeOAuthClient({ userId: user.id });
+      const refreshToken = await makeOAuthRefreshToken(
+        client.clientId,
+        user.id,
+      );
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: "valid-refresh-token-hash",
+        refreshId: refreshToken.id,
+      });
+
+      const found = await OAuthAccessTokenModel.getByTokenHash(
+        "valid-refresh-token-hash",
+      );
+
+      expect(found).toBeDefined();
+      expect(found?.refreshTokenRevoked).toBeNull();
+    });
+
+    test("should return refreshTokenRevoked timestamp when refresh token is revoked", async ({
+      makeUser,
+      makeOAuthClient,
+      makeOAuthRefreshToken,
+      makeOAuthAccessToken,
+    }) => {
+      const user = await makeUser();
+      const client = await makeOAuthClient({ userId: user.id });
+      const revokedAt = new Date();
+      const refreshToken = await makeOAuthRefreshToken(
+        client.clientId,
+        user.id,
+        { revoked: revokedAt },
+      );
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: "revoked-refresh-token-hash",
+        refreshId: refreshToken.id,
+      });
+
+      const found = await OAuthAccessTokenModel.getByTokenHash(
+        "revoked-refresh-token-hash",
+      );
+
+      expect(found).toBeDefined();
+      expect(found?.refreshTokenRevoked).toEqual(revokedAt);
+    });
+  });
+
+  describe("updateExpiresAtByTokenHash", () => {
+    test("should update access token expiry by hash", async ({
+      makeUser,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+    }) => {
+      const user = await makeUser();
+      const client = await makeOAuthClient({ userId: user.id });
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: "update-expiry-token-hash",
+      });
+      const expiresAt = new Date("2030-01-01T00:00:00.000Z");
+
+      const updated = await OAuthAccessTokenModel.updateExpiresAtByTokenHash({
+        tokenHash: "update-expiry-token-hash",
+        expiresAt,
+      });
+
+      expect(updated?.expiresAt).toEqual(expiresAt);
+
+      const found = await OAuthAccessTokenModel.getByTokenHash(
+        "update-expiry-token-hash",
+      );
+      expect(found?.expiresAt).toEqual(expiresAt);
+    });
+
+    test("should return null when hash does not match", async () => {
+      const updated = await OAuthAccessTokenModel.updateExpiresAtByTokenHash({
+        tokenHash: "missing-token-hash",
+        expiresAt: new Date(),
+      });
+
+      expect(updated).toBeNull();
+    });
+  });
+
+  describe("bindReferenceIdByTokenHashWhenUnbound", () => {
+    test("binds the audience when the token is still unbound", async ({
+      makeUser,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+    }) => {
+      const user = await makeUser();
+      const client = await makeOAuthClient({ userId: user.id });
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: "unbound-token-hash",
+        referenceId: null,
+      });
+
+      const bound =
+        await OAuthAccessTokenModel.bindReferenceIdByTokenHashWhenUnbound({
+          tokenHash: "unbound-token-hash",
+          referenceId: "mcp-app-resource:https://host/api/mcp/app/app-1",
+        });
+
+      expect(bound?.referenceId).toBe(
+        "mcp-app-resource:https://host/api/mcp/app/app-1",
+      );
+    });
+
+    test("never overwrites a token that is already bound", async ({
+      makeUser,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+    }) => {
+      const user = await makeUser();
+      const client = await makeOAuthClient({ userId: user.id });
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: "already-bound-token-hash",
+        referenceId: "mcp-resource:some-gateway",
+      });
+
+      const bound =
+        await OAuthAccessTokenModel.bindReferenceIdByTokenHashWhenUnbound({
+          tokenHash: "already-bound-token-hash",
+          referenceId: "mcp-app-resource:https://host/api/mcp/app/app-1",
+        });
+
+      expect(bound).toBeNull();
+      const found = await OAuthAccessTokenModel.getByTokenHash(
+        "already-bound-token-hash",
+      );
+      expect(found?.referenceId).toBe("mcp-resource:some-gateway");
+    });
+
+    test("returns null when the token hash does not match", async () => {
+      const bound =
+        await OAuthAccessTokenModel.bindReferenceIdByTokenHashWhenUnbound({
+          tokenHash: "missing-token-hash",
+          referenceId: "mcp-app-resource:https://host/api/mcp/app/app-1",
+        });
+
+      expect(bound).toBeNull();
+    });
+  });
+});

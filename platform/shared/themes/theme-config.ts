@@ -1,0 +1,39 @@
+/**
+ * Theme configuration - defines which themes from tweakcn registry we support
+ */
+
+/**
+ * Supported themes from the tweakcn registry
+ * This is the single source of truth for which themes are available
+ */
+export const SUPPORTED_THEMES = [
+  "modern-minimal",
+  "clean-slate",
+  "mono",
+  "twitter",
+  "tangerine",
+  "bubblegum",
+  "caffeine",
+  "amber-minimal",
+  "cosmic-night",
+  "doom-64",
+  "mocha-mousse",
+  "nature",
+  "sunset-horizon",
+  "neo-brutalism",
+  "vercel",
+  "claude",
+  "vintage-paper",
+  "boxy-minimalistic",
+  "catppuccin",
+  "solarized-dark",
+  "gruvbox-dark",
+  "dracula-dark",
+  "monokai-dark",
+  "moonlight-dark",
+] as const;
+
+/**
+ * Default theme ID
+ */
+export const DEFAULT_THEME_ID = "caffeine";

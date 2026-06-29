@@ -1,0 +1,1758 @@
+import { createHash } from "node:crypto";
+import type { IncomingMessage } from "node:http";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  hasArchestraTokenPrefix,
+  isAgentTool,
+  isAlwaysExposedArchestraToolShortName,
+  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+  MCP_GATEWAY_OAUTH_SCOPE,
+  MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
+  OAUTH_TOKEN_ID_PREFIX,
+  parseFullToolName,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+} from "@archestra/shared";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import {
+  CallToolRequestSchema,
+  ElicitResultSchema,
+  ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  ListToolsRequestSchema,
+  type ListToolsResult,
+  ReadResourceRequestSchema,
+  type Tool,
+} from "@modelcontextprotocol/sdk/types.js";
+import type { FastifyRequest } from "fastify";
+import {
+  archestraMcpBranding,
+  executeArchestraTool,
+  filterToolNamesByPermission,
+  getArchestraMcpTools,
+} from "@/archestra-mcp-server";
+import { userHasPermission } from "@/auth/utils";
+import { LRUCacheManager } from "@/cache-manager";
+import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
+import config from "@/config";
+import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
+import logger from "@/logging";
+import {
+  AgentConnectorAssignmentModel,
+  AgentKnowledgeBaseModel,
+  AgentModel,
+  AgentTeamModel,
+  InternalMcpCatalogModel,
+  KnowledgeBaseConnectorModel,
+  KnowledgeBaseModel,
+  McpOauthClientModel,
+  McpToolCallModel,
+  MemberModel,
+  OAuthAccessTokenModel,
+  TeamModel,
+  TeamTokenModel,
+  ToolModel,
+  UserModel,
+  UserTokenModel,
+} from "@/models";
+import { findAgentAccessContextById } from "@/models/agent-access-context";
+import { metrics } from "@/observability";
+import {
+  ATTR_MCP_IS_ERROR_RESULT,
+  startActiveMcpSpan,
+} from "@/observability/tracing";
+import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
+import {
+  discoverOidcJwksUrl,
+  findExternalIdentityProviderById,
+} from "@/services/identity-providers/oidc";
+import { jwksValidator } from "@/services/jwks-validator";
+import {
+  type AgentAccessContext,
+  type AgentType,
+  agentOwner,
+  type CommonToolCall,
+  type SelectTeamToken,
+  type SelectUserToken,
+  type ToolExposureMode,
+} from "@/types";
+import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
+import { deriveAuthMethod } from "@/utils/auth-method";
+import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
+
+export { deriveAuthMethod };
+
+/**
+ * Token authentication result
+ */
+export interface TokenAuthResult {
+  tokenId: string;
+  teamId: string | null;
+  isOrganizationToken: boolean;
+  /** Organization ID the token belongs to */
+  organizationId: string;
+  /** True if this is a personal user token */
+  isUserToken?: boolean;
+  /** User ID for user tokens */
+  userId?: string;
+  /** True if authenticated via external IdP JWKS */
+  isExternalIdp?: boolean;
+  /** Raw JWT token for propagation to underlying MCP servers */
+  rawToken?: string;
+}
+
+export type AgentInfo = {
+  name: string;
+  id: string;
+  agentType?: AgentType;
+  labels?: Array<{ key: string; value: string }>;
+  passthroughHeaders?: string[] | null;
+};
+
+type TokenHashes = {
+  cacheKey: string;
+  oauthTokenHash: string;
+  rawTokenHash: string;
+};
+
+type ResolvedArchestraToken =
+  | {
+      type: "team";
+      token: SelectTeamToken;
+    }
+  | {
+      type: "user";
+      token: SelectUserToken;
+    };
+
+const TOKEN_AUTH_CACHE_TTL_MS = 30_000;
+const TOKEN_AUTH_CACHE_MAX_ENTRIES = 1_000;
+const tokenAuthCache = new LRUCacheManager<TokenAuthResult | null>({
+  maxSize: TOKEN_AUTH_CACHE_MAX_ENTRIES,
+  defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
+});
+const rawArchestraTokenCache =
+  new LRUCacheManager<ResolvedArchestraToken | null>({
+    maxSize: TOKEN_AUTH_CACHE_MAX_ENTRIES,
+    defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
+  });
+
+/**
+ * Creates an MCP server for the given agent.
+ */
+export async function createAgentServer(
+  agentId: string,
+  tokenAuth?: TokenAuthContext,
+): Promise<{ server: McpServer; agent: AgentInfo }> {
+  const extensionCapabilities = {
+    ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+    ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+    ...MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
+  } as const;
+
+  const mcpServer = new McpServer(
+    {
+      name: `archestra-agent-${agentId}`,
+      version: config.api.version,
+    },
+    {
+      capabilities: {
+        resources: {
+          subscribe: true,
+          listChanged: true,
+        },
+        extensions: extensionCapabilities,
+        prompts: {},
+        tools: { listChanged: false },
+      } as McpServerCapabilitiesWithExtensions,
+    },
+  );
+  const { server } = mcpServer;
+
+  const agent = await AgentModel.findById(agentId);
+  if (!agent) throw new Error(`Agent not found: ${agentId}`);
+
+  // Fetch the agent's teams and the calling user's teams (with labels) for
+  // trace span team attributes.
+  const teams = await AgentTeamModel.getTeamLabelInfoForAgent(agentId);
+  const userTeams =
+    tokenAuth?.userId && tokenAuth.organizationId
+      ? await TeamModel.getTeamLabelInfoForUser({
+          userId: tokenAuth.userId,
+          organizationId: tokenAuth.organizationId,
+        })
+      : [];
+
+  // Create a map of Archestra tool names to their titles
+  // This is needed because the database schema doesn't include a title field
+  const archestraTools = getArchestraMcpTools();
+  const archestraToolTitles = new Map(
+    archestraTools.map((tool: Tool) => [tool.name, tool.title]),
+  );
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    // Get MCP tools (from connected MCP servers + Archestra built-in tools)
+    // Excludes proxy-discovered tools
+    // Fetch fresh on every request to ensure we get newly assigned tools
+    const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+
+    const implicitMetaTools =
+      agent.toolExposureMode === "search_and_run_only"
+        ? getImplicitArchestraMetaTools()
+        : [];
+    const candidateTools = dedupeToolsByName(
+      [...mcpTools, ...implicitMetaTools].map(toMcpListTool),
+    );
+
+    // Filter Archestra tools based on user RBAC permissions
+    const permittedNames = await filterToolNamesByPermission(
+      candidateTools.map((t) => t.name),
+      tokenAuth?.userId,
+      tokenAuth?.organizationId,
+    );
+    const permittedTools = filterExposedTools({
+      toolExposureMode: agent.toolExposureMode ?? "full",
+      tools: candidateTools.filter((t) => permittedNames.has(t.name)),
+    });
+
+    // Resolve the backing catalogs of the assigned tools once: their names feed
+    // both the search_tools description and the app launch-tool titles below.
+    const catalogsById = await InternalMcpCatalogModel.getByIds([
+      ...new Set(
+        mcpTools
+          .map((tool) => tool.catalogId)
+          .filter(
+            (id): id is string =>
+              Boolean(id) && id !== ARCHESTRA_MCP_CATALOG_ID,
+          ),
+      ),
+    ]);
+
+    // An app's launch tool keeps its unique slug `name` for invocation, but a
+    // gateway client should show a human label. Derive "Open <app>" from the
+    // backing catalog name (kept in lockstep with the app) so it never goes
+    // stale; non-app tools keep their existing title.
+    const appLaunchTitle = (
+      catalogId: string | null | undefined,
+    ): string | undefined => {
+      const catalog = catalogId ? catalogsById.get(catalogId) : undefined;
+      return catalog?.serverType === "app" ? `Open ${catalog.name}` : undefined;
+    };
+
+    // Dynamically enrich the knowledge sources tool description with
+    // the agent's actual knowledge base names and connector types
+    const [kbToolDescription, searchToolsDescription] = await Promise.all([
+      buildKnowledgeSourcesDescription(agentId),
+      buildSearchToolsDescription(mcpTools, catalogsById),
+    ]);
+
+    const toolsList: McpListTool[] = permittedTools.map(
+      ({ name, description, parameters, meta, catalogId }) => ({
+        name,
+        title:
+          archestraToolTitles.get(name) || appLaunchTitle(catalogId) || name,
+        description:
+          name ===
+            archestraMcpBranding.getToolName(
+              TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+            ) && kbToolDescription
+            ? kbToolDescription
+            : name ===
+                  archestraMcpBranding.getToolName(
+                    TOOL_SEARCH_TOOLS_SHORT_NAME,
+                  ) && searchToolsDescription
+              ? searchToolsDescription
+              : (description ?? undefined),
+        inputSchema: parameters,
+        annotations: meta?.annotations || {},
+        _meta: meta?._meta || {},
+      }),
+    );
+
+    // Log tools/list request
+    try {
+      await McpToolCallModel.create({
+        agentId,
+        mcpServerName: "mcp-gateway",
+        method: "tools/list",
+        toolCall: null,
+        // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
+        toolResult: { tools: toolsList } as any,
+        userId: tokenAuth?.userId ?? null,
+        authMethod: deriveAuthMethod(tokenAuth) ?? null,
+      });
+      logger.info(
+        { agentId, toolsCount: toolsList.length },
+        "Saved tools/list request",
+      );
+    } catch (dbError) {
+      logger.warn({ err: dbError }, "Failed to persist tools/list request:");
+    }
+
+    return { tools: toolsList };
+  });
+
+  server.setRequestHandler(
+    ReadResourceRequestSchema,
+    async ({ params: { uri } }) => {
+      try {
+        logger.info(
+          { agentId, uri },
+          "MCP gateway read resource request received",
+        );
+        const result = await mcpClient.readResource(uri, agentId, tokenAuth);
+        logger.info(
+          { agentId, uri, resultType: typeof result },
+          "Resource read successful",
+        );
+        return result;
+      } catch (error) {
+        logger.error(
+          {
+            agentId,
+            uri,
+            error: error instanceof Error ? error.message : "Unknown error",
+            stack: error instanceof Error ? error.stack : undefined,
+          },
+          "Resource read failed",
+        );
+        throw {
+          code: -32603,
+          message: "Resource read failed",
+          data: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    },
+  );
+
+  // SEP-1865: resources/list, resources/templates/list, prompts/list
+  // Proxy to all upstream MCP servers connected to this agent and aggregate results.
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    return mcpClient.listResources(agentId, tokenAuth);
+  });
+
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+    return mcpClient.listResourceTemplates(agentId, tokenAuth);
+  });
+
+  server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    return mcpClient.listPrompts(agentId, tokenAuth);
+  });
+
+  server.setRequestHandler(
+    CallToolRequestSchema,
+    async ({ params: { name, arguments: args } }, extra) => {
+      const startTime = Date.now();
+      const mcpServerName = parseFullToolName(name).serverName ?? "unknown";
+
+      // Resolve user identity for OTEL span attributes
+      let mcpUser: {
+        id: string;
+        email?: string;
+        name?: string;
+      } | null = null;
+      if (tokenAuth?.userId) {
+        const userDetails = await UserModel.getById(tokenAuth.userId);
+        if (userDetails) {
+          mcpUser = {
+            id: userDetails.id,
+            email: userDetails.email,
+            name: userDetails.name,
+          };
+        }
+      }
+
+      try {
+        // Check if this is an Archestra tool or agent delegation tool
+        const isArchestraTool = archestraMcpBranding.isToolName(name);
+        const isAgentDelegationTool = isAgentTool(name);
+        const contextIsTrusted = !agent.considerContextUntrusted;
+
+        const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
+          agentId: agent.id,
+          toolName: name,
+          toolInput: args ?? {},
+          organizationId: tokenAuth?.organizationId,
+          contextIsTrusted,
+        });
+        if (policyBlock) {
+          return {
+            content: [{ type: "text", text: policyBlock.refusalMessage }],
+            isError: true,
+          };
+        }
+
+        if (isArchestraTool || isAgentDelegationTool) {
+          logger.info(
+            {
+              agentId,
+              toolName: name,
+              toolType: isAgentDelegationTool
+                ? "agent-delegation"
+                : "archestra",
+            },
+            isAgentDelegationTool
+              ? "Agent delegation tool call received"
+              : "Archestra MCP tool call received",
+          );
+
+          // Handle Archestra and agent delegation tools directly
+          const response = await startActiveMcpSpan({
+            toolName: name,
+            mcpServerName,
+            agent,
+            teams,
+            userTeams,
+            agentType: agent.agentType,
+            toolCallId: `archestra-${Date.now()}`,
+            toolArgs: args,
+            user: mcpUser,
+            callback: async (span) => {
+              const result = await executeArchestraTool(name, args, {
+                agent: { id: agent.id, name: agent.name },
+                agentId: agent.id,
+                userId: tokenAuth?.userId,
+                organizationId: tokenAuth?.organizationId,
+                tokenAuth,
+                contextIsTrusted,
+              });
+              span.setAttribute(
+                ATTR_MCP_IS_ERROR_RESULT,
+                result.isError ?? false,
+              );
+              return result;
+            },
+          });
+
+          const durationSeconds = (Date.now() - startTime) / 1000;
+          metrics.mcp.reportMcpToolCall({
+            agentId: agent.id,
+            agentName: agent.name,
+            agentType: agent.agentType ?? null,
+            mcpServerName,
+            toolName: name,
+            durationSeconds,
+            isError: false,
+            agentLabels: agent.labels,
+            requestSizeBytes: args ? JSON.stringify(args).length : undefined,
+            responseSizeBytes: response.content
+              ? JSON.stringify(response.content).length
+              : undefined,
+          });
+
+          logger.info(
+            {
+              agentId,
+              toolName: name,
+            },
+            isAgentDelegationTool
+              ? "Agent delegation tool call completed"
+              : "Archestra MCP tool call completed",
+          );
+
+          // Persist archestra/agent delegation tool call to database
+          try {
+            await McpToolCallModel.create({
+              agentId,
+              mcpServerName: archestraMcpBranding.serverName,
+              method: "tools/call",
+              toolCall: {
+                id: `archestra-${Date.now()}`,
+                name,
+                arguments: args || {},
+              },
+              toolResult: response,
+              userId: tokenAuth?.userId ?? null,
+              authMethod: deriveAuthMethod(tokenAuth) ?? null,
+            });
+          } catch (dbError) {
+            logger.info(
+              { err: dbError },
+              "Failed to persist archestra tool call",
+            );
+          }
+
+          return response;
+        }
+
+        logger.info(
+          {
+            agentId,
+            toolName: name,
+            argumentKeys: args ? Object.keys(args) : [],
+            argumentsSize: JSON.stringify(args || {}).length,
+          },
+          "MCP gateway tool call received",
+        );
+
+        // Generate a unique ID for this tool call
+        const toolCallId = `mcp-call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+        // Create CommonToolCall for McpClient
+        const toolCall: CommonToolCall = {
+          id: toolCallId,
+          name,
+          arguments: args || {},
+        };
+
+        // Execute the tool call via McpClient with tracing
+        const result = await startActiveMcpSpan({
+          toolName: name,
+          mcpServerName,
+          agent,
+          teams,
+          userTeams,
+          agentType: agent.agentType,
+          toolCallId,
+          toolArgs: args,
+          user: mcpUser,
+          callback: async (span) => {
+            const r = await mcpClient.executeToolCallForOwner(
+              toolCall,
+              agentOwner(agentId),
+              tokenAuth,
+              {
+                elicitationHandler: async (request) => {
+                  try {
+                    return await extra.sendRequest(request, ElicitResultSchema);
+                  } catch (error) {
+                    logger.warn(
+                      {
+                        agentId,
+                        toolName: name,
+                        mode: request.params.mode ?? "form",
+                        error:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                      },
+                      "MCP elicitation request was not completed by caller",
+                    );
+                    throw error;
+                  }
+                },
+              },
+            );
+            span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, r.isError ?? false);
+            return r;
+          },
+        });
+
+        const durationSeconds = (Date.now() - startTime) / 1000;
+        metrics.mcp.reportMcpToolCall({
+          agentId: agent.id,
+          agentName: agent.name,
+          agentType: agent.agentType ?? null,
+          mcpServerName,
+          toolName: name,
+          durationSeconds,
+          isError: result.isError ?? false,
+          agentLabels: agent.labels,
+          requestSizeBytes: args ? JSON.stringify(args).length : undefined,
+          responseSizeBytes: result.content
+            ? JSON.stringify(result.content).length
+            : undefined,
+        });
+
+        const contentLength = estimateToolResultContentLength(result.content);
+        logger.info(
+          {
+            agentId,
+            toolName: name,
+            resultContentLength: contentLength.length,
+            resultContentLengthEstimated: contentLength.isEstimated,
+            isError: result.isError,
+          },
+          result.isError
+            ? "MCP gateway tool call completed with error result"
+            : "MCP gateway tool call completed",
+        );
+
+        // Transform CommonToolResult to MCP response format
+        // When isError is true, we still return the content so the LLM can see
+        // the error message and potentially try a different approach
+        return {
+          content: Array.isArray(result.content)
+            ? result.content
+            : [{ type: "text", text: JSON.stringify(result.content) }],
+          isError: result.isError,
+          _meta: result._meta,
+          structuredContent: result.structuredContent,
+        };
+      } catch (error) {
+        const durationSeconds = (Date.now() - startTime) / 1000;
+        metrics.mcp.reportMcpToolCall({
+          agentId: agent.id,
+          agentName: agent.name,
+          agentType: agent.agentType ?? null,
+          mcpServerName,
+          toolName: name,
+          durationSeconds,
+          isError: true,
+          agentLabels: agent.labels,
+          requestSizeBytes: args ? JSON.stringify(args).length : undefined,
+        });
+
+        if (typeof error === "object" && error !== null && "code" in error) {
+          throw error; // Re-throw JSON-RPC errors
+        }
+
+        throw {
+          code: -32603, // Internal error
+          message: "Tool execution failed",
+          data: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    },
+  );
+
+  logger.info({ agentId }, "MCP server instance created");
+  return { server: mcpServer, agent };
+}
+
+/**
+ * Create a stateless transport for a request
+ * Each request gets a fresh transport with no session persistence
+ */
+export function createStatelessTransport(
+  agentId: string,
+): StreamableHTTPServerTransport {
+  logger.info({ agentId }, "Creating stateless transport instance");
+
+  // Create transport in stateless mode (no session persistence)
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined, // Stateless mode - no sessions
+    enableJsonResponse: true, // Use JSON responses instead of SSE
+  });
+
+  logger.info({ agentId }, "Stateless transport instance created");
+  return transport;
+}
+
+/**
+ * Hono's Node adapter drains unread request bodies by calling
+ * `request.socket.destroySoon()`. Fastify inject uses a socket-like test object
+ * without that legacy method, so provide the method only when the socket lacks it.
+ */
+export function ensureRequestSocketDestroySoon(request: IncomingMessage): void {
+  const socket = request.socket as
+    | (IncomingMessage["socket"] & {
+        destroySoon?: () => void;
+        end?: () => void;
+      })
+    | undefined;
+
+  if (!socket || typeof socket.destroySoon === "function") {
+    return;
+  }
+
+  socket.destroySoon = () => {
+    if (typeof socket.destroy === "function") {
+      socket.destroy();
+      return;
+    }
+
+    socket.end?.();
+  };
+}
+
+/**
+ * Extract bearer token from Authorization header
+ * Returns the token string if valid, null otherwise
+ */
+export function extractBearerToken(request: FastifyRequest): string | null {
+  const authHeader = request.headers.authorization as string | undefined;
+  if (!authHeader) {
+    return null;
+  }
+
+  const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  return tokenMatch?.[1] ?? null;
+}
+
+/**
+ * Extract profile ID from URL path and token from Authorization header.
+ * URL format: /v1/mcp/:profileId (accepts both UUID and slug)
+ */
+export async function extractProfileIdAndTokenFromRequest(
+  request: FastifyRequest,
+): Promise<{ profileId: string; token: string } | null> {
+  const token = extractBearerToken(request);
+  if (!token) {
+    return null;
+  }
+
+  // Extract profile ID or slug from URL path (last segment)
+  const idOrSlug = request.url.split("/").at(-1)?.split("?")[0];
+  if (!idOrSlug) {
+    return null;
+  }
+
+  const profileId = await AgentModel.resolveIdFromIdOrSlug(idOrSlug);
+  return profileId ? { profileId, token } : null;
+}
+
+/**
+ * Extract headers from an incoming request that match the gateway's passthrough allowlist.
+ * Returns a map of header name → value, or undefined if none matched.
+ */
+export function extractPassthroughHeaders(
+  allowlist: string[] | null | undefined,
+  requestHeaders: Record<string, string | string[] | undefined>,
+): Record<string, string> | undefined {
+  if (!allowlist || allowlist.length === 0) {
+    return undefined;
+  }
+  const extracted: Record<string, string> = {};
+  for (const headerName of allowlist) {
+    const value = requestHeaders[headerName.toLowerCase()];
+    if (typeof value === "string") {
+      extracted[headerName] = value;
+    } else if (Array.isArray(value)) {
+      extracted[headerName] = value.join(", ");
+    }
+  }
+  return Object.keys(extracted).length > 0 ? extracted : undefined;
+}
+
+/**
+ * Validate a platform-managed token for a specific profile
+ * Returns token auth info if valid, null otherwise
+ *
+ * Validates that:
+ * 1. The token is valid (exists and matches)
+ * 2. The profile is accessible via this token:
+ *    - Org token: profile must belong to the same organization
+ *    - Team token: profile must be assigned to that team
+ */
+export async function validateTeamToken(
+  profileId: string,
+  tokenValue: string,
+  agentAccessContext?: AgentAccessContext | null,
+): Promise<TokenAuthResult | null> {
+  // Validate the token itself
+  const token = await TeamTokenModel.validateToken(tokenValue);
+  if (!token) {
+    return null;
+  }
+
+  return validateResolvedTeamToken({
+    profileId,
+    token,
+    agentAccessContext,
+  });
+}
+
+async function validateResolvedTeamToken(params: {
+  profileId: string;
+  token: SelectTeamToken;
+  agentAccessContext?: AgentAccessContext | null;
+}): Promise<TokenAuthResult | null> {
+  const { profileId, token, agentAccessContext } = params;
+
+  // Check if profile is accessible via this token
+  if (!token.isOrganizationToken) {
+    // Team token: profile must be assigned to this team, or be teamless (org-wide)
+    const hasAccess = await AgentTeamModel.teamHasAgentAccess(
+      profileId,
+      token.teamId,
+      agentAccessContext,
+    );
+    if (!hasAccess) {
+      logger.warn(
+        { profileId, tokenTeamId: token.teamId },
+        "Profile not accessible via team token",
+      );
+      return null;
+    }
+  }
+  // Org token: any profile in the organization is accessible
+  // (organization membership is verified in the route handler)
+
+  return {
+    tokenId: token.id,
+    teamId: token.teamId,
+    isOrganizationToken: token.isOrganizationToken,
+    organizationId: token.organizationId,
+  };
+}
+
+/**
+ * Validate a user token for a specific profile
+ * Returns token auth info if valid, null otherwise
+ *
+ * Validates that:
+ * 1. The token is valid (exists and matches)
+ * 2. The profile is accessible via this token:
+ *    - User has mcpGateway:admin permission (can access all gateways), OR
+ *    - User is a member of at least one team that the profile is assigned to
+ */
+export async function validateUserToken(
+  profileId: string,
+  tokenValue: string,
+  agentAccessContext?: AgentAccessContext | null,
+): Promise<TokenAuthResult | null> {
+  // Validate the token itself
+  const token = await UserTokenModel.validateToken(tokenValue);
+  if (!token) {
+    logger.debug(
+      { profileId, tokenPrefix: tokenValue.substring(0, 14) },
+      "validateUserToken: token not found in user_token table",
+    );
+    return null;
+  }
+
+  return validateResolvedUserToken({
+    profileId,
+    token,
+    agentAccessContext,
+  });
+}
+
+async function validateResolvedUserToken(params: {
+  profileId: string;
+  token: SelectUserToken;
+  agentAccessContext?: AgentAccessContext | null;
+}): Promise<TokenAuthResult | null> {
+  const { profileId, token, agentAccessContext } = params;
+
+  // Check if user has MCP gateway admin permission (can access all gateways)
+  const isGatewayAdmin = await userHasPermission(
+    token.userId,
+    token.organizationId,
+    "mcpGateway",
+    "admin",
+  );
+
+  if (isGatewayAdmin) {
+    return {
+      tokenId: token.id,
+      teamId: null, // User tokens aren't scoped to a single team
+      isOrganizationToken: false,
+      organizationId: token.organizationId,
+      isUserToken: true,
+      userId: token.userId,
+    };
+  }
+
+  // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
+  if (
+    !(await AgentTeamModel.userHasAgentAccess(
+      token.userId,
+      profileId,
+      false,
+      agentAccessContext,
+    ))
+  ) {
+    logger.warn(
+      { profileId, userId: token.userId },
+      "Profile not accessible via user token (no shared teams)",
+    );
+    return null;
+  }
+
+  return {
+    tokenId: token.id,
+    teamId: null, // User tokens aren't scoped to a single team
+    isOrganizationToken: false,
+    organizationId: token.organizationId,
+    isUserToken: true,
+    userId: token.userId,
+  };
+}
+
+/**
+ * Validate an OAuth access token for a specific profile.
+ * Looks up the token by its SHA-256 hash in the oauth_access_token table
+ * (matching better-auth's hashed token storage), then checks user access.
+ *
+ * Returns token auth info if valid, null otherwise.
+ */
+export async function validateOAuthToken(params: {
+  profileId: string;
+  tokenValue: string;
+}): Promise<TokenAuthResult | null>;
+export async function validateOAuthToken(
+  profileId: string,
+  tokenValue: string,
+): Promise<TokenAuthResult | null>;
+export async function validateOAuthToken(
+  profileIdOrParams:
+    | string
+    | {
+        profileId: string;
+        tokenValue: string;
+      },
+  tokenValueArg?: string,
+): Promise<TokenAuthResult | null> {
+  const profileId =
+    typeof profileIdOrParams === "string"
+      ? profileIdOrParams
+      : profileIdOrParams.profileId;
+  const tokenValue =
+    typeof profileIdOrParams === "string"
+      ? tokenValueArg
+      : profileIdOrParams.tokenValue;
+
+  if (!tokenValue) {
+    return null;
+  }
+
+  const oauthTokenHash = buildOAuthTokenHash(tokenValue);
+  return validateOAuthTokenByHash({ profileId, oauthTokenHash });
+}
+
+async function validateOAuthTokenByHash(params: {
+  profileId: string;
+  oauthTokenHash: string;
+  agentAccessContext?: AgentAccessContext | null;
+}): Promise<TokenAuthResult | null> {
+  try {
+    const agent =
+      params.agentAccessContext ??
+      (await findAgentAccessContextById(params.profileId));
+    if (!agent) {
+      return null;
+    }
+
+    // Look up the hashed token via the model
+    const accessToken = await OAuthAccessTokenModel.getByTokenHash(
+      params.oauthTokenHash,
+    );
+
+    if (!accessToken) {
+      return null;
+    }
+
+    // Check if associated refresh token has been revoked
+    if (accessToken.refreshTokenRevoked) {
+      logger.debug(
+        { profileId: params.profileId },
+        "validateOAuthToken: associated refresh token is revoked",
+      );
+      return null;
+    }
+
+    // Check token expiry
+    if (accessToken.expiresAt < new Date()) {
+      logger.debug(
+        { profileId: params.profileId },
+        "validateOAuthToken: token expired",
+      );
+      return null;
+    }
+
+    if (
+      accessToken.referenceId?.startsWith(MCP_RESOURCE_REFERENCE_PREFIX) &&
+      accessToken.referenceId !==
+        `${MCP_RESOURCE_REFERENCE_PREFIX}${params.profileId}`
+    ) {
+      logger.warn(
+        {
+          profileId: params.profileId,
+          tokenReferenceId: accessToken.referenceId,
+        },
+        "validateOAuthToken: token is bound to a different MCP resource",
+      );
+      return null;
+    }
+
+    // A token audience-bound to a shareable-App connector is valid only at that
+    // connector, never at the MCP gateway — reject it before the user-access
+    // branch would otherwise accept it on team membership alone.
+    if (isAppConnectorAudienceRef(accessToken.referenceId)) {
+      logger.warn(
+        { profileId: params.profileId },
+        "validateOAuthToken: rejecting an app-connector-bound token at the MCP gateway",
+      );
+      return null;
+    }
+
+    // Application (client_credentials) tokens minted for an MCP OAuth client
+    // carry no acting user. Authorize them against the client's allowed gateways
+    // instead of a user's team membership.
+    if (
+      accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX)
+    ) {
+      return validateMcpOauthClientToken({
+        accessToken,
+        profileId: params.profileId,
+        organizationId: agent.organizationId,
+      });
+    }
+
+    const userId = accessToken.userId;
+    if (!userId) {
+      return null;
+    }
+    const organizationId = agent.organizationId;
+
+    // Check if user has MCP gateway admin permission (can access all gateways)
+    const isGatewayAdmin = await userHasPermission(
+      userId,
+      organizationId,
+      "mcpGateway",
+      "admin",
+    );
+
+    if (isGatewayAdmin) {
+      return {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId,
+        isUserToken: true,
+        userId,
+      };
+    }
+
+    // Non-admin access has two additive sources:
+    //   1. the user's own RBAC (profile is teamless/org-wide or shares a team), or
+    //   2. an admin-controlled grant on the authorization_code MCP OAuth client
+    //      that minted this token — its allowedGatewayIds may grant access to
+    //      gateways the user could not otherwise reach (e.g. a gateway reachable
+    //      only through a specific pre-registered app).
+    const hasRbacAccess = await AgentTeamModel.userHasAgentAccess(
+      userId,
+      params.profileId,
+      false,
+      agent,
+    );
+    const hasClientGrant =
+      hasRbacAccess || !accessToken.clientId
+        ? false
+        : await mcpOauthClientGrantsGatewayAccess({
+            clientId: accessToken.clientId,
+            profileId: params.profileId,
+            organizationId,
+          });
+
+    if (!hasRbacAccess && !hasClientGrant) {
+      logger.warn(
+        { profileId: params.profileId, userId },
+        "validateOAuthToken: profile not accessible via OAuth token (no RBAC access and no client grant)",
+      );
+      return null;
+    }
+
+    return {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId,
+      isUserToken: true,
+      userId,
+    };
+  } catch (error) {
+    logger.debug(
+      {
+        profileId: params.profileId,
+        error: error instanceof Error ? error.message : "unknown",
+      },
+      "validateOAuthToken: token validation failed",
+    );
+    return null;
+  }
+}
+
+/**
+ * Authorize a client_credentials access token minted for an MCP OAuth client.
+ *
+ * These are application tokens (machine-to-machine): there is no acting user,
+ * so authorization is the client's explicit `allowedGatewayIds` list rather
+ * than team membership. The per-gateway check here is the real authorization
+ * gate — a successful result grants access to exactly the requested gateway and
+ * nothing broader (teamId/isOrganizationToken stay null/false, so no downstream
+ * code re-broadens access).
+ *
+ * Note: an MCP OAuth client is a shared application credential with no acting
+ * user, so gateway tools that resolve per-user/dynamic upstream credentials at
+ * call time are not supported — assign shared/org-scoped credentials to those
+ * tools.
+ */
+async function validateMcpOauthClientToken(params: {
+  accessToken: {
+    id: string;
+    clientId: string | null;
+    referenceId: string | null;
+    scopes: string[] | null;
+  };
+  profileId: string;
+  organizationId: string;
+}): Promise<TokenAuthResult | null> {
+  const { accessToken, profileId, organizationId } = params;
+
+  // Require the mcp scope (parallels the llm:proxy scope check on the LLM path).
+  if (!accessToken.scopes?.includes(MCP_GATEWAY_OAUTH_SCOPE)) {
+    return null;
+  }
+  if (!accessToken.clientId) {
+    return null;
+  }
+
+  // findByClientId returns null when the client was deleted or disabled.
+  const oauthClient = await McpOauthClientModel.findByClientId(
+    accessToken.clientId,
+  );
+  if (!oauthClient) {
+    return null;
+  }
+
+  // Defense in depth: the token's referenceId must point at this exact client.
+  if (
+    accessToken.referenceId !==
+    `${MCP_OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`
+  ) {
+    return null;
+  }
+
+  // Cross-org tokens are never valid for this gateway.
+  if (oauthClient.organizationId !== organizationId) {
+    return null;
+  }
+
+  // The client must be explicitly scoped to the requested gateway.
+  if (!oauthClient.allowedGatewayIds.includes(profileId)) {
+    logger.warn(
+      { profileId, clientId: oauthClient.clientId },
+      "validateOAuthToken: MCP OAuth client not authorized for this gateway",
+    );
+    return null;
+  }
+
+  return {
+    tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+    teamId: null,
+    isOrganizationToken: false,
+    organizationId,
+  };
+}
+
+/**
+ * Whether the authorization_code MCP OAuth client that minted a user-bound token
+ * grants access to a gateway beyond the user's own RBAC. This is an additive,
+ * admin-controlled access grant: only client_credentials clients use
+ * allowedGatewayIds as a sole authority, whereas an authorization_code client's
+ * list confers extra access to anyone who authenticates through it. Disabled or
+ * deleted clients (findByClientId returns null) grant nothing.
+ */
+async function mcpOauthClientGrantsGatewayAccess(params: {
+  clientId: string;
+  profileId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const oauthClient = await McpOauthClientModel.findByClientId(params.clientId);
+  if (!oauthClient || oauthClient.grantType !== "authorization_code") {
+    return false;
+  }
+  if (oauthClient.organizationId !== params.organizationId) {
+    return false;
+  }
+  return oauthClient.allowedGatewayIds.includes(params.profileId);
+}
+
+/**
+ * Validate any token for a specific profile.
+ * Tries external IdP JWKS first (if configured), then team/org tokens, user tokens, and OAuth tokens.
+ * Returns token auth info if valid, null otherwise.
+ */
+export async function validateMCPGatewayToken(
+  profileId: string,
+  tokenValue: string,
+): Promise<TokenAuthResult | null> {
+  const tokenHashes = buildTokenHashes(profileId, tokenValue);
+  const cachedResult = getCachedTokenAuthResult(tokenHashes.cacheKey);
+  if (cachedResult !== undefined) {
+    return cachedResult;
+  }
+
+  let agentAccessContextPromise: Promise<AgentAccessContext | null> | undefined;
+  const getAgentAccessContext =
+    async (): Promise<AgentAccessContext | null> => {
+      if (!agentAccessContextPromise) {
+        agentAccessContextPromise = findAgentAccessContextById(profileId);
+      }
+      return agentAccessContextPromise;
+    };
+
+  // Try external IdP JWKS validation first (if profile has an IdP configured)
+  if (!hasArchestraTokenPrefix(tokenValue)) {
+    const externalIdpResult = await validateExternalIdpToken(
+      profileId,
+      tokenValue,
+    );
+    if (externalIdpResult) {
+      cacheTokenAuthResult(tokenHashes.cacheKey, externalIdpResult);
+      return externalIdpResult;
+    }
+  }
+
+  if (hasArchestraTokenPrefix(tokenValue)) {
+    const resolvedToken = await resolveArchestraToken(
+      tokenValue,
+      tokenHashes.rawTokenHash,
+    );
+    if (resolvedToken?.type === "team") {
+      const teamTokenResult = await validateResolvedTeamToken({
+        profileId,
+        token: resolvedToken.token,
+        agentAccessContext: resolvedToken.token.isOrganizationToken
+          ? null
+          : await getAgentAccessContext(),
+      });
+      if (teamTokenResult) {
+        cacheTokenAuthResult(tokenHashes.cacheKey, teamTokenResult);
+        return teamTokenResult;
+      }
+    }
+
+    if (resolvedToken?.type === "user") {
+      const userTokenResult = await validateResolvedUserToken({
+        profileId,
+        token: resolvedToken.token,
+        agentAccessContext: await getAgentAccessContext(),
+      });
+      if (userTokenResult) {
+        cacheTokenAuthResult(tokenHashes.cacheKey, userTokenResult);
+        return userTokenResult;
+      }
+    }
+
+    logger.warn(
+      { profileId, tokenPrefix: tokenValue.substring(0, 14) },
+      "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
+    );
+    cacheTokenAuthResult(tokenHashes.cacheKey, null);
+    return null;
+  }
+
+  // Try OAuth token validation (for MCP clients like Open WebUI)
+  const oauthResult = await validateOAuthTokenByHash({
+    profileId,
+    oauthTokenHash: tokenHashes.oauthTokenHash,
+    agentAccessContext: await getAgentAccessContext(),
+  });
+  if (oauthResult) {
+    // This cache is intentionally short-lived and process-local. Revocations
+    // may take up to TOKEN_AUTH_CACHE_TTL_MS to fully age out across requests.
+    cacheTokenAuthResult(tokenHashes.cacheKey, oauthResult);
+    return oauthResult;
+  }
+
+  logger.warn(
+    { profileId, tokenPrefix: tokenValue.substring(0, 14) },
+    "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
+  );
+  cacheTokenAuthResult(tokenHashes.cacheKey, null);
+  return null;
+}
+
+/**
+ * Validate a JWT from an external Identity Provider via JWKS.
+ * Only attempted when the profile has an associated SSO provider with OIDC config.
+ *
+ * @returns TokenAuthResult with external identity info, or null if validation fails
+ */
+export async function validateExternalIdpToken(
+  profileId: string,
+  tokenValue: string,
+  permissionResource: "mcpGateway" | "llmProxy" = "mcpGateway",
+): Promise<TokenAuthResult | null> {
+  try {
+    // Look up the agent to check if it has an identity provider configured
+    const agent = await AgentModel.findById(profileId);
+    if (!agent?.identityProviderId) {
+      return null;
+    }
+
+    // Look up the identity provider to get OIDC config
+    const idpProvider = await findExternalIdentityProviderById(
+      agent.identityProviderId,
+    );
+    if (!idpProvider) {
+      logger.warn(
+        { profileId, identityProviderId: agent.identityProviderId },
+        "validateExternalIdpToken: Identity provider not found",
+      );
+      return null;
+    }
+
+    if (!idpProvider.oidcConfig) {
+      logger.warn(
+        { profileId, identityProviderId: agent.identityProviderId },
+        "validateExternalIdpToken: identity provider has no OIDC config",
+      );
+      return null;
+    }
+
+    const oidcConfig = idpProvider.oidcConfig;
+
+    if (!oidcConfig.clientId) {
+      logger.warn(
+        { profileId, identityProviderId: agent.identityProviderId },
+        "validateExternalIdpToken: identity provider OIDC clientId is required for audience validation",
+      );
+      return null;
+    }
+
+    // Use the JWKS endpoint from OIDC config if available (avoids OIDC discovery
+    // round-trip, and works when the issuer URL isn't reachable from the backend
+    // e.g. in CI where the issuer is a NodePort URL but the backend runs in a pod).
+    // Fall back to OIDC discovery from the issuer URL.
+    const jwksUrl =
+      oidcConfig.jwksEndpoint ??
+      (await discoverOidcJwksUrl(idpProvider.issuer));
+    if (!jwksUrl) {
+      logger.warn(
+        { profileId, issuer: idpProvider.issuer },
+        "validateExternalIdpToken: could not determine JWKS URL",
+      );
+      return null;
+    }
+
+    // Validate the JWT
+    const result = await jwksValidator.validateJwt({
+      token: tokenValue,
+      issuerUrl: idpProvider.issuer,
+      jwksUrl,
+      audience: oidcConfig.clientId,
+    });
+
+    if (!result) {
+      return null;
+    }
+
+    logger.info(
+      {
+        profileId,
+        identityProviderId: agent.identityProviderId,
+        sub: result.sub,
+        email: result.email,
+      },
+      "validateExternalIdpToken: JWT validated via external IdP JWKS",
+    );
+
+    // Match JWT email claim to an Archestra user for access control. Some IdPs
+    // use the subject as the user email and omit the email claim.
+    const userEmail = result.email ?? getEmailFromSubject(result.sub);
+    if (!userEmail) {
+      logger.warn(
+        { profileId, sub: result.sub },
+        "validateExternalIdpToken: JWT has no email claim, cannot match to Archestra user",
+      );
+      return null;
+    }
+
+    const user = await UserModel.findByEmail(userEmail);
+    if (!user) {
+      logger.warn(
+        { profileId, email: userEmail },
+        "validateExternalIdpToken: JWT email does not match any Archestra user",
+      );
+      return null;
+    }
+
+    const member = await MemberModel.getByUserId(user.id, agent.organizationId);
+    if (!member) {
+      logger.warn(
+        { profileId, userId: user.id, email: userEmail },
+        "validateExternalIdpToken: user is not a member of the gateway's organization",
+      );
+      return null;
+    }
+
+    // Check if user has admin permission for the target resource (MCP Gateway or LLM Proxy)
+    const isAdmin = await userHasPermission(
+      user.id,
+      agent.organizationId,
+      permissionResource,
+      "admin",
+    );
+
+    if (isAdmin) {
+      return {
+        tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: agent.organizationId,
+        isUserToken: true,
+        userId: user.id,
+        isExternalIdp: true,
+        rawToken: tokenValue,
+      };
+    }
+
+    // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
+    if (!(await AgentTeamModel.userHasAgentAccess(user.id, profileId, false))) {
+      logger.warn(
+        { profileId, userId: user.id },
+        "validateExternalIdpToken: profile not accessible via external IdP (no shared teams)",
+      );
+      return null;
+    }
+
+    return {
+      tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: agent.organizationId,
+      isUserToken: true,
+      userId: user.id,
+      isExternalIdp: true,
+      rawToken: tokenValue,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
+    logger.warn(
+      { profileId, error: message, stack },
+      "validateExternalIdpToken: unexpected error",
+    );
+    return null;
+  }
+}
+
+function getEmailFromSubject(subject: string | undefined): string | null {
+  // This fallback is intentionally loose: after token validation succeeds,
+  // it only decides whether an email-shaped subject can be used for lookup.
+  if (!subject || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(subject)) {
+    return null;
+  }
+  return subject;
+}
+
+/**
+ * TTL cache for buildKnowledgeSourcesDescription to avoid repeated DB queries
+ * on every tools/list request. Invalidated after 30 seconds.
+ */
+const kbDescriptionCache = new Map<
+  string,
+  { description: string | null; expiresAt: number }
+>();
+const KB_DESCRIPTION_CACHE_TTL_MS = 30_000;
+
+function getCachedTokenAuthResult(
+  cacheKey: string,
+): TokenAuthResult | null | undefined {
+  return tokenAuthCache.get(cacheKey);
+}
+
+function getCachedRawArchestraToken(
+  rawTokenHash: string,
+): ResolvedArchestraToken | null | undefined {
+  return rawArchestraTokenCache.get(rawTokenHash);
+}
+
+function cacheTokenAuthResult(
+  cacheKey: string,
+  result: TokenAuthResult | null,
+): void {
+  // Negative results are intentionally NOT cached. Caching auth failures
+  // creates a "cache treadmill" where every retry refreshes the negative
+  // entry: a transient race during agent/IdP creation fails the first
+  // call, the failure is cached, the test/client retries within the cache
+  // TTL window, that retry finds (and refreshes) the cached `null`, and
+  // the cycle repeats forever (or until the polling budget is exhausted).
+  //
+  // This was the root cause of intermittent 401s in CI for the JWKS /
+  // enterprise-managed-credentials e2e suites — those tests create an
+  // identity provider + agent + IdP-binding within milliseconds of the
+  // first gateway call, and the negative cache kept the early failure
+  // sticky long after the underlying state stabilized.
+  //
+  // The defensive benefit of negative caching (less DB load on rejected
+  // tokens) is small: invalid-token requests already pay an upstream
+  // auth-rate-limit cost, and the validator's DB lookups are indexed and
+  // fast. Skipping the cache for failures lets every request re-evaluate
+  // against fresh state — eliminating the race entirely.
+  if (result === null) {
+    return;
+  }
+  tokenAuthCache.set(cacheKey, result, TOKEN_AUTH_CACHE_TTL_MS);
+}
+
+function cacheRawArchestraToken(
+  rawTokenHash: string,
+  result: ResolvedArchestraToken | null,
+): void {
+  // Same rationale as cacheTokenAuthResult: don't cache failures, to
+  // avoid the negative-cache treadmill that turns a transient creation
+  // race into a sticky 5-second window of 401s.
+  if (result === null) {
+    return;
+  }
+  rawArchestraTokenCache.set(rawTokenHash, result, TOKEN_AUTH_CACHE_TTL_MS);
+}
+
+function buildTokenHashes(profileId: string, tokenValue: string): TokenHashes {
+  const digest = createHash("sha256").update(tokenValue).digest();
+  return {
+    cacheKey: `${profileId}:${digest.toString("hex")}`,
+    oauthTokenHash: digest.toString("base64url"),
+    rawTokenHash: digest.toString("hex"),
+  };
+}
+
+function buildOAuthTokenHash(tokenValue: string): string {
+  return createHash("sha256").update(tokenValue).digest("base64url");
+}
+
+async function resolveArchestraToken(
+  tokenValue: string,
+  rawTokenHash: string,
+): Promise<ResolvedArchestraToken | null> {
+  const cached = getCachedRawArchestraToken(rawTokenHash);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const teamToken = await TeamTokenModel.validateToken(tokenValue);
+  if (teamToken) {
+    const result: ResolvedArchestraToken = {
+      type: "team",
+      token: teamToken,
+    };
+    cacheRawArchestraToken(rawTokenHash, result);
+    return result;
+  }
+
+  const userToken = await UserTokenModel.validateToken(tokenValue);
+  if (userToken) {
+    const result: ResolvedArchestraToken = {
+      type: "user",
+      token: userToken,
+    };
+    cacheRawArchestraToken(rawTokenHash, result);
+    return result;
+  }
+
+  cacheRawArchestraToken(rawTokenHash, null);
+  return null;
+}
+
+/**
+ * Build a dynamic description for the query_knowledge_sources tool that includes
+ * the agent's actual knowledge base names and connector sources.
+ * Results are cached per agentId with a 30s TTL.
+ */
+export async function buildKnowledgeSourcesDescription(
+  agentId: string,
+): Promise<string | null> {
+  const cached = kbDescriptionCache.get(agentId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.description;
+  }
+
+  const [kbAssignments, directConnectorIds] = await Promise.all([
+    AgentKnowledgeBaseModel.findByAgent(agentId),
+    AgentConnectorAssignmentModel.getConnectorIds(agentId),
+  ]);
+
+  if (kbAssignments.length === 0 && directConnectorIds.length === 0) {
+    kbDescriptionCache.set(agentId, {
+      description: null,
+      expiresAt: Date.now() + KB_DESCRIPTION_CACHE_TTL_MS,
+    });
+    return null;
+  }
+
+  const kbIds = kbAssignments.map((a) => a.knowledgeBaseId);
+
+  const [knowledgeBases, kbConnectors, directConnectors] = await Promise.all([
+    kbIds.length > 0 ? KnowledgeBaseModel.findByIds(kbIds) : [],
+    kbIds.length > 0
+      ? KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds)
+      : [],
+    KnowledgeBaseConnectorModel.findByIds(directConnectorIds),
+  ]);
+
+  const kbNames = knowledgeBases.map((kb) => kb.name);
+  const allConnectors = [...kbConnectors, ...directConnectors];
+  const connectorTypes = [
+    ...new Set(allConnectors.map((c) => c.connectorType)),
+  ];
+
+  let description =
+    "Query the organization's knowledge sources to retrieve relevant information. " +
+    "Use this tool when the user asks a question you cannot answer from your training data alone, " +
+    "or when they explicitly ask you to search internal documents and data sources. " +
+    "Pass the user's original query as-is — do not rephrase, summarize, or expand it. " +
+    "The system performs its own query optimization internally.";
+
+  if (kbNames.length > 0) {
+    const kbList = kbNames.join(", ");
+    description +=
+      kbList.length > 500
+        ? ` Available knowledge bases: ${kbList.slice(0, 500)}...`
+        : ` Available knowledge bases: ${kbList}.`;
+  }
+  if (connectorTypes.length > 0) {
+    description += ` Connected sources: ${connectorTypes.join(", ")}.`;
+  }
+
+  description +=
+    " Pass the user's original query verbatim — the system handles query optimization internally.";
+
+  kbDescriptionCache.set(agentId, {
+    description,
+    expiresAt: Date.now() + KB_DESCRIPTION_CACHE_TTL_MS,
+  });
+
+  return description;
+}
+
+function filterExposedTools(params: {
+  toolExposureMode: ToolExposureMode;
+  tools: McpListToolCandidate[];
+}) {
+  const { toolExposureMode, tools } = params;
+  return tools.filter((tool) => {
+    // `search_and_run_only` normally hides every tool behind search_tools/run_tool,
+    // but the meta tools themselves and the always-exposed skill path must stay
+    // top-level. `full` mode hides only the meta tools.
+    return toolExposureMode === "search_and_run_only"
+      ? isArchestraMetaTool(tool.name) || isAlwaysExposedTool(tool.name)
+      : !isArchestraMetaTool(tool.name);
+  });
+}
+
+type McpListTool = ListToolsResult["tools"][number];
+
+type McpToolForSearchDescription = {
+  catalogId: string | null;
+};
+
+type McpListToolCandidate = {
+  name: string;
+  description: string | null;
+  parameters: McpListTool["inputSchema"];
+  catalogId?: string | null;
+  meta?: {
+    annotations?: McpListTool["annotations"];
+    _meta?: McpListTool["_meta"];
+  };
+};
+
+function toMcpListTool(tool: {
+  name: string;
+  description?: string | null;
+  catalogId?: string | null;
+  parameters?: unknown;
+  inputSchema?: unknown;
+  meta?: {
+    annotations?: Record<string, unknown>;
+    _meta?: Record<string, unknown>;
+  } | null;
+}): McpListToolCandidate {
+  return {
+    name: tool.name,
+    description: tool.description ?? null,
+    parameters: normalizeToolInputSchema(tool.parameters ?? tool.inputSchema),
+    catalogId: tool.catalogId,
+    meta: tool.meta ?? undefined,
+  };
+}
+
+function getImplicitArchestraMetaTools() {
+  return getArchestraMcpTools().filter((tool) =>
+    isArchestraMetaTool(tool.name),
+  );
+}
+
+function dedupeToolsByName<T extends { name: string }>(tools: T[]) {
+  const deduped = new Map<string, T>();
+  for (const tool of tools) {
+    deduped.set(tool.name, tool);
+  }
+  return Array.from(deduped.values());
+}
+
+async function buildSearchToolsDescription(
+  mcpTools: McpToolForSearchDescription[],
+  prefetchedCatalogs?: Awaited<
+    ReturnType<typeof InternalMcpCatalogModel.getByIds>
+  >,
+) {
+  const searchTool = getArchestraMcpTools().find(
+    (tool) =>
+      archestraMcpBranding.getToolShortName(tool.name) ===
+      TOOL_SEARCH_TOOLS_SHORT_NAME,
+  );
+  const baseDescription = searchTool?.description;
+  if (!baseDescription) {
+    return null;
+  }
+
+  const catalogIds = [
+    ...new Set(
+      mcpTools
+        .map((tool) => tool.catalogId)
+        .filter(
+          (catalogId): catalogId is string =>
+            Boolean(catalogId) && catalogId !== ARCHESTRA_MCP_CATALOG_ID,
+        ),
+    ),
+  ];
+
+  if (catalogIds.length === 0) {
+    return baseDescription;
+  }
+
+  const catalogs =
+    prefetchedCatalogs ?? (await InternalMcpCatalogModel.getByIds(catalogIds));
+  const catalogSummaries = catalogIds
+    .map((catalogId) => catalogs.get(catalogId))
+    .filter((catalog) => catalog !== undefined)
+    .slice(0, 10)
+    .map((catalog) => {
+      const labels = catalog.labels
+        .slice(0, 3)
+        .map((label) => `${label.key}:${label.value}`)
+        .join(", ");
+      return labels ? `${catalog.name} (labels: ${labels})` : catalog.name;
+    });
+
+  if (catalogSummaries.length === 0) {
+    return baseDescription;
+  }
+
+  const remainingCount = catalogIds.length - catalogSummaries.length;
+  const remainingText =
+    remainingCount > 0 ? `, and ${remainingCount} more` : "";
+
+  return `${baseDescription} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
+}
+
+/** @public — also consumed by the app MCP server (mcp-app-gateway.utils.ts). */
+export function normalizeToolInputSchema(
+  schema: unknown,
+): McpListTool["inputSchema"] {
+  if (isRecord(schema) && schema.type === "object") {
+    return schema as McpListTool["inputSchema"];
+  }
+
+  return { type: "object", properties: {} };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isArchestraMetaTool(toolName: string) {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  return (
+    shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
+    shortName === TOOL_RUN_TOOL_SHORT_NAME
+  );
+}
+
+function isAlwaysExposedTool(toolName: string) {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  return shortName !== null && isAlwaysExposedArchestraToolShortName(shortName);
+}

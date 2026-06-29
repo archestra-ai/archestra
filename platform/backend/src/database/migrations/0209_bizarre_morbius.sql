@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "slim_chat_error_ui" boolean DEFAULT false NOT NULL;

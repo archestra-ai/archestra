@@ -1,0 +1,30 @@
+{{- if .Values.archestra.podDisruptionBudget.enabled }}
+{{- $minAvailableSet := not (kindIs "invalid" .Values.archestra.podDisruptionBudget.minAvailable) }}
+{{- $maxUnavailableSet := not (kindIs "invalid" .Values.archestra.podDisruptionBudget.maxUnavailable) }}
+{{- if and (not $minAvailableSet) (not $maxUnavailableSet) }}
+{{- fail "PodDisruptionBudget is enabled but neither minAvailable nor maxUnavailable is set. At least one must be specified." }}
+{{- end }}
+{{- if and $minAvailableSet $maxUnavailableSet }}
+{{- fail "PodDisruptionBudget cannot have both minAvailable and maxUnavailable set. Only one can be specified." }}
+{{- end }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+spec:
+  {{- if $minAvailableSet }}
+  minAvailable: {{ .Values.archestra.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if $maxUnavailableSet }}
+  maxUnavailable: {{ .Values.archestra.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  {{- if .Values.archestra.podDisruptionBudget.unhealthyPodEvictionPolicy }}
+  unhealthyPodEvictionPolicy: {{ .Values.archestra.podDisruptionBudget.unhealthyPodEvictionPolicy }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "archestra-platform.selectorLabels" . | nindent 6 }}
+{{- end }}

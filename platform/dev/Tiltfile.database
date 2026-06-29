@@ -1,0 +1,144 @@
+# Database resources
+load('ext://helm_remote', 'helm_remote')
+
+# Env-driven so a parallel Tilt session (separate worktree) doesn't collide.
+pg_namespace = os.getenv('ARCHESTRA_K8S_NAMESPACE', 'archestra-dev')
+pg_host_port = os.getenv('ARCHESTRA_POSTGRES_HOST_PORT', '5432')
+pg_metrics_host_port = os.getenv('ARCHESTRA_POSTGRES_METRICS_HOST_PORT', '9187')
+
+# PostgreSQL database for local development
+# https://dev.to/flodev/use-tilt-to-provide-easy-to-setup-development-environments-4n9d
+helm_remote(
+  'postgresql',
+  repo_url='https://charts.bitnami.com/bitnami',
+  namespace=pg_namespace,
+  create_namespace=True,
+  set=[
+    'auth.database=archestra_dev',
+    'auth.username=archestra',
+    'auth.password=archestra_dev_password',
+    'auth.postgresPassword=archestra_dev_password',
+
+    # NOTE: Bitnami is archiving their image.. see these github comments for details
+    # (this is essentially why we need to override image.repository and image.tag and global.security.allowInsecureImages)
+    #
+    # https://github.com/coder/coder/issues/19869#issuecomment-3305875979
+    # https://github.com/bitnami/containers/issues/83267
+    'image.repository=bitnamisecure/postgresql',
+    'image.tag=latest',
+    'global.security.allowInsecureImages=true',
+
+    # Enable postgres_exporter sidecar for Prometheus metrics (port 9187)
+    'metrics.enabled=true',
+    'metrics.service.ports.metrics=9187',
+
+    # Increase resource limits to prevent health check timeouts
+    # https://github.com/bitnami/charts/blob/main/bitnami/common/templates/_resources.tpl#L24C4-L24C9
+    'primary.resourcesPreset=small',
+
+    # Increase probe timeout to accommodate slower responses
+    'primary.livenessProbe.timeoutSeconds=10',
+    'primary.readinessProbe.timeoutSeconds=10',
+    'primary.startupProbe.timeoutSeconds=10',
+
+    # Grant superuser to the archestra user so migrations can create extensions (e.g., pgvector).
+    # Must run as the postgres superuser (not the default auth.username).
+    'primary.initdb.user=postgres',
+    'primary.initdb.password=archestra_dev_password',  # matches auth.postgresPassword
+    'primary.initdb.scripts.grant-superuser\\.sql=ALTER USER archestra WITH SUPERUSER;',
+  ]
+)
+
+k8s_resource('postgresql', port_forwards=[pg_host_port + ':5432', pg_metrics_host_port + ':9187'], labels=['database'])
+
+# Database cleanup button (manual trigger only, for development)
+local_resource(
+  'db-clean',
+  cmd='pnpm db:clean && tilt trigger db-migrate',
+  dir='../backend',
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  labels=['database'],
+  env={
+    'NODE_ENV': 'development',
+  }
+)
+
+local_resource(
+  'db-seed-mock-data',
+  cmd='pnpm db:seed:mock-data',
+  resource_deps=['pnpm-install', 'postgresql'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  labels=['database']
+)
+
+local_resource(
+  'db-migrate',
+  # NOTE: we need to cd into the backend directory to run the migrate command
+  # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
+  # propogate the required environment variables (ie. DATABASE_URL)
+  # Retry logic: wait for PostgreSQL to be ready before running migrations, then seed
+  cmd='''
+    for i in {1..30}; do
+      if pnpm db:migrate 2>/dev/null; then
+        echo "✅ Migration completed successfully"
+        tilt trigger pnpm-dev-backend
+        exit 0
+      fi
+      echo "⏳ Waiting for PostgreSQL... (attempt $i/30)"
+      sleep 2
+    done
+    echo "❌ Migration failed after 30 attempts"
+    exit 1
+  ''',
+  # Windows batch equivalent with retry logic
+  cmd_bat='''
+@echo off
+setlocal enabledelayedexpansion
+set count=0
+:retry
+set /a count+=1
+pnpm db:migrate 2>nul && (
+  echo Migration completed successfully
+  tilt trigger pnpm-dev-backend
+  exit /b 0
+)
+if !count! lss 30 (
+  echo Waiting for PostgreSQL... ^(attempt !count!/30^)
+  timeout /t 2 /nobreak >nul
+  goto retry
+)
+echo Migration failed after 30 attempts
+exit /b 1
+  ''',
+  dir='../backend',
+  deps=['../backend/src/database/migrations'],
+  resource_deps=['pnpm-install', 'postgresql'],
+  # The retry loop busy-spins for up to ~60s. Without this, a non-parallel
+  # local_resource holds Tilt's global build queue while running, which can
+  # block the postgresql re-apply that the loop is itself waiting for.
+  allow_parallel=True,
+  labels=['database']
+)
+
+local_resource(
+  'db-generate',
+  cmd='pnpm db:generate',
+  dir='../backend',
+  resource_deps=['postgresql'],
+  labels=['database'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+)
+
+local_resource(
+  'database-gui',
+  # NOTE: we need to cd into the backend directory to run the migrate command
+  # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
+  # propogate the required environment variables (ie. DATABASE_URL)
+  serve_cmd='pnpm db:studio',
+  serve_dir='../backend',
+  labels=['database'],
+  resource_deps=['postgresql']
+)

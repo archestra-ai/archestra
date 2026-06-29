@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/mcp/auth-calltime-e2e",
+    "bodyPatterns": [
+      { "matchesJsonPath": "$[?(@.method == 'tools/list')]" }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":{{jsonPath request.body '$.id'}},\"result\":{\"tools\":[{\"name\":\"test_auth_tool\",\"description\":\"Test tool for auth-at-call-time testing\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}}]}}"
+  }
+}

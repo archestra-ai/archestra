@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/cimd/test-client.json"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "transformers": ["response-template"],
+    "body": "{\"client_id\": \"{{request.baseUrl}}/cimd/test-client.json\", \"client_name\": \"E2E CIMD Test Client\", \"redirect_uris\": [\"http://127.0.0.1:34567/callback\"], \"grant_types\": [\"authorization_code\", \"refresh_token\"], \"response_types\": [\"code\"], \"token_endpoint_auth_method\": \"none\"}"
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "schedule_trigger_runs" ADD COLUMN "artifact" text;

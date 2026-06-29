@@ -1,0 +1,975 @@
+import type { IncomingMessage, Server } from "node:http";
+import { PassThrough } from "node:stream";
+import {
+  type ClientWebSocketMessage,
+  ClientWebSocketMessageSchema,
+  type ClientWebSocketMessageType,
+  type LocalMcpInstallationState,
+  MCP_DEFAULT_LOG_LINES,
+  type McpDeploymentStatusEntry,
+  type ServerWebSocketMessage,
+} from "@archestra/shared";
+import type * as k8s from "@kubernetes/client-node";
+import type { WebSocket, WebSocketServer } from "ws";
+import { WebSocket as WS, WebSocketServer as WSS } from "ws";
+import { betterAuth, hasPermission } from "@/auth";
+import config from "@/config";
+import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
+import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
+import logger from "@/logging";
+import { McpServerModel, UserModel } from "@/models";
+import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
+
+interface McpLogsSubscription {
+  serverId: string;
+  stream: PassThrough;
+  abortController: AbortController;
+}
+
+interface McpExecSubscription {
+  serverId: string;
+  stdin: PassThrough;
+  stdout: PassThrough;
+  stderr: PassThrough;
+  k8sWs: {
+    readyState: number;
+    close: () => void;
+    on: (event: string, listener: (...args: unknown[]) => void) => void;
+    send: (data: Buffer | string) => void;
+  };
+}
+
+interface McpDeploymentStatusSubscription {
+  interval: NodeJS.Timeout;
+  lastStatuses: Record<string, McpDeploymentStatusEntry>;
+}
+
+interface WebSocketClientContext {
+  userId: string;
+  organizationId: string;
+  userIsMcpServerAdmin: boolean;
+}
+
+type MessageHandler = (
+  ws: WebSocket,
+  message: ClientWebSocketMessage,
+  clientContext: WebSocketClientContext,
+) => Promise<void> | void;
+
+class WebSocketService {
+  private wss: WebSocketServer | null = null;
+  private mcpLogsSubscriptions: Map<WebSocket, McpLogsSubscription> = new Map();
+  private mcpExecSubscriptions: Map<WebSocket, McpExecSubscription> = new Map();
+  private mcpDeploymentStatusSubscriptions: Map<
+    WebSocket,
+    McpDeploymentStatusSubscription
+  > = new Map();
+  private clientContexts: Map<WebSocket, WebSocketClientContext> = new Map();
+  private browserStreamContext: BrowserStreamSocketClientContext | null = null;
+  private deploymentMetricsInterval: NodeJS.Timeout | null = null;
+
+  /**
+   * Proxy object for browser subscriptions - exposes Map-like interface for testing.
+   * Delegates to browserStreamContext when enabled, otherwise uses empty Map behavior.
+   */
+  get browserSubscriptions() {
+    const context = this.browserStreamContext;
+    return {
+      clear: () => context?.clearSubscriptions(),
+      has: (ws: WebSocket) => context?.hasSubscription(ws) ?? false,
+      get: (ws: WebSocket) => context?.getSubscription(ws),
+    };
+  }
+
+  /**
+   * Initialize browser stream context for testing without starting the full WebSocket server.
+   * Only call this in test environments.
+   */
+  initBrowserStreamContextForTesting(): void {
+    if (BrowserStreamSocketClientContext.isBrowserStreamEnabled()) {
+      this.browserStreamContext = new BrowserStreamSocketClientContext({
+        wss: null,
+        sendToClient: (ws, message) => this.sendToClient(ws, message),
+      });
+    }
+  }
+
+  // Browser messages are handled by browserStreamContext - see handleMessage()
+  private messageHandlers: Partial<
+    Record<ClientWebSocketMessageType, MessageHandler>
+  > = {
+    subscribe_mcp_logs: (ws, message, clientContext) => {
+      if (message.type !== "subscribe_mcp_logs") return;
+      return this.handleSubscribeMcpLogs(
+        ws,
+        message.payload.serverId,
+        message.payload.lines ?? MCP_DEFAULT_LOG_LINES,
+        clientContext,
+      );
+    },
+    unsubscribe_mcp_logs: (ws) => {
+      this.unsubscribeMcpLogs(ws);
+    },
+    subscribe_mcp_exec: (ws, message, clientContext) => {
+      if (message.type !== "subscribe_mcp_exec") return;
+      return this.handleSubscribeMcpExec(
+        ws,
+        message.payload.serverId,
+        clientContext,
+      );
+    },
+    unsubscribe_mcp_exec: (ws) => {
+      this.unsubscribeMcpExec(ws);
+    },
+    mcp_exec_input: (ws, message) => {
+      if (message.type !== "mcp_exec_input") return;
+      this.handleMcpExecInput(
+        ws,
+        message.payload.serverId,
+        message.payload.data,
+      );
+    },
+    mcp_exec_resize: (ws, message) => {
+      if (message.type !== "mcp_exec_resize") return;
+      this.handleMcpExecResize(
+        ws,
+        message.payload.serverId,
+        message.payload.cols,
+        message.payload.rows,
+      );
+    },
+    subscribe_mcp_deployment_statuses: (ws, _message, clientContext) => {
+      return this.handleSubscribeMcpDeploymentStatuses(ws, clientContext);
+    },
+    unsubscribe_mcp_deployment_statuses: (ws) => {
+      this.unsubscribeMcpDeploymentStatuses(ws);
+    },
+  };
+
+  start(httpServer: Server) {
+    const { path } = config.websocket;
+
+    this.wss = new WSS({
+      server: httpServer,
+      path,
+    });
+    if (BrowserStreamSocketClientContext.isBrowserStreamEnabled()) {
+      this.browserStreamContext = new BrowserStreamSocketClientContext({
+        wss: this.wss,
+        sendToClient: (ws, message) => this.sendToClient(ws, message),
+      });
+    } else {
+      this.browserStreamContext?.stop();
+      this.browserStreamContext = null;
+    }
+
+    logger.info(`WebSocket server started on path ${path}`);
+
+    this.startDeploymentMetricsPolling();
+
+    this.wss.on(
+      "connection",
+      async (ws: WebSocket, request: IncomingMessage) => {
+        const clientContext = await this.authenticateConnection(request);
+
+        if (!clientContext) {
+          logger.warn(
+            {
+              clientAddress:
+                request.socket.remoteAddress ?? "unknown_websocket_client",
+            },
+            "Unauthorized WebSocket connection attempt",
+          );
+          this.sendUnauthorized(ws);
+          return;
+        }
+
+        this.clientContexts.set(ws, clientContext);
+
+        logger.trace(
+          {
+            connections: this.wss?.clients.size,
+            userId: clientContext.userId,
+            organizationId: clientContext.organizationId,
+          },
+          "WebSocket client connected",
+        );
+
+        ws.on("message", async (data) => {
+          try {
+            const message = JSON.parse(data.toString());
+            const validatedMessage =
+              ClientWebSocketMessageSchema.parse(message);
+            await this.handleMessage(validatedMessage, ws);
+          } catch (error) {
+            logger.error({ error }, "Failed to parse WebSocket message");
+            this.sendToClient(ws, {
+              type: "error",
+              payload: {
+                message:
+                  error instanceof Error ? error.message : "Invalid message",
+              },
+            });
+          }
+        });
+
+        ws.on("close", () => {
+          this.unsubscribeMcpLogs(ws);
+          this.unsubscribeMcpExec(ws);
+          this.unsubscribeMcpDeploymentStatuses(ws);
+          logger.trace(
+            `WebSocket client disconnected. Remaining connections: ${this.wss?.clients.size}`,
+          );
+          this.clientContexts.delete(ws);
+        });
+
+        ws.on("error", (error) => {
+          logger.error({ error }, "WebSocket error");
+          this.unsubscribeMcpLogs(ws);
+          this.unsubscribeMcpExec(ws);
+          this.unsubscribeMcpDeploymentStatuses(ws);
+          this.clientContexts.delete(ws);
+        });
+      },
+    );
+
+    this.wss.on("error", (error) => {
+      logger.error({ error }, "WebSocket server error");
+    });
+  }
+
+  private async handleMessage(
+    message: ClientWebSocketMessage,
+    ws: WebSocket,
+  ): Promise<void> {
+    const clientContext = this.getClientContext(ws);
+    if (!clientContext) {
+      return;
+    }
+
+    // Delegate browser messages to browserStreamContext
+    if (
+      BrowserStreamSocketClientContext.isBrowserWebSocketMessage(message.type)
+    ) {
+      if (this.browserStreamContext) {
+        await this.browserStreamContext.handleMessage(
+          message,
+          ws,
+          clientContext,
+        );
+      } else {
+        this.sendToClient(ws, {
+          type: "browser_stream_error",
+          payload: {
+            conversationId:
+              "conversationId" in message.payload
+                ? String(message.payload.conversationId)
+                : "",
+            error: "Browser streaming feature is disabled",
+          },
+        });
+      }
+      return;
+    }
+
+    const handler = this.messageHandlers[message.type];
+    if (handler) {
+      await handler(ws, message, clientContext);
+    } else {
+      logger.warn({ message }, "Unknown WebSocket message type");
+    }
+  }
+
+  private async handleSubscribeMcpLogs(
+    ws: WebSocket,
+    serverId: string,
+    lines: number,
+    clientContext: WebSocketClientContext,
+  ): Promise<void> {
+    // Unsubscribe from any existing MCP logs stream first
+    this.unsubscribeMcpLogs(ws);
+
+    // Verify the user has access to this MCP server
+    // Note: findById checks access control based on userId and admin status
+    const mcpServer = await McpServerModel.findById(
+      serverId,
+      clientContext.userId,
+      clientContext.userIsMcpServerAdmin,
+    );
+
+    if (!mcpServer) {
+      logger.warn(
+        { serverId, organizationId: clientContext.organizationId },
+        "MCP server not found or unauthorized for logs streaming",
+      );
+      this.sendToClient(ws, {
+        type: "mcp_logs_error",
+        payload: {
+          serverId,
+          error: "MCP server not found",
+        },
+      });
+      return;
+    }
+
+    logger.info({ serverId, lines }, "MCP logs client subscribed");
+
+    const abortController = new AbortController();
+    const stream = new PassThrough();
+
+    // Store subscription
+    this.mcpLogsSubscriptions.set(ws, {
+      serverId,
+      stream,
+      abortController,
+    });
+
+    // Get the appropriate kubectl command based on pod status
+    const command = await McpServerRuntimeManager.getAppropriateCommand(
+      serverId,
+      lines,
+    );
+    // Send an initial message to confirm subscription and provide the command
+    this.sendToClient(ws, {
+      type: "mcp_logs",
+      payload: {
+        serverId,
+        logs: "",
+        command,
+      },
+    });
+
+    // Set up stream data handler
+    stream.on("data", (chunk: Buffer) => {
+      if (ws.readyState === WS.OPEN) {
+        this.sendToClient(ws, {
+          type: "mcp_logs",
+          payload: {
+            serverId,
+            logs: chunk.toString(),
+          },
+        });
+      }
+    });
+
+    stream.on("error", (error) => {
+      logger.error({ error, serverId }, "MCP logs stream error");
+      if (ws.readyState === WS.OPEN) {
+        this.sendToClient(ws, {
+          type: "mcp_logs_error",
+          payload: {
+            serverId,
+            error: error.message,
+          },
+        });
+      }
+      this.unsubscribeMcpLogs(ws);
+    });
+
+    stream.on("end", () => {
+      logger.info({ serverId }, "MCP logs stream ended");
+      if (ws.readyState === WS.OPEN) {
+        this.sendToClient(ws, {
+          type: "mcp_logs_ended",
+          payload: { serverId },
+        });
+      }
+      this.unsubscribeMcpLogs(ws);
+    });
+
+    try {
+      // Start streaming logs
+      await McpServerRuntimeManager.streamMcpServerLogs(
+        serverId,
+        stream,
+        lines,
+        abortController.signal,
+      );
+    } catch (error) {
+      logger.error({ error, serverId }, "Failed to start MCP logs stream");
+      this.sendToClient(ws, {
+        type: "mcp_logs_error",
+        payload: {
+          serverId,
+          error:
+            error instanceof Error ? error.message : "Failed to stream logs",
+        },
+      });
+      this.unsubscribeMcpLogs(ws);
+    }
+  }
+
+  private unsubscribeMcpLogs(ws: WebSocket): void {
+    const subscription = this.mcpLogsSubscriptions.get(ws);
+    if (subscription) {
+      subscription.abortController.abort();
+      subscription.stream.destroy();
+      this.mcpLogsSubscriptions.delete(ws);
+      logger.info(
+        { serverId: subscription.serverId },
+        "MCP logs client unsubscribed",
+      );
+    }
+  }
+
+  private async handleSubscribeMcpExec(
+    ws: WebSocket,
+    serverId: string,
+    clientContext: WebSocketClientContext,
+  ): Promise<void> {
+    this.unsubscribeMcpExec(ws);
+
+    const mcpServer = await McpServerModel.findById(
+      serverId,
+      clientContext.userId,
+      clientContext.userIsMcpServerAdmin,
+    );
+
+    if (!mcpServer) {
+      this.sendToClient(ws, {
+        type: "mcp_exec_error",
+        payload: { serverId, error: "MCP server not found" },
+      });
+      return;
+    }
+
+    logger.info(
+      { serverId, userId: clientContext.userId },
+      "Exec session starting",
+    );
+
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+
+    // Why a session ended (e.g. `/bin/sh` missing on a distroless image) can
+    // arrive on two different K8s exec channels depending on the container
+    // runtime: the status channel (a V1Status) and/or the output stream (the
+    // OCI runtime's stderr). Capture both so the close event can tell the user
+    // the real reason instead of a bare "Session terminated".
+    let execStatus: k8s.V1Status | undefined;
+    let capturedOutput = "";
+    const captureExecOutput = (chunk: string) => {
+      if (capturedOutput.length >= EXEC_OUTPUT_CAPTURE_LIMIT) return;
+      capturedOutput += chunk.slice(
+        0,
+        EXEC_OUTPUT_CAPTURE_LIMIT - capturedOutput.length,
+      );
+    };
+
+    try {
+      const { k8sWs, podName } =
+        await McpServerRuntimeManager.execIntoMcpServer(
+          serverId,
+          stdin,
+          stdout,
+          stderr,
+          (status) => {
+            execStatus = status;
+          },
+        );
+
+      this.mcpExecSubscriptions.set(ws, {
+        serverId,
+        stdin,
+        stdout,
+        stderr,
+        k8sWs,
+      });
+
+      const command = McpServerRuntimeManager.getExecCommand(serverId);
+      this.sendToClient(ws, {
+        type: "mcp_exec_started",
+        payload: { serverId, command, podName },
+      });
+
+      // Bridge K8s stdout/stderr -> client
+      stdout.on("data", (chunk: Buffer) => {
+        const data = chunk.toString();
+        captureExecOutput(data);
+        if (ws.readyState === WS.OPEN) {
+          this.sendToClient(ws, {
+            type: "mcp_exec_output",
+            payload: { serverId, data },
+          });
+        }
+      });
+
+      stderr.on("data", (chunk: Buffer) => {
+        const data = chunk.toString();
+        captureExecOutput(data);
+        if (ws.readyState === WS.OPEN) {
+          this.sendToClient(ws, {
+            type: "mcp_exec_output",
+            payload: { serverId, data },
+          });
+        }
+      });
+
+      // K8s WS close -> notify client
+      k8sWs.on("close", () => {
+        const reason = describeExecFailure(execStatus, capturedOutput);
+        logger.info({ serverId, reason }, "K8s exec WebSocket closed");
+        if (ws.readyState === WS.OPEN) {
+          this.sendToClient(ws, {
+            type: "mcp_exec_closed",
+            payload: { serverId, reason },
+          });
+        }
+        this.unsubscribeMcpExec(ws);
+      });
+
+      k8sWs.on("error", (err: unknown) => {
+        logger.error({ err, serverId }, "K8s exec WebSocket error");
+        if (ws.readyState === WS.OPEN) {
+          this.sendToClient(ws, {
+            type: "mcp_exec_error",
+            payload: { serverId, error: "K8s connection error" },
+          });
+        }
+        this.unsubscribeMcpExec(ws);
+      });
+    } catch (error) {
+      logger.error({ error, serverId }, "Failed to start exec session");
+      stdin.destroy();
+      stdout.destroy();
+      stderr.destroy();
+
+      let errorMsg = "Failed to exec into pod";
+      if (error instanceof Error) {
+        errorMsg = error.message;
+      } else if (
+        typeof error === "object" &&
+        error !== null &&
+        "message" in error
+      ) {
+        errorMsg = String((error as { message: unknown }).message);
+      }
+
+      this.sendToClient(ws, {
+        type: "mcp_exec_error",
+        payload: { serverId, error: errorMsg },
+      });
+    }
+  }
+
+  private handleMcpExecInput(
+    ws: WebSocket,
+    serverId: string,
+    data: string,
+  ): void {
+    const sub = this.mcpExecSubscriptions.get(ws);
+    if (!sub || sub.serverId !== serverId) return;
+    sub.stdin.write(data);
+  }
+
+  private handleMcpExecResize(
+    ws: WebSocket,
+    serverId: string,
+    cols: number,
+    rows: number,
+  ): void {
+    const sub = this.mcpExecSubscriptions.get(ws);
+    if (!sub || sub.serverId !== serverId) return;
+
+    const resizeMsg = JSON.stringify({ Width: cols, Height: rows });
+    const resizeBuf = Buffer.alloc(resizeMsg.length + 1);
+    resizeBuf[0] = 4; // SPDY channel 4 = resize
+    resizeBuf.write(resizeMsg, 1);
+    if (sub.k8sWs.readyState <= 1) {
+      sub.k8sWs.send(resizeBuf);
+    }
+  }
+
+  private unsubscribeMcpExec(ws: WebSocket): void {
+    const sub = this.mcpExecSubscriptions.get(ws);
+    if (!sub) return;
+
+    sub.stdin.destroy();
+    sub.stdout.destroy();
+    sub.stderr.destroy();
+    if (sub.k8sWs.readyState <= 1) {
+      sub.k8sWs.close();
+    }
+    this.mcpExecSubscriptions.delete(ws);
+    logger.info({ serverId: sub.serverId }, "MCP exec client unsubscribed");
+  }
+
+  /**
+   * Start a standalone interval that periodically reports deployment status
+   * metrics to Prometheus, independent of any WebSocket client subscriptions.
+   */
+  private startDeploymentMetricsPolling(): void {
+    const reportMetrics = () => {
+      try {
+        const summary = McpServerRuntimeManager.statusSummary;
+        const metricStatuses: Record<
+          string,
+          { serverName: string; state: string }
+        > = {};
+        for (const [serverId, deployment] of Object.entries(
+          summary.mcpServers,
+        )) {
+          metricStatuses[serverId] = {
+            serverName: deployment.serverName,
+            state: deployment.state,
+          };
+        }
+        reportMcpDeploymentStatuses(metricStatuses);
+      } catch (error) {
+        logger.error(
+          { error },
+          "Failed to report MCP deployment status metrics",
+        );
+      }
+    };
+
+    // Report immediately, then every 30 seconds
+    reportMetrics();
+    this.deploymentMetricsInterval = setInterval(reportMetrics, 30_000);
+  }
+
+  private async handleSubscribeMcpDeploymentStatuses(
+    ws: WebSocket,
+    clientContext: WebSocketClientContext,
+  ): Promise<void> {
+    // Unsubscribe from any existing subscription first
+    this.unsubscribeMcpDeploymentStatuses(ws);
+
+    // Get accessible servers for this user.
+    // NOTE: This list is captured once at subscription time. If servers are added/removed
+    // after subscribing, the client won't see them until they re-subscribe (e.g. page refresh).
+    const allServers = await McpServerModel.findAll(
+      clientContext.userId,
+      clientContext.userIsMcpServerAdmin,
+    );
+
+    // Filter to local servers only (remote servers don't have K8s deployments)
+    const localServers = allServers.filter((s) => s.serverType === "local");
+    const localServerIds = localServers.map((s) => s.id);
+
+    // Build statuses from the runtime manager for this client
+    const buildStatuses = (
+      summary: typeof McpServerRuntimeManager.statusSummary,
+    ): Record<string, McpDeploymentStatusEntry> => {
+      const result: Record<string, McpDeploymentStatusEntry> = {};
+
+      for (const serverId of localServerIds) {
+        const deploymentStatus = summary.mcpServers[serverId];
+        if (deploymentStatus) {
+          result[serverId] = {
+            state: deploymentStatus.state,
+            message: deploymentStatus.message,
+            error: deploymentStatus.error,
+            restartCount: deploymentStatus.restartCount,
+            podAge: deploymentStatus.podAge,
+            podName: deploymentStatus.podName,
+          };
+        } else {
+          result[serverId] = {
+            state: "not_created",
+            message: "Deployment not created",
+            error: null,
+          };
+        }
+      }
+
+      return result;
+    };
+
+    // Refresh and build initial statuses from the runtime manager
+    await McpServerRuntimeManager.refreshAllStates();
+    const runtimeSummary = McpServerRuntimeManager.statusSummary;
+    const statuses = buildStatuses(runtimeSummary);
+
+    // Send initial statuses
+    this.sendToClient(ws, {
+      type: "mcp_deployment_statuses",
+      payload: { statuses },
+    });
+
+    // Store subscription with initial statuses for change detection
+    const lastStatuses = { ...statuses };
+
+    // Start polling interval (10s)
+    const interval = setInterval(async () => {
+      if (ws.readyState !== WS.OPEN) {
+        this.unsubscribeMcpDeploymentStatuses(ws);
+        return;
+      }
+
+      try {
+        // Refresh deployment states from K8s before reading cached summaries
+        await McpServerRuntimeManager.refreshAllStates();
+
+        const currentSummary = McpServerRuntimeManager.statusSummary;
+        const currentStatuses = buildStatuses(currentSummary);
+
+        // Only send if statuses changed
+        const sub = this.mcpDeploymentStatusSubscriptions.get(ws);
+        if (!sub) return;
+
+        const changed =
+          JSON.stringify(currentStatuses) !== JSON.stringify(sub.lastStatuses);
+
+        if (changed) {
+          sub.lastStatuses = { ...currentStatuses };
+          this.sendToClient(ws, {
+            type: "mcp_deployment_statuses",
+            payload: { statuses: currentStatuses },
+          });
+        }
+      } catch (error) {
+        logger.error({ error }, "Failed to poll MCP deployment statuses");
+      }
+    }, 10_000);
+
+    this.mcpDeploymentStatusSubscriptions.set(ws, {
+      interval,
+      lastStatuses,
+    });
+
+    logger.info("MCP deployment status client subscribed");
+  }
+
+  private unsubscribeMcpDeploymentStatuses(ws: WebSocket): void {
+    const subscription = this.mcpDeploymentStatusSubscriptions.get(ws);
+    if (subscription) {
+      clearInterval(subscription.interval);
+      this.mcpDeploymentStatusSubscriptions.delete(ws);
+      logger.info("MCP deployment status client unsubscribed");
+    }
+  }
+
+  private sendToClient(ws: WebSocket, message: ServerWebSocketMessage): void {
+    if (ws.readyState === WS.OPEN) {
+      ws.send(JSON.stringify(message));
+    }
+  }
+
+  broadcast(message: ServerWebSocketMessage) {
+    if (!this.wss) {
+      logger.warn("WebSocket server not initialized");
+      return;
+    }
+
+    const messageStr = JSON.stringify(message);
+    const clientCount = this.wss.clients.size;
+
+    let sentCount = 0;
+    this.wss.clients.forEach((client) => {
+      if (client.readyState === WS.OPEN) {
+        client.send(messageStr);
+        sentCount++;
+      }
+    });
+
+    if (sentCount < clientCount) {
+      logger.info(
+        `Only sent to ${sentCount}/${clientCount} clients (some were not ready)`,
+      );
+    }
+
+    logger.info(
+      { message, sentCount },
+      `Broadcasted message to ${sentCount} client(s)`,
+    );
+  }
+
+  sendToClients(
+    message: ServerWebSocketMessage,
+    filter?: (client: WebSocket) => boolean,
+  ) {
+    if (!this.wss) {
+      logger.warn("WebSocket server not initialized");
+      return;
+    }
+
+    const messageStr = JSON.stringify(message);
+    let sentCount = 0;
+
+    this.wss.clients.forEach((client) => {
+      if (client.readyState === WS.OPEN && (!filter || filter(client))) {
+        client.send(messageStr);
+        sentCount++;
+      }
+    });
+
+    logger.info(
+      { message, sentCount },
+      `Sent message to ${sentCount} client(s)`,
+    );
+  }
+
+  stop() {
+    if (this.deploymentMetricsInterval) {
+      clearInterval(this.deploymentMetricsInterval);
+      this.deploymentMetricsInterval = null;
+    }
+    for (const [ws] of this.mcpLogsSubscriptions) {
+      this.unsubscribeMcpLogs(ws);
+    }
+    for (const [ws] of this.mcpExecSubscriptions) {
+      this.unsubscribeMcpExec(ws);
+    }
+    for (const [ws] of this.mcpDeploymentStatusSubscriptions) {
+      this.unsubscribeMcpDeploymentStatuses(ws);
+    }
+    this.clientContexts.clear();
+
+    if (this.wss) {
+      this.wss.clients.forEach((client) => {
+        client.close();
+      });
+
+      this.wss.close(() => {
+        logger.info("WebSocket server closed");
+      });
+      this.wss = null;
+    }
+  }
+
+  getClientCount(): number {
+    return this.wss?.clients.size ?? 0;
+  }
+
+  private async authenticateConnection(
+    request: IncomingMessage,
+  ): Promise<WebSocketClientContext | null> {
+    const { success: userIsMcpServerAdmin } = await hasPermission(
+      { mcpServerInstallation: ["admin"] },
+      request.headers,
+    );
+    const headers = new Headers(request.headers as HeadersInit);
+
+    try {
+      const session = await betterAuth.api.getSession({
+        headers,
+        query: { disableCookieCache: true },
+      });
+
+      if (session?.user?.id) {
+        const { organizationId, ...user } = await UserModel.getById(
+          session.user.id,
+        );
+        return {
+          userId: user.id,
+          organizationId,
+          userIsMcpServerAdmin,
+        };
+      }
+    } catch (_sessionError) {
+      // Fall through to API key verification
+    }
+
+    const authHeader = headers.get("authorization");
+    if (authHeader) {
+      try {
+        const apiKeyResult = await betterAuth.api.verifyApiKey({
+          body: { key: authHeader },
+        });
+
+        if (apiKeyResult?.valid && apiKeyResult.key?.referenceId) {
+          const { organizationId, ...user } = await UserModel.getById(
+            apiKeyResult.key.referenceId,
+          );
+          return {
+            userId: user.id,
+            organizationId,
+            userIsMcpServerAdmin,
+          };
+        }
+      } catch (_apiKeyError) {
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  private getClientContext(ws: WebSocket): WebSocketClientContext | null {
+    const context = this.clientContexts.get(ws);
+    if (!context) {
+      this.sendUnauthorized(ws);
+      return null;
+    }
+
+    return context;
+  }
+
+  private sendUnauthorized(ws: WebSocket): void {
+    this.sendToClient(ws, {
+      type: "error",
+      payload: { message: "Unauthorized" },
+    });
+    ws.close(4401, "Unauthorized");
+  }
+
+  broadcastMcpInstallationStatus(
+    serverId: string,
+    status: LocalMcpInstallationState,
+    error: string | null,
+  ): void {
+    if (!this.wss) return;
+    this.broadcast({
+      type: "mcp_installation_status",
+      payload: { serverId, status, error },
+    });
+  }
+}
+
+const websocketService = new WebSocketService();
+
+/**
+ * Push an install-status update to all connected clients. Call this from
+ * any code path that writes mcp_server.local_installation_status so the UI
+ * doesn't depend on the 2s React Query poll catching the change.
+ */
+export function broadcastMcpInstallationStatus(
+  serverId: string,
+  status: LocalMcpInstallationState,
+  error: string | null = null,
+): void {
+  websocketService.broadcastMcpInstallationStatus(serverId, status, error);
+}
+
+export default websocketService;
+
+// How much exec output we keep to diagnose why a session ended. The OCI
+// start-failure error is short and arrives first, so a small head is plenty.
+const EXEC_OUTPUT_CAPTURE_LIMIT = 4096;
+
+// Markers the container runtime emits when it can't start the exec'd binary
+// (i.e. the shell itself is missing). Deliberately specific — these are
+// runtime-generated and won't appear from a normal shell command's output, so
+// matching them won't misfire on e.g. `cat /missing` inside a working shell.
+const SHELL_START_FAILURE =
+  /OCI runtime exec failed|unable to start container process|exec:\s+".*?":.*?(?:no such file|not found)|executable file not found|exec format error/i;
+
+/**
+ * Translate a K8s exec session's end into a human-readable reason. Returns
+ * undefined for a clean exit so the UI keeps its generic "Session terminated".
+ *
+ * The cause can land on either of two exec channels depending on the runtime:
+ * the status channel (`status.message`) or the output stream (the OCI error
+ * written to stderr). The most important case — a distroless MCP image with no
+ * `/bin/sh` — shows up as a "no such file"/"failed to start container process"
+ * error, which we turn into an actionable hint regardless of which channel
+ * carried it.
+ */
+function describeExecFailure(
+  status: k8s.V1Status | undefined,
+  output: string,
+): string | undefined {
+  if (SHELL_START_FAILURE.test(`${status?.message ?? ""}\n${output}`)) {
+    return "No shell found in this container image — it looks like a distroless/minimal image without /bin/sh. Use the Logs or Inspector tabs, or attach a debug container to inspect it.";
+  }
+
+  if (status?.status === "Failure") {
+    return (
+      status.message || status.reason || "Session ended with a failure status."
+    );
+  }
+
+  return undefined;
+}

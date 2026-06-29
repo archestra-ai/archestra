@@ -1,0 +1,90 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["ARCHESTRA_*", "NEXT_PUBLIC_ARCHESTRA_*", "CODEGEN"],
+  "globalDependencies": [".env", "pnpm-workspace.yaml"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**", "*.node"],
+      "env": ["VERSION"]
+    },
+    "dev": {
+      "persistent": true,
+      "cache": false,
+      "passThroughEnv": ["PORT"]
+    },
+    "start": {
+      "persistent": true,
+      "cache": false
+    },
+    "lint": {
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json"]
+    },
+    "lint:fix": {
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json"]
+    },
+    "lint:fix:unsafe": {
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json"]
+    },
+    "check:ci": {
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json", "src/database/migrations/**"]
+    },
+    "@backend#check:ci": {
+      "dependsOn": ["@archestra/app-runtime-rs#build", "@archestra/sandbox-rs#build"]
+    },
+    "check:commit": {
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json", "src/database/migrations/**"]
+    },
+    "knip": {
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "**/knip.config.ts", "**/package.json"]
+    },
+    "type-check": {
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts"]
+    },
+    "test": {
+      "cache": false
+    },
+    "test:e2e": {
+      "cache": false,
+      "passThroughEnv": [
+        "CI",
+        "PLAYWRIGHT_BROWSERS_PATH",
+        "E2E_UI_BASE_URL",
+        "E2E_API_BASE_URL",
+        "E2E_WIREMOCK_BASE_URL"
+      ]
+    },
+    "test:e2e:ui": {
+      "cache": false
+    },
+    "test:integration": {
+      "cache": false,
+      "passThroughEnv": ["CI", "PLAYWRIGHT_BROWSERS_PATH"]
+    },
+    "test:integration:ui": {
+      "cache": false,
+      "persistent": true
+    },
+    "codegen": {
+      "cache": false
+    },
+    "@archestra/shared#codegen": {
+      "dependsOn": ["@backend#codegen"],
+      "cache": false
+    },
+    "db:generate": {
+      "cache": false,
+      "persistent": true
+    },
+    "db:migrate": {
+      "inputs": ["backend/src/database/**/*.ts"]
+    },
+    "db:studio": {
+      "persistent": true,
+      "cache": false
+    },
+    "db:seed:mock-data": {
+      "cache": false
+    }
+  }
+}

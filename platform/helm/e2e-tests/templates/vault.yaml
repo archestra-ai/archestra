@@ -1,0 +1,153 @@
+{{- if .Values.vault.k8sAuth.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.vault.k8sAuth.serviceAccountName }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- if .Values.vault.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+  labels:
+    app: vault
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: vault
+spec:
+  type: {{ .Values.vault.service.type }}
+  selector:
+    app: vault
+  ports:
+    - port: {{ .Values.vault.service.port }}
+      targetPort: vault
+      protocol: TCP
+      name: vault
+      {{- if and (eq .Values.vault.service.type "NodePort") .Values.vault.service.nodePort }}
+      nodePort: {{ .Values.vault.service.nodePort }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vault
+  labels:
+    app: vault
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: vault
+spec:
+  {{- if .Values.vault.k8sAuth.enabled }}
+  serviceAccountName: {{ .Values.vault.k8sAuth.serviceAccountName }}
+  {{- end }}
+  containers:
+    - name: vault
+      image: "{{ .Values.vault.image.repository }}:{{ .Values.vault.image.tag }}"
+      imagePullPolicy: {{ .Values.vault.image.pullPolicy }}
+      env:
+        - name: VAULT_DEV_ROOT_TOKEN_ID
+          value: {{ .Values.vault.devRootToken | quote }}
+        - name: VAULT_DEV_LISTEN_ADDRESS
+          value: "0.0.0.0:8200"
+        - name: VAULT_ADDR
+          value: "http://127.0.0.1:8200"
+        - name: SKIP_SETCAP
+          value: "true"
+      ports:
+        - containerPort: 8200
+          name: vault
+      securityContext:
+        capabilities:
+          add:
+            - IPC_LOCK
+      {{- with .Values.vault.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.vault.readinessProbe.enabled }}
+      readinessProbe:
+        httpGet:
+          path: /v1/sys/health
+          port: vault
+        initialDelaySeconds: {{ .Values.vault.readinessProbe.initialDelaySeconds }}
+        periodSeconds: {{ .Values.vault.readinessProbe.periodSeconds }}
+        timeoutSeconds: {{ .Values.vault.readinessProbe.timeoutSeconds }}
+      {{- end }}
+      {{- if .Values.vault.k8sAuth.enabled }}
+      # Post-start hook to configure K8s auth after vault is ready
+      lifecycle:
+        postStart:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - |
+                export VAULT_ADDR="http://127.0.0.1:8200"
+                export VAULT_TOKEN="{{ .Values.vault.devRootToken }}"
+
+                # Wait for Vault API to be fully ready (not just initialized)
+                for i in $(seq 1 30); do
+                  if vault secrets list >/dev/null 2>&1; then
+                    break
+                  fi
+                  sleep 1
+                done
+
+                # Enable both KV v1 and v2 engines so the same Vault works with either version
+                vault secrets enable -path=kv -version=1 kv 2>/dev/null || true
+                vault secrets enable -path=secret kv-v2 2>/dev/null || true
+                vault policy write archestra-secrets - <<'POLICY'
+                path "kv/archestra" {
+                  capabilities = ["list"]
+                }
+                path "kv/archestra/*" {
+                  capabilities = ["create", "read", "update", "delete", "list"]
+                }
+                path "kv/teams" {
+                  capabilities = ["list"]
+                }
+                path "kv/teams/*" {
+                  capabilities = ["create", "read", "update", "delete", "list"]
+                }
+                path "secret/data/archestra/*" {
+                  capabilities = ["create", "read", "update", "delete", "list"]
+                }
+                path "secret/metadata/archestra/*" {
+                  capabilities = ["read", "delete", "list"]
+                }
+                path "secret/data/teams/*" {
+                  capabilities = ["create", "read", "update", "delete", "list"]
+                }
+                path "secret/metadata/teams/*" {
+                  capabilities = ["read", "delete", "list"]
+                }
+                POLICY
+
+                vault auth enable kubernetes 2>/dev/null || true
+
+                vault write auth/kubernetes/config \
+                  kubernetes_host="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
+
+                vault write auth/kubernetes/role/archestra \
+                  bound_service_account_names="{{ .Values.vault.k8sAuth.boundServiceAccountName }}" \
+                  bound_service_account_namespaces="{{ .Values.vault.k8sAuth.boundServiceAccountNamespace }}" \
+                  policies="archestra-secrets" \
+                  ttl="{{ .Values.vault.k8sAuth.ttl }}"
+
+                {{- range .Values.vault.secrets }}
+                {{- $path := .path }}
+                {{- if contains "/data/" $path }}
+                vault kv put -mount="{{ regexReplaceAll "/data/.*$" $path "" }}" "{{ regexReplaceAll "^.*/data/" $path "" }}"{{ range $key, $value := .data }} {{ $key }}={{ $value | quote }}{{ end }}
+                {{- else }}
+                vault write {{ $path }}{{ range $key, $value := .data }} {{ $key }}={{ $value | quote }}{{ end }}
+                {{- end }}
+                {{- end }}
+      {{- end }}
+{{- end }}

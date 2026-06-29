@@ -1,0 +1,1373 @@
+import {
+  type AgentType,
+  createPaginatedResponseSchema,
+  isModelSelectionComplete,
+  PaginationQuerySchema,
+  parseLabelsParam,
+  RouteId,
+} from "@archestra/shared";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import {
+  getAgentTypePermissionChecker,
+  hasAnyAgentTypeReadPermission,
+  requireAgentModifyPermission,
+  userHasPermission,
+} from "@/auth";
+import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
+import { knowledgeSourceAccessControlService } from "@/knowledge-base";
+import {
+  AgentLabelModel,
+  AgentModel,
+  KnowledgeBaseConnectorModel,
+  KnowledgeBaseModel,
+  MemberModel,
+  TeamModel,
+} from "@/models";
+import { initializeObservabilityMetrics } from "@/observability";
+import { serializeAgentForExport } from "@/services/agent-export";
+import { importAgentFromPayload } from "@/services/agent-import";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import {
+  AgentExportPayloadSchema,
+  type AgentScope,
+  AgentScopeFilterSchema,
+  ApiError,
+  BuiltInAgentConfigSchema,
+  constructResponseSchema,
+  createSortingQuerySchema,
+  DeleteObjectResponseSchema,
+  ImportAgentResponseSchema,
+  InsertAgentSchema,
+  SelectAgentSchema,
+  UpdateAgentSchemaBase,
+  UuidIdSchema,
+} from "@/types";
+
+const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    "/api/agents",
+    {
+      schema: {
+        operationId: RouteId.GetAgents,
+        description: "Get all agents with pagination, sorting, and filtering",
+        tags: ["Agents"],
+        querystring: z
+          .object({
+            name: z.string().optional().describe("Filter by agent name"),
+            agentType: z
+              .enum(["profile", "mcp_gateway", "llm_proxy", "agent"])
+              .optional()
+              .describe(
+                "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.",
+              ),
+            agentTypes: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val.split(",") : val),
+                z.array(
+                  z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"]),
+                ),
+              )
+              .optional()
+              .describe(
+                "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
+              ),
+            scope: AgentScopeFilterSchema.optional().describe(
+              "Filter by scope: personal, team, org, or built_in.",
+            ),
+            teamIds: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val.split(",") : val),
+                z.array(z.string()),
+              )
+              .optional()
+              .describe(
+                "Filter by specific team IDs (comma-separated). Only used when scope=team.",
+              ),
+            authorIds: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val.split(",") : val),
+                z.array(z.string()),
+              )
+              .optional()
+              .describe(
+                "Filter by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
+              ),
+            excludeAuthorIds: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val.split(",") : val),
+                z.array(z.string()),
+              )
+              .optional()
+              .describe(
+                "Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
+              ),
+            labels: z
+              .string()
+              .optional()
+              .describe(
+                "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+              ),
+            excludeOtherPersonalAgents: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val === "true" : val),
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Hide personal agents owned by other users. Admin-only; no-op for non-admins.",
+              ),
+            status: z
+              .enum(["active", "deleted"])
+              .optional()
+              .describe(
+                "Filter by lifecycle status. Deleted rows require delete permission.",
+              ),
+          })
+          .merge(PaginationQuerySchema)
+          .merge(
+            createSortingQuerySchema([
+              "name",
+              "createdAt",
+              "toolsCount",
+              "subagentsCount",
+              "knowledgeSourcesCount",
+              "team",
+            ] as const),
+          ),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectAgentSchema),
+        ),
+      },
+    },
+    async (
+      {
+        query: {
+          name,
+          agentType,
+          agentTypes,
+          scope,
+          teamIds,
+          authorIds,
+          excludeAuthorIds,
+          labels,
+          excludeOtherPersonalAgents,
+          status,
+          limit,
+          offset,
+          sortBy,
+          sortDirection,
+        },
+        user,
+        organizationId,
+      },
+      reply,
+    ) => {
+      // Determine the effective type filter
+      const effectiveTypes =
+        agentTypes || (agentType ? [agentType] : undefined);
+
+      // Single DB query for all permission checks
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      const permittedTypes = getPermittedAgentTypesForList({
+        checker,
+        effectiveTypes,
+        status,
+      });
+
+      // Check admin for the specific type(s) being queried, or any type if unfiltered
+      const isAdmin = effectiveTypes
+        ? effectiveTypes.length === 1
+          ? checker.isAdmin(effectiveTypes[0])
+          : checker.hasAnyAdminPermission()
+        : checker.hasAnyAdminPermission();
+
+      return reply.send(
+        await AgentModel.findAllPaginated(
+          { limit, offset },
+          { sortBy, sortDirection },
+          {
+            name,
+            // agentTypes takes precedence over agentType
+            agentType: agentTypes || permittedTypes ? undefined : agentType,
+            agentTypes: permittedTypes ?? agentTypes,
+            scope,
+            teamIds,
+            // authorIds and excludeAuthorIds are admin-only
+            authorIds: isAdmin ? authorIds : undefined,
+            excludeAuthorIds: isAdmin ? excludeAuthorIds : undefined,
+            excludeOtherPersonalAgents: isAdmin
+              ? excludeOtherPersonalAgents
+              : undefined,
+            labels: parseLabelsParam(labels),
+            status,
+          },
+          user.id,
+          isAdmin,
+        ),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/agents/all",
+    {
+      schema: {
+        operationId: RouteId.GetAllAgents,
+        description: "Get all agents without pagination",
+        tags: ["Agents"],
+        querystring: z.object({
+          agentType: z
+            .enum(["profile", "mcp_gateway", "llm_proxy", "agent"])
+            .optional()
+            .describe(
+              "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.",
+            ),
+          agentTypes: z
+            .preprocess(
+              (val) => (typeof val === "string" ? val.split(",") : val),
+              z.array(z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"])),
+            )
+            .optional()
+            .describe(
+              "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
+            ),
+          excludeBuiltIn: z
+            .preprocess((val) => val === "true" || val === true, z.boolean())
+            .optional()
+            .describe(
+              "Exclude built-in agents from the results. Defaults to false.",
+            ),
+          scope: AgentScopeFilterSchema.optional().describe(
+            "Filter by scope: personal, team, org, or built_in.",
+          ),
+          excludeOtherPersonalAgents: z
+            .preprocess(
+              (val) => (typeof val === "string" ? val === "true" : val),
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Hide personal agents owned by other users. Admin-only; no-op for non-admins (their access control already excludes them).",
+            ),
+          status: z
+            .enum(["active", "deleted"])
+            .optional()
+            .describe(
+              "Filter by lifecycle status. Deleted rows require delete permission.",
+            ),
+        }),
+        response: constructResponseSchema(z.array(SelectAgentSchema)),
+      },
+    },
+    async (
+      {
+        query: {
+          agentType,
+          agentTypes,
+          excludeBuiltIn,
+          scope,
+          excludeOtherPersonalAgents,
+          status,
+        },
+        user,
+        organizationId,
+      },
+      reply,
+    ) => {
+      // Determine the effective type filter
+      const effectiveTypes =
+        agentTypes || (agentType ? [agentType] : undefined);
+
+      // Single DB query for all permission checks
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      const permittedTypes = getPermittedAgentTypesForList({
+        checker,
+        effectiveTypes,
+        status,
+      });
+
+      // Check admin for the specific type(s) being queried, or any type if unfiltered
+      const isAdmin = effectiveTypes
+        ? effectiveTypes.length === 1
+          ? checker.isAdmin(effectiveTypes[0])
+          : checker.hasAnyAdminPermission()
+        : checker.hasAnyAdminPermission();
+
+      return reply.send(
+        await AgentModel.findAll(user.id, isAdmin, {
+          // agentTypes takes precedence over agentType
+          agentType: agentTypes || permittedTypes ? undefined : agentType,
+          agentTypes: permittedTypes ?? agentTypes,
+          excludeBuiltIn,
+          scope:
+            scope && scope !== "built_in" ? (scope as AgentScope) : undefined,
+          excludeOtherPersonalAgents: isAdmin
+            ? excludeOtherPersonalAgents
+            : undefined,
+          status,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/mcp-gateways/default",
+    {
+      schema: {
+        operationId: RouteId.GetDefaultMcpGateway,
+        description: "Get default MCP Gateway",
+        tags: ["MCP Gateway"],
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async (request, reply) => {
+      const gateway = await AgentModel.ensurePersonalMcpGateway({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      return reply.send(gateway);
+    },
+  );
+
+  fastify.get(
+    "/api/llm-proxy/default",
+    {
+      schema: {
+        operationId: RouteId.GetDefaultLlmProxy,
+        description: "Get default LLM Proxy",
+        tags: ["LLM Proxy"],
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async (request, reply) => {
+      return reply.send(
+        await AgentModel.ensurePersonalLlmProxy({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+        }),
+      );
+    },
+  );
+
+  fastify.post(
+    "/api/agents/import",
+    {
+      // Limit import payloads to 1 MiB — agent configs are small JSON files;
+      // rejecting oversized payloads protects against accidental or malicious abuse.
+      bodyLimit: 1 * 1024 * 1024,
+      schema: {
+        operationId: RouteId.ImportAgent,
+        description:
+          "Import an agent from a portable JSON payload. Creates a new agent with all resolvable associations and returns soft warnings for any references that could not be found.",
+        tags: ["Agents"],
+        body: AgentExportPayloadSchema,
+        response: constructResponseSchema(ImportAgentResponseSchema),
+      },
+    },
+    async ({ body, user, organizationId }, reply) => {
+      // Only agent type is supported for import
+      if (body.agent.agentType !== "agent") {
+        throw new ApiError(
+          400,
+          "Only internal agents can be imported. MCP gateways and LLM proxies are not supported.",
+        );
+      }
+
+      // Check create permission for agent type
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      checker.require("agent", "create");
+
+      const result = await importAgentFromPayload(
+        body,
+        user.id,
+        organizationId,
+      );
+
+      return reply.send(result);
+    },
+  );
+
+  fastify.post(
+    "/api/agents",
+    {
+      schema: {
+        operationId: RouteId.CreateAgent,
+        description: "Create a new agent",
+        tags: ["Agents"],
+        body: InsertAgentSchema,
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async ({ body, user, organizationId }, reply) => {
+      // Check create permission for the specific agent type
+      const agentType = body.agentType ?? "mcp_gateway";
+
+      // Single DB query for all permission checks on this agent type
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      checker.require(agentType, "create");
+
+      // Validate scope-based permissions for agent creation
+      if (!checker.isAdmin(agentType)) {
+        const scope = body.scope ?? "personal";
+        if (scope === "org") {
+          throw new ApiError(403, "Only admins can create org-scoped agents");
+        }
+        if (scope === "team" || body.teams.length > 0) {
+          if (!checker.isTeamAdmin(agentType)) {
+            throw new ApiError(
+              403,
+              "You need team-admin permission to create team-scoped agents",
+            );
+          }
+
+          // team-admin can only assign teams they are a member of
+          const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+          const userTeamIdSet = new Set(userTeamIds);
+          const invalidTeams = body.teams.filter(
+            (id) => !userTeamIdSet.has(id),
+          );
+          if (invalidTeams.length > 0) {
+            throw new ApiError(
+              403,
+              "You can only assign teams you are a member of",
+            );
+          }
+        }
+      }
+
+      // Validate knowledgeBaseIds if provided
+      if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
+        if (agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Knowledge bases cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
+        for (const kbId of body.knowledgeBaseIds) {
+          await validateKnowledgeBaseAccess({
+            kbId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
+        }
+      }
+
+      // Validate connectorIds if provided
+      if (body.connectorIds && body.connectorIds.length > 0) {
+        if (agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Connectors cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
+        for (const connectorId of body.connectorIds) {
+          await validateConnectorAccess({
+            connectorId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
+        }
+      }
+
+      // A model and its API key are a pair: persist both or neither.
+      if (
+        !isModelSelectionComplete({
+          modelId: body.modelId,
+          apiKeyId: body.llmApiKeyId,
+        })
+      ) {
+        throw new ApiError(
+          400,
+          "An agent's model and API key must be set together",
+        );
+      }
+
+      // Always assert on create: a null/omitted environment still lands on the
+      // org default, which may itself be restricted (mirrors the MCP-catalog path).
+      await assertEnvironmentAssignable({
+        userId: user.id,
+        organizationId,
+        environmentId: body.environmentId ?? null,
+      });
+
+      // Omit teams if scope is not 'team' — scope takes precedence
+      const createData = {
+        ...body,
+        ...(body.scope !== "team" && { teams: [] }),
+      };
+      const agent = await AgentModel.create(createData, user.id);
+      // We need to re-init metrics with the new label keys in case label keys changed.
+      // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
+      await initializeObservabilityMetrics();
+
+      return reply.send(agent);
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id",
+    {
+      schema: {
+        operationId: RouteId.GetAgent,
+        description: "Get agent by ID",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Fetch agent first to determine its type
+      // Use admin=true for the lookup so we can check type, then enforce type-specific RBAC
+      const agent = await AgentModel.findById(id, user.id, true);
+
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Defense-in-depth: never allow cross-organization access, even for admins.
+      // Permissions are scoped to the current organizationId.
+      if (agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Single DB query for all permission checks on this agent type
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Check read permission (return 404 to avoid leaking existence)
+      try {
+        checker.require(agent.agentType, "read");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      if (!checker.isAdmin(agent.agentType)) {
+        // Re-fetch with team filtering
+        const filteredAgent = await AgentModel.findById(id, user.id, false);
+        if (!filteredAgent) {
+          throw new ApiError(404, "Agent not found");
+        }
+        return reply.send(filteredAgent);
+      }
+
+      return reply.send(agent);
+    },
+  );
+
+  fastify.post(
+    "/api/agents/:id/clone",
+    {
+      schema: {
+        operationId: RouteId.CloneAgent,
+        description: "Clone an agent and all its associations",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Fetch agent first to determine its type for permission checks
+      const sourceAgent = await AgentModel.findById(id, user.id, true);
+      if (!sourceAgent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Prevent cross-organization cloning: the permission checker is scoped
+      // to the caller's org, so an agent from a different org would bypass
+      // those checks. Return 404 to avoid leaking existence.
+      if (sourceAgent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Disallow cloning built-in agents (Phase 1 policy)
+      if (sourceAgent.builtInAgentConfig) {
+        throw new ApiError(403, "Built-in agents cannot be cloned");
+      }
+
+      // Single DB query for all permission checks on this agent type
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Check read + create permission (return 404 to avoid leaking existence)
+      try {
+        checker.require(sourceAgent.agentType, "read");
+        checker.require(sourceAgent.agentType, "create");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Enforce scope-based modify permissions on the source agent
+      const userTeamIds = !checker.isAdmin(sourceAgent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+      requireAgentModifyPermission({
+        checker,
+        agentType: sourceAgent.agentType,
+        agentScope: sourceAgent.scope,
+        agentAuthorId: sourceAgent.authorId,
+        agentTeamIds: sourceAgent.teams.map((t) => t.id),
+        userTeamIds,
+        userId: user.id,
+      });
+
+      // Validate knowledgeBaseIds if provided
+      if ((sourceAgent.knowledgeBaseIds?.length ?? 0) > 0) {
+        if (sourceAgent.agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Knowledge bases cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
+        for (const kbId of sourceAgent.knowledgeBaseIds) {
+          await validateKnowledgeBaseAccess({
+            kbId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
+        }
+      }
+
+      // Validate connectorIds if provided
+      if ((sourceAgent.connectorIds?.length ?? 0) > 0) {
+        if (sourceAgent.agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Connectors cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
+        for (const connectorId of sourceAgent.connectorIds) {
+          await validateConnectorAccess({
+            connectorId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
+        }
+      }
+
+      // Delegate cloning logic to the model
+      const clonedAgent = await AgentModel.cloneAgent({
+        sourceId: sourceAgent.id,
+        userId: user.id,
+      });
+
+      return reply.send(clonedAgent);
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/export",
+    {
+      schema: {
+        operationId: RouteId.ExportAgent,
+        description:
+          "Export an agent configuration as a portable JSON payload for cross-instance transfer",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(AgentExportPayloadSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Fetch agent with admin=true first to check type, then enforce type-specific RBAC
+      const agent = await AgentModel.findById(id, user.id, true);
+
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Defense-in-depth: never allow cross-organization exports, even for admins.
+      // Permissions are scoped to the current organizationId.
+      if (agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Only internal agents can be exported
+      if (agent.agentType !== "agent") {
+        throw new ApiError(
+          400,
+          "Only internal agents can be exported. MCP gateways and LLM proxies are not supported.",
+        );
+      }
+
+      // Built-in agents cannot be exported
+      if (agent.builtInAgentConfig) {
+        throw new ApiError(
+          400,
+          "Built-in agents cannot be exported. They contain internal configuration that is not portable.",
+        );
+      }
+
+      // Check read permission (return 404 to avoid leaking existence)
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      try {
+        checker.require(agent.agentType, "read");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Non-admin: re-fetch with team filtering to enforce access control
+      if (!checker.isAdmin(agent.agentType)) {
+        const filteredAgent = await AgentModel.findById(id, user.id, false);
+        if (!filteredAgent) {
+          throw new ApiError(404, "Agent not found");
+        }
+        return reply.send(await serializeAgentForExport(filteredAgent));
+      }
+
+      return reply.send(await serializeAgentForExport(agent));
+    },
+  );
+
+  fastify.put(
+    "/api/agents/:id",
+    {
+      schema: {
+        operationId: RouteId.UpdateAgent,
+        description: "Update an agent",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: UpdateAgentSchemaBase.partial(),
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      // Fetch agent to determine its type for permission check
+      const existingAgent = await AgentModel.findById(id, user.id, true);
+      if (!existingAgent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Single DB query for all permission checks on this agent type
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Check update permission (return 404 to avoid leaking existence)
+      try {
+        checker.require(existingAgent.agentType, "update");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Fetch user's team IDs once for scope-based checks and team assignment validation
+      const userTeamIds = !checker.isAdmin(existingAgent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+
+      // Enforce scope-based modify permissions on the existing agent
+      requireAgentModifyPermission({
+        checker,
+        agentType: existingAgent.agentType,
+        agentScope: existingAgent.scope,
+        agentAuthorId: existingAgent.authorId,
+        agentTeamIds: existingAgent.teams.map((t) => t.id),
+        userTeamIds,
+        userId: user.id,
+      });
+
+      // Validate scope escalation for non-admin users
+      if (!checker.isAdmin(existingAgent.agentType)) {
+        if (body.scope === "org") {
+          throw new ApiError(403, "Only admins can set scope to org");
+        }
+        if (body.scope === "team" || (body.teams && body.teams.length > 0)) {
+          if (!checker.isTeamAdmin(existingAgent.agentType)) {
+            throw new ApiError(
+              403,
+              "You need team-admin permission to set scope to team",
+            );
+          }
+        }
+
+        // team-admin: validate team assignments and preserve teams they don't control
+        if (checker.isTeamAdmin(existingAgent.agentType) && body.teams) {
+          const userTeamIdSet = new Set(userTeamIds);
+          const existingTeamIds = new Set(existingAgent.teams.map((t) => t.id));
+
+          // Validate newly added teams — must be a member
+          const invalidAdds = body.teams.filter(
+            (id) => !existingTeamIds.has(id) && !userTeamIdSet.has(id),
+          );
+          if (invalidAdds.length > 0) {
+            throw new ApiError(
+              403,
+              "You can only assign teams you are a member of",
+            );
+          }
+
+          // Preserve existing teams the user doesn't control
+          const preservedTeams = [...existingTeamIds].filter(
+            (id) => !userTeamIdSet.has(id),
+          );
+          const userControlledTeams = body.teams.filter((id) =>
+            userTeamIdSet.has(id),
+          );
+          body.teams = [
+            ...new Set([...userControlledTeams, ...preservedTeams]),
+          ];
+        }
+      }
+
+      // Prevent downgrading shared agents to personal
+      if (body.scope === "personal" && existingAgent.scope !== "personal") {
+        throw new ApiError(400, "Shared agents cannot be made personal");
+      }
+
+      // Validate knowledgeBaseIds if provided
+      if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
+        if (existingAgent.agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Knowledge bases cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
+        for (const kbId of body.knowledgeBaseIds) {
+          await validateKnowledgeBaseAccess({
+            kbId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
+        }
+      }
+
+      // Validate connectorIds if provided
+      if (body.connectorIds && body.connectorIds.length > 0) {
+        if (existingAgent.agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Connectors cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
+        for (const connectorId of body.connectorIds) {
+          await validateConnectorAccess({
+            connectorId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
+        }
+      }
+
+      // Built-in agent guard: restrict which fields can be modified
+      let updateData: typeof body;
+      if (existingAgent.builtInAgentConfig) {
+        // Validate builtInAgentConfig if provided
+        if (body.builtInAgentConfig) {
+          const parsed = BuiltInAgentConfigSchema.safeParse(
+            body.builtInAgentConfig,
+          );
+          if (!parsed.success) {
+            throw new ApiError(400, "Invalid built-in agent configuration");
+          }
+        }
+
+        // Only allow specific fields for built-in agents.
+        updateData = {
+          ...(body.builtInAgentConfig !== undefined && {
+            builtInAgentConfig: body.builtInAgentConfig,
+          }),
+          ...(body.systemPrompt !== undefined && {
+            systemPrompt: body.systemPrompt,
+          }),
+          ...(body.llmApiKeyId !== undefined && {
+            llmApiKeyId: body.llmApiKeyId,
+          }),
+          ...(body.modelId !== undefined && { modelId: body.modelId }),
+          ...(body.scope !== undefined && { scope: body.scope }),
+          ...(body.teams !== undefined && { teams: body.teams }),
+        };
+      } else {
+        // Omit teams if scope is not 'team' — scope takes precedence
+        updateData = {
+          ...body,
+          ...((body.scope ?? existingAgent.scope) !== "team" &&
+            body.teams !== undefined && { teams: [] }),
+        };
+      }
+
+      // A model and its API key are a pair: persist both or neither. Validate
+      // the merged result, but only when this update touches either field — an
+      // unrelated edit must not be blocked by a pre-existing half pair.
+      if (body.modelId !== undefined || body.llmApiKeyId !== undefined) {
+        const mergedModelId =
+          body.modelId !== undefined ? body.modelId : existingAgent.modelId;
+        const mergedApiKeyId =
+          body.llmApiKeyId !== undefined
+            ? body.llmApiKeyId
+            : existingAgent.llmApiKeyId;
+        if (
+          !isModelSelectionComplete({
+            modelId: mergedModelId,
+            apiKeyId: mergedApiKeyId,
+          })
+        ) {
+          throw new ApiError(
+            400,
+            "An agent's model and API key must be set together",
+          );
+        }
+      }
+
+      if (body.environmentId !== undefined) {
+        await assertEnvironmentAssignable({
+          userId: user.id,
+          organizationId,
+          environmentId: body.environmentId,
+        });
+      }
+
+      const agent = await AgentModel.update(id, updateData);
+
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Only re-init metrics when labels were part of the update payload,
+      // since that's the only field that can introduce new label keys.
+      if (body.labels !== undefined) {
+        await initializeObservabilityMetrics();
+      }
+
+      return reply.send(agent);
+    },
+  );
+
+  fastify.delete(
+    "/api/agents/:id",
+    {
+      schema: {
+        operationId: RouteId.DeleteAgent,
+        description: "Delete an agent",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Fetch agent to determine its type for permission check
+      const agent = await AgentModel.findById(id, user.id, true);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Check delete permission for this agent's type (return 404 to avoid leaking existence)
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      try {
+        checker.require(agent.agentType, "delete");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Enforce scope-based modify permissions
+      const userTeamIds = !checker.isAdmin(agent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+      requireAgentModifyPermission({
+        checker,
+        agentType: agent.agentType,
+        agentScope: agent.scope,
+        agentAuthorId: agent.authorId,
+        agentTeamIds: agent.teams.map((t) => t.id),
+        userTeamIds,
+        userId: user.id,
+      });
+
+      // Prevent deletion of built-in agents
+      if (agent.builtInAgentConfig) {
+        throw new ApiError(403, "Built-in agents cannot be deleted");
+      }
+
+      // Prevent deletion of an agent that is any member's default
+      const isDefault = await MemberModel.isAgentDefault(id);
+      if (isDefault) {
+        throw new ApiError(
+          403,
+          "Cannot delete a default agent. Set another agent as default first.",
+        );
+      }
+
+      // Prevent deletion of a user's personal MCP gateway
+      if (agent.isPersonalGateway) {
+        throw new ApiError(403, "Personal MCP gateways cannot be deleted.");
+      }
+
+      const success = await AgentModel.delete(id);
+
+      if (!success) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/agents/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreAgent,
+        description: "Restore a soft-deleted agent",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const agent = await AgentModel.findDeletedByIdForOrganization(
+        id,
+        organizationId,
+      );
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      try {
+        checker.require(agent.agentType, "delete");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const userTeamIds = !checker.isAdmin(agent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+      requireAgentModifyPermission({
+        checker,
+        agentType: agent.agentType,
+        agentScope: agent.scope,
+        agentAuthorId: agent.authorId,
+        agentTeamIds: agent.teams.map((t) => t.id),
+        userTeamIds,
+        userId: user.id,
+      });
+
+      const conflictMessage = await AgentModel.getRestoreConflictMessage(agent);
+      if (conflictMessage) {
+        throw new ApiError(409, conflictMessage);
+      }
+
+      const success = await AgentModel.restore(id);
+      if (!success) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const restored = await AgentModel.findById(id, user.id, true);
+      if (!restored) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      return reply.send(restored);
+    },
+  );
+
+  fastify.get(
+    "/api/agents/labels/keys",
+    {
+      schema: {
+        operationId: RouteId.GetLabelKeys,
+        description: "Get all available label keys",
+        tags: ["Agents"],
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async ({ user, organizationId }, reply) => {
+      const hasRead = await hasAnyAgentTypeReadPermission({
+        userId: user.id,
+        organizationId,
+      });
+      if (!hasRead) {
+        throw new ApiError(403, "Forbidden");
+      }
+      return reply.send(await AgentLabelModel.getAllKeys());
+    },
+  );
+
+  fastify.get(
+    "/api/agents/labels/values",
+    {
+      schema: {
+        operationId: RouteId.GetLabelValues,
+        description: "Get all available label values",
+        tags: ["Agents"],
+        querystring: z.object({
+          key: z.string().optional().describe("Filter values by label key"),
+        }),
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async ({ query: { key }, user, organizationId }, reply) => {
+      const hasRead = await hasAnyAgentTypeReadPermission({
+        userId: user.id,
+        organizationId,
+      });
+      if (!hasRead) {
+        throw new ApiError(403, "Forbidden");
+      }
+      return reply.send(
+        key
+          ? await AgentLabelModel.getValuesByKey(key)
+          : await AgentLabelModel.getAllValues(),
+      );
+    },
+  );
+  fastify.get(
+    "/api/members/default-agent",
+    {
+      schema: {
+        operationId: RouteId.GetMemberDefaultAgent,
+        description: "Get the current user's default agent ID",
+        tags: ["Members"],
+        response: constructResponseSchema(
+          z.object({ defaultAgentId: z.string().uuid().nullable() }),
+        ),
+      },
+    },
+    async ({ user, organizationId }, reply) => {
+      const defaultAgentId = await MemberModel.getDefaultAgentId(
+        user.id,
+        organizationId,
+      );
+      return reply.send({ defaultAgentId });
+    },
+  );
+
+  fastify.get(
+    "/api/members/default-model",
+    {
+      schema: {
+        operationId: RouteId.GetMemberDefaultModel,
+        description: "Get the current user's default model and API key",
+        tags: ["Members"],
+        response: constructResponseSchema(
+          z.object({
+            modelId: z.string().uuid().nullable(),
+            chatApiKeyId: z.string().uuid().nullable(),
+          }),
+        ),
+      },
+    },
+    async ({ user, organizationId }, reply) => {
+      const selection = await MemberModel.getDefaultModelSelection(
+        user.id,
+        organizationId,
+      );
+      return reply.send(selection);
+    },
+  );
+
+  fastify.put(
+    "/api/members/default-model",
+    {
+      schema: {
+        operationId: RouteId.UpdateMemberDefaultModel,
+        description: "Set the current user's default model and API key",
+        tags: ["Members"],
+        body: z.object({
+          modelId: z.string().uuid().nullable(),
+          chatApiKeyId: z.string().uuid().nullable(),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            modelId: z.string().uuid().nullable(),
+            chatApiKeyId: z.string().uuid().nullable(),
+          }),
+        ),
+      },
+    },
+    async ({ body, user, organizationId }, reply) => {
+      // The default model and its API key are a pair: persist both or neither.
+      if (
+        !isModelSelectionComplete({
+          modelId: body.modelId,
+          apiKeyId: body.chatApiKeyId,
+        })
+      ) {
+        throw new ApiError(
+          400,
+          "The default model and API key must be set together",
+        );
+      }
+
+      await MemberModel.setDefaultModelSelection({
+        userId: user.id,
+        organizationId,
+        modelId: body.modelId,
+        apiKeyId: body.chatApiKeyId,
+      });
+
+      return reply.send({
+        modelId: body.modelId,
+        chatApiKeyId: body.chatApiKeyId,
+      });
+    },
+  );
+};
+
+export default agentRoutes;
+
+async function validateKnowledgeBaseAccess(params: {
+  kbId: string;
+  organizationId: string;
+  access: Awaited<
+    ReturnType<
+      typeof knowledgeSourceAccessControlService.buildAccessControlContext
+    >
+  >;
+}) {
+  const kb = await KnowledgeBaseModel.findById(params.kbId);
+  if (
+    !kb ||
+    kb.organizationId !== params.organizationId ||
+    !knowledgeSourceAccessControlService.canAccessKnowledgeBase(
+      params.access,
+      kb,
+    )
+  ) {
+    throw new ApiError(404, `Knowledge base not found: ${params.kbId}`);
+  }
+}
+
+async function validateConnectorAccess(params: {
+  connectorId: string;
+  organizationId: string;
+  access: Awaited<
+    ReturnType<
+      typeof knowledgeSourceAccessControlService.buildAccessControlContext
+    >
+  >;
+}) {
+  const connector = await KnowledgeBaseConnectorModel.findById(
+    params.connectorId,
+  );
+  if (
+    !connector ||
+    connector.organizationId !== params.organizationId ||
+    !knowledgeSourceAccessControlService.canAccessConnector(
+      params.access,
+      connector,
+    )
+  ) {
+    throw new ApiError(404, `Connector not found: ${params.connectorId}`);
+  }
+}
+
+function getPermittedAgentTypesForList(params: {
+  checker: AgentTypePermissionChecker;
+  effectiveTypes: AgentType[] | undefined;
+  status: "active" | "deleted" | undefined;
+}): AgentType[] | undefined {
+  const action = params.status === "deleted" ? "delete" : "read";
+
+  if (params.effectiveTypes) {
+    for (const type of params.effectiveTypes) {
+      params.checker.require(type, action);
+    }
+    return undefined;
+  }
+
+  const permittedTypes = params.checker.getAgentTypesWithPermission(action);
+  if (permittedTypes.length === 0) {
+    throw new ApiError(403, "Forbidden");
+  }
+
+  return permittedTypes;
+}
+
+/**
+ * Binding an agent to a restricted environment routes its code sandbox to that
+ * environment's isolated runtime, so it is gated by the same
+ * environment:deploy-to-restricted permission the MCP-catalog assignment path
+ * uses (environment:admin implies it). Throws 403/404 if the caller may not
+ * assign the environment.
+ */
+async function assertEnvironmentAssignable(params: {
+  userId: string;
+  organizationId: string;
+  environmentId: string | null;
+}): Promise<void> {
+  const { userId, organizationId, environmentId } = params;
+  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
+    userHasPermission(userId, organizationId, "environment", "admin"),
+    userHasPermission(
+      userId,
+      organizationId,
+      "environment",
+      "deploy-to-restricted",
+    ),
+  ]);
+  await assertCanAssignEnvironment({
+    environmentId,
+    organizationId,
+    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
+  });
+}

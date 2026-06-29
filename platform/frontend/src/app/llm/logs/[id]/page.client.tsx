@@ -1,0 +1,374 @@
+"use client";
+
+import { type archestraApiTypes, DynamicInteraction } from "@archestra/shared";
+import { ArrowLeft, Database, Layers } from "lucide-react";
+import Link from "next/link";
+import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { JsonCodeBlock } from "@/components/json-code-block";
+import { LoadingSpinner } from "@/components/loading";
+import MessageThread from "@/components/message-thread";
+import { MetadataCard, MetadataItem } from "@/components/metadata-card";
+import { QueryLoadError } from "@/components/query-load-error";
+import { Savings } from "@/components/savings";
+import { SourceBadge } from "@/components/source-badge";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { useInteraction } from "@/lib/interactions/interaction.query";
+import { formatDate } from "@/lib/utils";
+
+export function ChatPage({
+  initialData,
+  id,
+}: {
+  initialData?: {
+    interaction: archestraApiTypes.GetInteractionResponses["200"] | undefined;
+    agents: archestraApiTypes.GetAllAgentsResponses["200"];
+  };
+  id: string;
+}) {
+  return (
+    <div className="w-full h-full overflow-y-auto">
+      <ErrorBoundary>
+        <LogDetail initialData={initialData} id={id} />
+      </ErrorBoundary>
+    </div>
+  );
+}
+
+function LogDetail({
+  initialData,
+  id,
+}: {
+  initialData?: {
+    interaction: archestraApiTypes.GetInteractionResponses["200"] | undefined;
+    agents: archestraApiTypes.GetAllAgentsResponses["200"];
+  };
+  id: string;
+}) {
+  const {
+    data: dynamicInteraction,
+    isPending,
+    isLoadingError,
+    refetch,
+  } = useInteraction({
+    interactionId: id,
+    initialData: initialData?.interaction,
+  });
+
+  if (isPending) {
+    return <LoadingSpinner />;
+  }
+
+  if (isLoadingError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load this interaction"
+        onRetry={() => refetch()}
+      />
+    );
+  }
+
+  if (!dynamicInteraction) {
+    return (
+      <div className="text-muted-foreground p-8">Interaction not found</div>
+    );
+  }
+
+  const interaction = new DynamicInteraction(dynamicInteraction);
+  const agent = initialData?.agents?.find(
+    (a) => a.id === interaction.profileId,
+  );
+  const toolsUsed = interaction.getToolNamesUsed();
+  const toolsBlocked = interaction.getToolNamesRefused();
+  const isDualLlmRelevant = interaction.isLastMessageToolCall();
+  const lastToolCallId = interaction.getLastToolCallId();
+  const allDualLlmAnalyses = dynamicInteraction.dualLlmAnalyses ?? [];
+  const dualLlmResult = allDualLlmAnalyses.find(
+    (r) => r.toolCallId === lastToolCallId,
+  );
+
+  const requestMessages = new DynamicInteraction(
+    dynamicInteraction,
+  ).mapToUiMessages(allDualLlmAnalyses);
+  const chatErrors = dynamicInteraction.chatErrors ?? [];
+  const authMethod = dynamicInteraction.authMethod
+    ? formatAuthMethod(dynamicInteraction.authMethod)
+    : null;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="sm" asChild>
+          {dynamicInteraction.sessionId ? (
+            <Link
+              href={`/llm/logs/session/${encodeURIComponent(dynamicInteraction.sessionId)}`}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Session
+            </Link>
+          ) : (
+            <Link href="/llm/logs">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Sessions
+            </Link>
+          )}
+        </Button>
+      </div>
+
+      <div>
+        <div className="mb-8">
+          <MetadataCard
+            title="Metadata"
+            badges={
+              <>
+                <SourceBadge source={dynamicInteraction.source} />
+                <Badge variant="secondary" className="text-xs">
+                  {dynamicInteraction.source?.startsWith("knowledge:") ? (
+                    <>
+                      <Database className="h-3 w-3 mr-1" />
+                      Knowledge Base
+                    </>
+                  ) : (
+                    <>
+                      <Layers className="h-3 w-3 mr-1" />
+                      {agent?.name ??
+                        (interaction.profileId === null
+                          ? "Deleted LLM Proxy"
+                          : "Unknown")}
+                    </>
+                  )}
+                </Badge>
+              </>
+            }
+          >
+            <MetadataItem label="Tokens">
+              <div className="font-mono">
+                {(dynamicInteraction.inputTokens ?? 0).toLocaleString()} in /{" "}
+                {(dynamicInteraction.outputTokens ?? 0).toLocaleString()} out
+              </div>
+              {((dynamicInteraction.cacheReadTokens ?? 0) > 0 ||
+                (dynamicInteraction.cacheWriteTokens ?? 0) > 0) && (
+                <div className="font-mono text-muted-foreground">
+                  {(dynamicInteraction.cacheReadTokens ?? 0).toLocaleString()}{" "}
+                  cache read /{" "}
+                  {(dynamicInteraction.cacheWriteTokens ?? 0).toLocaleString()}{" "}
+                  cache write
+                </div>
+              )}
+            </MetadataItem>
+            <MetadataItem label="Cost">
+              <div className="font-mono">
+                {dynamicInteraction.cost ? (
+                  <TooltipProvider>
+                    <Savings
+                      cost={dynamicInteraction.cost}
+                      baselineCost={
+                        dynamicInteraction.baselineCost ||
+                        dynamicInteraction.cost
+                      }
+                      toonCostSavings={dynamicInteraction.toonCostSavings}
+                      toonTokensBefore={dynamicInteraction.toonTokensBefore}
+                      toonTokensAfter={dynamicInteraction.toonTokensAfter}
+                      toonSkipReason={dynamicInteraction.toonSkipReason}
+                      format="percent"
+                      tooltip="always"
+                      variant="interaction"
+                      baselineModel={dynamicInteraction.baselineModel}
+                      actualModel={dynamicInteraction.model}
+                    />
+                  </TooltipProvider>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </div>
+            </MetadataItem>
+            <MetadataItem label="Model">
+              <Badge variant="secondary" className="text-xs">
+                {interaction.provider} ({interaction.modelName})
+              </Badge>
+            </MetadataItem>
+            <MetadataItem label="Timestamp">
+              <div className="font-mono text-xs">
+                {formatDate({ date: interaction.createdAt })}
+              </div>
+            </MetadataItem>
+            {authMethod && (
+              <MetadataItem label="Auth Method">
+                <div className="font-mono text-xs">{authMethod}</div>
+              </MetadataItem>
+            )}
+            {dynamicInteraction.authenticatedAppName && (
+              <MetadataItem label="OAuth Client">
+                <div className="space-y-1">
+                  <div className="font-mono text-xs">
+                    {dynamicInteraction.authenticatedAppName}
+                  </div>
+                  {dynamicInteraction.authenticatedAppId && (
+                    <div className="font-mono text-xs text-muted-foreground">
+                      {dynamicInteraction.authenticatedAppId}
+                    </div>
+                  )}
+                </div>
+              </MetadataItem>
+            )}
+            {dynamicInteraction.externalAgentId && (
+              <MetadataItem label="External Agent">
+                <div className="font-mono text-xs">
+                  {dynamicInteraction.externalAgentId}
+                </div>
+              </MetadataItem>
+            )}
+            {dynamicInteraction.executionId && (
+              <MetadataItem label="Execution ID">
+                <div className="font-mono text-xs">
+                  {dynamicInteraction.executionId}
+                </div>
+              </MetadataItem>
+            )}
+            <MetadataItem label="Tools Used">
+              {toolsUsed.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {toolsUsed.map((toolName) => (
+                    <Badge
+                      key={toolName}
+                      variant="secondary"
+                      className="text-xs"
+                    >
+                      {toolName}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-muted-foreground">None</div>
+              )}
+            </MetadataItem>
+            {toolsBlocked.length > 0 && (
+              <MetadataItem label="Tools Blocked">
+                <div className="flex flex-wrap gap-1">
+                  {toolsBlocked.map((toolName) => (
+                    <Badge
+                      key={toolName}
+                      variant="destructive"
+                      className="text-xs"
+                    >
+                      {toolName}
+                    </Badge>
+                  ))}
+                </div>
+              </MetadataItem>
+            )}
+            {isDualLlmRelevant && (
+              <MetadataItem label="Dual LLM Analysis">
+                {dualLlmResult ? (
+                  <Badge className="bg-green-600">Analyzed</Badge>
+                ) : (
+                  <div className="text-muted-foreground">Not analyzed</div>
+                )}
+              </MetadataItem>
+            )}
+          </MetadataCard>
+        </div>
+
+        {requestMessages.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold mb-4">Conversation</h2>
+            <div className="border border-border rounded-lg bg-background overflow-hidden">
+              <MessageThread
+                messages={requestMessages}
+                chatErrors={chatErrors}
+                conversationId={dynamicInteraction.sessionId ?? undefined}
+                containerClassName="h-auto"
+                hideDivider={true}
+                profileId={agent?.id}
+                agentName={agent?.name ?? undefined}
+                selectedModel={interaction.modelName}
+                unsafeContextBoundary={dynamicInteraction.unsafeContextBoundary}
+              />
+            </div>
+          </div>
+        )}
+
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Raw Data</h2>
+          <Accordion type="single" collapsible defaultValue="response">
+            <AccordionItem value="request" className="border rounded-lg mb-2">
+              <AccordionTrigger className="px-6 py-4 hover:no-underline">
+                <span className="text-base font-semibold">
+                  Raw Request (Original)
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="px-6 pb-4">
+                <JsonCodeBlock value={dynamicInteraction.request} />
+              </AccordionContent>
+            </AccordionItem>
+
+            {dynamicInteraction.processedRequest && (
+              <AccordionItem
+                value="processedRequest"
+                className="border rounded-lg mb-2"
+              >
+                <AccordionTrigger className="px-6 py-4 hover:no-underline">
+                  <span className="text-base font-semibold">
+                    Processed Request (Sent to LLM)
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="px-6 pb-4">
+                  <JsonCodeBlock value={dynamicInteraction.processedRequest} />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    This shows the request after processing (e.g., TOON
+                    conversion, trusted data filtering, etc.)
+                  </p>
+                </AccordionContent>
+              </AccordionItem>
+            )}
+
+            <AccordionItem
+              value="response"
+              className="border rounded-lg !border-b"
+            >
+              <AccordionTrigger className="px-6 py-4 hover:no-underline">
+                <span className="text-base font-semibold">Raw Response</span>
+              </AccordionTrigger>
+              <AccordionContent className="px-6 pb-4">
+                <JsonCodeBlock value={dynamicInteraction.response} />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type InteractionAuthMethod = NonNullable<
+  archestraApiTypes.GetInteractionResponses["200"]["authMethod"]
+>;
+
+function formatAuthMethod(authMethod: InteractionAuthMethod) {
+  switch (authMethod) {
+    case "oauth_client_credentials":
+      return "OAuth Client Credentials";
+    case "oauth_user":
+      return "OAuth User";
+    case "virtual_key":
+      return "Virtual Key";
+    case "passthrough_virtual_key":
+      return "Passthrough Virtual Key";
+    case "provider_key":
+      return "Provider Key";
+    case "jwks":
+      return "JWKS";
+    case "internal":
+      return "Internal";
+    default:
+      return authMethod;
+  }
+}

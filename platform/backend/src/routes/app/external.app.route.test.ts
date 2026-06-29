@@ -1,0 +1,194 @@
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import config from "@/config";
+import McpServerUserModel from "@/models/mcp-server-user";
+import type { FastifyInstanceWithZod } from "@/server";
+import { createFastifyInstance } from "@/server";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
+import type { User } from "@/types";
+
+describe("GET /api/apps/external/:catalogId", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  const appsEnabled = config.apps.enabled;
+  beforeAll(() => {
+    (config.apps as { enabled: boolean }).enabled = true;
+  });
+  afterAll(() => {
+    (config.apps as { enabled: boolean }).enabled = appsEnabled;
+  });
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & {
+          organizationId: string;
+          user: User;
+        }
+      ).organizationId = organizationId;
+      (request as typeof request & { user: User }).user = user;
+    });
+
+    const { default: appRoutes } = await import("./app.routes");
+    await app.register(appRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("resolves an external app by catalog id with its UI resource, installs, and default", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Get Time",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "get-time",
+      meta: { _meta: { ui: { resourceUri: "ui://gt/app.html" } } },
+    });
+
+    const ok = await app.inject({
+      method: "GET",
+      url: `/api/apps/external/${catalog.id}`,
+    });
+    expect(ok.statusCode).toBe(200);
+    const body = ok.json();
+    expect(body).toMatchObject({
+      catalogId: catalog.id,
+      name: "Get Time",
+      resourceUri: "ui://gt/app.html",
+      defaultMcpServerId: server.id,
+    });
+    expect(
+      body.installs.some(
+        (i: { mcpServerId: string }) => i.mcpServerId === server.id,
+      ),
+    ).toBe(true);
+  });
+
+  test("orders installs by scope precedence (personal first) and defaults to the personal install", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Multi-install",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    // Org install created first; a naive DB-order result would list it first.
+    const org = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    const personal = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "personal",
+      ownerId: user.id,
+    });
+    await McpServerUserModel.assignUserToMcpServer(personal.id, user.id);
+    await makeTool({
+      catalogId: catalog.id,
+      name: "draw",
+      meta: { _meta: { ui: { resourceUri: "ui://mi/app.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/apps/external/${catalog.id}`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(
+      body.installs.map((i: { mcpServerId: string }) => i.mcpServerId),
+    ).toEqual([personal.id, org.id]);
+    expect(body.defaultMcpServerId).toBe(personal.id);
+  });
+
+  test("resolves a visible catalog with no accessible install to a null default and no installs", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Uninstalled",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "draw",
+      meta: { _meta: { ui: { resourceUri: "ui://un/app.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/apps/external/${catalog.id}`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.defaultMcpServerId).toBeNull();
+    expect(body.installs).toEqual([]);
+  });
+
+  test("returns 404 for an unknown catalog id", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/apps/external/${crypto.randomUUID()}`,
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  test("returns 404 for a catalog without a ui:// tool", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const plainCatalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Plain",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    await makeMcpServer({
+      catalogId: plainCatalog.id,
+      scope: "org",
+    });
+    await makeTool({
+      catalogId: plainCatalog.id,
+      name: "noop",
+      meta: { _meta: {} },
+    });
+
+    const notUi = await app.inject({
+      method: "GET",
+      url: `/api/apps/external/${plainCatalog.id}`,
+    });
+    expect(notUi.statusCode).toBe(404);
+  });
+});

@@ -1,0 +1,47 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/bedrock/model/.*/converse",
+    "headers": {
+      "Authorization": {
+        "contains": "bedrock-allows-regular-after-archestra"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "output": {
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "toolUse": {
+                "toolUseId": "call_archestra_whoami_456",
+                "name": "archestra__whoami",
+                "input": {}
+              }
+            },
+            {
+              "toolUse": {
+                "toolUseId": "call_read_file_456",
+                "name": "read_file",
+                "input": {
+                  "file_path": "/home/user/document.txt"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "stopReason": "tool_use",
+      "usage": {
+        "inputTokens": 140,
+        "outputTokens": 25
+      }
+    }
+  }
+}

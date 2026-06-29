@@ -1,0 +1,18 @@
+{{- if and .Values.archestra.diagnostics.enabled (not .Values.archestra.diagnostics.existingClaimName) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "archestra-platform.diagnosticsClaimName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.archestra.diagnostics.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.archestra.diagnostics.size | quote }}
+  {{- with .Values.archestra.diagnostics.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,31 @@
+[[stages]]
+text = """Can you run a read-only license audit for Acme as of 2026-06-01? The seat inventory and our
+reclamation policy both live in the IT service desk. Find the seats we could reclaim under the policy and
+the monthly cost attached to them -- but don't deactivate or change anything, just read."""
+
+[[stages]]
+text = """Small correction on what counts: finance only cares about reclaiming that would actually lower
+the monthly bill. The service desk has the contract terms too, so factor those in and send me just the
+seats that create real monthly savings, plus the total savings. Call submit_result with
+result = {"reclaimable_monthly_savings_cents": <integer cents>, "reclaimable_seat_ids": [<seat ids>]}."""
+
+[result_schema]
+type = "object"
+required = ["reclaimable_monthly_savings_cents", "reclaimable_seat_ids"]
+additionalProperties = false
+
+  [result_schema.properties.reclaimable_monthly_savings_cents]
+  type = "integer"
+  minimum = 0
+
+  [result_schema.properties.reclaimable_seat_ids]
+  type = "array"
+
+    [result_schema.properties.reclaimable_seat_ids.items]
+    type = "string"
+
+[state]
+rest = ["/api/agents/{{agent_id}}/tools"]
+
+[verifier]
+deps = []

@@ -1,0 +1,39 @@
+name: Good First Issue Welcome
+
+on:
+  issues:
+    types: [labeled]
+
+permissions: {}
+
+concurrency:
+  group: good-first-issue-welcome-${{ github.event.issue.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  welcome-new-contributor:
+    name: Welcome New Contributor
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    if: github.event.label.name == 'good first issue'
+    permissions:
+      contents: read # Required to checkout the repository for local workflow context.
+      issues: write # Required to post the welcome comment on the labeled issue.
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Post welcome comment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: 'This issue is a great starting point for new contributors!\n\nRead here how to run the project: https://www.archestra.ai/docs/developer-quickstart\nAnd here how to contribute: https://www.archestra.ai/docs/contributing\n\nGood luck and welcome to the contributing team! Please don\'t hesitate to ask questions if you need any help right here in the comments.'
+            });

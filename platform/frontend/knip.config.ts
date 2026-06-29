@@ -1,0 +1,32 @@
+import type { KnipConfig } from "knip";
+
+const config: KnipConfig = {
+  entry: ["src/app/**/*.{ts,tsx}", "src/mocks/**/*.ts", "sentry.*.config.ts"],
+  project: ["src/**/*.{ts,tsx}", "tests-integration/**/*.{ts,tsx}"],
+  ignore: [],
+  ignoreDependencies: [
+    // Workspace dependency - resolved by pnpm
+    "@archestra/shared",
+    // Used by Sentry for instrumentation
+    "import-in-the-middle",
+    "require-in-the-middle",
+    // Used in globals.css via @import
+    "tw-animate-css",
+    // PostCSS is a dependency of @tailwindcss/postcss
+    "postcss",
+    // Used via dynamic import in use-layout-nodes.ts (Knip doesn't detect the pattern)
+    "elkjs",
+  ],
+  ignoreBinaries: [
+    // biome and concurrently are in root package.json
+    "biome",
+    "concurrently",
+  ],
+  rules: {
+    // shadcn/ui components export all variants for completeness - intentional pattern
+    exports: "off",
+    types: "off",
+  },
+};
+
+export default config;

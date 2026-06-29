@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "mcp_oauth_access_token_lifetime_seconds" integer DEFAULT 31536000 NOT NULL;

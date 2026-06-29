@@ -1,0 +1,18 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/mcp/context7",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.method == 'notifications/initialized')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": ""
+  }
+}

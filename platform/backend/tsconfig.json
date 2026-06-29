@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolvePackageJsonExports": true,
+    "esModuleInterop": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2023",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "incremental": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "strict": true,
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@drizzle-migration-linter": ["../drizzle-migration-linter/src/index.ts"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "*.config.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

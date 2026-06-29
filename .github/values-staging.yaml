@@ -1,0 +1,159 @@
+archestra:
+  replicaCount: 4
+
+  worker:
+    replicaCount: 3
+
+  codeRuntime:
+    enabled: true
+    dagger:
+      managed:
+        enabled: true
+
+  # Pod Disruption Budget: ensure at least 3 of 4 pods stay running during
+  # voluntary disruptions (node upgrades, autoscaling, maintenance)
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+  # Faster rolling updates: allow 2 pods to be created at once
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: "50%"
+
+  # Vertex AI Gemini configuration
+  # Uses Application Default Credentials (ADC) via GKE Workload Identity
+  # instead of API keys for authentication
+  env:
+    ARCHESTRA_ANALYTICS: disabled
+    ARCHESTRA_BETA: "true"
+    ARCHESTRA_AGENTS_SKILLS_ENABLED: "true"
+    ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED: "true"
+    ARCHESTRA_AGENT_HOOKS_ENABLED: "true"
+    ARCHESTRA_APPS_ENABLED: "true"
+    ARCHESTRA_PROJECTS_ENABLED: "true"
+    ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
+    ARCHESTRA_API_BASE_URL: "https://frontend.archestra.dev,https://backend.archestra.dev"
+    ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
+    ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
+    ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
+    ARCHESTRA_BEDROCK_BASE_URL: "https://bedrock-runtime.eu-north-1.amazonaws.com"
+    ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX: "eu"
+    ARCHESTRA_AUTH_COOKIE_DOMAIN: ".archestra.dev"
+    ARCHESTRA_FRONTEND_URL: "https://frontend.archestra.dev"
+    ARCHESTRA_TRUST_PROXY: "false"
+    ARCHESTRA_SENTRY_ENVIRONMENT: "archestra.dev"
+    ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER: "outlook"
+    ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS: "agents@archestraai.onmicrosoft.com"
+    ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL: "https://backend.archestra.dev/api/webhooks/incoming-email"
+    ARCHESTRA_CHAT_DEFAULT_PROVIDER: "anthropic"
+    ARCHESTRA_CHAT_DEFAULT_MODEL: "claude-opus-4-5-20251101"
+    ARCHESTRA_DATABASE_POOL_MAX: "8"
+
+  diagnostics:
+    enabled: true
+    storageClassName: "archestra-diagnostics-rwx"
+    accessModes:
+      - ReadWriteMany
+    heapSnapshotsNearHeapLimit: 1
+
+  # Orchestrator configuration with Workload Identity for Vertex AI
+  orchestrator:
+    kubernetes:
+      networkPolicy:
+        # Enable SSRF protection for MCP server pods
+        create: true
+
+      rbac:
+        # Namespaces backing deployment environments the platform may deploy
+        # MCP servers into. Each entry gets a namespace-scoped Role + RoleBinding
+        # and is surfaced to the app as ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES.
+        environmentNamespaces:
+          - env-test
+
+      serviceAccount:
+        # GKE Workload Identity binding to allow Vertex AI access via ADC
+        # The GCP service account (archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com)
+        # is created and bound in the archestra-ai/infra repo (gke/main.tf)
+        annotations:
+          iam.gke.io/gcp-service-account: archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com
+
+      # Additional RBAC for MCP K8s operator service account
+      # Grants cluster-wide read access and namespace-specific permissions for the Kubernetes MCP server
+      # The ClusterRole and Roles are created in archestra-ai/infra repo (gke/archestra-rbac.tf)
+      mcpServerRbac:
+        additionalClusterRoleBindings:
+          - clusterRoleName: archestra-cluster-reader
+        additionalRoleBindings:
+          # Read-only access to archestra namespace
+          - roleName: archestra-namespace-reader
+            namespace: archestra
+
+  service:
+    annotations:
+      # GKE BackendConfig for custom health checks
+      # Maps backend port (9000) and frontend port (3000) to their respective BackendConfigs
+      # These BackendConfigs are defined in archestra-ai/infra repo (gke/ingress.tf)
+      cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config", "3000":"archestra-platform-frontend-config"}}'
+      cloud.google.com/neg: '{"ingress": true}'
+
+  ingress:
+    enabled: true
+    annotations:
+      # GKE Ingress Controller configuration
+      kubernetes.io/ingress.class: "gce"
+      kubernetes.io/ingress.global-static-ip-name: "archestra-staging-ip"
+      ingress.gcp.cloud.google.com/load-balancer-type: "External"
+      networking.gke.io/managed-certificates: "archestra-platform-staging-ssl"
+      ingress.gcp.cloud.google.com/ssl-redirect: "true"
+
+    hosts:
+      - host: frontend.archestra.dev
+        paths:
+          - path: /
+            port: 3000
+            pathType: Prefix
+      - host: backend.archestra.dev
+        paths:
+          - path: /
+            port: 9000
+            pathType: Prefix
+
+postgresql:
+  # Staging still uses the bundled PostgreSQL chart. This is not HA, but these
+  # settings keep routine app deploys and voluntary node disruptions from
+  # bouncing the only database pod.
+  primary:
+    priorityClassName: platform-default
+    terminationGracePeriodSeconds: 120
+    pdb:
+      create: true
+      maxUnavailable: 0
+    startupProbe:
+      enabled: true
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 30
+    livenessProbe:
+      initialDelaySeconds: 60
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 12
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 5
+      failureThreshold: 12
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "1Gi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"

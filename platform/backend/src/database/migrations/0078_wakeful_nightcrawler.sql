@@ -1,0 +1,1 @@
+ALTER TABLE "sso_provider" ADD COLUMN "role_mapping" text;

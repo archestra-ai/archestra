@@ -1,0 +1,1351 @@
+/**
+ * biome-ignore-all lint/correctness/noEmptyPattern: oddly enough in extend below this is required
+ * see https://vitest.dev/guide/test-context.html#extend-test-context
+ */
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  DEFAULT_APP_NAME,
+  MEMBER_ROLE_NAME,
+  type SupportedProvider,
+} from "@archestra/shared";
+import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
+import db, { schema } from "@/database";
+import {
+  AgentModel,
+  AgentToolModel,
+  AppDataModel,
+  AppModel,
+  AppToolModel,
+  AppVersionModel,
+  InternalMcpCatalogModel,
+  LlmProviderApiKeyModel,
+  ScheduleTriggerModel,
+  ScheduleTriggerRunModel,
+  SecretModel,
+  SessionModel,
+  TeamModel,
+  ToolInvocationPolicyModel,
+  ToolModel,
+  TrustedDataPolicyModel,
+  VirtualApiKeyModel,
+} from "@/models";
+import { createAppBacking } from "@/services/apps/app-mcp-backing";
+import type {
+  Agent,
+  AgentTool,
+  App,
+  AppTool,
+  AppVersion,
+  ConnectorRun,
+  InsertAccount,
+  InsertAgent,
+  InsertApp,
+  InsertConnectorRun,
+  InsertConversation,
+  InsertInteraction,
+  InsertInternalMcpCatalog,
+  InsertInvitation,
+  InsertKnowledgeBase,
+  InsertKnowledgeBaseConnector,
+  InsertLlmProviderApiKey,
+  InsertMcpServer,
+  InsertMember,
+  InsertOrganization,
+  InsertOrganizationRole,
+  InsertScheduleTrigger,
+  InsertSession,
+  InsertTeam,
+  InsertUser,
+  InsertVirtualApiKey,
+  KnowledgeBase,
+  KnowledgeBaseConnector,
+  OrganizationRole,
+  ScheduleTrigger,
+  ScheduleTriggerRun,
+  TeamMember,
+  Tool,
+  ToolInvocation,
+  TrustedData,
+} from "@/types";
+import type { ResourceVisibilityScope } from "@/types/visibility";
+
+type MakeUserOverrides = Partial<
+  Pick<InsertUser, "email" | "name" | "emailVerified" | "role">
+>;
+
+/**
+ * Vitest test extension with fixtures
+ * https://vitest.dev/guide/test-context.html#extend-test-context
+ */
+interface TestFixtures {
+  makeUser: typeof makeUser;
+  makeAdmin: typeof makeAdmin;
+  makeVirtualApiKey: typeof makeVirtualApiKey;
+  makeOrganization: typeof makeOrganization;
+  makeTeam: typeof makeTeam;
+  makeTeamMember: typeof makeTeamMember;
+  makeAgent: typeof makeAgent;
+  makeInternalAgent: typeof makeInternalAgent;
+  makeScheduleTrigger: typeof makeScheduleTrigger;
+  makeScheduleTriggerRun: typeof makeScheduleTriggerRun;
+  makeTool: typeof makeTool;
+  makeAgentTool: typeof makeAgentTool;
+  makeApp: typeof makeApp;
+  makeAppVersion: typeof makeAppVersion;
+  makeAppTool: typeof makeAppTool;
+  makeAppData: typeof makeAppData;
+  makeToolPolicy: typeof makeToolPolicy;
+  makeTrustedDataPolicy: typeof makeTrustedDataPolicy;
+  makeCustomRole: typeof makeCustomRole;
+  makeMember: typeof makeMember;
+  makeMcpServer: typeof makeMcpServer;
+  makeInternalMcpCatalog: typeof makeInternalMcpCatalog;
+  makeInvitation: typeof makeInvitation;
+  makeAccount: typeof makeAccount;
+  makeSession: typeof makeSession;
+  makeAuthHeaders: typeof makeAuthHeaders;
+  makeKnowledgeBase: typeof makeKnowledgeBase;
+  makeKnowledgeBaseConnector: typeof makeKnowledgeBaseConnector;
+  makeConnectorRun: typeof makeConnectorRun;
+  makeConversation: typeof makeConversation;
+  makeInteraction: typeof makeInteraction;
+  makeSecret: typeof makeSecret;
+  makeLlmProviderApiKey: typeof makeLlmProviderApiKey;
+  makeIdentityProvider: typeof makeIdentityProvider;
+  makeOAuthClient: typeof makeOAuthClient;
+  makeOAuthAccessToken: typeof makeOAuthAccessToken;
+  makeOAuthRefreshToken: typeof makeOAuthRefreshToken;
+  seedAndAssignArchestraTools: typeof seedAndAssignArchestraTools;
+}
+
+async function _makeUser(
+  namePrefix: string,
+  overrides: MakeUserOverrides = {},
+) {
+  const userId = crypto.randomUUID();
+  const [user] = await db
+    .insert(schema.usersTable)
+    .values({
+      id: userId,
+      name: `${namePrefix} ${userId.substring(0, 8)}`,
+      email: `${userId}@test.com`,
+      emailVerified: true,
+      ...overrides,
+    })
+    .returning();
+  return user;
+}
+
+/**
+ * Creates a test user in the database (without organization membership)
+ * Use makeMember() to create the user-organization-role relationship
+ */
+async function makeUser(overrides: MakeUserOverrides = {}) {
+  return await _makeUser("Test User", overrides);
+}
+
+/**
+ * Creates a test admin user in the database (without organization membership)
+ * Use makeMember() with role override to create the user-organization-role relationship
+ */
+async function makeAdmin(overrides: MakeUserOverrides = {}) {
+  return await _makeUser("Admin User", overrides);
+}
+
+/**
+ * Creates a test virtual key in the database
+ */
+async function makeVirtualApiKey(
+  organizationId: string,
+  overrides: Partial<
+    Pick<InsertVirtualApiKey, "name" | "scope" | "authorId">
+  > & {
+    providerApiKeys?: {
+      provider: SupportedProvider;
+      providerApiKeyId: string;
+    }[];
+  } = {},
+) {
+  const result = await VirtualApiKeyModel.create({
+    organizationId,
+    name:
+      overrides.name ??
+      `Test Virtual Key ${crypto.randomUUID().substring(0, 8)}`,
+    scope: overrides.scope ?? "org",
+    authorId: overrides.authorId ?? null,
+    providerApiKeys: overrides.providerApiKeys ?? [],
+  });
+  return result.virtualKey;
+}
+
+/**
+ * Creates a test organization in the database
+ */
+async function makeOrganization(
+  overrides: Partial<
+    Pick<InsertOrganization, "name" | "slug" | "globalToolPolicy">
+  > = {},
+) {
+  const orgId = crypto.randomUUID();
+  const [org] = await db
+    .insert(schema.organizationsTable)
+    .values({
+      id: orgId,
+      name: `Test Org ${orgId.substring(0, 8)}`,
+      slug: `test-org-${orgId.substring(0, 8)}`,
+      createdAt: new Date(),
+      theme: "cosmic-night",
+      customFont: "lato",
+      ...overrides,
+    })
+    .returning();
+  return org;
+}
+
+/**
+ * Creates a test team using the Team model
+ */
+async function makeTeam(
+  organizationId: string,
+  createdBy: string,
+  overrides: Partial<Pick<InsertTeam, "name" | "description">> = {},
+) {
+  const [team] = await db
+    .insert(schema.teamsTable)
+    .values({
+      id: crypto.randomUUID(),
+      name: `Test Team ${crypto.randomUUID().substring(0, 8)}`,
+      organizationId,
+      createdBy,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    })
+    .returning();
+  return team;
+}
+
+/**
+ * Creates a test team member using the TeamModel
+ */
+async function makeTeamMember(
+  teamId: string,
+  userId: string,
+  overrides: { role?: "admin" | "member"; syncedFromSso?: boolean } = {},
+): Promise<TeamMember> {
+  return await TeamModel.addMember(
+    teamId,
+    userId,
+    overrides.role ?? MEMBER_ROLE_NAME,
+    overrides.syncedFromSso ?? false,
+  );
+}
+
+/**
+ * Creates a test agent using the Agent model.
+ * Auto-creates an organization if not provided.
+ */
+async function makeAgent(
+  overrides: Partial<InsertAgent> & { authorId?: string } = {},
+): Promise<Agent> {
+  // Auto-create organization if not provided
+  let organizationId = overrides.organizationId;
+  if (!organizationId) {
+    const org = await makeOrganization();
+    organizationId = org.id;
+  }
+
+  const { authorId, ...agentOverrides } = overrides;
+
+  const defaults: InsertAgent = {
+    name: `Test Agent ${crypto.randomUUID().substring(0, 8)}`,
+    organizationId,
+    scope: "org",
+    teams: [],
+    labels: [],
+    knowledgeBaseIds: [],
+    connectorIds: [],
+  };
+  return await AgentModel.create(
+    {
+      ...defaults,
+      ...agentOverrides,
+    },
+    authorId,
+  );
+}
+
+/**
+ * Creates an internal test agent (with prompts/chat capabilities).
+ */
+async function makeInternalAgent(
+  overrides: Partial<InsertAgent> & { authorId?: string } = {},
+): Promise<Agent> {
+  return await makeAgent({
+    agentType: "agent",
+    systemPrompt: "You are a test agent",
+    ...overrides,
+  });
+}
+
+/**
+ * Creates a test schedule trigger linked to an internal agent
+ */
+async function makeScheduleTrigger(
+  overrides: Partial<InsertScheduleTrigger> & {
+    actorUserId?: string;
+    agentId?: string;
+    organizationId?: string;
+  } = {},
+): Promise<ScheduleTrigger> {
+  let organizationId = overrides.organizationId;
+  if (!organizationId) {
+    const org = await makeOrganization();
+    organizationId = org.id;
+  }
+
+  let actorUserId = overrides.actorUserId;
+  if (!actorUserId) {
+    const user = await makeUser();
+    actorUserId = user.id;
+  }
+
+  let agentId = overrides.agentId;
+  if (!agentId) {
+    const agent = await makeInternalAgent({ organizationId });
+    agentId = agent.id;
+  }
+
+  return await ScheduleTriggerModel.create({
+    organizationId,
+    name: `Test Trigger ${crypto.randomUUID().substring(0, 8)}`,
+    agentId,
+    messageTemplate: "Run the scheduled task",
+    cronExpression: "* * * * *",
+    timezone: "UTC",
+    enabled: true,
+    actorUserId,
+    ...overrides,
+  });
+}
+
+/**
+ * Creates a test schedule trigger run
+ */
+async function makeScheduleTriggerRun(
+  triggerId: string,
+  overrides: {
+    organizationId?: string;
+    runKind?: "due" | "manual";
+    initiatedByUserId?: string;
+  } = {},
+): Promise<ScheduleTriggerRun> {
+  const trigger = await ScheduleTriggerModel.findById(triggerId);
+  if (!trigger) {
+    throw new Error(`Trigger ${triggerId} not found`);
+  }
+
+  return await ScheduleTriggerRunModel.create({
+    organizationId: overrides.organizationId ?? trigger.organizationId,
+    triggerId,
+    runKind: overrides.runKind ?? "due",
+    initiatedByUserId: overrides.initiatedByUserId,
+  });
+}
+
+/**
+ * Creates a test tool using the Tool model
+ */
+async function makeTool(
+  overrides: Partial<
+    Pick<
+      Tool,
+      "name" | "description" | "parameters" | "catalogId" | "agentId" | "meta"
+    >
+  > = {},
+): Promise<Tool> {
+  const toolData = {
+    name: `test-tool-${crypto.randomUUID().substring(0, 8)}`,
+    description: "Test tool description",
+    parameters: {},
+    ...overrides,
+  };
+
+  await ToolModel.createToolIfNotExists(toolData);
+  const tool = await ToolModel.findByName(toolData.name);
+
+  if (!tool) {
+    throw new Error(`Failed to create tool: ${toolData.name}`);
+  }
+
+  return tool;
+}
+
+/**
+ * Creates a test agent-tool relationship using the AgentTool model
+ */
+async function makeAgentTool(
+  agentId: string,
+  toolId: string,
+  overrides: Partial<
+    Pick<AgentTool, "mcpServerId" | "credentialResolutionMode">
+  > = {},
+) {
+  return await AgentToolModel.create(agentId, toolId, {
+    mcpServerId: overrides.mcpServerId,
+    credentialResolutionMode: overrides.credentialResolutionMode,
+  });
+}
+
+/**
+ * Creates a test app (with its version 1) via the App model. Auto-creates an
+ * organization if not provided; defaults to org scope.
+ */
+async function makeApp(
+  overrides: Partial<InsertApp> & {
+    html?: string;
+    teamIds?: string[];
+    scope?: ResourceVisibilityScope;
+    environmentId?: string | null;
+  } = {},
+): Promise<App> {
+  let organizationId = overrides.organizationId;
+  if (!organizationId) {
+    const org = await makeOrganization();
+    organizationId = org.id;
+  }
+  const {
+    html,
+    teamIds,
+    scope: scopeOverride,
+    environmentId,
+    ...appOverrides
+  } = overrides;
+  const scope = scopeOverride ?? "org";
+  // Visibility/environment live on the backing catalog, so an author is needed
+  // (catalog authorId + personal-scope access checks).
+  const authorId = appOverrides.authorId ?? (await makeUser()).id;
+
+  const created = await AppModel.create({
+    app: {
+      name: `Test App ${crypto.randomUUID().substring(0, 8)}`,
+      ...appOverrides,
+      authorId,
+      organizationId,
+    },
+    payload: {
+      html: html ?? "<!doctype html><title>test app</title>",
+      uiPermissions: null,
+    },
+  });
+  await createAppBacking({
+    app: created,
+    scope,
+    environmentId: environmentId ?? null,
+    userId: authorId,
+    organizationId,
+    teamIds: teamIds ?? [],
+  });
+
+  const app = await AppModel.findById(created.id);
+  if (!app) throw new Error("makeApp: failed to load created app");
+  return app;
+}
+
+/** Forks a new app version (changing the html) and returns the new head version. */
+async function makeAppVersion(
+  appId: string,
+  html?: string,
+): Promise<AppVersion> {
+  const app = await AppModel.update({
+    id: appId,
+    version: {
+      html:
+        html ??
+        `<!doctype html><title>v ${crypto.randomUUID().substring(0, 8)}</title>`,
+      uiPermissions: null,
+    },
+  });
+  if (!app) throw new Error("makeAppVersion: app not found");
+  const head = await AppVersionModel.findByAppAndVersion(
+    appId,
+    app.latestVersion,
+  );
+  if (!head) throw new Error("makeAppVersion: head version missing");
+  return head;
+}
+
+/** Attaches a tool to an app via the AppTool model. */
+async function makeAppTool(
+  appId: string,
+  toolId: string,
+  overrides: Partial<
+    Pick<AppTool, "mcpServerId" | "credentialResolutionMode">
+  > = {},
+) {
+  return await AppToolModel.create(appId, toolId, {
+    mcpServerId: overrides.mcpServerId,
+    credentialResolutionMode: overrides.credentialResolutionMode,
+  });
+}
+
+/** Writes an App Data Store entry (shared partition unless a userId is given). */
+async function makeAppData(
+  appId: string,
+  key: string,
+  value: unknown,
+  userId: string | null = null,
+) {
+  return await AppDataModel.set({
+    appId,
+    userId,
+    key,
+    value,
+    // Fixtures write collaborative (unowned) data; override keeps any future
+    // ownership check a no-op and callerUserId is otherwise unused here.
+    callerUserId: userId ?? "fixture",
+    callerCanOverrideOwner: true,
+  });
+}
+
+/**
+ * Creates a test tool invocation policy using the ToolInvocationPolicy model
+ */
+async function makeToolPolicy(
+  toolId: string,
+  overrides: Partial<
+    Pick<
+      ToolInvocation.ToolInvocationPolicy,
+      "conditions" | "action" | "reason"
+    >
+  > = {},
+): Promise<ToolInvocation.ToolInvocationPolicy> {
+  return await ToolInvocationPolicyModel.create({
+    toolId,
+    conditions: [{ key: "test-arg", operator: "equal", value: "test-value" }],
+    action: "block_always",
+    reason: "Test policy reason",
+    ...overrides,
+  });
+}
+
+/**
+ * Creates a test trusted data policy using the TrustedDataPolicy model
+ * Returns the created policy
+ */
+async function makeTrustedDataPolicy(
+  toolId: string,
+  overrides: Partial<
+    Pick<TrustedData.TrustedDataPolicy, "description" | "conditions" | "action">
+  > = {},
+): Promise<TrustedData.TrustedDataPolicy> {
+  return await TrustedDataPolicyModel.create({
+    toolId,
+    description: overrides.description ?? "Test trusted data policy",
+    conditions: overrides.conditions ?? [
+      { key: "test.path", operator: "equal", value: "test-value" },
+    ],
+    action: overrides.action ?? "mark_as_trusted",
+  });
+}
+
+/**
+ * Creates a test custom organization role via direct DB insert
+ * (bypasses Better Auth API for test simplicity)
+ */
+async function makeCustomRole(
+  organizationId: string,
+  overrides: Partial<
+    Pick<InsertOrganizationRole, "role" | "name" | "permission">
+  > = {},
+): Promise<OrganizationRole> {
+  const roleName = `test_role_${crypto.randomUUID().substring(0, 8)}`;
+  const roleData = {
+    role: roleName,
+    name: `Test Role ${crypto.randomUUID().substring(0, 8)}`,
+    organizationId,
+    permission: { agent: ["read"] },
+    ...overrides,
+  };
+
+  const id = crypto.randomUUID();
+  const [result] = await db
+    .insert(schema.organizationRolesTable)
+    .values({
+      id,
+      ...roleData,
+      permission: JSON.stringify(roleData.permission),
+    })
+    .returning();
+
+  return {
+    ...result,
+    predefined: false,
+    permission: JSON.parse(result.permission),
+  };
+}
+
+/**
+ * Creates a test member relationship between user and organization
+ */
+async function makeMember(
+  userId: string,
+  organizationId: string,
+  overrides: Partial<Pick<InsertMember, "role">> = {},
+) {
+  const [member] = await db
+    .insert(schema.membersTable)
+    .values({
+      id: crypto.randomUUID(),
+      userId,
+      organizationId,
+      role: MEMBER_ROLE_NAME,
+      createdAt: new Date(),
+      ...overrides,
+    })
+    .returning();
+  return member;
+}
+
+/**
+ * Creates a test MCP server in the database
+ */
+async function makeMcpServer(
+  overrides: Partial<
+    Pick<InsertMcpServer, "name" | "catalogId" | "ownerId" | "teamId" | "scope">
+  > = {},
+) {
+  // Create a catalog if catalogId is not provided
+  let catalogId = overrides.catalogId;
+  if (!catalogId) {
+    const catalog = await makeInternalMcpCatalog();
+    catalogId = catalog.id;
+  }
+
+  const [mcpServer] = await db
+    .insert(schema.mcpServersTable)
+    .values({
+      name: `test-server-${crypto.randomUUID().substring(0, 8)}`,
+      serverType: "local",
+      catalogId,
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    })
+    .returning();
+  return mcpServer;
+}
+
+/**
+ * Creates a test internal MCP catalog item
+ */
+async function makeInternalMcpCatalog(
+  overrides: Partial<
+    Pick<
+      InsertInternalMcpCatalog,
+      | "id"
+      | "name"
+      | "serverType"
+      | "serverUrl"
+      | "description"
+      | "version"
+      | "repository"
+      | "installationCommand"
+      | "requiresAuth"
+      | "authDescription"
+      | "authFields"
+      | "localConfig"
+      | "localConfigSecretId"
+      | "userConfig"
+      | "oauthConfig"
+      | "enterpriseManagedConfig"
+      | "scope"
+      | "teams"
+      | "clonedFrom"
+      | "environmentId"
+    >
+  > & {
+    organizationId?: string;
+    authorId?: string;
+  } = {},
+) {
+  const { organizationId, authorId, ...catalogOverrides } = overrides;
+
+  // Auto-create organization if not provided
+  let orgId = organizationId;
+  if (!orgId) {
+    const org = await makeOrganization();
+    orgId = org.id;
+  }
+
+  return await InternalMcpCatalogModel.create(
+    {
+      name: `test-catalog-${crypto.randomUUID().substring(0, 8)}`,
+      serverType: "remote",
+      serverUrl: "https://api.example.com/mcp/",
+      scope: "org",
+      ...catalogOverrides,
+    },
+    {
+      organizationId: orgId,
+      authorId,
+    },
+  );
+}
+
+/**
+ * Creates a test invitation
+ */
+async function makeInvitation(
+  organizationId: string,
+  inviterId: string,
+  overrides: Partial<
+    Pick<InsertInvitation, "email" | "role" | "status" | "expiresAt">
+  > = {},
+) {
+  const [invitation] = await db
+    .insert(schema.invitationsTable)
+    .values({
+      id: crypto.randomUUID(),
+      organizationId,
+      email: `test-${crypto.randomUUID().substring(0, 8)}@example.com`,
+      role: MEMBER_ROLE_NAME,
+      status: "pending",
+      expiresAt: new Date(Date.now() + 86400000),
+      inviterId,
+      ...overrides,
+    })
+    .returning();
+  return invitation;
+}
+
+/**
+ * Creates a test account
+ */
+async function makeAccount(
+  userId: string,
+  overrides: Partial<
+    Pick<
+      InsertAccount,
+      | "accountId"
+      | "providerId"
+      | "accessToken"
+      | "refreshToken"
+      | "idToken"
+      | "accessTokenExpiresAt"
+      | "refreshTokenExpiresAt"
+    >
+  > = {},
+) {
+  const [account] = await db
+    .insert(schema.accountsTable)
+    .values({
+      id: crypto.randomUUID(),
+      accountId: `oauth-account-${crypto.randomUUID().substring(0, 8)}`,
+      providerId: "google",
+      userId,
+      accessToken: `access-token-${crypto.randomUUID().substring(0, 8)}`,
+      refreshToken: `refresh-token-${crypto.randomUUID().substring(0, 8)}`,
+      idToken: `id-token-${crypto.randomUUID().substring(0, 8)}`,
+      accessTokenExpiresAt: new Date(Date.now() + 3600000),
+      refreshTokenExpiresAt: new Date(Date.now() + 86400000),
+      scope: "email profile",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    })
+    .returning();
+  return account;
+}
+
+async function makeSession(
+  userId: string,
+  overrides: Partial<
+    Pick<
+      InsertSession,
+      | "token"
+      | "expiresAt"
+      | "ipAddress"
+      | "userAgent"
+      | "activeOrganizationId"
+      | "impersonatedBy"
+    >
+  > = {},
+) {
+  return await SessionModel.create({
+    id: crypto.randomUUID(),
+    userId,
+    token: `test-token-${crypto.randomUUID().substring(0, 8)}`,
+    expiresAt: new Date(Date.now() + 86400000),
+    ipAddress: "192.168.1.1",
+    userAgent: "Mozilla/5.0 Test Agent",
+    ...overrides,
+  });
+}
+
+/**
+ * Creates authenticated headers from a session token for Better Auth API calls
+ */
+function makeAuthHeaders(sessionToken: string): HeadersInit {
+  return {
+    cookie: `archestra.session_token=${sessionToken}`,
+  };
+}
+
+/**
+ * Creates a test conversation in the database
+ */
+async function makeConversation(
+  agentId: string,
+  overrides: Partial<
+    Pick<
+      InsertConversation,
+      "userId" | "organizationId" | "title" | "modelId" | "chatApiKeyId"
+    >
+  > = {},
+) {
+  const [conversation] = await db
+    .insert(schema.conversationsTable)
+    .values({
+      id: crypto.randomUUID(),
+      userId: `user-${crypto.randomUUID().substring(0, 8)}`,
+      organizationId: `org-${crypto.randomUUID().substring(0, 8)}`,
+      agentId,
+      title: `Test Conversation ${crypto.randomUUID().substring(0, 8)}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    })
+    .returning();
+  return conversation;
+}
+
+/**
+ * Creates a test interaction in the database
+ */
+async function makeInteraction(
+  profileId: string,
+  overrides: Partial<
+    Pick<
+      InsertInteraction,
+      | "request"
+      | "response"
+      | "type"
+      | "model"
+      | "inputTokens"
+      | "outputTokens"
+      | "cost"
+      | "baselineCost"
+      | "toonCostSavings"
+      | "cacheSavings"
+    >
+  > = {},
+) {
+  const [interaction] = await db
+    .insert(schema.interactionsTable)
+    .values({
+      profileId,
+      request: {
+        model: "gpt-4",
+        messages: [
+          {
+            role: "user",
+            content: "Read the file at /etc/passwd",
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "read_file",
+              description: "Read a file from the filesystem",
+              parameters: {
+                type: "object",
+                properties: {
+                  file_path: {
+                    type: "string",
+                    description: "The path to the file to read",
+                  },
+                },
+                required: ["file_path"],
+              },
+            },
+          },
+        ],
+      },
+      response: {
+        id: "chatcmpl-test-123",
+        object: "chat.completion",
+        created: 1234567890,
+        model: "gpt-4",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: null,
+              refusal: null,
+              tool_calls: [
+                {
+                  id: "call_test_123",
+                  type: "function",
+                  function: {
+                    name: "read_file",
+                    arguments: '{"file_path":"/etc/passwd"}',
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+            logprobs: null,
+          },
+        ],
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 20,
+          total_tokens: 120,
+        },
+      },
+      type: "openai:chatCompletions",
+      model: "gpt-4o",
+      inputTokens: 100,
+      outputTokens: 200,
+      ...overrides,
+    })
+    .returning();
+  return interaction;
+}
+
+/**
+ * Creates a test secret in the database
+ */
+async function makeSecret(
+  overrides: Partial<{ name: string; secret: Record<string, unknown> }> = {},
+) {
+  return SecretModel.create({
+    name: `testsecret`,
+    secret: {
+      access_token: `test-token-${crypto.randomUUID().substring(0, 8)}`,
+    },
+    ...overrides,
+  });
+}
+
+/**
+ * Creates a test chat API key in the database.
+ * Used for testing features that require LLM API keys (e.g., auto-policy configuration).
+ */
+async function makeLlmProviderApiKey(
+  organizationId: string,
+  secretId: string,
+  overrides: Partial<
+    Pick<
+      InsertLlmProviderApiKey,
+      | "name"
+      | "provider"
+      | "scope"
+      | "userId"
+      | "teamId"
+      | "baseUrl"
+      | "inferenceBaseUrl"
+    >
+  > = {},
+) {
+  return await LlmProviderApiKeyModel.create({
+    organizationId,
+    secretId,
+    name:
+      overrides.name ?? `Test API Key ${crypto.randomUUID().substring(0, 8)}`,
+    provider: overrides.provider ?? "anthropic",
+    scope: overrides.scope ?? "org",
+    userId: overrides.userId ?? null,
+    teamId: overrides.teamId ?? null,
+    baseUrl: overrides.baseUrl ?? null,
+    inferenceBaseUrl: overrides.inferenceBaseUrl ?? null,
+  });
+}
+
+/**
+ * Creates a test identity provider in the database.
+ * Bypasses Better Auth API for test simplicity.
+ */
+async function makeIdentityProvider(
+  organizationId: string,
+  overrides: {
+    providerId?: string;
+    issuer?: string;
+    domain?: string;
+    oidcConfig?: Record<string, unknown>;
+    samlConfig?: Record<string, unknown>;
+    roleMapping?: Record<string, unknown>;
+    ssoLoginEnabled?: boolean;
+    userId?: string | null;
+  } = {},
+) {
+  const id = crypto.randomUUID().replace(/-/g, "").substring(0, 32);
+  const providerId =
+    overrides.providerId ?? `TestProvider-${id.substring(0, 8)}`;
+
+  const [provider] = await db
+    .insert(schema.identityProvidersTable)
+    .values({
+      id,
+      providerId,
+      issuer:
+        overrides.issuer ?? `https://issuer-${id.substring(0, 8)}.example.com`,
+      domain: overrides.domain ?? "example.com",
+      organizationId,
+      ssoLoginEnabled: overrides.ssoLoginEnabled ?? true,
+      oidcConfig: overrides.oidcConfig
+        ? (JSON.stringify(overrides.oidcConfig) as unknown as undefined)
+        : undefined,
+      samlConfig: overrides.samlConfig
+        ? (JSON.stringify(overrides.samlConfig) as unknown as undefined)
+        : undefined,
+      roleMapping: overrides.roleMapping
+        ? (JSON.stringify(overrides.roleMapping) as unknown as undefined)
+        : undefined,
+      userId: overrides.userId ?? null,
+      // WORKAROUND: With domainVerification enabled, all SSO providers need domainVerified: true
+      // See: https://github.com/better-auth/better-auth/issues/6481
+      domainVerified: true,
+    })
+    .returning();
+
+  return provider;
+}
+
+/**
+ * Creates a test OAuth client
+ */
+async function makeOAuthClient(
+  overrides: {
+    clientId?: string;
+    name?: string;
+    redirectUris?: string[];
+    userId?: string;
+    scopes?: string[] | null;
+    grantTypes?: string[];
+  } = {},
+) {
+  const id = crypto.randomUUID();
+  const [client] = await db
+    .insert(schema.oauthClientsTable)
+    .values({
+      id,
+      clientId: overrides.clientId ?? `client-${id.substring(0, 8)}`,
+      name: overrides.name ?? `Test Client ${id.substring(0, 8)}`,
+      redirectUris: overrides.redirectUris ?? [
+        "http://localhost:8005/callback",
+      ],
+      tokenEndpointAuthMethod: "none",
+      grantTypes: overrides.grantTypes ?? [
+        "authorization_code",
+        "refresh_token",
+      ],
+      responseTypes: ["code"],
+      public: true,
+      type: "web",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...(overrides.scopes !== undefined ? { scopes: overrides.scopes } : {}),
+      ...(overrides.userId ? { userId: overrides.userId } : {}),
+    })
+    .returning();
+  return client;
+}
+
+/**
+ * Creates a test OAuth access token
+ */
+async function makeOAuthAccessToken(
+  clientId: string,
+  userId: string,
+  overrides: {
+    token?: string;
+    expiresAt?: Date;
+    scopes?: string[];
+    refreshId?: string;
+    referenceId?: string | null;
+  } = {},
+) {
+  const id = crypto.randomUUID();
+  const [accessToken] = await db
+    .insert(schema.oauthAccessTokensTable)
+    .values({
+      id,
+      token: overrides.token ?? `token-hash-${id.substring(0, 8)}`,
+      clientId,
+      userId,
+      expiresAt: overrides.expiresAt ?? new Date(Date.now() + 3600000),
+      scopes: overrides.scopes ?? ["mcp"],
+      refreshId: overrides.refreshId ?? null,
+      referenceId: overrides.referenceId ?? null,
+      createdAt: new Date(),
+    })
+    .returning();
+  return accessToken;
+}
+
+/**
+ * Creates a test OAuth refresh token
+ */
+async function makeOAuthRefreshToken(
+  clientId: string,
+  userId: string,
+  overrides: {
+    token?: string;
+    expiresAt?: Date;
+    scopes?: string[];
+    revoked?: Date | null;
+  } = {},
+) {
+  const id = crypto.randomUUID();
+  const [refreshToken] = await db
+    .insert(schema.oauthRefreshTokensTable)
+    .values({
+      id,
+      token: overrides.token ?? `refresh-token-hash-${id.substring(0, 8)}`,
+      clientId,
+      userId,
+      expiresAt: overrides.expiresAt ?? new Date(Date.now() + 86400000),
+      scopes: overrides.scopes ?? ["mcp"],
+      revoked: overrides.revoked ?? null,
+      createdAt: new Date(),
+    })
+    .returning();
+  return refreshToken;
+}
+
+/**
+ * Creates a test knowledge base in the database
+ */
+async function makeKnowledgeBase(
+  organizationId: string,
+  overrides: Partial<Pick<InsertKnowledgeBase, "name" | "status">> = {},
+): Promise<KnowledgeBase> {
+  const [result] = await db
+    .insert(schema.knowledgeBasesTable)
+    .values({
+      organizationId,
+      name: `Test Knowledge Base ${crypto.randomUUID().substring(0, 8)}`,
+      ...overrides,
+    })
+    .returning();
+  return result;
+}
+
+/**
+ * Creates a test knowledge base connector in the database
+ */
+async function makeKnowledgeBaseConnector(
+  knowledgeBaseId: string,
+  organizationId: string,
+  overrides: Partial<
+    Pick<
+      InsertKnowledgeBaseConnector,
+      | "name"
+      | "visibility"
+      | "teamIds"
+      | "connectorType"
+      | "config"
+      | "schedule"
+      | "enabled"
+    >
+  > = {},
+): Promise<KnowledgeBaseConnector> {
+  const [result] = await db
+    .insert(schema.knowledgeBaseConnectorsTable)
+    .values({
+      organizationId,
+      name: `Test Connector ${crypto.randomUUID().substring(0, 8)}`,
+      connectorType: "jira",
+      config: {
+        type: "jira",
+        jiraBaseUrl: "https://test.atlassian.net",
+        isCloud: true,
+        projectKey: "TEST",
+      },
+      ...overrides,
+    })
+    .returning();
+
+  // Assign connector to the knowledge base via junction table
+  await db.insert(schema.knowledgeBaseConnectorAssignmentsTable).values({
+    connectorId: result.id,
+    knowledgeBaseId,
+  });
+
+  return result;
+}
+
+/**
+ * Creates a test connector run in the database
+ */
+async function makeConnectorRun(
+  connectorId: string,
+  overrides: Partial<
+    Pick<InsertConnectorRun, "status" | "startedAt" | "documentsProcessed">
+  > = {},
+): Promise<ConnectorRun> {
+  const [result] = await db
+    .insert(schema.connectorRunsTable)
+    .values({
+      connectorId,
+      status: "running",
+      startedAt: new Date(),
+      ...overrides,
+    })
+    .returning();
+  return result;
+}
+
+/**
+ * Seeds and assigns Archestra tools to an agent.
+ * Creates the Archestra catalog entry if it doesn't exist, then seeds tools.
+ * This is useful for tests that need Archestra tools to be available.
+ */
+async function seedAndAssignArchestraTools(agentId: string): Promise<void> {
+  // Create Archestra catalog entry if it doesn't exist
+  const existing = await InternalMcpCatalogModel.findById(
+    ARCHESTRA_MCP_CATALOG_ID,
+  );
+  if (!existing) {
+    await db.insert(schema.internalMcpCatalogTable).values({
+      id: ARCHESTRA_MCP_CATALOG_ID,
+      name: DEFAULT_APP_NAME,
+      description: `Built-in ${DEFAULT_APP_NAME} tools for managing profiles, limits, policies, and MCP servers.`,
+      serverType: "builtin",
+    });
+  }
+
+  // Seed and assign Archestra tools
+  await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+  await ToolModel.assignArchestraToolsToAgent(
+    agentId,
+    ARCHESTRA_MCP_CATALOG_ID,
+  );
+}
+
+export const beforeEach = baseBeforeEach<TestFixtures>;
+export const test = baseTest.extend<TestFixtures>({
+  makeUser: async ({}, use) => {
+    await use(makeUser);
+  },
+  makeAdmin: async ({}, use) => {
+    await use(makeAdmin);
+  },
+  makeOrganization: async ({}, use) => {
+    await use(makeOrganization);
+  },
+  makeTeam: async ({}, use) => {
+    await use(makeTeam);
+  },
+  makeTeamMember: async ({}, use) => {
+    await use(makeTeamMember);
+  },
+  makeAgent: async ({}, use) => {
+    await use(makeAgent);
+  },
+  makeInternalAgent: async ({}, use) => {
+    await use(makeInternalAgent);
+  },
+  makeScheduleTrigger: async ({}, use) => {
+    await use(makeScheduleTrigger);
+  },
+  makeScheduleTriggerRun: async ({}, use) => {
+    await use(makeScheduleTriggerRun);
+  },
+  makeTool: async ({}, use) => {
+    await use(makeTool);
+  },
+  makeAgentTool: async ({}, use) => {
+    await use(makeAgentTool);
+  },
+  makeApp: async ({}, use) => {
+    await use(makeApp);
+  },
+  makeAppVersion: async ({}, use) => {
+    await use(makeAppVersion);
+  },
+  makeAppTool: async ({}, use) => {
+    await use(makeAppTool);
+  },
+  makeAppData: async ({}, use) => {
+    await use(makeAppData);
+  },
+  makeToolPolicy: async ({}, use) => {
+    await use(makeToolPolicy);
+  },
+  makeTrustedDataPolicy: async ({}, use) => {
+    await use(makeTrustedDataPolicy);
+  },
+  makeCustomRole: async ({}, use) => {
+    await use(makeCustomRole);
+  },
+  makeMember: async ({}, use) => {
+    await use(makeMember);
+  },
+  makeMcpServer: async ({}, use) => {
+    await use(makeMcpServer);
+  },
+  makeInternalMcpCatalog: async ({}, use) => {
+    await use(makeInternalMcpCatalog);
+  },
+  makeInvitation: async ({}, use) => {
+    await use(makeInvitation);
+  },
+  makeAccount: async ({}, use) => {
+    await use(makeAccount);
+  },
+  makeSession: async ({}, use) => {
+    await use(makeSession);
+  },
+  makeAuthHeaders: async ({}, use) => {
+    await use(makeAuthHeaders);
+  },
+  makeKnowledgeBase: async ({}, use) => {
+    await use(makeKnowledgeBase);
+  },
+  makeKnowledgeBaseConnector: async ({}, use) => {
+    await use(makeKnowledgeBaseConnector);
+  },
+  makeConnectorRun: async ({}, use) => {
+    await use(makeConnectorRun);
+  },
+  makeConversation: async ({}, use) => {
+    await use(makeConversation);
+  },
+  makeInteraction: async ({}, use) => {
+    await use(makeInteraction);
+  },
+  makeSecret: async ({}, use) => {
+    await use(makeSecret);
+  },
+  makeLlmProviderApiKey: async ({}, use) => {
+    await use(makeLlmProviderApiKey);
+  },
+  makeVirtualApiKey: async ({}, use) => {
+    await use(makeVirtualApiKey);
+  },
+  makeIdentityProvider: async ({}, use) => {
+    await use(makeIdentityProvider);
+  },
+  makeOAuthClient: async ({}, use) => {
+    await use(makeOAuthClient);
+  },
+  makeOAuthAccessToken: async ({}, use) => {
+    await use(makeOAuthAccessToken);
+  },
+  makeOAuthRefreshToken: async ({}, use) => {
+    await use(makeOAuthRefreshToken);
+  },
+  seedAndAssignArchestraTools: async ({}, use) => {
+    await use(seedAndAssignArchestraTools);
+  },
+});

@@ -1,0 +1,381 @@
+{{- if .Values.keycloak.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-keycloak
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: {{ .Values.keycloak.service.type }}
+  ports:
+    - port: {{ .Values.keycloak.service.port }}
+      targetPort: 8080
+      {{- if and (eq .Values.keycloak.service.type "NodePort") .Values.keycloak.service.nodePort }}
+      nodePort: {{ .Values.keycloak.service.nodePort }}
+      {{- end }}
+      name: http
+  selector:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-keycloak
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app: {{ .Release.Name }}-keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app: {{ .Release.Name }}-keycloak
+    spec:
+      containers:
+        - name: keycloak
+          image: "{{ .Values.keycloak.image.registry }}/{{ .Values.keycloak.image.repository }}:{{ .Values.keycloak.image.tag }}"
+          imagePullPolicy: {{ .Values.keycloak.image.pullPolicy | default "IfNotPresent" }}
+          args:
+            - start-dev
+            {{- if .Values.keycloak.realm.import }}
+            - --import-realm
+            {{- end }}
+          env:
+            - name: KEYCLOAK_ADMIN
+              value: {{ .Values.keycloak.auth.adminUser | quote }}
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              value: {{ .Values.keycloak.auth.adminPassword | quote }}
+            - name: KC_HTTP_PORT
+              value: "8080"
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: KC_FEATURES
+              value: {{ .Values.keycloak.features | join "," | quote }}
+            # Keycloak 26+ v2 hostname configuration
+            # Forces Keycloak to always return consistent issuer in tokens
+            # regardless of how it's accessed (internal K8s service vs NodePort)
+            # In v2, KC_HOSTNAME can be a full URL: scheme://hostname:port
+            # See: https://www.keycloak.org/server/hostname
+            - name: KC_HOSTNAME
+              value: {{ .Values.keycloak.hostnameUrl | quote }}
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
+            - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+              value: {{ ternary "true" "false" .Values.keycloak.hostnameBackchannelDynamic | quote }}
+          ports:
+            - containerPort: 8080
+              name: http
+          {{- if .Values.keycloak.realm.import }}
+          volumeMounts:
+            - name: realm-config
+              mountPath: /opt/keycloak/data/import
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: {{ .Values.keycloak.healthPort | default 9000 }}
+            initialDelaySeconds: {{ .Values.keycloak.readinessProbe.initialDelaySeconds | default 30 }}
+            periodSeconds: {{ .Values.keycloak.readinessProbe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.keycloak.readinessProbe.timeoutSeconds | default 5 }}
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: {{ .Values.keycloak.healthPort | default 9000 }}
+            initialDelaySeconds: {{ .Values.keycloak.livenessProbe.initialDelaySeconds | default 60 }}
+            periodSeconds: {{ .Values.keycloak.livenessProbe.periodSeconds | default 30 }}
+            timeoutSeconds: {{ .Values.keycloak.livenessProbe.timeoutSeconds | default 5 }}
+          startupProbe:
+            httpGet:
+              path: /health/ready
+              port: {{ .Values.keycloak.healthPort | default 9000 }}
+            failureThreshold: {{ .Values.keycloak.startupProbe.failureThreshold | default 30 }}
+            periodSeconds: {{ .Values.keycloak.startupProbe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.keycloak.startupProbe.timeoutSeconds | default 5 }}
+          resources:
+            {{- toYaml .Values.keycloak.resources | nindent 12 }}
+      {{- if .Values.keycloak.realm.import }}
+      volumes:
+        - name: realm-config
+          configMap:
+            name: {{ .Release.Name }}-keycloak-realm
+      {{- end }}
+---
+{{- if .Values.keycloak.realm.import }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-keycloak-realm
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  archestra-realm.json: |
+    {
+      "realm": "archestra",
+      "enabled": true,
+      "sslRequired": "none",
+      "registrationAllowed": false,
+      "loginWithEmailAllowed": true,
+      "duplicateEmailsAllowed": false,
+      "resetPasswordAllowed": true,
+      "editUsernameAllowed": false,
+      "bruteForceProtected": false,
+      "accessTokenLifespan": 3600,
+      "accessTokenLifespanForImplicitFlow": 3600,
+      "ssoSessionIdleTimeout": 28800,
+      "ssoSessionMaxLifespan": 28800,
+      "clientSessionIdleTimeout": 28800,
+      "clientSessionMaxLifespan": 28800,
+      "groups": [
+        {{- $groups := .Values.keycloak.groups | default list }}
+        {{- range $index, $group := $groups }}
+        {{- if $index }},{{ end }}
+        {
+          "name": {{ $group.name | quote }},
+          "path": {{ printf "/%s" $group.name | quote }}
+        }
+        {{- end }}
+      ],
+      "clients": [
+        {
+          "clientId": "archestra-oidc",
+          "name": "Archestra OIDC Client",
+          "enabled": true,
+          "clientAuthenticatorType": "client-secret",
+          "secret": "archestra-oidc-secret",
+          "redirectUris": [
+            "http://localhost:3000/*",
+            "http://localhost:9000/*"
+          ],
+          "webOrigins": [
+            "http://localhost:3000",
+            "http://localhost:9000"
+          ],
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": true,
+          "publicClient": false,
+          "protocol": "openid-connect",
+          "attributes": {
+            "pkce.code.challenge.method": "S256"
+          },
+          "protocolMappers": [
+            {
+              "name": "email",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-property-mapper",
+              "consentRequired": false,
+              "config": {
+                "userinfo.token.claim": "true",
+                "user.attribute": "email",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "email",
+                "jsonType.label": "String"
+              }
+            },
+            {
+              "name": "name",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-full-name-mapper",
+              "consentRequired": false,
+              "config": {
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "name",
+                "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "preferred_username",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-property-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "username",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "preferred_username",
+                "jsonType.label": "String",
+                "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "demo_token_value",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-attribute-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "demo_token_value",
+                "id.token.claim": "false",
+                "access.token.claim": "true",
+                "claim.name": "demo_token_value",
+                "jsonType.label": "String",
+                "userinfo.token.claim": "false"
+              }
+            },
+            {
+              "name": "groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "groups",
+                "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "archestra-oidc",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
+            }
+          ]
+        },
+        {
+          "clientId": "http://localhost:3000",
+          "name": "Archestra SAML Client",
+          "enabled": true,
+          "protocol": "saml",
+          "frontchannelLogout": true,
+          "attributes": {
+            "saml.assertion.signature": "true",
+            "saml.force.post.binding": "true",
+            "saml.multivalued.roles": "false",
+            "saml.encrypt": "false",
+            "saml.server.signature": "true",
+            "saml.server.signature.keyinfo.ext": "false",
+            "saml.signing.certificate": "",
+            "saml_force_name_id_format": "true",
+            "saml.client.signature": "false",
+            "saml.authnstatement": "true",
+            "saml_name_id_format": "email",
+            "saml_signature_canonicalization_method": "http://www.w3.org/2001/10/xml-exc-c14n#"
+          },
+          "redirectUris": [
+            "http://localhost:3000/*",
+            "http://localhost:9000/*"
+          ],
+          "protocolMappers": [
+            {
+              "name": "email",
+              "protocol": "saml",
+              "protocolMapper": "saml-user-property-idp-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "email",
+                "friendly.name": "email",
+                "attribute.name": "email"
+              }
+            },
+            {
+              "name": "firstName",
+              "protocol": "saml",
+              "protocolMapper": "saml-user-property-idp-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "firstName",
+                "friendly.name": "firstName",
+                "attribute.name": "firstName"
+              }
+            },
+            {
+              "name": "lastName",
+              "protocol": "saml",
+              "protocolMapper": "saml-user-property-idp-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "lastName",
+                "friendly.name": "lastName",
+                "attribute.name": "lastName"
+              }
+            },
+            {
+              "name": "name",
+              "protocol": "saml",
+              "protocolMapper": "saml-user-property-idp-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "username",
+                "friendly.name": "name",
+                "attribute.name": "name"
+              }
+            },
+            {
+              "name": "groups",
+              "protocol": "saml",
+              "protocolMapper": "saml-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "single": "false",
+                "full.path": "false",
+                "attribute.nameformat": "Basic",
+                "attribute.name": "groups"
+              }
+            }
+          ]
+        }
+      ],
+      "users": [
+        {{- $users := .Values.keycloak.testUsers | default list }}
+        {{- range $index, $user := $users }}
+        {{- if $index }},{{ end }}
+        {
+          "username": {{ $user.username | quote }},
+          "email": {{ $user.email | quote }},
+          "firstName": {{ $user.firstName | quote }},
+          "lastName": {{ $user.lastName | quote }},
+          "enabled": true,
+          "emailVerified": true,
+          "credentials": [
+            {
+              "type": "password",
+              "value": {{ $user.password | quote }},
+              "temporary": false
+            }
+          ]
+          {{- if $user.attributes }},
+          "attributes": {
+            {{- $attrs := $user.attributes }}
+            {{- $first := true }}
+            {{- range $key, $value := $attrs }}
+            {{- if not $first }},{{ end }}
+            {{- $first = false }}
+            {{ $key | quote }}: [{{ $value | quote }}]
+            {{- end }}
+          }
+          {{- end }}
+          {{- if $user.groups }},
+          "groups": [
+            {{- range $gindex, $group := $user.groups }}
+            {{- if $gindex }},{{ end }}
+            {{ $group | quote }}
+            {{- end }}
+          ]
+          {{- end }}
+        }
+        {{- end }}
+      ]
+    }
+{{- end }}
+{{- end }}

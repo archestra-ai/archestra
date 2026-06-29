@@ -1,0 +1,211 @@
+# WireMock configuration
+wiremock:
+  enabled: true
+  image:
+    repository: wiremock/wiremock
+    tag: "3.13.1"
+    pullPolicy: IfNotPresent
+  service:
+    type: NodePort
+    port: 8080
+    # NodePort for kind/CI environments (optional)
+    nodePort: 30080
+  # WireMock command arguments
+  args:
+    - --global-response-templating
+    - --disable-gzip
+    - --verbose
+
+# Keycloak configuration for SSO testing
+keycloak:
+  enabled: true
+  image:
+    registry: europe-west1-docker.pkg.dev
+    repository: friendly-path-465518-r6/archestra-public/keycloak
+    tag: "pr46048-5afbf42"
+    pullPolicy: IfNotPresent
+  # Admin credentials for e2e testing
+  auth:
+    adminUser: admin
+    adminPassword: admin
+  features:
+    - token-exchange:v1
+    - admin-fine-grained-authz:v1
+    - jwt-authorization-grant:v1
+    - identity-assertion-jwt:v1
+  # Service configuration
+  service:
+    type: NodePort
+    port: 8080
+    nodePort: 30081
+  healthPort: 9000
+  # Public hostname/issuer URL advertised by Keycloak.
+  # Local dev uses the NodePort forwarded to the host. CI overrides this to the
+  # in-cluster service URL so server-side OIDC flows from the backend pod work.
+  hostnameUrl: "http://localhost:30081"
+  hostnameBackchannelDynamic: true
+  # Resource limits for CI environment
+  # Keycloak 26 (Java) needs ~1.5GB+ for JVM + realm import; 1024Mi causes OOMKill
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1024Mi
+    limits:
+      cpu: 1000m
+      memory: 2048Mi
+  # Liveness probe
+  livenessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 5
+  # Readiness probe
+  readinessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+  startupProbe:
+    failureThreshold: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+  # Groups for role mapping tests
+  groups:
+    - name: "archestra-admins"
+    - name: "archestra-users"
+  # Test users for SSO E2E tests
+  # The first user (admin) should match the Archestra admin user created during onboarding
+  # so that SSO login can link to an existing account
+  testUsers:
+    # Admin user - in archestra-admins group for role mapping tests
+    - username: "admin"
+      email: "admin@example.com"
+      password: "password"
+      firstName: "Admin"
+      lastName: "User"
+      attributes:
+        demo_token_value: "admin_user_token"
+      groups:
+        - "archestra-admins"
+    # Member user - in archestra-users group, should get member role
+    - username: "member"
+      email: "member@example.com"
+      password: "memberpass"
+      firstName: "Member"
+      lastName: "User"
+      attributes:
+        demo_token_value: "member_user_token"
+      groups:
+        - "archestra-users"
+  # Realm configuration for e2e testing
+  # Set import: true to auto-import the realm on startup
+  realm:
+    import: true
+
+# MCP Server with JWKS authentication for JWT propagation testing
+mcpServerJwks:
+  enabled: true
+  image:
+    repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak
+    tag: "0.0.3"
+    pullPolicy: IfNotPresent
+  # JWT audience claim the server expects (must match Keycloak client's audience mapper)
+  jwtAudience: "archestra-oidc"
+  # Service configuration
+  service:
+    type: NodePort
+    port: 3456
+    nodePort: 30082
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# MCP Example OAuth Server for testing OAuth 2.1 flows with self-hosted MCP servers
+mcpExampleOAuth:
+  enabled: true
+  image:
+    repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server
+    tag: "0.0.1"
+    pullPolicy: IfNotPresent
+  # Service configuration
+  service:
+    type: NodePort
+    port: 3232
+    nodePort: 30083
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# MCP Server with ID-JAG authentication for protected-resource exchange testing
+mcpServerIdJag:
+  enabled: true
+  image:
+    repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag
+    tag: "0.0.4"
+    pullPolicy: IfNotPresent
+  gatewayAudience: "id-jag-gateway-client"
+  resourceClientId: "id-jag-resource-client"
+  resourceClientSecret: "id-jag-resource-secret"
+  service:
+    type: NodePort
+    port: 3458
+    nodePort: 30084
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# HashiCorp Vault configuration for BYOS (Bring Your Own Secrets) testing
+vault:
+  enabled: true
+  image:
+    repository: hashicorp/vault
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  # Dev mode root token (auto-unsealed, in-memory storage)
+  devRootToken: "dev-root-token"
+  # Service configuration
+  service:
+    type: NodePort
+    port: 8200
+    nodePort: 30200
+  # Resource limits for CI environment
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  # Readiness probe
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+  # Kubernetes auth configuration (auto-configures K8s auth on startup)
+  k8sAuth:
+    enabled: false
+    # Service account for the vault pod itself
+    serviceAccountName: default
+    # Service account that will authenticate to Vault (e.g., archestra-platform)
+    boundServiceAccountName: archestra-platform
+    boundServiceAccountNamespace: archestra-dev
+    ttl: "24h"
+  # Secrets to write into Vault on startup (used in post-start hook)
+  secrets:
+    - path: kv/archestra/config
+      data:
+        dburl: "postgresql://archestra:vault_e2e_custom_pw@archestra-platform-postgresql:5432/archestra_dev"
+        dummy_var: "hello-from-vault"

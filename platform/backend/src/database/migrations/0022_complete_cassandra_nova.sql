@@ -1,0 +1,1 @@
+ALTER TABLE "mcp_server" ADD COLUMN "metadata" jsonb DEFAULT '{}'::jsonb NOT NULL;

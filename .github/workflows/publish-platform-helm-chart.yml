@@ -1,0 +1,70 @@
+name: Publish platform Helm chart
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Version tag for the Helm chart"
+        required: true
+        type: string
+      push_chart:
+        description: "Whether to push the Helm chart to the repository"
+        required: true
+        type: boolean
+      checkout_ref:
+        description: "Optional ref to checkout when packaging the chart"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+        required: false
+      GCP_SERVICE_ACCOUNT_NAME:
+        required: false
+
+permissions: {}
+
+concurrency:
+  group: publish-platform-helm-chart-${{ inputs.version }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # See here for inspiration on how this was put together:
+  # https://medium.com/google-cloud/ci-gitops-with-helm-github-actions-google-artifact-registry-and-config-sync-b48604191fda
+  publish-platform-helm-chart:
+    name: Publish platform Helm chart
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: write # Required to package the chart from the checked-out repository.
+      id-token: write # Required for Workload Identity Federation.
+    defaults:
+      run:
+        working-directory: ./platform/helm/archestra
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
+
+      - name: Authenticate to Google Artifact Registry
+        if: inputs.push_chart
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: helm package
+        env:
+          IMAGE_TAG: ${{ inputs.version }}
+          ARCHESTRA_ANALYTICS: disabled
+        run: |
+          helm package . --version $IMAGE_TAG --app-version $IMAGE_TAG
+
+      - name: helm push
+        if: inputs.push_chart
+        env:
+          IMAGE_TAG: ${{ inputs.version }}
+        run: |
+          helm push archestra-platform-$IMAGE_TAG.tgz oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts

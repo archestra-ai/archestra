@@ -1,0 +1,27 @@
+name: Docker Login
+description: Wrapper around docker/login-action pinned to a vetted version.
+inputs:
+  registry:
+    description: Docker registry to log in to.
+    required: false
+    default: ""
+  username:
+    description: Username used for the registry login.
+    required: true
+  password:
+    description: Password or token used for the registry login.
+    required: true
+  logout:
+    description: Whether to log out at the end of the job.
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Log in to Docker registry
+      uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+      with:
+        registry: ${{ inputs.registry }}
+        username: ${{ inputs.username }}
+        password: ${{ inputs.password }}
+        logout: ${{ inputs.logout }}

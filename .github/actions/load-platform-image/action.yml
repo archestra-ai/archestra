@@ -1,0 +1,53 @@
+name: Load Platform Image
+description: |
+  Loads the platform Docker image from a registry or a co-located artifact.
+
+inputs:
+  source:
+    description: "Where to load the image from: registry or artifact"
+    required: false
+    default: artifact
+  image-tag:
+    description: "Platform image tag to pull or report"
+    required: false
+    default: ""
+  artifact-name:
+    description: "Artifact name to download when source=artifact"
+    required: false
+    default: platform-docker-image
+
+outputs:
+  image-tag:
+    description: "The resolved platform image tag"
+    value: ${{ steps.resolve-tag.outputs.tag }}
+
+runs:
+  using: composite
+  steps:
+    - name: Pull platform image from registry
+      if: ${{ inputs.source == 'registry' }}
+      shell: bash
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.image-tag }}
+      run: docker pull "${PLATFORM_IMAGE_TAG}"
+
+    - name: Download platform image artifact
+      if: ${{ inputs.source == 'artifact' }}
+      uses: ./.github/actions/github-download-artifact
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: /tmp
+
+    - name: Load platform Docker image
+      if: ${{ inputs.source == 'artifact' }}
+      shell: bash
+      run: |
+        gunzip -c /tmp/platform-image.tar.gz | docker load
+
+    - name: Resolve platform image tag
+      id: resolve-tag
+      shell: bash
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.image-tag }}
+      run: |
+        echo "tag=${PLATFORM_IMAGE_TAG}" >> "$GITHUB_OUTPUT"

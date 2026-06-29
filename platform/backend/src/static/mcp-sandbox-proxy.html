@@ -1,0 +1,383 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="color-scheme" content="light dark">
+  <!-- CSP is set via HTTP headers by server.ts for cross-origin modes (localhost swap, domain).
+       For opaque-origin fallback (srcdoc), CSP is injected as a meta tag into the HTML. -->
+  <title>MCP-UI Proxy</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      height: 100vh;
+      width: 100vw;
+      /* Transparent background allows parent page to show through */
+      background-color: transparent;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    iframe {
+      background-color: transparent;
+      border: 0px none transparent;
+      padding: 0px;
+      overflow: hidden;
+      flex-grow: 1;
+      /* Inherit color scheme from parent for consistent transparency */
+      color-scheme: inherit;
+    }
+  </style>
+</head>
+<body>
+<script>
+
+// The ext-apps guest SDK, served same-deployment next to this proxy. The
+// Archestra Apps SDK imports it (via window.__ARCHESTRA_APP_SDK_URL__, injected
+// below) to connect to the host. location.origin is this proxy's real origin
+// (the proxy is never the opaque srcdoc guest), and /_sandbox/ is proxied to the
+// backend in every mode, so this absolute URL resolves + loads everywhere.
+const APP_SDK_URL = location.origin + "/_sandbox/ext-apps-app.js";
+
+// The Archestra Apps SDK (window.archestra), loaded by the <script src> the
+// backend injects into owned apps at serve time (app-sdk-injection.ts). Its
+// root-relative src resolves against this proxy's base URL — which srcdoc and
+// document.write children inherit — so the absolute form below is what CSP
+// must allowlist.
+const ARCHESTRA_APP_SDK_URL = location.origin + "/_sandbox/archestra-app-sdk.js";
+
+// The platform baseline stylesheet, loaded by the <link> the backend injects
+// into owned apps at serve time (app-sdk-injection.ts). Root-relative href
+// resolves against this proxy origin, so style-src must allowlist this URL.
+const ARCHESTRA_APP_BASE_CSS_URL = location.origin + "/_sandbox/archestra-app-base.css";
+
+function buildAllowAttribute(permissions) {
+  if (!permissions) return "";
+
+  const allowList = [];
+  if (permissions.camera) allowList.push("camera");
+  if (permissions.microphone) allowList.push("microphone");
+  if (permissions.geolocation) allowList.push("geolocation");
+  if (permissions.clipboardWrite) allowList.push("clipboard-write");
+
+  return allowList.join("; ");
+}
+
+/**
+ * Sanitize a CSP domain value to prevent injection.
+ * Only allows valid hostnames, wildcard subdomains, scheme-prefixed domains, and optional ports.
+ */
+function sanitizeDomain(d) {
+  if (typeof d !== "string") return "";
+  return d.replace(/['"<>;]/g, "");
+}
+
+/**
+ * Build CSP string from _meta.ui.csp metadata (Inspector pattern).
+ * No 'self' — doesn't work in srcdoc iframes (refers to about:srcdoc).
+ * Uses 'unsafe-inline' for scripts/styles since all widget code is inline.
+ */
+function buildCSP(csp) {
+  if (!csp) {
+    return [
+      "default-src 'none'",
+      "script-src 'unsafe-inline' " + APP_SDK_URL + " " + ARCHESTRA_APP_SDK_URL,
+      "style-src 'unsafe-inline' " + ARCHESTRA_APP_BASE_CSS_URL,
+      "img-src data: blob:",
+      "font-src data: blob:",
+      "media-src data: blob:",
+      "connect-src 'none'",
+      "form-action 'none'",
+      "frame-src 'none'",
+      "object-src 'none'",
+      "base-uri 'none'",
+    ].join("; ");
+  }
+
+  var connectDomains = (csp.connectDomains || []).map(sanitizeDomain).filter(Boolean);
+  var resourceDomains = (csp.resourceDomains || []).map(sanitizeDomain).filter(Boolean);
+  var frameDomains = (csp.frameDomains || []).map(sanitizeDomain).filter(Boolean);
+  var baseUriDomains = (csp.baseUriDomains || []).map(sanitizeDomain).filter(Boolean);
+
+  var connectSrc = connectDomains.length > 0 ? connectDomains.join(" ") : "'none'";
+  var resourceSrc = resourceDomains.length > 0
+    ? ["data:", "blob:", ...resourceDomains].join(" ")
+    : "data: blob:";
+  var frameSrc = frameDomains.length > 0 ? frameDomains.join(" ") : "'none'";
+  var baseUri = baseUriDomains.length > 0 ? baseUriDomains.join(" ") : "'none'";
+
+  return [
+    "default-src 'none'",
+    "script-src 'unsafe-inline' " + APP_SDK_URL + " " + ARCHESTRA_APP_SDK_URL + " " + resourceSrc,
+    "style-src 'unsafe-inline' " + ARCHESTRA_APP_BASE_CSS_URL + " " + resourceSrc,
+    "img-src " + resourceSrc,
+    "font-src " + resourceSrc,
+    "media-src " + resourceSrc,
+    "connect-src " + connectSrc,
+    "form-action 'none'",
+    "frame-src " + frameSrc,
+    "object-src 'none'",
+    "base-uri " + baseUri,
+  ].join("; ");
+}
+
+/**
+ * Build CSP violation listener script (Inspector pattern).
+ * Forwards securitypolicyviolation events to the host via postMessage
+ * so violations can be surfaced for debugging.
+ *
+ * Violations originating from a platform-served guest SDK file are not
+ * forwarded: the SDK probes code-generation support at load with a try/catch
+ * `new Function("")`, and the caught probe still fires a
+ * securitypolicyviolation (script-src blocks eval). That is platform noise an
+ * app author cannot act on — forwarding it would flag every render as
+ * "1 runtime error". Matched by the `/_sandbox/` asset path (where both SDK
+ * files are served from) rather than `window.__ARCHESTRA_APP_SDK_URL__`, which
+ * is only injected for external apps — owned apps carry their SDK URL in the
+ * backend envelope, so keying off the global leaked the probe for every owned
+ * app.
+ */
+function buildViolationListenerScript() {
+  return '<script>\
+document.addEventListener("securitypolicyviolation", function(e) {\
+  var src = e.sourceFile || "";\
+  if (src.indexOf("/_sandbox/ext-apps-app.js") !== -1 || src.indexOf("/_sandbox/archestra-app-sdk.js") !== -1) return;\
+  var violation = {\
+    type: "mcp-apps:csp-violation",\
+    directive: e.violatedDirective,\
+    blockedUri: e.blockedURI,\
+    sourceFile: e.sourceFile || null,\
+    lineNumber: e.lineNumber || null,\
+    effectiveDirective: e.effectiveDirective,\
+    timestamp: Date.now()\
+  };\
+  window.parent.postMessage(violation, "*");\
+});\
+<\/script>';
+}
+
+/**
+ * Inject CSP meta tag and violation listener into HTML (Inspector pattern).
+ * Used for srcdoc loading where HTTP headers aren't available.
+ */
+function injectCSP(html, cspValue, ownedApp) {
+  var violationListener = buildViolationListenerScript();
+  var injection;
+  // Owned apps carry their CSP and the SDK bundle URL in the backend-injected
+  // envelope (app-sdk-injection.ts), so they work identically here and in a
+  // foreign host. The proxy must NOT add a second CSP for them — a differing
+  // policy would intersect and break the render — so it only adds the violation
+  // listener. This MUST key off the trusted host-set `ownedApp` flag, never the
+  // HTML: the HTML for external MCP-UI apps is attacker-controlled, so a content
+  // marker could be spoofed to suppress the platform CSP. External apps get the
+  // full proxy CSP + SDK-URL injection.
+  if (ownedApp === true) {
+    injection = violationListener;
+  } else {
+    var cspMeta = '<meta http-equiv="Content-Security-Policy" content="' + cspValue + '">';
+    // Expose the served SDK URL so the injected Apps SDK can import it (apps
+    // themselves never touch it). APP_SDK_URL is
+    // location.origin-derived (no user input), but JSON-encode defensively so it
+    // can never break out of the inline script.
+    var sdkGlobal = '<script>window.__ARCHESTRA_APP_SDK_URL__=' + JSON.stringify(APP_SDK_URL) + ';<\/script>';
+    injection = cspMeta + sdkGlobal + violationListener;
+  }
+
+  // Anchors tolerate attributes (<head lang="en">) and mirror the backend's
+  // serve-time SDK injection (app-sdk-injection.ts) exactly: both chains
+  // resolve to the SAME first anchor, so this injection always lands before
+  // the SDK bootstrap and the SDK URL global is defined when the SDK runs.
+  // (\s[^>]*)? — attributes allowed, never a longer tag name (<header>).
+  var head = /(<head(\s[^>]*)?>)/i.exec(html);
+  if (head) {
+    return html.replace(head[1], head[1] + injection);
+  }
+  var htmlTag = /(<html(\s[^>]*)?>)/i.exec(html);
+  if (htmlTag) {
+    return html.replace(htmlTag[1], htmlTag[1] + "<head>" + injection + "</head>");
+  }
+  var doctype = /(<!DOCTYPE[^>]*>)/i.exec(html);
+  if (doctype) {
+    return html.replace(doctype[1], doctype[1] + "<head>" + injection + "</head>");
+  }
+  return injection + html;
+}
+
+// Injected at serve time by server.ts. Empty array = allow any origin (open/dev deployment).
+const ALLOWED_ORIGINS = __ARCHESTRA_ALLOWED_ORIGINS__;
+
+if (window.self === window.top) {
+  throw new Error("This file is only to be used in an iframe sandbox.");
+}
+
+// Extract the expected host origin from the referrer for origin validation.
+// document.referrer may be absent if the parent sets Referrer-Policy: no-referrer,
+// so fall back to ALLOWED_ORIGINS-only validation when referrer is unavailable.
+let EXPECTED_HOST_ORIGIN = document.referrer
+  ? new URL(document.referrer).origin
+  : null;
+
+if (EXPECTED_HOST_ORIGIN && ALLOWED_ORIGINS.length > 0 && !ALLOWED_ORIGINS.includes(EXPECTED_HOST_ORIGIN)) {
+  throw new Error(
+    `Embedding domain not allowed: ${EXPECTED_HOST_ORIGIN}. Configure ARCHESTRA_FRONTEND_URL to allow your domain.`,
+  );
+}
+
+if (!EXPECTED_HOST_ORIGIN) {
+  if (ALLOWED_ORIGINS.length === 0) {
+    // No referrer and no ALLOWED_ORIGINS — open/dev mode, accept any origin.
+    // EXPECTED_HOST_ORIGIN stays null; message validation uses "*".
+  } else {
+    // No referrer but ALLOWED_ORIGINS configured — use the first allowed origin
+    // for postMessage targeting. Message validation checks ALLOWED_ORIGINS list.
+    EXPECTED_HOST_ORIGIN = ALLOWED_ORIGINS[0];
+  }
+}
+
+// Detect opaque origin (sandbox without allow-same-origin on this iframe).
+// With localhost swap or domain mode, this is false (real cross-origin).
+// With production fallback (no domain, not localhost), this is true (opaque).
+const OWN_ORIGIN = window.origin;
+const IS_OPAQUE_ORIGIN = OWN_ORIGIN === "null";
+
+// Security self-test: verify iframe isolation is working correctly.
+// This MUST throw a SecurityError -- if `window.top` is accessible, the sandbox
+// configuration is dangerously broken and untrusted content could escape.
+ try {
+  window.top?.alert("If you see this, the sandbox is not setup securely.");
+  throw "FAIL";
+} catch (e) {
+  if (e === "FAIL") {
+    throw new Error("The sandbox is not setup securely.");
+  }
+
+  // Expected: SecurityError confirms proper sandboxing.
+}
+
+// Double-iframe sandbox architecture: THIS file is the outer sandbox proxy
+// iframe on a different origin from the host. It creates an inner iframe
+// for untrusted HTML content.
+const inner = document.createElement("iframe");
+inner.style = "width:100%; height:100%; border:none;";
+// allow-same-origin on the inner iframe lets it retain its inherited origin.
+// In cross-origin modes (localhost swap, domain), both outer and inner share
+// the sandbox origin — enabling document.write() access.
+// In opaque mode, both share the opaque origin.
+inner.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");
+// Note: allow attribute is set later when receiving sandbox-resource-ready notification
+// based on the permissions requested by the app
+document.body.appendChild(inner);
+
+const RESOURCE_READY_NOTIFICATION =
+  "ui/notifications/sandbox-resource-ready";
+const PROXY_READY_NOTIFICATION =
+  "ui/notifications/sandbox-proxy-ready";
+
+// Message relay: This Sandbox (outer iframe) acts as a bidirectional bridge,
+// forwarding messages between:
+//
+//   Host (parent window) ↔ Sandbox (outer frame) ↔ View (inner iframe)
+//
+// Special case: The "sandbox-resource-ready" message is intercepted here
+// (not relayed) because the Sandbox uses it to configure and load the
+// inner iframe with the view HTML content.
+
+window.addEventListener("message", async (event) => {
+  if (event.source === window.parent) {
+    if(location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+      console.debug('[Sandbox] Message from parent:', event.data)
+    }
+    // Validate that messages from parent come from the expected host origin.
+    if (EXPECTED_HOST_ORIGIN && event.origin !== EXPECTED_HOST_ORIGIN) {
+      console.error(
+        "[Sandbox] Rejecting message from unexpected origin:",
+        event.origin,
+        "expected:",
+        EXPECTED_HOST_ORIGIN
+      );
+      return;
+    }
+
+    if (event.data && event.data.method === RESOURCE_READY_NOTIFICATION) {
+      // `ownedApp` is set by the trusted host (origin-validated above) only for
+      // Archestra-owned apps, whose envelope already carries the platform CSP.
+      const { html, sandbox, csp, permissions, ownedApp } = event.data.params;
+      if (typeof sandbox === "string") {
+        // Only allow known-safe sandbox tokens to prevent a compromised MCP
+        // server from injecting e.g. allow-top-navigation to escape the sandbox.
+        const ALLOWED_SANDBOX_TOKENS = new Set([
+          "allow-scripts", "allow-same-origin", "allow-forms",
+          "allow-popups", "allow-downloads", "allow-modals",
+        ]);
+        const filtered = sandbox.split(" ").filter(t => ALLOWED_SANDBOX_TOKENS.has(t)).join(" ");
+        inner.setAttribute("sandbox", filtered);
+      }
+      // Set Permission Policy allow attribute if permissions are requested
+      const allowAttribute = buildAllowAttribute(permissions);
+      if (allowAttribute) {
+        inner.setAttribute("allow", allowAttribute);
+      }
+      if (typeof html === "string") {
+        // Inject CSP as meta tag + violation listener into the HTML (Inspector pattern).
+        // One code path for all modes — CSP is always in the HTML, not HTTP headers.
+        const processedHtml = injectCSP(html, buildCSP(csp), ownedApp === true);
+
+        if (IS_OPAQUE_ORIGIN) {
+          // Opaque origin (production fallback): use srcdoc
+          inner.srcdoc = processedHtml;
+        } else {
+          // Cross-origin (localhost swap or domain mode): document.write
+          try {
+            const doc = inner.contentDocument || inner.contentWindow?.document;
+            if (doc) {
+              doc.open();
+              doc.write(processedHtml);
+              doc.close();
+            } else {
+              inner.srcdoc = processedHtml;
+            }
+          } catch {
+            inner.srcdoc = processedHtml;
+          }
+        }
+      }
+    } else {
+      if (inner && inner.contentWindow) {
+        // With opaque origin, postMessage targetOrigin cannot be a specific origin.
+        // Use "*" — safe because the inner iframe is sandboxed.
+        inner.contentWindow.postMessage(event.data, IS_OPAQUE_ORIGIN ? "*" : OWN_ORIGIN);
+      }
+    }
+  } else if (event.source === inner.contentWindow) {
+    // Message filtering (Inspector pattern): only forward JSON-RPC 2.0 messages,
+    // CSP violations, and runtime-error diagnostics. Prevents noise from browser
+    // extensions or widget internals from reaching PostMessageTransport and
+    // causing parse errors.
+    var data = event.data;
+    if (data && typeof data === "object") {
+      if (
+        data.jsonrpc === "2.0" ||
+        data.type === "mcp-apps:csp-violation" ||
+        data.type === "mcp-apps:runtime-error" ||
+        data.type === "mcp-apps:screenshot"
+      ) {
+        window.parent.postMessage(data, EXPECTED_HOST_ORIGIN || "*");
+      }
+    }
+  }
+});
+
+// Notify the Host that the Sandbox is ready to receive view HTML.
+// Use specific origin when available; fall back to "*" in open/dev mode.
+  window.parent.postMessage({
+    jsonrpc: "2.0",
+    method: PROXY_READY_NOTIFICATION,
+    params: {},
+  }, EXPECTED_HOST_ORIGIN || "*");
+</script>
+</body>
+</html>

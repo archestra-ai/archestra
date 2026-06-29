@@ -1,0 +1,1 @@
+ALTER TABLE "organization_role" ALTER COLUMN "permission" SET DATA TYPE text;

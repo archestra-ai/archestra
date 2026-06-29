@@ -1,0 +1,53 @@
+name: Load MCP Server Base Image
+description: |
+  Loads the MCP server base Docker image from a registry or a co-located artifact.
+
+inputs:
+  source:
+    description: "Where to load the image from: registry or artifact"
+    required: false
+    default: artifact
+  image-tag:
+    description: "MCP server base image tag to pull or report"
+    required: false
+    default: ""
+  artifact-name:
+    description: "Artifact name to download when source=artifact"
+    required: false
+    default: mcp-server-base-docker-image
+
+outputs:
+  image-tag:
+    description: "The resolved MCP server base image tag"
+    value: ${{ steps.resolve-tag.outputs.tag }}
+
+runs:
+  using: composite
+  steps:
+    - name: Pull MCP server base image from registry
+      if: ${{ inputs.source == 'registry' }}
+      shell: bash
+      env:
+        MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.image-tag }}
+      run: docker pull "${MCP_SERVER_BASE_IMAGE_TAG}"
+
+    - name: Download MCP server base image artifact
+      if: ${{ inputs.source == 'artifact' }}
+      uses: ./.github/actions/github-download-artifact
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: /tmp
+
+    - name: Load MCP server base Docker image
+      if: ${{ inputs.source == 'artifact' }}
+      shell: bash
+      run: |
+        gunzip -c /tmp/mcp-server-base-image.tar.gz | docker load
+
+    - name: Resolve MCP server base image tag
+      id: resolve-tag
+      shell: bash
+      env:
+        MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.image-tag }}
+      run: |
+        echo "tag=${MCP_SERVER_BASE_IMAGE_TAG}" >> "$GITHUB_OUTPUT"

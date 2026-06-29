@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "chat_error_support_message" text;

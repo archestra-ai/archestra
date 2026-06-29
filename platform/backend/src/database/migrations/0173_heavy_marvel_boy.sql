@@ -1,0 +1,2 @@
+ALTER TABLE "tasks" ADD COLUMN "periodic" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "tasks_unique_periodic_idx" ON "tasks" USING btree ("task_type") WHERE "tasks"."periodic" = true AND "tasks"."status" IN ('pending', 'processing');

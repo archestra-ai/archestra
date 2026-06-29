@@ -1,0 +1,304 @@
+suite: test archestra platform -- MCP NetworkPolicy (SSRF Protection)
+templates:
+  - mcp-network-policy.yaml
+values:
+  - ../values.yaml
+tests:
+  # Creation / toggle tests
+  - it: "should not create NetworkPolicy by default (create: false)"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create NetworkPolicy when create is true
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: NetworkPolicy
+
+  # Metadata tests
+  - it: should have correct name suffix
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: -mcp-server-ssrf-protection$
+
+  - it: should include release name in the name
+    release:
+      name: my-release
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-release-archestra-platform-mcp-server-ssrf-protection
+
+  - it: should have standard labels
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - isNotEmpty:
+          path: metadata.labels
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: mcp-network-policy
+
+  - it: should use orchestrator namespace when configured
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+      archestra.orchestrator.kubernetes.namespace: "custom-mcp-ns"
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-mcp-ns
+
+  - it: should use release namespace when orchestrator namespace is not set
+    release:
+      namespace: my-namespace
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+      archestra.orchestrator.kubernetes.namespace: ""
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: my-namespace
+
+  # Pod selector tests
+  - it: should target pods with app=mcp-server label
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - equal:
+          path: spec.podSelector.matchLabels.app
+          value: mcp-server
+
+  # Policy type tests
+  - it: should only apply Egress policy type
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Egress
+
+  # DNS egress rule tests
+  - it: should allow DNS resolution on UDP port 53
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - contains:
+          path: spec.egress[0].ports
+          content:
+            protocol: UDP
+            port: 53
+
+  - it: should allow DNS resolution on TCP port 53
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - contains:
+          path: spec.egress[0].ports
+          content:
+            protocol: TCP
+            port: 53
+
+  # IPv4 egress rule tests
+  - it: should allow IPv4 egress to 0.0.0.0/0 with private range exceptions
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - equal:
+          path: spec.egress[1].to[0].ipBlock.cidr
+          value: 0.0.0.0/0
+
+  - it: should block RFC 1918 10.0.0.0/8
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 10.0.0.0/8
+
+  - it: should block RFC 1918 172.16.0.0/12
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 172.16.0.0/12
+
+  - it: should block RFC 1918 192.168.0.0/16
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 192.168.0.0/16
+
+  - it: should block link-local / cloud metadata 169.254.0.0/16
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 169.254.0.0/16
+
+  - it: should block carrier-grade NAT 100.64.0.0/10
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 100.64.0.0/10
+
+  - it: should block loopback 127.0.0.0/8
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 127.0.0.0/8
+
+  - it: should block 0.0.0.0/32 (treated as localhost by some HTTP libraries)
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 0.0.0.0/32
+
+  - it: should have exactly 7 default denied IPv4 CIDRs when no additional CIDRs configured
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - lengthEqual:
+          path: spec.egress[1].to[0].ipBlock.except
+          count: 7
+
+  # IPv6 egress rule tests
+  - it: should allow IPv6 egress to ::/0 with private range exceptions
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - equal:
+          path: spec.egress[2].to[0].ipBlock.cidr
+          value: "::/0"
+
+  - it: should block IPv6 loopback ::1/128
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - contains:
+          path: spec.egress[2].to[0].ipBlock.except
+          content: "::1/128"
+
+  - it: should block IPv6 unique local addresses fc00::/7
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - contains:
+          path: spec.egress[2].to[0].ipBlock.except
+          content: "fc00::/7"
+
+  - it: should block IPv6 link-local fe80::/10
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - contains:
+          path: spec.egress[2].to[0].ipBlock.except
+          content: "fe80::/10"
+
+  - it: should have exactly 3 denied IPv6 CIDRs
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - lengthEqual:
+          path: spec.egress[2].to[0].ipBlock.except
+          count: 3
+
+  # additionalDeniedCidrs tests (IPv4 only)
+  - it: should include additional denied CIDRs when configured
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+      archestra.orchestrator.kubernetes.networkPolicy.additionalDeniedCidrs:
+        - 198.51.100.0/24
+        - 203.0.113.0/24
+    asserts:
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 198.51.100.0/24
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 203.0.113.0/24
+
+  - it: should have 9 denied IPv4 CIDRs when 2 additional CIDRs are configured
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+      archestra.orchestrator.kubernetes.networkPolicy.additionalDeniedCidrs:
+        - 198.51.100.0/24
+        - 203.0.113.0/24
+    asserts:
+      - lengthEqual:
+          path: spec.egress[1].to[0].ipBlock.except
+          count: 9
+
+  # additionalEgressRules tests
+  - it: should have exactly 3 egress rules by default (DNS + IPv4 + IPv6)
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 3
+
+  - it: should include additional egress rules when configured
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+      archestra.orchestrator.kubernetes.networkPolicy.additionalEgressRules:
+        - to:
+            - ipBlock:
+                cidr: 10.0.50.0/24
+          ports:
+            - protocol: TCP
+              port: 443
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 4
+      - contains:
+          path: spec.egress[3].to
+          content:
+            ipBlock:
+              cidr: 10.0.50.0/24
+      - contains:
+          path: spec.egress[3].ports
+          content:
+            protocol: TCP
+            port: 443
+
+  - it: should support multiple additional egress rules
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+      archestra.orchestrator.kubernetes.networkPolicy.additionalEgressRules:
+        - to:
+            - ipBlock:
+                cidr: 10.0.50.0/24
+          ports:
+            - protocol: TCP
+              port: 443
+        - to:
+            - ipBlock:
+                cidr: 10.0.60.0/24
+          ports:
+            - protocol: TCP
+              port: 8080
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 5

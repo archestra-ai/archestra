@@ -1132,6 +1132,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ],
       });
 
+      // Re-enforce the trusted-image-registry gate BEFORE swapping credentials.
+      // A server whose catalog image is untrusted/unapproved (e.g. the image was
+      // edited after install) is held pending approval, so reject the whole
+      // reauth here rather than swap the secret and then skip the pod restart —
+      // which would leave the pod on stale credentials while reporting success.
+      if (catalogItem) {
+        await assertInstallAllowedOrBlock({ catalogItem, organizationId });
+      }
+
       // Resolve the new secret ID: either provided directly, or create from raw credentials
       let newSecretId = providedSecretId;
 
@@ -1311,49 +1320,21 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // are keyed by server ID and can otherwise keep reusing the stale auth/session.
       await mcpClient.invalidateConnectionsForServer(id);
 
-      // For local servers, trigger pod restart to pick up new credentials
+      // For local servers, trigger pod restart to pick up new credentials. The
+      // trusted-image-registry gate already ran above (before the credential
+      // swap), so a blocked image never reaches this restart.
       if (mcpServer.serverType === "local") {
-        // Re-enforce the trusted-image-registry gate: don't roll the pod onto
-        // the catalog's current image if it became untrusted/unapproved (e.g.
-        // the image was edited after install). The credential swap above stands;
-        // the running pod keeps its current image until the new one is approved.
-        const reauthCatalogItem = mcpServer.catalogId
-          ? await InternalMcpCatalogModel.findById(mcpServer.catalogId, {
-              expandSecrets: false,
-            })
-          : null;
-        let blockedByImagePolicy = false;
-        if (reauthCatalogItem) {
-          try {
-            await assertInstallAllowedOrBlock({
-              catalogItem: reauthCatalogItem,
-              organizationId,
-            });
-          } catch (error) {
-            if (error instanceof ApiError) {
-              blockedByImagePolicy = true;
-              logger.warn(
-                { mcpServerId: id, catalogId: mcpServer.catalogId },
-                "Skipped pod restart after re-authentication: image is pending admin approval",
-              );
-            } else {
-              throw error;
-            }
-          }
-        }
-        if (!blockedByImagePolicy) {
-          try {
-            await McpServerRuntimeManager.restartServer(id);
-            logger.info(
-              { mcpServerId: id },
-              "Triggered pod restart after re-authentication",
-            );
-          } catch (error) {
-            logger.warn(
-              { err: error, mcpServerId: id },
-              "Failed to restart pod after re-authentication (may not be running)",
-            );
-          }
+        try {
+          await McpServerRuntimeManager.restartServer(id);
+          logger.info(
+            { mcpServerId: id },
+            "Triggered pod restart after re-authentication",
+          );
+        } catch (error) {
+          logger.warn(
+            { err: error, mcpServerId: id },
+            "Failed to restart pod after re-authentication (may not be running)",
+          );
         }
       }
 

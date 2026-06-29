@@ -1486,6 +1486,227 @@ describe("mcp server inspect route", () => {
     await drainPendingReinstall(mcpServer.id);
   });
 
+  // A whitespace-only submission for a required secret passes validation via
+  // the existing-bag fallback; it must not then overwrite the stored secret
+  // with whitespace, leaving the restarted server with broken credentials.
+  test("reinstall ignores a whitespace-only secret submission and keeps the stored secret", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Reinstall Whitespace Secret",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "API_SECRET",
+            type: "secret",
+            promptOnInstallation: true,
+            required: true,
+          },
+        ],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    const existingBag = await secretManager().createSecret(
+      { API_SECRET: "valid-credential" },
+      `${mcpServer.name}-existing-bag`,
+    );
+    await db
+      .update(schema.mcpServersTable)
+      .set({ secretId: existingBag.id })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: { environmentValues: { API_SECRET: "   " } },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const [updatedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    const storedSecret = await secretManager().getSecret(
+      updatedServer.secretId!,
+    );
+    expect(storedSecret?.secret).toMatchObject({
+      API_SECRET: "valid-credential",
+    });
+
+    await drainPendingReinstall(mcpServer.id);
+  });
+
+  // The plain-env column is rebuilt from the catalog's current plain prompted
+  // keys, so a var removed from the catalog or flipped to secret-typed can't
+  // survive as stale plaintext in the column (and thus in the pod env via the
+  // unconditional overlay).
+  test("reinstall prunes column keys no longer plain-prompted in the catalog", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Reinstall Prune Stale Column",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "KEPT_PLAIN",
+            type: "plain_text",
+            promptOnInstallation: true,
+            required: false,
+          },
+          {
+            key: "FLIPPED_TO_SECRET",
+            type: "secret",
+            promptOnInstallation: true,
+            required: false,
+          },
+        ],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await db
+      .update(schema.mcpServersTable)
+      .set({
+        environmentValues: {
+          KEPT_PLAIN: "old",
+          FLIPPED_TO_SECRET: "stale-plaintext",
+          REMOVED_FROM_CATALOG: "orphan",
+        },
+      })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: { environmentValues: { KEPT_PLAIN: "new" } },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const [updatedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+    expect(updatedServer?.environmentValues).toEqual({ KEPT_PLAIN: "new" });
+
+    await drainPendingReinstall(mcpServer.id);
+  });
+
+  // Required-env validation runs even when the reinstall body is empty, so a
+  // newly-added required var that nothing satisfies fails fast with 400
+  // instead of only breaking later at pod start.
+  test("reinstall with an empty body 400s when a newly-added required env var is unsatisfied", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Reinstall Empty Body Missing Required",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "NEWLY_REQUIRED",
+            type: "plain_text",
+            promptOnInstallation: true,
+            required: true,
+          },
+        ],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await db
+      .update(schema.mcpServersTable)
+      .set({ environmentValues: {} })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: { environmentValues: {} },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("NEWLY_REQUIRED");
+  });
+
+  // The hoisted validation must not over-reject: an empty body still succeeds
+  // when the required var is already satisfied on the install row.
+  test("reinstall with an empty body succeeds when required env vars are already on the row", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Reinstall Empty Body Satisfied",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "ALREADY_SET",
+            type: "plain_text",
+            promptOnInstallation: true,
+            required: true,
+          },
+        ],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await db
+      .update(schema.mcpServersTable)
+      .set({ environmentValues: { ALREADY_SET: "from-original-install" } })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: { environmentValues: {} },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    await drainPendingReinstall(mcpServer.id);
+  });
+
   test("installs a protected remote MCP server with an exchanged enterprise-managed credential on first discovery", async ({
     makeAccount,
     makeIdentityProvider,

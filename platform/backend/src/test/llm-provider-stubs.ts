@@ -6,6 +6,7 @@ export interface OpenAiStubOptions {
   interruptAtChunk?: number;
   throwAtChunk?: number;
   throwOnReturnAfterUsage?: boolean;
+  usageOnlyStream?: boolean;
 }
 
 export interface AnthropicStubOptions {
@@ -160,69 +161,92 @@ export function createGeminiTestClient(options: GeminiStubOptions = {}) {
 }
 
 function createOpenAiStream(options: OpenAiStubOptions) {
-  const chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = [
-    {
-      id: "chatcmpl-test-openai",
-      object: "chat.completion.chunk",
-      created: Math.floor(Date.now() / 1000),
-      model: "gpt-4o",
-      choices: [
-        {
-          index: 0,
-          delta: { role: "assistant", content: "" },
-          finish_reason: null,
-          logprobs: null,
-        },
-      ],
-    },
-    {
-      id: "chatcmpl-test-openai",
-      object: "chat.completion.chunk",
-      created: Math.floor(Date.now() / 1000),
-      model: "gpt-4o",
-      choices: [
-        {
-          index: 0,
-          delta: { content: "How can" },
-          finish_reason: null,
-          logprobs: null,
-        },
-      ],
-    },
-    {
-      id: "chatcmpl-test-openai",
-      object: "chat.completion.chunk",
-      created: Math.floor(Date.now() / 1000),
-      model: "gpt-4o",
-      choices: [
-        {
-          index: 0,
-          delta: { content: " I help you?" },
-          finish_reason: null,
-          logprobs: null,
-        },
-      ],
-    },
-    {
-      id: "chatcmpl-test-openai",
-      object: "chat.completion.chunk",
-      created: Math.floor(Date.now() / 1000),
-      model: "gpt-4o",
-      choices: [
-        {
-          index: 0,
-          delta: {},
-          finish_reason: "stop",
-          logprobs: null,
-        },
-      ],
-      usage: {
-        prompt_tokens: 12,
-        completion_tokens: 10,
-        total_tokens: 22,
-      },
-    },
-  ];
+  const chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] =
+    options.usageOnlyStream
+      ? [
+          {
+            id: "chatcmpl-test-openai",
+            object: "chat.completion.chunk",
+            created: Math.floor(Date.now() / 1000),
+            model: "gpt-4o",
+            choices: [
+              {
+                index: 0,
+                delta: {},
+                finish_reason: "stop",
+                logprobs: null,
+              },
+            ],
+            usage: {
+              prompt_tokens: 12,
+              completion_tokens: 10,
+              total_tokens: 22,
+            },
+          },
+        ]
+      : [
+          {
+            id: "chatcmpl-test-openai",
+            object: "chat.completion.chunk",
+            created: Math.floor(Date.now() / 1000),
+            model: "gpt-4o",
+            choices: [
+              {
+                index: 0,
+                delta: { role: "assistant", content: "" },
+                finish_reason: null,
+                logprobs: null,
+              },
+            ],
+          },
+          {
+            id: "chatcmpl-test-openai",
+            object: "chat.completion.chunk",
+            created: Math.floor(Date.now() / 1000),
+            model: "gpt-4o",
+            choices: [
+              {
+                index: 0,
+                delta: { content: "How can" },
+                finish_reason: null,
+                logprobs: null,
+              },
+            ],
+          },
+          {
+            id: "chatcmpl-test-openai",
+            object: "chat.completion.chunk",
+            created: Math.floor(Date.now() / 1000),
+            model: "gpt-4o",
+            choices: [
+              {
+                index: 0,
+                delta: { content: " I help you?" },
+                finish_reason: null,
+                logprobs: null,
+              },
+            ],
+          },
+          {
+            id: "chatcmpl-test-openai",
+            object: "chat.completion.chunk",
+            created: Math.floor(Date.now() / 1000),
+            model: "gpt-4o",
+            choices: [
+              {
+                index: 0,
+                delta: {},
+                finish_reason: "stop",
+                logprobs: null,
+              },
+            ],
+            usage: {
+              prompt_tokens: 12,
+              completion_tokens: 10,
+              total_tokens: 22,
+            },
+          },
+        ];
 
   return {
     [Symbol.asyncIterator]() {

@@ -1359,11 +1359,10 @@ async function handleStreaming<
   } catch (error) {
     const headersSent = reply.raw.headersSent === true;
     const errorMessage = provider.extractErrorMessage(error);
-    if (headersSent) {
-      streamErrorMessage = errorMessage;
-    }
+    streamErrorMessage = errorMessage;
+    const usage = streamAdapter.state.usage;
 
-    if (headersSent && !streamAdapter.state.usage) {
+    if (headersSent && !usage) {
       try {
         logger.info(
           { profileId: agent.id, errorMessage },

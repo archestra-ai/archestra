@@ -59,8 +59,6 @@ import {
   ApiError,
   type DualLlmAnalysis,
   type InteractionAuthMethod,
-  type InteractionRequest,
-  type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
@@ -80,6 +78,7 @@ import {
   virtualKeyRateLimiter,
 } from "./llm-proxy-auth";
 import {
+  buildErrorInteractionRecord,
   buildInteractionRecord,
   calculateInteractionCosts,
   handleError,
@@ -981,28 +980,27 @@ export async function handleLLMProxy<
         { profileId: resolvedAgent.id, errorMessage },
         "Persisting error interaction record",
       );
-      await InteractionModel.create({
-        profileId: resolvedAgent.id,
-        externalAgentId,
-        executionId,
-        userId,
-        virtualKeyId,
-        passthroughVirtualKeyId,
-        sessionId,
-        sessionSource,
-        source,
-        authMethod,
-        authenticatedAppId: authenticatedApp?.id,
-        authenticatedAppName: authenticatedApp?.name,
-        type: provider.interactionType,
-        request: requestAdapter.getOriginalRequest() as InteractionRequest,
-        processedRequest: null,
-        response: { error: errorMessage } as unknown as InteractionResponse,
-        model: requestAdapter.getModel(),
-        baselineModel: requestAdapter.getModel(),
-        inputTokens: 0,
-        outputTokens: 0,
-      });
+      await InteractionModel.create(
+        buildErrorInteractionRecord({
+          agent: resolvedAgent,
+          externalAgentId,
+          authMethod,
+          authenticatedApp,
+          executionId,
+          userId,
+          virtualKeyId,
+          passthroughVirtualKeyId,
+          sessionId,
+          sessionSource,
+          source,
+          providerType: provider.interactionType,
+          request: requestAdapter.getOriginalRequest(),
+          processedRequest: null,
+          errorMessage,
+          actualModel: requestAdapter.getModel(),
+          baselineModel: requestAdapter.getModel(),
+        }),
+      );
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -1358,6 +1356,44 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
+    if (reply.raw.headersSent === true && !streamAdapter.state.usage) {
+      try {
+        const errorMessage = provider.extractErrorMessage(error);
+        logger.info(
+          { profileId: agent.id, errorMessage },
+          "Persisting streaming error interaction record",
+        );
+        await InteractionModel.create(
+          buildErrorInteractionRecord({
+            agent,
+            externalAgentId,
+            authMethod,
+            authenticatedApp,
+            executionId,
+            userId,
+            virtualKeyId,
+            passthroughVirtualKeyId,
+            sessionId,
+            sessionSource,
+            source,
+            providerType: provider.interactionType,
+            request: originalRequest,
+            processedRequest: request,
+            errorMessage,
+            actualModel,
+            baselineModel,
+            dualLlmAnalyses,
+            unsafeContextBoundary,
+          }),
+        );
+      } catch (interactionError) {
+        logger.error(
+          { err: interactionError, profileId: agent.id },
+          "Failed to create streaming error interaction record",
+        );
+      }
+    }
+
     return handleError(
       error,
       reply,

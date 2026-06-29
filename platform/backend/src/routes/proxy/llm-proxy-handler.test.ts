@@ -30,6 +30,7 @@ import {
   createAnthropicTestClient,
   createGeminiTestClient,
   createOpenAiTestClient,
+  type OpenAiStubOptions,
 } from "@/test/llm-provider-stubs";
 import type { Agent } from "@/types";
 import { ApiError } from "@/types";
@@ -111,7 +112,7 @@ import openAiProxyRoutes from "./routes/openai";
 describe("LLM Proxy Handler Prometheus Metrics", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
-  let openAiStubOptions: { interruptAtChunk?: number };
+  let openAiStubOptions: OpenAiStubOptions;
   let anthropicStubOptions: {
     includeToolUse?: boolean;
     interruptAtChunk?: number;
@@ -236,6 +237,51 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
 
       // TTFT and tokens/sec histograms may be skipped because the test stub
       // returns data immediately (TTFT = 0, which is invalid).
+    });
+
+    test("records an interaction when streaming fails after headers before usage", async () => {
+      // Chunk 1 writes content and commits SSE headers. Throwing at chunk 2
+      // simulates a provider/network failure before the trailing usage chunk.
+      openAiStubOptions.throwAtChunk = 2;
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain("event: error");
+      expect(response.body).toContain(
+        "Simulated OpenAI stream failure before usage",
+      );
+
+      const interactions = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+
+      expect(interactions).toHaveLength(1);
+      expect(interactions[0].inputTokens).toBe(0);
+      expect(interactions[0].outputTokens).toBe(0);
+      expect(interactions[0].response).toEqual({
+        error: "Simulated OpenAI stream failure before usage",
+      });
+      expect(interactions[0].model).toBe("gpt-4o");
+      expect(interactions[0].baselineModel).toBe("gpt-4o");
+      expect(interactions[0].processedRequest).toMatchObject({
+        model: "gpt-4o",
+        stream: true,
+      });
     });
 
     test("non-streaming request increments cost metrics", async () => {

@@ -212,6 +212,65 @@ export function buildInteractionRecord(params: {
 }
 
 /**
+ * Build a zero-token interaction record for provider/proxy failures.
+ * Callers intentionally do not report token/cost metrics for this path because
+ * no provider usage has been observed.
+ */
+export function buildErrorInteractionRecord(params: {
+  agent: Agent;
+  externalAgentId?: string;
+  authMethod?: InteractionAuthMethod;
+  authenticatedApp?: {
+    id: string;
+    name: string;
+    clientId: string;
+  };
+  executionId?: string;
+  userId?: string;
+  virtualKeyId?: string;
+  passthroughVirtualKeyId?: string;
+  sessionId?: string | null;
+  sessionSource?: SessionSource;
+  source?: InteractionSource | null;
+  providerType: SupportedProviderDiscriminator;
+  request: unknown;
+  processedRequest?: unknown;
+  errorMessage: string;
+  actualModel: string;
+  baselineModel: string;
+  dualLlmAnalyses?: DualLlmAnalysis[];
+  unsafeContextBoundary?: UnsafeContextBoundary;
+}): InsertInteraction {
+  return {
+    profileId: params.agent.id,
+    externalAgentId: params.externalAgentId,
+    authMethod: params.authMethod,
+    authenticatedAppId: params.authenticatedApp?.id,
+    authenticatedAppName: params.authenticatedApp?.name,
+    executionId: params.executionId,
+    userId: params.userId,
+    virtualKeyId: params.virtualKeyId,
+    passthroughVirtualKeyId: params.passthroughVirtualKeyId,
+    sessionId: params.sessionId,
+    sessionSource: params.sessionSource,
+    source: params.source,
+    type: params.providerType,
+    request: params.request as InteractionRequest,
+    processedRequest:
+      params.processedRequest === undefined
+        ? null
+        : (params.processedRequest as InteractionRequest),
+    response: { error: params.errorMessage } as unknown as InteractionResponse,
+    dualLlmAnalyses: params.dualLlmAnalyses,
+    unsafeContextBoundary: params.unsafeContextBoundary,
+    model: params.actualModel,
+    baselineModel: params.baselineModel,
+    inputTokens: 0,
+    outputTokens: 0,
+  };
+}
+
+/**
  * Record OTEL spans and Prometheus metrics for blocked tool calls.
  * Used by both streaming and non-streaming paths when tool invocation
  * policies refuse tool calls.

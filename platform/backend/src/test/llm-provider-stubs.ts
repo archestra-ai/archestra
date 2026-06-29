@@ -5,6 +5,7 @@ import type OpenAI from "openai";
 export interface OpenAiStubOptions {
   interruptAtChunk?: number;
   throwAtChunk?: number;
+  throwOnReturnAfterUsage?: boolean;
 }
 
 export interface AnthropicStubOptions {
@@ -245,6 +246,13 @@ function createOpenAiStream(options: OpenAiStubOptions) {
 
           if (index < chunks.length) {
             return { done: false, value: chunks[index++] };
+          }
+
+          return { done: true, value: undefined };
+        },
+        async return() {
+          if (options.throwOnReturnAfterUsage && index >= chunks.length) {
+            throw new Error("Simulated OpenAI stream failure after usage");
           }
 
           return { done: true, value: undefined };

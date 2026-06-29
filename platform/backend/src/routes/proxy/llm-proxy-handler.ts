@@ -1070,6 +1070,7 @@ async function handleStreaming<
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
   let streamCompleted = false;
+  let streamErrorMessage: string | undefined;
   const streamedEventIndices = new Set<number>();
   // Once a blocking tool is encountered, buffer all subsequent tool call chunks
   // to prevent streaming data for tools that appear after a blocked tool.
@@ -1356,9 +1357,14 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
-    if (reply.raw.headersSent === true && !streamAdapter.state.usage) {
+    const headersSent = reply.raw.headersSent === true;
+    const errorMessage = provider.extractErrorMessage(error);
+    if (headersSent) {
+      streamErrorMessage = errorMessage;
+    }
+
+    if (headersSent && !streamAdapter.state.usage) {
       try {
-        const errorMessage = provider.extractErrorMessage(error);
         logger.info(
           { profileId: agent.id, errorMessage },
           "Persisting streaming error interaction record",
@@ -1486,7 +1492,9 @@ async function handleStreaming<
             providerType: provider.interactionType,
             request: originalRequest,
             processedRequest: request,
-            response: streamAdapter.toProviderResponse(),
+            response: streamErrorMessage
+              ? { error: streamErrorMessage }
+              : streamAdapter.toProviderResponse(),
             actualModel,
             baselineModel,
             usage,

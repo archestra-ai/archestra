@@ -27,6 +27,7 @@ export async function recomputeConnectorPermissions(
     }
 
     const metadata = doc.permissionSyncMetadata as {
+      provider: string;
       rawPermissions?: {
         isPublic: boolean;
         users?: string[];
@@ -54,7 +55,8 @@ export async function recomputeConnectorPermissions(
     if (aclChanged || statusChanged) {
       const nextStatus = resolved.complete ? "synced" : "skipped_unresolvable";
       const nextMetadata = {
-        ...metadata,
+        provider: metadata.provider,
+        rawPermissions: metadata.rawPermissions as Record<string, unknown> | undefined,
         resolvedEmails: resolved.resolvedEmails,
         skippedGroups: resolved.skippedGroups,
         lastSyncedAt: new Date().toISOString(),

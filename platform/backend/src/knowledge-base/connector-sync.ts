@@ -12,6 +12,7 @@ import * as metrics from "@/observability/metrics";
 import { taskQueueService } from "@/task-queue";
 import type {
   AclEntry,
+  Connector,
   ConnectorDocument,
   KnowledgeBaseConnector,
   KnowledgeSourceVisibility,
@@ -58,7 +59,7 @@ class ConnectorSyncService {
     ]);
 
     // Get the connector implementation
-    const connectorImpl = getConnector(connector.connectorType);
+    const connectorImpl = getConnector(connector.connectorType) as BaseConnector;
 
     // Interrupt any stale "running" runs left by previous attempts
     const interrupted =
@@ -156,7 +157,7 @@ class ConnectorSyncService {
         credentials,
         checkpoint: connector.checkpoint as Record<string, unknown> | null,
         embeddingInputModalities,
-      });
+      } as Parameters<Connector["sync"]>[0]);
 
       for await (const batch of syncGenerator) {
         const ingestedDocumentIds: string[] = [];
@@ -424,10 +425,9 @@ class ConnectorSyncService {
     }
 
     const credentials = await resolveConnectorCredentials(connector);
-    const connectorImpl = getConnector(connector.connectorType);
+    const connectorImpl = getConnector(connector.connectorType) as BaseConnector;
 
-    // biome-ignore lint/suspicious/noExplicitAny: syncPermissions is optional and not defined on the base interface
-    const syncPermissionsFn = (connectorImpl as any).syncPermissions;
+    const syncPermissionsFn = connectorImpl.syncPermissions;
     if (typeof syncPermissionsFn !== "function") {
       return { status: "not_supported", processed: 0, updated: 0, failed: 0 };
     }
@@ -577,8 +577,14 @@ class ConnectorSyncService {
 
     let targetAcl = acl;
     let syncStatus: "synced" | "skipped_unresolvable" = "synced";
-    // biome-ignore lint/suspicious/noExplicitAny: syncMetadata is a JSON record with arbitrary fields
-    let syncMetadata: Record<string, any> | null = null;
+    let syncMetadata: {
+      provider: string;
+      rawPermissions?: Record<string, unknown>;
+      resolvedEmails?: string[];
+      skippedGroups?: string[];
+      lastSyncedAt?: string;
+      error?: string;
+    } | null = null;
 
     if (visibility === "auto-sync-permissions") {
       if (!doc.permissions) {
@@ -615,7 +621,10 @@ class ConnectorSyncService {
       const materializer = new AclMaterializer(
         new IdentityResolutionService(organizationId),
       );
-      const resolved = await materializer.materialize(doc.permissions);
+      const resolved = await materializer.materialize({
+        ...doc.permissions,
+        isPublic: doc.permissions.isPublic ?? false,
+      });
 
       syncMetadata = {
         provider: connector.connectorType,

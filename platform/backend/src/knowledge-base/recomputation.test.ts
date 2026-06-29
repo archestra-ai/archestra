@@ -15,7 +15,7 @@ describe("recomputeConnectorPermissions", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "org",
+      visibility: "org-wide",
     });
 
     // Create a document with rawPermissions
@@ -260,7 +260,7 @@ describe("handleTeamOrGroupMappingChange", () => {
 
     // Create a non-auto-sync connector with a document
     const orgConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "org",
+      visibility: "org-wide",
     });
 
     const docOrg = await KbDocumentModel.create({

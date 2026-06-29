@@ -132,7 +132,10 @@ export function ConnectorDocumentsTable({
         header: "Permission Sync",
         cell: ({ row }) => {
           const status = row.original.permissionSyncStatus;
-          const metadata = row.original.permissionSyncMetadata;
+          const metadata = row.original.permissionSyncMetadata as {
+            skippedGroups?: string[];
+            error?: string;
+          } | null;
 
           if (!status)
             return <span className="text-sm text-muted-foreground">-</span>;

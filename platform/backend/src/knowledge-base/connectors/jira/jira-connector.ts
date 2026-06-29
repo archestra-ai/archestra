@@ -274,7 +274,7 @@ export class JiraConnector extends BaseConnector {
       }
 
       // 2. If the issue has a security level, restrict it further
-      const securityLevel = document.metadata?.securityLevel;
+      const securityLevel = (document.metadata as { securityLevel?: { id?: string } } | null | undefined)?.securityLevel;
       if (securityLevel?.id) {
         try {
           // biome-ignore lint/suspicious/noExplicitAny: API client response has dynamic/untyped security levels payload

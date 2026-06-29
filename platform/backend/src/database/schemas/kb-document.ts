@@ -43,6 +43,7 @@ const kbDocumentsTable = pgTable(
       resolvedEmails?: string[];
       skippedGroups?: string[];
       lastSyncedAt?: string;
+      error?: string;
     }>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

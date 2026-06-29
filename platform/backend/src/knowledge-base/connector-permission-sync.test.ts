@@ -68,7 +68,7 @@ describe("ConnectorPermissionSync", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "public",
+      visibility: "org-wide",
     });
 
     const result = await connectorSyncService.executePermissionSync(

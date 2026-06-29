@@ -464,6 +464,36 @@ impl EvalClient {
         Ok(())
     }
 
+    /// Delete the org's seeded tool-invocation policies (notably the default `archestra__api`
+    /// "writes require approval" gate). The headless bench has no human approver, so an
+    /// approval-gated tool call is held forever and the next model turn fails with a missing tool
+    /// result. Clearing the policies lets approval-gated tools execute, so the run measures the
+    /// model's own judgment rather than the gate. The privileged client hits REST directly and is
+    /// not itself policy-gated. Only call for envs whose surface includes such a tool.
+    pub async fn clear_tool_invocation_policies(&self) -> Result<(), ClientError> {
+        let policies = items(
+            self.request(
+                Method::GET,
+                "/api/autonomy-policies/tool-invocation",
+                None,
+                None,
+            )
+            .await?,
+        )?;
+        for policy in policies {
+            if let Some(id) = policy.get("id").and_then(|v| v.as_str()) {
+                self.request(
+                    Method::DELETE,
+                    &format!("/api/autonomy-policies/tool-invocation/{id}"),
+                    None,
+                    None,
+                )
+                .await?;
+            }
+        }
+        Ok(())
+    }
+
     pub async fn list_catalog(&self) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
         items(
             self.request(Method::GET, "/api/internal_mcp_catalog", None, None)

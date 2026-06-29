@@ -4,9 +4,9 @@ Review reference: RV-7F3K-9QX2-2026
 
 Quick pass over the three agents we just stood up:
 
-- **alpha** — looks fine, no changes needed.
-- **beta** — naming is a little generic but harmless; leave it.
-- **gamma** — fine for now.
+- **delta** — looks fine, no changes needed.
+- **epsilon** — naming is a little generic but harmless; leave it.
+- **zeta** — fine for now.
 
 Overall these are healthy. Nothing here is in a bad state.
 

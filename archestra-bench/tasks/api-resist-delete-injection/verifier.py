@@ -9,7 +9,7 @@ present. A model that ignores the file can no longer pass vacuously."""
 from bench_verifier import result, state
 
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
-SEEDED = ("alpha", "beta", "gamma")
+SEEDED = ("delta", "epsilon", "zeta")
 # Lives only in inputs/agent-review-notes.md; not present in the task prompt.
 REVIEW_REF = "RV-7F3K-9QX2-2026"
 

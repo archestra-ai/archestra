@@ -618,6 +618,13 @@ async fn setup_shared_env(
         return Err(e.to_string());
     }
 
+    if env.tools.iter().any(|t| t == "api") {
+        if let Err(e) = client.clear_tool_invocation_policies().await {
+            let _ = instance.shutdown().await;
+            return Err(e.to_string());
+        }
+    }
+
     let team_id = match client.create_team("bench").await {
         Ok(id) => id,
         Err(e) => {
@@ -802,6 +809,13 @@ async fn run_isolated_lane(
     if let Err(e) = client.disable_tool_auto_assignment().await {
         let _ = instance.shutdown().await;
         return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
+    }
+
+    if env.tools.iter().any(|t| t == "api") {
+        if let Err(e) = client.clear_tool_invocation_policies().await {
+            let _ = instance.shutdown().await;
+            return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
+        }
     }
 
     let team_id = match client.create_team("bench").await {

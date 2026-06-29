@@ -289,10 +289,12 @@ export async function executeA2AMessage(
     );
 
     // A file the model cannot read inline is staged into the agent's sandbox when
-    // one is usable for this caller. Skip the permission lookup for the synthetic
-    // "system" actor (external A2A v2) — it can never hold `sandbox:execute`.
+    // one is usable for this caller. Resolved only when there are attachments, so
+    // text-only turns (the common case) skip the permission/DB chain. Skip the
+    // lookup for the synthetic "system" actor (external A2A v2) — it can never
+    // hold `sandbox:execute`.
     const sandboxAvailable =
-      userId && userId !== "system"
+      (attachments?.length ?? 0) > 0 && userId && userId !== "system"
         ? await isSkillSandboxAvailableForAgent({
             userId,
             organizationId,
@@ -302,7 +304,8 @@ export async function executeA2AMessage(
 
     // Build the current user turn from the message + attachments, gated by the
     // model's capabilities and normalized for the provider. `params.messages`
-    // carries only prior context; this turn is appended to it below.
+    // carries only prior context; this turn is appended to it below. Passing
+    // `stageAttachments` is what tells `buildUserContent` a sandbox is available.
     const { content: userContent, note } = await buildUserContent(
       message,
       attachments,
@@ -310,7 +313,6 @@ export async function executeA2AMessage(
         provider,
         anthropicNativeEndpoint,
         ingestibleMimeTypes,
-        sandboxAvailable,
         sandboxByteLimit: config.skillsSandbox.artifactBytesLimit,
         stageAttachments: sandboxAvailable
           ? (atts) =>
@@ -318,6 +320,7 @@ export async function executeA2AMessage(
                 attachments: atts,
                 organizationId,
                 userId,
+                conversationId: params.conversationId ?? null,
                 isolationKey,
                 agentId,
               })
@@ -539,16 +542,21 @@ export async function buildUserContent(
     provider: SupportedProvider;
     anthropicNativeEndpoint: boolean;
     ingestibleMimeTypes: Set<string>;
-    sandboxAvailable?: boolean;
     sandboxByteLimit?: number;
     stageAttachments?: StageAttachmentsFn;
   },
 ): Promise<{ content: UserContent | null; note: string }> {
   const allAttachments = attachments ?? [];
-  const sandboxAvailable = opts.sandboxAvailable ?? false;
+  // A sandbox is usable iff the caller supplied a stager; deriving it here (vs a
+  // separate flag) makes the "available but unstageable" state unrepresentable.
+  const sandboxAvailable = opts.stageAttachments !== undefined;
   const sandboxByteLimit =
     opts.sandboxByteLimit ?? config.skillsSandbox.artifactBytesLimit;
 
+  // Images are matched broadly by `image/*` and always kept (subject to the
+  // tiny-broken-image filter), deliberately bypassing the mime classifier: a
+  // model's readable set may omit a non-standard subtype (e.g. `image/jpg`) that
+  // the provider still renders, so images are never staged or rejected here.
   const imageAttachments = allAttachments.filter((a) =>
     a.contentType.startsWith("image/"),
   );
@@ -632,8 +640,13 @@ export async function buildUserContent(
   if (unprovidable.length > 0) {
     note += `\n\n[Note: This message also included ${unprovidable.length} attachment(s) that could not be processed: ${unprovidable.join(", ")}]`;
   }
-  if (stagedPointers.length > 0) {
-    note += `\n\n[Note: ${stagedPointers.length} attachment(s) were placed in your sandbox: ${stagedPointers
+  // Identical content dedupes to one upload (and one path) via `uploadFile`, so
+  // collapse pointers by path to avoid naming the same staged file twice.
+  const uniquePointers = [
+    ...new Map(stagedPointers.map((p) => [p.path, p])).values(),
+  ];
+  if (uniquePointers.length > 0) {
+    note += `\n\n[Note: ${uniquePointers.length} attachment(s) were placed in your sandbox: ${uniquePointers
       .map((p) => `"${p.name}" at ${p.path}`)
       .join(", ")}. Use the run_command tool to read or process them.]`;
   }

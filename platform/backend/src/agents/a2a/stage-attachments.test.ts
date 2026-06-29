@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import config from "@/config";
-import { SkillSandboxReplayEventModel } from "@/models";
+import { SkillSandboxModel, SkillSandboxReplayEventModel } from "@/models";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
@@ -63,6 +63,7 @@ describe("stageAttachmentsIntoSandbox (integration)", () => {
       attachments,
       organizationId: org.id,
       userId: user.id,
+      conversationId: null,
       isolationKey,
       agentId: "agent-x",
     });
@@ -106,6 +107,7 @@ describe("stageAttachmentsIntoSandbox (integration)", () => {
       attachments,
       organizationId: org.id,
       userId: user.id,
+      conversationId: null,
       isolationKey,
       agentId: "agent-x",
     });
@@ -117,5 +119,83 @@ describe("stageAttachmentsIntoSandbox (integration)", () => {
       isolationKey,
     });
     expect(uploads).toHaveLength(1);
+  });
+
+  test("stages into the conversation default sandbox when a conversationId is set", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    if (!conversation) throw new Error("conversation seed failed");
+
+    const results = await stageAttachmentsIntoSandbox({
+      attachments: [
+        {
+          contentType: "application/octet-stream",
+          contentBase64: Buffer.from("conv-bytes").toString("base64"),
+          name: "data.bin",
+        },
+      ],
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conversation.id,
+      // isolationKey is ignored on the conversation branch.
+      isolationKey: crypto.randomUUID(),
+      agentId: "agent-x",
+    });
+
+    expect(results).toEqual([{ path: "/home/sandbox/attachments/data.bin" }]);
+
+    // The bytes land in the conversation's default sandbox — the same one
+    // run_command resolves — not a per-execution sandbox.
+    const sandbox = await SkillSandboxModel.findOrCreateDefault({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conversation.id,
+      defaultCwd: SKILL_SANDBOX_HOME,
+    });
+    const uploads = (
+      await SkillSandboxReplayEventModel.listBySandbox(sandbox.id)
+    ).filter((e) => e.kind === "upload");
+    expect(uploads).toHaveLength(1);
+  });
+
+  test("returns an error marker per attachment when the sandbox cannot be created", async () => {
+    // Unknown org/user ids make SkillSandboxModel.create fail its FK, so
+    // getOrCreateDefault throws and every slot degrades to an error marker.
+    const isolationKey = crypto.randomUUID();
+    isolationKeys.push(isolationKey);
+
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "application/octet-stream",
+        contentBase64: Buffer.from("bytes").toString("base64"),
+        name: "a.bin",
+      },
+      {
+        contentType: "application/octet-stream",
+        contentBase64: Buffer.from("more").toString("base64"),
+        name: "b.bin",
+      },
+    ];
+
+    const results = await stageAttachmentsIntoSandbox({
+      attachments,
+      organizationId: crypto.randomUUID(),
+      userId: crypto.randomUUID(),
+      conversationId: null,
+      isolationKey,
+      agentId: "agent-x",
+    });
+
+    expect(results).toEqual([{ error: true }, { error: true }]);
   });
 });

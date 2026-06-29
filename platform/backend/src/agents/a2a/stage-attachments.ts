@@ -1,45 +1,64 @@
 import crypto from "node:crypto";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import logger from "@/logging";
+import { SkillSandboxModel } from "@/models";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
 import {
   assignAttachmentPaths,
   skillSandboxRuntimeService,
 } from "@/skills-sandbox/skill-sandbox-runtime-service";
-import { asSandboxId } from "@/types";
+import { asSandboxId, type SkillSandbox } from "@/types";
 
 /** A staged attachment's in-sandbox path, or an error marker for that slot. */
 export type StageResult = { path: string } | { error: true };
 
 /**
- * Stage raw chatops/email attachments into the agent's per-execution sandbox so
- * the model can read them with `run_command`. Results are aligned to the input
- * order; a sandbox-creation or per-file upload failure yields an `{ error }`
- * marker for that slot (the caller notes it) rather than throwing the turn.
+ * Stage raw chatops/email attachments into the agent's default sandbox so the
+ * model can read them with `run_command`. The target mirrors how `run_command`
+ * itself resolves the default sandbox (`archestra-mcp-server/sandbox.ts`
+ * `resolveTarget`): the conversation default when a `conversationId` is in
+ * scope, otherwise the per-execution sandbox keyed by `isolationKey` — so the
+ * pointer paths always reference the sandbox the model will actually open.
+ * Results are aligned to the input order; a sandbox-creation or per-file upload
+ * failure yields an `{ error }` marker for that slot (the caller notes it)
+ * rather than throwing the turn.
  */
 export async function stageAttachmentsIntoSandbox(params: {
   attachments: A2AAttachment[];
   organizationId: string;
   userId: string;
+  conversationId: string | null;
   isolationKey: string;
   agentId: string;
 }): Promise<StageResult[]> {
-  const { attachments, organizationId, userId, isolationKey, agentId } = params;
+  const {
+    attachments,
+    organizationId,
+    userId,
+    conversationId,
+    isolationKey,
+    agentId,
+  } = params;
 
-  let sandbox: Awaited<
-    ReturnType<typeof executionSandboxRegistry.getOrCreateDefault>
-  >;
+  let sandbox: SkillSandbox;
   try {
-    sandbox = await executionSandboxRegistry.getOrCreateDefault({
-      organizationId,
-      userId,
-      isolationKey,
-      defaultCwd: SKILL_SANDBOX_HOME,
-    });
+    sandbox = conversationId
+      ? await SkillSandboxModel.findOrCreateDefault({
+          organizationId,
+          userId,
+          conversationId,
+          defaultCwd: SKILL_SANDBOX_HOME,
+        })
+      : await executionSandboxRegistry.getOrCreateDefault({
+          organizationId,
+          userId,
+          isolationKey,
+          defaultCwd: SKILL_SANDBOX_HOME,
+        });
   } catch (error) {
     logger.error(
-      { err: error, agentId, isolationKey },
+      { err: error, agentId, conversationId, isolationKey },
       "[A2A] failed to create sandbox for attachment staging",
     );
     return attachments.map(() => ({ error: true as const }));

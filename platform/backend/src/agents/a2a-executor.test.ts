@@ -3,6 +3,7 @@ import { NoSuchToolError } from "ai";
 import { describe, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { expect, test } from "@/test";
+import type { StageResult } from "./a2a/stage-attachments";
 import {
   type A2AAttachment,
   buildUserContent,
@@ -178,7 +179,6 @@ describe("buildUserContent", () => {
     );
 
     expect(content).toBeNull();
-    expect(note).toContain("1 attachment(s)");
     expect(note).toContain("report.docx");
   });
 
@@ -241,7 +241,6 @@ describe("buildUserContent", () => {
     expect(mediaTypes).toContain("application/pdf");
     expect(mediaTypes).toContain("image/png");
     expect(note).toContain("report.docx");
-    expect(note).toContain("1 attachment(s)");
     // The note travels on the kept turn's text part too.
     const textPart = (content as { type: string; text?: string }[]).find(
       (p) => p.type === "text",
@@ -250,7 +249,7 @@ describe("buildUserContent", () => {
     expect(textPart?.text).toContain("report.docx");
   });
 
-  test("skipped note uses 'unnamed' for attachments without names", async () => {
+  test("surfaces an unreadable attachment that has no filename", async () => {
     const attachments: A2AAttachment[] = [
       {
         contentType:
@@ -265,7 +264,8 @@ describe("buildUserContent", () => {
       geminiOpts(PDF_AND_IMAGES),
     );
 
-    expect(note).toContain("unnamed");
+    // No filename, but the unreadable attachment is still surfaced (not dropped).
+    expect(note).not.toBe("");
   });
 
   test("filters out tiny image attachments below MIN_IMAGE_ATTACHMENT_SIZE", async () => {
@@ -294,7 +294,6 @@ describe("buildUserContent", () => {
 
     expect(fileMediaTypes(content)).toEqual(["image/jpeg"]);
     expect(note).toContain("broken-inline-ref.png");
-    expect(note).toContain("1 attachment(s)");
   });
 
   test("returns null content when all images are below minimum size", async () => {
@@ -357,7 +356,6 @@ describe("buildUserContent", () => {
       .join("");
   }
 
-  type StageResult = { path: string } | { error: true };
   function recordingStager(results: StageResult[]) {
     const calls: A2AAttachment[][] = [];
     return {
@@ -408,7 +406,6 @@ describe("buildUserContent", () => {
       attachments,
       {
         ...geminiOpts(PDF_AND_IMAGES),
-        sandboxAvailable: true,
         stageAttachments: stager.fn,
       },
     );
@@ -450,7 +447,6 @@ describe("buildUserContent", () => {
 
     const { content, note } = await buildUserContent("Analyze", attachments, {
       ...geminiOpts(new Set(["text/csv"])),
-      sandboxAvailable: true,
       stageAttachments: stager.fn,
     });
 
@@ -487,7 +483,6 @@ describe("buildUserContent", () => {
 
     const { content, note } = await buildUserContent("Inspect", attachments, {
       ...geminiOpts(PDF_AND_IMAGES),
-      sandboxAvailable: true,
       sandboxByteLimit: 4,
       stageAttachments: stager.fn,
     });
@@ -509,14 +504,14 @@ describe("buildUserContent", () => {
 
     const { content, note } = await buildUserContent("Inspect", attachments, {
       ...geminiOpts(PDF_AND_IMAGES),
-      sandboxAvailable: true,
       stageAttachments: stager.fn,
     });
 
     expect(stager.calls).toHaveLength(1);
     expect(content).toBeNull();
+    // The file is named (not silently dropped) but carries no sandbox pointer.
     expect(note).toContain("repair.sqlite");
-    expect(note).toContain("could not be staged");
+    expect(note).not.toContain("/home/sandbox");
   });
 });
 

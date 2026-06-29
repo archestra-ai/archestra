@@ -1048,8 +1048,9 @@ function planAttachmentStaging(params: {
  * under {@link SKILL_SANDBOX_ATTACHMENTS_DIR}. Duplicate sanitized names get a short
  * attachment-id suffix; the input order (created_at, id) is stable, so a given
  * attachment always resolves to the same path across turns.
+ * @public — reused by the A2A attachment-staging path (a2a-executor).
  */
-function assignAttachmentPaths(
+export function assignAttachmentPaths(
   attachments: { id: string; originalName: string | null }[],
 ): Map<string, string> {
   const used = new Set<string>();

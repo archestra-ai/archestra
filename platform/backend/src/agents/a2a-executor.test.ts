@@ -122,23 +122,23 @@ describe("buildUserContent", () => {
   }
 
   test("returns null content when no attachments are provided", async () => {
-    const { content, skippedNote } = await buildUserContent(
+    const { content, note } = await buildUserContent(
       "Hello",
       undefined,
       geminiOpts(PDF_AND_IMAGES),
     );
     expect(content).toBeNull();
-    expect(skippedNote).toBe("");
+    expect(note).toBe("");
   });
 
   test("returns null content when attachments array is empty", async () => {
-    const { content, skippedNote } = await buildUserContent(
+    const { content, note } = await buildUserContent(
       "Hello",
       [],
       geminiOpts(PDF_AND_IMAGES),
     );
     expect(content).toBeNull();
-    expect(skippedNote).toBe("");
+    expect(note).toBe("");
   });
 
   test("keeps a PDF when the model can read it", async () => {
@@ -150,14 +150,14 @@ describe("buildUserContent", () => {
       },
     ];
 
-    const { content, skippedNote } = await buildUserContent(
+    const { content, note } = await buildUserContent(
       "Summarize this",
       attachments,
       geminiOpts(PDF_AND_IMAGES),
     );
 
     expect(fileMediaTypes(content)).toContain("application/pdf");
-    expect(skippedNote).toBe("");
+    expect(note).toBe("");
   });
 
   test("drops a non-image the model cannot read and names it in the note", async () => {
@@ -170,7 +170,7 @@ describe("buildUserContent", () => {
       },
     ];
 
-    const { content, skippedNote } = await buildUserContent(
+    const { content, note } = await buildUserContent(
       "Read this",
       attachments,
       // Model reads PDFs/images but not docx.
@@ -178,8 +178,8 @@ describe("buildUserContent", () => {
     );
 
     expect(content).toBeNull();
-    expect(skippedNote).toContain("1 attachment(s)");
-    expect(skippedNote).toContain("report.docx");
+    expect(note).toContain("1 attachment(s)");
+    expect(note).toContain("report.docx");
   });
 
   test("keeps images regardless of the readable mime set, including image/jpg", async () => {
@@ -198,7 +198,7 @@ describe("buildUserContent", () => {
       },
     ];
 
-    const { content, skippedNote } = await buildUserContent(
+    const { content, note } = await buildUserContent(
       "Describe",
       attachments,
       // Deliberately omit image/jpg from the readable set.
@@ -208,7 +208,7 @@ describe("buildUserContent", () => {
     const mediaTypes = fileMediaTypes(content);
     expect(mediaTypes).toContain("image/png");
     expect(mediaTypes).toContain("image/jpg");
-    expect(skippedNote).toBe("");
+    expect(note).toBe("");
   });
 
   test("keeps readable attachments and notes unreadable ones in a mixed set", async () => {
@@ -231,7 +231,7 @@ describe("buildUserContent", () => {
       },
     ];
 
-    const { content, skippedNote } = await buildUserContent(
+    const { content, note } = await buildUserContent(
       "Check this",
       attachments,
       geminiOpts(PDF_AND_IMAGES),
@@ -240,8 +240,8 @@ describe("buildUserContent", () => {
     const mediaTypes = fileMediaTypes(content);
     expect(mediaTypes).toContain("application/pdf");
     expect(mediaTypes).toContain("image/png");
-    expect(skippedNote).toContain("report.docx");
-    expect(skippedNote).toContain("1 attachment(s)");
+    expect(note).toContain("report.docx");
+    expect(note).toContain("1 attachment(s)");
     // The note travels on the kept turn's text part too.
     const textPart = (content as { type: string; text?: string }[]).find(
       (p) => p.type === "text",
@@ -259,13 +259,13 @@ describe("buildUserContent", () => {
       },
     ];
 
-    const { skippedNote } = await buildUserContent(
+    const { note } = await buildUserContent(
       "Hello",
       attachments,
       geminiOpts(PDF_AND_IMAGES),
     );
 
-    expect(skippedNote).toContain("unnamed");
+    expect(note).toContain("unnamed");
   });
 
   test("filters out tiny image attachments below MIN_IMAGE_ATTACHMENT_SIZE", async () => {
@@ -286,15 +286,15 @@ describe("buildUserContent", () => {
       },
     ];
 
-    const { content, skippedNote } = await buildUserContent(
+    const { content, note } = await buildUserContent(
       "Check this",
       attachments,
       geminiOpts(PDF_AND_IMAGES),
     );
 
     expect(fileMediaTypes(content)).toEqual(["image/jpeg"]);
-    expect(skippedNote).toContain("broken-inline-ref.png");
-    expect(skippedNote).toContain("1 attachment(s)");
+    expect(note).toContain("broken-inline-ref.png");
+    expect(note).toContain("1 attachment(s)");
   });
 
   test("returns null content when all images are below minimum size", async () => {
@@ -306,14 +306,14 @@ describe("buildUserContent", () => {
       },
     ];
 
-    const { content, skippedNote } = await buildUserContent(
+    const { content, note } = await buildUserContent(
       "Hello",
       attachments,
       geminiOpts(PDF_AND_IMAGES),
     );
 
     expect(content).toBeNull();
-    expect(skippedNote).toContain("tiny.png");
+    expect(note).toContain("tiny.png");
   });
 
   test("does not filter images at or above the minimum size threshold", async () => {
@@ -338,6 +338,185 @@ describe("buildUserContent", () => {
     );
 
     expect(fileMediaTypes(content)).toEqual(["image/png"]);
+  });
+
+  // Concatenated text of all `text` content parts (gemini decode-and-inlines
+  // text documents, so an inlined doc's bytes land here rather than as a file).
+  function allText(content: unknown): string {
+    if (!Array.isArray(content)) {
+      return "";
+    }
+    return content
+      .filter(
+        (p): p is { type: "text"; text: string } =>
+          typeof p === "object" &&
+          p !== null &&
+          (p as { type?: unknown }).type === "text",
+      )
+      .map((p) => p.text)
+      .join("");
+  }
+
+  type StageResult = { path: string } | { error: true };
+  function recordingStager(results: StageResult[]) {
+    const calls: A2AAttachment[][] = [];
+    return {
+      calls,
+      fn: async (atts: A2AAttachment[]): Promise<StageResult[]> => {
+        calls.push(atts);
+        return results;
+      },
+    };
+  }
+
+  test("inlines a small inlineable text type the model does not list as readable", async () => {
+    // yaml is not in the readable mime set, but it is inlineable text ≤ 256KB.
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "application/x-yaml",
+        contentBase64: Buffer.from("key: value").toString("base64"),
+        name: "config.yaml",
+      },
+    ];
+
+    const { content, note } = await buildUserContent(
+      "Read this",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
+
+    expect(content).not.toBeNull();
+    expect(note).toBe("");
+    // gemini inlines the decoded text, so the file content reaches the model.
+    expect(allText(content)).toContain("key: value");
+  });
+
+  test("stages a non-readable binary into the sandbox when one is available", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "application/octet-stream",
+        contentBase64: Buffer.from("sqlite-bytes").toString("base64"),
+        name: "repair.sqlite",
+      },
+    ];
+    const stager = recordingStager([
+      { path: "/home/sandbox/attachments/repair.sqlite" },
+    ]);
+
+    const { content, note } = await buildUserContent(
+      "Inspect this",
+      attachments,
+      {
+        ...geminiOpts(PDF_AND_IMAGES),
+        sandboxAvailable: true,
+        stageAttachments: stager.fn,
+      },
+    );
+
+    expect(stager.calls).toHaveLength(1);
+    expect(stager.calls[0][0].name).toBe("repair.sqlite");
+    expect(content).toBeNull();
+    expect(note).toContain("/home/sandbox/attachments/repair.sqlite");
+  });
+
+  test("names a non-readable binary in the note when no sandbox is available", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "application/octet-stream",
+        contentBase64: Buffer.from("sqlite-bytes").toString("base64"),
+        name: "repair.sqlite",
+      },
+    ];
+
+    const { content, note } = await buildUserContent(
+      "Inspect this",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
+
+    expect(content).toBeNull();
+    expect(note).toContain("repair.sqlite");
+  });
+
+  test("routes oversized inlineable text to the sandbox instead of inlining it", async () => {
+    // ~262KB of decoded bytes, over the 256KB inline cap.
+    const bigText = "A".repeat(349528);
+    const attachments: A2AAttachment[] = [
+      { contentType: "text/csv", contentBase64: bigText, name: "big.csv" },
+    ];
+    const stager = recordingStager([
+      { path: "/home/sandbox/attachments/big.csv" },
+    ]);
+
+    const { content, note } = await buildUserContent("Analyze", attachments, {
+      ...geminiOpts(new Set(["text/csv"])),
+      sandboxAvailable: true,
+      stageAttachments: stager.fn,
+    });
+
+    expect(stager.calls).toHaveLength(1);
+    expect(content).toBeNull();
+    expect(note).toContain("/home/sandbox/attachments/big.csv");
+  });
+
+  test("skips oversized inlineable text when no sandbox is available", async () => {
+    const bigText = "A".repeat(349528);
+    const attachments: A2AAttachment[] = [
+      { contentType: "text/csv", contentBase64: bigText, name: "big.csv" },
+    ];
+
+    const { content, note } = await buildUserContent(
+      "Analyze",
+      attachments,
+      geminiOpts(new Set(["text/csv"])),
+    );
+
+    expect(content).toBeNull();
+    expect(note).toContain("big.csv");
+  });
+
+  test("does not attempt to stage a file larger than the sandbox limit", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "application/octet-stream",
+        contentBase64: Buffer.from("0123456789abcdef").toString("base64"),
+        name: "big.bin",
+      },
+    ];
+    const stager = recordingStager([]);
+
+    const { content, note } = await buildUserContent("Inspect", attachments, {
+      ...geminiOpts(PDF_AND_IMAGES),
+      sandboxAvailable: true,
+      sandboxByteLimit: 4,
+      stageAttachments: stager.fn,
+    });
+
+    expect(stager.calls).toHaveLength(0);
+    expect(content).toBeNull();
+    expect(note).toContain("big.bin");
+  });
+
+  test("surfaces a staging failure in the note rather than dropping it silently", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "application/octet-stream",
+        contentBase64: Buffer.from("sqlite-bytes").toString("base64"),
+        name: "repair.sqlite",
+      },
+    ];
+    const stager = recordingStager([{ error: true }]);
+
+    const { content, note } = await buildUserContent("Inspect", attachments, {
+      ...geminiOpts(PDF_AND_IMAGES),
+      sandboxAvailable: true,
+      stageAttachments: stager.fn,
+    });
+
+    expect(stager.calls).toHaveLength(1);
+    expect(content).toBeNull();
+    expect(note).toContain("repair.sqlite");
+    expect(note).toContain("could not be staged");
   });
 });
 

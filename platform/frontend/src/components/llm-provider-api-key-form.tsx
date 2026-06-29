@@ -20,7 +20,6 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
-import { useAppName } from "@/lib/hooks/use-app-name";
 import { useTeams } from "@/lib/teams/team.query";
 import { LlmProviderSelectItems } from "./llm-provider-select-items";
 import { Button } from "./ui/button";
@@ -319,7 +318,6 @@ export function LlmProviderApiKeyForm({
   const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
-  const appName = useAppName();
   const { data: providerBaseUrls } = useProviderBaseUrls();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: isLlmProviderApiKeyAdmin } = useHasPermissions({
@@ -940,8 +938,8 @@ export function LlmProviderApiKeyForm({
           }) &&
             provider !== "azure" && (
               <p className="text-xs text-muted-foreground">
-                If {appName} runs in Docker, <code>localhost</code> points at
-                the container, not your host machine. Use{" "}
+                If this app runs in Docker, <code>localhost</code> points at the
+                container, not your host machine. Use{" "}
                 <code>host.docker.internal</code> instead (e.g.{" "}
                 <code>http://host.docker.internal:11434/v1</code>).
               </p>

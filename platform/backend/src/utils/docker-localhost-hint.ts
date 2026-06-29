@@ -18,7 +18,7 @@ const CONNECTION_ERROR_MARKERS = [
 /**
  * When connecting to a self-hosted provider (e.g. Ollama) fails and the base
  * URL points at localhost, this is almost always the Docker networking trap:
- * Archestra running inside a container reaches itself at `localhost`, not the
+ * a server running inside a container reaches itself at `localhost`, not the
  * host machine where the provider is listening. Returns a hint suggesting the
  * `host.docker.internal` equivalent, or null when the situation doesn't apply
  * (non-connection error, non-loopback URL, or an unparseable URL).
@@ -46,5 +46,5 @@ export function dockerLocalhostConnectionHint(params: {
     return null;
   }
 
-  return `If Archestra is running in Docker, "localhost" points at the container itself, not your host machine — try using ${suggestedUrl} instead.`;
+  return `If this server is running in Docker, "localhost" points at the container itself, not your host machine — try using ${suggestedUrl} instead.`;
 }

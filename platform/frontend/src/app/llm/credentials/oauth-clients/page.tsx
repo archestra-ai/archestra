@@ -19,6 +19,7 @@ import {
   providerApiKeyMapToArray,
 } from "@/components/provider-key-mappings-field";
 import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -91,10 +92,16 @@ export default function OAuthClientsPage() {
   const search = searchParams.get("search") || "";
   const providerApiKeyIdFilter = searchParams.get("providerApiKeyId") || "all";
 
-  const { data: oauthClients = [], isPending } = useLlmOauthClients({
+  const {
+    data: oauthClients = [],
+    isPending,
+    isLoadingError: isOauthClientsLoadError,
+    refetch: refetchOauthClients,
+  } = useLlmOauthClients({
     search: search || undefined,
     providerApiKeyId:
       providerApiKeyIdFilter === "all" ? undefined : providerApiKeyIdFilter,
+    toastOnError: false,
   });
   const { data: llmProxies = [] } = useProfiles({
     filters: { agentTypes: ["llm_proxy"] },
@@ -255,21 +262,28 @@ export default function OAuthClientsPage() {
         />
       </div>
 
-      <DataTable
-        columns={columns}
-        data={oauthClients}
-        isLoading={isPending}
-        emptyMessage="No OAuth clients registered. Create one for backend services or bots that call LLM proxies."
-        hasActiveFilters={Boolean(search || providerApiKeyIdFilter !== "all")}
-        filteredEmptyMessage="No OAuth clients match your filters. Try adjusting your search."
-        onClearFilters={() =>
-          updateQueryParams({
-            search: null,
-            providerApiKeyId: null,
-            page: "1",
-          })
-        }
-      />
+      {isOauthClientsLoadError ? (
+        <QueryLoadError
+          title="Couldn't load your OAuth clients"
+          onRetry={() => refetchOauthClients()}
+        />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={oauthClients}
+          isLoading={isPending}
+          emptyMessage="No OAuth clients registered. Create one for backend services or bots that call LLM proxies."
+          hasActiveFilters={Boolean(search || providerApiKeyIdFilter !== "all")}
+          filteredEmptyMessage="No OAuth clients match your filters. Try adjusting your search."
+          onClearFilters={() =>
+            updateQueryParams({
+              search: null,
+              providerApiKeyId: null,
+              page: "1",
+            })
+          }
+        />
+      )}
 
       <CreateOAuthClientDialog
         open={isCreateDialogOpen}

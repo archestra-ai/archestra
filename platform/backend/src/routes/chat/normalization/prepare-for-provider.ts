@@ -1,22 +1,25 @@
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  isInlineableTextMimeType,
+  type SupportedProvider,
+} from "@archestra/shared";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 
 /**
  * Rewrite materialized messages into a shape the target provider's SDK accepts
  * before `convertToModelMessages`.
  *
- * Text-document file parts (CSV/JSON/Markdown/…) are handled three ways:
+ * Inlineable text-document file parts (see {@link isInlineableTextMimeType} —
+ * CSV/JSON/Markdown/XML/YAML/TOML/…) are handled two ways:
  * - `anthropic`/`bedrock`: rewrite the document part's mediaType to text/plain
- *   (their SDKs base64-decode text/plain documents natively).
- * - `gemini`: pass through — @ai-sdk/google inlines any file part as inlineData,
- *   which is base64 the Gemini API decodes server-side.
- * - every other provider, including `cohere`: the document is inlined as a
- *   `text` part with its decoded content. OpenAI-compatible/groq/xai/mistral
- *   SDKs throw `UnsupportedFunctionalityError` for any non-image/-pdf file part
- *   (including text/plain); @ai-sdk/cohere instead relays a data-URL file part's
- *   raw base64 body as document text WITHOUT decoding it (its media-type
- *   handling only runs for `Uint8Array` data, never our data-URL strings), so
- *   the model would see base64. Inlining the decoded text fixes both.
+ *   (their SDKs base64-decode text/plain documents natively), keeping the
+ *   provider's native `document` block and any prompt-cache marker on it.
+ * - every other provider, including `gemini` and `cohere`: the document is
+ *   inlined as a `text` part with its decoded content. OpenAI-compatible/groq/
+ *   xai/mistral SDKs throw `UnsupportedFunctionalityError` for any non-image/-pdf
+ *   file part (including text/plain); @ai-sdk/cohere relays a data-URL file
+ *   part's raw base64 body as document text WITHOUT decoding it; and Gemini's
+ *   `inlineData` path does not reliably accept exotic text MIMEs. Inlining the
+ *   decoded text fixes all of these.
  */
 export function prepareMessagesForProvider(params: {
   messages: ChatMessage[];
@@ -53,11 +56,6 @@ export function prepareMessagesForProvider(params: {
       );
   }
 
-  // @ai-sdk/google inlines any file part as inlineData — the document survives.
-  if (provider === "gemini") {
-    return messages;
-  }
-
   return messages.map(inlineTextDocumentMessageFileParts);
 }
 
@@ -84,7 +82,7 @@ function inlineTextDocumentFilePart(part: ChatMessagePart): ChatMessagePart {
   if (
     part.type !== "file" ||
     typeof part.mediaType !== "string" ||
-    !isInlineableTextDocumentMimeType(part.mediaType)
+    !isInlineableTextMimeType(part.mediaType)
   ) {
     return part;
   }
@@ -110,23 +108,6 @@ function inlineTextDocumentFilePart(part: ChatMessagePart): ChatMessagePart {
     type: "text",
     text: `[Attachment ${JSON.stringify(name)} (${part.mediaType})]\n\n${decoded}`,
   };
-}
-
-/**
- * Text-document mime types whose content can be inlined as a text part for
- * providers that reject document file parts. Kept separate from
- * {@link isAnthropicTextDocumentMimeType} so the anthropic rewrite path stays
- * byte-identical (it intentionally excludes text/plain).
- */
-export function isInlineableTextDocumentMimeType(mediaType: string): boolean {
-  return (
-    mediaType === "text/csv" ||
-    mediaType === "application/csv" ||
-    mediaType === "application/vnd.ms-excel" ||
-    mediaType === "text/markdown" ||
-    mediaType === "application/json" ||
-    mediaType === "text/plain"
-  );
 }
 
 // Decodes the base64 body of a `data:<mediaType>;base64,...` URL as UTF-8.
@@ -189,14 +170,11 @@ function normalizeAnthropicFilePart(part: ChatMessagePart): ChatMessagePart {
   };
 }
 
+// Inlineable text documents Anthropic should receive as a native `document`
+// block: rewrite them to text/plain (its SDK base64-decodes text/plain natively).
+// text/plain is excluded — it is already text/plain, so the rewrite is a no-op.
 function isAnthropicTextDocumentMimeType(mediaType: string): boolean {
-  return (
-    mediaType === "text/csv" ||
-    mediaType === "text/markdown" ||
-    mediaType === "application/csv" ||
-    mediaType === "application/vnd.ms-excel" ||
-    mediaType === "application/json"
-  );
+  return isInlineableTextMimeType(mediaType) && mediaType !== "text/plain";
 }
 
 // ===== Bedrock =====
@@ -238,10 +216,15 @@ function normalizeBedrockFilePart(part: ChatMessagePart): ChatMessagePart {
   };
 }
 
-// MIMEs that contain text content but aren't in Bedrock's natively supported
-// document list — normalize to text/plain so the AI SDK can relay them.
+// Inlineable text documents that aren't in Bedrock's natively supported document
+// list (csv, md, txt) — normalize to text/plain so the AI SDK can relay them.
 function isBedrockTextNormalizableMimeType(mediaType: string): boolean {
-  return mediaType === "application/json" || mediaType === "application/csv";
+  return (
+    isInlineableTextMimeType(mediaType) &&
+    mediaType !== "text/csv" &&
+    mediaType !== "text/markdown" &&
+    mediaType !== "text/plain"
+  );
 }
 
 // Bedrock rejects user messages that contain a file/document block but no text

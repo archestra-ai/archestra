@@ -8,7 +8,7 @@ import {
 } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { handleApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils";
 
 const {
   getInteraction,
@@ -98,10 +98,7 @@ export function useInteractions({
           hasPrev: false,
         },
       };
-      if (response.error) {
-        handleApiError(response.error);
-        return emptyResponse;
-      }
+      throwOnApiError(response.error);
       return response.data ?? emptyResponse;
     },
     enabled,
@@ -136,10 +133,7 @@ export function useInteraction({
     queryKey: ["interactions", interactionId],
     queryFn: async () => {
       const response = await getInteraction({ path: { interactionId } });
-      if (response.error) {
-        handleApiError(response.error);
-        return null;
-      }
+      throwOnApiError(response.error, { allowNotFound: true });
       return response.data ?? null;
     },
     initialData,
@@ -152,10 +146,7 @@ export function useUniqueExternalAgentIds() {
     queryKey: ["interactions", "externalAgentIds"],
     queryFn: async () => {
       const response = await getUniqueExternalAgentIds();
-      if (response.error) {
-        handleApiError(response.error);
-        return [];
-      }
+      throwOnApiError(response.error);
       return response.data ?? [];
     },
   });
@@ -166,10 +157,7 @@ export function useUniqueUserIds() {
     queryKey: ["interactions", "userIds"],
     queryFn: async () => {
       const response = await getUniqueUserIds();
-      if (response.error) {
-        handleApiError(response.error);
-        return [];
-      }
+      throwOnApiError(response.error);
       return response.data ?? [];
     },
   });
@@ -187,6 +175,7 @@ export function useInteractionSessions({
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   initialData,
+  toastOnError,
 }: {
   profileId?: string;
   userId?: string;
@@ -199,6 +188,7 @@ export function useInteractionSessions({
   limit?: number;
   offset?: number;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
+  toastOnError?: boolean;
 } = {}) {
   // If the search value is a sessionId, we want to treat it as a sessionId search instead
   const isSessionIdSearch = search ? isSessionId(search) : false;
@@ -248,10 +238,7 @@ export function useInteractionSessions({
         },
       };
 
-      if (response.error) {
-        handleApiError(response.error);
-        return emptyResponse;
-      }
+      throwOnApiError(response.error, { toastOnError });
       return response.data ?? emptyResponse;
     },
     initialData:

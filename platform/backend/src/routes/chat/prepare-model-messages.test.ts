@@ -3,7 +3,7 @@ import config from "@/config";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
-import { __test } from "./prepare-model-messages";
+import { __test, buildModelMessages } from "./prepare-model-messages";
 
 const CSV = "a,b,c\n1,2,3";
 const INGESTIBLE = new Set(["text/csv"]);
@@ -99,6 +99,7 @@ test("anthropic non-native endpoint: bytes inlined as text, no cache_control, no
       conversationId: conversation.id,
       ingestibleMimeTypes: INGESTIBLE,
       anthropicNativeEndpoint: false,
+      sandboxAvailable: false,
     });
   } finally {
     config.skillsSandbox.enabled = prevEnabled;
@@ -137,6 +138,7 @@ test("native Anthropic (default flag): document file part survives with cache_co
       conversationId: conversation.id,
       ingestibleMimeTypes: INGESTIBLE,
       anthropicNativeEndpoint: true,
+      sandboxAvailable: false,
     });
   } finally {
     config.skillsSandbox.enabled = prevEnabled;
@@ -145,4 +147,204 @@ test("native Anthropic (default flag): document file part survives with cache_co
   // Native path keeps the document as a file part and marks it for caching.
   expect(hasFilePart(modelMessages)).toBe(true);
   expect(anthropicCacheControlSeen(modelMessages)).toBe(true);
+});
+
+// End-to-end through the public entry point: buildModelMessages must resolve
+// the agent's sandbox availability itself and thread it into materialization,
+// so the sandbox pointer follows the agent — not just the global feature flag.
+test("buildModelMessages emits the sandbox pointer when the agent can use the sandbox", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeCustomRole,
+  makeAgent,
+  makeConversation,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const role = await makeCustomRole(org.id, {
+    permission: { sandbox: ["execute"] },
+  });
+  await makeMember(user.id, org.id, { role: role.role });
+  // accessAllTools makes the sandbox usable via dynamic dispatch, so this also
+  // covers the predicate's dynamic-access branch end-to-end.
+  const agent = await makeAgent({
+    organizationId: org.id,
+    accessAllTools: true,
+  });
+  const conversation = await makeConversation(agent.id, {
+    organizationId: org.id,
+  });
+  const messages = await csvRefMessage(conversation.id, user.id, org.id);
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = true;
+  let modelMessages: ModelMessage[];
+  try {
+    modelMessages = await buildModelMessages({
+      messages,
+      conversationId: conversation.id,
+      organizationId: org.id,
+      userId: user.id,
+      agentId: agent.id,
+      provider: "anthropic",
+      selectedModel: "claude-test-model",
+      emit: () => {},
+    });
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+
+  expect(textContent(modelMessages)).toContain("/home/sandbox/attachments");
+});
+
+test("buildModelMessages omits the sandbox pointer when the agent cannot use the sandbox", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeCustomRole,
+  makeAgent,
+  makeConversation,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const role = await makeCustomRole(org.id, {
+    permission: { sandbox: ["execute"] },
+  });
+  await makeMember(user.id, org.id, { role: role.role });
+  // No assigned sandbox tools and no accessAllTools: the agent can't run it,
+  // even though the feature flag is on below.
+  const agent = await makeAgent({ organizationId: org.id });
+  const conversation = await makeConversation(agent.id, {
+    organizationId: org.id,
+  });
+  const messages = await csvRefMessage(conversation.id, user.id, org.id);
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = true;
+  let modelMessages: ModelMessage[];
+  try {
+    modelMessages = await buildModelMessages({
+      messages,
+      conversationId: conversation.id,
+      organizationId: org.id,
+      userId: user.id,
+      agentId: agent.id,
+      provider: "anthropic",
+      selectedModel: "claude-test-model",
+      emit: () => {},
+    });
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+
+  expect(textContent(modelMessages)).not.toContain("/home/sandbox/attachments");
+});
+
+function inlinePdfMessage(base64Length: number): ChatMessage[] {
+  return [
+    {
+      role: "user",
+      parts: [
+        { type: "text", text: "Can you read this PDF?" },
+        {
+          type: "file",
+          url: `data:application/pdf;base64,${"A".repeat(base64Length)}`,
+          mediaType: "application/pdf",
+          filename: "big.pdf",
+        },
+      ],
+    },
+  ];
+}
+
+test("bedrock: an inline PDF whose payload exceeds the provider limit is rejected, reporting the decoded file size", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  // 40 MiB of base64 decodes to a ~30 MB file, over Bedrock's 20 MB cap.
+  const messages = inlinePdfMessage(40 * 1024 * 1024);
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = false;
+  try {
+    const error = await __test
+      .buildModelMessagesForProvider({
+        messages,
+        provider: "bedrock",
+        conversationId: conversation.id,
+        sandboxAvailable: false,
+      })
+      .then(
+        () => null,
+        (e) => e,
+      );
+    expect(error).toBeInstanceOf(Error);
+    // Reports the real decoded file size (30 MB), not the inflated ~40 MB wire size.
+    expect(error.message).toMatch(/\bThis file is 30 MB\b/);
+    expect(error.message).not.toMatch(/40 MB/);
+    expect(error.message).toContain("AWS Bedrock");
+    expect(error.message).toContain("20 MB");
+    expect(error.message).toContain(
+      "platform.claude.com/docs/en/api/overview#request-size-limits",
+    );
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+});
+
+test("bedrock: a file that rounds to the limit is not rejected", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  // base64 that decodes to ~20.25 MB — rounds to the 20 MB cap, so it must pass
+  // rather than reject with a contradictory "20 MB, max 20 MB".
+  const messages = inlinePdfMessage(27 * 1024 * 1024);
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = false;
+  try {
+    const modelMessages = await __test.buildModelMessagesForProvider({
+      messages,
+      provider: "bedrock",
+      conversationId: conversation.id,
+      sandboxAvailable: false,
+    });
+    expect(modelMessages.length).toBeGreaterThan(0);
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+});
+
+test("bedrock: a small inline PDF passes the size guard", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const messages = inlinePdfMessage(2048);
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = false;
+  try {
+    const modelMessages = await __test.buildModelMessagesForProvider({
+      messages,
+      provider: "bedrock",
+      conversationId: conversation.id,
+      sandboxAvailable: false,
+    });
+    expect(modelMessages.length).toBeGreaterThan(0);
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
 });

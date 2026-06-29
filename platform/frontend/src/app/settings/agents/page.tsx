@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
+import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -49,7 +50,11 @@ export default function AgentSettingsPage() {
   const { getToolName } = useArchestraMcpIdentity();
   const appName = useAppName();
   const { data: organization } = useOrganization();
-  const { data: apiKeys } = useAvailableLlmProviderApiKeys();
+  const {
+    data: apiKeys,
+    isLoadingError: isApiKeysLoadError,
+    refetch: refetchApiKeys,
+  } = useAvailableLlmProviderApiKeys({ toastOnError: false });
   const { data: orgAgents } = useOrgScopedAgents();
 
   const [selectedApiKeyId, setSelectedApiKeyId] = useState<string>("");
@@ -69,9 +74,16 @@ export default function AgentSettingsPage() {
     fileUploads: "enabled" as FileUploadsEnabled,
   });
 
-  const { data: allModels, isPending: modelsLoading } = useLlmModels({
+  const {
+    data: allModels,
+    isPending: modelsLoading,
+    isLoadingError: isModelsLoadError,
+    refetch: refetchModels,
+  } = useLlmModels({
     apiKeyId: selectedApiKeyId || undefined,
   });
+
+  const isLoadError = isApiKeysLoadError || isModelsLoadError;
 
   const updateAgentMutation = useUpdateAgentSettings(
     "Agent settings updated",
@@ -189,60 +201,71 @@ export default function AgentSettingsPage() {
             permissions={{ agentSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
-            {({ hasPermission }) => (
-              <div className="flex flex-col gap-2 w-80">
-                <LlmProviderApiKeyDropdown
-                  availableKeys={availableKeys}
-                  selectedApiKeyId={selectedApiKeyId || null}
-                  disabled={isSaving || !hasPermission}
-                  open={apiKeySelectorOpen}
-                  onOpenChange={setApiKeySelectorOpen}
-                  onSelectKey={(value) => {
-                    setSelectedApiKeyId(value);
-                    setDefaultModel("");
-                    setApiKeySelectorOpen(false);
-                  }}
-                  triggerVariant="select"
-                  triggerClassName="w-80"
-                  popoverClassName="w-80"
-                  emptyTriggerLabel="Select API key..."
-                />
-                <LlmModelSearchableSelect
-                  value={defaultModel}
-                  onValueChange={setDefaultModel}
-                  options={modelItems}
-                  freeFilterable={canFilterFreeModels}
-                  placeholder={
-                    !selectedApiKeyId
-                      ? "Select API key first..."
-                      : modelsLoading
-                        ? "Loading models..."
-                        : "Select model..."
-                  }
+            {({ hasPermission }) =>
+              isLoadError ? (
+                <QueryLoadError
+                  title="Couldn't load your LLM providers"
                   className="w-80"
-                  disabled={
-                    isSaving ||
-                    !hasPermission ||
-                    modelsLoading ||
-                    !selectedApiKeyId
-                  }
+                  onRetry={() => {
+                    refetchApiKeys();
+                    refetchModels();
+                  }}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="self-end"
-                  onClick={handleResetDefaultModel}
-                  disabled={
-                    isSaving ||
-                    !hasPermission ||
-                    (!selectedApiKeyId && !defaultModel)
-                  }
-                >
-                  Reset
-                </Button>
-              </div>
-            )}
+              ) : (
+                <div className="flex flex-col gap-2 w-80">
+                  <LlmProviderApiKeyDropdown
+                    availableKeys={availableKeys}
+                    selectedApiKeyId={selectedApiKeyId || null}
+                    disabled={isSaving || !hasPermission}
+                    open={apiKeySelectorOpen}
+                    onOpenChange={setApiKeySelectorOpen}
+                    onSelectKey={(value) => {
+                      setSelectedApiKeyId(value);
+                      setDefaultModel("");
+                      setApiKeySelectorOpen(false);
+                    }}
+                    triggerVariant="select"
+                    triggerClassName="w-80"
+                    popoverClassName="w-80"
+                    emptyTriggerLabel="Select API key..."
+                  />
+                  <LlmModelSearchableSelect
+                    value={defaultModel}
+                    onValueChange={setDefaultModel}
+                    options={modelItems}
+                    freeFilterable={canFilterFreeModels}
+                    placeholder={
+                      !selectedApiKeyId
+                        ? "Select API key first..."
+                        : modelsLoading
+                          ? "Loading models..."
+                          : "Select model..."
+                    }
+                    className="w-80"
+                    disabled={
+                      isSaving ||
+                      !hasPermission ||
+                      modelsLoading ||
+                      !selectedApiKeyId
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="self-end"
+                    onClick={handleResetDefaultModel}
+                    disabled={
+                      isSaving ||
+                      !hasPermission ||
+                      (!selectedApiKeyId && !defaultModel)
+                    }
+                  >
+                    Reset
+                  </Button>
+                </div>
+              )
+            }
           </WithPermissions>
         }
       />

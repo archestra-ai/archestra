@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { getApiErrorMessage, handleApiError } from "./utils";
+import { getApiErrorMessage, handleApiError, throwOnApiError } from "./utils";
 
 const {
   assignToolToAgent,
@@ -83,9 +83,7 @@ export function useAllProfileTools({
           skipPagination,
         },
       });
-      if (result.error) {
-        handleApiError(result.error);
-      }
+      throwOnApiError(result.error);
       return (
         result.data ?? {
           data: [],
@@ -377,9 +375,7 @@ export function useAgentDelegations(
     queryFn: async () => {
       if (!agentId) return [];
       const response = await getAgentDelegations({ path: { agentId } });
-      if (response.error) {
-        handleApiError(response.error);
-      }
+      throwOnApiError(response.error);
       return response.data ?? [];
     },
     enabled: !!agentId && (params?.enabled ?? true),

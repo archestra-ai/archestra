@@ -7,7 +7,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { handleApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 export type { SupportedProvider };
 
@@ -23,10 +23,25 @@ type AvailableLlmProviderApiKeysQuery = NonNullable<
 >;
 type LlmProviderApiKeysQueryParams = Partial<LlmProviderApiKeysQuery> & {
   enabled?: boolean;
+  /**
+   * Toast on fetch failure. Default true so list/dialog callers fail loud.
+   * Callers that render their own error state (the new-chat and projects
+   * gates) pass false to avoid a redundant toast-plus-screen and a fresh
+   * toast on every retry. The query throws regardless, so `isError` is always
+   * available to branch on.
+   *
+   * Best-effort under react-query's shared fetches: observers with the same
+   * query key share one request, so the toast follows whichever observer
+   * triggers the fetch (e.g. a gating screen's own retry uses its `false`).
+   * The gating screens don't rely on suppression for correctness — they show
+   * their inline error from `isError` either way.
+   */
+  toastOnError?: boolean;
 };
 type AvailableLlmProviderApiKeysParams =
   Partial<AvailableLlmProviderApiKeysQuery> & {
     enabled?: boolean;
+    toastOnError?: boolean;
   };
 
 const {
@@ -40,6 +55,7 @@ const {
 export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
   const search = params?.search;
   const provider = params?.provider;
+  const toastOnError = params?.toastOnError ?? true;
 
   return useQuery({
     queryKey: ["llm-provider-api-keys", search, provider],
@@ -50,10 +66,7 @@ export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
           search: search || undefined,
         },
       });
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error, { toastOnError });
       return data ?? [];
     },
     enabled: params?.enabled,
@@ -70,18 +83,32 @@ export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
 export function useHasAnyApiKey(): {
   hasAnyApiKey: boolean;
   isLoading: boolean;
+  isLoadError: boolean;
+  refetch: () => void;
 } {
   const { data: canReadKeys } = useHasPermissions({
     llmProviderApiKey: ["read"],
   });
   const { data: canReadModels } = useHasPermissions({ llmModel: ["read"] });
   const enabled = canReadKeys === true && canReadModels === true;
-  const { data: keys = [], isLoading } = useLlmProviderApiKeys({ enabled });
+  const {
+    data: keys = [],
+    isLoading,
+    isLoadingError,
+    refetch,
+  } = useLlmProviderApiKeys({ enabled, toastOnError: false });
   const permissionsResolving =
     canReadKeys === undefined || canReadModels === undefined;
   return {
     hasAnyApiKey: keys.length > 0,
     isLoading: permissionsResolving || (enabled && isLoading),
+    // Only the first-fetch failure (no cached list). A failed background
+    // refetch keeps the last successful result — empty or not — so we don't
+    // hide a known "no keys" or working state behind the load-error screen.
+    isLoadError: enabled && isLoadingError,
+    refetch: () => {
+      void refetch();
+    },
   };
 }
 
@@ -90,6 +117,7 @@ export function useAvailableLlmProviderApiKeys(
 ) {
   const provider = params?.provider;
   const includeKeyId = params?.includeKeyId;
+  const toastOnError = params?.toastOnError;
 
   return useQuery({
     queryKey: ["available-llm-provider-api-keys", provider, includeKeyId],
@@ -105,10 +133,7 @@ export function useAvailableLlmProviderApiKeys(
       const { data, error } = await getAvailableLlmProviderApiKeys({
         query: Object.keys(query).length > 0 ? query : undefined,
       });
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error, { toastOnError });
       return data ?? [];
     },
     enabled: params?.enabled,

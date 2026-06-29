@@ -21,7 +21,7 @@ describe("gemini model fetchers", () => {
   });
 
   describe("fetchGeminiModels", () => {
-    test("fetches Gemini models that support generateContent or embedContent", async () => {
+    test("keeps usable Gemini-family chat + embedding models and drops the rest", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () =>
@@ -33,9 +33,24 @@ describe("gemini model fetchers", () => {
                 supportedGenerationMethods: ["generateContent"],
               },
               {
-                name: "models/gemini-2.5-flash",
-                displayName: "Gemini 2.5 Flash",
-                supportedGenerationMethods: ["generateContent", "countTokens"],
+                name: "models/gemini-1.5-pro",
+                displayName: "Gemini 1.5 Pro",
+                supportedGenerationMethods: ["generateContent"],
+              },
+              {
+                name: "models/gemini-2.5-flash-preview-tts",
+                displayName: "Gemini 2.5 Flash TTS",
+                supportedGenerationMethods: ["generateContent"],
+              },
+              {
+                name: "models/gemma-3-27b-it",
+                displayName: "Gemma 3 27B",
+                supportedGenerationMethods: ["generateContent"],
+              },
+              {
+                name: "models/gemma-2-9b-it",
+                displayName: "Gemma 2 9B",
+                supportedGenerationMethods: ["generateContent"],
               },
               {
                 name: "models/gemini-embedding-001",
@@ -50,6 +65,11 @@ describe("gemini model fetchers", () => {
                 displayName: "AQA",
                 supportedGenerationMethods: ["generateAnswer"],
               },
+              {
+                name: "models/learnlm-2.0-flash-experimental",
+                displayName: "LearnLM 2.0 Flash",
+                supportedGenerationMethods: ["generateContent"],
+              },
             ],
           }),
       });
@@ -63,8 +83,8 @@ describe("gemini model fetchers", () => {
           provider: "gemini",
         },
         {
-          id: "gemini-2.5-flash",
-          displayName: "Gemini 2.5 Flash",
+          id: "gemma-3-27b-it",
+          displayName: "Gemma 3 27B",
           provider: "gemini",
         },
         {
@@ -75,15 +95,15 @@ describe("gemini model fetchers", () => {
       ]);
     });
 
-    test("includes Gemini models that only advertise batchEmbedContents", async () => {
+    test("includes embedding models that only advertise batchEmbedContents", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () =>
           Promise.resolve({
             models: [
               {
-                name: "models/gemini-batch-embedding-only",
-                displayName: "Gemini Batch Embedding Only",
+                name: "models/gemini-embedding-exp-03-07",
+                displayName: "Gemini Embedding Experimental",
                 supportedGenerationMethods: ["batchEmbedContents"],
               },
             ],
@@ -94,8 +114,8 @@ describe("gemini model fetchers", () => {
 
       expect(models).toEqual([
         {
-          id: "gemini-batch-embedding-only",
-          displayName: "Gemini Batch Embedding Only",
+          id: "gemini-embedding-exp-03-07",
+          displayName: "Gemini Embedding Experimental",
           provider: "gemini",
         },
       ]);
@@ -130,6 +150,16 @@ describe("gemini model fetchers", () => {
         {
           name: "publishers/google/models/gemini-embedding-001",
           version: "default",
+          tunedModelInfo: {},
+        },
+        {
+          name: "publishers/google/models/gemma-3-27b-it",
+          version: "default",
+          tunedModelInfo: {},
+        },
+        {
+          name: "publishers/google/models/gemini-1.5-pro-002",
+          version: "002",
           tunedModelInfo: {},
         },
         {
@@ -172,6 +202,11 @@ describe("gemini model fetchers", () => {
         {
           id: "gemini-embedding-001",
           displayName: "Gemini Embedding 001",
+          provider: "gemini",
+        },
+        {
+          id: "gemma-3-27b-it",
+          displayName: "Gemma 3 27b It",
           provider: "gemini",
         },
       ]);
@@ -256,7 +291,7 @@ describe("gemini model fetchers", () => {
       ]);
     });
 
-    test("merges fallback models when list only returns live audio Gemini", async () => {
+    test("drops non-text Gemini from the list and merges usable fallback models", async () => {
       const mockPager = {
         [Symbol.asyncIterator]: async function* () {
           yield {
@@ -273,9 +308,7 @@ describe("gemini model fetchers", () => {
           model === "gemini-embedding-2-preview" ||
           model === "gemini-2.5-pro" ||
           model === "gemini-2.5-flash" ||
-          model === "gemini-2.5-flash-lite" ||
-          model === "gemini-2.0-flash-001" ||
-          model === "gemini-2.0-flash-lite-001"
+          model === "gemini-2.5-flash-lite"
         ) {
           return {
             name: `publishers/google/models/${model}`,
@@ -297,12 +330,9 @@ describe("gemini model fetchers", () => {
 
       const models = await fetchGeminiModelsViaVertexAi();
 
+      // The live/audio model is filtered out entirely; only usable fallback
+      // models remain.
       expect(models).toEqual([
-        {
-          id: "gemini-live-2.5-flash-native-audio",
-          displayName: "Gemini Live 2.5 Flash Native Audio",
-          provider: "gemini",
-        },
         {
           id: "gemini-embedding-001",
           displayName: "Gemini Embedding 001",
@@ -326,16 +356,6 @@ describe("gemini model fetchers", () => {
         {
           id: "gemini-2.5-flash-lite",
           displayName: "Gemini 2.5 Flash Lite",
-          provider: "gemini",
-        },
-        {
-          id: "gemini-2.0-flash-001",
-          displayName: "Gemini 2.0 Flash 001",
-          provider: "gemini",
-        },
-        {
-          id: "gemini-2.0-flash-lite-001",
-          displayName: "Gemini 2.0 Flash Lite 001",
           provider: "gemini",
         },
       ]);

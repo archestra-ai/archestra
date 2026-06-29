@@ -2,7 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useOrganization } from "@/lib/organization.query";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   getKnowledgeBases,
@@ -56,10 +56,7 @@ export function useKnowledgeBases(params?: KnowledgeBasesListParams) {
           search: params?.query?.search,
         },
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error);
       return data?.data ?? [];
     },
     enabled: params?.enabled,
@@ -74,10 +71,8 @@ export function useKnowledgeBasesPaginated(
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getKnowledgeBases({ query: params });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      // Screen renders its own QueryLoadError panel; don't also toast.
+      throwOnApiError(error, { toastOnError: false });
       return data;
     },
   });
@@ -88,11 +83,8 @@ export function useKnowledgeBase(id: string) {
     queryKey: ["knowledge-bases", id],
     queryFn: async () => {
       const { data, error } = await getKnowledgeBase({ path: { id } });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
     enabled: !!id,
   });
@@ -103,11 +95,8 @@ export function useKnowledgeBaseHealth(id: string) {
     queryKey: ["knowledge-bases", id, "health"],
     queryFn: async () => {
       const { data, error } = await getKnowledgeBaseHealth({ path: { id } });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
     enabled: false, // Only fetch on demand
   });

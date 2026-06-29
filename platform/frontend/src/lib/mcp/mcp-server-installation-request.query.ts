@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { throwOnApiError } from "@/lib/utils";
 
 const {
   addMcpServerInstallationRequestNote,
@@ -40,10 +41,11 @@ export function useMcpServerInstallationRequests(
   return useQuery({
     queryKey: ["mcp-server-installation-requests", params?.status],
     queryFn: async () => {
-      const response = await getMcpServerInstallationRequests({
+      const { data, error } = await getMcpServerInstallationRequests({
         query: params?.status ? { status: params.status } : undefined,
       });
-      return response.data ?? null;
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
     },
   });
 }
@@ -52,10 +54,11 @@ export function useMcpServerInstallationRequest(id: string) {
   return useQuery({
     queryKey: ["mcp-server-installation-request", id],
     queryFn: async () => {
-      const response = await getMcpServerInstallationRequest({
+      const { data, error } = await getMcpServerInstallationRequest({
         path: { id },
       });
-      return response.data ?? null;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
     enabled: !!id,
   });

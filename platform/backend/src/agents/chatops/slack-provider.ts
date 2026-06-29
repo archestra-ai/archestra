@@ -415,10 +415,11 @@ class SlackProvider implements ChatOpsProvider {
         });
       }
 
-      const fallbackText =
+      const fallbackText = truncateFallbackText(
         isFinal && options.footer
           ? `${chunkText}\n\n${options.footer}`
-          : chunkText;
+          : chunkText,
+      );
 
       // Follow-ups thread under the first message when the original wasn't a
       // thread, so we don't spam the channel with N top-level posts.
@@ -468,11 +469,21 @@ class SlackProvider implements ChatOpsProvider {
           emoji: true,
         },
         action_id: `approval_decision_${options.approvalId}_${action}`,
+        // Slack caps a button `value` at 2,000 chars and rejects oversized
+        // chat.postMessage payloads with `msg_too_large`. Embedding the full
+        // original message (text, rawText, base64 attachments, metadata) here
+        // scales with user input and blew past that limit. The approve/decline
+        // click path only needs the requester's email (authz check, not
+        // recoverable from the click payload) plus channel/thread for replies.
         value: JSON.stringify({
           taskId: options.taskId,
           approvalId: options.approvalId,
           toolName: options.toolName,
-          originalMessage: options.originalMessage,
+          originalMessage: {
+            channelId: options.originalMessage.channelId,
+            threadId: options.originalMessage.threadId,
+            senderEmail: options.originalMessage.senderEmail,
+          },
           approved,
         }),
         style,
@@ -902,7 +913,7 @@ class SlackProvider implements ChatOpsProvider {
       approvalId?: string;
       approved?: boolean;
       toolName?: string;
-      originalMessage: IncomingChatMessage;
+      originalMessage?: Partial<IncomingChatMessage>;
     };
     try {
       parsedValue = JSON.parse(action.value) as {
@@ -910,7 +921,7 @@ class SlackProvider implements ChatOpsProvider {
         approvalId?: string;
         approved?: boolean;
         toolName?: string;
-        originalMessage: IncomingChatMessage;
+        originalMessage?: Partial<IncomingChatMessage>;
       };
     } catch {
       return null;
@@ -930,6 +941,28 @@ class SlackProvider implements ChatOpsProvider {
       return null;
     }
 
+    // The button value now carries only a slimmed-down original message (see
+    // addApprovalRequestForm). Reconstruct a complete IncomingChatMessage,
+    // falling back to the live interactive payload for ids and to safe defaults
+    // for fields the click path doesn't read. Older in-flight buttons that
+    // still carry a full message keep working unchanged.
+    const embedded = parsedValue.originalMessage;
+    const originalMessage: IncomingChatMessage = {
+      messageId: embedded.messageId ?? "",
+      channelId: embedded.channelId ?? p.channel?.id ?? "",
+      workspaceId: embedded.workspaceId ?? p.team?.id ?? null,
+      threadId: embedded.threadId ?? p.message?.thread_ts ?? p.message?.ts,
+      senderId: embedded.senderId ?? "",
+      senderEmail: embedded.senderEmail,
+      senderName: embedded.senderName ?? "",
+      text: embedded.text ?? "",
+      rawText: embedded.rawText ?? "",
+      timestamp: new Date(),
+      isThreadReply: embedded.isThreadReply ?? false,
+      metadata: embedded.metadata,
+      attachments: embedded.attachments,
+    };
+
     return {
       taskId: parsedValue.taskId,
       approvalId: parsedValue.approvalId,
@@ -942,7 +975,7 @@ class SlackProvider implements ChatOpsProvider {
       userId: p.user?.id || "unknown",
       userName: p.user?.name || "Unknown",
       responseUrl: p.response_url || "",
-      originalMessage: parsedValue.originalMessage,
+      originalMessage,
     };
   }
 
@@ -1782,6 +1815,17 @@ function decodeSlackEntities(text: string): string {
 
 // Slack's `markdown` block has a 12,000-char limit per block.
 const MARKDOWN_BLOCK_CHAR_LIMIT = 12_000;
+
+// Slack's chat.postMessage `text` is only a notification/accessibility fallback
+// — the rendered reply lives in `blocks`. Slack rejects oversized payloads with
+// `msg_too_large`, so cap the fallback well below Slack's ~40,000-char text
+// limit instead of duplicating the full (already block-rendered) chunk into it.
+const SLACK_FALLBACK_TEXT_LIMIT = 3_000;
+
+function truncateFallbackText(text: string): string {
+  if (text.length <= SLACK_FALLBACK_TEXT_LIMIT) return text;
+  return `${text.slice(0, SLACK_FALLBACK_TEXT_LIMIT - 1)}…`;
+}
 
 // Slack rejects chat.postMessage with more than 50 expanded blocks. Each
 // sendReply message reserves 1 slot for a context footer (continuation hint

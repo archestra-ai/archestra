@@ -71,7 +71,9 @@ function normalizeRegistryEntry(raw: string): string | null {
 
   if (segments.length === 1) {
     const only = segments[0];
-    if (isHostOnly(only)) return canonicalizeHost(only);
+    // A lone host (`ghcr.io`, `localhost:5000`, the k8s-internal `registry:5000`)
+    // is a host-only entry; a bare name is an official docker.io image.
+    if (isHostSegment(only)) return canonicalizeHost(only);
     const name = stripTag(only);
     if (!name) return null;
     return `${DOCKER_DEFAULT_HOST}/${DOCKER_OFFICIAL_NAMESPACE}/${name}`.toLowerCase();
@@ -119,18 +121,9 @@ function stripTagFromLastSegment(path: string): string {
   return `${head}${stripTag(last)}`;
 }
 
-/** A leading multi-segment host: has a dot, a port colon, or is localhost. */
+/** A host segment: has a dot, a port colon, or is localhost. */
 function isHostSegment(segment: string): boolean {
   return (
     segment.includes(".") || segment.includes(":") || segment === "localhost"
-  );
-}
-
-/** A standalone host entry (with optional port), distinct from a repo:tag. */
-function isHostOnly(segment: string): boolean {
-  return (
-    segment.includes(".") ||
-    segment === "localhost" ||
-    segment.startsWith("localhost:")
   );
 }

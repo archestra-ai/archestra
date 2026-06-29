@@ -1313,17 +1313,47 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // For local servers, trigger pod restart to pick up new credentials
       if (mcpServer.serverType === "local") {
-        try {
-          await McpServerRuntimeManager.restartServer(id);
-          logger.info(
-            { mcpServerId: id },
-            "Triggered pod restart after re-authentication",
-          );
-        } catch (error) {
-          logger.warn(
-            { err: error, mcpServerId: id },
-            "Failed to restart pod after re-authentication (may not be running)",
-          );
+        // Re-enforce the trusted-image-registry gate: don't roll the pod onto
+        // the catalog's current image if it became untrusted/unapproved (e.g.
+        // the image was edited after install). The credential swap above stands;
+        // the running pod keeps its current image until the new one is approved.
+        const reauthCatalogItem = mcpServer.catalogId
+          ? await InternalMcpCatalogModel.findById(mcpServer.catalogId, {
+              expandSecrets: false,
+            })
+          : null;
+        let blockedByImagePolicy = false;
+        if (reauthCatalogItem) {
+          try {
+            await assertInstallAllowedOrBlock({
+              catalogItem: reauthCatalogItem,
+              organizationId,
+            });
+          } catch (error) {
+            if (error instanceof ApiError) {
+              blockedByImagePolicy = true;
+              logger.warn(
+                { mcpServerId: id, catalogId: mcpServer.catalogId },
+                "Skipped pod restart after re-authentication: image is pending admin approval",
+              );
+            } else {
+              throw error;
+            }
+          }
+        }
+        if (!blockedByImagePolicy) {
+          try {
+            await McpServerRuntimeManager.restartServer(id);
+            logger.info(
+              { mcpServerId: id },
+              "Triggered pod restart after re-authentication",
+            );
+          } catch (error) {
+            logger.warn(
+              { err: error, mcpServerId: id },
+              "Failed to restart pod after re-authentication (may not be running)",
+            );
+          }
         }
       }
 

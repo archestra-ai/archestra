@@ -173,6 +173,36 @@ describe("internal MCP catalog image approval", () => {
     expect(ids).not.toContain(approved.id);
   });
 
+  test("editing the catalog image resets a prior approval", async () => {
+    const catalog = await makePersonalLocalCatalog("ghcr.io/acme/foo:1");
+    await InternalMcpCatalogModel.approveImage({
+      id: catalog.id,
+      reviewedBy: user.id,
+    });
+
+    await InternalMcpCatalogModel.update(catalog.id, {
+      localConfig: { dockerImage: "ghcr.io/evil/x:1" },
+    });
+
+    const after = await InternalMcpCatalogModel.findById(catalog.id);
+    expect(after?.catalogItemApprovalStatus).toBeNull();
+  });
+
+  test("editing non-image fields preserves a prior approval", async () => {
+    const catalog = await makePersonalLocalCatalog("ghcr.io/acme/foo:1");
+    await InternalMcpCatalogModel.approveImage({
+      id: catalog.id,
+      reviewedBy: user.id,
+    });
+
+    await InternalMcpCatalogModel.update(catalog.id, {
+      description: "updated description",
+    });
+
+    const after = await InternalMcpCatalogModel.findById(catalog.id);
+    expect(after?.catalogItemApprovalStatus).toBe("approved");
+  });
+
   test("a catalog edit cannot set the image-approval fields", async () => {
     const catalog = await makePersonalLocalCatalog();
 

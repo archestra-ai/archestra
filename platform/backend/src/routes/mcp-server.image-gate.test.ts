@@ -4,6 +4,7 @@ import db, { schema } from "@/database";
 import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { autoReinstallServer } from "@/services/mcp-reinstall";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -193,5 +194,44 @@ describe("MCP Server Install - trusted-image-registry gate", () => {
 
     expect(response.statusCode).toBe(200);
     expect(k8sStartServerMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Redeploy paths (reinstall route + catalog-edit cascade + refresh-image) all
+  // funnel through autoReinstallServer, so it carries the gate too — otherwise an
+  // image edited to an untrusted value would be rolled onto the running pod.
+  test("reinstall is blocked for an untrusted (edited) image", async ({
+    makeMcpServer,
+  }) => {
+    await OrganizationModel.patch(organizationId, {
+      defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
+    });
+    const catalog = await makePersonalLocalCatalog("ghcr.io/evil/x:1");
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "personal",
+      ownerId: user.id,
+    });
+
+    await expect(autoReinstallServer(server, catalog)).rejects.toMatchObject({
+      statusCode: 403,
+    });
+    expect(k8sRestartServerMock).not.toHaveBeenCalled();
+    const flagged = await InternalMcpCatalogModel.findById(catalog.id);
+    expect(flagged?.catalogItemApprovalStatus).toBe("pending");
+  });
+
+  test("reinstall proceeds for a trusted image", async ({ makeMcpServer }) => {
+    await OrganizationModel.patch(organizationId, {
+      defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
+    });
+    const catalog = await makePersonalLocalCatalog("ghcr.io/acme/foo:1");
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "personal",
+      ownerId: user.id,
+    });
+
+    await autoReinstallServer(server, catalog);
+    expect(k8sRestartServerMock).toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
+import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import type { InternalMcpCatalog, LocalConfig, McpServer } from "@/types";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
@@ -354,6 +355,19 @@ export async function autoReinstallServer(
 
   // For local servers: restart K8s deployment
   if (catalogItem.serverType === "local") {
+    // Re-enforce the trusted-image-registry gate on redeploy. A catalog edit
+    // that swaps in an untrusted image (approval is reset on image change) must
+    // not be rolled out to the running pod until an admin approves it — mirrors
+    // the install-time gate and the env-regex policy, which is also re-checked
+    // on reinstall. Only personal local items are gated; for everything else
+    // the policy is a no-op. `organizationId` lives on the catalog row (personal
+    // catalogs always carry it); skip when absent rather than fail open loudly.
+    if (catalogItem.organizationId) {
+      await assertInstallAllowedOrBlock({
+        catalogItem,
+        organizationId: catalogItem.organizationId,
+      });
+    }
     await McpServerRuntimeManager.restartServer(server.id);
 
     // Wait for deployment to be ready

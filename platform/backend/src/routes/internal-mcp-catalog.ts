@@ -1292,6 +1292,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!approved) {
         throw new ApiError(404, "Catalog item not found");
       }
+      logger.info(
+        { catalogId: catalogItem.id, reviewedBy: request.user.id },
+        "Catalog item image approved",
+      );
       return reply.send(approved);
     },
   );
@@ -1322,6 +1326,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!declined) {
         throw new ApiError(404, "Catalog item not found");
       }
+      logger.info(
+        { catalogId: catalogItem.id, reviewedBy: request.user.id },
+        "Catalog item image declined",
+      );
       return reply.send(declined);
     },
   );

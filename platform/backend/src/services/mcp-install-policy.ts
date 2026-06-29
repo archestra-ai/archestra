@@ -1,4 +1,5 @@
 import config from "@/config";
+import logger from "@/logging";
 import { InternalMcpCatalogModel } from "@/models";
 import { resolveTrustedImageRegistries } from "@/services/environments/environment";
 import { ApiError, type InternalMcpCatalog } from "@/types";
@@ -51,6 +52,10 @@ export async function assertInstallAllowedOrBlock(params: {
 
   if (catalogItem.catalogItemApprovalStatus === "approved") return;
   if (catalogItem.catalogItemApprovalStatus === "declined") {
+    logger.info(
+      { catalogId: catalogItem.id, image: policy.image },
+      "Install blocked: catalog image was declined",
+    );
     throw new ApiError(
       403,
       declineMessage(catalogItem.catalogItemApprovalReason),
@@ -66,6 +71,14 @@ export async function assertInstallAllowedOrBlock(params: {
   if (winning.status === "declined") {
     throw new ApiError(403, declineMessage(winning.reason));
   }
+  logger.info(
+    {
+      catalogId: catalogItem.id,
+      image: policy.image,
+      environment: policy.environmentLabel,
+    },
+    "Install blocked: catalog image not in trusted registries (pending approval)",
+  );
   throw new ApiError(403, blockedMessage(policy.environmentLabel));
 }
 

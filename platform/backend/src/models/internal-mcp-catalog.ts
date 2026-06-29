@@ -490,12 +490,34 @@ class InternalMcpCatalogModel {
       }
     }
 
+    const setValues: Partial<
+      typeof schema.internalMcpCatalogTable.$inferInsert
+    > = { ...dbValues };
+
+    // Reset a stale image-approval decision when the custom image changes: the
+    // new image must be re-vetted by the install-time gate, otherwise a one-time
+    // approval would silently carry over to any swapped image.
+    if ("localConfig" in dbValues) {
+      const [existing] = await db
+        .select({ localConfig: schema.internalMcpCatalogTable.localConfig })
+        .from(schema.internalMcpCatalogTable)
+        .where(eq(schema.internalMcpCatalogTable.id, id));
+      const oldImage = existing?.localConfig?.dockerImage ?? null;
+      const newImage = dbValues.localConfig?.dockerImage ?? null;
+      if (oldImage !== newImage) {
+        setValues.catalogItemApprovalStatus = null;
+        setValues.catalogItemApprovalReason = null;
+        setValues.catalogItemApprovalReviewedBy = null;
+        setValues.catalogItemApprovalReviewedAt = null;
+      }
+    }
+
     let dbItem: typeof schema.internalMcpCatalogTable.$inferSelect | undefined;
 
-    if (Object.keys(dbValues).length > 0) {
+    if (Object.keys(setValues).length > 0) {
       [dbItem] = await db
         .update(schema.internalMcpCatalogTable)
-        .set(dbValues)
+        .set(setValues)
         .where(eq(schema.internalMcpCatalogTable.id, id))
         .returning();
     } else {

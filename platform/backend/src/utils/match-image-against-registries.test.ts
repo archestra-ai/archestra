@@ -81,6 +81,22 @@ describe("imageMatchesTrustedRegistries", () => {
     ).toBe(false);
   });
 
+  it("supports a dotless host:port entry (e.g. a k8s-internal registry)", () => {
+    expect(
+      imageMatchesTrustedRegistries("registry:5000/team/app:1", [
+        "registry:5000",
+      ]),
+    ).toBe(true);
+    expect(
+      imageMatchesTrustedRegistries("registry:5000/team/app:1", [
+        "registry:5000/team",
+      ]),
+    ).toBe(true);
+    expect(
+      imageMatchesTrustedRegistries("other:5000/x", ["registry:5000"]),
+    ).toBe(false);
+  });
+
   it("strips a tag from a registry entry (approval is by repo, not tag)", () => {
     expect(
       imageMatchesTrustedRegistries("ghcr.io/acme/foo:v2", [

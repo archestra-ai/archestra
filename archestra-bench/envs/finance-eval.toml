@@ -1,0 +1,8 @@
+id = "finance-eval"
+name = "Finance deck QC"
+tasks = ["ib-deck-qc"]
+
+# Finance judgement task over staged inputs: the agent reads the attachments, works in the sandbox,
+# and hands the answer to submit_result. No skills or MCPs are seeded (none are needed), and the task
+# is read-only against backend state, so all lanes can share one seeded backend.
+share_backend = true

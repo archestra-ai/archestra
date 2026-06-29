@@ -30,10 +30,10 @@ import {
 } from "@/clients/chat-mcp-elicitation";
 import config from "@/config";
 import {
+  AppAccessModel,
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
-  AppTeamModel,
   AppToolModel,
   AppVersionModel,
   EnvironmentModel,
@@ -1678,7 +1678,7 @@ describe("publish_app", () => {
     );
     expect(result.isError).toBe(false);
     expect(structured(result).scope).toBe("team");
-    expect(await AppTeamModel.getTeamsForApp(app.id)).toEqual([team.id]);
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
   });
 
   // The source-scope gate: a team admin (editor) can see every org app but must
@@ -1711,7 +1711,7 @@ describe("publish_app", () => {
     expect(result.isError).toBe(true);
     // the org app is untouched — neither demoted nor reassigned
     expect((await AppModel.findById(app.id))?.scope).toBe("org");
-    expect(await AppTeamModel.getTeamsForApp(app.id)).toEqual([]);
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([]);
   });
 
   test("rejects teamIds when publishing to org scope", async ({

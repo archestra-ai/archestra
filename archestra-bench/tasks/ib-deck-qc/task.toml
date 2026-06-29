@@ -1,0 +1,54 @@
+[[stages]]
+text = """Hey, I've attached deck.md — it's the draft CIM for Project Atlas (the Meridian Software sale) that an analyst put together. It's at /home/sandbox/attachments/deck.md.
+
+Before this goes out I need a QC pass on the numbers. I'm worried about two classes of problem:
+- the SAME metric showing up with different values on different slides (an internal inconsistency / value conflict), and
+- a number that doesn't actually follow from the figures stated for it (a stated calculation that's arithmetically wrong).
+
+Go through the whole deck and find every such defect. For each one, report the metric it concerns and which class of problem it is. When you check a stated growth rate or CAGR against a data series, compute it over the number of years the series actually spans (last value / first value, annualized over that many years).
+
+Two scope notes so we're aligned: (1) the deck quotes different headline enterprise values on different slides — a comps-IMPLIED EV (~$1.2B) versus the INDICATIVE deal EV ($1.25B). Those are different concepts by design, so do NOT treat that as a defect. (2) For `implied_ev`, the only thing to check is whether slide 6's stated implied EV correctly equals the median EV/Revenue multiple it cites times the revenue it cites — i.e. is that one stated calculation right.
+
+Send it back with submit_result as `findings`: a list of objects, each with a `metric` (pick from the allowed enum) and an `issue_type` of either "value_conflict" or "calc_error". Only report real defects — don't pad the list with metrics that are actually consistent.
+
+Make a single submit_result call with your complete, final list of findings."""
+
+  [[stages.files]]
+  src = "deck.md"
+  dest = "/home/sandbox/attachments/deck.md"
+  mime_type = "text/markdown"
+
+[result_schema]
+type = "object"
+required = ["findings"]
+additionalProperties = false
+
+  [result_schema.properties.findings]
+  type = "array"
+  uniqueItems = true
+
+    [result_schema.properties.findings.items]
+    type = "object"
+    required = ["metric", "issue_type"]
+    additionalProperties = false
+
+      [result_schema.properties.findings.items.properties.metric]
+      type = "string"
+      enum = [
+        "revenue",
+        "employees",
+        "implied_ev",
+        "cagr",
+        "gross_margin",
+        "net_revenue_retention",
+        "ebitda",
+        "arr",
+        "free_cash_flow",
+      ]
+
+      [result_schema.properties.findings.items.properties.issue_type]
+      type = "string"
+      enum = ["value_conflict", "calc_error"]
+
+[verifier]
+deps = []

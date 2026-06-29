@@ -15,6 +15,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { QueryLoadError } from "@/components/query-load-error";
 import { scopeStyles } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
@@ -41,11 +42,14 @@ export default function AppsPage() {
 
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-  const { data, isPending } = useApps({
-    limit: PAGE_SIZE,
-    offset: 0,
-    search: search || undefined,
-  });
+  const { data, isPending, isLoadingError, refetch } = useApps(
+    {
+      limit: PAGE_SIZE,
+      offset: 0,
+      search: search || undefined,
+    },
+    { toastOnError: false },
+  );
   const [createOpen, setCreateOpen] = useState(false);
 
   const apps = useMemo(() => data?.data ?? [], [data]);
@@ -165,7 +169,12 @@ export default function AppsPage() {
       </div>
 
       <LoadingWrapper isPending={isPending && !data}>
-        {filtered.length === 0 && !showCreateCard ? (
+        {isLoadingError ? (
+          <QueryLoadError
+            title="Couldn't load your apps"
+            onRetry={() => refetch()}
+          />
+        ) : filtered.length === 0 && !showCreateCard ? (
           <div className="flex min-h-[40vh] flex-col items-center justify-center text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border bg-background shadow-sm">
               <AppWindow className="h-6 w-6 text-primary" />

@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
+import { throwOnApiError } from "@/lib/utils";
 
 const { getHealth } = archestraApiSdk;
 
@@ -8,7 +9,11 @@ export function useHealth(params?: {
 }) {
   return useQuery({
     queryKey: ["health"],
-    queryFn: async () => (await getHealth()).data ?? null,
+    queryFn: async () => {
+      const { data, error } = await getHealth();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
     initialData: params?.initialData,
   });
 }

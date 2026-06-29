@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 const {
   getMcpOauthClients,
@@ -27,10 +27,7 @@ export function useMcpOauthClients(params?: McpOauthClientsParams) {
           search: search || undefined,
         },
       });
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
     enabled: params?.enabled,

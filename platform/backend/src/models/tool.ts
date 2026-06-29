@@ -1022,23 +1022,30 @@ class ToolModel {
     });
 
     if (discoveredArchestraTools.length > 0) {
-      // Promote only names not already present in the catalog, and at most one
-      // discovered row per name. Promoting a colliding/duplicate name would violate
-      // the (catalog_id, name) unique index. Redundant discovered rows are left as-is
-      // (catalog_id = NULL, not surfaced as catalog tools) rather than deleted, to avoid
-      // cascading their agent assignments.
-      const claimedNames = new Set(
+      // Promote at most one discovered row per built-in SHORT name, and only when
+      // that short name isn't already in the catalog. Deduping by short name (not by
+      // full name) is what stops a default-prefixed `archestra__X` discovery from
+      // being adopted alongside an already-branded `archestra_staging__X` — the
+      // dual-prefix duplicate that 0285 had to collapse. Promoting a colliding full
+      // name would also violate the (catalog_id, name) unique index. Redundant
+      // discovered rows are left as-is (catalog_id = NULL, not surfaced as catalog
+      // tools) rather than deleted, to avoid cascading their agent assignments.
+      const claimedShortNames = new Set(
         (
           await db
             .select({ name: schema.toolsTable.name })
             .from(schema.toolsTable)
             .where(eq(schema.toolsTable.catalogId, catalogId))
-        ).map((tool) => tool.name),
+        )
+          .map((tool) => extractArchestraBuiltInShortName(tool.name))
+          .filter((shortName): shortName is string => shortName !== null),
       );
       const idsToPromote: string[] = [];
       for (const tool of discoveredArchestraTools) {
-        if (!claimedNames.has(tool.name)) {
-          claimedNames.add(tool.name);
+        // discoveredArchestraTools is pre-filtered to rows with a built-in short name.
+        const shortName = extractArchestraBuiltInShortName(tool.name);
+        if (shortName !== null && !claimedShortNames.has(shortName)) {
+          claimedShortNames.add(shortName);
           idsToPromote.push(tool.id);
         }
       }

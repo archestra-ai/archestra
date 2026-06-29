@@ -6,6 +6,7 @@ import {
   type StatisticsTimeFrame,
 } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
+import { throwOnApiError } from "@/lib/utils";
 
 const {
   getTeamStatistics,
@@ -25,10 +26,11 @@ export function useTeamStatistics({
   return useQuery({
     queryKey: ["statistics", "teams", timeframe],
     queryFn: async () => {
-      const response = await getTeamStatistics({
+      const { data, error } = await getTeamStatistics({
         query: { timeframe },
       });
-      return response.data;
+      throwOnApiError(error, { toastOnError: false });
+      return data;
     },
     initialData,
     refetchInterval: 30_000, // Refresh every 30 seconds
@@ -45,10 +47,11 @@ export function useProfileStatistics({
   return useQuery({
     queryKey: ["statistics", "agents", timeframe],
     queryFn: async () => {
-      const response = await getAgentStatistics({
+      const { data, error } = await getAgentStatistics({
         query: { timeframe },
       });
-      return response.data;
+      throwOnApiError(error, { toastOnError: false });
+      return data;
     },
     initialData,
     refetchInterval: 30_000, // Refresh every 30 seconds
@@ -65,10 +68,11 @@ export function useModelStatistics({
   return useQuery({
     queryKey: ["statistics", "models", timeframe],
     queryFn: async () => {
-      const response = await getModelStatistics({
+      const { data, error } = await getModelStatistics({
         query: { timeframe },
       });
-      return response.data;
+      throwOnApiError(error, { toastOnError: false });
+      return data;
     },
     initialData,
     refetchInterval: 30_000, // Refresh every 30 seconds
@@ -85,10 +89,11 @@ export function useOverviewStatistics({
   return useQuery({
     queryKey: ["statistics", "overview", timeframe],
     queryFn: async () => {
-      const response = await getOverviewStatistics({
+      const { data, error } = await getOverviewStatistics({
         query: { timeframe },
       });
-      return response.data;
+      throwOnApiError(error, { toastOnError: false });
+      return data;
     },
     initialData,
     refetchInterval: 30_000, // Refresh every 30 seconds
@@ -105,10 +110,11 @@ export function useCostSavingsStatistics({
   return useQuery({
     queryKey: ["statistics", "cost-savings", timeframe],
     queryFn: async () => {
-      const response = await getCostSavingsStatistics({
+      const { data, error } = await getCostSavingsStatistics({
         query: { timeframe },
       });
-      return response.data;
+      throwOnApiError(error, { toastOnError: false });
+      return data;
     },
     initialData,
     refetchInterval: 30_000, // Refresh every 30 seconds

@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
+import { QueryLoadError } from "@/components/query-load-error";
 import { RoleTypeIcon } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -58,7 +59,12 @@ export function RolesList() {
     updateQueryParams,
   } = useDataTableQueryParams();
   const nameFilter = searchParams.get("name") || undefined;
-  const { data: rolesResponse, isLoading } = useRolesPaginated({
+  const {
+    data: rolesResponse,
+    isLoading,
+    isLoadingError,
+    refetch,
+  } = useRolesPaginated({
     limit: pageSize,
     offset,
     name: nameFilter,
@@ -325,27 +331,34 @@ export function RolesList() {
           paramName="name"
         />
 
-        <DataTable
-          columns={columns}
-          data={allRoles}
-          isLoading={isLoading}
-          manualPagination
-          pagination={{
-            pageIndex,
-            pageSize,
-            total,
-          }}
-          onPaginationChange={setPagination}
-          hasActiveFilters={Boolean(nameFilter)}
-          onClearFilters={() =>
-            updateQueryParams({
-              name: null,
-              page: "1",
-            })
-          }
-          emptyMessage="No roles found"
-          hideSelectedCount
-        />
+        {isLoadingError ? (
+          <QueryLoadError
+            title="Couldn't load your roles"
+            onRetry={() => refetch()}
+          />
+        ) : (
+          <DataTable
+            columns={columns}
+            data={allRoles}
+            isLoading={isLoading}
+            manualPagination
+            pagination={{
+              pageIndex,
+              pageSize,
+              total,
+            }}
+            onPaginationChange={setPagination}
+            hasActiveFilters={Boolean(nameFilter)}
+            onClearFilters={() =>
+              updateQueryParams({
+                name: null,
+                page: "1",
+              })
+            }
+            emptyMessage="No roles found"
+            hideSelectedCount
+          />
+        )}
       </div>
 
       {/* Create Role Dialog */}

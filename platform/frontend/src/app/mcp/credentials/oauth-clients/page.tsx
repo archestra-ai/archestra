@@ -11,6 +11,7 @@ import {
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -81,7 +82,12 @@ export default function OAuthClientsPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
 
-  const { data: oauthClients = [], isPending } = useMcpOauthClients({
+  const {
+    data: oauthClients = [],
+    isPending,
+    isLoadingError: isOauthClientsLoadError,
+    refetch: refetchOauthClients,
+  } = useMcpOauthClients({
     search: search || undefined,
   });
   const { data: gateways = [] } = useProfiles({
@@ -202,20 +208,27 @@ export default function OAuthClientsPage() {
         />
       </div>
 
-      <DataTable
-        columns={columns}
-        data={oauthClients}
-        isLoading={isPending}
-        emptyMessage="No OAuth clients registered. Create one for an application that calls MCP gateways."
-        hasActiveFilters={Boolean(search)}
-        filteredEmptyMessage="No OAuth clients match your filters. Try adjusting your search."
-        onClearFilters={() =>
-          updateQueryParams({
-            search: null,
-            page: "1",
-          })
-        }
-      />
+      {isOauthClientsLoadError ? (
+        <QueryLoadError
+          title="Couldn't load your OAuth clients"
+          onRetry={() => refetchOauthClients()}
+        />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={oauthClients}
+          isLoading={isPending}
+          emptyMessage="No OAuth clients registered. Create one for an application that calls MCP gateways."
+          hasActiveFilters={Boolean(search)}
+          filteredEmptyMessage="No OAuth clients match your filters. Try adjusting your search."
+          onClearFilters={() =>
+            updateQueryParams({
+              search: null,
+              page: "1",
+            })
+          }
+        />
+      )}
 
       <CreateOAuthClientDialog
         open={isCreateDialogOpen}

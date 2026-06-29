@@ -4,7 +4,7 @@ import {
   SecretsManagerType,
 } from "@archestra/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { handleApiError } from "./utils";
+import { handleApiError, throwOnApiError } from "./utils";
 
 const { getSecretsType, checkSecretsConnectivity, getSecret } = archestraApiSdk;
 
@@ -19,7 +19,8 @@ export function useSecretsType() {
   return useQuery({
     queryKey: secretsKeys.type(),
     queryFn: async () => {
-      const { data } = await getSecretsType();
+      const { data, error } = await getSecretsType();
+      throwOnApiError(error, { toastOnError: false });
       return data;
     },
   });
@@ -42,10 +43,7 @@ export function useGetSecret(secretId: string | null | undefined) {
         return null;
       }
       const response = await getSecret({ path: { id: secretId } });
-      if (response.error) {
-        handleApiError(response.error);
-        return null;
-      }
+      throwOnApiError(response.error, { allowNotFound: true });
       return response.data;
     },
     enabled: !!secretId && byosEnabled,

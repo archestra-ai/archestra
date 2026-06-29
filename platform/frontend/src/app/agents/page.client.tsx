@@ -29,6 +29,7 @@ import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
@@ -135,7 +136,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
-  const { data: agentsResponse, isPending } = useProfilesPaginated({
+  const {
+    data: agentsResponse,
+    isPending,
+    isLoadingError: isAgentsLoadError,
+    refetch: refetchAgents,
+  } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
     limit: pageSize,
     offset,
@@ -442,6 +448,25 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       },
     },
   ];
+
+  if (isAgentsLoadError) {
+    return (
+      <PageLayout
+        title="Agents"
+        description={
+          <p className="text-sm text-muted-foreground">
+            Agents are AI assistants with system prompts, tools, knowledge
+            sources, and integrations like ChatOps, email, and A2A.
+          </p>
+        }
+      >
+        <QueryLoadError
+          title="Couldn't load your agents"
+          onRetry={() => refetchAgents()}
+        />
+      </PageLayout>
+    );
+  }
 
   return (
     <LoadingWrapper

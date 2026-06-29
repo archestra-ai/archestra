@@ -85,7 +85,7 @@ from contracts import (
     to_jsonable,
     validate_requirements,
 )
-from frontmatter import emit_frontmatter
+from frontmatter import emit_frontmatter, parse_frontmatter, set_name
 
 # deterministic apply order: keys before the agent, skills/catalog next, install, then policies,
 # then hooks (they attach to the already-created primary agent).
@@ -192,10 +192,12 @@ def _skill_content_for(item: Item, name: str) -> tuple[str, list[SkillFile]]:
     files = _skill_files(item)
     match item:
         case SkillItem():
-            # verbatim: the original SKILL.md already carries frontmatter.
-            return item.data.content, files
+            # the original SKILL.md carries its own frontmatter; archestra reads the skill name
+            # from there (SkillCreate has no name field), so apply the rename into the frontmatter.
+            # set_name is a no-op when the name already matches, keeping unchanged skills verbatim.
+            return set_name(item.data.content, name), files
         case SubagentItem():
-            desc = (item.data.description or f"migrated subagent {name}").replace("\n", " ")
+            desc = ((item.data.description or "").strip() or f"migrated subagent {name}").replace("\n", " ")
             note = ""
             tools = item.data.tools
             if tools:
@@ -207,8 +209,8 @@ def _skill_content_for(item: Item, name: str) -> tuple[str, list[SkillFile]]:
                 )
             return emit_frontmatter(name, desc) + item.data.body + note, files
         case CommandItem():
-            desc = (_fm_str(item.data.frontmatter, "description") or f"migrated command {name}").replace("\n", " ")
-            return emit_frontmatter(name, desc) + item.data.body, files
+            desc = (_fm_str(item.data.frontmatter, "description") or "").strip() or f"migrated command {name}"
+            return emit_frontmatter(name, desc.replace("\n", " ")) + item.data.body, files
         case LocalToolItem():
             entry = item.data.entrypoint
             body = (
@@ -220,6 +222,26 @@ def _skill_content_for(item: Item, name: str) -> tuple[str, list[SkillFile]]:
             return emit_frontmatter(name, f"Run the bundled {entry} script.") + body, files
         case _:
             raise ContractError(f"cannot build skill content from item kind {item.kind}")
+
+
+def _require_skill_frontmatter(content: str, *, ctx: str) -> None:
+    """fail offline on skill content the server would 400 on. archestra requires a SKILL.md to
+    start with a `---` frontmatter block carrying `name` and `description`; without this check a
+    frontmatter-less or description-less skill passes --dry-run and only fails at create time.
+
+    `name` is normally supplied upstream (set_name writes the override or the source dir name), so
+    in practice this is the gate on `description` -- which cannot be invented -- and on duplicate or
+    ambiguous keys the server's YAML would resolve differently than we do."""
+    if not content.startswith("---"):
+        raise ContractError(f"{ctx}: SKILL.md must start with a `---` frontmatter block")
+    doc = parse_frontmatter(content)
+    for key in ("name", "description"):
+        value = doc.frontmatter.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ContractError(f"{ctx}: SKILL.md frontmatter is missing `{key}`")
+    for line in doc.unparsed_lines:
+        if not line[:1].isspace() and line.split(":", 1)[0] in ("name", "description"):
+            raise ContractError(f"{ctx}: SKILL.md frontmatter has a duplicate/ambiguous `{line.split(':', 1)[0]}`")
 
 
 def _agent_source(item: Item) -> tuple[str | None, str | None]:
@@ -321,6 +343,7 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
 
         case "skill":
             content, files = _skill_content_for(item, name)
+            _require_skill_frontmatter(content, ctx=decision.source_id)
             return name, BuiltSkill(SkillCreate(
                 content=content,
                 scope=decision.scope,

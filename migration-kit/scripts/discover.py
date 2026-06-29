@@ -319,6 +319,9 @@ def discover(root: Path) -> Inventory:
                 data=OpenclawData(config=config), redacted_refs=refs,
             ))
 
+    # 7.5 dangling references: warn when a migrated body points at a repo file not bundled with it.
+    _scan_dangling_refs(inv, root)
+
     # 8. unrecognized files under .claude/ -> surface for the model
     claude_dir = root / ".claude"
     if claude_dir.is_dir():
@@ -428,6 +431,68 @@ def _script_position(rest: list[str], root: Path) -> int | None:
 
 def _expand_project_dir(token: str, root: Path) -> str:
     return _PROJECT_DIR_RE.sub(str(root), token)
+
+
+# a file path a migrated body may reference: optional ./ or ../ segments then a path ending in a
+# known code/doc/config extension. used only to WARN about uncaptured repo files (never to alter a
+# body). limitations: extensionless refs (./check, `node x`) and env vars other than
+# $CLAUDE_PROJECT_DIR are not resolved, so they are not flagged.
+_REF_RE = re.compile(r"(?:\.{1,2}/)*[\w./-]+\.(?:py|sh|md|js|ts|mjs|cjs|json|ya?ml|txt)")
+
+
+def _dangling_refs(body: str, bases: list[Path], root: Path, bundled: set[Path]) -> list[str]:
+    """repo-relative paths referenced in `body` that exist on disk but do NOT travel with this
+    artifact (not in `bundled`) -- so they would dangle in the artifact's sandbox. each ref is
+    resolved against every dir in `bases` ($CLAUDE_PROJECT_DIR expanded first); a hit inside
+    `bundled` is safe. returns deduped repo-relative paths."""
+    out: list[str] = []
+    found: set[Path] = set()
+    for m in _REF_RE.finditer(_expand_project_dir(body, root)):
+        candidate = Path(m.group(0))
+        roots = [candidate] if candidate.is_absolute() else [base / candidate for base in bases]
+        for c in roots:
+            try:
+                resolved = c.resolve()
+            except OSError:
+                continue
+            if resolved in bundled:
+                break  # the ref points at a file that ships with this artifact -> safe
+            if resolved in found:
+                break
+            if resolved.is_file() and resolved.is_relative_to(root):
+                found.add(resolved)
+                out.append(resolved.relative_to(root).as_posix())
+                break
+    return out
+
+
+def _scan_dangling_refs(inv: Inventory, root: Path) -> None:
+    """warn when a migrate-candidate body points at a repo file that won't be in its sandbox. a ref
+    is safe only if it resolves to a file bundled WITH that artifact; a file captured by a different
+    item (e.g. a separate local_tool) still dangles, so it is flagged."""
+    for it in inv.items:
+        match it:
+            case ClaudeMdItem() | CommandItem() | SubagentItem():
+                bundled = {(root / it.path).resolve()}
+                bodies = [(it.data.body, [root])]
+            case HookItem():
+                bundled = {(root / bf.path).resolve() for bf in it.files}
+                bodies = [(it.data.command, [root])]
+            case SkillItem():
+                skill_dir = (root / it.path).parent
+                bundled = {(skill_dir / bf.path).resolve() for bf in it.files} | {(root / it.path).resolve()}
+                # a skill body may address files by the skill dir (bundled siblings) or the repo root.
+                bodies = [(it.data.content, [skill_dir, root])]
+                bodies += [(bf.content, [skill_dir / Path(bf.path).parent, root])
+                           for bf in it.files if bf.encoding == "utf8"]
+            case _:
+                continue
+        for body, bases in bodies:
+            for rel in _dangling_refs(body, bases, root, bundled):
+                inv.warnings.append(
+                    f"{it.path}: references {rel} which exists in the repo but is not bundled with "
+                    "this artifact; bundle it or rewrite the reference before applying"
+                )
 
 
 def _pep723_requirements(content: str, ref: str, warnings: list[str]) -> list[str]:

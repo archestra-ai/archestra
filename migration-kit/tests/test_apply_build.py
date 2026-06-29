@@ -23,9 +23,19 @@ from apply import (
     _Built,
     _flag_hook_collisions,
     _redacted_for_print,
+    _require_skill_frontmatter,
 )
 from archestra_client import CatalogCreate, LlmKeyCreate, LocalConfig, McpEnvVar
-from contracts import ContractError, Decision, HookData, HookItem, Item, SkillItem, to_jsonable
+from contracts import (
+    ContractError,
+    Decision,
+    HookData,
+    HookItem,
+    Item,
+    SkillData,
+    SkillItem,
+    to_jsonable,
+)
 from discover import discover
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample-setup"
@@ -68,6 +78,61 @@ def test_skill_is_verbatim(index: dict[str, Item]) -> None:
     assert isinstance(source, SkillItem)
     assert built.payload.content == source.data.content
     assert {f.path for f in built.payload.files} == {"reference.md"}
+
+
+def test_skill_name_override_renames_frontmatter(index: dict[str, Item]) -> None:
+    # archestra reads the skill name from the content frontmatter, so a name_override must land
+    # there -- and the returned display name must match it (idempotency keys on that name).
+    name, built = _decide(index, "skill:summarize-text", "skill", name_override="proj-summarize")
+    assert isinstance(built, BuiltSkill)
+    assert name == "proj-summarize"
+    assert yaml.safe_load(built.payload.content.split("---", 2)[1])["name"] == "proj-summarize"
+
+
+def _skill_item(content: str) -> SkillItem:
+    return SkillItem(id="skill:x", name="x", path=".claude/skills/x/SKILL.md", summary="",
+                     data=SkillData(content=content, frontmatter={}), files=[])
+
+
+def test_require_skill_frontmatter_accepts_valid() -> None:
+    _require_skill_frontmatter("---\nname: x\ndescription: d\n---\nbody", ctx="t")  # no raise
+
+
+@pytest.mark.parametrize(
+    ("content", "match"),
+    [
+        ("no frontmatter at all", "must start with"),
+        ("---\ndescription: d\n---\nb", "missing `name`"),
+        ("---\nname: x\n---\nb", "missing `description`"),
+        ("---\nname: x\ndescription:   \n---\nb", "missing `description`"),
+    ],
+)
+def test_require_skill_frontmatter_rejects(content: str, match: str) -> None:
+    with pytest.raises(ContractError, match=match):
+        _require_skill_frontmatter(content, ctx="t")
+
+
+def test_require_skill_frontmatter_rejects_duplicate_name() -> None:
+    with pytest.raises(ContractError, match="duplicate/ambiguous"):
+        _require_skill_frontmatter("---\nname: a\nname: b\ndescription: d\n---\nbody", ctx="t")
+
+
+def test_build_skill_rejects_description_less_content() -> None:
+    # a description-less SKILL.md passes set_name (name present) but the server would 400 it;
+    # the build must fail offline so --dry-run reports it invalid rather than the network.
+    decision = Decision(source_id="skill:x", target_kind="skill", scope="personal")
+    with pytest.raises(ContractError, match="missing `description`"):
+        _build_payload(decision, _skill_item("---\nname: x\n---\nbody"))
+
+
+def test_build_skill_auto_supplies_missing_name() -> None:
+    # name is supplied from name_override (or the source dir) when the SKILL.md omits it; only
+    # description -- which cannot be invented -- gates the build.
+    decision = Decision(source_id="skill:x", target_kind="skill", scope="personal",
+                        name_override="proj-x")
+    _, built = _build_payload(decision, _skill_item("---\ndescription: d\n---\nbody"))
+    assert isinstance(built, BuiltSkill)
+    assert yaml.safe_load(built.payload.content.split("---", 2)[1])["name"] == "proj-x"
 
 
 def test_team_scoped_skill_requires_team_ids(index: dict[str, Item]) -> None:

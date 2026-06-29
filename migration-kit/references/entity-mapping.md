@@ -7,7 +7,7 @@ This is the canonical mapping the model applies when turning `inventory.json` in
 | Source (inventory `kind`) | `target_kind` | Confidence | Notes |
 |---|---|---|---|
 | `claude_md` (root CLAUDE.md) | `agent` | clean | becomes the **primary agent**'s systemPrompt; one per setup, no model binding (inherits org default) |
-| `skill` (`.claude/skills/*/SKILL.md`) | `skill` | clean | migrated verbatim with bundled files |
+| `skill` (`.claude/skills/*/SKILL.md`) | `skill` | clean | migrated verbatim with bundled files; a `name_override` is written into the SKILL.md frontmatter (Archestra derives the skill name from there) |
 | `subagent` (`.claude/agents/*.md`) | `skill` (preferred) or `agent` | best-effort | default to skill; tool allowlist is **documented, not enforced** |
 | `command` (`.claude/commands/*.md`) | `skill` | best-effort | slash command body → skill |
 | `local_tool` (`tools/*.py`) | `skill` | best-effort | per-script fallback; PREFER consolidating into one toolset skill — see "Local tools" below |

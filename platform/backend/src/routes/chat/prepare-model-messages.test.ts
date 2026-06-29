@@ -146,3 +146,70 @@ test("native Anthropic (default flag): document file part survives with cache_co
   expect(hasFilePart(modelMessages)).toBe(true);
   expect(anthropicCacheControlSeen(modelMessages)).toBe(true);
 });
+
+function inlinePdfMessage(base64Length: number): ChatMessage[] {
+  return [
+    {
+      role: "user",
+      parts: [
+        { type: "text", text: "Can you read this PDF?" },
+        {
+          type: "file",
+          url: `data:application/pdf;base64,${"A".repeat(base64Length)}`,
+          mediaType: "application/pdf",
+          filename: "big.pdf",
+        },
+      ],
+    },
+  ];
+}
+
+test("bedrock: an inline PDF whose payload exceeds the provider limit is rejected before the model call", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  // 33 MB of base64 > Bedrock/Claude's 32 MB request limit.
+  const messages = inlinePdfMessage(33 * 1024 * 1024);
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = false;
+  try {
+    await expect(
+      __test.buildModelMessagesForProvider({
+        messages,
+        provider: "bedrock",
+        conversationId: conversation.id,
+      }),
+    ).rejects.toThrow(/exceeds the .*\bMB\b.* limit/i);
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+});
+
+test("bedrock: a small inline PDF passes the size guard", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const messages = inlinePdfMessage(2048);
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = false;
+  try {
+    const modelMessages = await __test.buildModelMessagesForProvider({
+      messages,
+      provider: "bedrock",
+      conversationId: conversation.id,
+    });
+    expect(modelMessages.length).toBeGreaterThan(0);
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+});

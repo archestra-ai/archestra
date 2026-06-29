@@ -27,6 +27,7 @@ import {
   ProviderError,
   sanitizeChatErrorForFrontend,
 } from "./errors";
+import { RequestTooLargeError } from "./normalization/enforce-request-size-limit";
 
 beforeEach(() => {
   mockSentryCaptureException.mockClear();
@@ -45,6 +46,24 @@ describe("mapProviderError - per-user provider auth required", () => {
       provider: "github-copilot",
       providerLabel: "GitHub Copilot",
     });
+  });
+});
+
+describe("mapProviderError - request too large", () => {
+  it("maps RequestTooLargeError to a non-retryable RequestTooLarge card naming the size and limit", () => {
+    const result = mapProviderError(
+      new RequestTooLargeError({
+        provider: "bedrock",
+        payloadBytes: 65 * 1024 * 1024,
+        limitBytes: 32 * 1024 * 1024,
+      }),
+      "bedrock",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.RequestTooLarge);
+    expect(result.isRetryable).toBe(false);
+    expect(result.message).toMatch(/exceeds the 32 MB size limit/i);
+    expect(result.message).toContain("AWS Bedrock");
   });
 });
 

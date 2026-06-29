@@ -49,6 +49,7 @@ import {
   SkillSandboxError,
 } from "@/skills-sandbox/types";
 import { asSandboxId, type PersistedFile, type SandboxId } from "@/types";
+import { isUuid } from "@/utils/uuid";
 import {
   defineArchestraTool,
   defineArchestraTools,
@@ -74,9 +75,6 @@ import type { ArchestraContext } from "./types";
  * Model-facing text in this file follows the skill terminology glossary in
  * `skills/skill-activation.ts` and is pinned by `skill-tool-text.test.ts`.
  */
-
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // read_file default line window (matches the SOTA Read default).
 const READ_FILE_DEFAULT_LINES = 2000;
@@ -226,7 +224,7 @@ const UploadSourceSchema = z.discriminatedUnion("type", [
         .string()
         .min(1)
         .refine(
-          (v) => UUID_REGEX.test(v),
+          (v) => isUuid(v),
           "must be the attachment's id, not its filename",
         )
         .describe(
@@ -258,7 +256,7 @@ const UploadSourceSchema = z.discriminatedUnion("type", [
         .string()
         .trim()
         .refine(
-          (v) => UUID_REGEX.test(v) || v.startsWith(OBJECT_REF_PREFIX),
+          (v) => isUuid(v) || v.startsWith(OBJECT_REF_PREFIX),
           "must be a file id or ref from search_files",
         )
         .optional()
@@ -1468,7 +1466,7 @@ function normalizeTarget(
   }
   const id = target.id?.trim();
   if (id) {
-    if (!UUID_REGEX.test(id)) {
+    if (!isUuid(id)) {
       return {
         error: `target.id must be a sandbox id (UUID). Omit \`target\` to use the conversation's default sandbox, or pass \`target: { fresh: true }\` to create a new one.`,
       };
@@ -1857,7 +1855,7 @@ async function loadUploadSource(params: {
       // the id column is uuid-typed, so querying it with a non-UUID throws an
       // unhandled Postgres error that aborts the whole turn instead of
       // surfacing as the graceful "no such attachment" result below.
-      if (!UUID_REGEX.test(source.attachmentId)) {
+      if (!isUuid(source.attachmentId)) {
         logger.warn(
           {
             organizationId: userCtx.organizationId,

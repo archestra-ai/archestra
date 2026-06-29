@@ -1,4 +1,7 @@
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  calculateCostSavings,
+} from "@archestra/shared";
 import {
   Tooltip,
   TooltipContent,
@@ -10,7 +13,8 @@ export function Savings({
   cost,
   baselineCost,
   toonCostSavings,
-  toonTokensSaved,
+  toonTokensBefore,
+  toonTokensAfter,
   toonSkipReason,
   format = "percent",
   tooltip = "never",
@@ -22,7 +26,8 @@ export function Savings({
   cost: string;
   baselineCost: string;
   toonCostSavings?: string | null;
-  toonTokensSaved?: number | null;
+  toonTokensBefore?: number | null;
+  toonTokensAfter?: number | null;
   toonSkipReason?:
     | archestraApiTypes.GetInteractionResponses["200"]["toonSkipReason"]
     | null;
@@ -35,23 +40,22 @@ export function Savings({
   /** The actual model used after cost optimization */
   actualModel?: string | null;
 }) {
-  const costNum = Number.parseFloat(cost);
-  const baselineCostNum = Number.parseFloat(baselineCost);
-  const toonCostSavingsNum = toonCostSavings
-    ? Number.parseFloat(toonCostSavings)
-    : 0;
+  const {
+    costOptimizationSavings,
+    toonSavings: toonCostSavingsNum,
+    toonTokensSaved,
+    totalSavings,
+    estimatedCost,
+    actualCost,
+    savingsPercent: savingsPercentNum,
+  } = calculateCostSavings({
+    cost,
+    baselineCost,
+    toonCostSavings,
+    toonTokensBefore,
+    toonTokensAfter,
+  });
 
-  // Calculate cost optimization savings (from model selection)
-  const costOptimizationSavings = baselineCostNum - costNum;
-
-  // Calculate total savings (cost optimization + TOON compression)
-  const totalSavings = costOptimizationSavings + toonCostSavingsNum;
-
-  // Calculate actual cost after all savings
-  const actualCost = baselineCostNum - totalSavings;
-
-  const savingsPercentNum =
-    baselineCostNum > 0 ? (totalSavings / baselineCostNum) * 100 : 0;
   const savingsPercent =
     savingsPercentNum % 1 === 0
       ? savingsPercentNum.toFixed(0)
@@ -92,7 +96,7 @@ export function Savings({
             <div className="space-y-0.5">
               {totalSavings > 0 ? (
                 <>
-                  <div>Estimated Cost: {formatCost(baselineCostNum)}</div>
+                  <div>Estimated Cost: {formatCost(estimatedCost)}</div>
                   <div>Actual Cost: {formatCost(actualCost)}</div>
                   <div className="font-semibold">
                     Savings: {formatCost(totalSavings)}

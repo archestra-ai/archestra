@@ -63,6 +63,9 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               betaEnabled: z.boolean(),
               orchestratorK8sRuntime: z.boolean(),
               sandbox: z.boolean(),
+              // Max size of a file the sandbox can stage. The chat composer caps
+              // sandbox-routed uploads at this instead of guessing.
+              sandboxArtifactBytesLimit: z.number(),
               agentSkillsEnabled: z.boolean(),
               agentEnvironmentsEnabled: z.boolean(),
               appsEnabled: z.boolean(),
@@ -123,6 +126,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           betaEnabled: config.beta,
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           sandbox: skillSandboxRuntimeService.isEnabled,
+          sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
           agentSkillsEnabled: config.agents.skillsEnabled,
           agentEnvironmentsEnabled: config.agents.environmentsEnabled,
           appsEnabled: config.apps.enabled,

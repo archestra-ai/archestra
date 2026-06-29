@@ -83,6 +83,7 @@ docker pull archestra/platform:latest
 docker run \
   -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
   -e ARCHESTRA_QUICKSTART=true \
+  -e ARCHESTRA_BETA=true \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v archestra-postgres-data:/var/lib/postgresql/data \
   -v archestra-app-data:/app/data \

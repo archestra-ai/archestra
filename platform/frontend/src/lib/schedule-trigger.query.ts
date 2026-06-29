@@ -242,7 +242,9 @@ export function useScheduleTriggerRuns(
           ...(queryParams.status ? { status: queryParams.status } : {}),
         },
       });
-      throwOnApiError(response.error);
+      // A deleted/missing parent trigger 404s here; degrade to an empty runs
+      // list rather than an error state.
+      throwOnApiError(response.error, { allowNotFound: true });
       return (
         (response.data as PaginatedResponse<ScheduleTriggerRun>) ??
         emptyResponse

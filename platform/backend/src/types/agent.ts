@@ -240,6 +240,14 @@ export const SelectAgentSchema = createSelectSchema(
    * substituting another model.
    */
   llmProviderRequiresPerUserCredential: z.boolean().optional(),
+  /**
+   * Whether the code-execution sandbox is usable for this agent by the
+   * requesting user (`isSkillSandboxAvailableForAgent`: feature enabled +
+   * `sandbox:execute` permission + the sandbox tools assigned/accessible). The
+   * chat composer widens the accepted upload types to any file when true.
+   * Populated on read paths (list/get); absent on mutation responses.
+   */
+  sandboxAvailable: z.boolean().optional(),
 });
 
 // Base schema without refinement - can be used with .partial()

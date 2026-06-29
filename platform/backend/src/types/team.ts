@@ -24,14 +24,23 @@ export const SelectTeamSchema = createSelectSchema(schema.teamsTable).extend({
 export const InsertTeamSchema = createInsertSchema(schema.teamsTable);
 export const UpdateTeamSchema = createUpdateSchema(schema.teamsTable);
 
+const MAX_TEAM_NAME_LENGTH = 256;
+
 export const CreateTeamBodySchema = z.object({
-  name: z.string().min(1, "Team name is required"),
+  name: z
+    .string()
+    .min(1, "Team name is required")
+    .max(MAX_TEAM_NAME_LENGTH, "Team name must be at most 256 characters"),
   description: z.string().optional(),
   labels: z.array(AgentLabelWithDetailsSchema).optional(),
 });
 
 export const UpdateTeamBodySchema = z.object({
-  name: z.string().min(1).optional(),
+  name: z
+    .string()
+    .min(1)
+    .max(MAX_TEAM_NAME_LENGTH, "Team name must be at most 256 characters")
+    .optional(),
   description: z.string().optional(),
   convertToolResultsToToon: z.boolean().optional(),
   labels: z.array(AgentLabelWithDetailsSchema).optional(),

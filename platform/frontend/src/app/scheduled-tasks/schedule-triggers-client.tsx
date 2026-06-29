@@ -605,7 +605,12 @@ export function ScheduleTriggerDetailPage({
     () => new Set(userTeams.map((t) => t.id)),
     [userTeams],
   );
-  const { data: trigger, isLoading } = useScheduleTrigger(triggerId, {
+  const {
+    data: trigger,
+    isLoading,
+    isLoadingError: isTriggerLoadError,
+    refetch: refetchTrigger,
+  } = useScheduleTrigger(triggerId, {
     refetchInterval: 5_000,
   });
   const { data: agents = [], isLoading: agentsLoading } = useProfiles({
@@ -742,6 +747,15 @@ export function ScheduleTriggerDetailPage({
         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         <span className="text-sm text-muted-foreground">Loading...</span>
       </div>
+    );
+  }
+
+  if (isTriggerLoadError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load this scheduled task"
+        onRetry={() => refetchTrigger()}
+      />
     );
   }
 

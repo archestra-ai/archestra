@@ -55,7 +55,7 @@ describe("mapProviderError - request too large", () => {
       new RequestTooLargeError({
         provider: "bedrock",
         fileBytes: 49 * 1024 * 1024,
-        limitBytes: 32_000_000,
+        limitBytes: 20 * 1024 * 1024,
         fileCount: 1,
       }),
       "bedrock",
@@ -66,6 +66,7 @@ describe("mapProviderError - request too large", () => {
     // The user-facing size is the real file size, not the inflated wire size.
     expect(result.message).toMatch(/\bThis file is 49 MB\b/);
     expect(result.message).toContain("AWS Bedrock");
+    expect(result.message).toContain("20 MB");
   });
 });
 

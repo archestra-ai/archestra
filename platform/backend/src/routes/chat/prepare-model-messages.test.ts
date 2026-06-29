@@ -172,8 +172,7 @@ test("bedrock: an inline PDF whose payload exceeds the provider limit is rejecte
   const conversation = await makeConversation(agent.id, {
     organizationId: agent.organizationId,
   });
-  // 40 MiB of base64 decodes to a ~30 MB file, over Bedrock/Claude's 32 MB
-  // (decimal) request limit once the base64 inflation is counted.
+  // 40 MiB of base64 decodes to a ~30 MB file, over Bedrock's 20 MB cap.
   const messages = inlinePdfMessage(40 * 1024 * 1024);
 
   const prevEnabled = config.skillsSandbox.enabled;
@@ -194,6 +193,36 @@ test("bedrock: an inline PDF whose payload exceeds the provider limit is rejecte
     expect(error.message).toMatch(/\bThis file is 30 MB\b/);
     expect(error.message).not.toMatch(/40 MB/);
     expect(error.message).toContain("AWS Bedrock");
+    expect(error.message).toContain("20 MB");
+    expect(error.message).toContain(
+      "platform.claude.com/docs/en/api/overview#request-size-limits",
+    );
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+});
+
+test("bedrock: a file that rounds to the limit is not rejected", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  // base64 that decodes to ~20.25 MB — rounds to the 20 MB cap, so it must pass
+  // rather than reject with a contradictory "20 MB, max 20 MB".
+  const messages = inlinePdfMessage(27 * 1024 * 1024);
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = false;
+  try {
+    const modelMessages = await __test.buildModelMessagesForProvider({
+      messages,
+      provider: "bedrock",
+      conversationId: conversation.id,
+    });
+    expect(modelMessages.length).toBeGreaterThan(0);
   } finally {
     config.skillsSandbox.enabled = prevEnabled;
   }

@@ -339,7 +339,14 @@ export function McpAppSection({
   let bottomBar: React.ReactNode;
   if (renderInPanel && appId && ownedApp) {
     topBar = (
-      <div className="relative z-10 flex h-9 shrink-0 items-center gap-2 px-2 py-2 shadow-[0_1px_2px_-1px_rgb(0_0_0/0.08)]">
+      <McpAppTopBar
+        right={
+          <div className="flex items-center gap-2">
+            <AppSettingsMenu app={ownedApp} />
+            <AppPublishButton app={ownedApp} />
+          </div>
+        }
+      >
         {apps.length > 1 ? (
           <McpAppSwitcher
             value={selectedToolCallId}
@@ -358,11 +365,7 @@ export function McpAppSection({
             actions={<McpAppStandaloneButton appId={appId} />}
           />
         )}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <AppSettingsMenu app={ownedApp} />
-          <AppPublishButton app={ownedApp} />
-        </div>
-      </div>
+      </McpAppTopBar>
     );
     body = runtimeNode;
     bottomBar = undefined;

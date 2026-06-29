@@ -98,7 +98,19 @@ export function AppPublishButton({ app }: { app: App }) {
     // modal: the panel body is a sandboxed iframe, whose pointer events don't
     // reach the host document — a non-modal popover wouldn't dismiss when
     // clicking the app. The dismiss layer captures those outside clicks.
-    <Popover open={open} onOpenChange={setOpen} modal>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        // Closing without applying (outside click / Escape) discards unsaved
+        // edits — re-seed from the app's current state so a reopen is clean.
+        if (!next) {
+          setScope(app.scope);
+          setTeamIds(app.teams.map((t) => t.id));
+        }
+        setOpen(next);
+      }}
+      modal
+    >
       <PopoverTrigger asChild>
         <Button
           type="button"

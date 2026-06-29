@@ -135,7 +135,7 @@ export function McpAppSwitcher({
         <PillActions>{actions}</PillActions>
         <ChevronDown className="pointer-events-none mr-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       </div>
-      <SelectContent>
+      <SelectContent className="w-[var(--radix-select-trigger-width)]">
         {options.map((option) => (
           <SelectItem key={option.value} value={option.value}>
             <span className="truncate">{option.label}</span>

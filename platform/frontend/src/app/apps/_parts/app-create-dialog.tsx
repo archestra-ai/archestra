@@ -35,14 +35,19 @@ export function AppCreateDialog({
     defaultValues: { name: "" },
   });
 
+  const handleOpenChange = (next: boolean) => {
+    // Clear any typed-but-uncommitted name when the dialog is dismissed.
+    if (!next) form.reset();
+    onOpenChange(next);
+  };
+
   const onSubmit = form.handleSubmit(async (values) => {
     const created = await createApp.mutateAsync({
       name: values.name.trim(),
       description: DEFAULT_APP_DESCRIPTION,
     });
     if (created) {
-      onOpenChange(false);
-      form.reset();
+      handleOpenChange(false);
       router.push(
         buildAppChatHandoffUrl({
           appId: created.id,
@@ -55,7 +60,7 @@ export function AppCreateDialog({
   return (
     <StandardFormDialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title="New app"
       description="This creates a blank app and opens it in chat, where you can start building."
       size="small"
@@ -65,7 +70,7 @@ export function AppCreateDialog({
           <Button
             type="button"
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={() => handleOpenChange(false)}
           >
             Cancel
           </Button>

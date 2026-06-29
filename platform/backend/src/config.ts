@@ -1357,7 +1357,7 @@ const config = {
    * Projects + the persistent "My Files" file system on top of the skill
    * sandbox. Ships dark: off by default until ready to surface. Gates the
    * project APIs, the My Files endpoints, the persistent-file MCP tools
-   * (search_files, read_file, save_result, edit_file, delete_file), and the
+   * (search_files, read_file, save_file, edit_file, delete_file), and the
    * my_file upload source.
    */
   projects: {

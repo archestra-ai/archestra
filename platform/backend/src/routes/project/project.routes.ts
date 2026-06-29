@@ -1,4 +1,5 @@
 import {
+  MAX_PROJECT_UPLOAD_BYTES,
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
@@ -24,6 +25,15 @@ const CommaSeparatedIds = z.preprocess(
   (val) => (typeof val === "string" ? val.split(",").filter(Boolean) : val),
   z.array(z.string()),
 );
+
+/**
+ * Body limit for a single-file upload: the 25 MB cap as base64 (~4/3) plus the
+ * small JSON envelope (name + mimeType + keys). Tighter than the global body
+ * limit so an oversized body is rejected at parse time, before a ~190 MB
+ * decode, instead of relying only on the handler's decoded-size 413.
+ */
+const PROJECT_UPLOAD_BODY_LIMIT =
+  Math.ceil(MAX_PROJECT_UPLOAD_BYTES / 3) * 4 + 64 * 1024;
 
 /**
  * Projects: named collections of chats that own a set of files. Read access
@@ -302,6 +312,45 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
         allowAdminOversight: true,
+      }),
+  );
+
+  fastify.post(
+    "/api/projects/:id/files",
+    {
+      bodyLimit: PROJECT_UPLOAD_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.UploadProjectFiles,
+        description:
+          "Upload one file into the project (drag-and-drop on the Files " +
+          "panel). The bytes are base64-encoded in the body; a colliding name " +
+          "is auto-renamed.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({
+          name: z.string().min(1),
+          /** MIME type from the browser; may be empty for some OS drops. */
+          mimeType: z.string(),
+          /** Raw base64 (a `data:` URL prefix is tolerated). */
+          dataBase64: z.string().min(1),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            id: z.string().uuid(),
+            filename: z.string(),
+            mimeType: z.string(),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, body, organizationId, user }) =>
+      projectService.uploadFile({
+        id,
+        organizationId,
+        userId: user.id,
+        name: body.name,
+        mimeType: body.mimeType,
+        dataBase64: body.dataBase64,
       }),
   );
 

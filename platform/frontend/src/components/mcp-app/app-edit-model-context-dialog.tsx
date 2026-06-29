@@ -23,10 +23,15 @@ export function AppEditModelContextDialog({
   app,
   open,
   onOpenChange,
+  title = "Edit model context",
+  description = "What the model reads to decide whether this app is relevant and when to open it.",
 }: {
   app: App;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Overrides the dialog title for entry points framed differently (e.g. Rename). */
+  title?: string;
+  description?: string;
 }) {
   const updateApp = useUpdateApp();
   const form = useForm<EditFormValues>({

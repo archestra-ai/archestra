@@ -95,7 +95,10 @@ export function AppPublishButton({ app }: { app: App }) {
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    // modal: the panel body is a sandboxed iframe, whose pointer events don't
+    // reach the host document — a non-modal popover wouldn't dismiss when
+    // clicking the app. The dismiss layer captures those outside clicks.
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
           type="button"

@@ -72,8 +72,8 @@ vi.mock("@/components/mcp-app/mcp-app-meta-bar", () => ({
 // Stub the side-panel management tabs: they pull the environment/teams/auth
 // query chains, which aren't this suite's concern (covered by their own tests).
 // Here we only assert the panel chrome wires them to the tabs.
-vi.mock("@/components/mcp-app/app-settings-panel", () => ({
-  AppSettingsPanel: () => <div data-testid="settings-panel" />,
+vi.mock("@/components/mcp-app/app-settings-menu", () => ({
+  AppSettingsMenu: () => <div data-testid="settings-menu" />,
 }));
 vi.mock("@/components/mcp-app/app-publish-button", () => ({
   AppPublishButton: () => <div data-testid="publish-button" />,
@@ -778,32 +778,14 @@ describe("McpAppSection owned-app panel chrome", () => {
     return target;
   }
 
-  it("shows the preview/settings toggle and drops the bottom meta bar", async () => {
+  it("shows the settings menu and publish control, drops the bottom meta bar", async () => {
     const target = await renderOwnedPanel();
 
-    for (const name of ["Preview", "All settings"]) {
-      expect(within(target).getByRole("tab", { name })).toBeInTheDocument();
-    }
+    expect(within(target).getByTestId("settings-menu")).toBeInTheDocument();
+    expect(within(target).getByTestId("publish-button")).toBeInTheDocument();
     expect(screen.queryByTestId("meta-bar")).not.toBeInTheDocument();
+    // The live iframe is the panel body — no settings overlay covers it.
     expect(target.querySelector("iframe")).toBeInTheDocument();
-
-    target.remove();
-  });
-
-  it("keeps the live iframe mounted when switching to All settings", async () => {
-    const user = userEvent.setup();
-    const target = await renderOwnedPanel();
-    const iframe = target.querySelector("iframe");
-
-    await act(async () => {
-      await user.click(
-        within(target).getByRole("tab", { name: "All settings" }),
-      );
-    });
-
-    expect(within(target).getByTestId("settings-panel")).toBeInTheDocument();
-    // The runtime overlay never unmounts the iframe — same DOM node persists.
-    expect(target.querySelector("iframe")).toBe(iframe);
 
     target.remove();
   });

@@ -1,5 +1,4 @@
 import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
-import { Eye, Settings } from "lucide-react";
 import type React from "react";
 import {
   Component,
@@ -20,7 +19,7 @@ import {
 import { AppEditModelContextDialog } from "@/components/mcp-app/app-edit-model-context-dialog.lazy";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
 import { AppPublishButton } from "@/components/mcp-app/app-publish-button";
-import { AppSettingsPanel } from "@/components/mcp-app/app-settings-panel";
+import { AppSettingsMenu } from "@/components/mcp-app/app-settings-menu";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
   McpAppAddressPill,
@@ -41,7 +40,6 @@ import {
   type McpCallToolResult,
 } from "@/components/mcp-app/mcp-app-view";
 import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApp } from "@/lib/app.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -119,9 +117,6 @@ function useInlineHeightCap() {
   return cap;
 }
 
-/** Modes of the owned-app side-panel chrome: the live app vs all its settings. */
-type PanelTab = "preview" | "settings";
-
 /**
  * Self-contained MCP App section for use inside a Tool collapsible.
  * Owns display-mode / size state and the rawToolResult derivation so the
@@ -192,7 +187,6 @@ export function McpAppSection({
   // at render time) and to seed the edit dialog.
   const { data: canEdit } = useHasPermissions({ app: ["update"] });
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<PanelTab>("preview");
   const inlineHeightCap = useInlineHeightCap();
   const { data: ownedApp } = useApp(appId ?? null);
 
@@ -337,74 +331,40 @@ export function McpAppSection({
     />
   );
 
-  // The owned-app side panel gets a two-row header (name/switcher + refresh,
-  // then tabs) and no bottom meta bar. The management tabs render as an opaque
-  // overlay over the live iframe so the runtime is never unmounted — only the
-  // Preview tab leaves it visible.
+  // The owned-app side panel gets a single-row header (address bar with the
+  // refresh / open-in-new-tab actions, a settings gear menu, and the publish
+  // control) and no bottom meta bar.
   let topBar: React.ReactNode;
   let body: React.ReactNode;
   let bottomBar: React.ReactNode;
   if (renderInPanel && appId && ownedApp) {
     topBar = (
       <div className="relative z-10 flex h-9 shrink-0 items-center gap-2 px-2 py-2 shadow-[0_1px_2px_-1px_rgb(0_0_0/0.08)]">
-        <Tabs
-          value={activeTab}
-          onValueChange={(value) => setActiveTab(value as PanelTab)}
-        >
-          <TabsList className="h-7">
-            <TabsTrigger
-              value="preview"
-              aria-label="Preview"
-              title="Preview"
-              className="px-2"
-            >
-              <Eye className="h-3.5 w-3.5" />
-            </TabsTrigger>
-            <TabsTrigger
-              value="settings"
-              aria-label="All settings"
-              title="All settings"
-              className="px-2"
-            >
-              <Settings className="h-3.5 w-3.5" />
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <div className="min-w-0 flex-1">
-          {apps.length > 1 ? (
-            <McpAppSwitcher
-              value={selectedToolCallId}
-              options={apps.map((app) => ({
-                value: app.toolCallId,
-                label: app.label,
-              }))}
-              onChange={select}
-              className="w-full"
-              leading={<McpAppRefreshButton onClick={reload} />}
-              actions={<McpAppStandaloneButton appId={appId} />}
-            />
-          ) : (
-            <McpAppAddressPill
-              label={headerName}
-              className="w-full"
-              leading={<McpAppRefreshButton onClick={reload} />}
-              actions={<McpAppStandaloneButton appId={appId} />}
-            />
-          )}
-        </div>
-        <AppPublishButton app={ownedApp} />
-      </div>
-    );
-    body = (
-      <div className="relative h-full w-full [&>div]:!h-full">
-        {runtimeNode}
-        {activeTab === "settings" && (
-          <div className="absolute inset-0 z-10 overflow-y-auto bg-background p-4">
-            <AppSettingsPanel app={ownedApp} />
-          </div>
+        {apps.length > 1 ? (
+          <McpAppSwitcher
+            value={selectedToolCallId}
+            options={apps.map((app) => ({
+              value: app.toolCallId,
+              label: app.label,
+            }))}
+            onChange={select}
+            leading={<McpAppRefreshButton onClick={reload} />}
+            actions={<McpAppStandaloneButton appId={appId} />}
+          />
+        ) : (
+          <McpAppAddressPill
+            label={headerName}
+            leading={<McpAppRefreshButton onClick={reload} />}
+            actions={<McpAppStandaloneButton appId={appId} />}
+          />
         )}
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <AppSettingsMenu app={ownedApp} />
+          <AppPublishButton app={ownedApp} />
+        </div>
       </div>
     );
+    body = runtimeNode;
     bottomBar = undefined;
   } else {
     topBar = (

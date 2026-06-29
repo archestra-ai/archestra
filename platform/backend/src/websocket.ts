@@ -9,6 +9,7 @@ import {
   type McpDeploymentStatusEntry,
   type ServerWebSocketMessage,
 } from "@archestra/shared";
+import type * as k8s from "@kubernetes/client-node";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS, WebSocketServer as WSS } from "ws";
 import { betterAuth, hasPermission } from "@/auth";
@@ -441,6 +442,11 @@ class WebSocketService {
     const stdout = new PassThrough();
     const stderr = new PassThrough();
 
+    // The K8s exec reports why a session ended (e.g. `/bin/sh` missing on a
+    // distroless image) on its status channel. Capture it so the close event
+    // can tell the user the real reason instead of a bare "Session terminated".
+    let closedReason: string | undefined;
+
     try {
       const { k8sWs, podName } =
         await McpServerRuntimeManager.execIntoMcpServer(
@@ -448,6 +454,10 @@ class WebSocketService {
           stdin,
           stdout,
           stderr,
+          (status) => {
+            const reason = describeExecFailure(status);
+            if (reason) closedReason = reason;
+          },
         );
 
       this.mcpExecSubscriptions.set(ws, {
@@ -485,11 +495,14 @@ class WebSocketService {
 
       // K8s WS close -> notify client
       k8sWs.on("close", () => {
-        logger.info({ serverId }, "K8s exec WebSocket closed");
+        logger.info(
+          { serverId, reason: closedReason },
+          "K8s exec WebSocket closed",
+        );
         if (ws.readyState === WS.OPEN) {
           this.sendToClient(ws, {
             type: "mcp_exec_closed",
-            payload: { serverId },
+            payload: { serverId, reason: closedReason },
           });
         }
         this.unsubscribeMcpExec(ws);
@@ -910,3 +923,27 @@ export function broadcastMcpInstallationStatus(
 }
 
 export default websocketService;
+
+/**
+ * Translate a K8s exec status into a human-readable reason for why an
+ * interactive shell session ended. Returns undefined for a clean exit so the
+ * UI keeps its generic "Session terminated" message. A `Failure` status is
+ * where the real cause lives — most importantly, distroless MCP images have no
+ * `/bin/sh`, which surfaces here as an OCI "no such file" error.
+ */
+function describeExecFailure(status: k8s.V1Status): string | undefined {
+  if (status?.status !== "Failure") return undefined;
+
+  const message = status.message ?? "";
+
+  // The exec'd binary (the shell itself) is missing from the image.
+  if (
+    /no such file or directory|executable file not found|exec format error/i.test(
+      message,
+    )
+  ) {
+    return "No shell found in this container image — it looks like a distroless/minimal image without /bin/sh. Use the Logs or Inspector tabs, or attach a debug container to inspect it.";
+  }
+
+  return message || status.reason || "Session ended with a failure status.";
+}

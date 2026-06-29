@@ -1278,6 +1278,150 @@ describe("websocket MCP exec", () => {
     });
   });
 
+  test("surfaces the real reason when the image has no shell (distroless)", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const mockK8sWs = makeMockK8sWs();
+
+    // Capture the status callback the handler passes down to the runtime so we
+    // can simulate the K8s exec failing because /bin/sh doesn't exist.
+    let capturedOnStatus:
+      | ((status: { status?: string; message?: string }) => void)
+      | undefined;
+    vi.spyOn(McpServerRuntimeManager, "execIntoMcpServer").mockImplementation(
+      async (_id, _stdin, _stdout, _stderr, onStatus) => {
+        capturedOnStatus = onStatus;
+        return { k8sWs: mockK8sWs, podName: "mcp-test-pod" };
+      },
+    );
+    vi.spyOn(McpServerRuntimeManager, "getExecCommand").mockReturnValue(
+      "kubectl exec ...",
+    );
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      on: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_exec",
+        payload: { serverId: mcpServer.id },
+      },
+      ws,
+    );
+
+    // K8s reports the failure on its status channel, then closes the socket.
+    expect(capturedOnStatus).toBeDefined();
+    capturedOnStatus?.({
+      status: "Failure",
+      message:
+        'OCI runtime exec failed: exec: "/bin/sh": stat /bin/sh: no such file or directory',
+    });
+    mockK8sWs.emit("close");
+
+    const sentMessages = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => JSON.parse(call[0] as string),
+    );
+    expect(sentMessages).toContainEqual({
+      type: "mcp_exec_closed",
+      payload: {
+        serverId: mcpServer.id,
+        reason: expect.stringContaining("No shell found"),
+      },
+    });
+  });
+
+  test("keeps the generic closed message on a clean exit", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const mockK8sWs = makeMockK8sWs();
+
+    let capturedOnStatus:
+      | ((status: { status?: string; message?: string }) => void)
+      | undefined;
+    vi.spyOn(McpServerRuntimeManager, "execIntoMcpServer").mockImplementation(
+      async (_id, _stdin, _stdout, _stderr, onStatus) => {
+        capturedOnStatus = onStatus;
+        return { k8sWs: mockK8sWs, podName: "mcp-test-pod" };
+      },
+    );
+    vi.spyOn(McpServerRuntimeManager, "getExecCommand").mockReturnValue(
+      "kubectl exec ...",
+    );
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      on: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_exec",
+        payload: { serverId: mcpServer.id },
+      },
+      ws,
+    );
+
+    // A clean shell exit reports Success — no reason should be attached.
+    capturedOnStatus?.({ status: "Success" });
+    mockK8sWs.emit("close");
+
+    const sentMessages = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => JSON.parse(call[0] as string),
+    );
+    expect(sentMessages).toContainEqual({
+      type: "mcp_exec_closed",
+      payload: { serverId: mcpServer.id },
+    });
+  });
+
   test("forwards input from client to stdin", async ({
     makeOrganization,
     makeUser,

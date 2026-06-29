@@ -1080,12 +1080,13 @@ export class McpServerRuntimeManager {
     stdin: import("node:stream").Readable,
     stdout: import("node:stream").Writable,
     stderr: import("node:stream").Writable,
+    onStatus?: (status: k8s.V1Status) => void,
   ) {
     const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     if (!k8sDeployment) {
       throw new Error("MCP server not found");
     }
-    return k8sDeployment.execIntoContainer(stdin, stdout, stderr);
+    return k8sDeployment.execIntoContainer(stdin, stdout, stderr, { onStatus });
   }
 
   /**

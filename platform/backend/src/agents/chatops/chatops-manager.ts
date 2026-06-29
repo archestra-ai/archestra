@@ -455,7 +455,7 @@ export class ChatOpsManager {
           ? `Direct Message - ${message.senderEmail}`
           : await provider.getChannelName(message.channelId);
         const organizationId = await getDefaultOrganizationId();
-        await ChatOpsChannelBindingModel.upsertByChannel({
+        binding = await ChatOpsChannelBindingModel.upsertByChannel({
           organizationId,
           provider: provider.providerId,
           channelId: message.channelId,
@@ -467,14 +467,17 @@ export class ChatOpsManager {
         });
       }
 
-      // Show agent selection
-      await this.sendAgentSelectionCard({
+      // Frictionless onboarding: auto-assign a clear default agent instead of
+      // always prompting, so the bot just replies. Falls back to the picker
+      // card only when the choice is ambiguous.
+      const agentId = await this.resolveOrPromptChannelAgent({
         provider,
         message,
-        isWelcome: true,
+        binding,
         isDm,
       });
-      return;
+      if (!agentId) return; // picker card was sent
+      binding = { ...binding, agentId };
     }
 
     // Always reply to empty Slack app mentions so users get a response even
@@ -614,13 +617,22 @@ export class ChatOpsManager {
       return { success: true, error: "NO_BINDING" };
     }
 
-    // Check if the binding has an agent assigned
+    // Channel binding with no agent yet (e.g. Teams, which calls processMessage
+    // directly): auto-assign a clear default or prompt with the picker — never
+    // silently drop, which leaves the user with no reply and no explanation.
     if (!binding.agentId) {
-      logger.warn(
-        { bindingId: binding.id },
-        "[ChatOps] Binding has no agent assigned",
-      );
-      return { success: false, error: "NO_AGENT_ASSIGNED" };
+      const isDm = message.metadata?.conversationType === "personal";
+      const agentId = await this.resolveOrPromptChannelAgent({
+        provider,
+        message,
+        binding,
+        isDm,
+      });
+      if (!agentId) {
+        // picker card was sent (or no agents to offer)
+        return { success: true };
+      }
+      binding.agentId = agentId;
     }
 
     // Verify the agent exists and is an internal agent
@@ -881,6 +893,58 @@ export class ChatOpsManager {
         "[ChatOps] Failed to send auto-provision welcome message",
       );
     }
+  }
+
+  /**
+   * Pick a default agent for a channel that has none yet so onboarding "just
+   * works": the org-wide default agent if set, else the sole agent when the org
+   * has exactly one (a fresh single-agent setup, including a lone personal
+   * agent). Returns null when the choice is ambiguous (0 or 2+ candidates) so
+   * the caller prompts with the picker card instead.
+   */
+  private async autoResolveChannelAgentId(
+    organizationId: string,
+  ): Promise<string | null> {
+    const org = await OrganizationModel.getById(organizationId);
+    if (org?.defaultAgentId) {
+      const agent = await AgentModel.findById(org.defaultAgentId);
+      if (agent?.agentType === "agent") return org.defaultAgentId;
+    }
+    const candidates =
+      await AgentModel.findAssignableChatopsAgents(organizationId);
+    return candidates.length === 1 ? candidates[0].id : null;
+  }
+
+  /**
+   * Resolve a channel's default agent and persist it, or prompt with the picker
+   * card. Returns the assigned agent id, or null when the picker was sent (the
+   * caller should stop processing this message).
+   */
+  private async resolveOrPromptChannelAgent(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    binding: { id: string; organizationId: string };
+    isDm: boolean;
+  }): Promise<string | null> {
+    const { provider, message, binding, isDm } = params;
+    const agentId = await this.autoResolveChannelAgentId(
+      binding.organizationId,
+    );
+    if (agentId) {
+      await ChatOpsChannelBindingModel.update(binding.id, { agentId });
+      logger.info(
+        { bindingId: binding.id, agentId },
+        "[ChatOps] Auto-assigned default agent to channel",
+      );
+      return agentId;
+    }
+    await this.sendAgentSelectionCard({
+      provider,
+      message,
+      isWelcome: true,
+      isDm,
+    });
+    return null;
   }
 
   private async sendAgentSelectionCard({

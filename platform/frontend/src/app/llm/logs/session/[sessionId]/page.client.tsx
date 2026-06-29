@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  calculateCostSavings,
-  DynamicInteraction,
-  getSessionClientLabel,
-} from "@archestra/shared";
+import { DynamicInteraction, getSessionClientLabel } from "@archestra/shared";
 import { ArrowLeft, Bot, Layers, Loader2, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -373,29 +369,23 @@ export default function SessionDetailPage({
                       </Badge>
                     </TableCell>
                     <TableCell className="font-mono text-xs">
-                      {(() => {
-                        const savings = calculateCostSavings(interaction);
-                        return (
-                          <TooltipProvider>
-                            <Savings
-                              cost={interaction.cost || "0"}
-                              baselineCost={
-                                interaction.baselineCost ||
-                                interaction.cost ||
-                                "0"
-                              }
-                              toonCostSavings={interaction.toonCostSavings}
-                              toonTokensSaved={savings.toonTokensSaved}
-                              toonSkipReason={interaction.toonSkipReason}
-                              format="percent"
-                              tooltip="hover"
-                              variant="interaction"
-                              baselineModel={interaction.baselineModel}
-                              actualModel={interaction.model}
-                            />
-                          </TooltipProvider>
-                        );
-                      })()}
+                      <TooltipProvider>
+                        <Savings
+                          cost={interaction.cost || "0"}
+                          baselineCost={
+                            interaction.baselineCost || interaction.cost || "0"
+                          }
+                          toonCostSavings={interaction.toonCostSavings}
+                          toonTokensBefore={interaction.toonTokensBefore}
+                          toonTokensAfter={interaction.toonTokensAfter}
+                          toonSkipReason={interaction.toonSkipReason}
+                          format="percent"
+                          tooltip="hover"
+                          variant="interaction"
+                          baselineModel={interaction.baselineModel}
+                          actualModel={interaction.model}
+                        />
+                      </TooltipProvider>
                     </TableCell>
                     <TableCell className="text-xs overflow-hidden">
                       <TruncatedText

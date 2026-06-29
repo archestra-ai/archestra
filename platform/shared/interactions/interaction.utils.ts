@@ -73,11 +73,15 @@ export interface CostSavingsResult {
   toonTokensSaved: number | null;
   /** Total savings (costOptimization + toon) */
   totalSavings: number;
-  /** Baseline cost before any optimization */
-  baselineCost: number;
-  /** Actual cost after optimization */
+  /**
+   * Estimated cost: what the request would have cost without the optimizations
+   * we attribute (original model + uncompressed tool results). Equals
+   * `actualCost + totalSavings`.
+   */
+  estimatedCost: number;
+  /** Actual cost charged — the stored `cost`, already reflecting every optimization */
   actualCost: number;
-  /** Total savings as percentage of baseline */
+  /** Total savings as a percentage of the estimated cost (0–100) */
   savingsPercent: number;
   /** Whether there are any savings at all */
   hasSavings: boolean;
@@ -106,23 +110,35 @@ export function calculateCostSavings(
       ? input.toonTokensBefore - input.toonTokensAfter
       : null;
 
-  // Calculate cost optimization savings (from model selection)
+  // `cost` is the real spend. It already reflects every applied optimization
+  // (the cheaper model and TOON's reduced billed token count), so it is the
+  // true actual cost. It must never be re-derived by subtracting savings again
+  // — doing so double-counts the TOON savings already baked into `cost` and can
+  // produce a negative cost and a >100% savings percentage.
+  const actualCost = costNum;
+
+  // Savings from model selection: identical token usage priced at the original
+  // model vs. the model actually used.
   const costOptimizationSavings = baselineCostNum - costNum;
 
-  // Calculate total savings
+  // Total savings (model optimization + TOON compression).
   const totalSavings = costOptimizationSavings + toonCostSavingsNum;
 
-  // Calculate savings percentage
+  // The estimated (non-optimized) cost sits exactly `totalSavings` above the
+  // real spend, so the breakdown always reconciles and the percentage stays
+  // within 0–100% for any non-negative savings.
+  const estimatedCost = actualCost + totalSavings;
+
   const savingsPercent =
-    baselineCostNum > 0 ? (totalSavings / baselineCostNum) * 100 : 0;
+    estimatedCost > 0 ? (totalSavings / estimatedCost) * 100 : 0;
 
   return {
     costOptimizationSavings,
     toonSavings: toonCostSavingsNum,
     toonTokensSaved,
     totalSavings,
-    baselineCost: baselineCostNum,
-    actualCost: baselineCostNum - totalSavings,
+    estimatedCost,
+    actualCost,
     savingsPercent,
     hasSavings: totalSavings !== 0,
   };

@@ -1,3 +1,7 @@
+import {
+  INLINE_TEXT_MAX_BYTES,
+  isInlineableTextMimeType,
+} from "@archestra/shared";
 import config from "@/config";
 import logger from "@/logging";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
@@ -7,7 +11,6 @@ import {
   isAttachmentRefUrl,
   parseAttachmentIdFromUrl,
 } from "./extract-inline-attachments";
-import { isInlineableTextDocumentMimeType } from "./prepare-for-provider";
 
 type Attachment = Awaited<
   ReturnType<typeof ConversationAttachmentModel.findByIdsWithData>
@@ -176,7 +179,13 @@ function materializePart(
   const endpointRejectsBinaryDoc =
     rerouteBinaryDocsToSandbox &&
     isNonInlineableBinaryDocMimeType(attachment.mimeType);
-  if (modelCannotRead || endpointRejectsBinaryDoc) {
+  // A text document over the inline budget is routed to the sandbox instead of
+  // being embedded in the prompt. The ingest gate only admits an over-budget
+  // text file when the sandbox is available, so it has been auto-staged there.
+  const textTooLargeToInline =
+    isInlineableTextMimeType(attachment.mimeType) &&
+    attachment.fileData.byteLength > INLINE_TEXT_MAX_BYTES;
+  if (modelCannotRead || endpointRejectsBinaryDoc || textTooLargeToInline) {
     return referenceSandboxFilePart(attachment, sandboxAvailable);
   }
 
@@ -237,10 +246,7 @@ function dualAvailabilityPointer(
   // `sandboxAvailable` already implies the feature flag is on; gating on it (not
   // just the flag) keeps the pointer from advertising a sandbox the agent can't
   // reach. The inline copy still goes through, so nothing is lost.
-  if (
-    !sandboxAvailable ||
-    !isInlineableTextDocumentMimeType(attachment.mimeType)
-  ) {
+  if (!sandboxAvailable || !isInlineableTextMimeType(attachment.mimeType)) {
     return null;
   }
   if (
@@ -263,7 +269,7 @@ function dualAvailabilityPointer(
  * other binaries) only travels as a `document` block the endpoint rejects.
  */
 function isNonInlineableBinaryDocMimeType(mime: string): boolean {
-  return !mime.startsWith("image/") && !isInlineableTextDocumentMimeType(mime);
+  return !mime.startsWith("image/") && !isInlineableTextMimeType(mime);
 }
 
 /** Mime of an inline `data:` file part, from `mediaType` or the URL prefix. */

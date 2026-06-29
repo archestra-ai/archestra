@@ -29,6 +29,7 @@ export function makeConfig(
       betaEnabled: false,
       orchestratorK8sRuntime: false,
       sandbox: false,
+      sandboxArtifactBytesLimit: 16 * 1024 * 1024,
       agentSkillsEnabled: false,
       agentEnvironmentsEnabled: false,
       appsEnabled: false,

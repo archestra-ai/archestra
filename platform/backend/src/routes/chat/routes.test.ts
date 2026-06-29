@@ -177,7 +177,7 @@ describe("prepareMessagesForProvider", () => {
     expect(messages[0]).toBe(message);
   });
 
-  it("leaves text-document file parts unchanged for gemini (inlineData passthrough)", () => {
+  it("inlines text-document file parts as decoded text for gemini", () => {
     const message = {
       role: "user" as const,
       parts: [
@@ -195,7 +195,13 @@ describe("prepareMessagesForProvider", () => {
       messages: [message],
     });
 
-    expect(messages[0]).toBe(message);
+    // Gemini no longer receives text documents as inlineData — they are decoded
+    // and inlined as a text part, which reliably handles exotic text MIME types.
+    expect(messages[0].parts?.some((p) => p.type === "file")).toBe(false);
+    const inlined = messages[0].parts?.find(
+      (p) => p.type === "text" && p.text?.includes("a,b,c"),
+    );
+    expect(inlined).toBeDefined();
   });
 
   it("inlines application/csv and excel-as-text for cohere (its SDK relays base64 undecoded otherwise)", () => {

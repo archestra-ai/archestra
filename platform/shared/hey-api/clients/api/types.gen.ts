@@ -37051,6 +37051,7 @@ export type GetInternalMcpCatalogResponses = {
         toolCount: number;
         providesUi?: boolean;
         appId?: string | null;
+        imageApprovalRequired?: boolean;
     }>;
 };
 

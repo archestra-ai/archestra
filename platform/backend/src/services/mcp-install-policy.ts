@@ -2,7 +2,11 @@ import config from "@/config";
 import logger from "@/logging";
 import { InternalMcpCatalogModel } from "@/models";
 import { resolveTrustedImageRegistries } from "@/services/environments/environment";
-import { ApiError, type InternalMcpCatalog } from "@/types";
+import {
+  ApiError,
+  type InternalMcpCatalog,
+  type TrustedImageRegistries,
+} from "@/types";
 import { imageMatchesTrustedRegistries } from "@/utils/match-image-against-registries";
 
 /**
@@ -82,6 +86,47 @@ export async function assertInstallAllowedOrBlock(params: {
   throw new ApiError(403, blockedMessage(policy.environmentLabel));
 }
 
+/**
+ * Annotate which of a catalog list's items would be blocked by the image gate if
+ * installed right now — i.e. gated AND not yet `approved`. Used by the registry
+ * list so the UI can prevent the install up front instead of failing on attempt.
+ * Trusted registries are resolved once per distinct environment.
+ */
+export async function flagImageApprovalRequired(
+  items: InstallPolicyCatalogItem[],
+  organizationId: string,
+): Promise<Set<string>> {
+  const required = new Set<string>();
+  const candidates = items.filter(
+    (item) =>
+      item.catalogItemApprovalStatus !== "approved" &&
+      isGateableLocalImage(item),
+  );
+  if (candidates.length === 0) return required;
+
+  const registriesByEnv = new Map<
+    string | null,
+    TrustedImageRegistries | null
+  >();
+  await Promise.all(
+    [...new Set(candidates.map((c) => c.environmentId ?? null))].map(
+      async (environmentId) => {
+        const { registries } = await resolveTrustedImageRegistries({
+          environmentId,
+          organizationId,
+        });
+        registriesByEnv.set(environmentId, registries);
+      },
+    ),
+  );
+
+  for (const item of candidates) {
+    const registries = registriesByEnv.get(item.environmentId ?? null) ?? null;
+    if (imageIsGatedForRegistries(item, registries)) required.add(item.id);
+  }
+  return required;
+}
+
 // === Internal helpers ===
 
 type InstallImagePolicy =
@@ -100,23 +145,42 @@ async function evaluateInstallImagePolicy(params: {
 }): Promise<InstallImagePolicy> {
   const { catalogItem, organizationId } = params;
 
-  if (catalogItem.scope !== "personal") return { gated: false };
-  if (catalogItem.serverType !== "local") return { gated: false };
-
-  // No custom image → the platform default base image is used, which is never
-  // gated.
-  const image = catalogItem.localConfig?.dockerImage?.trim();
-  if (!image) return { gated: false };
-  if (image === config.orchestrator.mcpServerBaseImage) return { gated: false };
+  if (!isGateableLocalImage(catalogItem)) return { gated: false };
 
   const { registries, label } = await resolveTrustedImageRegistries({
     environmentId: catalogItem.environmentId,
     organizationId,
   });
-  if (!registries || registries.length === 0) return { gated: false };
-  if (imageMatchesTrustedRegistries(image, registries)) return { gated: false };
+  if (!imageIsGatedForRegistries(catalogItem, registries)) {
+    return { gated: false };
+  }
 
+  // isGateableLocalImage guarantees a non-empty custom image here.
+  const image = catalogItem.localConfig?.dockerImage?.trim() ?? "";
   return { gated: true, image, environmentLabel: label };
+}
+
+/** A personal local item with a custom image that isn't the platform base image. */
+function isGateableLocalImage(item: InstallPolicyCatalogItem): boolean {
+  if (item.scope !== "personal") return false;
+  if (item.serverType !== "local") return false;
+  const image = item.localConfig?.dockerImage?.trim();
+  if (!image) return false;
+  return image !== config.orchestrator.mcpServerBaseImage;
+}
+
+/**
+ * Given an already-gateable item, is its image actually disallowed by these
+ * resolved trusted registries? A NULL/empty list means "no restriction".
+ */
+function imageIsGatedForRegistries(
+  item: InstallPolicyCatalogItem,
+  registries: TrustedImageRegistries | null,
+): boolean {
+  if (!isGateableLocalImage(item)) return false;
+  if (!registries || registries.length === 0) return false;
+  const image = item.localConfig?.dockerImage?.trim() ?? "";
+  return !imageMatchesTrustedRegistries(image, registries);
 }
 
 function blockedMessage(environmentLabel: string): string {

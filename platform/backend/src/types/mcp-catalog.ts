@@ -174,6 +174,10 @@ export const ListInternalMcpCatalogSchema =
     // registry can link to / manage the app. Populated only on the includeApps
     // path; null for everything else.
     appId: z.string().nullable().optional(),
+    // True when installing this item right now would be blocked by the trusted-
+    // image-registry gate (gated + not approved), so the registry can prevent the
+    // install up front. Populated on the list route only.
+    imageApprovalRequired: z.boolean().optional(),
   });
 
 const InsertInternalMcpCatalogSchemaBase = createInsertSchema(

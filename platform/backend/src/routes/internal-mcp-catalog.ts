@@ -39,6 +39,7 @@ import {
   assertRemoteServerUrlAllowedByNetworkPolicy,
   assertValuesMatchEnvironmentRegex,
 } from "@/services/environments/environment";
+import { flagImageApprovalRequired } from "@/services/mcp-install-policy";
 import {
   autoReinstallServer,
   localExecutionConfigChanged,
@@ -112,7 +113,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.query.includeApps === true &&
         (await hasPermission({ app: ["read"] }, request.headers)).success;
       if (!includeApps) {
-        return reply.send(await InternalMcpCatalogModel.findAll(opts));
+        const list = await InternalMcpCatalogModel.findAll(opts);
+        const approvalRequired = await flagImageApprovalRequired(
+          list,
+          request.organizationId,
+        );
+        return reply.send(
+          list.map((item) => ({
+            ...item,
+            imageApprovalRequired: approvalRequired.has(item.id),
+          })),
+        );
       }
       // App backings carry an `appId` so the registry can link/manage the app.
       // Only the (few) serverType:"app" rows need the lookup, so the default
@@ -123,12 +134,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         .map((item) => item.id);
       const appIdByCatalog =
         await AppModel.getAppIdsByCatalogIds(appCatalogIds);
+      const approvalRequired = await flagImageApprovalRequired(
+        items,
+        request.organizationId,
+      );
       return reply.send(
-        items.map((item) =>
-          item.serverType === "app"
-            ? { ...item, appId: appIdByCatalog.get(item.id) ?? null }
-            : item,
-        ),
+        items.map((item) => ({
+          ...item,
+          imageApprovalRequired: approvalRequired.has(item.id),
+          ...(item.serverType === "app"
+            ? { appId: appIdByCatalog.get(item.id) ?? null }
+            : {}),
+        })),
       );
     },
   );

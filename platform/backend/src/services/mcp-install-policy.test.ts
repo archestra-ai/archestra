@@ -6,7 +6,10 @@ import {
   InternalMcpCatalogModel,
   OrganizationModel,
 } from "@/models";
-import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
+import {
+  assertInstallAllowedOrBlock,
+  flagImageApprovalRequired,
+} from "@/services/mcp-install-policy";
 import { describe, expect, test } from "@/test";
 import type { CatalogItemApprovalStatus } from "@/types";
 
@@ -315,5 +318,70 @@ describe("assertInstallAllowedOrBlock", () => {
       }),
     ).resolves.toBeUndefined();
     expect(await approvalStatus(catalog.id)).toBeNull();
+  });
+});
+
+describe("flagImageApprovalRequired", () => {
+  test("flags only personal local untrusted images that aren't approved", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
+    });
+
+    const gated = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      scope: "personal",
+      serverType: "local",
+      localConfig: { dockerImage: "ghcr.io/evil/x:1" },
+    });
+    const trusted = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      scope: "personal",
+      serverType: "local",
+      localConfig: { dockerImage: "ghcr.io/acme/server:1" },
+    });
+    const teamScoped = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      scope: "team",
+      serverType: "local",
+      localConfig: { dockerImage: "ghcr.io/evil/x:1" },
+    });
+    const approved = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      scope: "personal",
+      serverType: "local",
+      localConfig: { dockerImage: "ghcr.io/evil/x:1" },
+    });
+    await setApproval(approved.id, "approved");
+
+    const items = [gated, trusted, teamScoped, approved].map((c) => ({
+      ...c,
+      catalogItemApprovalStatus:
+        c.id === approved.id ? "approved" : c.catalogItemApprovalStatus,
+    }));
+    const required = await flagImageApprovalRequired(items, org.id);
+
+    expect(required.has(gated.id)).toBe(true);
+    expect(required.has(trusted.id)).toBe(false);
+    expect(required.has(teamScoped.id)).toBe(false);
+    expect(required.has(approved.id)).toBe(false);
+  });
+
+  test("flags nothing when the environment has no trusted registries", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const item = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      scope: "personal",
+      serverType: "local",
+      localConfig: { dockerImage: "ghcr.io/evil/x:1" },
+    });
+    const required = await flagImageApprovalRequired([item], org.id);
+    expect(required.size).toBe(0);
   });
 });

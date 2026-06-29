@@ -9,11 +9,13 @@ import {
 } from "@archestra/shared";
 import {
   AlertTriangle,
+  Copy,
   MessageSquare,
   Pencil,
   Plus,
   RefreshCw,
   Server,
+  ShieldAlert,
   User,
   Wrench,
 } from "lucide-react";
@@ -877,7 +879,52 @@ export function McpServerCard({
     </>
   );
 
-  const localInstallButton = (
+  // The trusted-image-registry policy holds this catalog's image: an untrusted
+  // personal local image can't be installed until an admin approves it. The
+  // backend flags `imageApprovalRequired` so we prevent the install up front
+  // (rather than letting it fail), and explain why.
+  const showApprovalPanel = item.imageApprovalRequired === true;
+  const imageDeclined = item.catalogItemApprovalStatus === "declined";
+
+  const copyApprovalLink = () => {
+    void navigator.clipboard.writeText(
+      `${window.location.origin}/mcp/registry?catalog=${item.id}`,
+    );
+    toast.success("Link copied — share it with an admin to approve this image");
+  };
+
+  const localInstallButton = showApprovalPanel ? (
+    <div className="flex-1 space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
+      <div
+        className={`flex items-center gap-2 text-sm font-medium ${
+          imageDeclined
+            ? "text-destructive"
+            : "text-amber-600 dark:text-amber-500"
+        }`}
+      >
+        <ShieldAlert className="h-4 w-4" />
+        {imageDeclined ? "Image declined" : "Awaiting admin approval"}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {imageDeclined
+          ? `An administrator declined this image${
+              item.catalogItemApprovalReason
+                ? `: ${item.catalogItemApprovalReason}`
+                : "."
+            }`
+          : "This image isn't from a trusted registry. An admin must approve it before it can be installed."}
+      </p>
+      <Button
+        size="sm"
+        variant="outline"
+        className="w-full"
+        onClick={copyApprovalLink}
+      >
+        <Copy className="h-4 w-4" />
+        Copy link
+      </Button>
+    </div>
+  ) : (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>

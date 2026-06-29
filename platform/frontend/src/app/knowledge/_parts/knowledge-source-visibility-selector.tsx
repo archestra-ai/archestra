@@ -35,7 +35,8 @@ const VISIBILITY_OPTIONS: Record<
   "auto-sync-permissions": {
     value: "auto-sync-permissions",
     label: "Auto-sync permissions",
-    description: "Synchronize upstream file-level restrictions directly to Archestra.",
+    description:
+      "Synchronize upstream file-level restrictions directly to Archestra.",
     icon: Shield,
   },
 };

@@ -37,14 +37,13 @@ const kbDocumentsTable = pgTable(
       .$type<"synced" | "skipped_unresolvable">()
       .notNull()
       .default("synced"),
-    permissionSyncMetadata: jsonb("permission_sync_metadata")
-      .$type<{
-        provider: string;
-        rawPermissions?: Record<string, unknown>;
-        resolvedEmails?: string[];
-        skippedGroups?: string[];
-        lastSyncedAt?: string;
-      }>(),
+    permissionSyncMetadata: jsonb("permission_sync_metadata").$type<{
+      provider: string;
+      rawPermissions?: Record<string, unknown>;
+      resolvedEmails?: string[];
+      skippedGroups?: string[];
+      lastSyncedAt?: string;
+    }>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

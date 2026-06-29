@@ -1,11 +1,13 @@
 import { describe, expect } from "vitest";
-import { test } from "@/test";
 import { TeamModel } from "@/models";
-import { IdentityResolutionService } from "./identity-resolution";
+import { test } from "@/test";
 import { AclMaterializer } from "./acl-materializer";
+import { IdentityResolutionService } from "./identity-resolution";
 
 describe("AclMaterializer", () => {
-  test("materializes public permissions to org:*", async ({ makeOrganization }) => {
+  test("materializes public permissions to org:*", async ({
+    makeOrganization,
+  }) => {
     const org = await makeOrganization();
     const resolver = new IdentityResolutionService(org.id);
     const materializer = new AclMaterializer(resolver);

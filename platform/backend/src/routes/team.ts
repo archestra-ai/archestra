@@ -9,6 +9,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 import { enterpriseTier } from "@/enterprise-tier";
+import { handleTeamOrGroupMappingChange } from "@/knowledge-base/recomputation";
 import { AgentToolModel, TeamLabelModel, TeamModel } from "@/models";
 import {
   AddTeamExternalGroupBodySchema,
@@ -24,7 +25,6 @@ import {
   UpdateTeamBodySchema,
   UpdateTeamMemberBodySchema,
 } from "@/types";
-import { handleTeamOrGroupMappingChange } from "@/knowledge-base/recomputation";
 
 const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

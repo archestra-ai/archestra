@@ -6,6 +6,7 @@ import {
   retrieveIdpGroups,
 } from "@/auth/idp-team-sync-cache.ee";
 import { enterpriseTier } from "@/enterprise-tier";
+import { handleTeamOrGroupMappingChange } from "@/knowledge-base/recomputation";
 import logger from "@/logging";
 // Direct imports to avoid circular dependencies when importing from barrel files
 import AccountModel from "@/models/account";
@@ -14,7 +15,6 @@ import IdentityProviderModel, {
 } from "@/models/identity-provider.ee";
 import MemberModel from "@/models/member";
 import TeamModel from "@/models/team";
-import { handleTeamOrGroupMappingChange } from "@/knowledge-base/recomputation";
 
 /** @public — consumed via dynamic import in src/auth/better-auth.ts */
 export const ssoConfig = {

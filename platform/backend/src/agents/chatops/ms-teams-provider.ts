@@ -44,6 +44,7 @@ import type {
 import { detectImageType } from "@/utils/detect-image-type";
 import { stripHtmlTags } from "@/utils/strip-html";
 import { isUuid } from "@/utils/uuid";
+import { isMuteReaction } from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_TEAM_CACHE,
@@ -351,6 +352,51 @@ class MSTeamsProvider implements ChatOpsProvider {
           normalizeTeamsId(e.mentioned.id) === normalizeTeamsId(botId),
       ),
     );
+  }
+
+  /**
+   * If this is a "mute the thread" reaction on one of the bot's channel
+   * messages, return the channel + thread to mute; otherwise null.
+   *
+   * Teams only delivers messageReaction events for the bot's OWN messages, so
+   * no sender check is needed. The thread is taken from `conversation.id`'s
+   * `;messageid=<root>` — NOT `replyToId`, which on a reaction points at the
+   * reacted (bot reply) message rather than the thread root the activation was
+   * keyed on. If the root can't be resolved we return null and the caller
+   * no-ops loudly (no false "muted") rather than guessing a key — guessing the
+   * channelId fallback could clear a different thread's activation.
+   */
+  parseMuteReaction(activity: {
+    type?: string;
+    conversation?: { id?: string; conversationType?: string };
+    channelData?: { channel?: { id?: string } };
+    reactionsAdded?: Array<{ type?: string } | null> | null;
+  }): { channelId: string; threadId: string } | null {
+    if (activity.type !== "messageReaction") return null;
+    const hasMuteReaction = Boolean(
+      activity.reactionsAdded?.some((r) => r?.type && isMuteReaction(r.type)),
+    );
+    if (!hasMuteReaction) return null;
+
+    // Sticky auto-reply (and thus muting) only applies in team channels.
+    if (activity.conversation?.conversationType !== "channel") return null;
+
+    const conversationId = activity.conversation?.id;
+    // Match how the gate derived the activation key's channelId
+    // (parseWebhookNotification): prefer channelData.channel.id, else the
+    // thread-suffix-stripped conversation id. Uses `||` (not `??`) to match the
+    // gate exactly, so an empty channel.id falls through to the conversation id.
+    const channelId =
+      activity.channelData?.channel?.id || stripThreadSuffix(conversationId);
+    // Assumes the activation key's threadId equals the conversation's
+    // `;messageid=<root>`. Teams channel threads are flat (every reply's
+    // replyToId is the root), so the gate's extractThreadId (replyToId-first)
+    // and this resolve to the same root. If a payload ever breaks that, the
+    // mute no-ops loudly (returns null → no false "muted") rather than guessing.
+    const threadId = extractThreadIdFromConversationId(conversationId);
+    if (!channelId || !threadId) return null;
+
+    return { channelId, threadId };
   }
 
   async sendReply(options: ChatReplyOptions): Promise<string> {
@@ -1666,6 +1712,10 @@ function needsBotAuth(contentUrl: string, serviceUrl: string): boolean {
 /**
  * Extract thread message ID from Teams activity.
  * Teams format: "channelId;messageid=messageId" for thread replies.
+ *
+ * Prefers replyToId, which on a normal message points at the thread root. For
+ * REACTION activities replyToId instead points at the reacted message, so the
+ * reaction path uses extractThreadIdFromConversationId directly instead.
  */
 function extractThreadId(activity: {
   conversation?: { id?: string };
@@ -1674,14 +1724,19 @@ function extractThreadId(activity: {
   if (activity.replyToId) {
     return activity.replyToId;
   }
+  return extractThreadIdFromConversationId(activity.conversation?.id);
+}
 
-  const conversationId = activity.conversation?.id;
-  if (conversationId?.includes(";messageid=")) {
-    const match = conversationId.match(/;messageid=(\d+)/);
-    return match?.[1];
-  }
+/** The `;messageid=<root>` thread id encoded in a Teams conversation id, if any. */
+function extractThreadIdFromConversationId(
+  conversationId?: string,
+): string | undefined {
+  return conversationId?.match(/;messageid=(\d+)/)?.[1];
+}
 
-  return undefined;
+/** A Teams conversation id with any `;messageid=...` thread suffix removed. */
+function stripThreadSuffix(conversationId?: string): string | undefined {
+  return conversationId?.split(";messageid=")[0] || undefined;
 }
 
 /**

@@ -396,6 +396,20 @@ export const parseContentMaxLength = (
 };
 
 /** @public — exported for testability */
+export const parseLogFormat = (
+  envValue?: string | undefined,
+): "json" | "pretty" => {
+  const value = envValue?.toLowerCase().trim();
+  if (value === "pretty" || value === "json") return value;
+  if (value && value.length > 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_LOGGING_FORMAT value "${envValue}", using default "json"`,
+    );
+  }
+  return "json";
+};
+
+/** @public — exported for testability */
 export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
   const value = envValue?.trim();
   if (!value) {
@@ -1396,6 +1410,9 @@ const config = {
      * Mirrors the CORS/trusted-origin configuration so all three stay in sync.
      */
     allowedOrigins: addLoopbackEquivalents(getConfiguredOrigins()),
+  },
+  logging: {
+    format: parseLogFormat(process.env.ARCHESTRA_LOGGING_FORMAT),
   },
   observability: {
     otel: {

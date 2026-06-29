@@ -70,19 +70,21 @@ Using `references/entity-mapping.md`, turn the inventory into `migration_plan.js
                    "user_answers": { } } ] }
 ```
 You author **decisions only** — never raw API payloads; `apply.py` builds and validates those.
+`target_kind` is required for `migrate` decisions (it drives the build); a `skip`/`manual` decision
+may omit it.
 
 Use `AskUserQuestion` only for genuine ambiguities, e.g.:
 - the single default scope (`personal`/`team`/`org`), plus any per-item exceptions;
-- if any decision uses `team` scope, which concrete Archestra team ids should own it. Put them in
-  `user_answers.teamIds`; otherwise use `personal` or `org` scope. Team-scoped agents, skills, and
-  MCP catalog items use `teamIds`; team-scoped MCP installs and LLM keys use `teamId` (or the single
-  value from `teamIds`). A team-scoped decision with no team id is invalid and `apply.py` will not
-  touch the network;
+- if any decision uses `team` scope, which concrete Archestra team ids should own it. Give them in
+  `user_answers`: as `teamIds` (a list) for agents, skills, and MCP catalog items; as `teamId` (a
+  single id, or the lone value from `teamIds`) for MCP installs and LLM keys. `apply.py` maps each to
+  the correct API field. Otherwise use `personal` or `org` scope. A team-scoped decision with no team
+  id is invalid and `apply.py` will not touch the network;
 - whether each subagent should be a `skill` (default) or a full `agent`;
 - whether to also **install** each MCP server now (`mcp_install`) or just register the catalog item
   (installing a local stdio server spins a K8s pod). If you emit both a `mcp_catalog` and a
   `mcp_install` decision for one server, give them the **same** `name`/`name_override` — the install
-  resolves its catalog item by name. `apply.py` attaches installs to the primary migrated agent by
+  resolves its catalog item by name. `apply.py` attaches installs to the primary agent by
   default; use `user_answers.agentIds` only for extra explicit agent assignments;
 - which LLM keys to migrate — and have the user paste each secret into `user_answers.apiKey`
   (with `provider`). Never read a secret out of their files.
@@ -156,7 +158,9 @@ From `migration_result.json`, write `report.md` using `references/report-templat
 for deciding whether the converted pilot is ready to try in Archestra, not for producing an exhaustive
 command transcript. For a `guard` hook you mapped to a `tool_policy` whose target tool doesn't exist yet,
 include the exact policy JSON to paste once it does. For hooks migrated as native lifecycle hooks, note
-the behavior differences (no matcher, Archestra tool names, sandbox `cwd`, dropped env/argv).
+the behavior differences (no matcher, Archestra tool names, sandbox `cwd`, dropped env/argv), and whether
+the agent-hooks feature is on: `apply.py` records a warning op when it is off, in which case migrated
+hooks are saved but never fire until an admin enables it.
 Tool-invocation policies only enforce when the org `globalToolPolicy` is `restrictive`;
 the scripts don't read that setting, so tell the user to verify it in Archestra settings. Also surface
 any `warnings` from the inventory (possible secrets left intact in migrated bodies). Summarize for the

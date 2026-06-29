@@ -24,7 +24,6 @@ import {
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
-  CHATOPS_MUTE_THREAD_CARD_ACTION,
   CHATOPS_RATE_LIMIT,
   CHATOPS_THREAD_MUTED_NOTICE,
   SLACK_DEFAULT_CONNECTION_MODE,
@@ -179,20 +178,6 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const activityValue = context.activity.value as
               | { action?: string; channelId?: string; workspaceId?: string }
               | undefined;
-            // "Mute this thread" Adaptive Card button. Channel + thread come
-            // from the activity itself (not the card data) and we confirm only
-            // on a real active→muted transition.
-            if (activityValue?.action === CHATOPS_MUTE_THREAD_CARD_ACTION) {
-              const target = provider.muteTargetFor(context.activity);
-              if (target) {
-                await muteTeamsThreadAndNotify(context, {
-                  provider: "ms-teams",
-                  channelId: target.channelId,
-                  threadId: target.threadId,
-                });
-              }
-              return;
-            }
             if (activityValue?.action === "selectAgent") {
               // For card submissions, we need to construct a minimal message from the activity
               const cardMessage: IncomingChatMessage = {

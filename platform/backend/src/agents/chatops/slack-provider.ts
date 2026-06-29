@@ -118,8 +118,6 @@ class SlackProvider implements ChatOpsProvider {
       return;
     }
 
-    if (await this.handleMuteThreadAction(payload)) return;
-
     const selection = this.parseInteractivePayload(payload);
     if (!selection) return;
 
@@ -452,32 +450,6 @@ class SlackProvider implements ChatOpsProvider {
         blocks.push({
           type: "context",
           elements: [{ type: "plain_text", text: options.footer, emoji: true }],
-        });
-      }
-
-      // Offer a one-click "Mute this thread" on the final message of channel /
-      // group replies (never DMs — nothing to mute there). This consumes one of
-      // the block-budget slots the splitter holds in reserve (see
-      // MAX_ESTIMATED_RENDERED_BLOCKS), so worst case stays under Slack's cap.
-      const conversationType =
-        options.originalMessage.metadata?.conversationType;
-      if (
-        isFinal &&
-        (conversationType === "channel" || conversationType === "groupChat")
-      ) {
-        blocks.push({
-          type: "actions",
-          elements: [
-            {
-              type: "button",
-              action_id: SLACK_MUTE_THREAD_ACTION_ID,
-              text: {
-                type: "plain_text",
-                text: "🔇 Mute this thread",
-                emoji: true,
-              },
-            },
-          ],
         });
       }
 
@@ -1387,27 +1359,6 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   /**
-   * Handle a "Mute this thread" button click. Returns true if it was that
-   * action. Channel + thread are taken from the SIGNATURE-VERIFIED interactive
-   * payload (the message the button lives on), never the button's own value, so
-   * a forged/replayed payload can't target an arbitrary thread.
-   */
-  private async handleMuteThreadAction(payload: unknown): Promise<boolean> {
-    const p = payload as SlackInteractivePayload;
-    if (
-      p.type !== "block_actions" ||
-      p.actions?.[0]?.action_id !== SLACK_MUTE_THREAD_ACTION_ID
-    ) {
-      return false;
-    }
-    const channelId = p.channel?.id;
-    const threadTs = p.message?.thread_ts || p.message?.ts;
-    if (!channelId || !threadTs) return true;
-    await this.muteThreadAndNotify(channelId, threadTs);
-    return true;
-  }
-
-  /**
    * Mute a thread when a 🔇/🤫 reaction lands on one of the bot's OWN channel
    * messages. Slack reaction events carry only the reacted message's ts, not its
    * thread_ts, so we resolve the thread root (the activation key) via the API.
@@ -1956,9 +1907,6 @@ export default SlackProvider;
 // =============================================================================
 // Internal Helpers
 // =============================================================================
-
-/** Block Kit action_id for the "Mute this thread" button on bot replies. */
-const SLACK_MUTE_THREAD_ACTION_ID = "mute_thread";
 
 /**
  * Decode Slack's HTML entity encoding.

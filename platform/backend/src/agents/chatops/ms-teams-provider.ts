@@ -46,7 +46,6 @@ import { stripHtmlTags } from "@/utils/strip-html";
 import { isMuteReaction } from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
-  CHATOPS_MUTE_THREAD_CARD_ACTION,
   CHATOPS_TEAM_CACHE,
   CHATOPS_THREAD_HISTORY,
 } from "./constants";
@@ -377,23 +376,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       activity.reactionsAdded?.some((r) => r?.type && isMuteReaction(r.type)),
     );
     if (!hasMuteReaction) return null;
-    return this.muteTargetFor(activity);
-  }
 
-  /**
-   * The channel + thread an activity refers to, for muting — or null if it's
-   * not a team channel or the thread root can't be resolved.
-   *
-   * Shared by the reaction path and the "Mute this thread" Adaptive Card submit.
-   * The thread is the `conversation.id` `;messageid=<root>` (the value the gate
-   * keyed activation on), NOT `replyToId` (which points at the reacted/clicked
-   * message). If the root can't be resolved we return null so the caller no-ops
-   * loudly rather than guessing a key that could clear a different thread.
-   */
-  muteTargetFor(activity: {
-    conversation?: { id?: string; conversationType?: string };
-    channelData?: { channel?: { id?: string } };
-  }): { channelId: string; threadId: string } | null {
     // Sticky auto-reply (and thus muting) only applies in team channels.
     if (activity.conversation?.conversationType !== "channel") return null;
 
@@ -425,13 +408,6 @@ class MSTeamsProvider implements ChatOpsProvider {
       replyText += `\n\n---\n\n${options.footer}`;
     }
 
-    // Offer a one-click "Mute this thread" on channel replies (sticky
-    // auto-reply, and thus muting, only applies in team channels).
-    const attachments =
-      options.originalMessage.metadata?.conversationType === "channel"
-        ? [buildMuteThreadCard()]
-        : undefined;
-
     // If a placeholder "Thinking..." message was sent (Teams channels),
     // update it with the actual response instead of sending a new message.
     const placeholderActivityId = options.originalMessage.metadata
@@ -443,7 +419,6 @@ class MSTeamsProvider implements ChatOpsProvider {
           id: placeholderActivityId,
           type: ActivityTypes.Message,
           text: replyText,
-          ...(attachments && { attachments }),
         });
         return placeholderActivityId;
       } catch (error) {
@@ -471,11 +446,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         this.config.appId,
         ref,
         async (context) => {
-          const response = await context.sendActivity(
-            attachments
-              ? { type: ActivityTypes.Message, text: replyText, attachments }
-              : replyText,
-          );
+          const response = await context.sendActivity(replyText);
           messageId = response?.id || "";
         },
       );
@@ -1760,34 +1731,6 @@ function extractThreadIdFromConversationId(
   conversationId?: string,
 ): string | undefined {
   return conversationId?.match(/;messageid=(\d+)/)?.[1];
-}
-
-/**
- * Adaptive Card with a single "Mute this thread" Action.Submit button, attached
- * to channel replies. The click arrives as a message activity carrying
- * `value.action = CHATOPS_MUTE_THREAD_CARD_ACTION`; the webhook route resolves
- * the channel/thread from the activity itself (not this data) and mutes.
- */
-function buildMuteThreadCard(): {
-  contentType: string;
-  content: Record<string, unknown>;
-} {
-  return {
-    contentType: "application/vnd.microsoft.card.adaptive",
-    content: {
-      type: "AdaptiveCard",
-      $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
-      version: "1.4",
-      body: [],
-      actions: [
-        {
-          type: "Action.Submit",
-          title: "🔇 Mute this thread",
-          data: { action: CHATOPS_MUTE_THREAD_CARD_ACTION },
-        },
-      ],
-    },
-  };
 }
 
 /** A Teams conversation id with any `;messageid=...` thread suffix removed. */

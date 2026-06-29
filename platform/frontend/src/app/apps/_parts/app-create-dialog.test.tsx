@@ -16,12 +16,6 @@ vi.mock("@/lib/app.query", () => ({
   useCreateApp: useCreateAppMock,
 }));
 
-// The environment selector pulls in React Query hooks the bare render doesn't
-// provide; this flow test doesn't exercise environment selection, so stub it.
-vi.mock("@/components/environment-selector", () => ({
-  EnvironmentSelector: () => null,
-}));
-
 import { buildAppChatHandoffUrl } from "@/lib/apps/app-chat-handoff";
 import { AppCreateDialog } from "./app-create-dialog";
 
@@ -35,7 +29,7 @@ describe("AppCreateDialog", () => {
     });
   });
 
-  it("creates the app without a templateId (backend seeds the default) and opens chat", async () => {
+  it("creates a blank app with the seeded description and opens chat", async () => {
     const user = userEvent.setup();
     render(<AppCreateDialog open onOpenChange={() => {}} />);
 
@@ -45,9 +39,8 @@ describe("AppCreateDialog", () => {
     await waitFor(() => expect(createMutateMock).toHaveBeenCalledTimes(1));
     expect(createMutateMock).toHaveBeenCalledWith({
       name: "My App",
-      description: undefined,
-      scope: "personal",
-      environmentId: null,
+      description:
+        "To get started, send a prompt describing what you want to build.",
     });
     expect(pushMock).toHaveBeenCalledWith(
       buildAppChatHandoffUrl({ appId: "app-123", appName: "My App" }),

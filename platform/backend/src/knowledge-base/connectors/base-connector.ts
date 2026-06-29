@@ -53,6 +53,20 @@ export abstract class BaseConnector implements Connector {
     },
   ): Promise<ConnectorDocument["permissions"]>;
 
+  async *syncPermissions?(_params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+  }): AsyncGenerator<{
+    documentId: string;
+    permissions: {
+      isPublic: boolean;
+      users?: string[];
+      groups?: string[];
+    };
+  }> {
+    // Default implementation does nothing
+  }
+
   protected log: pino.Logger = defaultLogger;
   private rateLimitDelayMs: number;
   private itemFailures: ConnectorItemFailure[] = [];

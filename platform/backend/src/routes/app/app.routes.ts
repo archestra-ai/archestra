@@ -15,10 +15,10 @@ import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  AppAccessModel,
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
-  AppTeamModel,
   AppToolModel,
   AppVersionModel,
   McpServerModel,
@@ -110,7 +110,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // and external UI-providing installed MCP servers. Both are access-filtered
       // by their own model; we merge, sort, and paginate over the combined set.
       // Cardinality is small (tens), so fetching all-then-slicing is fine.
-      const accessibleAppIds = await AppTeamModel.getUserAccessibleAppIds({
+      const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
         organizationId,
         userId: user.id,
       });
@@ -303,7 +303,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      const teamsByApp = await AppTeamModel.getTeamDetailsForApps([app.id]);
+      const teamsByApp = await AppAccessModel.getTeamDetailsForApps([app.id]);
       return reply.send({ ...app, teams: teamsByApp.get(app.id) ?? [] });
     },
   );
@@ -336,7 +336,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      const resourceTeamIds = await AppTeamModel.getTeamsForApp(app.id);
+      const resourceTeamIds = await AppAccessModel.getTeamsForApp(app.id);
       const nextTeamIds =
         body.teamIds !== undefined
           ? await resolveOrgTeamIds(body.teamIds, organizationId)
@@ -464,7 +464,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         scope: app.scope,
         authorId: app.authorId,
-        resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+        resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
       });
       const success = await AppModel.delete(appId);
       if (!success) {
@@ -740,7 +740,7 @@ async function assertCallerMayModifyAppById(params: {
     organizationId: params.organizationId,
     scope: app.scope,
     authorId: app.authorId,
-    resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+    resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
   });
 }
 

@@ -793,12 +793,12 @@ export function McpServerCard({
     <div className="flex-1 space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
       <div className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-500">
         <ShieldAlert className="h-4 w-4" />
-        {isInstallAdmin ? "Image needs approval" : "Awaiting admin approval"}
+        {isInstallAdmin ? "Image needs approval" : "Admin review required"}
       </div>
       <p className="text-xs text-muted-foreground">
         {isInstallAdmin
-          ? "This image isn't from a trusted registry. Review the configuration, then approve to allow installs."
-          : "This image isn't from a trusted registry. An admin must approve it before it can be installed."}
+          ? "This MCP server Docker image isn't from a trusted image registry. Review and approve configuration to allow installs."
+          : "This MCP server Docker image isn't from a trusted image registry. An admin must approve it before it can be installed."}
       </p>
       {isInstallAdmin ? (
         <Button
@@ -812,13 +812,14 @@ export function McpServerCard({
         </Button>
       ) : (
         <Button
-          size="sm"
+          size="icon"
           variant="outline"
-          className="w-full"
+          className="h-8 w-8"
           onClick={copyApprovalLink}
+          title="Copy link"
+          aria-label="Copy link"
         >
           <Copy className="h-4 w-4" />
-          Copy link
         </Button>
       )}
     </div>

@@ -320,6 +320,162 @@ export class JiraConnector extends BaseConnector {
     return { isPublic: false };
   }
 
+  async *syncPermissions(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+  }) {
+    const config = parseJiraConfig(params.config);
+    if (!config) return;
+
+    const client = config.isCloud
+      ? createV3Client(config, params.credentials, this.log)
+      : createV2Client(config, params.credentials, this.log);
+
+    const projectKeys = getProjectKeyList(config);
+    for (const projectKey of projectKeys) {
+      // 1. Fetch project permission scheme
+      let projectPermissions: {
+        users?: string[];
+        groups?: string[];
+        isPublic: boolean;
+      } = { isPublic: false };
+      try {
+        // biome-ignore lint/suspicious/noExplicitAny: API client response has dynamic/untyped permission scheme payload
+        const schemeRes: any = await client.sendRequest(
+          {
+            url: `/api/3/project/${projectKey}/permissionscheme`,
+            method: "GET",
+            params: { expand: "permissions" },
+          },
+          // biome-ignore lint/suspicious/noExplicitAny: API client accepts any type
+          undefined as any,
+        );
+
+        const permissions = schemeRes?.permissions || [];
+        const browsePermissions = permissions.filter(
+          // biome-ignore lint/suspicious/noExplicitAny: permission item has dynamic/untyped schema
+          (p: any) => p.permission === "BROWSE_PROJECTS",
+        );
+
+        if (browsePermissions.length > 0) {
+          const users: string[] = [];
+          const groups: string[] = [];
+          let isPublic = false;
+
+          for (const p of browsePermissions) {
+            const holder = p.holder;
+            if (!holder) continue;
+
+            if (holder.type === "group") {
+              const groupName = holder.parameter || holder.group?.name;
+              if (groupName) groups.push(groupName);
+            } else if (holder.type === "user") {
+              const accountId = holder.parameter || holder.user?.accountId;
+              if (accountId) {
+                try {
+                  // biome-ignore lint/suspicious/noExplicitAny: API client response has dynamic/untyped user payload
+                  const userRes: any = await client.sendRequest(
+                    {
+                      url: `/api/3/user`,
+                      method: "GET",
+                      params: { accountId },
+                    },
+                    // biome-ignore lint/suspicious/noExplicitAny: API client accepts any type
+                    undefined as any,
+                  );
+                  const email = userRes?.emailAddress || userRes?.email;
+                  if (email) users.push(email);
+                } catch {}
+              }
+            } else if (holder.type === "projectRole") {
+              const roleId = holder.parameter;
+              if (roleId) {
+                try {
+                  // biome-ignore lint/suspicious/noExplicitAny: API client response has dynamic/untyped role payload
+                  const roleRes: any = await client.sendRequest(
+                    {
+                      url: `/api/3/project/${projectKey}/role/${roleId}`,
+                      method: "GET",
+                    },
+                    // biome-ignore lint/suspicious/noExplicitAny: API client accepts any type
+                    undefined as any,
+                  );
+
+                  if (roleRes?.actors) {
+                    for (const actor of roleRes.actors) {
+                      if (actor.type === "atlassian-user-role-actor") {
+                        const email =
+                          actor.user?.emailAddress ||
+                          actor.user?.email ||
+                          actor.email;
+                        if (email) users.push(email);
+                      } else if (actor.type === "atlassian-group-role-actor") {
+                        const groupName = actor.group?.name || actor.name;
+                        if (groupName) groups.push(groupName);
+                      }
+                    }
+                  }
+                } catch {}
+              }
+            } else if (
+              holder.type === "applicationRole" ||
+              holder.type === "anyUser" ||
+              holder.type === "reporter" ||
+              holder.type === "assignee"
+            ) {
+              isPublic = true;
+            }
+          }
+          projectPermissions = { isPublic, users, groups };
+        }
+      } catch (err) {
+        this.log.warn(
+          { projectKey, error: extractErrorMessage(err) },
+          "Failed to fetch project permissions during permissions sync",
+        );
+        continue;
+      }
+
+      // 2. Fetch issues in project and yield permission details
+      try {
+        // biome-ignore lint/suspicious/noExplicitAny: API client response has dynamic/untyped search payload
+        const issuesRes: any = await client.sendRequest(
+          {
+            url: "/api/3/search",
+            method: "GET",
+            params: {
+              jql: `project = ${projectKey}`,
+              fields: "security",
+              maxResults: 100,
+            },
+          },
+          // biome-ignore lint/suspicious/noExplicitAny: API client accepts any type
+          undefined as any,
+        );
+
+        const issues = issuesRes?.issues || [];
+        for (const issue of issues) {
+          const issuePermissions = { ...projectPermissions };
+          const securityLevel = issue.fields?.security;
+
+          if (securityLevel?.id) {
+            issuePermissions.isPublic = false;
+          }
+
+          yield {
+            documentId: issue.key,
+            permissions: issuePermissions,
+          };
+        }
+      } catch (err) {
+        this.log.warn(
+          { projectKey, error: extractErrorMessage(err) },
+          "Failed to fetch issues during permissions sync",
+        );
+      }
+    }
+  }
+
   async *sync(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;

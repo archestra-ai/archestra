@@ -23,6 +23,14 @@ type AvailableLlmProviderApiKeysQuery = NonNullable<
 >;
 type LlmProviderApiKeysQueryParams = Partial<LlmProviderApiKeysQuery> & {
   enabled?: boolean;
+  /**
+   * Toast on fetch failure. Default true so list/dialog callers fail loud.
+   * Callers that render their own error state (the new-chat and projects
+   * gates) pass false to avoid a redundant toast-plus-screen and a fresh
+   * toast on every retry. The query throws regardless, so `isError` is always
+   * available to branch on.
+   */
+  toastOnError?: boolean;
 };
 type AvailableLlmProviderApiKeysParams =
   Partial<AvailableLlmProviderApiKeysQuery> & {
@@ -40,6 +48,7 @@ const {
 export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
   const search = params?.search;
   const provider = params?.provider;
+  const toastOnError = params?.toastOnError ?? true;
 
   return useQuery({
     queryKey: ["llm-provider-api-keys", search, provider],
@@ -50,9 +59,15 @@ export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
           search: search || undefined,
         },
       });
+      // Throw rather than swallowing into [] so the query enters its error
+      // state: a failed fetch (e.g. offline) must be distinguishable from a
+      // successful "no keys configured" response, which gates the new-chat and
+      // projects "Add an LLM Provider Key" prompt.
       if (error) {
-        handleApiError(error);
-        return [];
+        if (toastOnError) {
+          handleApiError(error);
+        }
+        throw toApiError(error);
       }
       return data ?? [];
     },
@@ -70,18 +85,29 @@ export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
 export function useHasAnyApiKey(): {
   hasAnyApiKey: boolean;
   isLoading: boolean;
+  isError: boolean;
+  refetch: () => void;
 } {
   const { data: canReadKeys } = useHasPermissions({
     llmProviderApiKey: ["read"],
   });
   const { data: canReadModels } = useHasPermissions({ llmModel: ["read"] });
   const enabled = canReadKeys === true && canReadModels === true;
-  const { data: keys = [], isLoading } = useLlmProviderApiKeys({ enabled });
+  const {
+    data: keys = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useLlmProviderApiKeys({ enabled, toastOnError: false });
   const permissionsResolving =
     canReadKeys === undefined || canReadModels === undefined;
   return {
     hasAnyApiKey: keys.length > 0,
     isLoading: permissionsResolving || (enabled && isLoading),
+    isError: enabled && isError,
+    refetch: () => {
+      void refetch();
+    },
   };
 }
 

@@ -27,6 +27,7 @@ import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-serv
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
+import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { AppsProvider } from "@/components/chat/apps-context";
@@ -309,8 +310,15 @@ export function ChatPageContent({
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
     useLlmModelsByProvider({ enabled: canUseProviderSettings });
-  const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
-    useLlmProviderApiKeys({ enabled: hasChatAccess && canUseProviderSettings });
+  const {
+    data: chatApiKeys = [],
+    isLoading: isLoadingApiKeys,
+    isError: isApiKeysError,
+    refetch: refetchApiKeys,
+  } = useLlmProviderApiKeys({
+    enabled: hasChatAccess && canUseProviderSettings,
+    toastOnError: false,
+  });
   const { data: organization, isPending: isOrgLoading } = useOrganization();
   // The user's saved default (model, key) pair — top of the resolution chain
   // for a new chat ("member" level).
@@ -1844,6 +1852,12 @@ export function ChatPageContent({
         <LoadingSpinner />
       </div>
     );
+  }
+
+  // The keys request failed (e.g. offline). Show a retry state rather than the
+  // setup prompt, which would wrongly imply the user has no keys configured.
+  if (isApiKeysError) {
+    return <ApiKeyLoadError onRetry={() => refetchApiKeys()} />;
   }
 
   // If API key is not configured, show setup prompt with inline creation dialog

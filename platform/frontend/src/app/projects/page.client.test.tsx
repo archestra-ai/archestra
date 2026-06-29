@@ -8,6 +8,14 @@ const mockPinMutate = vi.fn();
 
 let mockProjects: ProjectFixture[] = [];
 
+type ApiKeyState = {
+  hasAnyApiKey: boolean;
+  isLoading: boolean;
+  isError: boolean;
+  refetch: () => void;
+};
+let mockApiKeyState: ApiKeyState;
+
 type ProjectFixture = {
   id: string;
   name: string;
@@ -178,7 +186,15 @@ vi.mock("@/components/ui/textarea", () => ({
 }));
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
-  useHasAnyApiKey: () => ({ hasAnyApiKey: true, isLoading: false }),
+  useHasAnyApiKey: () => mockApiKeyState,
+}));
+
+vi.mock("@/components/api-key-load-error", () => ({
+  ApiKeyLoadError: ({ onRetry }: { onRetry: () => void }) => (
+    <button type="button" data-testid="api-key-load-error" onClick={onRetry}>
+      retry
+    </button>
+  ),
 }));
 
 vi.mock("@/lib/auth/auth.query", () => ({
@@ -225,6 +241,12 @@ describe("ProjectsPageClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockProjects = [];
+    mockApiKeyState = {
+      hasAnyApiKey: true,
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
     mockDeleteMutateAsync.mockResolvedValue(true);
     mockUpdateMutateAsync.mockResolvedValue(true);
   });
@@ -285,6 +307,38 @@ describe("ProjectsPageClient", () => {
 
     fireEvent.click(screen.getByText("Delete"));
     expect(screen.getByText("Delete Owner project?")).toBeInTheDocument();
+  });
+
+  it("shows the load-error retry state, not the add-key prompt, when the keys request fails", () => {
+    mockApiKeyState = {
+      hasAnyApiKey: false,
+      isLoading: false,
+      isError: true,
+      refetch: vi.fn(),
+    };
+
+    render(<ProjectsPageClient />);
+
+    expect(screen.getByTestId("api-key-load-error")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Connect an LLM provider to start a project"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the add-key prompt when the keys request succeeds with no keys", () => {
+    mockApiKeyState = {
+      hasAnyApiKey: false,
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
+
+    render(<ProjectsPageClient />);
+
+    expect(
+      screen.getByText("Connect an LLM provider to start a project"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("api-key-load-error")).not.toBeInTheDocument();
   });
 
   it("shows unpin in pinned project card menus", () => {

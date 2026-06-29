@@ -298,6 +298,57 @@ describe("AgentModel", () => {
       expect(agents).toHaveLength(3);
     });
 
+    test("admin 'All' view (no scope) hides team-oversight agents", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const admin = await makeUser();
+      const other = await makeUser();
+      const org = await makeOrganization();
+
+      // A team the admin belongs to, and one they don't.
+      const myTeam = await makeTeam(org.id, admin.id, { name: "Mine" });
+      await TeamModel.addMember(myTeam.id, admin.id);
+      const foreignTeam = await makeTeam(org.id, other.id, { name: "Foreign" });
+
+      await AgentModel.create({ name: "Org Agent", teams: [], scope: "org" });
+      await AgentModel.create({
+        name: "Mine Team Agent",
+        teams: [myTeam.id],
+        scope: "team",
+      });
+      await AgentModel.create({
+        name: "Foreign Team Agent",
+        teams: [foreignTeam.id],
+        scope: "team",
+      });
+
+      // The unscoped "All" view shows an admin only the agents they can access:
+      // the team-shared agent for a team they aren't in is dropped (oversight).
+      const all = await AgentModel.findAllPaginated(
+        { limit: 50, offset: 0 },
+        undefined,
+        { scope: undefined },
+        admin.id,
+        true,
+      );
+      expect(all.data.map((a) => a.name).sort()).toEqual([
+        "Mine Team Agent",
+        "Org Agent",
+      ]);
+
+      // Oversight stays reachable by explicitly picking that team under Team scope.
+      const teamView = await AgentModel.findAllPaginated(
+        { limit: 50, offset: 0 },
+        undefined,
+        { scope: "team", teamIds: [foreignTeam.id] },
+        admin.id,
+        true,
+      );
+      expect(teamView.data.map((a) => a.name)).toEqual(["Foreign Team Agent"]);
+    });
+
     test("member only sees agents in their teams", async ({
       makeUser,
       makeAdmin,
@@ -1095,6 +1146,11 @@ describe("AgentModel", () => {
 
       const team1 = await makeTeam(org.id, admin.id, { name: "Team A" });
       const team2 = await makeTeam(org.id, admin.id, { name: "Team B" });
+      // This test exercises sorting/pagination, not oversight: the admin's
+      // unscoped "All" view only returns accessible agents, so join both teams
+      // to keep every team-scoped agent below in view.
+      await TeamModel.addMember(team1.id, admin.id);
+      await TeamModel.addMember(team2.id, admin.id);
 
       // Create 4 agents with varying tools and teams
       const agent1 = await AgentModel.create({

@@ -27,6 +27,7 @@ import config, {
   parseDatabasePoolMax,
   parseFileStorageFilesystemRoot,
   parseFileStorageProvider,
+  parseFileStorageS3Config,
   parseMetricsPort,
   parseProcessType,
   parseSampleRate,
@@ -1219,7 +1220,111 @@ describe("parseFileStorageProvider", () => {
   });
 
   test("falls back to db for any unknown value", () => {
-    expect(parseFileStorageProvider("s3")).toBe("db");
+    expect(parseFileStorageProvider("nope")).toBe("db");
+  });
+});
+
+describe("parseFileStorageProvider (s3)", () => {
+  test("recognizes s3 (case-insensitive)", () => {
+    expect(parseFileStorageProvider("s3")).toBe("s3");
+    expect(parseFileStorageProvider("S3")).toBe("s3");
+  });
+  test("keeps filesystem and defaults unknown to db", () => {
+    expect(parseFileStorageProvider("filesystem")).toBe("filesystem");
+    expect(parseFileStorageProvider(undefined)).toBe("db");
+    expect(parseFileStorageProvider("nope")).toBe("db");
+  });
+});
+
+describe("parseFileStorageS3Config", () => {
+  const env = {
+    bucket: "my-bucket",
+    region: "eu-west-1",
+    endpoint: "https://minio.local:9000",
+    forcePathStyle: "true",
+    accessKeyId: "AKIA",
+    secretAccessKey: "secret",
+    keyPrefix: "/inst-a/",
+  };
+  test("parses a full s3 config", () => {
+    const cfg = parseFileStorageS3Config({ provider: "s3", env });
+    expect(cfg).toEqual({
+      bucket: "my-bucket",
+      region: "eu-west-1",
+      endpoint: "https://minio.local:9000",
+      forcePathStyle: true,
+      accessKeyId: "AKIA",
+      secretAccessKey: "secret",
+      keyPrefix: "inst-a",
+    });
+  });
+  test("defaults region, forcePathStyle, and keyPrefix", () => {
+    const cfg = parseFileStorageS3Config({
+      provider: "s3",
+      env: {
+        ...env,
+        region: undefined,
+        forcePathStyle: undefined,
+        keyPrefix: undefined,
+      },
+    });
+    expect(cfg.region).toBe("us-east-1");
+    expect(cfg.forcePathStyle).toBe(false);
+    expect(cfg.keyPrefix).toBe("");
+  });
+  test("throws when bucket is missing under the s3 provider", () => {
+    expect(() =>
+      parseFileStorageS3Config({
+        provider: "s3",
+        env: { ...env, bucket: undefined },
+      }),
+    ).toThrow(/ARCHESTRA_FILE_STORAGE_S3_BUCKET/);
+  });
+  test("does not validate when the provider is not s3", () => {
+    expect(
+      parseFileStorageS3Config({
+        provider: "db",
+        env: { ...env, bucket: undefined },
+      }).bucket,
+    ).toBe("");
+  });
+  test("throws when only one of the credential pair is set under s3", () => {
+    expect(() =>
+      parseFileStorageS3Config({
+        provider: "s3",
+        env: { ...env, secretAccessKey: undefined },
+      }),
+    ).toThrow(/must be set together/);
+    expect(() =>
+      parseFileStorageS3Config({
+        provider: "s3",
+        env: { ...env, accessKeyId: undefined },
+      }),
+    ).toThrow(/must be set together/);
+  });
+  test("treats a whitespace-only credential as unset under s3", () => {
+    expect(() =>
+      parseFileStorageS3Config({
+        provider: "s3",
+        env: { ...env, secretAccessKey: "   " },
+      }),
+    ).toThrow(/must be set together/);
+  });
+  test("allows both credentials omitted under s3 (AWS default chain)", () => {
+    const cfg = parseFileStorageS3Config({
+      provider: "s3",
+      env: { ...env, accessKeyId: undefined, secretAccessKey: undefined },
+    });
+    expect(cfg.accessKeyId).toBeUndefined();
+    expect(cfg.secretAccessKey).toBeUndefined();
+  });
+  test("does not reject a partial credential pair when the provider is not s3", () => {
+    expect(
+      parseFileStorageS3Config({
+        provider: "db",
+        env: { ...env, secretAccessKey: undefined },
+      }).accessKeyId,
+    ).toBe("AKIA");
   });
 });
 

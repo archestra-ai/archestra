@@ -1360,7 +1360,7 @@ class ToolModel {
    *
    * - Runtime tools (run_command/upload_file/download_file): assigned when the
    *   skills-sandbox runtime is on (`config.skillsSandbox.enabled`).
-   * - Persistent-files (Projects) tools (search_files/read_file/save_result/
+   * - Persistent-files (Projects) tools (search_files/read_file/save_file/
    *   edit_file/delete_file): also require the Projects flag
    *   (`config.projects.enabled`) — they need the runtime to run AND Projects to
    *   be exposed (see `isSandboxToolEnabled`), so gating assignment on both
@@ -1991,19 +1991,6 @@ class ToolModel {
       .where(inArray(schema.toolsTable.catalogId, catalogIds));
 
     return tools.map((t) => t.id);
-  }
-
-  /**
-   * Delete all tools for a specific catalog item
-   * Used when the last MCP server installation for a catalog is removed
-   * Returns the number of tools deleted
-   */
-  static async deleteByCatalogId(catalogId: string): Promise<number> {
-    const result = await db
-      .delete(schema.toolsTable)
-      .where(eq(schema.toolsTable.catalogId, catalogId));
-
-    return result.rowCount || 0;
   }
 
   /**

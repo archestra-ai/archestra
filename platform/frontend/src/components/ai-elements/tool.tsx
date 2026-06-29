@@ -191,7 +191,7 @@ export const ToolInput = ({
 }: ToolInputProps) => {
   return (
     <div
-      className={cn("overflow-hidden px-3 pt-3 space-y-1.5", className)}
+      className={cn("overflow-hidden p-3 space-y-1.5", className)}
       {...props}
     >
       <SectionLabel accent="bg-sky-400">Request</SectionLabel>

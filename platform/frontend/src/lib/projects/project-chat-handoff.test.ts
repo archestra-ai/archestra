@@ -38,4 +38,41 @@ describe("buildProjectChatHandoffUrl", () => {
 
     expect(url.startsWith("/chat?")).toBe(true);
   });
+
+  it("stamps the attachments marker only when files were stashed", () => {
+    const without = new URLSearchParams(
+      buildProjectChatHandoffUrl({
+        projectId: "proj-1",
+        prompt: "hi",
+        agentId: "agent-42",
+      }).split("?")[1],
+    );
+    expect(without.get("attachments")).toBeNull();
+
+    const withFiles = new URLSearchParams(
+      buildProjectChatHandoffUrl({
+        projectId: "proj-1",
+        prompt: "hi",
+        agentId: "agent-42",
+        hasAttachments: true,
+      }).split("?")[1],
+    );
+    expect(withFiles.get("attachments")).toBe("1");
+  });
+
+  it("omits the empty prompt param for a files-only handoff", () => {
+    // No caption: the attachments marker is what triggers the send on /chat, so
+    // an empty user_prompt would just be noise (and reads as falsy there).
+    const params = new URLSearchParams(
+      buildProjectChatHandoffUrl({
+        projectId: "proj-1",
+        prompt: "",
+        agentId: "agent-42",
+        hasAttachments: true,
+      }).split("?")[1],
+    );
+    expect(params.has("user_prompt")).toBe(false);
+    expect(params.get("attachments")).toBe("1");
+    expect(params.get("agentId")).toBe("agent-42");
+  });
 });

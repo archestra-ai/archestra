@@ -633,4 +633,67 @@ describe("POST /api/llm-virtual-keys", () => {
       "User is not a member of this organization",
     );
   });
+
+  test("passthrough: creates a personal key", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: { name: "PT empty", keyType: "passthrough" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.keyType).toBe("passthrough");
+    expect(body.scope).toBe("personal");
+    expect(body.authorId).toBe(user.id);
+    expect(body.providerApiKeys).toEqual([]);
+    expect(body.allowedLlmProxies).toBeUndefined();
+    expect(hasArchestraTokenPrefix(body.value)).toBe(true);
+  });
+
+  test("passthrough: rejects mapping provider API keys", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "PT with provider",
+        keyType: "passthrough",
+        providerApiKeys: [
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("passthrough: admin can create on behalf of another user", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+    const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "PT for owner",
+        keyType: "passthrough",
+        ownerId: owner.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.keyType).toBe("passthrough");
+    expect(body.authorId).toBe(owner.id);
+  });
 });

@@ -1669,6 +1669,111 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ],
       });
 
+      // Drop whitespace-only submissions for secret-typed env vars: such a
+      // value passes required-secret validation via the existing-bag fallback
+      // but would then clobber the stored secret with whitespace on merge,
+      // breaking the restarted server's credentials. "" is left intact as an
+      // explicit clear (required-secret validation still rejects it).
+      const submittedEnv: Record<string, string> = {
+        ...(environmentValues ?? {}),
+      };
+      for (const envDef of catalogItem.localConfig?.environment ?? []) {
+        if (envDef.type === "secret") {
+          const value = submittedEnv[envDef.key];
+          if (
+            typeof value === "string" &&
+            value !== "" &&
+            value.trim() === ""
+          ) {
+            delete submittedEnv[envDef.key];
+          }
+        }
+      }
+
+      // Build the post-merge plain-env view: existing column pruned to the
+      // catalog's current plain prompted keys (so a var removed from the
+      // catalog or flipped to secret-typed can't leave stale plaintext in the
+      // column or the pod env), then overridden by the request body with empty
+      // string treated as the delete signal. Reused to validate required vars
+      // and to persist back to mcp_server.environmentValues.
+      const plainPromptedKeys = new Set(
+        (catalogItem.localConfig?.environment ?? [])
+          .filter((env) => env.promptOnInstallation && env.type !== "secret")
+          .map((env) => env.key),
+      );
+      const mergedPlainEnv: Record<string, string> = {};
+      for (const [key, value] of Object.entries(
+        mcpServer.environmentValues ?? {},
+      )) {
+        if (plainPromptedKeys.has(key)) {
+          mergedPlainEnv[key] = value;
+        }
+      }
+      for (const envDef of catalogItem.localConfig?.environment ?? []) {
+        if (envDef.promptOnInstallation && envDef.type !== "secret") {
+          const value = submittedEnv[envDef.key];
+          if (value === "") {
+            delete mergedPlainEnv[envDef.key];
+          } else if (value !== undefined && value !== null) {
+            mergedPlainEnv[envDef.key] = String(value);
+          }
+        }
+      }
+
+      // Fetch the existing secret bag once so validation and the non-BYOS
+      // merge below can both consult it. BYOS replaces the bag wholesale
+      // (vault references are re-supplied per request), so it doesn't need
+      // the existing state.
+      const existingSecrets: Record<string, unknown> =
+        !isByosVault && mcpServer.secretId
+          ? ((await secretManager().getSecret(mcpServer.secretId))?.secret ??
+            {})
+          : {};
+
+      // Validate required env vars against the effective post-merge state
+      // regardless of whether the body carried values — an empty reinstall
+      // body must still 400 when a newly-added required var is unsatisfied
+      // rather than failing later at pod start. Plain types come from
+      // `mergedPlainEnv` (column + body, empty = clear); non-BYOS secret types
+      // are satisfied by the existing bag when the body omits them; BYOS
+      // requires the body alone.
+      if (catalogItem.localConfig?.environment) {
+        const requiredEnvVars = catalogItem.localConfig.environment.filter(
+          (env) => env.promptOnInstallation && env.required,
+        );
+
+        const missingEnvVars = requiredEnvVars.filter((env) => {
+          if (env.type === "secret") {
+            const submitted = submittedEnv[env.key];
+            if (isByosVault) {
+              return !submitted?.trim();
+            }
+            if (submitted === "") {
+              return true;
+            }
+            if (typeof submitted === "string" && submitted.trim()) {
+              return false;
+            }
+            const existing = existingSecrets[env.key];
+            return typeof existing !== "string" || !existing.trim();
+          }
+          const value = mergedPlainEnv[env.key];
+          if (env.type === "boolean") {
+            return !value;
+          }
+          return typeof value !== "string" || !value.trim();
+        });
+
+        if (missingEnvVars.length > 0) {
+          throw new ApiError(
+            400,
+            `Missing required environment variables: ${missingEnvVars
+              .map((env) => env.key)
+              .join(", ")}`,
+          );
+        }
+      }
+
       // New env/userConfig values land in this install's secret bag. The
       // runtime reload below reads `secretId` to pick them up.
       if (
@@ -1682,29 +1787,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfig: catalogItem.userConfig,
           userConfigValues,
         });
-        // Validate required environment variables
-        if (catalogItem.localConfig?.environment) {
-          const requiredEnvVars = catalogItem.localConfig.environment.filter(
-            (env) => env.promptOnInstallation && env.required,
-          );
-
-          const missingEnvVars = requiredEnvVars.filter((env) => {
-            const value = environmentValues?.[env.key];
-            if (env.type === "boolean") {
-              return !value;
-            }
-            return !value?.trim();
-          });
-
-          if (missingEnvVars.length > 0) {
-            throw new ApiError(
-              400,
-              `Missing required environment variables: ${missingEnvVars
-                .map((env) => env.key)
-                .join(", ")}`,
-            );
-          }
-        }
 
         if (catalogItem.userConfig) {
           const requiredUserConfigFields = Object.entries(
@@ -1744,14 +1826,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (mcpServer.secretId) {
             await secretManager().updateSecret(mcpServer.secretId, {
               ...catalogStaticUserConfigValues,
-              ...(environmentValues ?? {}),
+              ...submittedEnv,
               ...(installUserConfigValues ?? {}),
             });
           } else {
             const secret = await secretManager().createSecret(
               {
                 ...catalogStaticUserConfigValues,
-                ...(environmentValues ?? {}),
+                ...submittedEnv,
                 ...(installUserConfigValues ?? {}),
               },
               `${mcpServer.name}-vault-secret`,
@@ -1759,16 +1841,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             await McpServerModel.update(id, { secretId: secret.id });
           }
         } else {
-          // Non-BYOS mode: merge new values with existing secret
-          const existingSecrets = mcpServer.secretId
-            ? (await secretManager().getSecret(mcpServer.secretId))?.secret ||
-              {}
-            : {};
-
+          // Non-BYOS mode: merge new values with the existing bag fetched
+          // above for validation.
           const mergedSecrets = {
             ...existingSecrets,
             ...catalogStaticUserConfigValues,
-            ...(environmentValues ?? {}),
+            ...submittedEnv,
             ...(installUserConfigValues ?? {}),
           };
 
@@ -1794,6 +1872,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           "Updated MCP server secrets for reinstall",
         );
+      }
+
+      // Persist the merged plain-env view onto the install row's column so
+      // startServer can overlay it on every (re)deploy — the runtime manager's
+      // secret-bag reload keeps only secret-typed keys, so plain values would
+      // otherwise vanish on pod restart. Runs after the secret writes above so
+      // a validation or secret-write failure aborts before the column is
+      // mutated, and outside the body-non-empty guard so a catalog edit that
+      // removed a plain key (or flipped it to secret-typed) is still pruned on
+      // an empty-body (auto-cascade) reinstall.
+      if (catalogItem.serverType === "local") {
+        await McpServerModel.update(id, { environmentValues: mergedPlainEnv });
       }
 
       // Update service account if provided

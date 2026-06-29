@@ -1,5 +1,14 @@
+import {
+  MAX_PROJECT_UPLOAD_BYTES,
+  MAX_PROJECT_UPLOAD_MB,
+  PROJECT_INSTRUCTIONS_FILENAME,
+} from "@archestra/shared";
 import { userHasPermission } from "@/auth";
 import {
+  ConversationModel,
+  ConversationNotOwnedError,
+  FileNameExistsError,
+  ProjectAlreadyAssignedError,
   ProjectModel,
   ProjectNameExistsError,
   ProjectPinModel,
@@ -19,6 +28,10 @@ import type {
   SandboxFileListItem,
 } from "@/types";
 import { ApiError } from "@/types";
+import {
+  nextAvailableName,
+  sanitizeUploadFilename,
+} from "@/utils/upload-filename";
 
 /**
  * Projects: named collections of chats that own a set of result files
@@ -47,6 +60,69 @@ class ProjectService {
         icon: params.icon ?? null,
       });
     } catch (error) {
+      if (error instanceof ProjectNameExistsError) {
+        throw new ApiError(
+          409,
+          `a project named "${name}" already exists in this organization`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Turn one of the caller's chats into a project: create the project, move the
+   * chat into it, and re-point the chat's files to the project (see
+   * {@link ProjectModel.createFromConversation}). Owner-only; only `user`
+   * chats are eligible (scheduled-run conversations are rejected) and a chat
+   * already in a project can't seed another. `name` defaults to the chat title.
+   */
+  async createProjectFromConversation(params: {
+    organizationId: string;
+    userId: string;
+    conversationId: string;
+    name?: string | null;
+    description?: string | null;
+    icon?: string | null;
+  }): Promise<{ project: Project; filesMoved: number }> {
+    const meta = await ConversationModel.getOwnedMeta({
+      id: params.conversationId,
+      userId: params.userId,
+      organizationId: params.organizationId,
+    });
+    if (!meta) {
+      throw new ApiError(404, "Conversation not found");
+    }
+    if (meta.origin !== "user") {
+      throw new ApiError(409, "Only user chats can be turned into a project");
+    }
+    if (meta.projectId) {
+      throw new ApiError(409, "This chat already belongs to a project");
+    }
+
+    const name =
+      params.name?.trim() || meta.title?.trim() || "Untitled project";
+    const invalid = validateProjectName(name);
+    if (invalid) {
+      throw new ApiError(400, `project name is invalid: ${invalid}`);
+    }
+
+    try {
+      return await ProjectModel.createFromConversation({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        conversationId: params.conversationId,
+        name,
+        description: params.description ?? null,
+        icon: params.icon ?? null,
+      });
+    } catch (error) {
+      if (error instanceof ConversationNotOwnedError) {
+        throw new ApiError(404, "Conversation not found");
+      }
+      if (error instanceof ProjectAlreadyAssignedError) {
+        throw new ApiError(409, "This chat already belongs to a project");
+      }
       if (error instanceof ProjectNameExistsError) {
         throw new ApiError(
           409,
@@ -111,13 +187,13 @@ class ProjectService {
         (c) => c.project.visibility === "organization",
       );
     } else {
-      // "All": an admin sees the whole org EXCEPT other members' PRIVATE
-      // projects — those live under Personal → Other users (mirrors the Agents
-      // filter, where "All types" hides other users' personal agents). Only
-      // affects admins; non-admins have no oversight candidates to drop.
-      candidates = candidates.filter(
-        (c) => !(c.viewerRole === "admin" && c.project.visibility === null),
-      );
+      // "All": show only what the caller can actually access — own, org-shared,
+      // and team-shared to a team they belong to. For an admin that drops every
+      // oversight row (other members' private projects AND team-shared projects
+      // for teams they aren't in); those stay reachable via Personal → Other
+      // users and Team → pick that team. Non-admins have no oversight candidates
+      // to begin with, so this is a no-op for them.
+      candidates = candidates.filter((c) => c.viewerRole !== "admin");
     }
 
     // admin "My / Other users" owner sub-filter (honored upstream for admins only).
@@ -183,10 +259,13 @@ class ProjectService {
       ownerName: ownerNames.get(project.userId) ?? null,
       conversationCount: counts.get(project.id) ?? 0,
       visibility: project.visibility,
-      // Owner's team-shared projects expose their team names for the badge;
-      // others (and non-team projects) get null.
+      // Team-shared projects expose their team names for the badge to the
+      // owner and to a project:admin overseeing them. A plain "shared"
+      // recipient (a member of one of the teams) gets null — the full target
+      // list stays the owner's business. Non-team projects: null.
       shareTeamNames:
-        viewerRole === "owner" && project.visibility === "team"
+        (viewerRole === "owner" || viewerRole === "admin") &&
+        project.visibility === "team"
           ? (shareTeams.get(project.id) ?? []).map((t) => t.name)
           : null,
       pinnedAt: pins.get(project.id) ?? null,
@@ -391,6 +470,80 @@ class ProjectService {
     });
   }
 
+  /**
+   * Upload one file into the project (drag-and-drop on the Files panel).
+   *
+   * Authorized by project membership (owner/share) via `requireReadable` — NOT
+   * `requireViewable`, whose admin oversight is read-only. This is a write, but
+   * project files are member-level state (any member already produces them via
+   * sandbox runs), so it is not owner-gated like the project's own metadata.
+   *
+   * The bytes arrive base64-encoded in the JSON body; the decoded size is capped
+   * at {@link MAX_PROJECT_UPLOAD_BYTES}. On a name collision the file is
+   * auto-renamed (`report.pdf` -> `report (1).pdf`) up to a bounded number of
+   * attempts before giving up — covering both the unique index and the object
+   * store's exclusive write, including concurrent same-name uploads.
+   */
+  async uploadFile(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+    name: string;
+    mimeType: string;
+    dataBase64: string;
+  }): Promise<{ id: string; filename: string; mimeType: string }> {
+    const project = await this.requireReadable(params);
+    const data = decodeUploadBase64(params.dataBase64);
+    if (data.byteLength > MAX_PROJECT_UPLOAD_BYTES) {
+      throw new ApiError(
+        413,
+        `File is too large (max ${MAX_PROJECT_UPLOAD_MB} MB)`,
+      );
+    }
+    const filename = sanitizeUploadFilename(params.name);
+    // The instructions file steers every chat in the project and is owner-only
+    // via setInstructions (with its own length cap); an upload must not be able
+    // to create or replace it, bypassing that gate. Compared case-insensitively
+    // so a case variant can't impersonate it (or collide on a case-insensitive
+    // filesystem store).
+    if (filename.toLowerCase() === PROJECT_INSTRUCTIONS_FILENAME) {
+      throw new ApiError(
+        400,
+        `"${PROJECT_INSTRUCTIONS_FILENAME}" is reserved; edit the project instructions instead`,
+      );
+    }
+    const mimeType = params.mimeType.trim() || "application/octet-stream";
+
+    for (let attempt = 0; attempt <= MAX_UPLOAD_RENAME_ATTEMPTS; attempt++) {
+      const candidate =
+        attempt === 0 ? filename : nextAvailableName(filename, attempt);
+      try {
+        const file = await fileStore.put({
+          organizationId: params.organizationId,
+          userId: params.userId,
+          projectId: project.id,
+          conversationId: null,
+          filename: candidate,
+          mimeType,
+          sizeBytes: data.byteLength,
+          data,
+        });
+        return {
+          id: file.id,
+          filename: file.filename,
+          mimeType: file.mimeType,
+        };
+      } catch (error) {
+        if (error instanceof FileNameExistsError) continue;
+        throw error;
+      }
+    }
+    throw new ApiError(
+      409,
+      `Could not find an available name for "${filename}"`,
+    );
+  }
+
   async listConversations(params: {
     id: string;
     organizationId: string;
@@ -528,3 +681,34 @@ class ProjectService {
 }
 
 export const projectService = new ProjectService();
+
+// Bounded so a pathological collision (or a hostile client racing the same name)
+// can't spin forever; 50 distinct " (n)" candidates is far beyond any real case.
+const MAX_UPLOAD_RENAME_ATTEMPTS = 50;
+
+/**
+ * Decode an upload's base64 body to bytes. Tolerates an accidental `data:` URL
+ * prefix and rejects a payload that is empty or not valid base64 (Buffer.from is
+ * lenient and would otherwise silently drop garbage), so callers get a clean 400.
+ */
+function decodeUploadBase64(input: string): Buffer {
+  const commaIdx = input.startsWith("data:") ? input.indexOf(",") : -1;
+  const payload = commaIdx >= 0 ? input.slice(commaIdx + 1) : input;
+  const normalized = payload.replace(/\s/g, "");
+  if (normalized.length === 0) {
+    throw new ApiError(400, "File is empty");
+  }
+  // A base64 length of n % 4 === 1 can't encode whole bytes; Buffer.from would
+  // silently drop the dangling char instead of erroring, so reject it here.
+  if (
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(normalized) ||
+    normalized.length % 4 === 1
+  ) {
+    throw new ApiError(400, "File data is not valid base64");
+  }
+  const data = Buffer.from(normalized, "base64");
+  if (data.byteLength === 0) {
+    throw new ApiError(400, "File is empty");
+  }
+  return data;
+}

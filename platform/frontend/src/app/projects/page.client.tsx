@@ -13,7 +13,6 @@ import {
   PinOff,
   Plus,
   Trash2,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -26,6 +25,7 @@ import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { ProjectScopeFilter } from "@/components/project-scope-filter";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
+import { ProjectVisibilityBadge } from "@/components/projects/project-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -267,24 +267,19 @@ function ProjectCard({
           <span className="min-w-0 truncate font-medium">{project.name}</span>
         </Link>
         <span className="relative z-10 flex shrink-0 items-center gap-1">
-          {project.viewerRole === "admin" && (
+          {/* Scope pill (personal/team/org) on every card. The owner label is
+              added only on another member's PERSONAL project (admin oversight),
+              where the personal pill alone can't say whose it is — for team/org
+              the scope pill already conveys the sharing. */}
+          <ProjectVisibilityBadge
+            visibility={project.visibility}
+            teamNames={project.shareTeamNames}
+          />
+          {project.viewerRole === "admin" && project.visibility === null && (
             <Badge variant="secondary">
               {project.ownerName
                 ? `Owned by ${project.ownerName}`
                 : "Other user"}
-            </Badge>
-          )}
-          {project.viewerRole === "shared" && (
-            <Badge variant="secondary">Shared with you</Badge>
-          )}
-          {project.viewerRole === "owner" && project.visibility && (
-            <Badge variant="outline" className="gap-1">
-              <Users className="h-3 w-3" />
-              {project.visibility === "organization"
-                ? "Org"
-                : project.shareTeamNames && project.shareTeamNames.length > 0
-                  ? project.shareTeamNames.join(", ")
-                  : "Teams"}
             </Badge>
           )}
           <ProjectCardActions

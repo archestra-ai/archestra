@@ -62,6 +62,26 @@ export const PROJECT_INSTRUCTIONS_FILENAME = "instructions.md";
  */
 export const PROJECT_INSTRUCTIONS_MAX_LENGTH = 100_000;
 
+/**
+ * Max size (bytes) of a Markdown/plain-text file the in-place editor saves in one
+ * write. Editing happens in a textarea, so this caps it below the sandbox
+ * artifact limit; larger generated files can still be downloaded and read, just
+ * not hand-edited here. The backend write route is the authority; the editor
+ * mirrors it.
+ */
+export const EDITABLE_TEXT_FILE_MAX_BYTES = 1_000_000;
+
+/**
+ * Max size (bytes) of a single file uploaded by dragging it onto the project
+ * Files panel. Enforced both client-side (instant feedback before encoding) and
+ * server-side (the real gate). Kept comfortably under the API body limit: a
+ * 25 MB file is ~33 MB once base64-encoded, and uploads are one request per
+ * file, so a multi-file drop never aggregates into one oversized body.
+ */
+export const MAX_PROJECT_UPLOAD_BYTES = 25 * 1024 * 1024;
+/** {@link MAX_PROJECT_UPLOAD_BYTES} expressed in whole MB, for user-facing copy. */
+export const MAX_PROJECT_UPLOAD_MB = MAX_PROJECT_UPLOAD_BYTES / (1024 * 1024);
+
 export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
 export const DEFAULT_TEAM_NAME = "Default Team";
@@ -99,6 +119,17 @@ export const EXTERNAL_AGENT_ID_HEADER = "X-Archestra-Agent-Id";
  * Particularly useful for identifying which user was using the Archestra Chat.
  */
 export const USER_ID_HEADER = "X-Archestra-User-Id";
+
+/**
+ * Header name for a passthrough virtual key.
+ * Clients can pass this header to authenticate the acting Archestra user on an
+ * LLM proxy request whose provider credential is something the proxy forwards
+ * untouched (e.g. a Claude Code subscription token or a raw provider key in the
+ * Authorization header). The passthrough key carries no provider credential of
+ * its own — it only attributes the interaction to its owner and gates access to
+ * the proxy. Standard virtual keys still go in the Authorization header.
+ */
+export const VIRTUAL_KEY_HEADER = "X-Archestra-Virtual-Key";
 
 /**
  * Header name for session ID.
@@ -181,4 +212,25 @@ export function getArchestraTokenPrefix(value: string): string | null {
 
 export function hasArchestraTokenPrefix(value: string): boolean {
   return getArchestraTokenPrefix(value) !== null;
+}
+
+/**
+ * Whether a file may be edited in place through the generic text editor: only
+ * Markdown and plain-text files, by extension or MIME. Intentionally narrower
+ * than the Files preview's text rendering (which also shows JSON/CSV/logs) — the
+ * editor targets `.md`/`.txt` only. Single source of truth for both the backend
+ * write route's gate and the frontend's Edit affordance, so they cannot drift.
+ */
+export function isEditableTextFile(params: {
+  filename: string;
+  mimeType: string;
+}): boolean {
+  const name = params.filename.toLowerCase();
+  const mime = params.mimeType.toLowerCase();
+  return (
+    name.endsWith(".md") ||
+    name.endsWith(".txt") ||
+    mime === "text/markdown" ||
+    mime === "text/plain"
+  );
 }

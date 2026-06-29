@@ -71,9 +71,11 @@ import {
 import { isLoopbackAddress } from "@/utils/network";
 import {
   assertAuthenticatedForKeylessProvider,
+  assertConsistentUserCredentials,
   attemptJwksAuth,
   resolveAgent,
   validateLlmOAuthAccessToken,
+  validatePassthroughVirtualKey,
   validateVirtualApiKey,
   virtualKeyRateLimiter,
 } from "./llm-proxy-auth";
@@ -133,6 +135,7 @@ export interface LLMProxyContext<TRequest> {
   userId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
   virtualKeyId?: string;
+  passthroughVirtualKeyId?: string;
   sessionId?: string | null;
   sessionSource?: SessionSource;
   source: InteractionSource;
@@ -205,10 +208,22 @@ export async function handleLLMProxy<
   const authOverride = (
     request as FastifyRequest & { llmProxyAuthOverride?: LLMProxyAuthOverride }
   ).llmProxyAuthOverride;
+  const passthroughVirtualKeyToken =
+    utils.headers.virtualKey.getPassthroughVirtualKeyToken(
+      headersForExtraction,
+    );
+  // The X-Archestra-User-Id header is an unauthenticated hint; it does not
+  // participate in the cross-credential user-consistency check below.
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
   let virtualKeyId: string | undefined;
+  let passthroughVirtualKeyId: string | undefined;
+  // Authenticated user identities, tracked per source for the consistency check.
+  let passthroughUserId: string | undefined;
+  let jwksUserId: string | undefined;
+  let oauthUserId: string | undefined;
+  let regularVirtualKeyUserId: string | undefined;
 
   const { sessionId, sessionSource } =
     utils.headers.sessionId.extractSessionInfo(
@@ -293,6 +308,30 @@ export async function handleLLMProxy<
     }
   }
 
+  // Resolve a passthrough virtual key (X-Archestra-Virtual-Key). It authenticates
+  // the acting Archestra user and gates proxy access, but carries no provider
+  // credential — the provider auth still comes from the Authorization header.
+  // Skipped for internal loopback auth overrides (in-app chat).
+  if (passthroughVirtualKeyToken && !authOverride) {
+    await virtualKeyRateLimiter.check(request.ip);
+    try {
+      const passthroughResult = await validatePassthroughVirtualKey({
+        tokenValue: passthroughVirtualKeyToken,
+        agent: resolvedAgent,
+      });
+      passthroughVirtualKeyId = passthroughResult.passthroughVirtualKeyId;
+      passthroughUserId = passthroughResult.userId;
+      // Authenticated identity → overrides the unauthenticated X-Archestra-User-Id.
+      userId = passthroughResult.userId;
+      resolvedUser = await UserModel.getById(userId);
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 401) {
+        await virtualKeyRateLimiter.recordFailure(request.ip);
+      }
+      throw error;
+    }
+  }
+
   // Authenticate and resolve API key (JWKS → virtual key → header extraction → keyless check)
   let apiKey: string | undefined;
   let perKeyBaseUrl: string | undefined;
@@ -335,6 +374,7 @@ export async function handleLLMProxy<
       perKeyBaseUrl = jwksResult.baseUrl;
       perKeyChatApiKeyId = jwksResult.chatApiKeyId;
       if (jwksResult.userId) {
+        jwksUserId = jwksResult.userId;
         userId = jwksResult.userId;
         resolvedUser = await UserModel.getById(userId);
       }
@@ -390,6 +430,7 @@ export async function handleLLMProxy<
       authMethod = oauthResult.authMethod;
       authenticatedApp = oauthResult.authenticatedApp;
       if (oauthResult.userId) {
+        oauthUserId = oauthResult.userId;
         userId = oauthResult.userId;
         resolvedUser = await UserModel.getById(userId);
       }
@@ -412,6 +453,11 @@ export async function handleLLMProxy<
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
       wasVirtualKeyResolved = true;
       virtualKeyId = virtualResult.virtualKeyId;
+      // A personal standard virtual key identifies its owner; include it in the
+      // cross-credential consistency check.
+      if (virtualResult.virtualKeyScope === "personal") {
+        regularVirtualKeyUserId = virtualResult.virtualKeyAuthorId ?? undefined;
+      }
       authMethod = "virtual_key";
     } catch (error) {
       // The token resolved as a local virtual key on success above. If it
@@ -509,7 +555,9 @@ export async function handleLLMProxy<
     });
   }
 
-  // 5. Enforce authentication for keyless providers on external requests
+  // 5. Enforce authentication for keyless providers on external requests.
+  // A passthrough key authenticates the user but carries no provider credential,
+  // so it intentionally does not satisfy the keyless-provider requirement.
   assertAuthenticatedForKeylessProvider(
     apiKey,
     wasVirtualKeyResolved || wasOAuthAuthenticated,
@@ -517,8 +565,20 @@ export async function handleLLMProxy<
     request.ip,
   );
 
+  // All authenticated user-scoped credentials must resolve to the same user.
+  assertConsistentUserCredentials([
+    passthroughUserId,
+    jwksUserId,
+    oauthUserId,
+    regularVirtualKeyUserId,
+  ]);
+
   if (!authMethod) {
-    authMethod = isLoopbackAddress(request.ip) ? "internal" : "provider_key";
+    authMethod = passthroughVirtualKeyId
+      ? "passthrough_virtual_key"
+      : isLoopbackAddress(request.ip)
+        ? "internal"
+        : "provider_key";
   }
 
   // Check usage limits
@@ -532,6 +592,7 @@ export async function handleLLMProxy<
         agentId: resolvedAgentId,
         userId,
         virtualKeyId,
+        passthroughVirtualKeyId,
       });
 
     if (limitViolation) {
@@ -888,6 +949,7 @@ export async function handleLLMProxy<
       userId,
       resolvedUser,
       virtualKeyId,
+      passthroughVirtualKeyId,
       sessionId,
       sessionSource,
       source,
@@ -925,6 +987,7 @@ export async function handleLLMProxy<
         executionId,
         userId,
         virtualKeyId,
+        passthroughVirtualKeyId,
         sessionId,
         sessionSource,
         source,
@@ -993,6 +1056,7 @@ async function handleStreaming<
     authenticatedApp,
     userId,
     virtualKeyId,
+    passthroughVirtualKeyId,
     resolvedUser,
     sessionId,
     sessionSource,
@@ -1379,6 +1443,7 @@ async function handleStreaming<
             executionId,
             userId,
             virtualKeyId,
+            passthroughVirtualKeyId,
             sessionId,
             sessionSource,
             source,
@@ -1440,6 +1505,7 @@ async function handleNonStreaming<
     authenticatedApp,
     userId,
     virtualKeyId,
+    passthroughVirtualKeyId,
     resolvedUser,
     sessionId,
     sessionSource,
@@ -1647,6 +1713,7 @@ async function handleNonStreaming<
           executionId,
           userId,
           virtualKeyId,
+          passthroughVirtualKeyId,
           sessionId,
           sessionSource,
           source,
@@ -1721,6 +1788,7 @@ async function handleNonStreaming<
         executionId,
         userId,
         virtualKeyId,
+        passthroughVirtualKeyId,
         sessionId,
         sessionSource,
         source,

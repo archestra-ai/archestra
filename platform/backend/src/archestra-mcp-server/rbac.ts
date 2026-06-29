@@ -122,6 +122,7 @@ export const TOOL_PERMISSIONS: Record<
   artifact_write: null,
   swap_agent: { resource: "agent", action: "read" },
   swap_to_default_agent: null,
+  create_project_from_conversation: { resource: "project", action: "create" },
 
   // Meta — permission is enforced on the target tool, not on run_tool itself
   search_tools: null,
@@ -143,7 +144,7 @@ export const TOOL_PERMISSIONS: Record<
   upload_file: { resource: "sandbox", action: "execute" },
   search_files: { resource: "sandbox", action: "execute" },
   read_file: { resource: "sandbox", action: "execute" },
-  save_result: { resource: "sandbox", action: "execute" },
+  save_file: { resource: "sandbox", action: "execute" },
   edit_file: { resource: "sandbox", action: "execute" },
   delete_file: { resource: "sandbox", action: "execute" },
 

@@ -107,6 +107,9 @@ export const TOOL_TODO_WRITE_SHORT_NAME = "todo_write";
 export const TOOL_SWAP_AGENT_SHORT_NAME = "swap_agent";
 export const TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME = "swap_to_default_agent";
 export const TOOL_ARTIFACT_WRITE_SHORT_NAME = "artifact_write";
+// Turn the current chat into a project (moves the chat + its files into a new project).
+export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
+  "create_project_from_conversation";
 export const TOOL_SEARCH_TOOLS_SHORT_NAME = "search_tools";
 export const TOOL_RUN_TOOL_SHORT_NAME = "run_tool";
 export const TOOL_LIST_SKILLS_SHORT_NAME = "list_skills";
@@ -121,7 +124,7 @@ export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
 // persistent files: produced by agents, scoped to a conversation (or a project)
 export const TOOL_SEARCH_FILES_SHORT_NAME = "search_files";
 export const TOOL_READ_FILE_SHORT_NAME = "read_file";
-export const TOOL_SAVE_RESULT_SHORT_NAME = "save_result";
+export const TOOL_SAVE_FILE_SHORT_NAME = "save_file";
 export const TOOL_EDIT_FILE_SHORT_NAME = "edit_file";
 export const TOOL_DELETE_FILE_SHORT_NAME = "delete_file";
 // MCP Apps — authoring/management (chat) + per-app data store (app runtime).
@@ -205,6 +208,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
+  TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -216,7 +220,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_UPLOAD_FILE_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
-  TOOL_SAVE_RESULT_SHORT_NAME,
+  TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_EDIT_FILE_SHORT_NAME,
   TOOL_DELETE_FILE_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
@@ -393,8 +397,8 @@ export const TOOL_SEARCH_FILES_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_SEARCH_FILES_SHORT_NAME}` as const;
 export const TOOL_READ_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_READ_FILE_SHORT_NAME}` as const;
-export const TOOL_SAVE_RESULT_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_SAVE_RESULT_SHORT_NAME}` as const;
+export const TOOL_SAVE_FILE_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_SAVE_FILE_SHORT_NAME}` as const;
 export const TOOL_EDIT_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_EDIT_FILE_SHORT_NAME}` as const;
 export const TOOL_DELETE_FILE_FULL_NAME =
@@ -470,7 +474,7 @@ export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
 export const PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
-  TOOL_SAVE_RESULT_SHORT_NAME,
+  TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_EDIT_FILE_SHORT_NAME,
   TOOL_DELETE_FILE_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];

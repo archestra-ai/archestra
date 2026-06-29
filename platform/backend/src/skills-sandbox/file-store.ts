@@ -1,4 +1,8 @@
-import { PROJECT_INSTRUCTIONS_FILENAME } from "@archestra/shared";
+import {
+  EDITABLE_TEXT_FILE_MAX_BYTES,
+  isEditableTextFile,
+  PROJECT_INSTRUCTIONS_FILENAME,
+} from "@archestra/shared";
 import config from "@/config";
 import {
   FileModel,
@@ -13,15 +17,13 @@ import type {
   SandboxFileListItem,
 } from "@/types";
 import { UnsafePathError } from "./file-path";
+import { deleteRowBytes, getObjectStore, readRowBytes } from "./file-storage";
+import { mimeFromExtension, resolveArtifactMime } from "./mime-sniff";
 import {
-  deleteRowBytes,
   FileBytesMissingError,
   FilePathConflictError,
-  getObjectStore,
   type OwnerScope,
-  readRowBytes,
-} from "./file-storage";
-import { mimeFromExtension, resolveArtifactMime } from "./mime-sniff";
+} from "./object-store";
 import { SkillSandboxError } from "./types";
 
 /** MIME type the project instructions file is stored as. */
@@ -491,7 +493,7 @@ class FileStore {
 
   /**
    * Resolve a headless (no-project, no-conversation) file by name, for a
-   * headless `save_result` overwrite — there is no conversation/project scope to
+   * headless `save_file` overwrite — there is no conversation/project scope to
    * resolve within, so this targets the orphan bucket directly.
    */
   async resolveOrphanRef(params: {
@@ -562,6 +564,60 @@ class FileStore {
       mimeType: params.mimeType,
       sizeBytes: params.sizeBytes,
     });
+  }
+
+  /**
+   * Overwrite a row-backed text file's content from the browser editor.
+   * Authorizes with the same author-or-project-access rule as {@link get} and
+   * {@link delete} (via {@link authorizedFile}), then replaces the bytes in place
+   * through {@link update}, preserving the filename and stored MIME (a text edit
+   * never changes type). Restricted to Markdown/plain-text rows; the project
+   * instructions file keeps its own owner/admin-only route and is refused here so
+   * the generic project-access rule can't rewrite project guidance. Returns the
+   * updated row, or a discriminated error the route maps to a status code.
+   *
+   * Oversight `project:admin` never reaches a write here: this uses
+   * `authorizedFile`, not the `getProjectScopedForAdmin` fallback, so an
+   * overseeing admin who is not the author / not a project member gets
+   * `not_found`.
+   */
+  async updateTextFileContent(params: {
+    ref: string;
+    organizationId: string;
+    userId: string;
+    content: string;
+  }): Promise<
+    | PersistedFile
+    | { error: "not_found" | "reserved" | "not_editable" | "too_large" }
+  > {
+    // Row-backed files only: `authorizedFile` returns null for a non-UUID/`obj_`
+    // ref (a rowless object has no row to update) and for "not yours".
+    const file = await this.authorizedFile(params);
+    if (!file) return { error: "not_found" };
+    // The instructions file is editable only through its own owner/admin-gated
+    // route (its content is injected into every chat's system prompt); refuse it
+    // here so the generic project-access rule can't rewrite project guidance.
+    if (file.projectId && file.filename === PROJECT_INSTRUCTIONS_FILENAME) {
+      return { error: "reserved" };
+    }
+    if (
+      !isEditableTextFile({ filename: file.filename, mimeType: file.mimeType })
+    ) {
+      return { error: "not_editable" };
+    }
+    const data = Buffer.from(params.content, "utf8");
+    if (data.byteLength > EDITABLE_TEXT_FILE_MAX_BYTES) {
+      return { error: "too_large" };
+    }
+    // Preserve the stored MIME — a content edit of a text file never changes its
+    // type (mirrors the edit_file tool).
+    const updated = await this.update({
+      file,
+      mimeType: file.mimeType,
+      sizeBytes: data.byteLength,
+      data,
+    });
+    return updated ?? { error: "not_found" };
   }
 
   /**

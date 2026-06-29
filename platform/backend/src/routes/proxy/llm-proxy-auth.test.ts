@@ -6,11 +6,14 @@ import type { FastifyRequest } from "fastify";
 import { vi } from "vitest";
 import { VirtualApiKeyModel } from "@/models";
 import { describe, expect, test } from "@/test";
+import { ApiError } from "@/types";
 import {
   assertAuthenticatedForKeylessProvider,
+  assertConsistentUserCredentials,
   attemptJwksAuth,
   resolveAgent,
   VirtualKeyRateLimiter,
+  validatePassthroughVirtualKey,
   validateVirtualApiKey,
 } from "./llm-proxy-auth";
 
@@ -70,6 +73,25 @@ describe("validateVirtualApiKey", () => {
         "openai",
       ),
     ).rejects.toThrow("Invalid virtual API key");
+  });
+
+  test("throws 400 when a passthrough key is used in the Authorization header", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "pt",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+
+    await expect(validateVirtualApiKey(value, "openai")).rejects.toMatchObject({
+      statusCode: 400,
+    });
   });
 
   test("throws 401 for expired key", async ({
@@ -728,5 +750,154 @@ describe("VirtualKeyRateLimiter", () => {
     // New failure starts fresh
     await limiter.recordFailure("1.2.3.4");
     await expect(limiter.check("1.2.3.4")).resolves.toBeUndefined();
+  });
+});
+
+// =========================================================================
+// validatePassthroughVirtualKey
+// =========================================================================
+
+describe("validatePassthroughVirtualKey", () => {
+  test("returns owner + key id when the owner can access the proxy", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      scope: "org",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "pt",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+
+    const result = await validatePassthroughVirtualKey({
+      tokenValue: value,
+      agent: proxy,
+    });
+    expect(result.userId).toBe(owner.id);
+  });
+
+  test("403 when the owner cannot access the proxy", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const otherUser = await makeUser();
+    const personalProxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      scope: "personal",
+      authorId: otherUser.id,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "pt",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+
+    await expect(
+      validatePassthroughVirtualKey({
+        tokenValue: value,
+        agent: personalProxy,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  test("401 for an expired key", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      scope: "org",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "pt",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+      expiresAt: new Date(Date.now() - 1000),
+    });
+
+    await expect(
+      validatePassthroughVirtualKey({ tokenValue: value, agent: proxy }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  test("400 when a standard key is sent as a passthrough key", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      scope: "org",
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "std",
+      keyType: "standard",
+      scope: "personal",
+      authorId: owner.id,
+      providerApiKeys: [
+        { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+      ],
+    });
+
+    await expect(
+      validatePassthroughVirtualKey({ tokenValue: value, agent: proxy }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+});
+
+// =========================================================================
+// assertConsistentUserCredentials
+// =========================================================================
+
+describe("assertConsistentUserCredentials", () => {
+  test("passes for a single user, repeats, and empties", () => {
+    expect(() => assertConsistentUserCredentials([])).not.toThrow();
+    expect(() =>
+      assertConsistentUserCredentials([undefined, null, "user-a"]),
+    ).not.toThrow();
+    expect(() =>
+      assertConsistentUserCredentials(["user-a", "user-a", undefined]),
+    ).not.toThrow();
+  });
+
+  test("throws 401 when two credentials identify different users", () => {
+    try {
+      assertConsistentUserCredentials(["user-a", "user-b"]);
+      throw new Error("expected a conflict error");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).statusCode).toBe(401);
+    }
   });
 });

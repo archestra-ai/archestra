@@ -964,7 +964,7 @@ export function ChatMessages({
                         return (
                           <div
                             key={partKey}
-                            className="py-1 -mt-2 flex justify-start"
+                            className="mb-4 flex justify-start"
                           >
                             <div className="max-w-sm">
                               {isImage && (
@@ -1729,7 +1729,7 @@ const MessageTool = memo(
       const iconInfo = toolIconMap?.get(toolName);
 
       return (
-        <div className="mb-1">
+        <div className="mb-4">
           <div className="flex items-center gap-1.5">
             <TooltipProvider delayDuration={200}>
               <Tooltip>

@@ -210,7 +210,7 @@ test("persistRunConversationMessages writes [user, assistant] from the executor 
     parts: [
       {
         type: "dynamic-tool" as const,
-        toolName: "archestra__save_result",
+        toolName: "archestra__save_file",
         toolCallId: "call-1",
         state: "output-available" as const,
         input: { path: "joke.txt" },

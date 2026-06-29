@@ -2,6 +2,7 @@
 
 import {
   Folder,
+  FolderPlus,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -13,6 +14,7 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
+import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -61,6 +63,7 @@ import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
 import type { Once } from "@/lib/hooks/use-once";
+import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { usePinProject, useProjects } from "@/lib/projects/projects.query";
 import { cn } from "@/lib/utils";
 
@@ -131,6 +134,13 @@ export function ChatSidebarSection({
   const { data: canDeleteConversation } = useHasPermissions({
     chat: ["delete"],
   });
+  const { data: canCreateProject } = useHasPermissions({
+    project: ["create"],
+  });
+  const [createProjectConv, setCreateProjectConv] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
 
   // Conversations whose title should play the typing animation (shared via chat context)
   const { animatingTitleIds, markTitleAnimating } = useGlobalChat();
@@ -260,6 +270,11 @@ export function ChatSidebarSection({
       generateTitleMutation.variables?.id === conv.id;
     const isMenuOpen = openMenuId === conv.id;
     const isPinned = !!conv.pinnedAt;
+    const showCreateProject = canCreateProjectFromChat({
+      projectsEnabled,
+      hasCreatePermission: canCreateProject === true,
+      conversation: conv,
+    });
 
     return (
       <SidebarMenuSubItem key={conv.id}>
@@ -372,7 +387,9 @@ export function ChatSidebarSection({
                   <span className="truncate">{conv.projectName}</span>
                 </span>
               )}
-              {(canUpdateConversation || canDeleteConversation) && (
+              {(canUpdateConversation ||
+                canDeleteConversation ||
+                showCreateProject) && (
                 <DropdownMenu
                   open={isMenuOpen}
                   onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
@@ -428,6 +445,21 @@ export function ChatSidebarSection({
                           Regenerate title
                         </DropdownMenuItem>
                       </>
+                    )}
+                    {showCreateProject && (
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuId(null);
+                          setCreateProjectConv({
+                            id: conv.id,
+                            title: displayTitle,
+                          });
+                        }}
+                      >
+                        <FolderPlus className="h-4 w-4 mr-2" />
+                        Create project
+                      </DropdownMenuItem>
                     )}
                     {canDeleteConversation && (
                       <DropdownMenuItem
@@ -589,6 +621,13 @@ export function ChatSidebarSection({
         }}
         confirmLabel="Delete"
         pendingLabel="Deleting..."
+      />
+
+      <CreateProjectFromChatDialog
+        conversationId={createProjectConv?.id ?? null}
+        defaultName={createProjectConv?.title ?? ""}
+        open={createProjectConv !== null}
+        onOpenChange={(open) => !open && setCreateProjectConv(null)}
       />
     </>
   );

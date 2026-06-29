@@ -707,8 +707,9 @@ export class LimitValidationService {
     agentId: string;
     userId?: string;
     virtualKeyId?: string;
+    passthroughVirtualKeyId?: string;
   }): Promise<null | LimitViolationResponse> {
-    const { agentId, userId, virtualKeyId } = params;
+    const { agentId, userId, virtualKeyId, passthroughVirtualKeyId } = params;
 
     try {
       logger.debug(
@@ -761,6 +762,30 @@ export class LimitValidationService {
 
       logger.debug({ entities }, `[LimitValidation] Running limits cleanup`);
       await LimitModel.cleanupLimitsIfNeeded({ entities });
+      if (passthroughVirtualKeyId) {
+        // Cleanup expired windows for the passthrough key too (the cleanup
+        // entities map holds a single virtual_key slot).
+        await LimitModel.cleanupLimitsIfNeeded({
+          entities: { virtual_key: passthroughVirtualKeyId },
+        });
+      }
+
+      // The passthrough key is the user-bound cost-bearing identity, so its
+      // per-key limit is checked first and takes precedence over the standard
+      // virtual key when both are present on the request.
+      if (passthroughVirtualKeyId) {
+        const passthroughLimitViolation =
+          await LimitValidationService.checkEntityLimits(
+            "virtual_key",
+            passthroughVirtualKeyId,
+          );
+        if (passthroughLimitViolation) {
+          logger.info(
+            `[LimitValidation] BLOCKED by passthrough virtual-key-level limit for: ${passthroughVirtualKeyId}`,
+          );
+          return passthroughLimitViolation;
+        }
+      }
 
       if (virtualKeyId) {
         logger.debug(

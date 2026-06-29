@@ -303,17 +303,20 @@ describe("chat-mcp-client health check", () => {
 
       await vi.advanceTimersByTimeAsync(1_001);
 
-      const tools = await chatClient.getChatMcpTools({
-        agentName: agent.name,
-        agentId: agent.id,
-        userId: user.id,
-        organizationId: org.id,
-        conversationId: "conv-1",
-      });
+      // The idle client is evicted and closed; the fresh connect then fails in
+      // the test env, so the fetch throws rather than streaming with empty tools.
+      await expect(
+        chatClient.getChatMcpTools({
+          agentName: agent.name,
+          agentId: agent.id,
+          userId: user.id,
+          organizationId: org.id,
+          conversationId: "conv-1",
+        }),
+      ).rejects.toBeInstanceOf(chatClient.McpToolsUnavailableError);
 
       expect(expiredClient.ping).not.toHaveBeenCalled();
       expect(expiredClient.close).toHaveBeenCalledTimes(1);
-      expect(tools).toEqual({});
 
       chatClient.clearChatMcpClient(agent.id);
       await chatClient.__test.clearToolCache(cacheKey);
@@ -353,15 +356,17 @@ describe("chat-mcp-client health check", () => {
       deadClient as unknown as Client,
     );
 
-    // getChatMcpTools should detect dead client via ping, discard it,
-    // and attempt to create a fresh client (which will fail in test env,
-    // resulting in empty tools - but the key behavior is ping was called)
-    const tools = await chatClient.getChatMcpTools({
-      agentName: agent.name,
-      agentId: agent.id,
-      userId: user.id,
-      organizationId: org.id,
-    });
+    // getChatMcpTools should detect the dead client via ping, discard it, and
+    // attempt a fresh client (which fails in the test env). The fetch throws
+    // rather than silently returning empty tools.
+    await expect(
+      chatClient.getChatMcpTools({
+        agentName: agent.name,
+        agentId: agent.id,
+        userId: user.id,
+        organizationId: org.id,
+      }),
+    ).rejects.toBeInstanceOf(chatClient.McpToolsUnavailableError);
 
     // Ping should have been called on the dead client
     expect(deadClient.ping).toHaveBeenCalledTimes(1);
@@ -369,8 +374,6 @@ describe("chat-mcp-client health check", () => {
     expect(deadClient.close).toHaveBeenCalledTimes(1);
     // listTools should NOT have been called on the dead client
     expect(deadClient.listTools).not.toHaveBeenCalled();
-    // Tools will be empty since we can't create a real client in tests
-    expect(tools).toEqual({});
 
     chatClient.clearChatMcpClient(agent.id);
     await chatClient.__test.clearToolCache(cacheKey);
@@ -460,20 +463,72 @@ describe("chat-mcp-client health check", () => {
         userId: user.id,
         organizationId: org.id,
       });
+      // Hold the rejection assertion so the pending promise stays handled while
+      // we advance the fake clock past the 5s ping timeout.
+      const rejection = expect(toolsPromise).rejects.toBeInstanceOf(
+        chatClient.McpToolsUnavailableError,
+      );
 
       await vi.advanceTimersByTimeAsync(5_000);
-      const tools = await toolsPromise;
+      await rejection;
 
       expect(hangingClient.ping).toHaveBeenCalledTimes(1);
       expect(hangingClient.close).toHaveBeenCalledTimes(1);
       expect(hangingClient.listTools).not.toHaveBeenCalled();
-      expect(tools).toEqual({});
 
       chatClient.clearChatMcpClient(agent.id);
       await chatClient.__test.clearToolCache(cacheKey);
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("getChatMcpTools failure-vs-empty contract", () => {
+  test("returns an empty set (no throw) when the gateway lists zero tools", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    // A successful fetch that yields no tools is a legitimate state (e.g. a new
+    // agent) and must NOT be conflated with a fetch failure.
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+    await makeTeamMember(team.id, user.id);
+    await TeamTokenModel.createTeamToken(team.id, team.name);
+
+    const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+
+    const emptyClient = {
+      ping: vi.fn().mockResolvedValue(undefined),
+      listTools: vi.fn().mockResolvedValue({ tools: [] }),
+      callTool: vi.fn(),
+      close: vi.fn(),
+    };
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      emptyClient as unknown as Client,
+    );
+    chatClient.__test.setCachedClientLastValidatedAt(cacheKey, Date.now());
+
+    const tools = await chatClient.getChatMcpTools({
+      agentName: agent.name,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    expect(emptyClient.listTools).toHaveBeenCalledTimes(1);
+    expect(tools).toEqual({});
+
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
   });
 });
 
@@ -1639,6 +1694,40 @@ describe("getChatMcpClient", () => {
       );
     expect(authorizationHeaders).toContain("Bearer external-idp-jwt");
     expect(authorizationHeaders).toContain("Bearer internal-fallback-token");
+  });
+
+  test("times out a hung connect instead of hanging indefinitely", async () => {
+    vi.useFakeTimers();
+    try {
+      mockConnect.mockReset();
+      // Never resolves: simulates a gateway that accepts the socket but stalls.
+      mockConnect.mockImplementation(() => new Promise(() => {}));
+      mockClose.mockReset();
+      vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
+
+      const clientPromise = chatClient.getChatMcpClient(
+        crypto.randomUUID(),
+        crypto.randomUUID(),
+        crypto.randomUUID(),
+        undefined,
+        "internal-token",
+      );
+
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      // With resolveSessionExternalIdpToken mocked to null, the passed
+      // "internal-token" is the sole (primary) connect token and there is no
+      // fallback token to retry — so the timed-out connect yields a null client
+      // (which getChatMcpTools turns into a McpToolsUnavailableError).
+      expect(await clientPromise).toBeNull();
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+      // The half-open client is closed on timeout so a late connect can't leak it.
+      expect(mockClose).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+      mockConnect.mockReset();
+      mockConnect.mockRejectedValue(new Error("Connection closed"));
+    }
   });
 });
 

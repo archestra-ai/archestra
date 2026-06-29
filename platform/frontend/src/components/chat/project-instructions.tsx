@@ -7,8 +7,7 @@ import {
 import { FileText } from "lucide-react";
 import { useState } from "react";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { PlainTextEditor } from "@/components/chat/plain-text-editor";
 import {
   useProjectInstructions,
   useSetProjectInstructions,
@@ -62,18 +61,22 @@ export function InstructionsRow({
 }
 
 /**
- * The instructions surface for the pinned entry. The owner lands straight in the
- * editor (no repeated filename header, no Edit button); non-owners get a
- * read-only rendered view with a Close.
+ * The instructions surface for the pinned entry — the body only, mirroring
+ * {@link FilePreview}: the editor when `editing`, the rendered read view
+ * otherwise. The caller owns the `editing` flag and renders the Edit toggle in
+ * the file detail header's action row (so it sits with the other row actions);
+ * `onExitEdit` fires when the editor saves or cancels.
  */
 export function ProjectInstructionsPanel({
   projectId,
   isOwner,
-  onClose,
+  editing,
+  onExitEdit,
 }: {
   projectId: string;
   isOwner: boolean;
-  onClose: () => void;
+  editing: boolean;
+  onExitEdit: () => void;
 }) {
   const { data, isPending } = useProjectInstructions(projectId);
   const setInstructions = useSetProjectInstructions();
@@ -87,46 +90,38 @@ export function ProjectInstructionsPanel({
     );
   }
 
-  if (isOwner) {
+  if (isOwner && editing) {
     return (
       <InstructionsEditor
         initialContent={content}
         saving={setInstructions.isPending}
-        onCancel={onClose}
+        onCancel={onExitEdit}
         onSave={async (value) => {
           const ok = await setInstructions.mutateAsync({
             id: projectId,
             content: value,
           });
-          if (ok) onClose();
+          if (ok) onExitEdit();
         }}
       />
     );
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-end border-b px-3 py-1.5">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs text-muted-foreground"
-          onClick={onClose}
-        >
-          Close
-        </Button>
-      </div>
+    <div className="min-h-0 flex-1 overflow-auto">
       {content.trim() ? (
         <ConversationArtifactPanel
           artifact={content}
           isOpen
-          onToggle={onClose}
+          onToggle={() => {}}
           embedded
           hideHeader
         />
       ) : (
-        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
-          The project owner hasn't added any instructions.
+        <div className="flex h-full flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
+          {isOwner
+            ? "No instructions yet."
+            : "The project owner hasn't added any instructions."}
         </div>
       )}
     </div>
@@ -150,47 +145,18 @@ function InstructionsEditor({
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState(initialContent);
-  const overLimit = draft.length > PROJECT_INSTRUCTIONS_MAX_LENGTH;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-      <Textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        placeholder="Instructions that apply to every chat in this project…"
-        className="min-h-40 flex-1 resize-none font-mono text-xs"
-        autoFocus
-      />
-      <div className="flex items-center justify-between">
-        <span
-          className={cn(
-            "text-[11px]",
-            overLimit ? "text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {draft.length.toLocaleString()} /{" "}
-          {PROJECT_INSTRUCTIONS_MAX_LENGTH.toLocaleString()}
-        </span>
-        <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={onCancel}
-            disabled={saving}
-          >
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={() => onSave(draft)}
-            disabled={saving || overLimit}
-          >
-            Save
-          </Button>
-        </div>
-      </div>
-    </div>
+    <PlainTextEditor
+      value={draft}
+      onChange={setDraft}
+      // Instructions are bounded by character count (they go into every prompt).
+      count={draft.length}
+      max={PROJECT_INSTRUCTIONS_MAX_LENGTH}
+      saving={saving}
+      onSave={() => onSave(draft)}
+      onCancel={onCancel}
+      placeholder="Instructions that apply to every chat in this project…"
+    />
   );
 }

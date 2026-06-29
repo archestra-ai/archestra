@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { toast } from "sonner";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
 import { useMemberDefaultModel } from "@/lib/chat/chat.query";
+import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-files";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -27,7 +27,11 @@ import { useOrganization } from "@/lib/organization.query";
 export function NewChatComposer({
   onSubmitPrompt,
 }: {
-  onSubmitPrompt: (text: string, agentId: string) => void;
+  onSubmitPrompt: (
+    text: string,
+    agentId: string,
+    hasAttachments: boolean,
+  ) => void;
 }) {
   const { data: internalAgents = [] } = useInternalAgents();
   const { data: defaultAgentId } = useDefaultAgentId();
@@ -76,16 +80,17 @@ export function NewChatComposer({
     <div className="w-full">
       <ArchestraPromptInput
         onSubmit={(message) => {
-          const text = message.text?.trim();
-          if (!text) return;
-          if (message.files && message.files.length > 0) {
-            toast.warning(
-              "Attachments can't be carried into the new chat yet — add them once the chat opens.",
-            );
-            // Reject the submit so the typed prompt (and its saved draft) survive.
-            throw new Error("attachments-not-supported");
-          }
-          onSubmitPrompt(text, agentId);
+          const text = message.text?.trim() ?? "";
+          const files = message.files ?? [];
+          // Nothing to start a chat with.
+          if (!text && files.length === 0) return;
+          // Data URLs are too large for the handoff URL, so stash the
+          // attachments in memory; `/chat` drains them into the first message
+          // (gated on the `attachments=1` marker the handoff URL carries).
+          // Always set — an empty array clears any abandoned prior set so a
+          // text-only handoff never inherits stale files.
+          setPendingChatHandoffFiles(files);
+          onSubmitPrompt(text, agentId, files.length > 0);
         }}
         status="ready"
         selectedModel={modelId}

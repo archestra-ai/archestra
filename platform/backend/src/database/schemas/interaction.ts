@@ -59,6 +59,16 @@ const interactionsTable = pgTable(
       { onDelete: "set null" },
     ),
     /**
+     * Optional passthrough virtual key (X-Archestra-Virtual-Key header) that
+     * authenticated the acting user for this request. Tracked independently from
+     * `virtualKeyId`: a request may carry a standard virtual key as its provider
+     * credential AND a passthrough key as the user identity.
+     */
+    passthroughVirtualKeyId: uuid("passthrough_virtual_key_id").references(
+      () => virtualApiKeysTable.id,
+      { onDelete: "set null" },
+    ),
+    /**
      * Snapshot of the environment this request ran under, resolved from the
      * agent's `environment_id` at interaction-creation time (see
      * InteractionModel.create). Null = no environment (the shared/default

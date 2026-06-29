@@ -34,7 +34,7 @@ export function ToolStatusRow({
   tone = "default",
 }: ToolStatusRowProps) {
   return (
-    <div className="p-4 pt-0">
+    <div className="p-4">
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <div
           className={tone === "destructive" ? "text-destructive" : undefined}

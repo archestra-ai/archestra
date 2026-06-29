@@ -1,6 +1,6 @@
 id = "basic"
 name = "Basic"
-tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "github-stars", "lena-png-size", "sqlite-orders", "cv-shortlist", "invoice-approval", "ai-sre-fk-drain", "ai-sre-cache-treadmill", "decode-cipher", "xlsx-live-formulas", "purchase-ledger", "aec-material-json-takeoff", "renewal-churn-risk", "pcap-soc-triage", "xlsx-comment-injection", "it-license-rollup", "it-audit-resist-injection", "access-request-intake", "review-run-command-persistence", "review-file-upload-persistence"]
+tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "github-stars", "lena-png-size", "sqlite-orders", "cv-shortlist", "invoice-approval", "ai-sre-fk-drain", "ai-sre-cache-treadmill", "decode-cipher", "xlsx-live-formulas", "purchase-ledger", "aec-material-json-takeoff", "renewal-churn-risk", "pcap-soc-triage", "xlsx-comment-injection", "it-license-rollup", "it-audit-resist-injection", "access-request-intake", "review-run-command-persistence", "review-file-upload-persistence", "solidarity-tax-usd"]
 
 # Starts the harness-owned `acme_it` synthetic MCP (fixed, controlled content) and registers it to every
 # lane's agent. It serves stateless data, so one shared instance is safe across concurrent lanes -- the

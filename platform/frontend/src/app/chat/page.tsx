@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
@@ -109,11 +110,16 @@ import {
 } from "@/lib/chat/chat-share.query";
 import {
   conversationStorageKeys,
+  getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
+import {
+  drainPendingChatHandoffFiles,
+  hasPendingChatHandoffFiles,
+} from "@/lib/chat/pending-chat-handoff-files";
 import {
   applyPendingActions,
   clearPendingActions,
@@ -124,7 +130,7 @@ import {
   deriveModelSource,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
-import { useConfig } from "@/lib/config/config.query";
+import { useConfig, useFeature } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
@@ -134,6 +140,7 @@ import {
 } from "@/lib/llm-provider-api-keys.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useOrganization } from "@/lib/organization.query";
+import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { useProjectFiles } from "@/lib/projects/projects.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
@@ -215,6 +222,7 @@ export function ChatPageContent({
   >(undefined);
 
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
   const [isForkDialogOpen, setIsForkDialogOpen] = useState(false);
   const [forkAgentId, setForkAgentId] = useState<string | null>(null);
   const [manualCompactionFeedback, setManualCompactionFeedback] = useState<{
@@ -260,6 +268,10 @@ export function ChatPageContent({
     useHasPermissions({
       chatAgentPicker: ["enable"],
     });
+  const { data: canCreateProjectPerm } = useHasPermissions({
+    project: ["create"],
+  });
+  const projectsEnabled = useFeature("projectsEnabled") === true;
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
 
   // Non-admin users with no teams cannot create agents
@@ -398,6 +410,17 @@ export function ChatPageContent({
     !!conversation &&
     conversation.userId === session?.user.id;
   useConversationShare(canManageShare ? conversationId : undefined);
+
+  // Turning this chat into a project is owner-only (same as sharing) and
+  // restricted to a user chat not already in a project.
+  const canCreateProjectFromThisChat =
+    canManageShare &&
+    !!conversation &&
+    canCreateProjectFromChat({
+      projectsEnabled,
+      hasCreatePermission: canCreateProjectPerm === true,
+      conversation,
+    });
   const isShared = !!conversation?.share;
   const isReadOnlyConversation =
     !!conversationId &&
@@ -1269,7 +1292,11 @@ export function ChatPageContent({
       } else {
         stop?.();
       }
-      return;
+      // Throw to keep the textarea and draft intact — see onSubmit contract
+      // in ArchestraPromptInputProps. The submit button doubles as Stop while
+      // streaming; treating that click as an accepted submit would clear any
+      // follow-up the user had already started typing.
+      throw new Error("stop-not-submit");
     }
 
     const hasText = message.text?.trim();
@@ -1671,8 +1698,16 @@ export function ChatPageContent({
 
   // Auto-send message from URL when conditions are met (deep link support)
   useEffect(() => {
-    // Skip if already triggered or no user_prompt in URL
-    if (autoSendTriggeredRef.current || !initialUserPrompt) return;
+    if (autoSendTriggeredRef.current) return;
+
+    // A handoff that stashed attachments stamps `attachments=1` and may carry no
+    // prompt (files-only), so it triggers the send too — but only when the files
+    // are actually still in memory, else a reloaded handoff URL (store cleared)
+    // would create an empty conversation.
+    const handoffHasAttachments = searchParams.get("attachments") === "1";
+    const handoffFilesReady =
+      handoffHasAttachments && hasPendingChatHandoffFiles();
+    if (!initialUserPrompt && !handoffFilesReady) return;
 
     // Skip if conversation already exists
     if (conversationId) return;
@@ -1690,8 +1725,13 @@ export function ChatPageContent({
       searchParams,
     });
 
-    // Store the message to send after conversation is created
+    // Store the message to send after conversation is created. Draining is
+    // gated on the URL marker so the shared auto-send path never pulls stashed
+    // files into an unrelated handoff (app / SSO / a2a / deep link).
     pendingPromptRef.current = initialUserPrompt;
+    pendingFilesRef.current = handoffHasAttachments
+      ? drainPendingChatHandoffFiles()
+      : [];
 
     createInitialConversation((newConversation) => {
       // the init effect on the /chat/<id> mount reads this preference and
@@ -1897,8 +1937,10 @@ export function ChatPageContent({
               }
               canManageShare={canManageShare}
               isShared={isShared}
+              canCreateProject={canCreateProjectFromThisChat}
               onShare={() => setIsShareDialogOpen(true)}
               onExportMarkdown={handleExportMarkdown}
+              onCreateProject={() => setIsCreateProjectOpen(true)}
               panel={{
                 isOpen: isRightPanelOpen,
                 isArtifactOpen,
@@ -2301,6 +2343,20 @@ export function ChatPageContent({
           />
         )}
 
+        <CreateProjectFromChatDialog
+          conversationId={conversationId ?? null}
+          defaultName={
+            conversation
+              ? getConversationDisplayTitle(
+                  conversation.title,
+                  conversation.messages,
+                )
+              : ""
+          }
+          open={isCreateProjectOpen}
+          onOpenChange={setIsCreateProjectOpen}
+        />
+
         <StandardDialog
           open={isForkDialogOpen}
           onOpenChange={setIsForkDialogOpen}
@@ -2357,6 +2413,9 @@ function clearUserPromptQueryParam(params: {
 }) {
   const nextSearchParams = new URLSearchParams(params.searchParams.toString());
   nextSearchParams.delete("user_prompt");
+  // The attachments marker is one-shot too: drop it once consumed so a remount
+  // can't re-trigger a drain (which would now find an empty store).
+  nextSearchParams.delete("attachments");
   const nextUrl = nextSearchParams.toString()
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;

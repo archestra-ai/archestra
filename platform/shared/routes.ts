@@ -561,6 +561,7 @@ export const RouteId = {
   GetSkillSandboxArtifact: "getSkillSandboxArtifact",
   GetSkillSandboxConversationArtifacts: "getSkillSandboxConversationArtifacts",
   CreateProject: "createProject",
+  CreateProjectFromConversation: "createProjectFromConversation",
   GetProjects: "getProjects",
   GetProject: "getProject",
   UpdateProject: "updateProject",
@@ -568,11 +569,13 @@ export const RouteId = {
   DeleteProject: "deleteProject",
   GetProjectConversations: "getProjectConversations",
   GetProjectFiles: "getProjectFiles",
+  UploadProjectFiles: "uploadProjectFiles",
   GetProjectInstructions: "getProjectInstructions",
   SetProjectInstructions: "setProjectInstructions",
   PinProject: "pinProject",
   UnpinProject: "unpinProject",
   DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
+  UpdateSkillSandboxArtifactContent: "updateSkillSandboxArtifactContent",
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
@@ -593,6 +596,7 @@ export const RouteId = {
   CreateConnectionSetup: "createConnectionSetup",
   GetConnectionSetupScript: "getConnectionSetupScript",
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
+  CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
 
   // MCP App Routes
   GetApps: "getApps",

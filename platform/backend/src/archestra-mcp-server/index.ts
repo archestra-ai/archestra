@@ -60,6 +60,10 @@ import {
   toolEntries as policyToolEntries,
   tools as policyTools,
 } from "./policies";
+import {
+  toolEntries as projectToolEntries,
+  tools as projectTools,
+} from "./projects";
 import { checkToolPermission } from "./rbac";
 import {
   toolEntries as runToolEntries,
@@ -99,6 +103,7 @@ const toolEntries: Partial<
   ...toolAssignmentToolEntries,
   ...knowledgeManagementToolEntries,
   ...chatToolEntries,
+  ...projectToolEntries,
   ...searchToolEntries,
   ...runToolEntries,
   ...skillToolEntries,
@@ -116,13 +121,20 @@ const appToolFullNames = new Set<string>([
   ...Object.keys(appLlmToolEntries),
 ]);
 
-// search_files / read_file / save_result / edit_file / delete_file are the
+// search_files / read_file / save_file / edit_file / delete_file are the
 // persistent-files (Projects) surface of the sandbox tool group. Registered above
 // for unit tests, but hidden and non-dispatchable when the projects feature is dark.
 // Derived from the shared subgroup so this gate and the always-exposed /
 // dynamic-access logic stay in lockstep.
 const projectGatedSandboxFullNames = new Set<string>(
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES.map(getArchestraToolFullName),
+);
+
+// The dedicated Projects tool group (create_project_from_conversation).
+// Registered above for unit tests, but hidden and non-dispatchable when the
+// projects feature is dark.
+const projectFeatureToolFullNames = new Set<string>(
+  projectTools.map((t) => t.name),
 );
 
 export function getArchestraMcpTools() {
@@ -137,6 +149,7 @@ export function getArchestraMcpTools() {
     ...toolAssignmentTools,
     ...knowledgeManagementTools,
     ...chatTools,
+    ...(config.projects.enabled ? projectTools : []),
     ...searchToolTools,
     ...runToolTools,
     ...skillTools,
@@ -226,7 +239,8 @@ export async function executeArchestraTool(
   if (
     !config.projects.enabled &&
     resolvedToolName &&
-    projectGatedSandboxFullNames.has(resolvedToolName)
+    (projectGatedSandboxFullNames.has(resolvedToolName) ||
+      projectFeatureToolFullNames.has(resolvedToolName))
   ) {
     throw {
       code: -32601,

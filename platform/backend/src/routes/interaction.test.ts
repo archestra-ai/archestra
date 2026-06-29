@@ -282,4 +282,56 @@ describe("interaction routes", () => {
       fullMessages,
     );
   });
+
+  test("filters the sessions endpoint by sessionSource (client)", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+
+    const openaiResp = {
+      id: "r",
+      object: "chat.completion" as const,
+      created: Date.now(),
+      model: "gpt-4",
+      choices: [],
+    } as unknown as InsertInteraction["response"];
+    const make = (sessionId: string, sessionSource: string) =>
+      InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource,
+        source: "api",
+        request: {
+          model: "gpt-4",
+          messages: [],
+        } as unknown as InsertInteraction["request"],
+        response: openaiResp,
+        type: "openai:chatCompletions",
+      });
+
+    await make("cc", "claude_code");
+    await make("cd", "claude_desktop");
+    await make("hdr", "header");
+
+    // Filtered to claude_code → only the claude_code session.
+    const filtered = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions?limit=50&offset=0&sessionSource=claude_code",
+    });
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json().data).toHaveLength(1);
+    expect(filtered.json().data[0].sessionSource).toBe("claude_code");
+
+    // No filter → all three sessions.
+    const all = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions?limit=50&offset=0",
+    });
+    expect(all.statusCode).toBe(200);
+    expect(all.json().data).toHaveLength(3);
+  });
 });

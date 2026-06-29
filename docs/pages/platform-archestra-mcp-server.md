@@ -68,7 +68,7 @@ Required RBAC permission: `agent:create`
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — persistent-files tools (search_files, read_file, save_result, edit_file, delete_file) — when the Projects feature is enabled and assigned — and app tools (scaffold_app, edit_app, read_app, render_app, list_apps) stay directly available in both modes. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — and app tools (scaffold_app, edit_app, read_app, render_app, list_apps) stay directly available in both modes. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
 | `description` | `string \| null` | No | Optional human-readable description of the agent. |
 | `icon` | `string \| null` | No | Optional emoji icon for the agent. |
@@ -217,7 +217,7 @@ Required RBAC permission: `llmProxy:create`
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — persistent-files tools (search_files, read_file, save_result, edit_file, delete_file) — when the Projects feature is enabled and assigned — and app tools (scaffold_app, edit_app, read_app, render_app, list_apps) stay directly available in both modes. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — and app tools (scaffold_app, edit_app, read_app, render_app, list_apps) stay directly available in both modes. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
 
 
@@ -1455,6 +1455,7 @@ Required RBAC permission: `knowledgeSource:update`
 | `swap_agent` | Switch the current conversation to a different agent. | `agent:read` |
 | `swap_to_default_agent` | Return to the default agent. | None (no additional RBAC permission required) |
 | `artifact_write` | Write or update the conversation's persistent markdown document — notes, reports, plans, summaries, diagrams — that evolves as the conversation progresses. | None (no additional RBAC permission required) |
+| `create_project_from_conversation` | Turn the current chat into a project. | `project:create` |
 
 #### todo_write
 
@@ -1525,6 +1526,27 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `success` | `boolean` | Yes | Whether the artifact write succeeded. |
 | `characterCount` | `integer` | Yes | The number of characters written to the artifact. |
 
+#### create_project_from_conversation
+
+Required RBAC permission: `project:create`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | No | Project name. Defaults to the chat's title when omitted. |
+| `description` | `string` | No | Optional project description. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `success` | `boolean` | Yes | Whether the project was created. |
+| `project_id` | `string` | Yes | The new project's id. |
+| `project_name` | `string` | Yes | The new project's name. |
+| `project_slug` | `string` | Yes | The new project's slug. |
+| `files_transferred` | `integer` | Yes | How many of the chat's files were moved into the project. |
+
 ### Meta
 
 | Tool | Description | Required RBAC Permission |
@@ -1557,6 +1579,8 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `tools[].description` | `string \| null` | Yes | Short tool description, if available. |
 | `tools[].source` | `"archestra" \| "mcp" \| "agent_delegation"` | Yes | Where the tool comes from. |
 | `tools[].server` | `string \| null` | Yes | MCP server prefix for third-party MCP tools when available. |
+| `tools[].available` | `boolean` | Yes | False when the tool's MCP connection is not installed; it stays discoverable but cannot run until reconnected. |
+| `tools[].unavailableReason` | `string \| null` | Yes | Compact reason and recovery action when available is false; null otherwise. |
 | `tools[].params` | `string` | Yes | Compact one-line input signature — a summary, not the full schema. Parameters are joined by '; ', each rendered as `name<!\|?>:<type>` where `!` marks required and `?` optional. Object parameters are expanded up to two levels as `{child<!\|?>:type{grandchild<!\|?>:type}, …}`, enums as `enum(<json-values>)`, and a trailing ` — description` is added when available. A trailing `…` on a type marks an object whose content is not fully shown (freeform or more deeply nested) — consult the task instructions or the full schema for its shape. Empty string when the tool takes no input. Pass matching values inside tool_args when calling run_tool; if a call is rejected as invalid, the error describes the expected input (for third-party tools, the full input schema). |
 
 #### run_tool

@@ -9,7 +9,6 @@ import {
 } from "@archestra/shared";
 import {
   AlertTriangle,
-  AppWindow,
   MessageSquare,
   Pencil,
   Plus,
@@ -910,12 +909,6 @@ export function McpServerCard({
                   {item.name}
                 </span>
               </TruncatedTooltip>
-              {item.providesUi && (
-                <Badge variant="secondary" className="shrink-0 gap-1">
-                  <AppWindow className="h-3 w-3" />
-                  App
-                </Badge>
-              )}
               {environmentLabel && (
                 <Badge
                   variant="outline"

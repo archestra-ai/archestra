@@ -1662,8 +1662,10 @@ describe("mcp server inspect route", () => {
   });
 
   // The hoisted validation must not over-reject: an empty body still succeeds
-  // when the required var is already satisfied on the install row.
-  test("reinstall with an empty body succeeds when required env vars are already on the row", async ({
+  // when the required var is already satisfied on the install row. The column
+  // is also rebuilt on an empty body, so a stale key left by a catalog edit is
+  // pruned even when the (auto-cascade) reinstall carries no values.
+  test("reinstall with an empty body succeeds and prunes stale column keys", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
   }) => {
@@ -1692,7 +1694,12 @@ describe("mcp server inspect route", () => {
     });
     await db
       .update(schema.mcpServersTable)
-      .set({ environmentValues: { ALREADY_SET: "from-original-install" } })
+      .set({
+        environmentValues: {
+          ALREADY_SET: "from-original-install",
+          REMOVED_FROM_CATALOG: "orphan",
+        },
+      })
       .where(eq(schema.mcpServersTable.id, mcpServer.id));
     await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
 
@@ -1703,6 +1710,15 @@ describe("mcp server inspect route", () => {
     });
 
     expect(response.statusCode).toBe(200);
+
+    const [updatedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+    expect(updatedServer?.environmentValues).toEqual({
+      ALREADY_SET: "from-original-install",
+    });
 
     await drainPendingReinstall(mcpServer.id);
   });

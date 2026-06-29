@@ -1774,6 +1774,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Persist the merged plain-env view onto the install row's column so
+      // startServer can overlay it on every (re)deploy — the runtime manager's
+      // secret-bag reload keeps only secret-typed keys, so plain values would
+      // otherwise vanish on pod restart. Runs regardless of body contents so a
+      // catalog edit that removed a plain key (or flipped it to secret-typed)
+      // can't leave stale plaintext on the column even on an empty-body
+      // (auto-cascade) reinstall.
+      if (catalogItem.serverType === "local") {
+        await McpServerModel.update(id, { environmentValues: mergedPlainEnv });
+      }
+
       // New env/userConfig values land in this install's secret bag. The
       // runtime reload below reads `secretId` to pick them up.
       if (
@@ -1872,16 +1883,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           "Updated MCP server secrets for reinstall",
         );
-
-        // Persist the merged plain-env view onto the install row's column
-        // so startServer can overlay it on every (re)deploy — the runtime
-        // manager's secret-bag reload keeps only secret-typed keys, so
-        // plain values would otherwise vanish on pod restart.
-        if (catalogItem.serverType === "local") {
-          await McpServerModel.update(id, {
-            environmentValues: mergedPlainEnv,
-          });
-        }
       }
 
       // Update service account if provided

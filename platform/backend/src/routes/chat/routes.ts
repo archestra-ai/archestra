@@ -893,29 +893,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   ...(supportsToolCalling && { tools: mcpTools }),
                   stopWhen: buildChatStopConditions(repeatTracker),
                   abortSignal: chatAbortController.signal,
-                  // Recover two distinct tool-call parse failures that would
-                  // otherwise abort the whole turn:
-                  //
-                  // 1. NoSuchToolError from a leaked harmony sentinel token in
-                  //    the tool *name* (e.g. `run_command<|channel|>commentary`).
-                  //    Repair lands at tool-call parse, so the earlier
-                  //    tool-input-start chunk keeps the raw name — execution is
-                  //    correct, but an MCP App UI start keyed off that earlier
-                  //    name may not render for such calls.
-                  //
-                  // 2. InvalidToolInputError when the model mis-escapes a quote
-                  //    or newline inside a large string argument (e.g.
-                  //    update_skill's SKILL.md `content`), so the SDK cannot
-                  //    JSON.parse the streamed args. The original string is
-                  //    malformed and unparseable, so we re-ask the model once to
-                  //    re-emit the same arguments as valid JSON. The SDK
-                  //    re-validates whatever we return against the tool schema,
-                  //    so a malformed or throwing repair never reaches the tool;
-                  //    on failure we return null and the SDK skips the call.
-                  //    The re-emitted content is trusted as-is — the schema
-                  //    checks shape, not that string values are byte-for-byte
-                  //    the original (unverifiable: the original is unparseable).
-                  //    That residual drift is the accepted cost of recovery.
+                  // Recover tool-call parse failures that would otherwise abort
+                  // the turn: a leaked harmony token in the tool name
+                  // (NoSuchToolError), and malformed argument JSON from a
+                  // mis-escaped quote/newline in a large string arg
+                  // (InvalidToolInputError). The latter is re-asked rather than
+                  // repaired with a lenient parser, which can't disambiguate an
+                  // unescaped quote without silently mutating persisted content.
+                  // Re-ask is best-effort: the SDK re-validates the result's
+                  // shape, but not that string values match the (unparseable)
+                  // original, so some content drift is the accepted cost.
                   experimental_repairToolCall: async ({
                     toolCall,
                     error,

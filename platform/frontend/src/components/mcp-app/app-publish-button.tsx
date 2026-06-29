@@ -10,6 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
@@ -19,11 +24,18 @@ import { useAssignableTeams } from "@/lib/teams/team.query";
 
 type App = archestraApiTypes.GetAppResponses["200"];
 
-// Who-can-use-this-app control for the side panel's Visibility tab: scope
-// (personal / teams / org) plus team selection, applied via the Apps API (which
-// syncs the backing catalog). Ported from the former /apps/[appId] publish
-// dropdown, inlined as a tab body.
-export function AppVisibilityPanel({ app }: { app: App }) {
+const scopeLabels: Record<ResourceVisibilityScope, string> = {
+  personal: "Personal",
+  team: "Teams",
+  org: "Organization",
+};
+
+// Header "Publish" control: a compact button (with the current-scope icon) that
+// opens a popover with the shared VisibilitySelector UI to set who can use the
+// app. Edits apply via the Apps API (which syncs the backing catalog). Lives
+// next to the address bar so the publish state reads at a glance from any tab.
+export function AppPublishButton({ app }: { app: App }) {
+  const [open, setOpen] = useState(false);
   const updateApp = useUpdateApp();
   const { data: isAppAdmin } = useHasPermissions({ app: ["admin"] });
   const { data: isAppTeamAdmin } = useHasPermissions({ app: ["team-admin"] });
@@ -79,44 +91,62 @@ export function AppVisibilityPanel({ app }: { app: App }) {
       appId: app.id,
       body: { scope, teamIds: scope === "team" ? teamIds : [] },
     });
+    setOpen(false);
   };
 
   return (
-    <div className="space-y-4">
-      <VisibilitySelector
-        heading="Who can use this app"
-        value={scope}
-        options={options}
-        onValueChange={setScope}
-      >
-        {scope === "team" && (
-          <div className="space-y-2">
-            <Label>Teams</Label>
-            <MultiSelectCombobox
-              disabled={!canShareTeams || hasNoTeams}
-              options={
-                teams?.map((team) => ({
-                  value: team.id,
-                  label: team.name,
-                })) ?? []
-              }
-              value={teamIds}
-              onChange={setTeamIds}
-              placeholder={hasNoTeams ? "No teams available" : "Search teams…"}
-              emptyMessage="No teams found."
-            />
-          </div>
-        )}
-      </VisibilitySelector>
-
-      <div className="flex justify-end">
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <Button
-          onClick={handleApply}
-          disabled={updateApp.isPending || teamSelectionMissing}
+          type="button"
+          variant="default"
+          size="sm"
+          className="h-7 shrink-0 gap-1.5 px-2.5 text-xs font-medium"
+          aria-label={`Publish — who can use this app: ${scopeLabels[app.scope]}`}
+          title="Publish — change who can use this app"
         >
-          {updateApp.isPending ? "Updating…" : "Update"}
+          Publish
         </Button>
-      </div>
-    </div>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80">
+        <VisibilitySelector
+          heading="Who can use this app"
+          value={scope}
+          options={options}
+          onValueChange={setScope}
+        >
+          {scope === "team" && (
+            <div className="space-y-2">
+              <Label>Teams</Label>
+              <MultiSelectCombobox
+                disabled={!canShareTeams || hasNoTeams}
+                options={
+                  teams?.map((team) => ({
+                    value: team.id,
+                    label: team.name,
+                  })) ?? []
+                }
+                value={teamIds}
+                onChange={setTeamIds}
+                placeholder={
+                  hasNoTeams ? "No teams available" : "Search teams…"
+                }
+                emptyMessage="No teams found."
+              />
+            </div>
+          )}
+        </VisibilitySelector>
+
+        <div className="mt-4 flex justify-end">
+          <Button
+            size="sm"
+            onClick={handleApply}
+            disabled={updateApp.isPending || teamSelectionMissing}
+          >
+            {updateApp.isPending ? "Updating…" : "Update"}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

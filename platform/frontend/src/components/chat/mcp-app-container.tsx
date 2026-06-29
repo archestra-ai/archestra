@@ -1,8 +1,10 @@
 import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
+import { Eye, Settings } from "lucide-react";
 import type React from "react";
 import {
   Component,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -17,9 +19,8 @@ import {
 } from "@/components/chat/chat-messages.utils";
 import { AppEditModelContextDialog } from "@/components/mcp-app/app-edit-model-context-dialog.lazy";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
+import { AppPublishButton } from "@/components/mcp-app/app-publish-button";
 import { AppSettingsPanel } from "@/components/mcp-app/app-settings-panel";
-import { AppVersionsPanel } from "@/components/mcp-app/app-versions-panel";
-import { AppVisibilityPanel } from "@/components/mcp-app/app-visibility-panel";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
   McpAppAddressPill,
@@ -93,8 +94,33 @@ class McpAppErrorBoundary extends Component<
 /** Stable no-op size reporter for the panel-hosted (fill) render. */
 const noopSizeChange = () => {};
 
-/** Tabs of the owned-app side-panel chrome. */
-type PanelTab = "preview" | "settings" | "visibility" | "versions";
+/**
+ * The chat-inline card caps its body at `max(320px, 60vh)` and the runtime
+ * clamps the iframe to this ceiling. Some apps size their layout to the iframe
+ * viewport (e.g. `100vh`); the auto-resize SDK then measures content that grows
+ * with the viewport, so each report makes the next taller and the host would
+ * inflate the iframe without bound. Clamping settles the loop (content scrolls
+ * within the iframe). Tracks `innerHeight` so the cap follows window resizes.
+ */
+function computeInlineHeightCap() {
+  return typeof window === "undefined"
+    ? INITIAL_INLINE_HEIGHT
+    : Math.max(INITIAL_INLINE_HEIGHT, Math.round(window.innerHeight * 0.6));
+}
+
+function useInlineHeightCap() {
+  const [cap, setCap] = useState(computeInlineHeightCap);
+  useEffect(() => {
+    const update = () => setCap(computeInlineHeightCap());
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return cap;
+}
+
+/** Modes of the owned-app side-panel chrome: the live app vs all its settings. */
+type PanelTab = "preview" | "settings";
 
 /**
  * Self-contained MCP App section for use inside a Tool collapsible.
@@ -167,6 +193,7 @@ export function McpAppSection({
   const { data: canEdit } = useHasPermissions({ app: ["update"] });
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<PanelTab>("preview");
+  const inlineHeightCap = useInlineHeightCap();
   const { data: ownedApp } = useApp(appId ?? null);
 
   const headerName = ownedApp?.name || appName || humanizeToolLabel(toolName);
@@ -292,6 +319,14 @@ export function McpAppSection({
       // Seed the iframe + loading box at the last measured inline height so a
       // reload (e.g. closing the panel re-mounts it) doesn't collapse then grow.
       inlineInitialHeight={size?.height ?? INITIAL_INLINE_HEIGHT}
+      // Cap the inline chat surface at the card's visual ceiling so a
+      // viewport-relative app can't inflate the iframe without bound. Panel
+      // (fill) and fullscreen stay uncapped.
+      containerDimensions={
+        !renderInPanel && displayMode !== "fullscreen"
+          ? { maxHeight: inlineHeightCap }
+          : undefined
+      }
       toolInput={appId ? undefined : toolInput}
       toolResult={toolResult}
       preloadedResource={preloadedResource}
@@ -311,61 +346,61 @@ export function McpAppSection({
   let bottomBar: React.ReactNode;
   if (renderInPanel && appId && ownedApp) {
     topBar = (
-      <div className="relative z-10 flex shrink-0 flex-col gap-2 px-2 py-2 shadow-[0_1px_2px_-1px_rgb(0_0_0/0.08)]">
-        <div className="flex h-7 items-center gap-2">
-          <div className="min-w-0 flex-1">
-            {apps.length > 1 ? (
-              <McpAppSwitcher
-                value={selectedToolCallId}
-                options={apps.map((app) => ({
-                  value: app.toolCallId,
-                  label: app.label,
-                }))}
-                onChange={select}
-                className="w-full"
-              />
-            ) : (
-              <span className="truncate px-1 text-sm font-medium">
-                {headerName}
-              </span>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-0.5">
-            <McpAppStandaloneButton appId={appId} />
-            <McpAppRefreshButton onClick={reload} />
-          </div>
-        </div>
+      <div className="relative z-10 flex h-9 shrink-0 items-center gap-2 px-2 py-2 shadow-[0_1px_2px_-1px_rgb(0_0_0/0.08)]">
         <Tabs
           value={activeTab}
           onValueChange={(value) => setActiveTab(value as PanelTab)}
         >
-          <TabsList className="h-8 w-max">
-            <TabsTrigger value="preview" className="px-3 text-xs">
-              Preview
+          <TabsList className="h-7">
+            <TabsTrigger
+              value="preview"
+              aria-label="Preview"
+              title="Preview"
+              className="px-2"
+            >
+              <Eye className="h-3.5 w-3.5" />
             </TabsTrigger>
-            <TabsTrigger value="settings" className="px-3 text-xs">
-              Settings
-            </TabsTrigger>
-            <TabsTrigger value="visibility" className="px-3 text-xs">
-              Visibility
-            </TabsTrigger>
-            <TabsTrigger value="versions" className="px-3 text-xs">
-              Versions
+            <TabsTrigger
+              value="settings"
+              aria-label="All settings"
+              title="All settings"
+              className="px-2"
+            >
+              <Settings className="h-3.5 w-3.5" />
             </TabsTrigger>
           </TabsList>
         </Tabs>
+        <div className="min-w-0 flex-1">
+          {apps.length > 1 ? (
+            <McpAppSwitcher
+              value={selectedToolCallId}
+              options={apps.map((app) => ({
+                value: app.toolCallId,
+                label: app.label,
+              }))}
+              onChange={select}
+              className="w-full"
+              leading={<McpAppRefreshButton onClick={reload} />}
+              actions={<McpAppStandaloneButton appId={appId} />}
+            />
+          ) : (
+            <McpAppAddressPill
+              label={headerName}
+              className="w-full"
+              leading={<McpAppRefreshButton onClick={reload} />}
+              actions={<McpAppStandaloneButton appId={appId} />}
+            />
+          )}
+        </div>
+        <AppPublishButton app={ownedApp} />
       </div>
     );
     body = (
       <div className="relative h-full w-full [&>div]:!h-full">
         {runtimeNode}
-        {activeTab !== "preview" && (
+        {activeTab === "settings" && (
           <div className="absolute inset-0 z-10 overflow-y-auto bg-background p-4">
-            {activeTab === "settings" && <AppSettingsPanel app={ownedApp} />}
-            {activeTab === "visibility" && (
-              <AppVisibilityPanel app={ownedApp} />
-            )}
-            {activeTab === "versions" && <AppVersionsPanel appId={appId} />}
+            <AppSettingsPanel app={ownedApp} />
           </div>
         )}
       </div>

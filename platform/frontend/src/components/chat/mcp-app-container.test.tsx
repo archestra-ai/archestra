@@ -75,11 +75,8 @@ vi.mock("@/components/mcp-app/mcp-app-meta-bar", () => ({
 vi.mock("@/components/mcp-app/app-settings-panel", () => ({
   AppSettingsPanel: () => <div data-testid="settings-panel" />,
 }));
-vi.mock("@/components/mcp-app/app-visibility-panel", () => ({
-  AppVisibilityPanel: () => <div data-testid="visibility-panel" />,
-}));
-vi.mock("@/components/mcp-app/app-versions-panel", () => ({
-  AppVersionsPanel: () => <div data-testid="versions-panel" />,
+vi.mock("@/components/mcp-app/app-publish-button", () => ({
+  AppPublishButton: () => <div data-testid="publish-button" />,
 }));
 
 // ── Import component under test after mocks ───────────────────────────────────
@@ -468,19 +465,24 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
     expect(inlineIframeHeightPx()).toBe(700);
   });
 
-  it("does not cap a report taller than the viewport", async () => {
+  it("caps an oversized inline report at the card's visual ceiling", async () => {
+    // innerHeight 2000 → ceiling max(320px, 60vh) = 1200. A viewport-relative
+    // app that reports an ever-growing height is clamped here so the iframe
+    // can't inflate without bound (content scrolls within it instead).
     const bridge = await renderReadyApp(2000);
 
     await act(async () => {
       bridge.onsizechange({ height: 100_000 });
     });
 
-    expect(inlineIframeHeightPx()).toBe(100_000);
+    expect(inlineIframeHeightPx()).toBe(1200);
   });
 
-  it("hints no height cap to the guest inline", async () => {
+  it("hints the inline ceiling to the guest", async () => {
+    // innerHeight 2000 → 60vh = 1200. The host shares this honest ceiling so a
+    // cooperative app can lay out within it.
     const bridge = await renderReadyApp(2000);
-    expect(lastGuestContainerDimensions(bridge)).toEqual({});
+    expect(lastGuestContainerDimensions(bridge)).toEqual({ maxHeight: 1200 });
   });
 
   it("hints no cap to the guest when the app fills the panel", async () => {
@@ -776,10 +778,10 @@ describe("McpAppSection owned-app panel chrome", () => {
     return target;
   }
 
-  it("shows the management tabs and drops the bottom meta bar", async () => {
+  it("shows the preview/settings toggle and drops the bottom meta bar", async () => {
     const target = await renderOwnedPanel();
 
-    for (const name of ["Preview", "Settings", "Visibility", "Versions"]) {
+    for (const name of ["Preview", "All settings"]) {
       expect(within(target).getByRole("tab", { name })).toBeInTheDocument();
     }
     expect(screen.queryByTestId("meta-bar")).not.toBeInTheDocument();
@@ -788,13 +790,15 @@ describe("McpAppSection owned-app panel chrome", () => {
     target.remove();
   });
 
-  it("keeps the live iframe mounted when switching to a management tab", async () => {
+  it("keeps the live iframe mounted when switching to All settings", async () => {
     const user = userEvent.setup();
     const target = await renderOwnedPanel();
     const iframe = target.querySelector("iframe");
 
     await act(async () => {
-      await user.click(within(target).getByRole("tab", { name: "Settings" }));
+      await user.click(
+        within(target).getByRole("tab", { name: "All settings" }),
+      );
     });
 
     expect(within(target).getByTestId("settings-panel")).toBeInTheDocument();

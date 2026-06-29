@@ -20,10 +20,10 @@ type SettingsFormValues = {
   description: string;
 };
 
-// Settings tab for the owned-app side panel: the app's model-facing metadata
-// (name + description), its bound environment, its enabled MCP tools, and a
-// destructive delete section. Each section writes through the Apps API
-// independently; the tools editor auto-persists every toggle on its own.
+// The owned-app side panel's "All settings" view: name/description and the
+// bound environment commit together behind a single Save. Below that sit the
+// live tools editor (auto-persists each toggle) and the destructive delete
+// section. Visibility lives in its own header dropdown (AppVisibilityButton).
 export function AppSettingsPanel({ app }: { app: App }) {
   const updateApp = useUpdateApp();
   const { data: canUpdate } = useHasPermissions({ app: ["update"] });
@@ -34,12 +34,21 @@ export function AppSettingsPanel({ app }: { app: App }) {
     defaultValues: { name: app.name, description: app.description ?? "" },
   });
 
-  // Keep the form in sync when the app refetches (e.g. after saving).
+  const [environmentId, setEnvironmentId] = useState<string | null>(
+    app.environmentId ?? null,
+  );
+
+  // Re-seed every field from server state whenever the app refetches (e.g. after
+  // a save) so the form and the environment control stay in sync.
   useEffect(() => {
     form.reset({ name: app.name, description: app.description ?? "" });
-  }, [app.name, app.description, form]);
+    setEnvironmentId(app.environmentId ?? null);
+  }, [app.name, app.description, app.environmentId, form]);
 
   const readOnly = canUpdate !== true;
+  const isDirty =
+    form.formState.isDirty ||
+    (environmentId ?? null) !== (app.environmentId ?? null);
 
   const onSubmit = form.handleSubmit(async (values) => {
     await updateApp.mutateAsync({
@@ -47,13 +56,10 @@ export function AppSettingsPanel({ app }: { app: App }) {
       body: {
         name: values.name.trim(),
         description: values.description.trim() || null,
+        environmentId,
       },
     });
   });
-
-  const handleEnvironmentChange = (environmentId: string | null) => {
-    updateApp.mutate({ appId: app.id, body: { environmentId } });
-  };
 
   return (
     <div className="flex flex-col gap-8">
@@ -78,26 +84,27 @@ export function AppSettingsPanel({ app }: { app: App }) {
             to open it.
           </p>
         </div>
+
+        {!readOnly && (
+          <EnvironmentSelector
+            value={environmentId}
+            onChange={setEnvironmentId}
+            helpText="The app can only be assigned and call MCP tools in this environment."
+          />
+        )}
+
         {!readOnly && (
           <div className="flex justify-end">
             <Button
               type="submit"
               size="sm"
-              disabled={updateApp.isPending || !form.formState.isDirty}
+              disabled={updateApp.isPending || !isDirty}
             >
               {updateApp.isPending ? "Saving…" : "Save"}
             </Button>
           </div>
         )}
       </form>
-
-      {!readOnly && (
-        <EnvironmentSelector
-          value={app.environmentId ?? null}
-          onChange={handleEnvironmentChange}
-          helpText="The app can only be assigned and call MCP tools in this environment."
-        />
-      )}
 
       <div className="space-y-2">
         <h3 className="text-sm font-semibold">Tools</h3>

@@ -64,13 +64,16 @@ export function McpAppAddressPill({
   label,
   leading,
   actions,
+  className,
 }: {
   label?: React.ReactNode;
   leading?: React.ReactNode;
   actions?: React.ReactNode;
+  /** Overrides the pill's default fixed width (e.g. `w-full` in a narrow panel). */
+  className?: string;
 }) {
   return (
-    <div className={PILL_CLASS}>
+    <div className={cn(PILL_CLASS, className)}>
       {leading ? (
         <div className="relative z-10 flex shrink-0 items-center">
           {leading}

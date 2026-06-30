@@ -1,21 +1,21 @@
-import type { ResourceVisibilityScope } from '@archestra/shared';
-import { Globe, User, Users } from 'lucide-react';
-import { scopeStyles } from '@/components/resource-visibility-badge';
-import { Badge } from '@/components/ui/badge';
+import type { ResourceVisibilityScope } from "@archestra/shared";
+import { Globe, User, Users } from "lucide-react";
+import { scopeStyles } from "@/components/resource-visibility-badge";
+import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 const SCOPE_META: Record<
   ResourceVisibilityScope,
   { label: string; icon: typeof User }
 > = {
-  personal: { label: 'Personal', icon: User },
-  team: { label: 'Team', icon: Users },
-  org: { label: 'Organization', icon: Globe },
+  personal: { label: "Personal", icon: User },
+  team: { label: "Team", icon: Users },
+  org: { label: "Organization", icon: Globe },
 };
 
 // Icon-only scope pill (personal/team/org) with the label in the tooltip +
@@ -31,7 +31,7 @@ export function ScopeBadge({
   teamNames?: string[] | null;
   hidePersonal?: boolean;
 }) {
-  if (scope === 'personal' && hidePersonal) {
+  if (scope === "personal" && hidePersonal) {
     return null;
   }
 
@@ -39,8 +39,8 @@ export function ScopeBadge({
 
   const names = teamNames?.filter(Boolean) ?? [];
   const label =
-    scope === 'team' && names.length > 0
-      ? `Team: ${names.join(', ')}`
+    scope === "team" && names.length > 0
+      ? `Team: ${names.join(", ")}`
       : scopeLabel;
 
   return (
@@ -49,7 +49,7 @@ export function ScopeBadge({
         <Badge
           variant="outline"
           aria-label={label}
-          className={cn(scopeStyles[scope], 'px-1.5')}
+          className={cn(scopeStyles[scope], "px-1.5")}
         >
           <Icon className="h-3 w-3" />
         </Badge>

@@ -3332,6 +3332,10 @@ export type OpenrouterChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     stream?: boolean | null;
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
 };
 
 export type OpenrouterChatCompletionResponseInput = {
@@ -8642,6 +8646,10 @@ export type OpenrouterChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     stream?: boolean | null;
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
 };
 
 export type OpenrouterChatCompletionResponse = {
@@ -32060,8 +32068,8 @@ export type GetInteractionsResponses = {
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
-            request: XaiChatCompletionRequest;
-            processedRequest?: XaiChatCompletionRequest | null;
+            request: OpenrouterChatCompletionRequest;
+            processedRequest?: OpenrouterChatCompletionRequest | null;
             response: OpenrouterChatCompletionResponse | {
                 error: string;
             };
@@ -35675,8 +35683,8 @@ export type GetInteractionResponses = {
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
-        request: XaiChatCompletionRequest;
-        processedRequest?: XaiChatCompletionRequest | null;
+        request: OpenrouterChatCompletionRequest;
+        processedRequest?: OpenrouterChatCompletionRequest | null;
         response: OpenrouterChatCompletionResponse | {
             error: string;
         };
@@ -51053,7 +51061,7 @@ export type OpenAiListModelsWithAgentResponses = {
 export type OpenAiListModelsWithAgentResponse = OpenAiListModelsWithAgentResponses[keyof OpenAiListModelsWithAgentResponses];
 
 export type OpenrouterChatCompletionsWithDefaultAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: OpenrouterChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -51144,7 +51152,7 @@ export type OpenrouterChatCompletionsWithDefaultAgentResponses = {
 export type OpenrouterChatCompletionsWithDefaultAgentResponse = OpenrouterChatCompletionsWithDefaultAgentResponses[keyof OpenrouterChatCompletionsWithDefaultAgentResponses];
 
 export type OpenrouterChatCompletionsWithAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: OpenrouterChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client

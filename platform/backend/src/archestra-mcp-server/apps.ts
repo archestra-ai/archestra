@@ -30,7 +30,6 @@ import {
   replaceAppToolAssignments,
   resolveAppToolsByName,
 } from "@/services/agent-tool-assignment";
-import { buildBuildAppSkillActivation } from "@/services/apps/app-authoring-skill-preload";
 import {
   assertCallerMayModifyApp,
   callerIsAppAdmin,
@@ -67,6 +66,7 @@ import {
   ScaffoldAppSchema,
 } from "@/types/app";
 import { isUniqueConstraintError } from "@/utils/db";
+import { ARCHESTRA_APP_SDK_SUMMARY } from "./app-authoring-guidance";
 import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
@@ -303,7 +303,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_SCAFFOLD_APP_SHORT_NAME,
     title: "Scaffold App",
     description:
-      "Create a new interactive app (dashboard, form, tracker, game, or any custom UI) seeded from the default starter template. Use this whenever the user asks to make, build, or create an app or interactive UI — never paste app code into the chat reply or write it as an artifact. The result returns the seeded HTML; build it up with edit_app.",
+      'Create a new interactive app (dashboard, form, tracker, game, or any custom UI) seeded from the default starter template. Use this whenever the user asks to make, build, or create an app or interactive UI — never paste app code into the chat reply or write it as an artifact. The result returns the seeded HTML plus the condensed window.archestra SDK surface; build it up with edit_app. For tool-calling apps (the assign→preview→diagnostics build loop), the CDN allowlist, or platform theming, load the "Build App" skill (in your available skills) for the full authoring playbook.',
     schema: ScaffoldAppToolSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
@@ -427,13 +427,6 @@ const registry = defineArchestraTools([
         warnings.length > 0
           ? `\nValidation warnings (save succeeded; fix via edit_app):\n- ${warnings.join("\n- ")}`
           : "";
-      // Auto-load the Build App skill in this same turn so the model has the
-      // window.archestra SDK contract before its first edit_app, without relying
-      // on it to discover and load the skill itself.
-      const skillActivation = buildBuildAppSkillActivation();
-      const skillNote = skillActivation
-        ? `\n\n${skillActivation.activation}`
-        : "";
       const toolsParts = toolsResultParts(resolvedTools);
       return structuredSuccessResult(
         {
@@ -445,7 +438,7 @@ const registry = defineArchestraTools([
           ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone page: /a/${app.id}${toolsParts.note}${warningsNote}${seededHtmlNote}${skillNote}`,
+        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone page: /a/${app.id}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
       );
     },
   }),
@@ -453,7 +446,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_REFINE_APP_SHORT_NAME,
     title: "Refine App",
     description:
-      "Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. Pass `questions` (up to 3) to ask the user clarifying questions, and/or `spec` to persist the consolidated requirements. The result returns the user's real assignable MCP tools to ground the spec in; once a spec is persisted, build the HTML with edit_app.",
+      'Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. Pass `questions` (up to 3) to ask the user clarifying questions, and/or `spec` to persist the consolidated requirements. The result returns the user\'s real assignable MCP tools to ground the spec in plus the condensed window.archestra SDK surface; once a spec is persisted, build the HTML with edit_app. For tool-calling apps, the CDN allowlist, or platform theming, load the "Build App" skill (in your available skills) for the full authoring playbook.',
     schema: RefineAppToolSchema,
     outputSchema: RefineAppOutputSchema,
     async handler({ args, context, toolName }) {
@@ -673,7 +666,7 @@ const registry = defineArchestraTools([
           byteSize,
           html: row.html,
         },
-        `App "${app.name}" (${app.id}) version ${row.version}, ${byteSize} bytes:\n\n${row.html}`,
+        `App "${app.name}" (${app.id}) version ${row.version}, ${byteSize} bytes:\n\n${row.html}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
       );
     },
   }),
@@ -681,7 +674,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
     description:
-      "Build up an app's HTML with str_replace edits — the path for any change, from a one-line tweak to a full rewrite (replace the whole document in a single edit). Read the current HTML with read_app first if it is not already in context, pass that read's version as baseVersion, and supply edits as [{old_str, new_str}] pairs. Each old_str must match the current HTML exactly once (include enough surrounding context to be unique); edits apply in order and the whole call is atomic — any non-match or stale baseVersion leaves the app untouched. A successful edit forks a new immutable version; assigned tools and metadata are unchanged.",
+      "Build up an app's HTML with str_replace edits — the path for any change, from a one-line tweak to a full rewrite (replace the whole document in a single edit). Read the current HTML with read_app first if it is not already in context, pass that read's version as baseVersion, and supply edits as [{old_str, new_str}] pairs. Each old_str must match the current HTML exactly once (include enough surrounding context to be unique); edits apply in order and the whole call is atomic — any non-match or stale baseVersion leaves the app untouched. A successful edit forks a new immutable version; assigned tools and metadata are unchanged. read_app's result carries the condensed window.archestra SDK surface; for tool-calling apps, the CDN allowlist, or platform theming, load the \"Build App\" skill (in your available skills) for the full authoring playbook.",
     schema: EditAppSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {

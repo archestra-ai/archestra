@@ -19,7 +19,11 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { collapseProjectChats } from "@/app/projects/[id]/project-chats.utils";
+import {
+  collapseProjectChats,
+  countRunsByTrigger,
+  formatScheduledRecentRow,
+} from "@/app/projects/[id]/project-chats.utils";
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
 import { AgentIcon } from "@/components/agent-icon";
 import { FileDetailHeader } from "@/components/chat/file-detail-header";
@@ -288,6 +292,7 @@ function ChatsList({
   // A schedule's runs collapse to one row (its latest run); user chats are shown
   // as-is. Newest activity first.
   const chats = collapseProjectChats(conversations);
+  const runCounts = countRunsByTrigger(conversations);
   return (
     <section>
       <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
@@ -301,6 +306,15 @@ function ChatsList({
         <div className="space-y-2">
           {chats.map((conv) => {
             const isScheduled = conv.origin === "schedule_trigger";
+            const scheduled = isScheduled
+              ? formatScheduledRecentRow({
+                  scheduleName: conv.scheduleName,
+                  prompt: conv.title,
+                  runCount: conv.scheduleTriggerId
+                    ? (runCounts.get(conv.scheduleTriggerId) ?? 0)
+                    : 0,
+                })
+              : null;
             // A scheduled row opens its latest run's chat WITH the schedule
             // context, so the chat sidebar shows the runs navigator for the rest.
             const href = isScheduled
@@ -328,8 +342,8 @@ function ChatsList({
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="truncate text-sm font-medium">
-                      {isScheduled
-                        ? (conv.scheduleName ?? "Scheduled task")
+                      {scheduled
+                        ? scheduled.title
                         : (conv.title ?? "Untitled chat")}
                     </span>
                     {conv.readOnly && (
@@ -340,8 +354,8 @@ function ChatsList({
                     )}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {isScheduled
-                      ? (conv.title ?? "No prompt")
+                    {scheduled
+                      ? scheduled.meta
                       : conv.readOnly
                         ? `by ${conv.authorName ?? "someone else"}`
                         : "by you"}

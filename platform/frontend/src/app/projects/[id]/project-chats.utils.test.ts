@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { collapseProjectChats } from "./project-chats.utils";
+import {
+  collapseProjectChats,
+  countRunsByTrigger,
+  formatScheduledRecentRow,
+} from "./project-chats.utils";
 
 type TestChat = {
   id: string;
@@ -100,5 +104,61 @@ describe("collapseProjectChats", () => {
       }),
     ]);
     expect(out.map((c) => c.id)).toEqual(["x2", "x1"]); // not collapsed together
+  });
+});
+
+describe("countRunsByTrigger", () => {
+  it("counts a schedule's runs and ignores user chats", () => {
+    const counts = countRunsByTrigger([
+      item({ id: "u1", origin: "user" }),
+      item({ id: "r1", origin: "schedule_trigger", scheduleTriggerId: "t1" }),
+      item({ id: "r2", origin: "schedule_trigger", scheduleTriggerId: "t1" }),
+      item({ id: "r3", origin: "schedule_trigger", scheduleTriggerId: "t2" }),
+    ]);
+    expect(counts.get("t1")).toBe(2);
+    expect(counts.get("t2")).toBe(1);
+    expect(counts.size).toBe(2); // user chat contributes no key
+  });
+
+  it("ignores scheduled chats with no schedule id", () => {
+    const counts = countRunsByTrigger([
+      item({ id: "x", origin: "schedule_trigger", scheduleTriggerId: null }),
+    ]);
+    expect(counts.size).toBe(0);
+  });
+});
+
+describe("formatScheduledRecentRow", () => {
+  it("prefixes the schedule name and pluralizes the run count", () => {
+    expect(
+      formatScheduledRecentRow({
+        scheduleName: "Weekly summary",
+        prompt: "Generate the report",
+        runCount: 12,
+      }),
+    ).toEqual({
+      title: "Scheduled task · Weekly summary",
+      meta: "12 runs · Generate the report",
+    });
+  });
+
+  it("uses the singular 'run' for a single run", () => {
+    expect(
+      formatScheduledRecentRow({
+        scheduleName: "Daily",
+        prompt: "do it",
+        runCount: 1,
+      }).meta,
+    ).toBe("1 run · do it");
+  });
+
+  it("falls back when the schedule name or prompt is missing", () => {
+    expect(
+      formatScheduledRecentRow({
+        scheduleName: null,
+        prompt: null,
+        runCount: 0,
+      }),
+    ).toEqual({ title: "Scheduled task", meta: "0 runs · No prompt" });
   });
 });

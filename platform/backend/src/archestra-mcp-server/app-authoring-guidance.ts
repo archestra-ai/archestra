@@ -17,3 +17,18 @@ TOOLS-ONLY DATA RULE: ALL external data must come through assigned MCP tools —
 // and that render diagnostics only exist once a browser has rendered the app.
 /** @public — embedded into the Build App built-in skill (built-in-skills.ts). */
 export const APP_BUILD_LOOP_GUIDANCE = `Tool-calling apps follow a fixed order: assign the tool (search_tools to find it, then the tools param on scaffold_app — assignments are set only at scaffold time, so to add or change them afterward call set_app_tools; edit_app and refine_app never touch assignments), then — interactively — call preview_app_tool with the new app's id to observe the tool's real output shape before writing code that parses it (it needs human approval, and you cannot preview a tool that is not assigned yet, so scaffold the app first; a minimal scaffold is fine). If that approval is not granted, code defensively against the tool's documented schema instead. After scaffold/edit, call get_app_diagnostics to read the diagnostics from the most recent render of the current version (a render happens when the app is shown inline in chat or at its run page); if the current version has not been rendered yet it returns no_render_observed, and any runtime errors will instead arrive on the user's next message.`;
+
+// Condensed window.archestra surface carried inline in the read_app/scaffold_app
+// results so the authoring model has the SDK contract — and the real storage
+// return shapes — in context before its first edit_app, without loading the full
+// Build App skill (the gap that let a model emit the non-existent
+// archestra.storage.get). The closing line is an escalation pointer: it names
+// what the summary omits so the model knows when to load the full skill.
+/** @public — surfaced in app tool results (apps.ts) and as capability.sdkSummary. */
+export const ARCHESTRA_APP_SDK_SUMMARY = `window.archestra is injected at render time (await archestra.ready before the first call; every method below is async — await it). Surface:
+- archestra.user — the authenticated viewer {id, name}, a plain property readable after ready.
+- archestra.storage.user.{get,set,list,delete} — per-viewer JSON key/value store (archestra.storage.shared.* is one store all viewers share). get(key) resolves to {value, revision, owner} or null when absent (NOT the raw value); set(key, value) resolves to {revision, owner}; list() resolves to [{key, value, revision, owner}]. Never localStorage/sessionStorage (they throw in the sandbox's opaque origin).
+- archestra.tools.call(name, args) — invoke an assigned MCP tool as the viewer with their credentials, name exactly as archestra.tools.list() returns it; archestra.tools.list() returns the assigned tools.
+- archestra.llm.complete(prompt, {system, jsonMode}) — one host LLM completion over data the app already has (not a data source).
+- archestra.ui.openLink(url) and archestra.ui.requestDisplayMode(mode) — reach the host; archestra.context is the running app's {appId, version}.
+All external data must come through assigned MCP tools (the sandbox blocks network access). This is the condensed SDK surface — for tool-calling apps (the assign→preview_app_tool→get_app_diagnostics build loop), the CSP/CDN allowlist, or theming against the platform stylesheet, load the Build App skill for the full contract.`;

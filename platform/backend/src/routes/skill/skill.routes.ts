@@ -536,32 +536,14 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const existing = await findSkillOrThrow(id, organizationId);
       const parsed = parseManifestOrThrow(body.content);
 
-      const checker = await getSkillPermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(user.id);
-      const existingTeamIds = await SkillTeamModel.getTeamsForSkill(id);
-
-      // 404 if the user cannot even see the skill; 403 if visible but not theirs to modify.
-      const hasAccess = await SkillTeamModel.userHasSkillAccess({
-        organizationId,
-        userId: user.id,
-        skill: existing,
-        isSkillAdmin: checker.isAdmin,
-      });
-      if (!hasAccess) {
-        throw new ApiError(404, "Skill not found");
-      }
-      requireSkillModifyPermission({
+      const {
         checker,
-        scope: existing.scope,
-        authorId: existing.authorId,
-        skillTeamIds: existingTeamIds,
         userTeamIds,
+        skillTeamIds: existingTeamIds,
+      } = await authorizeSkillModify({
+        skill: existing,
         userId: user.id,
+        organizationId,
       });
 
       // Re-authorize and re-sync teams only when scope or team assignments
@@ -673,32 +655,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, organizationId, user }, reply) => {
       const skill = await findSkillOrThrow(id, organizationId);
 
-      const checker = await getSkillPermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(user.id);
-      const teamIds = await SkillTeamModel.getTeamsForSkill(id);
-
-      const hasAccess = await SkillTeamModel.userHasSkillAccess({
-        organizationId,
-        userId: user.id,
-        skill,
-        isSkillAdmin: checker.isAdmin,
-      });
-      if (!hasAccess) {
-        throw new ApiError(404, "Skill not found");
-      }
-      requireSkillModifyPermission({
-        checker,
-        scope: skill.scope,
-        authorId: skill.authorId,
-        skillTeamIds: teamIds,
-        userTeamIds,
-        userId: user.id,
-      });
+      await authorizeSkillModify({ skill, userId: user.id, organizationId });
 
       const success = await SkillModel.delete(id);
       if (!success) {
@@ -733,32 +690,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "No shipped default exists for this skill");
       }
 
-      const checker = await getSkillPermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(user.id);
-      const teamIds = await SkillTeamModel.getTeamsForSkill(id);
-
-      const hasAccess = await SkillTeamModel.userHasSkillAccess({
-        organizationId,
-        userId: user.id,
-        skill,
-        isSkillAdmin: checker.isAdmin,
-      });
-      if (!hasAccess) {
-        throw new ApiError(404, "Skill not found");
-      }
-      requireSkillModifyPermission({
-        checker,
-        scope: skill.scope,
-        authorId: skill.authorId,
-        skillTeamIds: teamIds,
-        userTeamIds,
-        userId: user.id,
-      });
+      await authorizeSkillModify({ skill, userId: user.id, organizationId });
 
       // brand the shipped default under this org's white-label identity before
       // writing it, matching syncBuiltInSkills (no-op unless full white-labeling
@@ -1351,6 +1283,53 @@ async function authorizeInternalAgentForSkillConversion(params: {
   }
 
   return { agent, agentChecker };
+}
+
+/**
+ * Authorize a modify (update/delete/reset) on an existing skill: the caller
+ * must be able to see it — else 404, not 403, so scope is not leaked to users
+ * who cannot see the skill — and hold the scope-appropriate modify permission.
+ *
+ * Returns the skill's permission checker, the caller's team ids, and the
+ * skill's current team ids so callers can run follow-up scope/team
+ * re-authorization (e.g. on update) without reloading.
+ */
+async function authorizeSkillModify(params: {
+  skill: Skill;
+  userId: string;
+  organizationId: string;
+}): Promise<{
+  checker: SkillPermissionChecker;
+  userTeamIds: string[];
+  skillTeamIds: string[];
+}> {
+  const { skill, userId, organizationId } = params;
+
+  const checker = await getSkillPermissionChecker({ userId, organizationId });
+  const userTeamIds = checker.isAdmin
+    ? []
+    : await TeamModel.getUserTeamIds(userId);
+  const skillTeamIds = await SkillTeamModel.getTeamsForSkill(skill.id);
+
+  const hasAccess = await SkillTeamModel.userHasSkillAccess({
+    organizationId,
+    userId,
+    skill,
+    isSkillAdmin: checker.isAdmin,
+  });
+  if (!hasAccess) {
+    throw new ApiError(404, "Skill not found");
+  }
+  requireSkillModifyPermission({
+    checker,
+    scope: skill.scope,
+    authorId: skill.authorId,
+    skillTeamIds,
+    userTeamIds,
+    userId,
+  });
+
+  return { checker, userTeamIds, skillTeamIds };
 }
 
 /** Explicit `allowedTools` wins over the SKILL.md frontmatter when provided. */

@@ -76,8 +76,19 @@ export function getApiErrorType(error: unknown): string | undefined {
  */
 export function toApiError(error: ApiSdkError): Error {
   const unwrapped = unwrapApiError(error);
-  if (unwrapped instanceof Error) return unwrapped;
-  return new Error(getApiErrorMessage(error));
+  const apiError =
+    unwrapped instanceof Error
+      ? unwrapped
+      : new Error(getApiErrorMessage(error));
+  // Preserve the backend error `type` (e.g. "api_timeout_error") on the thrown
+  // Error so callers (and TanStack Query's `error`) can branch on it — otherwise
+  // only the message survives and a timeout is indistinguishable from a network
+  // failure. getApiErrorType reads it from the original envelope.
+  const type = getApiErrorType(error);
+  if (type && !(apiError as { type?: unknown }).type) {
+    (apiError as Error & { type?: string }).type = type;
+  }
+  return apiError;
 }
 
 export function handleApiError(error: ApiSdkError) {

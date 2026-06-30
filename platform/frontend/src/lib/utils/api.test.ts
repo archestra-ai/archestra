@@ -6,7 +6,7 @@ vi.mock("sonner", () => ({
   toast: { error: mockToastError, success: vi.fn() },
 }));
 
-import { throwOnApiError } from "./api";
+import { getApiErrorType, throwOnApiError, toApiError } from "./api";
 
 describe("throwOnApiError", () => {
   beforeEach(() => {
@@ -54,5 +54,35 @@ describe("throwOnApiError", () => {
         { allowNotFound: true, toastOnError: false },
       ),
     ).toThrow();
+  });
+});
+
+describe("toApiError", () => {
+  it("preserves the backend error type and message so callers can branch on it", () => {
+    // A 504 timeout envelope from the backend.
+    const envelope = {
+      error: {
+        message: "This request took too long to complete and was cancelled.",
+        type: "api_timeout_error",
+      },
+    };
+
+    const apiError = toApiError(envelope);
+
+    expect(apiError).toBeInstanceOf(Error);
+    expect(apiError.message).toBe(
+      "This request took too long to complete and was cancelled.",
+    );
+    // The type must survive onto the thrown Error — otherwise a timeout is
+    // indistinguishable from a network failure in the UI.
+    expect(getApiErrorType(apiError)).toBe("api_timeout_error");
+  });
+
+  it("leaves a network/unknown error without a type", () => {
+    const networkError = new TypeError("Failed to fetch");
+    const apiError = toApiError(networkError);
+
+    expect(apiError).toBe(networkError);
+    expect(getApiErrorType(apiError)).toBeUndefined();
   });
 });

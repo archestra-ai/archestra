@@ -352,6 +352,36 @@ function isBodyTooLargeError(error: unknown): boolean {
   return e.code === BODY_TOO_LARGE_CODE || e.statusCode === 413;
 }
 
+// Postgres SQLSTATE for a statement cancelled by `statement_timeout`
+// (or pg_cancel_backend). node-postgres exposes it as `error.code`; Drizzle
+// wraps the driver error as DrizzleQueryError and re-exposes it on `.cause`.
+const PG_QUERY_CANCELED_CODE = "57014";
+
+/** SQLSTATE of a DB driver error, checked on the error and its `.cause`. */
+function getPgErrorCode(error: unknown): string | undefined {
+  for (const candidate of [error, (error as { cause?: unknown })?.cause]) {
+    if (candidate && typeof candidate === "object" && "code" in candidate) {
+      const code = (candidate as { code?: unknown }).code;
+      if (typeof code === "string") return code;
+    }
+  }
+  return undefined;
+}
+
+/** A query cancelled by statement_timeout — a slow query, not an internal bug. */
+function isQueryCanceledError(error: unknown): boolean {
+  return getPgErrorCode(error) === PG_QUERY_CANCELED_CODE;
+}
+
+/**
+ * A Drizzle query error. Its `.message` embeds the full SQL and bound params
+ * ("Failed query: …\nparams: …"), so it must never be forwarded to the client.
+ */
+function isDatabaseQueryError(error: unknown): boolean {
+  const message = (error as { message?: unknown })?.message;
+  return typeof message === "string" && message.startsWith("Failed query:");
+}
+
 function formatBodyTooLargeMessage(params: {
   limit: number;
   contentLength?: number;
@@ -472,6 +502,28 @@ export const createFastifyInstance = () =>
         });
       }
 
+      // A query cancelled by statement_timeout (a slow/expensive query, not an
+      // internal bug). Return a safe, user-facing message — never the SQL — as a
+      // 504 Gateway Timeout so the client can distinguish it from a server fault.
+      if (isQueryCanceledError(error)) {
+        this.log.warn(
+          {
+            ...requestContext,
+            statusCode: 504,
+            code: PG_QUERY_CANCELED_CODE,
+          },
+          "HTTP 504 query cancelled (statement timeout)",
+        );
+
+        return reply.status(504).send({
+          error: {
+            message:
+              "This request took too long to complete and was cancelled. Please narrow it down (for example with filters or a shorter time range) and try again.",
+            type: "api_timeout_error",
+          },
+        });
+      }
+
       // Handle ApiError objects
       if (error instanceof ApiError) {
         const { statusCode, message, type, internalCode } = error;
@@ -500,14 +552,22 @@ export const createFastifyInstance = () =>
       }
 
       // Handle standard Error objects
-      const message = error.message || "Internal server error";
       const statusCode = 500;
       const errorCode = (error as { code?: string }).code;
+
+      // DB driver errors (DrizzleQueryError) embed the full SQL + bound params in
+      // their message — forwarding that to the client is an information leak (and
+      // unhelpful). Log the real error server-side; return a generic message.
+      const isDbError = isDatabaseQueryError(error);
+      const internalMessage = error.message || "Internal server error";
+      const clientMessage = isDbError
+        ? "A database error occurred. Please try again later."
+        : internalMessage;
 
       this.log.error(
         {
           ...requestContext,
-          error: message,
+          error: internalMessage,
           statusCode,
           ...(errorCode && { code: errorCode }),
           stack: error.stack,
@@ -517,7 +577,7 @@ export const createFastifyInstance = () =>
 
       return reply.status(statusCode).send({
         error: {
-          message,
+          message: clientMessage,
           type: "api_internal_server_error",
         },
       });

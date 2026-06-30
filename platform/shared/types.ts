@@ -29,6 +29,10 @@ export const ApiErrorTypeSchema = z.enum([
   "unknown_api_error",
   "api_conflict_error",
   "api_payload_too_large_error",
+  // A request the server couldn't complete in time (e.g. a query cancelled by
+  // statement_timeout) — surfaced as HTTP 504. Distinct from
+  // api_internal_server_error: not a bug, and the message is safe to show the user.
+  "api_timeout_error",
 ]);
 
 /**
@@ -65,6 +69,9 @@ export class ApiError extends Error {
         break;
       case 413:
         this.type = "api_payload_too_large_error";
+        break;
+      case 504:
+        this.type = "api_timeout_error";
         break;
       default:
         this.type = "unknown_api_error";

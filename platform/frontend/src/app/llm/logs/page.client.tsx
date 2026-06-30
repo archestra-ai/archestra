@@ -43,6 +43,7 @@ import {
   useUniqueUserIds,
 } from "@/lib/interactions/interaction.query";
 import { formatDate } from "@/lib/utils";
+import { getApiErrorMessage, getApiErrorType } from "@/lib/utils/api";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
 function formatDuration(start: Date | string, end: Date | string): string {
@@ -235,6 +236,7 @@ function SessionsTable({
     data: sessionsResponse,
     isFetching,
     isLoadingError,
+    error: sessionsError,
     refetch: refetchSessions,
   } = useInteractionSessions({
     limit: pageSize,
@@ -519,10 +521,18 @@ function SessionsTable({
   // A failed fetch leaves no rows; show a retry state instead of the table's
   // "No LLM proxy logs found" empty message, which would misrepresent the error.
   if (isLoadingError) {
+    // A 504 from the backend (a search cancelled by statement_timeout) carries a
+    // user-friendly, actionable message — surface it instead of the generic
+    // "check your internet connection" copy, which would misdescribe a timeout.
+    const errorType = getApiErrorType(sessionsError);
+    const isTimeout = errorType === "api_timeout_error";
     return (
       <div className="space-y-4">
         <QueryLoadError
-          title="Couldn't load logs"
+          title={isTimeout ? "Search timed out" : "Couldn't load logs"}
+          description={
+            errorType ? getApiErrorMessage(sessionsError) : undefined
+          }
           onRetry={() => refetchSessions()}
         />
       </div>

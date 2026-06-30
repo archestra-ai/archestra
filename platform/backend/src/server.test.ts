@@ -1,3 +1,4 @@
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import { vi } from "vitest";
 import { z } from "zod";
 import { describe, expect, test } from "@/test";
@@ -309,6 +310,78 @@ describe("createFastifyInstance", () => {
       );
 
       loggerWarnSpy.mockRestore();
+    });
+
+    test("maps a statement_timeout (cancelled query) to 504 with a safe message, not a 500 with SQL", async () => {
+      const app = createFastifyInstance();
+      const loggerWarnSpy = vi.spyOn(app.log, "warn");
+
+      // Exactly how Drizzle surfaces a query cancelled by statement_timeout:
+      // the SQL is embedded in the message, the pg SQLSTATE 57014 is on `.cause`.
+      app.get("/test-timeout", async () => {
+        throw new DrizzleQueryError(
+          'select "secret_column" from "interactions" where "request"::text ILIKE $1',
+          ["%sensitive search term%"],
+          Object.assign(
+            new Error("canceling statement due to statement timeout"),
+            { code: "57014" },
+          ),
+        );
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-timeout",
+      });
+
+      // 504 Gateway Timeout — not a 500 / internal-server-error.
+      expect(response.statusCode).toBe(504);
+      const body = response.json();
+      expect(body.error.type).toBe("api_timeout_error");
+      // User-friendly, actionable.
+      expect(body.error.message).toMatch(/took too long/i);
+      // CRITICAL: the SQL, params, and raw driver message must NOT leak.
+      const serialized = JSON.stringify(body);
+      expect(serialized).not.toMatch(/Failed query/i);
+      expect(serialized).not.toMatch(/secret_column/);
+      expect(serialized).not.toMatch(/sensitive search term/);
+      expect(serialized).not.toMatch(/statement timeout/i);
+
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ statusCode: 504, code: "57014" }),
+        "HTTP 504 query cancelled (statement timeout)",
+      );
+      loggerWarnSpy.mockRestore();
+    });
+
+    test("masks a database query error so the SQL never reaches the client", async () => {
+      const app = createFastifyInstance();
+
+      // A non-timeout DB failure (e.g. a constraint violation) still embeds SQL
+      // in its message — the client must get a generic message, not the query.
+      app.get("/test-db-error", async () => {
+        throw new DrizzleQueryError(
+          'insert into "interactions" ("secret_column") values ($1)',
+          ["leaked-value"],
+          Object.assign(new Error("duplicate key value"), { code: "23505" }),
+        );
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-db-error",
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = response.json();
+      expect(body.error.type).toBe("api_internal_server_error");
+      expect(body.error.message).toBe(
+        "A database error occurred. Please try again later.",
+      );
+      const serialized = JSON.stringify(body);
+      expect(serialized).not.toMatch(/Failed query/i);
+      expect(serialized).not.toMatch(/secret_column/);
+      expect(serialized).not.toMatch(/leaked-value/);
     });
   });
 

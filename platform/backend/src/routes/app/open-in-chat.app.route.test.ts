@@ -164,7 +164,7 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     expect(expectSeededRender(messages[0])).toBe(id);
   });
 
-  test("the seeded greeting includes the app description when set", async () => {
+  test("the seeded greeting omits the app description", async () => {
     const id = await createApp("Tracker", { description: "Track team spend." });
     await editApp(id);
 
@@ -177,7 +177,7 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     const messages = await MessageModel.findByConversation(conversationId);
     expect(messages).toHaveLength(2);
     const greeting = expectSeededGreeting(messages[1], "Tracker");
-    expect(greeting).toContain("Track team spend.");
+    expect(greeting).not.toContain("Track team spend.");
   });
 
   test("404s for an app the caller cannot view", async () => {

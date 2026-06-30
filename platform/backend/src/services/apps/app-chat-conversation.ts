@@ -17,7 +17,7 @@ import {
   buildAppRenderResult,
   buildExternalAppRenderResult,
 } from "@/services/apps/app-render-result";
-import { ApiError, type App } from "@/types";
+import { ApiError } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 
 const RENDER_APP_TOOL_NAME =
@@ -71,7 +71,8 @@ export async function createSeededAppConversation(params: {
     // (latestVersion === 1) still shows the default template, whose intro screen
     // already lists these capabilities, so the greeting would just repeat it.
     // External apps (read-only) never greet — see createSeededExternalAppConversation.
-    greeting: app.latestVersion > 1 ? buildAppOpenedGreeting(app) : undefined,
+    greeting:
+      app.latestVersion > 1 ? buildAppOpenedGreeting(app.name) : undefined,
   });
 }
 
@@ -224,13 +225,9 @@ async function resolveDefaultChatAgentId(params: {
  * platform capabilities, and tells the user they can both use it and ask for changes.
  * Markdown — the chat renders assistant text as Markdown.
  */
-function buildAppOpenedGreeting(
-  app: Pick<App, "name" | "description">,
-): string {
-  const lead = `Here's **${app.name}**, up and running.`;
-  const about = app.description?.trim() ? ` ${app.description.trim()}` : "";
+function buildAppOpenedGreeting(name: string): string {
   return (
-    `${lead}${about}\n\n` +
+    `Here's **${name}**, up and running.\n\n` +
     `It's an MCP app, so it can use:\n` +
     `- Your connected MCP tools & servers\n` +
     `- A private + shared data store\n` +

@@ -794,36 +794,10 @@ export function McpServerCard({
     toast.success("Link copied — share it with an admin to approve this image");
   };
 
-  const localInstallButton = showApprovalPanel ? (
-    <div className="flex-1 space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
-      <div className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-500">
-        <ShieldAlert className="h-4 w-4" />
-        {isInstallAdmin ? "Image needs approval" : "Admin review required"}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {isInstallAdmin
-          ? "This MCP server Docker image isn't from a trusted image registry. Review and approve configuration to allow installs."
-          : "This MCP server Docker image isn't from a trusted image registry. An admin must approve it before it can be installed."}
-      </p>
-      <div className="flex justify-end">
-        {isInstallAdmin ? (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => router.push(`/mcp/registry/beta/${item.id}/edit`)}
-          >
-            <Pencil className="h-4 w-4" />
-            Review config
-          </Button>
-        ) : (
-          <Button size="sm" variant="outline" onClick={copyApprovalLink}>
-            <Copy className="h-4 w-4" />
-            Copy link
-          </Button>
-        )}
-      </div>
-    </div>
-  ) : (
+  // When the image is gated, the full-width approval banner at the top of the
+  // card body explains it and carries the action — so drop the inline install
+  // button entirely (it would only fail the gate).
+  const localInstallButton = showApprovalPanel ? null : (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -985,27 +959,20 @@ export function McpServerCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">
-        {showApprovalPanel && allServersForCatalog.length > 0 && (
-          <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2">
-            <div className="flex items-start gap-2">
-              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-amber-600 dark:text-amber-500">
-                  {isInstallAdmin
-                    ? "Image needs approval"
-                    : "Admin review required"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  The Docker image was changed to one that isn't from a trusted
-                  registry. Existing connections keep running the previous image
-                  until an admin approves.
-                </p>
-              </div>
+        {showApprovalPanel && (
+          <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2.5">
+            <div className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-500">
+              <ShieldAlert className="h-4 w-4 shrink-0" />
+              <span>
+                {isInstallAdmin
+                  ? "Image needs approval"
+                  : "Admin review required"}
+              </span>
               {isInstallAdmin ? (
                 <Button
                   size="sm"
                   variant="outline"
-                  className="shrink-0"
+                  className="ml-auto h-7 shrink-0"
                   onClick={() =>
                     router.push(`/mcp/registry/beta/${item.id}/edit`)
                   }
@@ -1014,17 +981,24 @@ export function McpServerCard({
                   Review config
                 </Button>
               ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0"
+                <button
+                  type="button"
                   onClick={copyApprovalLink}
+                  title="Copy link"
+                  aria-label="Copy link"
+                  className="shrink-0 rounded p-0.5 hover:bg-amber-500/10"
                 >
                   <Copy className="h-4 w-4" />
-                  Copy link
-                </Button>
+                </button>
               )}
             </div>
+            <p className="text-xs text-muted-foreground">
+              {allServersForCatalog.length > 0
+                ? "The Docker image was changed to one that isn't from a trusted registry. Existing connections keep running the previous image until an admin approves."
+                : isInstallAdmin
+                  ? "This MCP server Docker image isn't from a trusted image registry. Review and approve configuration to allow installs."
+                  : "This MCP server Docker image isn't from a trusted image registry. An admin must approve it before it can be installed."}
+            </p>
           </div>
         )}
         {variant === "local" &&

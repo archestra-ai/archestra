@@ -545,7 +545,10 @@ export const ModelSelector = memo(function ModelSelector({
 }: ModelSelectorProps) {
   const {
     modelsByProvider,
-    isPending: isLoading,
+    // `isLoading` (isPending && isFetching) is true only during a real in-flight
+    // fetch. A disabled query (enabled:false) is `isPending` but never fetches,
+    // so keying off `isPending` would spin forever.
+    isLoading,
     isPlaceholderData,
   } = useLlmModelsByProvider({
     apiKeyId: apiKeyId ?? undefined,

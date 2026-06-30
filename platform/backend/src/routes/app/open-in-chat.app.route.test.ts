@@ -63,23 +63,32 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     return created.json().id;
   }
 
-  // The seeded message is what makes the app render inline with no model turn —
-  // a dynamic-tool render_app result whose structuredContent.id is the app id.
-  function expectSeededRender(message: {
-    role: string;
-    content: { parts: Array<Record<string, unknown>> };
-  }) {
-    expect(message.role).toBe("assistant");
-    const part = message.content.parts[0] as {
-      type: string;
-      toolName: string;
-      state: string;
-      output: { structuredContent: { id: string } };
-    };
+  // The seeded conversation carries a render_app message — a dynamic-tool result
+  // whose structuredContent.id is the app id — alongside a Build App skill preload
+  // (a load_skill message). This locates the render and returns its rendered app id.
+  function expectSeededRender(
+    messages: Array<{
+      role: string;
+      content: { parts: Array<Record<string, unknown>> };
+    }>,
+  ) {
+    const renders = messages
+      .filter((m) => m.role === "assistant")
+      .map(
+        (m) =>
+          m.content.parts[0] as {
+            type: string;
+            toolName: string;
+            state: string;
+            output: { structuredContent?: { id: string } };
+          },
+      )
+      .filter((part) => part.toolName?.includes("render_app"));
+    expect(renders).toHaveLength(1);
+    const [part] = renders;
     expect(part.type).toBe("dynamic-tool");
-    expect(part.toolName).toContain("render_app");
     expect(part.state).toBe("output-available");
-    return part.output.structuredContent.id;
+    return part.output.structuredContent?.id;
   }
 
   test("seeds a conversation with the app rendered and returns its id", async () => {
@@ -94,8 +103,7 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     expect(conversationId).toBeTruthy();
 
     const messages = await MessageModel.findByConversation(conversationId);
-    expect(messages).toHaveLength(1);
-    expect(expectSeededRender(messages[0])).toBe(appId);
+    expect(expectSeededRender(messages)).toBe(appId);
   });
 
   test("create with openInChat returns the seeded conversation id", async () => {
@@ -109,8 +117,7 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     expect(conversationId).toBeTruthy();
 
     const messages = await MessageModel.findByConversation(conversationId);
-    expect(messages).toHaveLength(1);
-    expect(expectSeededRender(messages[0])).toBe(id);
+    expect(expectSeededRender(messages)).toBe(id);
   });
 
   test("404s for an app the caller cannot view", async () => {

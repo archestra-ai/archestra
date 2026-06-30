@@ -85,6 +85,8 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
     expect(conversationId).toBeTruthy();
 
     const messages = await MessageModel.findByConversation(conversationId);
+    // Exactly one message: external apps are read-only from chat, so they get no
+    // "ask me to change it" greeting (unlike owned apps).
     expect(messages).toHaveLength(1);
     const part = messages[0].content.parts[0] as {
       type: string;

@@ -17,7 +17,7 @@ import {
   buildAppRenderResult,
   buildExternalAppRenderResult,
 } from "@/services/apps/app-render-result";
-import { ApiError } from "@/types";
+import { ApiError, type App } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 
 const RENDER_APP_TOOL_NAME =
@@ -66,6 +66,12 @@ export async function createSeededAppConversation(params: {
       input: { appId: app.id },
       output: buildAppRenderResult(app),
     },
+    // Owned apps are editable from chat, so greet the user with what they can do —
+    // but only once the app has been built past the scaffold. A brand-new app
+    // (latestVersion === 1) still shows the default template, whose intro screen
+    // already lists these capabilities, so the greeting would just repeat it.
+    // External apps (read-only) never greet — see createSeededExternalAppConversation.
+    greeting: app.latestVersion > 1 ? buildAppOpenedGreeting(app) : undefined,
   });
 }
 
@@ -135,8 +141,10 @@ async function seedConversationWithRender(params: {
   agentId?: string;
   title: string;
   part: UIMessage["parts"][number];
+  /** When set, seed a trailing assistant text message after the render. */
+  greeting?: string;
 }): Promise<{ conversationId: string }> {
-  const { userId, organizationId, title, part } = params;
+  const { userId, organizationId, title, part, greeting } = params;
 
   const agentId =
     params.agentId ??
@@ -176,6 +184,20 @@ async function seedConversationWithRender(params: {
     content,
   });
 
+  // Kept a separate message so the render above stays byte-for-byte a model-driven
+  // render (a text part has no tool part, so deriveAppsFromMessages ignores it).
+  if (greeting) {
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        id: generateId(),
+        role: "assistant",
+        parts: [{ type: "text", text: greeting }],
+      } satisfies UIMessage,
+    });
+  }
+
   return { conversationId: conversation.id };
 }
 
@@ -195,4 +217,25 @@ async function resolveDefaultChatAgentId(params: {
     throw new ApiError(500, "Could not resolve a default chat agent.");
   }
   return created;
+}
+
+/**
+ * The greeting seeded for an owned (editable) app: it names the app, restates the
+ * platform capabilities, and tells the user they can both use it and ask for changes.
+ * Markdown — the chat renders assistant text as Markdown.
+ */
+function buildAppOpenedGreeting(
+  app: Pick<App, "name" | "description">,
+): string {
+  const lead = `Here's **${app.name}**, up and running.`;
+  const about = app.description?.trim() ? ` ${app.description.trim()}` : "";
+  return (
+    `${lead}${about}\n\n` +
+    `It's an MCP app, so it can use:\n` +
+    `- Your connected MCP tools & servers\n` +
+    `- A private + shared data store\n` +
+    `- Built-in AI to summarize & generate\n\n` +
+    `Use it as-is, or tell me what you'd like to change or add ` +
+    `— I'll update it live.`
+  );
 }

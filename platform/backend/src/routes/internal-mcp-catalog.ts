@@ -40,6 +40,10 @@ import {
   assertValuesMatchEnvironmentRegex,
 } from "@/services/environments/environment";
 import {
+  flagImageApprovalRequired,
+  holdInstallIfImageGated,
+} from "@/services/mcp-install-policy";
+import {
   autoReinstallServer,
   localExecutionConfigChanged,
   onlyForwardCompatibleEnvDiff,
@@ -112,7 +116,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.query.includeApps === true &&
         (await hasPermission({ app: ["read"] }, request.headers)).success;
       if (!includeApps) {
-        return reply.send(await InternalMcpCatalogModel.findAll(opts));
+        const list = await InternalMcpCatalogModel.findAll(opts);
+        const approvalRequired = await flagImageApprovalRequired(
+          list,
+          request.organizationId,
+        );
+        return reply.send(
+          list.map((item) => ({
+            ...item,
+            imageApprovalRequired: approvalRequired.has(item.id),
+          })),
+        );
       }
       // App backings carry an `appId` so the registry can link/manage the app.
       // Only the (few) serverType:"app" rows need the lookup, so the default
@@ -123,12 +137,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         .map((item) => item.id);
       const appIdByCatalog =
         await AppModel.getAppIdsByCatalogIds(appCatalogIds);
+      const approvalRequired = await flagImageApprovalRequired(
+        items,
+        request.organizationId,
+      );
       return reply.send(
-        items.map((item) =>
-          item.serverType === "app"
-            ? { ...item, appId: appIdByCatalog.get(item.id) ?? null }
-            : item,
-        ),
+        items.map((item) => ({
+          ...item,
+          imageApprovalRequired: approvalRequired.has(item.id),
+          ...(item.serverType === "app"
+            ? { appId: appIdByCatalog.get(item.id) ?? null }
+            : {}),
+        })),
       );
     },
   );
@@ -1070,21 +1090,41 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await mcpServerRuntimeManager.reinstallSharedDeployment(id);
       }
 
-      // Cascade reinstall for the parent's own installs. Use the
-      // unexpanded snapshot so the gate's diff isn't fooled by
-      // expanded-vs-raw asymmetry on bag-bearing rows (see comment
-      // above on `originalCatalogItemForGate`). Force the auto-restart
-      // path when secret bag values rotated — those changes are
-      // invisible to the row-diff gate, so without the override pods
-      // would keep injecting the stale value until something else
-      // triggered a restart.
-      await cascadeReinstallForCatalog(
-        originalCatalogItemForGate,
-        catalogItem,
-        {
-          forceAutoRestart: catalogSharedSecretValuesRotated,
-        },
-      );
+      // Trusted-image gate: when a non-privileged author swaps the image to an
+      // untrusted one, hold the new image for admin approval instead of rolling
+      // it out. Flip the catalog flag to `pending` and skip the auto-reinstall so
+      // every install keeps running its old, approved image until an admin
+      // approves — rather than auto-reinstalling onto an image that the gate
+      // would reject and marking the install failed.
+      const imageHeldForApproval = catalogItem.organizationId
+        ? await holdInstallIfImageGated({
+            catalogItem,
+            organizationId: catalogItem.organizationId,
+          })
+        : false;
+
+      if (imageHeldForApproval) {
+        logger.info(
+          { catalogId: id },
+          "Catalog image edited to an untrusted image by a non-privileged author - holding for admin approval; skipping auto-reinstall",
+        );
+      } else {
+        // Cascade reinstall for the parent's own installs. Use the
+        // unexpanded snapshot so the gate's diff isn't fooled by
+        // expanded-vs-raw asymmetry on bag-bearing rows (see comment
+        // above on `originalCatalogItemForGate`). Force the auto-restart
+        // path when secret bag values rotated — those changes are
+        // invisible to the row-diff gate, so without the override pods
+        // would keep injecting the stale value until something else
+        // triggered a restart.
+        await cascadeReinstallForCatalog(
+          originalCatalogItemForGate,
+          catalogItem,
+          {
+            forceAutoRestart: catalogSharedSecretValuesRotated,
+          },
+        );
+      }
 
       // Note: Tools are NOT deleted - they are synced during reinstall to preserve
       // policies and profile assignments
@@ -1241,6 +1281,67 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send({ success: true });
+    },
+  );
+
+  // === Image approval (trusted-image-registry gate) ===
+
+  fastify.get(
+    "/api/internal_mcp_catalog/pending-image-approval",
+    {
+      schema: {
+        operationId: RouteId.ListPendingImageApprovalCatalogItems,
+        description:
+          "List local catalog items in the org whose custom image is awaiting admin approval (blocked by the target environment's trusted image registries).",
+        tags: ["MCP Catalog"],
+        response: constructResponseSchema(
+          z.array(SelectInternalMcpCatalogSchema),
+        ),
+      },
+    },
+    async (request, reply) => {
+      return reply.send(
+        await InternalMcpCatalogModel.listPendingImageApproval(
+          request.organizationId,
+        ),
+      );
+    },
+  );
+
+  fastify.post(
+    "/api/internal_mcp_catalog/:id/approve",
+    {
+      schema: {
+        operationId: RouteId.ApproveCatalogItemImage,
+        description:
+          "Approve a local catalog item's image so its installs proceed. Requires mcpServerInstallation:admin.",
+        tags: ["MCP Catalog"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
+      },
+    },
+    async (request, reply) => {
+      const catalogItem = await assertImageApprovable(
+        request.params.id,
+        request.organizationId,
+      );
+      const approved = await InternalMcpCatalogModel.approveImage({
+        id: catalogItem.id,
+        reviewedBy: request.user.id,
+      });
+      if (!approved) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+      logger.info(
+        { catalogId: catalogItem.id, reviewedBy: request.user.id },
+        "Catalog item image approved",
+      );
+      // Release the auto-reinstall the gated edit deferred: roll existing
+      // installs onto the now-approved image (mirrors the un-gated image edit,
+      // which auto-reinstalls). A fresh, never-installed catalog item has no
+      // installs, so this is a no-op for the install-from-scratch flow.
+      await reinstallApprovedImage(approved);
+      return reply.send(approved);
     },
   );
 
@@ -1874,6 +1975,19 @@ async function cascadeReinstallForCatalog(
     );
   }
 
+  autoReinstallInstallsInBackground(installedServers, catalogItem);
+}
+
+/**
+ * Roll every install of a single-tenant catalog onto its current spec in the
+ * background, broadcasting status per install. Shared by the catalog-edit auto
+ * cascade and image approval (which releases the auto-reinstall a gated edit
+ * deferred).
+ */
+function autoReinstallInstallsInBackground(
+  installedServers: Awaited<ReturnType<typeof McpServerModel.findByCatalogId>>,
+  catalogItem: InternalMcpCatalog,
+): void {
   setImmediate(async () => {
     try {
       for (const server of installedServers) {
@@ -1915,6 +2029,27 @@ async function cascadeReinstallForCatalog(
       );
     }
   });
+}
+
+/**
+ * Release the auto-reinstall that a gated catalog edit deferred: once an admin
+ * approves the image, roll every install onto it. Single-tenant catalogs
+ * auto-reinstall each pod; multi-tenant catalogs flag `catalogReinstallRequired`
+ * for the admin's "Reinstall catalog" — the non-gated multi-tenant edit path is
+ * manual by design too.
+ */
+async function reinstallApprovedImage(
+  catalogItem: InternalMcpCatalog,
+): Promise<void> {
+  const installedServers = await McpServerModel.findByCatalogId(catalogItem.id);
+  if (installedServers.length === 0) return;
+  if (catalogItem.multitenant === true && catalogItem.serverType === "local") {
+    await InternalMcpCatalogModel.update(catalogItem.id, {
+      catalogReinstallRequired: true,
+    });
+    return;
+  }
+  autoReinstallInstallsInBackground(installedServers, catalogItem);
 }
 
 async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {
@@ -1989,6 +2124,34 @@ function multitenantSharedEnvChanged(
   return (
     JSON.stringify(project(oldCatalog)) !== JSON.stringify(project(newCatalog))
   );
+}
+
+/**
+ * Resolve a catalog item that is subject to image approval — a local item with a
+ * custom image — in the caller's org, or throw. The approve endpoint is
+ * admin-gated by the route permission map; this adds the org-scope and "actually
+ * gateable" guards.
+ */
+async function assertImageApprovable(
+  id: string,
+  organizationId: string,
+): Promise<InternalMcpCatalog> {
+  const catalogItem = await InternalMcpCatalogModel.findById(id, {
+    expandSecrets: false,
+  });
+  if (!catalogItem || catalogItem.organizationId !== organizationId) {
+    throw new ApiError(404, "Catalog item not found");
+  }
+  if (
+    catalogItem.serverType !== "local" ||
+    !catalogItem.localConfig?.dockerImage
+  ) {
+    throw new ApiError(
+      400,
+      "This catalog item is not subject to image approval.",
+    );
+  }
+  return catalogItem;
 }
 
 export default internalMcpCatalogRoutes;

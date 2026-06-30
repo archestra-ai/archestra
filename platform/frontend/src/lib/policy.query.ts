@@ -28,7 +28,7 @@ import {
   transformToolInvocationPolicies,
   transformToolResultPolicies,
 } from "./policy.utils";
-import { handleApiError } from "./utils";
+import { handleApiError, throwOnApiError } from "./utils";
 
 export function useToolInvocationPolicies(
   initialData?: ReturnType<typeof transformToolInvocationPolicies>,
@@ -36,8 +36,9 @@ export function useToolInvocationPolicies(
   return useQuery({
     queryKey: ["tool-invocation-policies"],
     queryFn: async () => {
-      const all = (await getToolInvocationPolicies()).data ?? [];
-      return transformToolInvocationPolicies(all);
+      const { data, error } = await getToolInvocationPolicies();
+      throwOnApiError(error, { toastOnError: false });
+      return transformToolInvocationPolicies(data ?? []);
     },
     initialData,
   });
@@ -46,7 +47,11 @@ export function useToolInvocationPolicies(
 export function useOperators() {
   return useQuery({
     queryKey: ["operators"],
-    queryFn: async () => (await getOperators()).data ?? [],
+    queryFn: async () => {
+      const { data, error } = await getOperators();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
   });
 }
 
@@ -120,8 +125,9 @@ export function useToolResultPolicies(
   return useQuery({
     queryKey: ["tool-result-policies"],
     queryFn: async () => {
-      const all = (await getTrustedDataPolicies()).data ?? [];
-      return transformToolResultPolicies(all);
+      const { data, error } = await getTrustedDataPolicies();
+      throwOnApiError(error, { toastOnError: false });
+      return transformToolResultPolicies(data ?? []);
     },
     initialData,
   });

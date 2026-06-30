@@ -10,9 +10,10 @@ import {
   filterOptimisticToolCalls,
   getAppRenderVerb,
   hasTextPart,
-  humanizeToolLabel,
   identifyCompactToolGroups,
+  isBlankAssistantTextPart,
   isSupersededRender,
+  mcpToolLabel,
 } from "./chat-messages.utils";
 
 const getToolShortName = (toolName: string) =>
@@ -243,25 +244,21 @@ describe("collectBrowserToolCallIds", () => {
   });
 });
 
-describe("humanizeToolLabel", () => {
-  it("humanizes server and tool from a prefixed name", () => {
-    expect(humanizeToolLabel("system__get-system-stats")).toBe(
-      "System / Get System Stats",
+describe("mcpToolLabel", () => {
+  it("shows the raw server and tool name from a prefixed name", () => {
+    expect(mcpToolLabel("Archestra PM__show_board")).toBe(
+      "Archestra PM / show_board",
     );
   });
 
-  it("handles underscore-separated tool names", () => {
-    expect(humanizeToolLabel("weather__get_forecast")).toBe(
-      "Weather / Get Forecast",
+  it("preserves the raw tool name's separators", () => {
+    expect(mcpToolLabel("weather__get_forecast")).toBe(
+      "weather / get_forecast",
     );
   });
 
-  it("splits camelCase tool names", () => {
-    expect(humanizeToolLabel("fs__listFiles")).toBe("Fs / List Files");
-  });
-
-  it("humanizes a bare tool name with no server prefix", () => {
-    expect(humanizeToolLabel("render_app")).toBe("Render App");
+  it("returns a bare tool name with no server prefix unchanged", () => {
+    expect(mcpToolLabel("render_app")).toBe("render_app");
   });
 });
 
@@ -287,7 +284,7 @@ describe("deriveAppsFromMessages", () => {
     expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
       {
         toolCallId: "call_1",
-        label: "Pm / Show Board",
+        label: "pm / show_board",
         uiResourceUri: "ui://pm/board",
         appId: null,
         version: null,
@@ -327,7 +324,7 @@ describe("deriveAppsFromMessages", () => {
     ).toEqual([
       {
         toolCallId: "call_1",
-        label: "Pm / Show Board",
+        label: "pm / show_board",
         uiResourceUri: "ui://pm/board",
         appId: null,
         version: null,
@@ -368,7 +365,7 @@ describe("deriveAppsFromMessages", () => {
     expect(apps).toHaveLength(1);
     expect(apps[0]).toMatchObject({
       toolCallId: "call_1",
-      label: "Pm / Show Board",
+      label: "pm / show_board",
     });
   });
 
@@ -557,7 +554,7 @@ describe("deriveAppsFromMessages", () => {
     expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
       {
         toolCallId: "call_1",
-        label: "Pm / Show Board",
+        label: "pm / show_board",
         uiResourceUri: "ui://pm/board",
         appId: null,
         version: null,
@@ -565,7 +562,7 @@ describe("deriveAppsFromMessages", () => {
       },
       {
         toolCallId: "call_2",
-        label: "Pm / Show Board",
+        label: "pm / show_board",
         uiResourceUri: "ui://pm/board",
         appId: null,
         version: null,
@@ -881,5 +878,45 @@ describe("getAppRenderVerb", () => {
 
   it("returns null for non-app tools", () => {
     expect(getAppRenderVerb("google__search")).toBeNull();
+  });
+});
+
+describe("isBlankAssistantTextPart", () => {
+  const textPart = (text: string): UIMessage["parts"][number] => ({
+    type: "text",
+    text,
+  });
+
+  it.each([
+    " ",
+    "   ",
+    "\n\n",
+    "\t",
+    "\n  \t ",
+  ])("suppresses whitespace-only assistant text %j", (text) => {
+    expect(isBlankAssistantTextPart(textPart(text), "assistant")).toBe(true);
+  });
+
+  it("suppresses an empty-string assistant text part", () => {
+    expect(isBlankAssistantTextPart(textPart(""), "assistant")).toBe(true);
+  });
+
+  it("keeps assistant text that has real content", () => {
+    expect(isBlankAssistantTextPart(textPart("  hello  "), "assistant")).toBe(
+      false,
+    );
+  });
+
+  it("never suppresses non-assistant (user) text, even when blank", () => {
+    expect(isBlankAssistantTextPart(textPart("\n\n"), "user")).toBe(false);
+  });
+
+  it("ignores non-text parts", () => {
+    expect(
+      isBlankAssistantTextPart(
+        { type: "step-start" } as UIMessage["parts"][number],
+        "assistant",
+      ),
+    ).toBe(false);
   });
 });

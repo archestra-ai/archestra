@@ -9,6 +9,7 @@ import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -57,7 +58,12 @@ export default function ServiceAccountsSettingsPage() {
   const { data: canDeleteServiceAccounts } = useHasPermissions({
     serviceAccount: ["delete"],
   });
-  const { data: serviceAccounts = [], isPending } = useServiceAccounts();
+  const {
+    data: serviceAccounts = [],
+    isPending,
+    isLoadingError: isServiceAccountsLoadError,
+    refetch: refetchServiceAccounts,
+  } = useServiceAccounts();
   const createMutation = useCreateServiceAccount();
   const deleteMutation = useDeleteServiceAccount();
 
@@ -222,21 +228,28 @@ export default function ServiceAccountsSettingsPage() {
               objectNamePlural="service accounts"
               searchFields={["name"]}
             />
-            <DataTable
-              columns={columns}
-              data={filteredServiceAccounts}
-              onRowClick={(account, event) => {
-                const target = event.target as HTMLElement;
-                if (target.closest("a,button")) return;
-                router.push(`/settings/service-accounts/${account.id}`);
-              }}
-              emptyMessage="No service accounts yet"
-              hasActiveFilters={search.trim().length > 0}
-              filteredEmptyMessage="No service accounts match your search. Try adjusting your search."
-              onClearFilters={() =>
-                updateQueryParams({ search: null, page: "1" })
-              }
-            />
+            {isServiceAccountsLoadError ? (
+              <QueryLoadError
+                title="Couldn't load your service accounts"
+                onRetry={() => refetchServiceAccounts()}
+              />
+            ) : (
+              <DataTable
+                columns={columns}
+                data={filteredServiceAccounts}
+                onRowClick={(account, event) => {
+                  const target = event.target as HTMLElement;
+                  if (target.closest("a,button")) return;
+                  router.push(`/settings/service-accounts/${account.id}`);
+                }}
+                emptyMessage="No service accounts yet"
+                hasActiveFilters={search.trim().length > 0}
+                filteredEmptyMessage="No service accounts match your search. Try adjusting your search."
+                onClearFilters={() =>
+                  updateQueryParams({ search: null, page: "1" })
+                }
+              />
+            )}
           </div>
         </LoadingWrapper>
       )}

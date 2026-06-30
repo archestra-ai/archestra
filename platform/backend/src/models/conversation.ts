@@ -199,6 +199,7 @@ class ConversationModel {
             share: row.share?.id ? row.share : null,
             projectName: row.projectName ?? null,
             projectIcon: listProjectIcon(row.projectIcon),
+            unread: isConversationUnread(row.conversation),
             messages: [],
             chatErrors: [],
             compactions: [],
@@ -271,6 +272,7 @@ class ConversationModel {
         share: row.share?.id ? row.share : null,
         projectName: row.projectName ?? null,
         projectIcon: listProjectIcon(row.projectIcon),
+        unread: isConversationUnread(row.conversation),
         messages: [], // Messages fetched separately via findById
         chatErrors: [],
         compactions: [],
@@ -615,6 +617,45 @@ class ConversationModel {
     return updated ? updated.hooksDebugEnabled : null;
   }
 
+  /**
+   * Mark a conversation read by its owner (clears the sidebar new-messages
+   * indicator). Owner-scoped: a shared/project viewer never matches, so they
+   * cannot move the owner's read marker. Returns whether a row matched.
+   */
+  static async markRead(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const [updated] = await db
+      .update(schema.conversationsTable)
+      .set({ lastReadAt: new Date() })
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .returning({ id: schema.conversationsTable.id });
+    return !!updated;
+  }
+
+  /** The owner's user + org, or null if the conversation does not exist. */
+  static async getOwner(
+    id: string,
+  ): Promise<{ userId: string; organizationId: string } | null> {
+    const [row] = await db
+      .select({
+        userId: schema.conversationsTable.userId,
+        organizationId: schema.conversationsTable.organizationId,
+      })
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, id))
+      .limit(1);
+    return row ?? null;
+  }
+
   static async delete(
     id: string,
     userId: string,
@@ -676,6 +717,19 @@ export default ConversationModel;
 // persist normalization (or by an older client) and would otherwise reload as
 // an empty bubble. The DB `role` column is authoritative — a `content: ""` row
 // has no role inside its content. Read-only: bad rows are hidden, never deleted.
+// A conversation is unread when a message has landed since the owner last
+// viewed it. lastReadAt is null until the first explicit read, so fall back to
+// createdAt. Strict `>` so marking read at the same instant a message persists
+// (e.g. you sent it) does not register as unread.
+function isConversationUnread(conversation: {
+  lastMessageAt: Date;
+  lastReadAt: Date | null;
+  createdAt: Date;
+}): boolean {
+  const lastRead = conversation.lastReadAt ?? conversation.createdAt;
+  return conversation.lastMessageAt.getTime() > lastRead.getTime();
+}
+
 function shouldReturnPersistedMessageRow(message: {
   role: string;
   content: unknown;

@@ -53,7 +53,6 @@ from contracts import (
     CommandItem,
     ContractError,
     Decision,
-    FrontMatter,
     HookEvent,
     HookItem,
     Item,
@@ -85,7 +84,7 @@ from contracts import (
     to_jsonable,
     validate_requirements,
 )
-from frontmatter import emit_frontmatter
+from frontmatter import emit_frontmatter, fm_str, parse_frontmatter, set_name
 
 # deterministic apply order: keys before the agent, skills/catalog next, install, then policies,
 # then hooks (they attach to the already-created primary agent).
@@ -117,19 +116,9 @@ def _outcome_label(outcome: Outcome) -> str:
 # --- built operations: a typed union of what _build_payload produces ----------------------
 
 
-@dataclass(frozen=True)
-class BuiltAgent:
-    payload: AgentCreate
-
-
-@dataclass(frozen=True)
-class BuiltSkill:
-    payload: SkillCreate
-
-
-@dataclass(frozen=True)
-class BuiltCatalog:
-    payload: CatalogCreate
+# a "ready" op is its own api payload (fully built offline). the three structs below instead
+# carry pre-resolution data because they need an id looked up at execute time -- a catalog id,
+# a tool id, or the primary agent id -- that the offline build cannot know yet.
 
 
 @dataclass(frozen=True)
@@ -139,11 +128,6 @@ class BuiltInstall:
     environment_values: dict[str, str]
     agent_ids: list[str]
     team_id: str | None = None
-
-
-@dataclass(frozen=True)
-class BuiltLlmKey:
-    payload: LlmKeyCreate
 
 
 @dataclass(frozen=True)
@@ -166,18 +150,13 @@ class BuiltHook:
 
 
 Built = Union[
-    BuiltAgent, BuiltSkill, BuiltCatalog, BuiltInstall, BuiltLlmKey, BuiltPolicy, BuiltHook
+    AgentCreate, SkillCreate, CatalogCreate, BuiltInstall, LlmKeyCreate, BuiltPolicy, BuiltHook
 ]
 
 
 def _nonmigrate_outcome(action: str) -> Outcome:
     """an intentional skip is 'skipped'; a deferred item is 'manual'."""
     return "skipped" if action == "skip" else "manual"
-
-
-def _fm_str(fm: FrontMatter, key: str) -> str | None:
-    value = fm.get(key)
-    return value if isinstance(value, str) else None
 
 
 # --- payload builders (offline, deterministic) -------------------------------------------
@@ -192,10 +171,12 @@ def _skill_content_for(item: Item, name: str) -> tuple[str, list[SkillFile]]:
     files = _skill_files(item)
     match item:
         case SkillItem():
-            # verbatim: the original SKILL.md already carries frontmatter.
-            return item.data.content, files
+            # the original SKILL.md carries its own frontmatter; archestra reads the skill name
+            # from there (SkillCreate has no name field), so apply the rename into the frontmatter.
+            # set_name is a no-op when the name already matches, keeping unchanged skills verbatim.
+            return set_name(item.data.content, name), files
         case SubagentItem():
-            desc = (item.data.description or f"migrated subagent {name}").replace("\n", " ")
+            desc = ((item.data.description or "").strip() or f"migrated subagent {name}").replace("\n", " ")
             note = ""
             tools = item.data.tools
             if tools:
@@ -207,8 +188,8 @@ def _skill_content_for(item: Item, name: str) -> tuple[str, list[SkillFile]]:
                 )
             return emit_frontmatter(name, desc) + item.data.body + note, files
         case CommandItem():
-            desc = (_fm_str(item.data.frontmatter, "description") or f"migrated command {name}").replace("\n", " ")
-            return emit_frontmatter(name, desc) + item.data.body, files
+            desc = (fm_str(item.data.frontmatter, "description") or "").strip() or f"migrated command {name}"
+            return emit_frontmatter(name, desc.replace("\n", " ")) + item.data.body, files
         case LocalToolItem():
             entry = item.data.entrypoint
             body = (
@@ -222,11 +203,31 @@ def _skill_content_for(item: Item, name: str) -> tuple[str, list[SkillFile]]:
             raise ContractError(f"cannot build skill content from item kind {item.kind}")
 
 
+def _require_skill_frontmatter(content: str, *, ctx: str) -> None:
+    """fail offline on skill content the server would 400 on. archestra requires a SKILL.md to
+    start with a `---` frontmatter block carrying `name` and `description`; without this check a
+    frontmatter-less or description-less skill passes --dry-run and only fails at create time.
+
+    `name` is normally supplied upstream (set_name writes the override or the source dir name), so
+    in practice this is the gate on `description` -- which cannot be invented -- and on duplicate or
+    ambiguous keys the server's YAML would resolve differently than we do."""
+    if not content.startswith("---"):
+        raise ContractError(f"{ctx}: SKILL.md must start with a `---` frontmatter block")
+    doc = parse_frontmatter(content)
+    for key in ("name", "description"):
+        value = doc.frontmatter.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ContractError(f"{ctx}: SKILL.md frontmatter is missing `{key}`")
+    for line in doc.unparsed_lines:
+        if not line[:1].isspace() and line.split(":", 1)[0] in ("name", "description"):
+            raise ContractError(f"{ctx}: SKILL.md frontmatter has a duplicate/ambiguous `{line.split(':', 1)[0]}`")
+
+
 def _agent_source(item: Item) -> tuple[str | None, str | None]:
     """extract (system prompt body, description) from an agent-capable source item."""
     match item:
         case ClaudeMdItem():
-            return item.data.body or None, _fm_str(item.data.frontmatter, "description")
+            return item.data.body or None, fm_str(item.data.frontmatter, "description")
         case SubagentItem():
             return item.data.body or None, item.data.description
         case _:
@@ -303,6 +304,12 @@ def _build_agent_ids(answers: dict[str, JsonValue], *, ctx: str) -> list[str]:
     return _str_answers(raw, ctx=f"{ctx}.agentIds")
 
 
+def _report_kind(decision: Decision) -> str:
+    """the kind to show in results/preview. migrate decisions carry a real target_kind; skip/manual
+    ones may omit it, so fall back to the action ("manual"/"skip") rather than printing None."""
+    return decision.target_kind or decision.action
+
+
 def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
     """return (display_name, typed built op) for a migrate decision.
     raises ContractError on anything that cannot be built deterministically."""
@@ -311,22 +318,27 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
     ctx = f"{decision.source_id}.user_answers"
 
     match decision.target_kind:
+        case None:
+            # unreachable for a migrate decision (parse_decision requires the kind there); kept so
+            # the match stays exhaustive over TargetKind | None for the type checker.
+            raise ContractError(f"{decision.source_id}: a migrate decision must declare a target_kind")
         case "agent":
             body, description = _agent_source(item)
-            return name, BuiltAgent(AgentCreate(
+            return name, AgentCreate(
                 name=name, scope=decision.scope, systemPrompt=body,
                 description=description or "Migrated from CLAUDE.md",
                 teams=_team_ids(decision, ctx=ctx) or [],
-            ))
+            )
 
         case "skill":
             content, files = _skill_content_for(item, name)
-            return name, BuiltSkill(SkillCreate(
+            _require_skill_frontmatter(content, ctx=decision.source_id)
+            return name, SkillCreate(
                 content=content,
                 scope=decision.scope,
                 files=files,
                 teamIds=_team_ids(decision, ctx=ctx),
-            ))
+            )
 
         case "mcp_catalog":
             if not isinstance(item, McpServerItem):
@@ -343,7 +355,7 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
                                     localConfig=LocalConfig(command=data.command or "",
                                                             arguments=data.args, environment=env),
                                     teams=_team_ids(decision, ctx=ctx) or [])
-            return name, BuiltCatalog(cfg)
+            return name, cfg
 
         case "mcp_install":
             # catalogId is resolved by name at execute time; carry the supplied env values.
@@ -359,12 +371,12 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
             api_key = require_answer(answers, "apiKey", ctx=ctx)
             is_primary = answers.get("isPrimary")
             base_url = answers.get("baseUrl")
-            return name, BuiltLlmKey(LlmKeyCreate(
+            return name, LlmKeyCreate(
                 provider=provider, scope=decision.scope, apiKey=api_key, name=name,
                 isPrimary=is_primary if isinstance(is_primary, bool) else None,
                 baseUrl=base_url if isinstance(base_url, str) and base_url else None,
                 teamId=_team_id(decision, ctx=ctx),
-            ))
+            )
 
         case "tool_policy":
             # the model must extract the guard's semantics into user_answers.
@@ -470,7 +482,7 @@ def _scrub_url(url: str) -> str:
 def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
     """strip user-supplied secrets before printing a built op in --dry-run."""
     match built:
-        case BuiltLlmKey(payload):
+        case LlmKeyCreate() as payload:
             shown = to_payload(payload)
             shown["apiKey"] = "<redacted>"
             return shown
@@ -478,9 +490,9 @@ def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
             return {"catalog_name": built.catalog_name, "scope": built.scope,
                     "teamId": built.team_id, "agentIds": built.agent_ids,
                     "environmentValues": {k: "<redacted>" for k in built.environment_values}}
-        case BuiltAgent(payload) | BuiltSkill(payload):
+        case (AgentCreate() | SkillCreate()) as payload:
             return to_payload(payload)
-        case BuiltCatalog(payload):
+        case CatalogCreate() as payload:
             if payload.serverUrl is not None:
                 payload = replace(payload, serverUrl=_scrub_url(payload.serverUrl))
             local = payload.localConfig
@@ -510,13 +522,13 @@ def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
 
 def _preview_detail(built: Built) -> str:
     match built:
-        case BuiltAgent(payload):
+        case AgentCreate() as payload:
             return f"scope={payload.scope}; inherits org default model"
-        case BuiltSkill(payload):
+        case SkillCreate() as payload:
             if payload.scope == "team":
                 return f"scope=team; team_ids={len(payload.teamIds or [])}; bundled_files={len(payload.files)}"
             return f"scope={payload.scope}; bundled_files={len(payload.files)}"
-        case BuiltCatalog(payload):
+        case CatalogCreate() as payload:
             match payload.serverType:
                 case "remote":
                     return f"scope={payload.scope}; remote MCP catalog item"
@@ -531,7 +543,7 @@ def _preview_detail(built: Built) -> str:
                 f"scope={built.scope}; catalog={built.catalog_name}; "
                 f"agent_ids={len(built.agent_ids)}{team}; supplied_env_values={len(built.environment_values)}"
             )
-        case BuiltLlmKey(payload):
+        case LlmKeyCreate() as payload:
             return f"scope={payload.scope}; provider={payload.provider}; api_key=<redacted>"
         case BuiltPolicy():
             return f"tool={built.tool_name}; action={built.action}; conditions={len(built.conditions)}"
@@ -548,11 +560,11 @@ def _preview_detail(built: Built) -> str:
 def _execute(client: ArchestraClient, decision: Decision, name: str, built: Built) -> ResultOp:
     def op(outcome: Outcome, *, archestra_id: str | None = None, error: str | None = None,
            detail: str | None = None) -> ResultOp:
-        return ResultOp(source_id=decision.source_id, target_kind=decision.target_kind, name=name,
+        return ResultOp(source_id=decision.source_id, target_kind=_report_kind(decision), name=name,
                         outcome=outcome, archestra_id=archestra_id, error=error, detail=detail)
 
     match built:
-        case BuiltAgent(payload):
+        case AgentCreate() as payload:
             existing = client.list_agents(name=name, scope=payload.scope)
             if existing:
                 return op("skipped", archestra_id=require_str_field(existing[0], "id", ctx="agent"),
@@ -560,7 +572,7 @@ def _execute(client: ArchestraClient, decision: Decision, name: str, built: Buil
             created = client.create_agent(payload)
             return op("created", archestra_id=require_str_field(created, "id", ctx="agent create response"))
 
-        case BuiltSkill(payload):
+        case SkillCreate() as payload:
             existing = [
                 s for s in client.list_skills(search=name)
                 if s.get("name") == name and s.get("scope") == payload.scope
@@ -571,7 +583,7 @@ def _execute(client: ArchestraClient, decision: Decision, name: str, built: Buil
             created = client.create_skill(payload)
             return op("created", archestra_id=require_str_field(created, "id", ctx="skill create response"))
 
-        case BuiltCatalog(payload):
+        case CatalogCreate() as payload:
             existing = [c for c in client.list_catalog() if c.get("name") == name and c.get("scope") == payload.scope]
             if existing:
                 return op("skipped", archestra_id=require_str_field(existing[0], "id", ctx="catalog item"),
@@ -589,12 +601,13 @@ def _execute(client: ArchestraClient, decision: Decision, name: str, built: Buil
                 return op("skipped", archestra_id=require_str_field(existing[0], "id", ctx="mcp server"),
                           detail="an install of this catalog item at this scope already exists")
             created = client.install_mcp_server(McpInstall(
-                catalogId=catalog_id, scope=built.scope, environmentValues=built.environment_values,
+                catalogId=catalog_id, name=built.catalog_name, scope=built.scope,
+                environmentValues=built.environment_values,
                 agentIds=built.agent_ids, teamId=built.team_id,
             ))
             return op("created", archestra_id=require_str_field(created, "id", ctx="install response"))
 
-        case BuiltLlmKey(payload):
+        case LlmKeyCreate() as payload:
             existing = [
                 k for k in client.list_llm_keys(search=name, provider=payload.provider)
                 if k.get("name") == name and k.get("scope") == payload.scope and k.get("teamId") == payload.teamId
@@ -710,7 +723,7 @@ def main() -> int:
         except ContractError as exc:
             built.append(_Built(decision, decision.source_id, None, str(exc)))
     built = _flag_hook_collisions(built)
-    built.sort(key=lambda b: _ORDER.get(b.decision.target_kind, 99))
+    built.sort(key=lambda b: _ORDER.get(b.decision.target_kind or "", 99))
 
     if args.dry_run:
         return _finish(_run_validation(built, verbose=args.verbose, label="dry-run"), args.out)
@@ -735,15 +748,15 @@ def _run_validation(built: list[_Built], *, verbose: bool, label: str) -> list[R
             result = _nonmigrate_or_invalid(b)
             detail = result.detail or result.error or ""
             suffix = f" -- {detail}" if detail else ""
-            print(f"[{label}] {_outcome_label(result.outcome)}: {b.decision.target_kind}: {b.name}{suffix}")
+            print(f"[{label}] {_outcome_label(result.outcome)}: {_report_kind(b.decision)}: {b.name}{suffix}")
             results.append(result)
             continue
         detail = _preview_detail(b.built)
-        print(f"[{label}] {_outcome_label('planned')}: {b.decision.target_kind}: {b.name} -- {detail}")
+        print(f"[{label}] {_outcome_label('planned')}: {_report_kind(b.decision)}: {b.name} -- {detail}")
         if verbose:
             shown = _redacted_for_print(b.built)
             print(json.dumps(shown, indent=2))
-        results.append(ResultOp(source_id=b.decision.source_id, target_kind=b.decision.target_kind,
+        results.append(ResultOp(source_id=b.decision.source_id, target_kind=_report_kind(b.decision),
                                 name=b.name, outcome="planned"))
     return results
 
@@ -765,19 +778,13 @@ def _run_apply(built: list[_Built], base_url: str, api_key: str) -> list[ResultO
                 continue
             built_op = b.built
             if isinstance(built_op, BuiltInstall) and not built_op.agent_ids and primary_agent_id:
-                built_op = BuiltInstall(
-                    catalog_name=built_op.catalog_name,
-                    scope=built_op.scope,
-                    environment_values=built_op.environment_values,
-                    agent_ids=[primary_agent_id],
-                    team_id=built_op.team_id,
-                )
+                built_op = replace(built_op, agent_ids=[primary_agent_id])
             if isinstance(built_op, BuiltHook) and built_op.agent_id is None and primary_agent_id:
                 built_op = replace(built_op, agent_id=primary_agent_id)
             try:
                 op = _execute(client, b.decision, b.name, built_op)
             except (ArchestraApiError, ContractError) as exc:
-                op = ResultOp(source_id=b.decision.source_id, target_kind=b.decision.target_kind,
+                op = ResultOp(source_id=b.decision.source_id, target_kind=_report_kind(b.decision),
                               name=b.name, outcome="failed", error=str(exc))
             results.append(op)
             if op.target_kind == "agent" and op.outcome in ("created", "skipped") and op.archestra_id:
@@ -883,9 +890,9 @@ def _sandbox_warning(detail: str) -> ResultOp:
 
 def _nonmigrate_or_invalid(b: _Built) -> ResultOp:
     if b.decision.action != "migrate":
-        return ResultOp(source_id=b.decision.source_id, target_kind=b.decision.target_kind, name=b.name,
+        return ResultOp(source_id=b.decision.source_id, target_kind=_report_kind(b.decision), name=b.name,
                         outcome=_nonmigrate_outcome(b.decision.action), detail=b.decision.notes)
-    return ResultOp(source_id=b.decision.source_id, target_kind=b.decision.target_kind, name=b.name,
+    return ResultOp(source_id=b.decision.source_id, target_kind=_report_kind(b.decision), name=b.name,
                     outcome="invalid", error=b.error)
 
 

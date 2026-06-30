@@ -219,6 +219,34 @@ describe("team routes", () => {
       expect(team.id).toBeDefined();
     });
 
+    test("rejects an oversized team name without persisting it", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/teams",
+        payload: { name: "A".repeat(257) },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const list = await app.inject({ method: "GET", url: "/api/teams" });
+      expect(list.json().data).toHaveLength(0);
+    });
+
+    test("rejects an oversized team name on update", async ({ makeTeam }) => {
+      const team = await makeTeam(organizationId, adminUser.id, {
+        name: "Original",
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/teams/${team.id}`,
+        payload: { name: "A".repeat(257) },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect((await TeamModel.findById(team.id))?.name).toBe("Original");
+    });
+
     test("gets a team by id", async ({ makeTeam }) => {
       const team = await makeTeam(organizationId, adminUser.id, {
         name: "Lookup Team",

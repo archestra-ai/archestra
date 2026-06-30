@@ -2212,4 +2212,32 @@ describe("POST /api/chat handler composition", () => {
       );
     expect(attachments).toHaveLength(0);
   });
+
+  test("rejects an unsupported attachment with no sandbox and persists nothing", async () => {
+    const dataUrl = `data:application/zip;base64,${Buffer.from("PK zip bytes").toString("base64")}`;
+    const response = await postMessage([
+      {
+        id: "msg-1",
+        role: "user",
+        parts: [
+          { type: "text", text: "process this" },
+          {
+            type: "file",
+            url: dataUrl,
+            mediaType: "application/zip",
+            filename: "archive.zip",
+          },
+        ],
+      },
+    ]);
+
+    // The gate runs before extraction and before the active run is acquired,
+    // so the request is rejected and no attachment row is written.
+    expect(response.statusCode).toBe(400);
+    const attachments =
+      await ConversationAttachmentModel.findByConversationIdWithoutData(
+        conversationId,
+      );
+    expect(attachments).toHaveLength(0);
+  });
 });

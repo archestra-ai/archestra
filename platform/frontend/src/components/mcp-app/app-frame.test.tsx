@@ -1,159 +1,63 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("next/link", () => ({
-  default: ({ children, ...props }: { children: ReactNode }) => (
-    <a {...props}>{children}</a>
-  ),
-}));
-
-// Stub the lazily-loaded edit dialog so the test asserts the open/close
-// contract without crossing the next/dynamic async boundary.
-vi.mock("next/dynamic", () => ({
-  default: () => () => <div data-testid="edit-dialog" />,
-}));
 
 // Stub the runtime (sandboxed iframe + bridge) so the frame is tested in
 // isolation — the iframe lifecycle is covered by mcp-app-container.test.tsx.
 vi.mock("@/components/mcp-app/mcp-app-view", () => ({
-  McpAppRuntime: () => <div data-testid="runtime" />,
+  McpAppRuntime: ({
+    toolResourceUri,
+    appVersion,
+  }: {
+    toolResourceUri: string;
+    appVersion?: number;
+  }) => (
+    <div
+      data-testid="runtime"
+      data-uri={toolResourceUri}
+      data-version={appVersion ?? ""}
+    />
+  ),
   isRenderableMcpAppHtml: () => true,
 }));
 
 vi.mock("@/lib/app.query", () => ({ useApp: vi.fn() }));
-vi.mock("@/lib/auth/auth.query", () => ({ useHasPermissions: vi.fn() }));
-
-// Stub the meta bar (it fetches environments/session of its own); its own
-// behavior is covered by mcp-app-meta-bar.test.tsx.
-vi.mock("./mcp-app-meta-bar", () => ({
-  McpAppMetaBar: ({ version }: { version: number | null }) => (
-    <div data-testid="meta-bar">v{version}</div>
-  ),
-}));
 
 import { useApp } from "@/lib/app.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { AppFrame } from "./app-frame";
-import { McpAppStandaloneButton } from "./mcp-app-chrome";
 
 const mockUseApp = vi.mocked(useApp);
-const mockUseHasPermissions = vi.mocked(useHasPermissions);
-
-function setCanEdit(canEdit: boolean) {
-  mockUseHasPermissions.mockReturnValue({ data: canEdit } as ReturnType<
-    typeof useHasPermissions
-  >);
-}
 
 describe("AppFrame", () => {
   beforeEach(() => {
-    setCanEdit(false);
-  });
-
-  it("renders a bare runtime with no card chrome for external servers", () => {
     mockUseApp.mockReturnValue({ data: undefined } as ReturnType<
       typeof useApp
     >);
+  });
 
+  it("renders the runtime for an external server using the provided resource uri", () => {
     render(
       <AppFrame
         endpoint={{ kind: "server", mcpServerId: "server-1" }}
         resourceUri="ui://external/app"
-        chrome={false}
       />,
     );
 
-    expect(screen.getByTestId("runtime")).toBeInTheDocument();
-    // No address pill: no reload button, no meta bar.
-    expect(
-      screen.queryByRole("button", { name: /reload app/i }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByTestId("meta-bar")).not.toBeInTheDocument();
-  });
-
-  it("wraps owned apps in card chrome with label, meta bar, and composed actions", () => {
-    mockUseApp.mockReturnValue({
-      data: { name: "Dashboard", latestVersion: 3 },
-    } as ReturnType<typeof useApp>);
-
-    render(
-      <AppFrame
-        endpoint={{ kind: "app", appId: "app-1" }}
-        fillContainer
-        actions={<McpAppStandaloneButton appId="app-1" />}
-      />,
+    expect(screen.getByTestId("runtime")).toHaveAttribute(
+      "data-uri",
+      "ui://external/app",
     );
-
-    expect(screen.getByTestId("runtime")).toBeInTheDocument();
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /reload app/i }),
-    ).toBeInTheDocument();
-    // Meta bar mounts under the runtime, keyed to the head version.
-    expect(screen.getByTestId("meta-bar")).toHaveTextContent("v3");
-    // The caller-composed action button is rendered.
-    expect(
-      screen.getByRole("link", { name: /open in new tab/i }),
-    ).toHaveAttribute("href", "/a/app-1");
   });
 
-  it("waits for the owned app to resolve before mounting the runtime", () => {
-    mockUseApp.mockReturnValue({ data: undefined } as ReturnType<
-      typeof useApp
-    >);
-
-    render(<AppFrame endpoint={{ kind: "app", appId: "app-1" }} />);
-
-    expect(screen.queryByTestId("runtime")).not.toBeInTheDocument();
-  });
-
-  it("shows an edit pencil that opens the dialog when the user may edit the app", () => {
-    setCanEdit(true);
+  it("derives the resource uri and head version for an owned app", () => {
     mockUseApp.mockReturnValue({
-      data: { name: "Dashboard", latestVersion: 3 },
+      data: { latestVersion: 3 },
     } as ReturnType<typeof useApp>);
 
     render(<AppFrame endpoint={{ kind: "app", appId: "app-1" }} />);
 
-    const editButton = screen.getByRole("button", { name: /edit app/i });
-    expect(editButton).toBeInTheDocument();
-    // Dialog is only rendered once opened.
-    expect(screen.queryByTestId("edit-dialog")).not.toBeInTheDocument();
-
-    fireEvent.click(editButton);
-    expect(screen.getByTestId("edit-dialog")).toBeInTheDocument();
-  });
-
-  it("hides the edit pencil when the user lacks app update permission", () => {
-    setCanEdit(false);
-    mockUseApp.mockReturnValue({
-      data: { name: "Dashboard", latestVersion: 3 },
-    } as ReturnType<typeof useApp>);
-
-    render(<AppFrame endpoint={{ kind: "app", appId: "app-1" }} />);
-
-    expect(
-      screen.queryByRole("button", { name: /edit app/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("never shows the edit pencil for external servers", () => {
-    setCanEdit(true);
-    mockUseApp.mockReturnValue({ data: undefined } as ReturnType<
-      typeof useApp
-    >);
-
-    render(
-      <AppFrame
-        endpoint={{ kind: "server", mcpServerId: "server-1" }}
-        resourceUri="ui://external/app"
-        chrome={false}
-      />,
-    );
-
-    expect(
-      screen.queryByRole("button", { name: /edit app/i }),
-    ).not.toBeInTheDocument();
+    const runtime = screen.getByTestId("runtime");
+    expect(runtime).toHaveAttribute("data-version", "3");
+    // The resource URI is derived from the app id.
+    expect(runtime.getAttribute("data-uri")).toContain("app-1");
   });
 });

@@ -43,12 +43,14 @@ import type {
 } from "@/types";
 import { detectImageType } from "@/utils/detect-image-type";
 import { stripHtmlTags } from "@/utils/strip-html";
+import { isUuid } from "@/utils/uuid";
+import { isMuteReaction } from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_TEAM_CACHE,
   CHATOPS_THREAD_HISTORY,
 } from "./constants";
-import { errorMessage } from "./utils";
+import { errorMessage, formatApprovalToolArgs } from "./utils";
 
 /**
  * MS Teams provider using Bot Framework SDK.
@@ -220,7 +222,25 @@ class MSTeamsProvider implements ChatOpsProvider {
       "[MSTeamsProvider] Parsing activity",
     );
 
-    if (activity.type !== ActivityTypes.Message || !activity.text) {
+    if (activity.type !== ActivityTypes.Message) {
+      return null;
+    }
+
+    // A file-only message (empty text but with a real file attachment) is still
+    // meaningful, so accept it; only drop messages that carry neither text nor
+    // a downloadable file. Adaptive Cards / hero cards are not files (and are
+    // filtered out before download), so a card-only message stays dropped.
+    // Addressing/mention gating is enforced by the webhook route, not here, so
+    // this does not widen who the bot responds to.
+    const hasFileAttachment = Boolean(
+      activity.attachments?.some(
+        (a) =>
+          a.contentUrl &&
+          a.contentType &&
+          !a.contentType.startsWith("application/vnd.microsoft.card."),
+      ),
+    );
+    if (!activity.text && !hasFileAttachment) {
       return null;
     }
 
@@ -239,10 +259,10 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
 
     const cleanedText = cleanBotMention(
-      activity.text,
+      activity.text ?? "",
       activity.recipient?.name,
     );
-    if (!cleanedText) {
+    if (!cleanedText && !hasFileAttachment) {
       return null;
     }
 
@@ -265,6 +285,13 @@ class MSTeamsProvider implements ChatOpsProvider {
       activity.serviceUrl,
     );
 
+    // A file-only message (empty text) is kept only when a file actually
+    // survived download — oversized, expired, or failed downloads must not
+    // leave the bot answering an empty turn.
+    if (!cleanedText && attachments.length === 0) {
+      return null;
+    }
+
     return {
       messageId: activity.id || `teams-${Date.now()}`,
       channelId,
@@ -273,7 +300,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       senderId: activity.from?.aadObjectId || activity.from?.id || "unknown",
       senderName: activity.from?.name || "Unknown User",
       text: cleanedText,
-      rawText: activity.text,
+      rawText: activity.text ?? "",
       timestamp: activity.timestamp ? new Date(activity.timestamp) : new Date(),
       isThreadReply,
       metadata: {
@@ -327,14 +354,67 @@ class MSTeamsProvider implements ChatOpsProvider {
     );
   }
 
+  /**
+   * If this is a "mute the thread" reaction on one of the bot's channel
+   * messages, return the channel + thread to mute; otherwise null.
+   *
+   * Teams only delivers messageReaction events for the bot's OWN messages, so
+   * no sender check is needed. The thread is taken from `conversation.id`'s
+   * `;messageid=<root>` — NOT `replyToId`, which on a reaction points at the
+   * reacted (bot reply) message rather than the thread root the activation was
+   * keyed on. If the root can't be resolved we return null and the caller
+   * no-ops loudly (no false "muted") rather than guessing a key — guessing the
+   * channelId fallback could clear a different thread's activation.
+   */
+  parseMuteReaction(activity: {
+    type?: string;
+    conversation?: { id?: string; conversationType?: string };
+    channelData?: { channel?: { id?: string } };
+    reactionsAdded?: Array<{ type?: string } | null> | null;
+  }): { channelId: string; threadId: string } | null {
+    if (activity.type !== "messageReaction") return null;
+    const hasMuteReaction = Boolean(
+      activity.reactionsAdded?.some((r) => r?.type && isMuteReaction(r.type)),
+    );
+    if (!hasMuteReaction) return null;
+
+    // Sticky auto-reply (and thus muting) only applies in team channels.
+    if (activity.conversation?.conversationType !== "channel") return null;
+
+    const conversationId = activity.conversation?.id;
+    // Match how the gate derived the activation key's channelId
+    // (parseWebhookNotification): prefer channelData.channel.id, else the
+    // thread-suffix-stripped conversation id. Uses `||` (not `??`) to match the
+    // gate exactly, so an empty channel.id falls through to the conversation id.
+    const channelId =
+      activity.channelData?.channel?.id || stripThreadSuffix(conversationId);
+    // Assumes the activation key's threadId equals the conversation's
+    // `;messageid=<root>`. Teams channel threads are flat (every reply's
+    // replyToId is the root), so the gate's extractThreadId (replyToId-first)
+    // and this resolve to the same root. If a payload ever breaks that, the
+    // mute no-ops loudly (returns null → no false "muted") rather than guessing.
+    const threadId = extractThreadIdFromConversationId(conversationId);
+    if (!channelId || !threadId) return null;
+
+    return { channelId, threadId };
+  }
+
   async sendReply(options: ChatReplyOptions): Promise<string> {
     if (!this.adapter) {
       throw new Error("MSTeamsProvider not initialized");
     }
 
     let replyText = options.text;
+    // An even-more-subtle hint (e.g. the one-time mute tip) on its own italic
+    // line ABOVE the footer, so the agent footer stays the last line. Italics
+    // keep it visually quieter than the footer.
+    if (options.hint) {
+      replyText += `\n\n---\n\n_${options.hint}_`;
+    }
     if (options.footer) {
-      replyText += `\n\n---\n\n${options.footer}`;
+      replyText += options.hint
+        ? `\n\n${options.footer}`
+        : `\n\n---\n\n${options.footer}`;
     }
 
     // If a placeholder "Thinking..." message was sent (Teams channels),
@@ -410,7 +490,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       // - Group chats: no workspaceId, or workspaceId starts with "19:" (thread ID format)
       // - Team channels: workspaceId is a UUID (the team's aadGroupId), channelId contains @thread.tacv2
       let workspaceId = params.workspaceId;
-      const isValidTeamId = workspaceId && UUID_REGEX.test(workspaceId);
+      const isValidTeamId = workspaceId && isUuid(workspaceId);
 
       // If workspaceId isn't a valid UUID but channel looks like a team channel,
       // try to look up the actual team ID
@@ -431,7 +511,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         }
       }
 
-      const isTeamIdValid = workspaceId && UUID_REGEX.test(workspaceId);
+      const isTeamIdValid = workspaceId && isUuid(workspaceId);
       const isTeamChannel = isTeamIdValid && looksLikeTeamChannel;
       const isGroupChat = !isTeamChannel;
 
@@ -489,6 +569,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       },
     });
 
+    const argsText = formatApprovalToolArgs(options.toolArgs);
     const approvalCard = {
       type: "AdaptiveCard",
       $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
@@ -499,6 +580,17 @@ class MSTeamsProvider implements ChatOpsProvider {
           text: `\`${options.toolName}\``,
           wrap: true,
         },
+        ...(argsText
+          ? [
+              {
+                type: "TextBlock",
+                text: argsText,
+                wrap: true,
+                fontType: "Monospace",
+                spacing: "Small",
+              },
+            ]
+          : []),
         {
           type: "ActionSet",
           spacing: "Small",
@@ -1640,6 +1732,10 @@ function needsBotAuth(contentUrl: string, serviceUrl: string): boolean {
 /**
  * Extract thread message ID from Teams activity.
  * Teams format: "channelId;messageid=messageId" for thread replies.
+ *
+ * Prefers replyToId, which on a normal message points at the thread root. For
+ * REACTION activities replyToId instead points at the reacted message, so the
+ * reaction path uses extractThreadIdFromConversationId directly instead.
  */
 function extractThreadId(activity: {
   conversation?: { id?: string };
@@ -1648,14 +1744,19 @@ function extractThreadId(activity: {
   if (activity.replyToId) {
     return activity.replyToId;
   }
+  return extractThreadIdFromConversationId(activity.conversation?.id);
+}
 
-  const conversationId = activity.conversation?.id;
-  if (conversationId?.includes(";messageid=")) {
-    const match = conversationId.match(/;messageid=(\d+)/);
-    return match?.[1];
-  }
+/** The `;messageid=<root>` thread id encoded in a Teams conversation id, if any. */
+function extractThreadIdFromConversationId(
+  conversationId?: string,
+): string | undefined {
+  return conversationId?.match(/;messageid=(\d+)/)?.[1];
+}
 
-  return undefined;
+/** A Teams conversation id with any `;messageid=...` thread suffix removed. */
+function stripThreadSuffix(conversationId?: string): string | undefined {
+  return conversationId?.split(";messageid=")[0] || undefined;
 }
 
 /**
@@ -1726,9 +1827,6 @@ function extractAdaptiveCardText(element: unknown): string {
 
   return parts.join("\n");
 }
-
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function normalizeTeamsId(id: string): string {
   return id.replace(/^28:/, "").toLowerCase();

@@ -18,16 +18,22 @@ export function AppDeleteDialog({
   app,
   open,
   onOpenChange,
+  onDeleted,
 }: {
   app: { id: string; name: string };
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Called after a successful delete (in addition to closing the dialog). */
+  onDeleted?: () => void;
 }) {
   const deleteApp = useDeleteApp();
 
   const handleConfirm = async () => {
     const data = await deleteApp.mutateAsync(app.id);
-    if (data) onOpenChange(false);
+    if (data) {
+      onOpenChange(false);
+      onDeleted?.();
+    }
   };
 
   return (

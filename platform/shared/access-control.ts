@@ -180,7 +180,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpGateway: ["read", "create", "update", "delete"],
   mcpOauthClient: ["read"],
   toolPolicy: ["read"],
-  mcpRegistry: ["read"],
+  mcpRegistry: ["read", "update"],
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
   environment: [],
@@ -622,6 +622,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInternalMcpCatalogLabelValues]: {
     mcpRegistry: ["read"],
   },
+  [RouteId.ListPendingImageApprovalCatalogItems]: {
+    mcpServerInstallation: ["admin"],
+  },
+  [RouteId.ApproveCatalogItemImage]: {
+    mcpServerInstallation: ["admin"],
+  },
   [RouteId.GetDeploymentYamlPreview]: {
     mcpRegistry: ["read"],
   },
@@ -662,7 +668,13 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpServerInstallation: ["create"],
   },
   [RouteId.ReinstallMcpServer]: {
-    mcpServerInstallation: ["update"],
+    // Reinstalling redeploys a connection the caller can already install, so it
+    // is gated like installation (:create), not :update — mirroring
+    // ReauthenticateMcpServer above. The handler's assertScopedLifecycleAuthorization
+    // does the finer-grained check (owner-only for personal, team-admin for team,
+    // admin for org), so a member can reinstall their OWN connection and nothing
+    // more. Requiring :update here locked owners out of reinstalling their own.
+    mcpServerInstallation: ["create"],
   },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServerInstallation: ["read"],
@@ -823,6 +835,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // Coarse gate only; the handler further requires agent-type admin to flip
   // the per-conversation hook debug flag.
   [RouteId.SetConversationHooksDebug]: {
+    chat: ["update"],
+  },
+  // Marking your own conversation read clears its sidebar new-messages dot —
+  // a chat-state edit, same gate as the other conversation mutations.
+  [RouteId.MarkChatConversationRead]: {
     chat: ["update"],
   },
   [RouteId.DeleteChatConversation]: {
@@ -1343,6 +1360,12 @@ export const requiredEndpointPermissionsMap: Partial<
   // `downloadable` and then 403 on every fetch. Project membership is still
   // enforced in the handler (projectService.listFiles -> requireReadable).
   [RouteId.GetProjectFiles]: { project: ["read"], sandbox: ["execute"] },
+  // Uploading a project file mirrors how files are produced in a project today
+  // (a sandbox run writing a result), so it carries the same `sandbox:execute`
+  // as the list/byte surfaces. Project membership (owner/shared, not admin
+  // oversight) is enforced in the handler (projectService.uploadFile ->
+  // requireReadable).
+  [RouteId.UploadProjectFiles]: { project: ["read"], sandbox: ["execute"] },
   // Instructions are plain project metadata (not a sandbox byte surface), so the
   // GET needs only project read — every project reader can see the instructions
   // that steer the project's chats. Editing is owner-only, enforced in the
@@ -1352,6 +1375,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.PinProject]: { project: ["read"] },
   [RouteId.UnpinProject]: { project: ["read"] },
   [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
+  // Editing a file's text content shares the delete path's authorization
+  // (author / project access), enforced per-file in the store handler.
+  [RouteId.UpdateSkillSandboxArtifactContent]: { sandbox: ["execute"] },
 
   // Audit Log Routes
   [RouteId.GetAuditLogs]: {
@@ -1379,6 +1405,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.AssignToolToApp]: { app: ["update"] },
   [RouteId.UnassignToolFromApp]: { app: ["update"] },
   [RouteId.GetAppTemplates]: { app: ["read"] },
+  // Opens an app in chat: reads the app and creates a seeded conversation.
+  [RouteId.OpenAppInChat]: { app: ["read"], chat: ["create"] },
   // The trusted host page reports a viewer's render diagnostics; the handler
   // re-checks app-visibility, so app:read is the right coarse gate.
   [RouteId.PostAppRenderDiagnostics]: { app: ["read"] },

@@ -40,6 +40,7 @@ import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import { AppLogo } from "@/components/app-logo";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
+import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
   SidebarContent,
@@ -81,6 +82,7 @@ interface NavItem {
   customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
   onClick?: () => void;
   subItems?: NavSubItem[];
+  beta?: boolean;
 }
 
 interface NavGroup {
@@ -105,12 +107,33 @@ const chatsNavItems: NavItem[] = [
     url: "/projects",
     icon: FolderKanban,
     customIsActive: (pathname: string) => pathname.startsWith("/projects"),
+    beta: true,
+  },
+  {
+    title: "Apps",
+    url: "/apps",
+    icon: AppWindow,
+    customIsActive: (pathname: string) => pathname === "/apps",
+    beta: true,
+  },
+  {
+    title: "Connect",
+    url: "/connection",
+    icon: Cable,
+    customIsActive: (pathname: string) => pathname.startsWith("/connection"),
+    beta: true,
   },
 ];
 
 /** Which tab a route belongs to; null = no opinion (keep the current tab). */
 function routeSidebarMode(pathname: string): SidebarMode | null {
-  const chatPrefixes = ["/chat", "/projects"];
+  const chatPrefixes = [
+    "/chat",
+    "/projects",
+    "/apps",
+    "/connection",
+    "/connection_beta",
+  ];
   if (
     chatPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
   ) {
@@ -123,8 +146,6 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
     "/llm",
     "/knowledge",
     "/audit",
-    "/connection",
-    "/connection_beta",
   ];
   if (
     studioPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
@@ -193,7 +214,7 @@ function SidebarModeToggle({
 
   return (
     <div className="flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden">
-      {segment("chats", "Chats", MessageCircle)}
+      {segment("chats", "AI", MessageCircle)}
       {segment("studio", "Studio", PencilRuler)}
     </div>
   );
@@ -223,6 +244,7 @@ const contentNavGroups: NavGroup[] = [
         url: "/skills",
         icon: Sparkles,
         customIsActive: (pathname: string) => pathname.startsWith("/skills"),
+        beta: true,
       },
       {
         title: "Messaging Channels",
@@ -230,17 +252,6 @@ const contentNavGroups: NavGroup[] = [
         icon: Inbox,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/messaging-channels"),
-      },
-    ],
-  },
-  {
-    label: "Apps",
-    items: [
-      {
-        title: "Apps",
-        url: "/apps",
-        icon: AppWindow,
-        customIsActive: (pathname: string) => pathname === "/apps",
       },
     ],
   },
@@ -339,13 +350,6 @@ const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/mcp/logs") ||
           pathname.startsWith("/audit/logs"),
       },
-      {
-        title: "Connect",
-        url: "/connection",
-        icon: Cable,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/connection"),
-      },
     ],
   },
 ];
@@ -385,6 +389,14 @@ const NavPrimary = ({
         >
           <item.icon className={item.iconClassName} />
           <span>{item.title}</span>
+          {item.beta && (
+            <Badge
+              variant="secondary"
+              className="ml-auto px-1.5 py-0 text-[10px] group-data-[collapsible=icon]:hidden"
+            >
+              New
+            </Badge>
+          )}
         </SidebarPrefetchLink>
       </SidebarMenuButton>
       {item.subItems && item.subItems.length > 0 && (
@@ -630,52 +642,60 @@ export function AppSidebar() {
   // default Connect destination.
   const betaEnabled = useFeature("betaEnabled") === true;
 
-  // Projects exist only when the projects feature is on.
+  // Projects and Apps are each gated behind their own feature flags. Connect
+  // requires both MCP gateway and LLM proxy read permissions, and points at
+  // its beta route when ARCHESTRA_BETA is on.
   const filteredChatsNavItems = React.useMemo(
     () =>
-      chatsNavItems.filter(
-        (item) => item.title !== "Projects" || projectsEnabled,
-      ),
-    [projectsEnabled],
+      chatsNavItems
+        .filter((item) => {
+          if (item.title === "Projects") return projectsEnabled;
+          if (item.title === "Apps") return appsEnabled;
+          if (item.title === "Connect") return showConnect;
+          return true;
+        })
+        .map((item) => {
+          if (item.title === "Connect" && betaEnabled) {
+            return { ...item, url: "/connection_beta" };
+          }
+          return item;
+        }),
+    [projectsEnabled, appsEnabled, showConnect, betaEnabled],
   );
 
-  // Filter nav groups based on connect permissions and feature flags
+  // Filter nav groups based on feature flags
   const filteredNavGroups = React.useMemo(() => {
     // With ARCHESTRA_BETA on, these nav items point at their beta routes.
     const betaNavUrls: Record<string, string> = {
-      Connect: "/connection_beta",
       "MCP Registry": "/mcp/registry/beta",
     };
-    return contentNavGroups
-      .filter((group) => group.label !== "Apps" || appsEnabled)
-      .map((group) => ({
-        ...group,
-        items: group.items
-          .filter((item) => {
-            if (item.title === "Connect" && !showConnect) return false;
-            // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env
-            // var. It's a top-level item now, so gate it here (not in subItems).
-            if (item.url === "/skills" && !skillsEnabled) return false;
-            return true;
-          })
-          .map((item) => {
-            const betaUrl = betaEnabled ? betaNavUrls[item.title] : undefined;
-            const resolved = betaUrl ? { ...item, url: betaUrl } : item;
-            return resolved.subItems
-              ? {
-                  ...resolved,
-                  subItems: resolved.subItems.filter((sub) => {
-                    // With projects on, schedules are managed per-project on the
-                    // project detail page (the per-project runs view), so the
-                    // standalone entry is hidden.
-                    if (sub.url === "/scheduled-tasks") return !projectsEnabled;
-                    return true;
-                  }),
-                }
-              : resolved;
-          }),
-      }));
-  }, [showConnect, skillsEnabled, appsEnabled, projectsEnabled, betaEnabled]);
+    return contentNavGroups.map((group) => ({
+      ...group,
+      items: group.items
+        .filter((item) => {
+          // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env
+          // var. It's a top-level item now, so gate it here (not in subItems).
+          if (item.url === "/skills" && !skillsEnabled) return false;
+          return true;
+        })
+        .map((item) => {
+          const betaUrl = betaEnabled ? betaNavUrls[item.title] : undefined;
+          const resolved = betaUrl ? { ...item, url: betaUrl } : item;
+          return resolved.subItems
+            ? {
+                ...resolved,
+                subItems: resolved.subItems.filter((sub) => {
+                  // With projects on, schedules are managed per-project on the
+                  // project detail page (the per-project runs view), so the
+                  // standalone entry is hidden.
+                  if (sub.url === "/scheduled-tasks") return !projectsEnabled;
+                  return true;
+                }),
+              }
+            : resolved;
+        }),
+    }));
+  }, [skillsEnabled, projectsEnabled, betaEnabled]);
 
   return (
     <Sidebar collapsible="icon">

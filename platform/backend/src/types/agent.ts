@@ -240,6 +240,14 @@ export const SelectAgentSchema = createSelectSchema(
    * substituting another model.
    */
   llmProviderRequiresPerUserCredential: z.boolean().optional(),
+  /**
+   * Whether the code-execution sandbox is usable for this agent by the
+   * requesting user (`isSkillSandboxAvailableForAgent`: feature enabled +
+   * `sandbox:execute` permission + the sandbox tools assigned/accessible). The
+   * chat composer widens the accepted upload types to any file when true.
+   * Populated on read paths (list/get); absent on mutation responses.
+   */
+  sandboxAvailable: z.boolean().optional(),
 });
 
 // Base schema without refinement - can be used with .partial()
@@ -327,7 +335,7 @@ export const PolicyConfigSchema = z.object({
     .describe(
       "When should this tool be allowed to be invoked? " +
         "'allow_when_context_is_sensitive' - Allow invocation even when sensitive data is present (safe read-only tools). " +
-        "'block_when_context_is_sensitive' - Allow only when context is safe, block when sensitive data is present (tools that could leak data). " +
+        "'block_when_context_is_sensitive' - Block when sensitive data is present, allow only when context is safe (tools that could leak data). " +
         "'require_approval' - Require user confirmation before executing in chat; block in autonomous sessions (write/mutating tools that are not outright destructive: create/update/send/post/charge). " +
         "'block_always' - Never allow automatic invocation (obviously destructive tools whose name is solely dedicated to deleting or destroying data).",
     ),
@@ -340,9 +348,9 @@ export const PolicyConfigSchema = z.object({
     ])
     .describe(
       "How should the tool's results be treated? " +
-        "'mark_as_safe' - Results are safe and can be used directly (internal systems, databases, dev tools). " +
-        "'mark_as_sensitive' - Results are sensitive and will restrict subsequent tool usage (external/filesystem data where exact values are safe). " +
-        "'sanitize_with_dual_llm' - Results are processed through dual LLM security pattern (sensitive data that needs summarization). " +
+        "'mark_as_safe' - Results are fully trusted and used directly (internal dev/config metadata, or external action tools that return no third-party content). " +
+        "'mark_as_sensitive' - Results contain organizational data from internal self-hosted systems (Jira, GitHub, databases, internal APIs, file systems) that must not leak to external tools. " +
+        "'sanitize_with_dual_llm' - Results come from untrusted external/third-party sources and may carry injected instructions; they are summarized through the Dual LLM workflow so the raw content never reaches the privileged model (web search, scraping/fetching arbitrary pages, untrusted inbound messages). " +
         "'block_always' - Results are blocked entirely (highly sensitive or dangerous output).",
     ),
   reasoning: z

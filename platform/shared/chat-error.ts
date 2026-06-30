@@ -15,10 +15,10 @@ import {
  * body → the chat-error mapper, which uses it as a uniform cross-provider
  * signal.
  *
- * Providers differ in how they surface categories like "context too long":
- * some return a structured `error.code`, others only a message. Classifying
- * in the adapter and emitting a normalized code keeps the mapper a simple
- * lookup and lets each provider's idiosyncrasies stay local to its adapter.
+ * Adapters classify a category like "context too long" from the provider's
+ * structured `error.code` and emit a normalized code, which keeps the mapper a
+ * simple lookup and lets each provider's idiosyncrasies stay local to its
+ * adapter.
  */
 export const ArchestraInternalErrorCode = {
   ContextLengthExceeded: "context_length_exceeded",
@@ -264,6 +264,8 @@ export enum ChatErrorCode {
   NotFound = "not_found",
   /** Input exceeds the model's context window */
   ContextTooLong = "context_too_long",
+  /** Request payload (e.g. a large inline attachment) exceeds the provider's size limit */
+  RequestTooLarge = "request_too_large",
   /** Content blocked by safety filters */
   ContentFiltered = "content_filtered",
   /** Provider server error - retryable */
@@ -304,6 +306,8 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
     "The selected model is not available. Please choose a different model.",
   [ChatErrorCode.ContextTooLong]:
     "Your conversation is too long. Please start a new chat or remove some messages.",
+  [ChatErrorCode.RequestTooLarge]:
+    "This request is too large for the selected model. Compress or split large attachments — or remove some — and try again.",
   [ChatErrorCode.ContentFiltered]:
     "Your message was blocked by content filters. Please rephrase your request.",
   [ChatErrorCode.ServerError]: "The AI provider is experiencing issues.",

@@ -7,7 +7,7 @@ This is the canonical mapping the model applies when turning `inventory.json` in
 | Source (inventory `kind`) | `target_kind` | Confidence | Notes |
 |---|---|---|---|
 | `claude_md` (root CLAUDE.md) | `agent` | clean | becomes the **primary agent**'s systemPrompt; one per setup, no model binding (inherits org default) |
-| `skill` (`.claude/skills/*/SKILL.md`) | `skill` | clean | migrated verbatim with bundled files |
+| `skill` (`.claude/skills/*/SKILL.md`) | `skill` | clean | migrated verbatim with bundled files; a `name_override` is written into the SKILL.md frontmatter (Archestra derives the skill name from there) |
 | `subagent` (`.claude/agents/*.md`) | `skill` (preferred) or `agent` | best-effort | default to skill; tool allowlist is **documented, not enforced** |
 | `command` (`.claude/commands/*.md`) | `skill` | best-effort | slash command body → skill |
 | `local_tool` (`tools/*.py`) | `skill` | best-effort | per-script fallback; PREFER consolidating into one toolset skill — see "Local tools" below |
@@ -89,7 +89,7 @@ creating hooks and warns when the feature is off.
 - **unresolved** — a missing/escaping script or unparsable command; map it `manual`.
 
 What you author per hook decision (`target_kind:"hook"`): usually nothing. Optional `user_answers`:
-`agentId` (UUID; defaults to the primary migrated agent), `fileName` (override; must match the basename
+`agentId` (UUID; defaults to the primary agent), `fileName` (override; must match the basename
 regex), `requirements` (override the PEP-723 list; a `.sh` hook must have none). `apply.py` builds and
 validates the payload, attaches it to the primary agent, and skips an existing `(agentId, event, fileName)`.
 

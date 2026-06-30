@@ -34,6 +34,22 @@ Every organization has an implicit **Default** environment. Any resource whose e
 
 An environment can be marked **restricted**. Only members with the `environment:deploy-to-restricted` permission (or `environment:admin`, which implies it) can assign resources to a restricted environment. Unrestricted environments and Default stay open to anyone who can create the resource. The Default environment can be restricted the same way via organization settings.
 
+## Trusted image registries
+
+To govern where a self-hosted MCP server's code comes from, an environment can list the image registries it trusts. If a server's image comes from a registry that isn't on the list, the server is not deployed — it waits for an admin to review and approve it first. With no list set, any image is allowed.
+
+![MCP server held pending admin approval of its image](/docs/automated_screenshots/platform-environments_image-pending-approval.webp)
+
+### Use case
+
+Acme Inc wants engineers to install MCP servers only from its own image registry, which holds only verified images and the images engineers push when deploying their own servers. An admin adds that registry to the environment. Servers built from those images install and deploy on their own; anything from another registry is held until an admin approves it.
+
+![Trusted image registries editor in Settings > Environments](/docs/automated_screenshots/platform-environments_trusted-image-registries.webp)
+
+### What gets held
+
+A server is held only when it is self-hosted, uses its own custom image, is installed by a non-admin, and runs in an environment whose list its image doesn't match. Admins are never held — they own the list and do the approving. Remote servers, built-in servers, [Apps](/docs/platform-apps), the platform's default image, and an image already on the list all deploy normally. The check runs every time the image would start: install, reinstall, image refresh, and re-authenticate.
+
 ## Tool and knowledge isolation
 
 An agent, MCP gateway, or LLM proxy assigned to **Production** can only see and use:

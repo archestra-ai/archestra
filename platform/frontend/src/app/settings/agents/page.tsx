@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
+import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -43,13 +44,23 @@ type GlobalToolPolicy = NonNullable<
   >["globalToolPolicy"]
 >;
 
+type DiscoveredToolPolicy = NonNullable<
+  NonNullable<
+    archestraApiTypes.UpdateSecuritySettingsData["body"]
+  >["discoveredToolPolicy"]
+>;
+
 type FileUploadsEnabled = "enabled" | "disabled";
 
 export default function AgentSettingsPage() {
   const { getToolName } = useArchestraMcpIdentity();
   const appName = useAppName();
   const { data: organization } = useOrganization();
-  const { data: apiKeys } = useAvailableLlmProviderApiKeys();
+  const {
+    data: apiKeys,
+    isLoadingError: isApiKeysLoadError,
+    refetch: refetchApiKeys,
+  } = useAvailableLlmProviderApiKeys({ toastOnError: false });
   const { data: orgAgents } = useOrgScopedAgents();
 
   const [selectedApiKeyId, setSelectedApiKeyId] = useState<string>("");
@@ -57,6 +68,8 @@ export default function AgentSettingsPage() {
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
   const [toolPolicy, setToolPolicy] = useState<GlobalToolPolicy>("permissive");
+  const [discoveredToolPolicy, setDiscoveredToolPolicy] =
+    useState<DiscoveredToolPolicy>("relaxed");
   const [fileUploads, setFileUploads] = useState<FileUploadsEnabled>("enabled");
   const initializedRef = useRef(false);
   const savedStateRef = useRef<AgentSettingsState>({
@@ -66,12 +79,20 @@ export default function AgentSettingsPage() {
   });
   const savedSecurityStateRef = useRef({
     toolPolicy: "permissive" as GlobalToolPolicy,
+    discoveredToolPolicy: "relaxed" as DiscoveredToolPolicy,
     fileUploads: "enabled" as FileUploadsEnabled,
   });
 
-  const { data: allModels, isPending: modelsLoading } = useLlmModels({
+  const {
+    data: allModels,
+    isPending: modelsLoading,
+    isLoadingError: isModelsLoadError,
+    refetch: refetchModels,
+  } = useLlmModels({
     apiKeyId: selectedApiKeyId || undefined,
   });
+
+  const isLoadError = isApiKeysLoadError || isModelsLoadError;
 
   const updateAgentMutation = useUpdateAgentSettings(
     "Agent settings updated",
@@ -91,12 +112,14 @@ export default function AgentSettingsPage() {
     setDefaultModel(state.defaultModel);
     setDefaultAgentId(state.defaultAgentId);
     setToolPolicy(organization.globalToolPolicy ?? "permissive");
+    setDiscoveredToolPolicy(organization.discoveredToolPolicy ?? "relaxed");
     setFileUploads(
       (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled",
     );
     savedStateRef.current = state;
     savedSecurityStateRef.current = {
       toolPolicy: organization.globalToolPolicy ?? "permissive",
+      discoveredToolPolicy: organization.discoveredToolPolicy ?? "relaxed",
       fileUploads:
         (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled",
     };
@@ -114,6 +137,8 @@ export default function AgentSettingsPage() {
   const changes = detectChanges(localState, savedStateRef.current);
   const securityHasChanges =
     toolPolicy !== savedSecurityStateRef.current.toolPolicy ||
+    discoveredToolPolicy !==
+      savedSecurityStateRef.current.discoveredToolPolicy ||
     fileUploads !== savedSecurityStateRef.current.fileUploads;
 
   const handleSave = async () => {
@@ -128,10 +153,12 @@ export default function AgentSettingsPage() {
     if (securityHasChanges) {
       await updateSecurityMutation.mutateAsync({
         globalToolPolicy: toolPolicy,
+        discoveredToolPolicy,
         allowChatFileUploads: fileUploads === "enabled",
       });
       savedSecurityStateRef.current = {
         toolPolicy,
+        discoveredToolPolicy,
         fileUploads,
       };
     }
@@ -145,6 +172,7 @@ export default function AgentSettingsPage() {
     setDefaultModel(saved.defaultModel);
     setDefaultAgentId(saved.defaultAgentId);
     setToolPolicy(savedSecurityStateRef.current.toolPolicy);
+    setDiscoveredToolPolicy(savedSecurityStateRef.current.discoveredToolPolicy);
     setFileUploads(savedSecurityStateRef.current.fileUploads);
   };
 
@@ -176,6 +204,7 @@ export default function AgentSettingsPage() {
   }, []);
 
   const isRestrictive = toolPolicy === "restrictive";
+  const isDiscoveredRestrictive = discoveredToolPolicy === "apply_policies";
   const isSaving =
     updateAgentMutation.isPending || updateSecurityMutation.isPending;
 
@@ -189,60 +218,71 @@ export default function AgentSettingsPage() {
             permissions={{ agentSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
-            {({ hasPermission }) => (
-              <div className="flex flex-col gap-2 w-80">
-                <LlmProviderApiKeyDropdown
-                  availableKeys={availableKeys}
-                  selectedApiKeyId={selectedApiKeyId || null}
-                  disabled={isSaving || !hasPermission}
-                  open={apiKeySelectorOpen}
-                  onOpenChange={setApiKeySelectorOpen}
-                  onSelectKey={(value) => {
-                    setSelectedApiKeyId(value);
-                    setDefaultModel("");
-                    setApiKeySelectorOpen(false);
-                  }}
-                  triggerVariant="select"
-                  triggerClassName="w-80"
-                  popoverClassName="w-80"
-                  emptyTriggerLabel="Select API key..."
-                />
-                <LlmModelSearchableSelect
-                  value={defaultModel}
-                  onValueChange={setDefaultModel}
-                  options={modelItems}
-                  freeFilterable={canFilterFreeModels}
-                  placeholder={
-                    !selectedApiKeyId
-                      ? "Select API key first..."
-                      : modelsLoading
-                        ? "Loading models..."
-                        : "Select model..."
-                  }
+            {({ hasPermission }) =>
+              isLoadError ? (
+                <QueryLoadError
+                  title="Couldn't load your LLM providers"
                   className="w-80"
-                  disabled={
-                    isSaving ||
-                    !hasPermission ||
-                    modelsLoading ||
-                    !selectedApiKeyId
-                  }
+                  onRetry={() => {
+                    refetchApiKeys();
+                    refetchModels();
+                  }}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="self-end"
-                  onClick={handleResetDefaultModel}
-                  disabled={
-                    isSaving ||
-                    !hasPermission ||
-                    (!selectedApiKeyId && !defaultModel)
-                  }
-                >
-                  Reset
-                </Button>
-              </div>
-            )}
+              ) : (
+                <div className="flex flex-col gap-2 w-80">
+                  <LlmProviderApiKeyDropdown
+                    availableKeys={availableKeys}
+                    selectedApiKeyId={selectedApiKeyId || null}
+                    disabled={isSaving || !hasPermission}
+                    open={apiKeySelectorOpen}
+                    onOpenChange={setApiKeySelectorOpen}
+                    onSelectKey={(value) => {
+                      setSelectedApiKeyId(value);
+                      setDefaultModel("");
+                      setApiKeySelectorOpen(false);
+                    }}
+                    triggerVariant="select"
+                    triggerClassName="w-80"
+                    popoverClassName="w-80"
+                    emptyTriggerLabel="Select API key..."
+                  />
+                  <LlmModelSearchableSelect
+                    value={defaultModel}
+                    onValueChange={setDefaultModel}
+                    options={modelItems}
+                    freeFilterable={canFilterFreeModels}
+                    placeholder={
+                      !selectedApiKeyId
+                        ? "Select API key first..."
+                        : modelsLoading
+                          ? "Loading models..."
+                          : "Select model..."
+                    }
+                    className="w-80"
+                    disabled={
+                      isSaving ||
+                      !hasPermission ||
+                      modelsLoading ||
+                      !selectedApiKeyId
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="self-end"
+                    onClick={handleResetDefaultModel}
+                    disabled={
+                      isSaving ||
+                      !hasPermission ||
+                      (!selectedApiKeyId && !defaultModel)
+                    }
+                  >
+                    Reset
+                  </Button>
+                </div>
+              )
+            }
           </WithPermissions>
         }
       />
@@ -316,6 +356,53 @@ export default function AgentSettingsPage() {
             <span className="text-red-600 dark:text-red-400">
               Agents can perform any action. Tool calls are allowed and results
               are safe.
+            </span>
+          )
+        }
+      />
+      <SettingsBlock
+        title="Discovered Tool Policy"
+        description="Default security policy for tools auto-discovered via the LLM proxy."
+        control={
+          <WithPermissions
+            permissions={{ agentSettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <Select
+                value={discoveredToolPolicy}
+                onValueChange={(value: DiscoveredToolPolicy) =>
+                  setDiscoveredToolPolicy(value)
+                }
+                disabled={isSaving || !hasPermission}
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="relaxed">Relaxed</SelectItem>
+                  <SelectItem value="apply_policies">Apply policies</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          </WithPermissions>
+        }
+        notice={
+          isDiscoveredRestrictive ? (
+            <span className="text-green-600 dark:text-green-400">
+              Policies apply to tools discovered via the LLM proxy.{" "}
+              <Link
+                href="/mcp/tool-guardrails"
+                className="text-primary hover:underline"
+              >
+                Configure policies
+              </Link>
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              Tools discovered via the LLM proxy are allowed by default, so
+              clients like Claude Code keep working under a restrictive global
+              policy.
             </span>
           )
         }

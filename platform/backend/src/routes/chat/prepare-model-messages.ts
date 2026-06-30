@@ -5,6 +5,7 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import { convertToModelMessages, type ModelMessage, type UIMessage } from "ai";
+import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import type { ChatMessage } from "@/types";
 import {
   buildContextCompactionStreamData,
@@ -12,6 +13,7 @@ import {
   compactMessagesForChat,
 } from "./context-compaction";
 import { applyPromptCacheBreakpoints } from "./normalization/apply-prompt-cache";
+import { assertRequestWithinProviderPayloadLimit } from "./normalization/enforce-request-size-limit";
 import { materializeAttachments } from "./normalization/materialize-attachments";
 import { prepareMessagesForProvider } from "./normalization/prepare-for-provider";
 
@@ -48,7 +50,16 @@ export async function buildModelMessages(params: {
    * Defaults to true (genuine Anthropic / other providers unaffected).
    */
   anthropicNativeEndpoint?: boolean;
-}): Promise<ModelMessage[]> {
+}): Promise<{
+  modelMessages: ModelMessage[];
+  /**
+   * Provider-prepared, parts-bearing messages (post `prepareMessagesForProvider`,
+   * pre-conversion) — the closest representation of what is sent, with inlineable
+   * text documents already rewritten to text. Used by the caller to build the
+   * context-window breakdown; the converted `modelMessages` carry no `.parts`.
+   */
+  preparedMessages: ChatMessage[];
+}> {
   const {
     provider,
     selectedModel,
@@ -99,18 +110,33 @@ export async function buildModelMessages(params: {
     });
   }
 
-  return applyPromptCacheBreakpoints({
-    provider,
-    model: selectedModel,
-    anthropicNativeEndpoint,
-    messages: await buildModelMessagesForProvider({
+  // One availability lookup per LLM call (the system-prompt path pays the same),
+  // so attachment sandbox pointers are only emitted when the agent can run them.
+  const sandboxAvailable = await isSkillSandboxAvailableForAgent({
+    userId: compaction.userId,
+    organizationId: compaction.organizationId,
+    agentId: compaction.agentId ?? undefined,
+  });
+
+  const { modelMessages, preparedMessages } =
+    await buildModelMessagesForProvider({
       messages: compactionResult.messages,
       provider,
       conversationId,
       ingestibleMimeTypes: getModelReadableMimeTypes(inputModalities),
       anthropicNativeEndpoint,
+      sandboxAvailable,
+    });
+
+  return {
+    modelMessages: applyPromptCacheBreakpoints({
+      provider,
+      model: selectedModel,
+      anthropicNativeEndpoint,
+      messages: modelMessages,
     }),
-  });
+    preparedMessages,
+  };
 }
 
 export const __test = {
@@ -126,6 +152,7 @@ async function buildModelMessagesForProvider(params: {
   conversationId: string;
   ingestibleMimeTypes?: Set<string>;
   anthropicNativeEndpoint?: boolean;
+  sandboxAvailable: boolean;
 }) {
   const anthropicNativeEndpoint = params.anthropicNativeEndpoint ?? true;
   // `cache_control` is inert for non-Anthropic SDKs, so keep emitting it there;
@@ -138,13 +165,21 @@ async function buildModelMessagesForProvider(params: {
   // attachment id. Legacy inline data URLs pass through unchanged. Returns a
   // deep copy — the original messages keep their refs for any subsequent
   // persistence step.
-  const materialized = await materializeAttachments(
-    params.messages,
-    params.conversationId,
-    params.ingestibleMimeTypes,
+  const materialized = await materializeAttachments({
+    messages: params.messages,
+    conversationId: params.conversationId,
+    ingestibleMimeTypes: params.ingestibleMimeTypes,
     applyAnthropicCacheControl,
-    params.provider === "anthropic" && !anthropicNativeEndpoint,
-  );
+    rerouteBinaryDocsToSandbox:
+      params.provider === "anthropic" && !anthropicNativeEndpoint,
+    sandboxAvailable: params.sandboxAvailable,
+  });
+  // Reject oversized inline attachments here, before the provider call, so the
+  // user gets an actionable size error instead of a generic provider rejection.
+  assertRequestWithinProviderPayloadLimit({
+    messages: materialized,
+    provider: params.provider,
+  });
   const providerPreparedMessages = prepareMessagesForProvider({
     messages: materialized,
     provider: params.provider,
@@ -163,9 +198,12 @@ async function buildModelMessagesForProvider(params: {
   // placeholders survive while other providers never see an empty turn. An
   // empty assistant message has no tool-call block, so removing it cannot
   // orphan a tool result.
-  return modelMessages.filter(
-    (message) => !isEmptyAssistantModelMessage(message),
-  );
+  return {
+    modelMessages: modelMessages.filter(
+      (message) => !isEmptyAssistantModelMessage(message),
+    ),
+    preparedMessages: providerPreparedMessages,
+  };
 }
 
 function isEmptyAssistantModelMessage(message: {

@@ -13,6 +13,7 @@ import { sanitizeSvg } from "@/utils/sanitize-svg";
 import {
   NetworkPolicyInputSchema,
   NetworkPolicySchema,
+  TrustedImageRegistriesSchema,
   ValidationRegexSchema,
 } from "./environment";
 import { LimitCleanupIntervalSchema } from "./limit";
@@ -292,6 +293,14 @@ export const OrganizationCompressionScopeSchema = z.enum([
 ]);
 
 export const GlobalToolPolicySchema = z.enum(["permissive", "restrictive"]);
+/**
+ * Policy for tools auto-discovered via the LLM proxy (shared "llm-proxy"
+ * tools). A distinct setting resolved independently of GlobalToolPolicy so a
+ * restrictive global posture does not block tools Claude Code / Claude Desktop
+ * discover by default. "relaxed" (the default) allows them; "apply_policies"
+ * enforces per-tool invocation policies.
+ */
+export const DiscoveredToolPolicySchema = z.enum(["relaxed", "apply_policies"]);
 export const OAuthAccessTokenLifetimeSecondsSchema = z
   .number()
   .int()
@@ -303,6 +312,7 @@ const extendedFields = {
   customFont: OrganizationCustomFontSchema,
   compressionScope: OrganizationCompressionScopeSchema,
   globalToolPolicy: GlobalToolPolicySchema,
+  discoveredToolPolicy: DiscoveredToolPolicySchema,
   analyticsInstanceId: z.string().uuid(),
   analyticsInstanceStartedAt: z.date().nullable(),
   analyticsInstanceLastHeartbeatAt: z.date().nullable(),
@@ -331,6 +341,8 @@ const extendedFields = {
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
   connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
   defaultNetworkPolicy: NetworkPolicySchema.nullable(),
+  defaultEnvironmentTrustedImageRegistries:
+    TrustedImageRegistriesSchema.nullable(),
 };
 
 const InternalSelectOrganizationSchema = createSelectSchema(
@@ -379,6 +391,7 @@ export const UpdateAppearanceSettingsSchema = z.object({
 
 export const UpdateSecuritySettingsSchema = z.object({
   globalToolPolicy: GlobalToolPolicySchema.optional(),
+  discoveredToolPolicy: DiscoveredToolPolicySchema.optional(),
   allowChatFileUploads: z.boolean().optional(),
   /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */
   allowToolAutoAssignment: z.boolean().optional(),
@@ -466,6 +479,7 @@ export const UpdateDefaultEnvironmentSchema = z.object({
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: z.boolean().optional(),
   validationRegex: ValidationRegexSchema.nullable().optional(),
+  trustedImageRegistries: TrustedImageRegistriesSchema.nullable().optional(),
 });
 
 export type UpdateDefaultEnvironment = z.infer<
@@ -480,6 +494,19 @@ export type OrganizationCompressionScope = z.infer<
   typeof OrganizationCompressionScopeSchema
 >;
 export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
+export type DiscoveredToolPolicy = z.infer<typeof DiscoveredToolPolicySchema>;
+
+/**
+ * The discovered-tool policy equivalent of a global tool policy. Used as the
+ * fallback when a caller does not distinguish discovered tools, so single-policy
+ * behavior is preserved: "restrictive" → "apply_policies", else "relaxed".
+ */
+export function defaultDiscoveredToolPolicy(
+  globalToolPolicy: GlobalToolPolicy,
+): DiscoveredToolPolicy {
+  return globalToolPolicy === "restrictive" ? "apply_policies" : "relaxed";
+}
+
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type OrganizationAnalyticsState = Pick<
   z.infer<typeof InternalSelectOrganizationSchema>,

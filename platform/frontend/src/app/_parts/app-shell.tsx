@@ -2,6 +2,7 @@
 
 import type { Permissions } from "@archestra/shared/permission.types";
 import { usePathname } from "next/navigation";
+import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import {
@@ -16,6 +17,11 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  ConnectivityProvider,
+  useConnectivity,
+} from "@/lib/config/connectivity";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
 import { cn } from "@/lib/utils";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
@@ -87,59 +93,72 @@ export function AppShell({ children }: AppShellProps) {
     );
   }
 
-  // Wait for permission check before rendering sidebar to avoid flash.
-  // Don't render Version here — the full-width layout has a different center
-  // than the sidebar layout, causing the footer to visibly jump on load.
-  if (!permissionLoaded) {
-    return (
-      <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
-        <MaintenanceModeOverlay />
-        <div className="flex-1 min-w-0 flex flex-col">
-          <div className="flex-1 flex flex-col">{children}</div>
-        </div>
-        <Toaster />
-      </main>
-    );
-  }
-
-  // Normal mode: render full app shell with sidebar
+  // Authenticated shell. ConnectivityProvider wraps both the permission-loading
+  // skeleton and the full shell so /health polling and useConnectivity() are
+  // available on every page rendered here — including before the sidebar mounts
+  // (a page like /chat calls useConnectivity() unconditionally). The
+  // auth/preview/runtime branches above are intentionally outside it (no poll).
   return (
-    <NavigationStatusProvider>
-      <SidebarProvider defaultOpen={!shouldCollapse}>
-        <AppSidebar />
-        <NavAwareSidebarCircleToggle />
-        <MaintenanceModeOverlay />
-        <main className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto">
-          {notification && (
-            <SiteNotificationBar
-              content={notification.content}
-              notificationId={notification.id}
-            />
-          )}
-          <ImpersonationBanner />
-          <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
-            <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
-            <div
-              id="mobile-header-actions"
-              className="flex items-center gap-2"
-            />
-          </header>
-          <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-            <div
-              className={cn(
-                "flex-1 flex flex-col",
-                isViewportLocked && "min-h-0",
-              )}
-            >
-              {children}
-            </div>
-            <Version />
+    <ConnectivityProvider>
+      {!permissionLoaded ? (
+        // Wait for the permission check before rendering the sidebar to avoid a
+        // flash. Don't render Version here — the full-width layout centers
+        // differently than the sidebar layout, so the footer would visibly jump.
+        <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
+          <MaintenanceModeOverlay />
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex-1 flex flex-col">{children}</div>
           </div>
+          <Toaster />
         </main>
-        <Toaster />
-        <ConversationSearchProvider />
-      </SidebarProvider>
-    </NavigationStatusProvider>
+      ) : (
+        <NavigationStatusProvider>
+          <SidebarProvider defaultOpen={!shouldCollapse}>
+            <AppSidebar />
+            <NavAwareSidebarCircleToggle />
+            <MaintenanceModeOverlay />
+            <main className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto">
+              <ConnectivityBar />
+              {notification && (
+                <SiteNotificationBar
+                  content={notification.content}
+                  notificationId={notification.id}
+                />
+              )}
+              <ImpersonationBanner />
+              <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
+                <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
+                <div
+                  id="mobile-header-actions"
+                  className="flex items-center gap-2"
+                />
+              </header>
+              <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+                <div
+                  className={cn(
+                    "flex-1 flex flex-col",
+                    isViewportLocked && "min-h-0",
+                  )}
+                >
+                  {children}
+                </div>
+                <Version />
+              </div>
+            </main>
+            <Toaster />
+            <ConversationSearchProvider />
+          </SidebarProvider>
+        </NavigationStatusProvider>
+      )}
+    </ConnectivityProvider>
+  );
+}
+
+function ConnectivityBar() {
+  const { state, retry } = useConnectivity();
+  const appName = useAppName();
+  return (
+    <ConnectivityStatusBar state={state} onRetry={retry} appName={appName} />
   );
 }
 

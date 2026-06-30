@@ -27,6 +27,8 @@ import {
   ProviderError,
   sanitizeChatErrorForFrontend,
 } from "./errors";
+import { ContextWindowExceededError } from "./normalization/enforce-context-window-limit";
+import { RequestTooLargeError } from "./normalization/enforce-request-size-limit";
 
 beforeEach(() => {
   mockSentryCaptureException.mockClear();
@@ -45,6 +47,43 @@ describe("mapProviderError - per-user provider auth required", () => {
       provider: "github-copilot",
       providerLabel: "GitHub Copilot",
     });
+  });
+});
+
+describe("mapProviderError - request too large", () => {
+  it("maps RequestTooLargeError to a non-retryable RequestTooLarge card naming the decoded file size", () => {
+    const result = mapProviderError(
+      new RequestTooLargeError({
+        provider: "bedrock",
+        fileBytes: 49 * 1024 * 1024,
+        limitBytes: 20 * 1024 * 1024,
+        fileCount: 1,
+      }),
+      "bedrock",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.RequestTooLarge);
+    expect(result.isRetryable).toBe(false);
+    // The user-facing size is the real file size, not the inflated wire size.
+    expect(result.message).toMatch(/\bThis file is 49 MB\b/);
+    expect(result.message).toContain("AWS Bedrock");
+    expect(result.message).toContain("20 MB");
+  });
+});
+
+describe("mapProviderError - context window exceeded", () => {
+  it("maps ContextWindowExceededError to a non-retryable ContextTooLong card", () => {
+    const result = mapProviderError(
+      new ContextWindowExceededError({
+        model: "claude-test",
+        estimatedTokens: 566_084,
+        contextLength: 262_144,
+      }),
+      "anthropic",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+    expect(result.isRetryable).toBe(false);
   });
 });
 

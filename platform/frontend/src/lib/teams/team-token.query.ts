@@ -1,6 +1,6 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const { getTokens, getTokenValue, rotateToken } = archestraApiSdk;
 
@@ -51,9 +51,7 @@ export function useTokens(params?: { profileId?: string; enabled?: boolean }) {
     queryKey: ["tokens", { profileId }],
     queryFn: async () => {
       const response = await getTokens({ query: { profileId } });
-      if (response.error) {
-        handleApiError(response.error);
-      }
+      throwOnApiError(response.error);
       const data = response.data as TokensListResponse | undefined;
       return {
         tokens: data?.tokens ?? [],
@@ -76,6 +74,7 @@ export function useTokenValue(tokenId: string | undefined) {
     queryFn: async () => {
       if (!tokenId) return null;
       const response = await getTokenValue({ path: { tokenId } });
+      throwOnApiError(response.error, { toastOnError: false });
       return response.data as { value: string };
     },
     enabled: false, // Only fetch on demand

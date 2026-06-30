@@ -66,6 +66,64 @@ describe("isSkillSandboxAvailableForAgent", () => {
     ).toBe(false);
   });
 
+  test("true via accessAllTools dynamic access even without the sandbox tools assigned", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const role = await makeCustomRole(org.id, {
+      permission: { sandbox: ["execute"] },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+    // No sandbox tools assigned, but accessAllTools lets a real user run them
+    // via dynamic dispatch, so the sandbox is genuinely usable.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Access-all Agent",
+      accessAllTools: true,
+    });
+
+    expect(
+      await isSkillSandboxAvailableForAgent({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+      }),
+    ).toBe(true);
+  });
+
+  test("false for accessAllTools without sandbox:execute", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const role = await makeCustomRole(org.id, {
+      permission: { skill: ["read"] },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Access-all Agent",
+      accessAllTools: true,
+    });
+
+    expect(
+      await isSkillSandboxAvailableForAgent({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+      }),
+    ).toBe(false);
+  });
+
   test("false when the feature is disabled, even with tools assigned", async ({
     makeOrganization,
     makeUser,

@@ -12,6 +12,7 @@ import {
   PLAYWRIGHT_MCP_ICON,
   PLAYWRIGHT_MCP_SERVER_NAME,
   POLICY_CONFIG_SYSTEM_PROMPT,
+  PREVIOUS_POLICY_CONFIG_SYSTEM_PROMPT,
   PROVIDERS_REQUIRING_BASE_URL,
   type PredefinedRoleName,
   providerRequiresPerUserCredential,
@@ -919,7 +920,7 @@ function shouldSyncBuiltInAgentSystemPrompt(params: {
 
   return (
     params.builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG &&
-    params.systemPrompt === LEGACY_POLICY_CONFIG_SYSTEM_PROMPT
+    SUPERSEDED_POLICY_CONFIG_SYSTEM_PROMPTS.includes(params.systemPrompt)
   );
 }
 
@@ -951,3 +952,12 @@ Examples:
 - File writes: invocation="block_always", result="mark_as_trusted"
 - External APIs (raw data): invocation="block_when_context_is_untrusted", result="mark_as_untrusted"
 - Code execution: invocation="block_always", result="mark_as_untrusted"`;
+
+// Shipped policy-config prompts we have since replaced. An org still on any of
+// these is pristine (never customized) and is auto-upgraded to the current
+// POLICY_CONFIG_SYSTEM_PROMPT on startup; any other stored prompt is treated as
+// admin-edited and left untouched.
+const SUPERSEDED_POLICY_CONFIG_SYSTEM_PROMPTS: readonly string[] = [
+  LEGACY_POLICY_CONFIG_SYSTEM_PROMPT,
+  PREVIOUS_POLICY_CONFIG_SYSTEM_PROMPT,
+];

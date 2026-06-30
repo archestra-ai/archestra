@@ -30,6 +30,7 @@ import {
   providerApiKeyMapToArray,
 } from "@/components/provider-key-mappings-field";
 import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
+import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -117,7 +118,12 @@ export default function VirtualKeysPage() {
   const providerApiKeyIdFilter = searchParams.get("providerApiKeyId") || "all";
   const keyTypeFilter = searchParams.get("keyType") || "all";
 
-  const { data: response, isPending } = useAllVirtualApiKeys({
+  const {
+    data: response,
+    isPending,
+    isLoadingError: isVirtualKeysLoadError,
+    refetch: refetchVirtualKeys,
+  } = useAllVirtualApiKeys({
     limit: pageSize,
     offset,
     search: search || undefined,
@@ -125,6 +131,7 @@ export default function VirtualKeysPage() {
       providerApiKeyIdFilter === "all" ? undefined : providerApiKeyIdFilter,
     keyType:
       keyTypeFilter === "all" ? undefined : (keyTypeFilter as VirtualKeyType),
+    toastOnError: false,
   });
   const virtualKeys = response?.data ?? [];
   const paginationMeta = response?.pagination;
@@ -348,37 +355,46 @@ export default function VirtualKeysPage() {
         </Select>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={virtualKeys}
-        getRowId={(row) => row.id}
-        hideSelectedCount
-        isLoading={isPending}
-        emptyMessage={
-          parentableKeys.length === 0
-            ? "Add an API key first to create virtual keys"
-            : "No virtual keys yet"
-        }
-        manualPagination
-        pagination={{
-          pageIndex,
-          pageSize,
-          total: paginationMeta?.total ?? 0,
-        }}
-        onPaginationChange={setPagination}
-        hasActiveFilters={Boolean(
-          search || providerApiKeyIdFilter !== "all" || keyTypeFilter !== "all",
-        )}
-        filteredEmptyMessage="No virtual keys match your filters. Try adjusting your search."
-        onClearFilters={() =>
-          updateQueryParams({
-            search: null,
-            providerApiKeyId: null,
-            keyType: null,
-            page: "1",
-          })
-        }
-      />
+      {isVirtualKeysLoadError ? (
+        <QueryLoadError
+          title="Couldn't load your virtual keys"
+          onRetry={() => refetchVirtualKeys()}
+        />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={virtualKeys}
+          getRowId={(row) => row.id}
+          hideSelectedCount
+          isLoading={isPending}
+          emptyMessage={
+            parentableKeys.length === 0
+              ? "Add an API key first to create virtual keys"
+              : "No virtual keys yet"
+          }
+          manualPagination
+          pagination={{
+            pageIndex,
+            pageSize,
+            total: paginationMeta?.total ?? 0,
+          }}
+          onPaginationChange={setPagination}
+          hasActiveFilters={Boolean(
+            search ||
+              providerApiKeyIdFilter !== "all" ||
+              keyTypeFilter !== "all",
+          )}
+          filteredEmptyMessage="No virtual keys match your filters. Try adjusting your search."
+          onClearFilters={() =>
+            updateQueryParams({
+              search: null,
+              providerApiKeyId: null,
+              keyType: null,
+              page: "1",
+            })
+          }
+        />
+      )}
 
       <CreateVirtualKeyDialog
         open={isCreateDialogOpen}

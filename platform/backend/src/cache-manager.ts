@@ -52,6 +52,10 @@ export const CacheKey = {
   TeamsThreadActive: "teams-thread-active",
   /** Slack channel threads where the bot was @mentioned (sticky auto-reply) */
   SlackThreadActive: "slack-thread-active",
+  /** MS Teams channel threads that already got the one-time "you can mute me" hint */
+  TeamsThreadMuteHint: "teams-thread-mute-hint",
+  /** Slack channel threads that already got the one-time "you can mute me" hint */
+  SlackThreadMuteHint: "slack-thread-mute-hint",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

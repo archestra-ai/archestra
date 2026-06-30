@@ -7,7 +7,11 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { AgentTeamModel, OrganizationModel } from "@/models";
 import { describe, expect, test } from "@/test";
-import { evaluatePolicies, getGlobalToolPolicy } from "./tool-invocation";
+import {
+  evaluatePolicies,
+  getGlobalToolPolicy,
+  getToolPolicies,
+} from "./tool-invocation";
 
 // ---------------------------------------------------------------------------
 // getGlobalToolPolicy
@@ -74,6 +78,33 @@ describe("getGlobalToolPolicy", () => {
     const policy = await getGlobalToolPolicy(crypto.randomUUID());
     // Agent has no teams → falls back to first org → default is permissive
     expect(["permissive", "restrictive"]).toContain(policy);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getToolPolicies
+// ---------------------------------------------------------------------------
+describe("getToolPolicies", () => {
+  test("resolves both policies independently from the agent's org", async ({
+    makeAgent,
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    const org = await makeOrganization({
+      globalToolPolicy: "restrictive",
+      discoveredToolPolicy: "relaxed",
+    });
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    const policies = await getToolPolicies(agent.id);
+    expect(policies).toEqual({
+      globalToolPolicy: "restrictive",
+      discoveredToolPolicy: "relaxed",
+    });
   });
 });
 

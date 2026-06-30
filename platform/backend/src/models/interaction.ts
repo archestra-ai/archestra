@@ -35,8 +35,12 @@ import type {
   SortingQuery,
   UserInfo,
 } from "@/types";
-import { InteractionAuthMethodSchema } from "@/types";
+import {
+  InteractionAuthMethodSchema,
+  normalizeInteractionResponse,
+} from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
+import { isUuid } from "@/utils/uuid";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import ConversationChatErrorModel from "./conversation-chat-error";
@@ -137,15 +141,6 @@ function computeRequestType(
   }
 
   return "main";
-}
-
-/**
- * Check if a string is a valid UUID format
- */
-function isUuid(str: string): boolean {
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(str);
 }
 
 /**
@@ -278,6 +273,25 @@ function stripNullBytes<T>(value: T): T {
     return result as T;
   }
   return value;
+}
+
+/**
+ * Join predicate linking an interaction's `session_id` (VARCHAR) to a
+ * conversation's `id` (UUID) — used for Archestra Chat sessions whose
+ * session_id IS the conversation id.
+ *
+ * The only reason a cast is needed at all is type compatibility: Postgres has no
+ * `varchar = uuid` operator. We cast the TRUSTED side (`conversations.id::text`,
+ * which can never fail) rather than the untrusted `session_id::uuid` — a non-uuid
+ * session_id (e.g. some a2a / external-agent ids) would otherwise throw
+ * "invalid input syntax for type uuid" and 500 the whole query (see utils/uuid.ts).
+ * Comparing as text, a non-conversation session_id simply matches no row, and the
+ * equality on the bare `session_id` column can use interactions_session_*_idx.
+ * Conversation ids are generated as canonical lowercase uuids, so they match the
+ * canonical lowercase form `id::text` produces.
+ */
+function sessionIdMatchesConversation(): SQL {
+  return sql`${schema.interactionsTable.sessionId} = ${schema.conversationsTable.id}::text`;
 }
 
 class InteractionModel {
@@ -460,6 +474,12 @@ class InteractionModel {
         request: full?.request ?? interaction.request,
         processedRequest:
           full?.processedRequest ?? interaction.processedRequest,
+        // Coerce a stored response that no longer matches its provider schema
+        // into a serializable sentinel so one bad row can't 500 the whole list.
+        response: normalizeInteractionResponse(
+          interaction.type,
+          interaction.response,
+        ),
         // computeRequestType must run on the reconstructed (full) request — it
         // inspects messages.length and the first/last message content.
         requestType: computeRequestType(
@@ -568,6 +588,12 @@ class InteractionModel {
       ...interaction,
       request: reconstructed.request,
       processedRequest: reconstructed.processedRequest,
+      // Coerce a stored response that no longer matches its provider schema
+      // into a serializable sentinel so a bad row can't 500 the detail route.
+      response: normalizeInteractionResponse(
+        interaction.type,
+        interaction.response,
+      ),
       chatErrors: await findChatErrorsForSessionId(interaction.sessionId),
     } as Interaction;
   }
@@ -1007,19 +1033,60 @@ class InteractionModel {
     // Searches across: request messages content, response content (for titles), and conversation titles
     //
     // IMPORTANT: Claude interaction are delta encoded, i.t. each row only stores a part of the context.
+    //
+    // The predicate is expressed as `interactions.id IN (<UNION subquery>)` rather
+    // than a single cross-table OR. A cross-table OR (mixing interactions columns
+    // with the outer-joined conversations.title) cannot use the per-table trigram
+    // GIN indexes and degrades into a full sequential scan of `interactions`,
+    // casting every (multi-MB) request/response JSONB to text — which made this
+    // query hang. Each UNION leg below references a single table so PostgreSQL can
+    // BitmapOr the relevant trigram indexes.
+    //
+    // DELIBERATE: the legs intentionally carry ONLY the text-match predicate — the
+    // other filters (access control, profile, date range) are applied solely on the
+    // OUTER query. Do NOT push them into the legs. Doing so adds btree-eligible
+    // predicates (created_at, profile_id) alongside the trigram ILIKE, which gives
+    // the planner an alternative driving path. For the common case — a selective
+    // search token with a broad/absent filter (e.g. a request id across all time,
+    // exactly the scenario this fix targets) — pg_trgm's pessimistic ILIKE
+    // selectivity estimate then lures the planner off the trigram GIN index onto a
+    // btree scan of the whole filter window with the JSONB-cast+ILIKE re-applied as
+    // a per-row recheck. Measured on real Postgres that flip was ~8x slower (and on
+    // a large table reopens the original hang). Keeping the legs trigram-only forces
+    // the GIN index. Pushing filters down only helps the rarer narrow-filter +
+    // broad-term case; it is not worth regressing the selective-token path.
     if (filters?.search) {
       const searchPattern = `%${escapeLikePattern(filters.search)}%`;
-      const searchCondition = or(
-        // Search in request messages content (JSONB)
-        sql`${schema.interactionsTable.request}::text ILIKE ${searchPattern}`,
-        // Search in response content (for Claude Code titles)
-        sql`${schema.interactionsTable.response}::text ILIKE ${searchPattern}`,
-        // Search in conversation title (for Archestra Chat sessions)
-        sql`${schema.conversationsTable.title} ILIKE ${searchPattern}`,
+
+      // Leg A: interactions whose own request/response content matches.
+      // Both branches are on `interactions`, so the
+      // interactions_request_trgm_idx / interactions_response_trgm_idx GIN
+      // indexes can be combined via BitmapOr.
+      const byContent = db
+        .select({ id: schema.interactionsTable.id })
+        .from(schema.interactionsTable)
+        .where(
+          or(
+            sql`${schema.interactionsTable.request}::text ILIKE ${searchPattern}`,
+            sql`${schema.interactionsTable.response}::text ILIKE ${searchPattern}`,
+          ),
+        );
+
+      // Leg B: interactions whose session maps to a conversation whose title
+      // matches (for Archestra Chat sessions). Uses conversations_title_trgm_idx
+      // via the same UUID-cast join used for the aggregate query's LEFT JOIN.
+      const byConversationTitle = db
+        .select({ id: schema.interactionsTable.id })
+        .from(schema.interactionsTable)
+        .innerJoin(schema.conversationsTable, sessionIdMatchesConversation())
+        .where(sql`${schema.conversationsTable.title} ILIKE ${searchPattern}`);
+
+      conditions.push(
+        inArray(
+          schema.interactionsTable.id,
+          byContent.union(byConversationTitle),
+        ),
       );
-      if (searchCondition) {
-        conditions.push(searchCondition);
-      }
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -1083,13 +1150,7 @@ class InteractionModel {
           schema.usersTable,
           eq(schema.interactionsTable.userId, schema.usersTable.id),
         )
-        .leftJoin(
-          schema.conversationsTable,
-          // Only join when session_id is a valid UUID format (conversation IDs are UUIDs)
-          // Non-UUID session IDs (like "a2a-...") won't match any conversation
-          // Use CASE to safely handle the cast - only cast when length is 36 (UUID format)
-          sql`CASE WHEN LENGTH(${schema.interactionsTable.sessionId}) = 36 THEN ${schema.interactionsTable.sessionId}::uuid END = ${schema.conversationsTable.id}`,
-        )
+        .leftJoin(schema.conversationsTable, sessionIdMatchesConversation())
         .where(whereClause)
         .groupBy(
           sessionGroupExpr,
@@ -1102,11 +1163,7 @@ class InteractionModel {
       db
         .select({ total: sql<number>`COUNT(DISTINCT ${sessionGroupExpr})` })
         .from(schema.interactionsTable)
-        .leftJoin(
-          schema.conversationsTable,
-          // Only join when session_id is a valid UUID format (conversation IDs are UUIDs)
-          sql`CASE WHEN LENGTH(${schema.interactionsTable.sessionId}) = 36 THEN ${schema.interactionsTable.sessionId}::uuid END = ${schema.conversationsTable.id}`,
-        )
+        .leftJoin(schema.conversationsTable, sessionIdMatchesConversation())
         .where(whereClause),
     ]);
 

@@ -64,6 +64,8 @@ export const RouteId = {
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",
   GetInternalMcpCatalogLabelKeys: "getInternalMcpCatalogLabelKeys",
   GetInternalMcpCatalogLabelValues: "getInternalMcpCatalogLabelValues",
+  ListPendingImageApprovalCatalogItems: "listPendingImageApprovalCatalogItems",
+  ApproveCatalogItemImage: "approveCatalogItemImage",
   GetDeploymentYamlPreview: "getDeploymentYamlPreview",
   ValidateDeploymentYaml: "validateDeploymentYaml",
   ResetDeploymentYaml: "resetDeploymentYaml",
@@ -302,6 +304,7 @@ export const RouteId = {
   ForkChatConversation: "forkChatConversation",
   UpdateChatConversation: "updateChatConversation",
   SetConversationHooksDebug: "setConversationHooksDebug",
+  MarkChatConversationRead: "markChatConversationRead",
   DeleteChatConversation: "deleteChatConversation",
   ClearChatConversationErrors: "clearChatConversationErrors",
   CompactChatConversation: "compactChatConversation",
@@ -569,11 +572,13 @@ export const RouteId = {
   DeleteProject: "deleteProject",
   GetProjectConversations: "getProjectConversations",
   GetProjectFiles: "getProjectFiles",
+  UploadProjectFiles: "uploadProjectFiles",
   GetProjectInstructions: "getProjectInstructions",
   SetProjectInstructions: "setProjectInstructions",
   PinProject: "pinProject",
   UnpinProject: "unpinProject",
   DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
+  UpdateSkillSandboxArtifactContent: "updateSkillSandboxArtifactContent",
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
@@ -609,6 +614,7 @@ export const RouteId = {
   AssignToolToApp: "assignToolToApp",
   UnassignToolFromApp: "unassignToolFromApp",
   GetAppTemplates: "getAppTemplates",
+  OpenAppInChat: "openAppInChat",
   PostAppRenderDiagnostics: "postAppRenderDiagnostics",
   PostAppRenderScreenshot: "postAppRenderScreenshot",
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)

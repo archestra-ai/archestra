@@ -94,6 +94,11 @@ export interface ChatReplyOptions {
   replyInThread?: boolean;
   /** Optional: Footer text to append (e.g. agent name) */
   footer?: string;
+  /**
+   * Optional: an even-more-subtle hint rendered on its own line below the
+   * footer (e.g. the one-time "you can mute me" tip on a thread's first reply).
+   */
+  hint?: string;
   /** Provider-specific conversation reference for reply routing */
   conversationReference?: unknown;
 }
@@ -103,7 +108,16 @@ export interface AddApprovalRequestFormOptions {
   threadId?: string;
   approvalId: string;
   taskId: string;
+  /**
+   * The tool the user is approving. For a `run_tool` dispatch this is the
+   * underlying target tool, not the `run_tool` wrapper.
+   */
   toolName: string;
+  /**
+   * The arguments the tool will be invoked with, rendered as a code block in
+   * the approval prompt. Undefined/empty when there is nothing to show.
+   */
+  toolArgs?: Record<string, unknown>;
   originalMessage: IncomingChatMessage;
 }
 

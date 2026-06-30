@@ -8,7 +8,7 @@ import type { AppScope } from "@/types/app";
  * Dedupe the requested team ids and assert every one belongs to the caller's
  * org, throwing `ApiError(400)` otherwise. Shared by the REST app routes and the
  * `publish_app` MCP tool so neither can assign an app to a foreign-org team or
- * insert app_team rows for ids that do not exist.
+ * a team id that does not exist.
  */
 export async function resolveOrgTeamIds(
   teamIds: string[] | undefined,

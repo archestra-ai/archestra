@@ -42,6 +42,7 @@ import {
   McpElicitationDialog,
 } from "@/components/chat/mcp-elicitation-dialog";
 import {
+  useConversationUpdatedCacheSync,
   useGenerateConversationTitle,
   useResolveChatMcpElicitation,
 } from "@/lib/chat/chat.query";
@@ -206,6 +207,10 @@ const TITLE_ANIMATION_DURATION = 3000;
 const ChatContext = createContext<ChatContextValue | null>(null);
 
 export function ChatProvider({ children }: { children: ReactNode }) {
+  // Refresh sidebar unread indicators when the server pushes a message-landed
+  // event (covers turns that finish after the client navigated away).
+  useConversationUpdatedCacheSync();
+
   const sessionsRef = useRef(new Map<string, ChatSession>());
   const initialMessagesRef = useRef(new Map<string, UIMessage[]>());
   const cleanupTimersRef = useRef(new Map<string, NodeJS.Timeout>());

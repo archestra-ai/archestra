@@ -1,0 +1,9 @@
+{
+  "_source": "Ported from tessl-single-anthropics_financial-services_ib-check-deck_0 (skill anthropics_financial-services_ib-check-deck); upstream https://github.com/anthropics/financial-services",
+  "defects": [
+    { "metric": "revenue", "issue_type": "value_conflict" },
+    { "metric": "employees", "issue_type": "value_conflict" },
+    { "metric": "implied_ev", "issue_type": "calc_error" },
+    { "metric": "cagr", "issue_type": "calc_error" }
+  ]
+}

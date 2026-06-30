@@ -28,12 +28,6 @@ vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => hasPermissionsMock(),
 }));
 
-// The claude-code verify step pulls in app-name/session queries that need a
-// QueryClient; these tests are about the command panel, not the verify UI.
-vi.mock("./test-setup-link", () => ({
-  TestSetupStep: () => <div data-testid="test-setup-step" />,
-}));
-
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => true,
 }));
@@ -164,6 +158,27 @@ describe("ConnectCommandPanel", () => {
     expect(screen.getByText(/Run on/)).toBeInTheDocument();
     expect(screen.getByText("macOS / Linux")).toBeInTheDocument();
     expect(screen.getByTestId("connect-change-platform")).toBeInTheDocument();
+  });
+
+  it("shows a Finish the OAuth flow step for Claude Code when a gateway is connected", async () => {
+    renderPanel();
+    await screen.findByText(COMMAND);
+
+    expect(
+      screen.getByRole("heading", { name: "Finish the OAuth flow" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Claude Code opens your browser/),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the OAuth step when only a proxy (no gateway) is connected", async () => {
+    renderPanel({ mcpGateways: [], mcpGatewayId: null });
+    await screen.findByText(COMMAND);
+
+    expect(
+      screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
+    ).not.toBeInTheDocument();
   });
 
   it("regenerates without skills after opting out in Options", async () => {

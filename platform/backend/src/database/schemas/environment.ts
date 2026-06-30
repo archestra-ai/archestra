@@ -9,7 +9,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { NetworkPolicy } from "@/types";
+import type { NetworkPolicy, TrustedImageRegistries } from "@/types";
 import organizationsTable from "./organization";
 
 /**
@@ -42,6 +42,17 @@ const environmentsTable = pgTable(
      * substring (e.g. "prod" in staging) with a negative lookahead.
      */
     validationRegex: text("validation_regex"),
+    /**
+     * ALLOWLIST of trusted container image registries (normalized
+     * `host/repository` prefixes) for PERSONAL local catalog items assigned to
+     * this environment. A personal local catalog item's custom image must match
+     * an entry, otherwise its install is held for admin approval. NULL/empty
+     * disables the check. Mirrors `validation_regex` for the image-registry
+     * policy.
+     */
+    trustedImageRegistries: jsonb(
+      "trusted_image_registries",
+    ).$type<TrustedImageRegistries>(),
     /**
      * When true, assigning a catalog item to this environment requires the
      * `environment:admin` permission. Unrestricted environments (and the

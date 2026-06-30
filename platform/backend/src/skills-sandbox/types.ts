@@ -80,6 +80,8 @@ export interface ExportArtifactParams {
   mimeType?: string;
   /** Owning project for the exported file; null = the author's own file. */
   projectId?: string | null;
+  /** Replace an existing same-named persistent file in this scope in place, keeping its id. */
+  overwrite?: boolean;
   /**
    * The agent's environment isolation target. Artifact extraction replays the
    * recorded commands, so it must target the same engine the sandbox ran on.
@@ -96,6 +98,8 @@ export interface ArtifactRef {
   sizeBytes: number;
   /** See {@link CommandResult.stagingNotices}. */
   stagingNotices: string[];
+  /** True when an existing same-named persistent file was replaced in place. */
+  overwritten: boolean;
 }
 
 export interface UploadFileParams {

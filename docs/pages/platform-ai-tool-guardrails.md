@@ -91,7 +91,7 @@ Tool call policies control whether a tool may run in the current context.
 Available actions:
 
 - **Allow always**: The tool can run even when the current context is marked sensitive or untrusted.
-- **Allow in safe context**: The tool can run only while the current context is still safe.
+- **Block in sensitive context**: The tool is blocked when the current context is sensitive. The context becomes sensitive once a tool with a "Results are: Sensitive" policy has been called previously.
 - **Require approval**: The tool requires explicit user approval in chat. In autonomous execution contexts, the call is blocked.
 - **Block always**: The tool is never allowed to run automatically.
 

@@ -19,7 +19,7 @@ import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway.utils";
 import type { A2AContext } from "@/types";
 import type { InteractionSource } from "../../../../shared";
-import { executeA2AMessage } from "../a2a-executor";
+import { type A2AAttachment, executeA2AMessage } from "../a2a-executor";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import {
   A2AContextManager,
@@ -203,23 +203,40 @@ export class A2AManager {
       const requestMessages: ModelMessage[] =
         await convertToModelMessages(contextUiMessages);
 
+      // The executor owns building the current user turn: it applies
+      // model-aware, provider-specific attachment handling, so we pass the
+      // turn's text + attachments rather than baking it into `requestMessages`
+      // (which stays prior-context only). Attachments are reconstructed from the
+      // protocol file parts, preserving filenames.
+      const currentTurnAttachments: A2AAttachment[] = (
+        request.message.parts || []
+      )
+        .filter((p) => p.raw !== undefined && p.mediaType !== undefined)
+        .map((p) => ({
+          contentType: p.mediaType as string,
+          contentBase64: Buffer.from(p.raw as Uint8Array).toString("base64"),
+          name: p.filename,
+        }));
+      const currentTurnText = messageParts
+        .filter((part): part is TextPart => part.type === "text")
+        .map((part) => part.text)
+        .join("\n");
+
       if (messageParts.length > 0) {
-        // We need to separately push user message to both contextUiMessages and requestMessages.
-        // Full contextUiMessages are passed to executeA2AMessage for proper processing of final uiMessage
-        // requestMessages are passed to executeA2AMessage for the agent execution.
+        // Mirror the current turn's text into contextUiMessages so the
+        // generated final UIMessage continues from it. Files are not supported
+        // in UI history, so only text parts are carried here.
         const uiMessageParts: TextUIPart[] = [];
         messageParts.forEach((part) => {
           if (part.type === "text") {
             uiMessageParts.push({ type: "text" as const, text: part.text });
           }
-          // Files are currently not supported in history.
         });
         contextUiMessages.push({
           id: request.message.messageId,
           parts: uiMessageParts,
           role: "user",
         });
-        requestMessages.push({ role: "user", content: messageParts });
       }
 
       const sessionId = systemParams?.sessionId ?? context?.id;
@@ -242,7 +259,11 @@ export class A2AManager {
         callback: async () => {
           return executeA2AMessage({
             agentId,
-            message: "",
+            message: currentTurnText,
+            attachments:
+              currentTurnAttachments.length > 0
+                ? currentTurnAttachments
+                : undefined,
             messages: requestMessages,
             organizationId: actor.organizationId,
             userId: actor.kind === "user" ? actor.id : "system",
@@ -641,6 +662,7 @@ function extractApprovalRequestsFromUiMessage(
     state: string;
     type: string;
     toolCallId: string;
+    input?: unknown;
   }[];
   for (const part of parts) {
     if (
@@ -652,6 +674,15 @@ function extractApprovalRequestsFromUiMessage(
         approvalId: part.approval.id,
         toolCallId: part.toolCallId,
         toolName: part.type.substring("tool-".length),
+        // The tool call's arguments, carried so approval prompts can describe
+        // what the tool will do (and unwrap a `run_tool` dispatch to its real
+        // target). Only an object input is meaningful here.
+        toolInput:
+          typeof part.input === "object" &&
+          part.input !== null &&
+          !Array.isArray(part.input)
+            ? (part.input as Record<string, unknown>)
+            : undefined,
         approved: Boolean(part.approval?.approved),
         resolved: part.state === "approval-responded",
       });

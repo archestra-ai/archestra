@@ -66,11 +66,7 @@ export async function createSeededAppConversation(params: {
       input: { appId: app.id },
       output: buildAppRenderResult(app),
     },
-    // Owned apps are editable from chat, so greet the user with what they can do —
-    // but only once the app has been built past the scaffold. A brand-new app
-    // (latestVersion === 1) still shows the default template, whose intro screen
-    // already lists these capabilities, so the greeting would just repeat it.
-    // External apps (read-only) never greet — see createSeededExternalAppConversation.
+    // Skip for a brand-new app: its default template already lists these capabilities.
     greeting:
       app.latestVersion > 1 ? buildAppOpenedGreeting(app.name) : undefined,
   });
@@ -142,7 +138,6 @@ async function seedConversationWithRender(params: {
   agentId?: string;
   title: string;
   part: UIMessage["parts"][number];
-  /** When set, seed a trailing assistant text message after the render. */
   greeting?: string;
 }): Promise<{ conversationId: string }> {
   const { userId, organizationId, title, part, greeting } = params;
@@ -185,8 +180,7 @@ async function seedConversationWithRender(params: {
     content,
   });
 
-  // Kept a separate message so the render above stays byte-for-byte a model-driven
-  // render (a text part has no tool part, so deriveAppsFromMessages ignores it).
+  // Separate message so the render above stays a byte-for-byte model-driven render.
   if (greeting) {
     await MessageModel.create({
       conversationId: conversation.id,
@@ -220,11 +214,7 @@ async function resolveDefaultChatAgentId(params: {
   return created;
 }
 
-/**
- * The greeting seeded for an owned (editable) app: it names the app, restates the
- * platform capabilities, and tells the user they can both use it and ask for changes.
- * Markdown — the chat renders assistant text as Markdown.
- */
+/** Markdown greeting seeded when an owned app is opened in chat. */
 function buildAppOpenedGreeting(name: string): string {
   return (
     `Here's **${name}**, up and running.\n\n` +

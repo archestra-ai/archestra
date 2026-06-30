@@ -66,8 +66,7 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     return created.json().id;
   }
 
-  // Editing the html forks a new version (latestVersion 1 → 2), taking the app past
-  // the scaffold so the open-in-chat greeting fires.
+  // Forks a new version (latestVersion 1 → 2), so the open-in-chat greeting fires.
   async function editApp(appId: string): Promise<void> {
     const edited = await app.inject({
       method: "PATCH",
@@ -96,8 +95,6 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     return part.output.structuredContent.id;
   }
 
-  // Owned apps are editable from chat, so a second assistant text message greets the
-  // user with what they can do — naming the app and repeating the app capabilities.
   function expectSeededGreeting(
     message: {
       role: string;
@@ -134,8 +131,6 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
   });
 
   test("seeds only the render (no greeting) for a brand-new scaffold app", async () => {
-    // A fresh app still shows the default template, whose intro already lists the
-    // capabilities — so the greeting is suppressed to avoid repeating it.
     const appId = await createApp("Fresh");
 
     const res = await app.inject({

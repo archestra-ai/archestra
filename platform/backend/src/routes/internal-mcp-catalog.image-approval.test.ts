@@ -90,19 +90,20 @@ describe("internal MCP catalog image approval", () => {
   });
 
   test("approve rejects a catalog item not subject to image approval", async () => {
-    const orgCatalog = await InternalMcpCatalogModel.create(
+    // A remote server has no image, so it is never gated regardless of scope.
+    const remoteCatalog = await InternalMcpCatalogModel.create(
       {
-        name: `org-${crypto.randomUUID().slice(0, 8)}`,
-        serverType: "local",
-        scope: "org",
-        localConfig: { dockerImage: "ghcr.io/evil/x:1" },
+        name: `remote-${crypto.randomUUID().slice(0, 8)}`,
+        serverType: "remote",
+        scope: "personal",
+        serverUrl: "https://example.com/mcp/",
       },
       { organizationId, authorId: user.id },
     );
 
     const response = await app.inject({
       method: "POST",
-      url: `/api/internal_mcp_catalog/${orgCatalog.id}/approve`,
+      url: `/api/internal_mcp_catalog/${remoteCatalog.id}/approve`,
     });
     expect(response.statusCode).toBe(400);
   });

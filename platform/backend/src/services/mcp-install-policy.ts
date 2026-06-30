@@ -17,7 +17,6 @@ import { imageMatchesTrustedRegistries } from "@/utils/match-image-against-regis
 type InstallPolicyCatalogItem = Pick<
   InternalMcpCatalog,
   | "id"
-  | "scope"
   | "serverType"
   | "environmentId"
   | "localConfig"
@@ -172,11 +171,12 @@ async function applyImageGate(params: {
 
 /**
  * Decide whether a local install's image is gated by the target environment's
- * trusted image registries. Gated only for a PERSONAL local catalog item with a
- * custom image (not the platform base image) authored by a NON-privileged user
- * (a plain member — admins / team-admins are trusted to vet images), when the
- * resolved environment has a non-empty trusted list the image does not match.
- * Everything else is exempt.
+ * trusted image registries. Gated for any local catalog item with a custom image
+ * (not the platform base image) authored by a NON-admin (anyone without
+ * `mcpServerInstallation:admin` — admins curate the registry and are trusted to
+ * vet images), when the resolved environment has a non-empty trusted list the
+ * image does not match. Everything else (remote/builtin/app, base image, admin
+ * author, no trusted list, or a matching image) is exempt.
  */
 async function evaluateInstallImagePolicy(params: {
   catalogItem: InstallPolicyCatalogItem;
@@ -209,10 +209,11 @@ async function evaluateInstallImagePolicy(params: {
 }
 
 /**
- * Whether the catalog item's author holds an image-vetting capability —
- * `mcpServerInstallation:admin` or `mcpRegistry:team-admin`. Such authors curate
- * the registry, so their custom images bypass the gate. A null author (system /
- * legacy row) is treated as non-privileged so its image is still vetted.
+ * Whether the catalog item's author holds `mcpServerInstallation:admin` — the
+ * capability that both curates the registry and approves gated images. Such
+ * authors are trusted to vet their own custom images, so they bypass the gate. A
+ * null author (system / legacy row) is treated as non-admin so its image is still
+ * vetted.
  */
 async function isAuthorPrivileged(params: {
   authorId: string | null;
@@ -223,12 +224,11 @@ async function isAuthorPrivileged(params: {
     userId: params.authorId,
     organizationId: params.organizationId,
   });
-  return checker.isAdmin || checker.isTeamAdmin;
+  return checker.isAdmin;
 }
 
-/** A personal local item with a custom image that isn't the platform base image. */
+/** A local catalog item with a custom image that isn't the platform base image. */
 function isGateableLocalImage(item: InstallPolicyCatalogItem): boolean {
-  if (item.scope !== "personal") return false;
   if (item.serverType !== "local") return false;
   const image = item.localConfig?.dockerImage?.trim();
   if (!image) return false;

@@ -704,10 +704,10 @@ function EnvironmentEditorDialog({
               Trusted image registries
             </Label>
             <p className="text-xs text-muted-foreground">
-              Add the registries a personal local server may deploy from. An
-              image that isn't under a trusted registry is held for admin
-              approval before it can deploy. Leave empty to allow any image.
-              Examples:{" "}
+              Add the registries a local MCP server may deploy from. An image
+              that isn't under a trusted registry is held for admin approval
+              before it can deploy (admins are exempt). Leave empty to allow any
+              image. Examples:{" "}
               <code className="rounded bg-muted px-1 py-0.5 font-mono">
                 ghcr.io/acme
               </code>{" "}

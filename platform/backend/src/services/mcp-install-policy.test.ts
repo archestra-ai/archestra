@@ -106,7 +106,7 @@ describe("assertInstallAllowedOrBlock", () => {
     expect(await approvalStatus(catalog.id)).toBeNull();
   });
 
-  test("does not gate non-personal catalog items", async ({
+  test("gates local items of any scope authored by a non-admin", async ({
     makeOrganization,
     makeInternalMcpCatalog,
   }) => {
@@ -114,7 +114,7 @@ describe("assertInstallAllowedOrBlock", () => {
     await OrganizationModel.patch(org.id, {
       defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
     });
-    for (const scope of ["team", "org"] as const) {
+    for (const scope of ["personal", "team", "org"] as const) {
       const catalog = await makeInternalMcpCatalog({
         organizationId: org.id,
         scope,
@@ -126,7 +126,8 @@ describe("assertInstallAllowedOrBlock", () => {
           catalogItem: catalog,
           organizationId: org.id,
         }),
-      ).resolves.toBeUndefined();
+      ).rejects.toMatchObject({ statusCode: 403 });
+      expect(await approvalStatus(catalog.id)).toBe("pending");
     }
   });
 
@@ -295,7 +296,7 @@ describe("assertInstallAllowedOrBlock", () => {
 });
 
 describe("flagImageApprovalRequired", () => {
-  test("flags only personal local untrusted images that aren't approved", async ({
+  test("flags untrusted local images of any scope that aren't approved", async ({
     makeOrganization,
     makeInternalMcpCatalog,
   }) => {
@@ -339,7 +340,8 @@ describe("flagImageApprovalRequired", () => {
 
     expect(required.has(gated.id)).toBe(true);
     expect(required.has(trusted.id)).toBe(false);
-    expect(required.has(teamScoped.id)).toBe(false);
+    // Team/org scope is now gated too — only admins are exempt, not scope.
+    expect(required.has(teamScoped.id)).toBe(true);
     expect(required.has(approved.id)).toBe(false);
   });
 
@@ -427,7 +429,7 @@ describe("author privilege exemption", () => {
     expect(await approvalStatus(catalog.id)).toBeNull();
   });
 
-  test("does not gate an untrusted image authored by an editor (team-admin)", async ({
+  test("gates an untrusted image authored by an editor (only admins are exempt)", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -452,8 +454,8 @@ describe("author privilege exemption", () => {
         catalogItem: catalog,
         organizationId: org.id,
       }),
-    ).resolves.toBeUndefined();
-    expect(await approvalStatus(catalog.id)).toBeNull();
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(await approvalStatus(catalog.id)).toBe("pending");
   });
 
   test("gates an untrusted image authored by a plain member", async ({

@@ -1292,7 +1292,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ListPendingImageApprovalCatalogItems,
         description:
-          "List personal local catalog items in the org whose custom image is awaiting admin approval (blocked by the target environment's trusted image registries).",
+          "List local catalog items in the org whose custom image is awaiting admin approval (blocked by the target environment's trusted image registries).",
         tags: ["MCP Catalog"],
         response: constructResponseSchema(
           z.array(SelectInternalMcpCatalogSchema),
@@ -1314,7 +1314,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ApproveCatalogItemImage,
         description:
-          "Approve a personal local catalog item's image so its installs proceed. Requires mcpServerInstallation:admin.",
+          "Approve a local catalog item's image so its installs proceed. Requires mcpServerInstallation:admin.",
         tags: ["MCP Catalog"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(SelectInternalMcpCatalogSchema),
@@ -2088,10 +2088,10 @@ function multitenantSharedEnvChanged(
 }
 
 /**
- * Resolve a catalog item that is subject to image approval — a personal local
- * item with a custom image — in the caller's org, or throw. The approve/decline
- * endpoints are admin-gated by the route permission map; this adds the org-scope
- * and "actually gateable" guards.
+ * Resolve a catalog item that is subject to image approval — a local item with a
+ * custom image — in the caller's org, or throw. The approve endpoint is
+ * admin-gated by the route permission map; this adds the org-scope and "actually
+ * gateable" guards.
  */
 async function assertImageApprovable(
   id: string,
@@ -2104,7 +2104,6 @@ async function assertImageApprovable(
     throw new ApiError(404, "Catalog item not found");
   }
   if (
-    catalogItem.scope !== "personal" ||
     catalogItem.serverType !== "local" ||
     !catalogItem.localConfig?.dockerImage
   ) {

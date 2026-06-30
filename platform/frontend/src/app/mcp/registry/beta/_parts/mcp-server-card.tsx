@@ -17,7 +17,6 @@ import {
   Plus,
   RefreshCw,
   Server,
-  ShieldAlert,
   User,
   Wrench,
 } from "lucide-react";
@@ -963,7 +962,6 @@ export function McpServerCard({
         {showApprovalPanel && (
           <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2.5">
             <div className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-500">
-              <ShieldAlert className="h-4 w-4 shrink-0" />
               <span>
                 {isInstallAdmin
                   ? "Image needs approval"

@@ -1871,6 +1871,19 @@ class AgentModel {
           clearChatMcpClient(parentAgentId);
         }
       }
+
+      // The advertised tool surface depends on toolExposureMode (full vs the
+      // search_tools/run_tool dispatch surface) and accessAllTools. A cached
+      // chat MCP client freezes that surface at connection-build time, so a
+      // change here must evict the client — otherwise switching an agent to
+      // "all tools" / search_and_run_only doesn't expose run_tool/search_tools
+      // until the connection is rebuilt for some unrelated reason.
+      if (
+        updatedAgent.toolExposureMode !== existingAgent.toolExposureMode ||
+        updatedAgent.accessAllTools !== existingAgent.accessAllTools
+      ) {
+        clearChatMcpClient(id);
+      }
     } else {
       updatedAgent = existingAgent;
     }

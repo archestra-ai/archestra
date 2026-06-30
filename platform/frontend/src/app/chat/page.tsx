@@ -132,7 +132,10 @@ import {
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useConfig, useFeature } from "@/lib/config/config.query";
-import { useConnectivity } from "@/lib/config/connectivity";
+import {
+  type ConnectivityState,
+  useConnectivity,
+} from "@/lib/config/connectivity";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
@@ -166,6 +169,19 @@ function parseRightPanelTab(value: string | null): RightPanelTab | null {
   return RIGHT_PANEL_TABS.includes(value as RightPanelTab)
     ? (value as RightPanelTab)
     : null;
+}
+
+// Copy for the chat-send guard, picked per failure mode so the message matches
+// reality (browser offline vs backend down, which is not "you're offline").
+function offlineSubmitMessage(
+  kind: Exclude<ConnectivityState["kind"], "online">,
+): string {
+  switch (kind) {
+    case "browser-offline":
+      return "You're offline — your message wasn't sent. Try again once you're back online.";
+    case "backend-unreachable":
+      return "Can't reach the server — your message wasn't sent. Try again in a moment.";
+  }
 }
 
 export function ChatPageContent({
@@ -1295,10 +1311,9 @@ export function ChatPageContent({
       throw new Error("stop-not-submit");
     }
 
-    if (connectivity.state.kind !== "online") {
-      toast.error(
-        "You're offline — your message wasn't sent. Try again once you're back online.",
-      );
+    const { kind: connectivityKind } = connectivity.state;
+    if (connectivityKind !== "online") {
+      toast.error(offlineSubmitMessage(connectivityKind));
       // Throw to keep the textarea and draft intact (onSubmit contract): the
       // user keeps their message instead of losing it to a silent failure.
       throw new Error("offline-not-submit");
@@ -1707,16 +1722,15 @@ export function ChatPageContent({
     useCallback(
       (message, e, options) => {
         e.preventDefault();
-        if (connectivity.state.kind !== "online") {
-          toast.error(
-            "You're offline — your message wasn't sent. Try again once you're back online.",
-          );
+        const { kind: connectivityKind } = connectivity.state;
+        if (connectivityKind !== "online") {
+          toast.error(offlineSubmitMessage(connectivityKind));
           // Throw to keep the textarea and draft intact (onSubmit contract).
           throw new Error("offline-not-submit");
         }
         submitInitialMessage(message, options?.skill);
       },
-      [submitInitialMessage, connectivity.state.kind],
+      [submitInitialMessage, connectivity.state],
     );
 
   // A chat started from a project page keeps the Files panel open when the

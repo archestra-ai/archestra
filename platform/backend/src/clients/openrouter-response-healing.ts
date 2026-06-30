@@ -9,7 +9,6 @@
  *
  * @see https://openrouter.ai/docs/guides/features/plugins/response-healing
  */
-import config from "@/config";
 
 const RESPONSE_HEALING_PLUGIN_ID = "response-healing";
 
@@ -24,16 +23,13 @@ type HealableRequest = {
 
 /**
  * Returns the request with the response-healing plugin appended when (and only
- * when) it can take effect: feature enabled, non-streaming, and a json
- * `response_format` present. Pure and idempotent — never mutates the input and
- * never duplicates an already-present healing plugin.
+ * when) it can take effect: non-streaming, and a json `response_format` present.
+ * Pure and idempotent — never mutates the input and never duplicates an
+ * already-present healing plugin.
  */
 export function applyResponseHealing<T extends HealableRequest>(
   request: T,
 ): T & { plugins?: Plugin[] } {
-  if (!config.llm.openrouter.responseHealing) {
-    return request;
-  }
   if (request.stream === true) {
     return request;
   }

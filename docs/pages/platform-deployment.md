@@ -1024,10 +1024,6 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://openrouter.ai/api/v1`
   - Use this to point to your own proxy, an OpenRouter-compatible API, or other custom endpoints
 
-- **`ARCHESTRA_OPENROUTER_RESPONSE_HEALING`** - Inject OpenRouter's [response-healing](https://openrouter.ai/docs/guides/features/plugins/response-healing) plugin on non-streaming structured-output requests so OpenRouter repairs malformed JSON server-side.
-  - Default: `true`
-  - Set to `false` to disable. Only affects non-streaming requests that carry a JSON `response_format`; streaming and tool-call requests are unaffected.
-
 - **`ARCHESTRA_VLLM_BASE_URL`** - Base URL for your vLLM server.
   - Required to enable vLLM provider support
   - Example: `http://localhost:8000/v1` (standard vLLM)

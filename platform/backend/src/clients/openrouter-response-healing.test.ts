@@ -1,8 +1,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateObject } from "ai";
 import { z } from "zod";
-import config from "@/config";
-import { afterEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import {
   applyResponseHealing,
   createResponseHealingFetch,
@@ -10,10 +9,6 @@ import {
 
 // The literal OpenRouter plugin id we forward upstream.
 const healingPlugin = { id: "response-healing" };
-
-afterEach(() => {
-  config.llm.openrouter.responseHealing = true;
-});
 
 describe("applyResponseHealing", () => {
   test("appends the plugin for non-streaming json_schema requests", () => {
@@ -80,13 +75,6 @@ describe("applyResponseHealing", () => {
     applyResponseHealing(request);
 
     expect(request.plugins).toEqual([{ id: "web" }]);
-  });
-
-  test("does not inject when the feature is disabled", () => {
-    config.llm.openrouter.responseHealing = false;
-    const request = { response_format: { type: "json_schema" } };
-
-    expect(applyResponseHealing(request)).toBe(request);
   });
 });
 

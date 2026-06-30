@@ -1054,11 +1054,6 @@ const config = {
       categories:
         process.env.ARCHESTRA_OPENROUTER_CATEGORIES?.trim() ||
         "general-chat,personal-agent",
-      // Inject OpenRouter's response-healing plugin on non-streaming
-      // structured-output requests to repair malformed JSON server-side.
-      // Enabled by default; set ARCHESTRA_OPENROUTER_RESPONSE_HEALING=false to disable.
-      responseHealing:
-        process.env.ARCHESTRA_OPENROUTER_RESPONSE_HEALING !== "false",
     },
     anthropic: {
       baseUrl:

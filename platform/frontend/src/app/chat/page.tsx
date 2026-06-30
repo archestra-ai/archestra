@@ -1297,7 +1297,7 @@ export function ChatPageContent({
 
     if (connectivity.state.kind !== "online") {
       toast.error(
-        "You're offline — your message wasn't sent. It'll send once you're back online.",
+        "You're offline — your message wasn't sent. Try again once you're back online.",
       );
       // Throw to keep the textarea and draft intact (onSubmit contract): the
       // user keeps their message instead of losing it to a silent failure.
@@ -1709,7 +1709,7 @@ export function ChatPageContent({
         e.preventDefault();
         if (connectivity.state.kind !== "online") {
           toast.error(
-            "You're offline — your message wasn't sent. It'll send once you're back online.",
+            "You're offline — your message wasn't sent. Try again once you're back online.",
           );
           // Throw to keep the textarea and draft intact (onSubmit contract).
           throw new Error("offline-not-submit");

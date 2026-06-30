@@ -7,6 +7,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -84,28 +85,35 @@ export function ConnectivityProvider({ children }: { children: ReactNode }) {
     };
   }, [refetch]);
 
-  const state: ConnectivityState = !browserOnline
-    ? { kind: "browser-offline" }
+  const kind: ConnectivityState["kind"] = !browserOnline
+    ? "browser-offline"
     : backendUnreachable
-      ? { kind: "backend-unreachable" }
-      : { kind: "online" };
+      ? "backend-unreachable"
+      : "online";
 
   // On the transition back to fully online, refetch everything once so screens
   // that errored while offline recover — a single wave, not a per-screen storm.
   const prevKindRef = useRef<ConnectivityState["kind"]>("online");
   useEffect(() => {
-    if (prevKindRef.current !== "online" && state.kind === "online") {
+    if (prevKindRef.current !== "online" && kind === "online") {
       void queryClient.invalidateQueries({ type: "active" });
     }
-    prevKindRef.current = state.kind;
-  }, [state.kind, queryClient]);
+    prevKindRef.current = kind;
+  }, [kind, queryClient]);
 
   const retry = useCallback(() => {
     void refetch();
   }, [refetch]);
 
+  // Memoized so consumers (the chat page among them) don't re-render on every
+  // poll settle, only when the connectivity kind actually changes.
+  const value = useMemo<ConnectivityContextValue>(
+    () => ({ state: { kind }, retry }),
+    [kind, retry],
+  );
+
   return (
-    <ConnectivityContext.Provider value={{ state, retry }}>
+    <ConnectivityContext.Provider value={value}>
       {children}
     </ConnectivityContext.Provider>
   );

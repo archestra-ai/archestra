@@ -117,4 +117,29 @@ describe("ConnectivityProvider", () => {
     await flush();
     expect(result.current.state.kind).toBe("online");
   });
+
+  it("fires exactly one refetch wave per offline→online transition, not while steady", async () => {
+    mockGetHealth.mockResolvedValue(HEALTH_OK);
+    const { queryClient, wrapper } = makeWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useConnectivity(), { wrapper });
+    await flush();
+
+    const onLineSpy = vi.spyOn(navigator, "onLine", "get");
+    const countActiveWaves = () =>
+      invalidateSpy.mock.calls.filter(
+        ([arg]) => (arg as { type?: string } | undefined)?.type === "active",
+      ).length;
+
+    for (let cycle = 1; cycle <= 2; cycle++) {
+      onLineSpy.mockReturnValue(false);
+      await act(async () => window.dispatchEvent(new Event("offline")));
+      onLineSpy.mockReturnValue(true);
+      await act(async () => window.dispatchEvent(new Event("online")));
+      await flush();
+      expect(result.current.state.kind).toBe("online");
+      // One wave per recovery, and none from the steady-online renders between.
+      expect(countActiveWaves()).toBe(cycle);
+    }
+  });
 });

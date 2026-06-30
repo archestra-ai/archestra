@@ -6,7 +6,11 @@ import { ConnectivityStatusBar } from "./connectivity-status-bar";
 describe("ConnectivityStatusBar", () => {
   it("renders nothing while online", () => {
     const { container } = render(
-      <ConnectivityStatusBar state={{ kind: "online" }} onRetry={vi.fn()} />,
+      <ConnectivityStatusBar
+        state={{ kind: "online" }}
+        onRetry={vi.fn()}
+        appName="Acme"
+      />,
     );
     expect(container).toBeEmptyDOMElement();
   });
@@ -16,6 +20,7 @@ describe("ConnectivityStatusBar", () => {
       <ConnectivityStatusBar
         state={{ kind: "browser-offline" }}
         onRetry={vi.fn()}
+        appName="Acme"
       />,
     );
     const browserOfflineText = screen.getByTestId(
@@ -27,6 +32,7 @@ describe("ConnectivityStatusBar", () => {
       <ConnectivityStatusBar
         state={{ kind: "backend-unreachable" }}
         onRetry={vi.fn()}
+        appName="Acme"
       />,
     );
     const unreachableText = screen.getByTestId(
@@ -38,12 +44,26 @@ describe("ConnectivityStatusBar", () => {
     expect(unreachableText).not.toEqual(browserOfflineText);
   });
 
+  it("uses the white-label app name in the backend-unreachable message", () => {
+    render(
+      <ConnectivityStatusBar
+        state={{ kind: "backend-unreachable" }}
+        onRetry={vi.fn()}
+        appName="Acme"
+      />,
+    );
+    expect(screen.getByTestId("connectivity-status-bar").textContent).toContain(
+      "Acme",
+    );
+  });
+
   it("calls onRetry when the retry button is clicked", async () => {
     const onRetry = vi.fn();
     render(
       <ConnectivityStatusBar
         state={{ kind: "backend-unreachable" }}
         onRetry={onRetry}
+        appName="Acme"
       />,
     );
     await userEvent.click(screen.getByRole("button", { name: /retry/i }));

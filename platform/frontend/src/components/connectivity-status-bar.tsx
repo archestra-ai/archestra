@@ -5,11 +5,17 @@ import { RefreshCw, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ConnectivityState } from "@/lib/config/connectivity";
 
-const MESSAGES: Record<Exclude<ConnectivityState["kind"], "online">, string> = {
-  "browser-offline":
-    "You're offline. Some features won't work until you reconnect.",
-  "backend-unreachable": "Can't reach the Archestra server.",
-};
+function messageFor(
+  kind: Exclude<ConnectivityState["kind"], "online">,
+  appName: string,
+): string {
+  switch (kind) {
+    case "browser-offline":
+      return "You're offline. Some features won't work until you reconnect.";
+    case "backend-unreachable":
+      return `Can't reach the ${appName} server.`;
+  }
+}
 
 /**
  * Persistent banner for the authenticated shell, shown while the browser is
@@ -20,9 +26,11 @@ const MESSAGES: Record<Exclude<ConnectivityState["kind"], "online">, string> = {
 export function ConnectivityStatusBar({
   state,
   onRetry,
+  appName,
 }: {
   state: ConnectivityState;
   onRetry: () => void;
+  appName: string;
 }) {
   if (state.kind === "online") {
     return null;
@@ -35,7 +43,7 @@ export function ConnectivityStatusBar({
     >
       <span className="flex items-center gap-2 text-sm font-medium">
         <WifiOff className="h-4 w-4 shrink-0" />
-        {MESSAGES[state.kind]}
+        {messageFor(state.kind, appName)}
       </span>
       <Button
         size="sm"

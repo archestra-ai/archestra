@@ -35,18 +35,10 @@ const ResponseFormatSchema = z
   })
   .passthrough();
 
-/**
- * OpenRouter is OpenAI-compatible but additionally accepts `response_format`.
- * It MUST be declared here: the OpenAI base schema is a plain `z.object`, so
- * inbound Zod validation strips any field it doesn't declare before the request
- * reaches OpenRouter — which would prevent structured outputs (and the
- * response-healing plugin that depends on them) from ever working.
- *
- * The response-healing plugin itself is injected server-side after validation
- * (see `applyResponseHealing`), so we deliberately do NOT admit a client-supplied
- * `plugins` field — that would let callers route arbitrary (billable) OpenRouter
- * plugins through the proxy.
- */
+// `response_format` must be declared so inbound validation forwards it to
+// OpenRouter (the OpenAI base schema strips undeclared fields). `plugins` is
+// intentionally NOT declared — response-healing is injected server-side, and
+// admitting it would let callers route arbitrary OpenRouter plugins.
 export const ChatCompletionRequestSchema =
   OpenAIChatCompletionRequestSchema.extend({
     response_format: ResponseFormatSchema.optional(),

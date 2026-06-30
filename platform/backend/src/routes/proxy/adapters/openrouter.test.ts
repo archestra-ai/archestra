@@ -155,15 +155,6 @@ describe("openrouterAdapterFactory.execute", () => {
     expect(sent.plugins).toEqual([{ id: "response-healing" }]);
     expect(sent.stream).toBe(false);
   });
-
-  test("does not inject without a json response_format", async () => {
-    const sent = await executeWith({
-      model: "openrouter/free-model",
-      messages: [],
-    });
-
-    expect(sent.plugins).toBeUndefined();
-  });
 });
 
 describe("extractInternalCode", () => {

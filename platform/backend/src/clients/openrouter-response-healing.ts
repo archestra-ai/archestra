@@ -1,71 +1,47 @@
 /**
- * OpenRouter response-healing plugin.
- *
- * Appends `{ id: "response-healing" }` to a request's `plugins` so OpenRouter
- * repairs malformed structured-output JSON server-side. The plugin only takes
- * effect on NON-streaming requests carrying a json `response_format`, so we
- * inject it exactly under those conditions and leave every other request
- * untouched.
+ * Injects OpenRouter's response-healing plugin so OpenRouter repairs malformed
+ * structured-output JSON server-side. It only takes effect on non-streaming
+ * requests carrying a json `response_format`.
  *
  * @see https://openrouter.ai/docs/guides/features/plugins/response-healing
  */
 
 const RESPONSE_HEALING_PLUGIN_ID = "response-healing";
 
-type Plugin = { id: string };
-
-/** Minimal request shape the healing decision depends on. */
-type HealableRequest = {
+type ResponseHealingRequest = {
   stream?: boolean | null;
   response_format?: { type?: string | null } | null;
-  plugins?: Plugin[];
+  plugins?: Array<{ id: string }>;
 };
 
 /**
- * Returns the request with the response-healing plugin appended when (and only
- * when) it can take effect: non-streaming, and a json `response_format` present.
- * Pure and idempotent — never mutates the input and never duplicates an
- * already-present healing plugin.
+ * Returns the request with the healing plugin appended when it can take effect.
+ * Pure and idempotent — never mutates the input, never duplicates the plugin.
  */
-export function applyResponseHealing<T extends HealableRequest>(
-  request: T,
-): T & { plugins?: Plugin[] } {
-  if (request.stream === true) {
-    return request;
-  }
-  const responseFormatType = request.response_format?.type;
-  if (
-    responseFormatType !== "json_schema" &&
-    responseFormatType !== "json_object"
-  ) {
-    return request;
-  }
-
+export function applyResponseHealing(
+  request: ResponseHealingRequest,
+): ResponseHealingRequest {
+  const type = request.response_format?.type;
   const plugins = request.plugins ?? [];
-  if (plugins.some((plugin) => plugin.id === RESPONSE_HEALING_PLUGIN_ID)) {
-    return request;
-  }
+  const shouldHeal =
+    request.stream !== true &&
+    (type === "json_schema" || type === "json_object") &&
+    !plugins.some((plugin) => plugin.id === RESPONSE_HEALING_PLUGIN_ID);
 
-  return {
-    ...request,
-    plugins: [...plugins, { id: RESPONSE_HEALING_PLUGIN_ID }],
-  };
+  return shouldHeal
+    ? { ...request, plugins: [...plugins, { id: RESPONSE_HEALING_PLUGIN_ID }] }
+    : request;
 }
 
 /**
  * Wraps a `fetch` so OpenRouter requests gain the response-healing plugin.
- *
- * Direct OpenRouter models (via the Vercel AI SDK) bypass our proxy adapter, so
- * this is the only injection point for them. The SDK serializes request bodies
- * to a JSON string; we heal that body and forward everything else untouched.
- * Only attach this to OpenRouter-bound clients.
+ * Direct OpenRouter models (via the Vercel AI SDK) bypass our proxy adapter,
+ * and the SDK's only body hook is `fetch`. It always sends a JSON string body.
  */
 export function createResponseHealingFetch(
   baseFetch: typeof globalThis.fetch = globalThis.fetch,
 ): typeof globalThis.fetch {
   return (input, init) => {
-    // The Vercel AI SDK always calls fetch as `(url, { body: <json string> })`,
-    // so we only handle string bodies; any other shape is forwarded untouched.
     const body = init?.body;
     if (typeof body !== "string") {
       return baseFetch(input, init);
@@ -81,7 +57,7 @@ export function createResponseHealingFetch(
       return baseFetch(input, init);
     }
 
-    const healed = applyResponseHealing(parsed as HealableRequest);
+    const healed = applyResponseHealing(parsed as ResponseHealingRequest);
     if (healed === parsed) {
       return baseFetch(input, init);
     }

@@ -413,6 +413,39 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(interactions[0].baselineCost).toBeTruthy();
     });
 
+    test("does not read past the final streaming usage chunk", async () => {
+      openAiStubOptions.throwOnNextAfterFinalChunk = true;
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).not.toContain("event: error");
+      expect(response.body).toContain("data: [DONE]");
+
+      const interactions = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+
+      expect(interactions).toHaveLength(1);
+      expect(interactions[0].inputTokens).toBe(12);
+      expect(interactions[0].outputTokens).toBe(10);
+      expect(interactions[0].response).not.toHaveProperty("error");
+    });
+
     test("non-streaming request increments cost metrics", async () => {
       // Token metrics are NOT reported for these non-streaming stubbed requests
       // because the test clients don't use getObservableFetch(). In production,

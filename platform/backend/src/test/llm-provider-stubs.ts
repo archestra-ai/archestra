@@ -6,6 +6,7 @@ export interface OpenAiStubOptions {
   interruptAtChunk?: number;
   throwAtChunk?: number;
   throwOnReturnAfterUsage?: boolean;
+  throwOnNextAfterFinalChunk?: boolean;
   usageOnlyStream?: boolean;
 }
 
@@ -276,6 +277,10 @@ function createOpenAiStream(options: OpenAiStubOptions) {
 
           if (index < chunks.length) {
             return { done: false, value: chunks[index++] };
+          }
+
+          if (options.throwOnNextAfterFinalChunk) {
+            throw new Error("Unexpected OpenAI stream read after final chunk");
           }
 
           return { done: true, value: undefined };

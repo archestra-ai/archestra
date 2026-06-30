@@ -109,7 +109,7 @@ const THREAD_MUTED_LEAD_INS = [
  * 🔇 glyph matches the mute reaction users can add to any bot reply.
  */
 export const THREAD_MUTE_HINT =
-  'Reply "mute" or react 🔇 to stop auto-replies in this thread';
+  'Reply "mute" or react 🔇 to any of my messages to stop auto-replies in this thread';
 
 /**
  * In group conversations the agent hears every message but should not answer

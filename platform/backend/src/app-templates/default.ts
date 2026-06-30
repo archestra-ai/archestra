@@ -124,24 +124,11 @@ const html = `<!DOCTYPE html>
     </li>
     </ul>
   </div>
+  <!-- Easter egg: logo presses on click, spins every fifth one. This is starter
+       decoration only — remove this script (and the .logo press/spin styles) on
+       the first real edit. -->
   <script>
-    const logo = document.querySelector(".logo");
-    let clicks = 0;
-    let spinning = false;
-    logo.addEventListener("click", () => {
-      if (spinning) return; // only the spin locks out further clicks
-      clicks += 1;
-      // A quick key press on every click; a spin every fifth one.
-      const move = clicks % 5 === 0 ? "spin" : "press";
-      if (move === "spin") spinning = true;
-      logo.classList.remove("press", "spin");
-      void logo.offsetWidth; // restart so rapid presses retrigger mid-animation
-      logo.classList.add(move);
-    });
-    logo.addEventListener("animationend", (e) => {
-      logo.classList.remove("press", "spin");
-      if (e.animationName === "logo-spin") spinning = false;
-    });
+    const logo=document.querySelector(".logo");let clicks=0,spinning=false;logo.addEventListener("click",()=>{if(spinning)return;const move=++clicks%5===0?"spin":"press";if(move==="spin")spinning=true;logo.classList.remove("press","spin");void logo.offsetWidth;logo.classList.add(move)});logo.addEventListener("animationend",e=>{logo.classList.remove("press","spin");if(e.animationName==="logo-spin")spinning=false});
   </script>
 </body>
 </html>`;

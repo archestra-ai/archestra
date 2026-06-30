@@ -304,6 +304,17 @@ describe("app tool execution", () => {
     );
   });
 
+  test("scaffold result carries the condensed window.archestra SDK surface", async () => {
+    const created = await scaffold({ name: "Counter" });
+    expect(created.isError).toBe(false);
+    // The create flow's first edit_app has the SDK contract — and the storage
+    // return shapes — in context without loading the full skill.
+    const text = (created.content[0] as any).text as string;
+    expect(text).toContain("archestra.storage.user.{get,set,list,delete}");
+    expect(text).toContain("{value, revision, owner}");
+    expect(text).toContain("Build App");
+  });
+
   test("edit rejects SDK self-bootstrap html and surfaces fragment warnings", async () => {
     const created = await scaffold({ name: "Editable" });
     const appId = structured(created).id as string;
@@ -443,6 +454,20 @@ describe("read_app / edit_app", () => {
 
     const pinned = await readApp(appId, version);
     expect(structured(pinned).html).toBe("<h1>v1</h1>");
+  });
+
+  test("read_app result carries the condensed window.archestra SDK surface", async () => {
+    const { appId } = await scaffoldWithHtml("<h1>v1</h1>");
+    const head = await readApp(appId);
+    const text = (head.content[0] as any).text as string;
+    // The contract rides the result the model always reads before edit_app, so
+    // it authors against the real storage API (the right namespace AND the
+    // {value, revision, owner} return shape) without loading the full skill.
+    expect(text).toContain("archestra.storage.user.{get,set,list,delete}");
+    expect(text).toContain("{value, revision, owner}");
+    // Escalation pointer: names what the summary omits so the model knows when
+    // to load the full Build App skill.
+    expect(text).toContain("Build App");
   });
 
   test("read_app errors on a missing app or version", async () => {

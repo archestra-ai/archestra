@@ -190,6 +190,11 @@ describe("renderSetupScript", () => {
     expect(script).toContain(
       `claude plugin marketplace add '${SKILLS.cloneUrl}'`,
     );
+    // The skill bundle is installed by the script, not via a manual browse step.
+    expect(script).toContain(
+      `claude plugin install '${SKILLS.marketplaceName}@${SKILLS.marketplaceName}'`,
+    );
+    expect(script).not.toContain("marketplace browse");
     // python3 fallback prints a manual snippet rather than failing.
     expect(script).toContain("python3 not found");
   });

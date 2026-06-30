@@ -326,7 +326,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       }
       if (ctx.skills) {
         steps.push(
-          `Run /plugin marketplace browse ${ctx.skills.marketplaceName} inside Claude Code to install the shared skills.`,
+          "The shared skills are installed for Claude Code — start `claude` and they load automatically.",
         );
       }
       break;
@@ -453,9 +453,13 @@ claude mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
   }
 
   if (ctx.skills) {
-    sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
+    const pluginRef = `${ctx.skills.marketplaceName}@${ctx.skills.marketplaceName}`;
+    sections.push(`say ${sh(`Installing the "${ctx.skills.marketplaceName}" skills bundle`)}
 if ! claude plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
-  warn "Marketplace may already be registered — run /plugin inside Claude Code to inspect."
+  warn "Marketplace may already be registered — continuing."
+fi
+if ! claude plugin install ${sh(pluginRef)}; then
+  warn ${sh(`Could not install the skills automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)}
 fi`);
   }
 

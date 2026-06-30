@@ -1377,12 +1377,11 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
-    const headersSent = reply.raw.headersSent === true;
     const errorMessage = provider.extractErrorMessage(error);
     streamErrorMessage = errorMessage;
     const usage = streamAdapter.state.usage;
 
-    if (headersSent && !usage) {
+    if (!usage) {
       try {
         logger.info(
           { profileId: agent.id, errorMessage },

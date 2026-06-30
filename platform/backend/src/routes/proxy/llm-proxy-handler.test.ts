@@ -293,6 +293,48 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       });
     });
 
+    test("records an interaction when streaming fails before headers before usage", async () => {
+      openAiStubOptions.throwAtChunk = 0;
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.body).toContain(
+        "Simulated OpenAI stream failure before usage",
+      );
+
+      const interactions = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+
+      expect(interactions).toHaveLength(1);
+      expect(interactions[0].inputTokens).toBe(0);
+      expect(interactions[0].outputTokens).toBe(0);
+      expect(interactions[0].response).toEqual({
+        error: "Simulated OpenAI stream failure before usage",
+      });
+      expect(interactions[0].model).toBe("gpt-4o");
+      expect(interactions[0].baselineModel).toBe("gpt-4o");
+      expect(interactions[0].processedRequest).toMatchObject({
+        model: "gpt-4o",
+        stream: true,
+      });
+    });
+
     test("records a failed interaction with usage when streaming fails after usage", async () => {
       openAiStubOptions.throwOnReturnAfterUsage = true;
 

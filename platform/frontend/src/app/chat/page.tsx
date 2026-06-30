@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
@@ -131,6 +132,7 @@ import {
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useConfig, useFeature } from "@/lib/config/config.query";
+import { useConnectivity } from "@/lib/config/connectivity";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
@@ -445,6 +447,7 @@ export function ChatPageContent({
     initialMessages: persistedConversationMessages,
     enabled: shouldEnableChatSession,
   });
+  const connectivity = useConnectivity();
   const sharedConversationMessages = useMemo(
     () => (conversation?.messages ?? []) as PartialUIMessage[],
     [conversation?.messages],
@@ -1292,6 +1295,15 @@ export function ChatPageContent({
       throw new Error("stop-not-submit");
     }
 
+    if (connectivity.state.kind !== "online") {
+      toast.error(
+        "You're offline — your message wasn't sent. It'll send once you're back online.",
+      );
+      // Throw to keep the textarea and draft intact (onSubmit contract): the
+      // user keeps their message instead of losing it to a silent failure.
+      throw new Error("offline-not-submit");
+    }
+
     const hasText = message.text?.trim();
     const hasFiles = message.files && message.files.length > 0;
     // a skill slash command may be sent on its own, with no prompt or files
@@ -1695,9 +1707,16 @@ export function ChatPageContent({
     useCallback(
       (message, e, options) => {
         e.preventDefault();
+        if (connectivity.state.kind !== "online") {
+          toast.error(
+            "You're offline — your message wasn't sent. It'll send once you're back online.",
+          );
+          // Throw to keep the textarea and draft intact (onSubmit contract).
+          throw new Error("offline-not-submit");
+        }
         submitInitialMessage(message, options?.skill);
       },
-      [submitInitialMessage],
+      [submitInitialMessage, connectivity.state.kind],
     );
 
   // A chat started from a project page keeps the Files panel open when the

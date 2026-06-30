@@ -2,6 +2,7 @@
 
 import type { Permissions } from "@archestra/shared/permission.types";
 import { usePathname } from "next/navigation";
+import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import {
@@ -16,6 +17,10 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  ConnectivityProvider,
+  useConnectivity,
+} from "@/lib/config/connectivity";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
 import { cn } from "@/lib/utils";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
@@ -102,45 +107,55 @@ export function AppShell({ children }: AppShellProps) {
     );
   }
 
-  // Normal mode: render full app shell with sidebar
+  // Normal mode: render full app shell with sidebar. ConnectivityProvider lives
+  // here (not in the root layout) so the /health poll only runs on the real
+  // shell, never on the auth/preview/runtime branches above.
   return (
-    <NavigationStatusProvider>
-      <SidebarProvider defaultOpen={!shouldCollapse}>
-        <AppSidebar />
-        <NavAwareSidebarCircleToggle />
-        <MaintenanceModeOverlay />
-        <main className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto">
-          {notification && (
-            <SiteNotificationBar
-              content={notification.content}
-              notificationId={notification.id}
-            />
-          )}
-          <ImpersonationBanner />
-          <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
-            <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
-            <div
-              id="mobile-header-actions"
-              className="flex items-center gap-2"
-            />
-          </header>
-          <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-            <div
-              className={cn(
-                "flex-1 flex flex-col",
-                isViewportLocked && "min-h-0",
-              )}
-            >
-              {children}
+    <ConnectivityProvider>
+      <NavigationStatusProvider>
+        <SidebarProvider defaultOpen={!shouldCollapse}>
+          <AppSidebar />
+          <NavAwareSidebarCircleToggle />
+          <MaintenanceModeOverlay />
+          <main className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto">
+            <ConnectivityBar />
+            {notification && (
+              <SiteNotificationBar
+                content={notification.content}
+                notificationId={notification.id}
+              />
+            )}
+            <ImpersonationBanner />
+            <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
+              <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
+              <div
+                id="mobile-header-actions"
+                className="flex items-center gap-2"
+              />
+            </header>
+            <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+              <div
+                className={cn(
+                  "flex-1 flex flex-col",
+                  isViewportLocked && "min-h-0",
+                )}
+              >
+                {children}
+              </div>
+              <Version />
             </div>
-            <Version />
-          </div>
-        </main>
-        <Toaster />
-        <ConversationSearchProvider />
-      </SidebarProvider>
-    </NavigationStatusProvider>
+          </main>
+          <Toaster />
+          <ConversationSearchProvider />
+        </SidebarProvider>
+      </NavigationStatusProvider>
+    </ConnectivityProvider>
   );
+}
+
+function ConnectivityBar() {
+  const { state, retry } = useConnectivity();
+  return <ConnectivityStatusBar state={state} onRetry={retry} />;
 }
 
 function NavAwareSidebarCircleToggle() {

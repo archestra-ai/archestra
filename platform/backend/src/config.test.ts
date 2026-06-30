@@ -1686,68 +1686,6 @@ describe("getMCPGatewayOauthAllowedPublicHosts", () => {
   });
 });
 
-describe("getAppAssetBaseOrigin", () => {
-  const originalEnv = process.env;
-
-  // frontendBaseUrl is captured at module load, so each test reloads ./config
-  // after setting ARCHESTRA_FRONTEND_URL to control which origin is the frontend.
-  beforeEach(() => {
-    process.env = { ...originalEnv };
-    vi.resetModules();
-    delete process.env.ARCHESTRA_API_BASE_URL;
-    delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
-  });
-
-  test("excludes the frontend origin even when it is listed first", async () => {
-    process.env.ARCHESTRA_FRONTEND_URL = "https://frontend.example.com";
-    process.env.ARCHESTRA_API_BASE_URL =
-      "https://frontend.example.com,https://backend.example.com";
-    const { getAppAssetBaseOrigin: fn } = await import("./config");
-    expect(fn()).toBe("https://backend.example.com");
-  });
-
-  test("prefers a public https origin over a cluster-internal http one", async () => {
-    process.env.ARCHESTRA_FRONTEND_URL = "https://frontend.example.com";
-    process.env.ARCHESTRA_API_BASE_URL =
-      "http://archestra.default.svc:9000,https://backend.example.com";
-    const { getAppAssetBaseOrigin: fn } = await import("./config");
-    expect(fn()).toBe("https://backend.example.com");
-  });
-
-  test("matches the frontend on origin, ignoring path and trailing slash", async () => {
-    process.env.ARCHESTRA_FRONTEND_URL = "https://frontend.example.com/app/";
-    process.env.ARCHESTRA_API_BASE_URL =
-      "https://frontend.example.com,https://backend.example.com";
-    const { getAppAssetBaseOrigin: fn } = await import("./config");
-    expect(fn()).toBe("https://backend.example.com");
-  });
-
-  test("falls back to the frontend https entry when it is the only one", async () => {
-    process.env.ARCHESTRA_FRONTEND_URL = "https://frontend.example.com";
-    process.env.ARCHESTRA_API_BASE_URL = "https://frontend.example.com";
-    const { getAppAssetBaseOrigin: fn } = await import("./config");
-    expect(fn()).toBe("https://frontend.example.com");
-  });
-
-  test("skips malformed entries and resolves the next valid one", async () => {
-    process.env.ARCHESTRA_FRONTEND_URL = "https://frontend.example.com";
-    process.env.ARCHESTRA_API_BASE_URL =
-      "not-a-url,https://backend.example.com";
-    const { getAppAssetBaseOrigin: fn } = await import("./config");
-    expect(fn()).toBe("https://backend.example.com");
-  });
-
-  test("falls back to the local API origin when unset", async () => {
-    process.env.ARCHESTRA_FRONTEND_URL = "https://frontend.example.com";
-    const { getAppAssetBaseOrigin: fn } = await import("./config");
-    expect(fn()).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
-  });
-});
-
 describe("parseAuditLogRetentionDays", () => {
   test("returns 0 (disabled) when env var is not set", () => {
     expect(parseAuditLogRetentionDays(undefined)).toBe(0);

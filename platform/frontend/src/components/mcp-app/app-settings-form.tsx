@@ -46,6 +46,7 @@ export function AppSettingsForm({
   onBack,
   formId,
   onStatusChange,
+  onDeleted,
 }: {
   app: App;
   onBack: () => void;
@@ -53,6 +54,8 @@ export function AppSettingsForm({
   formId: string;
   /** Reports save button state (must be a stable callback, e.g. a setState). */
   onStatusChange?: (status: { saving: boolean; disabled: boolean }) => void;
+  /** Called after the app is deleted — e.g. to close the panel. */
+  onDeleted?: () => void;
 }) {
   const { data: canUpdate } = useHasPermissions({ app: ["update"] });
   const { data: canDelete } = useHasPermissions({ app: ["delete"] });
@@ -277,6 +280,7 @@ export function AppSettingsForm({
         app={app}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
+        onDeleted={onDeleted}
       />
     </div>
   );

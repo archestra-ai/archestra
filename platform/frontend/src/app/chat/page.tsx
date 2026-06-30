@@ -34,10 +34,7 @@ import { AppsProvider } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import {
-  collectBrowserToolCallIds,
-  deriveAppsFromMessages,
-} from "@/components/chat/chat-messages.utils";
+import { collectBrowserToolCallIds } from "@/components/chat/chat-messages.utils";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
@@ -52,6 +49,7 @@ import {
 } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
+import { useChatApps } from "@/components/chat/use-chat-apps";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread, {
   type PartialUIMessage,
@@ -140,7 +138,6 @@ import {
   type SupportedProvider,
   useLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
-import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useOrganization } from "@/lib/organization.query";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { useProjectFiles } from "@/lib/projects/projects.query";
@@ -812,21 +809,11 @@ export function ChatPageContent({
         : persistedConversationMessages,
     [chatSession?.messages, persistedConversationMessages],
   );
-  // Derive the MCP App list from the conversation itself so the panel selector
-  // is deterministic and survives transient section unmounts (the previous
-  // mount-effect registry could empty when a single app's section briefly
-  // unmounted).
-  const { getToolShortName: getArchestraToolShortName } =
-    useArchestraMcpIdentity();
-  const mcpApps = useMemo(
-    () =>
-      deriveAppsFromMessages(
-        messages,
-        chatSession?.earlyToolUiStarts ?? {},
-        getArchestraToolShortName,
-      ),
-    [messages, chatSession?.earlyToolUiStarts, getArchestraToolShortName],
-  );
+  const mcpApps = useChatApps({
+    messages,
+    earlyToolUiStarts: chatSession?.earlyToolUiStarts ?? {},
+    filterDeleted: true,
+  });
   const sendMessage = chatSession?.sendMessage;
   const regenerateUserMessage = chatSession?.regenerateUserMessage;
   const status = chatSession?.status ?? "ready";
@@ -1963,6 +1950,7 @@ export function ChatPageContent({
     <AppsProvider
       apps={mcpApps}
       onShowInPanel={() => openRightPanelTab("apps" as RightPanelTab)}
+      onClosePanel={closeRightPanel}
     >
       <div className="flex h-full w-full min-h-0">
         <div className="flex-1 flex flex-col min-w-0 min-h-0">

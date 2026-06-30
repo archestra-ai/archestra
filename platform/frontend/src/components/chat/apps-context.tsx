@@ -40,6 +40,8 @@ interface AppsContextValue {
   setPortalTarget: (el: HTMLElement | null) => void;
   /** Open the panel on the Apps tab and select this app. Wired by the chat page. */
   showInPanel: (toolCallId: string) => void;
+  /** Close the right panel entirely. Wired by the chat page. */
+  closePanel: () => void;
   /**
    * Whether the panel's owned-app shows its inline settings form instead of the
    * live app. Panel-level (not per-section) so it survives nothing across app
@@ -58,6 +60,7 @@ const NOOP_VALUE: AppsContextValue = {
   portalTarget: null,
   setPortalTarget: () => {},
   showInPanel: () => {},
+  closePanel: () => {},
   settingsOpen: false,
   setSettingsOpen: () => {},
 };
@@ -65,12 +68,15 @@ const NOOP_VALUE: AppsContextValue = {
 export function AppsProvider({
   apps,
   onShowInPanel,
+  onClosePanel,
   children,
 }: {
   /** Apps for this conversation, derived from its messages by the caller. */
   apps: PanelApp[];
   /** Called when an app requests to be shown in the panel — wire this to open the panel and switch to the Apps tab. */
   onShowInPanel?: (toolCallId: string) => void;
+  /** Called to close the right panel — wire this to collapse the panel. */
+  onClosePanel?: () => void;
   children: ReactNode;
 }) {
   const [explicitSelection, setExplicitSelection] = useState<string | null>(
@@ -115,6 +121,11 @@ export function AppsProvider({
     [onShowInPanel],
   );
 
+  const closePanel = useCallback(() => {
+    setSettingsOpen(false);
+    onClosePanel?.();
+  }, [onClosePanel]);
+
   const value = useMemo<AppsContextValue>(
     () => ({
       apps,
@@ -123,10 +134,19 @@ export function AppsProvider({
       portalTarget,
       setPortalTarget,
       showInPanel,
+      closePanel,
       settingsOpen,
       setSettingsOpen,
     }),
-    [apps, selectedToolCallId, select, portalTarget, showInPanel, settingsOpen],
+    [
+      apps,
+      selectedToolCallId,
+      select,
+      portalTarget,
+      showInPanel,
+      closePanel,
+      settingsOpen,
+    ],
   );
 
   return <AppsContext.Provider value={value}>{children}</AppsContext.Provider>;

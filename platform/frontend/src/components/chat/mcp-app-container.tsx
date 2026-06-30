@@ -1,5 +1,6 @@
-import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
-import type React from "react";
+import { type archestraApiTypes, parseFullToolName } from '@archestra/shared';
+import { AppWindow } from 'lucide-react';
+import type React from 'react';
 import {
   Component,
   useCallback,
@@ -8,17 +9,17 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-} from "react";
-import { createPortal } from "react-dom";
-import { useApps } from "@/components/chat/apps-context";
+} from 'react';
+import { createPortal } from 'react-dom';
+import { useApps } from '@/components/chat/apps-context';
 import {
   getAppRenderVerb,
   isSupersededRender,
   mcpToolLabel,
-} from "@/components/chat/chat-messages.utils";
-import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
-import { AppSettingsForm } from "@/components/mcp-app/app-settings-form";
-import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
+} from '@/components/chat/chat-messages.utils';
+import { INITIAL_INLINE_HEIGHT } from '@/components/mcp-app/app-height';
+import { AppSettingsForm } from '@/components/mcp-app/app-settings-form';
+import { McpAppCard } from '@/components/mcp-app/mcp-app-card';
 import {
   McpAppAddressPill,
   McpAppBackButton,
@@ -31,24 +32,24 @@ import {
   McpAppStandaloneButton,
   McpAppSwitcher,
   McpAppTopBar,
-} from "@/components/mcp-app/mcp-app-chrome";
+} from '@/components/mcp-app/mcp-app-chrome';
 import {
   type AppResourceMeta,
   isRenderableMcpAppHtml,
   McpAppRuntime,
   type McpCallToolResult,
-} from "@/components/mcp-app/mcp-app-view";
-import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
-import { useApp } from "@/lib/app.query";
+} from '@/components/mcp-app/mcp-app-view';
+import { useAppRuntimeControls } from '@/components/mcp-app/use-app-runtime-controls';
+import { useApp } from '@/lib/app.query';
 import {
   getAppDiagnosticCounts,
   subscribeAppDiagnostics,
-} from "@/lib/chat/app-diagnostics-store";
+} from '@/lib/chat/app-diagnostics-store';
 
 // Ties the settings form to its top-bar save button via the HTML `form` attr.
 // Only the selected panel app shows settings (one at a time), so a single id is
 // safe.
-const APP_SETTINGS_FORM_ID = "app-settings-form";
+const APP_SETTINGS_FORM_ID = 'app-settings-form';
 
 /**
  * Shape of MCP tool output stored by the backend in the AI SDK's tool result.
@@ -62,11 +63,11 @@ export type McpToolOutput = {
   /** Additional metadata (timestamps, version info, etc.) not intended for model context */
   _meta?: Record<string, unknown>;
   /** Unsafe-context boundary marker preserved in the live tool stream */
-  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses['200']['unsafeContextBoundary'];
   /** Structured data optimized for UI rendering (not added to model context) */
   structuredContent?: Record<string, unknown>;
   /** Original MCP content blocks from the tool response */
-  rawContent?: McpCallToolResult["content"];
+  rawContent?: McpCallToolResult['content'];
 };
 
 /** Catches render errors from MCP App iframes so a crashing app doesn't take down the chat. */
@@ -104,7 +105,7 @@ const noopSizeChange = () => {};
  * within the iframe). Tracks `innerHeight` so the cap follows window resizes.
  */
 function computeInlineHeightCap() {
-  return typeof window === "undefined"
+  return typeof window === 'undefined'
     ? INITIAL_INLINE_HEIGHT
     : Math.max(INITIAL_INLINE_HEIGHT, Math.round(window.innerHeight * 0.6));
 }
@@ -114,8 +115,8 @@ function useInlineHeightCap() {
   useEffect(() => {
     const update = () => setCap(computeInlineHeightCap());
     update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
   }, []);
   return cap;
 }
@@ -176,23 +177,24 @@ export function McpAppSection({
   });
   const [resourceState, setResourceState] = useState<{
     key: string;
-    state: "unknown" | "renderable" | "empty";
+    state: 'unknown' | 'renderable' | 'empty';
   }>(() => ({
     key: resourceKey,
     state: preloadedResource
       ? isRenderableMcpAppHtml(preloadedResource.html)
-        ? "renderable"
-        : "empty"
-      : "unknown",
+        ? 'renderable'
+        : 'empty'
+      : 'unknown',
   }));
   const effectiveResourceState =
-    resourceState.key === resourceKey ? resourceState.state : "unknown";
+    resourceState.key === resourceKey ? resourceState.state : 'unknown';
 
   const {
     apps,
     selectedToolCallId,
     select,
     showInPanel,
+    closePanel,
     portalTarget,
     settingsOpen,
     setSettingsOpen,
@@ -202,7 +204,11 @@ export function McpAppSection({
   // app so the title stays in sync after an edit (the appName prop is captured
   // at render time) and to seed the edit dialog.
   const inlineHeightCap = useInlineHeightCap();
-  const { data: ownedApp } = useApp(appId ?? null);
+  const { data: ownedApp, isSuccess: ownedAppResolved } = useApp(appId ?? null);
+  // A deleted (or no-longer-accessible) owned app: the fetch settled but
+  // `allowNotFound` turned the 404 into a successful `null`. Render a graceful
+  // placeholder instead of mounting the runtime, which would 404 again.
+  const ownedAppUnavailable = !!appId && ownedAppResolved && ownedApp === null;
 
   const headerName = ownedApp?.name || appName || mcpToolLabel(toolName);
   const isSelected = !!toolCallId && selectedToolCallId === toolCallId;
@@ -226,7 +232,7 @@ export function McpAppSection({
     if (!rawOutput || appId) return undefined;
     return {
       content: rawOutput.rawContent ?? [
-        { type: "text" as const, text: rawOutput.content },
+        { type: 'text' as const, text: rawOutput.content },
       ],
       structuredContent: rawOutput.structuredContent,
       _meta: rawOutput._meta,
@@ -236,12 +242,12 @@ export function McpAppSection({
 
   const handleShowInPanel = () => {
     if (!toolCallId) return;
-    setDisplayMode("inline"); // panel is the app's frame — never fullscreen there
+    setDisplayMode('inline'); // panel is the app's frame — never fullscreen there
     showInPanel(toolCallId);
   };
 
   const handleResourceStateChange = useCallback(
-    (state: "renderable" | "empty") => {
+    (state: 'renderable' | 'empty') => {
       setResourceState({ key: resourceKey, state });
     },
     [resourceKey],
@@ -258,7 +264,7 @@ export function McpAppSection({
   const errorCount = appDiagnosticCounts?.errors ?? 0;
   const logCount = appDiagnosticCounts?.logs ?? 0;
 
-  if (effectiveResourceState === "empty") {
+  if (effectiveResourceState === 'empty') {
     return null;
   }
 
@@ -277,20 +283,32 @@ export function McpAppSection({
     );
   }
 
+  // A deleted (or no-longer-accessible) owned app: it's already dropped from the
+  // panel, so this only shows in the chat stream. Degrade to a small, light pill
+  // instead of mounting the runtime (which would 404) behind browser-like chrome.
+  if (ownedAppUnavailable) {
+    return (
+      <div className="flex w-fit items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1 text-xs text-muted-foreground">
+        <AppWindow className="h-3.5 w-3.5 shrink-0" />
+        <span>{headerName} app is no longer available</span>
+      </div>
+    );
+  }
+
   const diagnosticsBadge =
     errorCount > 0 || logCount > 0 ? (
       <div className="mb-2 flex w-fit flex-wrap items-center gap-1.5">
         {errorCount > 0 && (
           <div className="rounded-md border border-destructive/50 bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
             {errorCount === 1
-              ? "1 runtime error"
-              : `${errorCount} runtime errors`}{" "}
+              ? '1 runtime error'
+              : `${errorCount} runtime errors`}{' '}
             in this app
           </div>
         )}
         {logCount > 0 && (
           <div className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground">
-            {logCount === 1 ? "1 log" : `${logCount} logs`} from this app
+            {logCount === 1 ? '1 log' : `${logCount} logs`} from this app
           </div>
         )}
       </div>
@@ -329,9 +347,9 @@ export function McpAppSection({
       toolResourceUri={uiResourceUri}
       endpoint={
         appId
-          ? { kind: "app", appId }
+          ? { kind: 'app', appId }
           : {
-              kind: "agent",
+              kind: 'agent',
               agentId,
               serverPrefix: parseFullToolName(toolName).serverName ?? toolName,
             }
@@ -349,7 +367,7 @@ export function McpAppSection({
       // viewport-relative app can't inflate the iframe without bound. Panel
       // (fill) and fullscreen stay uncapped.
       containerDimensions={
-        !renderInPanel && displayMode !== "fullscreen"
+        !renderInPanel && displayMode !== 'fullscreen'
           ? { maxHeight: inlineHeightCap }
           : undefined
       }
@@ -394,6 +412,7 @@ export function McpAppSection({
         onBack={() => setSettingsOpen(false)}
         formId={APP_SETTINGS_FORM_ID}
         onStatusChange={setSettingsSaveStatus}
+        onDeleted={closePanel}
       />
     );
   } else {
@@ -402,7 +421,7 @@ export function McpAppSection({
         <McpAppSettingsButton onClick={() => setSettingsOpen(true)} />
       ) : (
         <>
-          {displayMode === "fullscreen" && (
+          {displayMode === 'fullscreen' && (
             <McpAppFullscreenExitButton onClick={toggleFullscreen} />
           )}
           {toolCallId && !renderInPanel && (

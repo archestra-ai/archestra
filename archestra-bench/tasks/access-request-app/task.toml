@@ -8,7 +8,11 @@ text = """Thinking about it more -- admin-level requests shouldn't just sail thr
 text = """After someone connects their account, don't make them re-fill the form and click send again -- bring them back to their filled-in request, ready to go."""
 
 [[stages]]
-text = """Last tweak: only show the systems that belong to the IT team, not every system we've got. Then call submit_result with result = {"app_id": "<the app's id>", "app_name": "<the app's name>"}."""
+text = """Last tweak before we hand it out: only show the systems that belong to the IT team, not every system we've got. Once that's in, share it with the whole team so people can start filing requests with it."""
+
+[[stages]]
+new_conversation = true
+text = """Coming back to that access-request-app-{{cell}} we rolled out -- people keep pinging IT to ask where a request they already filed stands. Could you add a way for someone to look up the status of their existing requests right inside the app? When it's working, call submit_result with result = {"app_id": "<the app's id>", "app_name": "<the app's name>"}."""
 
 [result_schema]
 type = "object"

@@ -44,7 +44,6 @@ import {
 } from "../utils/mcp-image";
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
-import { internalCodeFromProviderMessage } from "./context-overflow-patterns";
 
 // =============================================================================
 // TYPE ALIASES
@@ -1547,7 +1546,7 @@ export const openaiAdapterFactory: LLMProvider<
     if (get(error, "error.code") === "context_length_exceeded") {
       return ArchestraInternalErrorCode.ContextLengthExceeded;
     }
-    return internalCodeFromProviderMessage(get(error, "error.message"));
+    return undefined;
   },
 
   extractErrorMessage(error: unknown): string {

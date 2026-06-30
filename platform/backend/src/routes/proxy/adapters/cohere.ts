@@ -26,7 +26,6 @@ import type {
 import { extractCommonMessageText } from "@/types";
 import type { ToolCompressionStats as CompressionStats } from "../utils/toon-conversion";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
-import { internalCodeFromProviderMessage } from "./context-overflow-patterns";
 
 // =============================================================================
 // TYPE ALIASES
@@ -929,13 +928,11 @@ function extractErrorMessage(error: unknown): string {
 }
 
 function extractInternalCode(
-  error: unknown,
+  _error: unknown,
 ): ArchestraInternalErrorCode | undefined {
-  // Cohere 400 bodies are `{ message: string }` with no structured code; the
-  // overflow messages read "too many tokens: …". Classify via the shared vocabulary.
-  return internalCodeFromProviderMessage(
-    get(error, "error.message") ?? get(error, "message"),
-  );
+  // Cohere 400 bodies are `{ message: string }` with no structured code, so there
+  // is no structured signal to classify overflow against.
+  return undefined;
 }
 
 export function getUsageTokens(usage: Cohere.Types.Usage) {

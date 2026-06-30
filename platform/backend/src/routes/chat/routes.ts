@@ -144,6 +144,7 @@ import {
 import { injectAppDiagnostics } from "./inject-app-diagnostics";
 import { injectSkillActivation } from "./inject-skill-activation";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
+import { assertWithinContextWindow } from "./normalization/enforce-context-window-limit";
 import {
   assertInlineAttachmentsAcceptable,
   extractInlineAttachments,
@@ -831,25 +832,28 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   return null;
                 });
 
-                const modelMessages = await buildModelMessages({
-                  messages: normalizedMessagesForLLM,
-                  conversationId,
-                  organizationId,
-                  userId: user.id,
-                  agentId: conversation.agentId,
-                  provider,
-                  selectedModel,
-                  inputModalities: modelRow?.inputModalities ?? null,
-                  agentLlmApiKeyId: agent.llmApiKeyId,
-                  systemPrompt,
-                  abortSignal: chatAbortController.signal,
-                  emit: (event) => writer.write(event),
-                  anthropicNativeEndpoint,
-                });
+                const { modelMessages, materializedMessages } =
+                  await buildModelMessages({
+                    messages: normalizedMessagesForLLM,
+                    conversationId,
+                    organizationId,
+                    userId: user.id,
+                    agentId: conversation.agentId,
+                    provider,
+                    selectedModel,
+                    inputModalities: modelRow?.inputModalities ?? null,
+                    agentLlmApiKeyId: agent.llmApiKeyId,
+                    systemPrompt,
+                    abortSignal: chatAbortController.signal,
+                    emit: (event) => writer.write(event),
+                    anthropicNativeEndpoint,
+                  });
 
                 // Per-category breakdown of the assembled request, powering
-                // the Context Window Visualizer. Computed from the assembled
-                // messages so it reflects exactly what is sent this turn.
+                // the Context Window Visualizer. Built from the materialized,
+                // parts-bearing messages — the converted `modelMessages` carry
+                // no `.parts`, so the breakdown would otherwise count only the
+                // system prompt and tools.
                 //
                 // After tool-call steps we re-emit an updated breakdown using the
                 // provider's exact inputTokens so the visualizer headline stays
@@ -867,7 +871,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     inputPricePerToken: breakdownPricePerToken,
                     systemPrompt,
                     tools: supportsToolCalling ? mcpTools : undefined,
-                    messages: modelMessages,
+                    messages: materializedMessages,
                   });
                   latestBreakdown = breakdown;
                   writer.write({
@@ -880,6 +884,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     { error, conversationId },
                     "[ContextWindow] failed to build context window breakdown",
                   );
+                }
+
+                // Reject a prompt that cannot fit the model's context window
+                // before the provider call, so the user gets an actionable
+                // "too long" message instead of a generic provider rejection.
+                // Reuses the breakdown's budget (gating on the tokenizer-counted
+                // categories only). Skipped when the budget could not be built —
+                // the provider remains the safety net in that case.
+                if (latestBreakdown !== null) {
+                  assertWithinContextWindow(latestBreakdown);
                 }
 
                 // Flipped once runAgentStream returns the committed result. The

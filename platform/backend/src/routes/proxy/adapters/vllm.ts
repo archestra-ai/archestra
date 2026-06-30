@@ -5,13 +5,10 @@
  * configured for vLLM via createOpenAiCompatibleAdapterFactory.
  * See: https://docs.vllm.ai/en/latest/features/openai_api.html
  */
-import type { ArchestraInternalErrorCode } from "@archestra/shared";
-import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import config from "@/config";
 import { metrics } from "@/observability";
 import type { CreateClientOptions } from "@/types";
-import { internalCodeFromProviderMessage } from "./context-overflow-patterns";
 import { createOpenAiCompatibleAdapterFactory } from "./openai-compatible-adapter";
 
 export const vllmAdapterFactory = createOpenAiCompatibleAdapterFactory({
@@ -38,9 +35,5 @@ export const vllmAdapterFactory = createOpenAiCompatibleAdapterFactory({
       fetch: customFetch,
       defaultHeaders: options.defaultHeaders,
     });
-  },
-  // vLLM returns a plain message (no structured error.code) on context overflow.
-  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
-    return internalCodeFromProviderMessage(get(error, "error.message"));
   },
 });

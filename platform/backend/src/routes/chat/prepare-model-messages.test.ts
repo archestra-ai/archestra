@@ -3,7 +3,21 @@ import config from "@/config";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
+import { buildContextWindowBreakdown } from "./context-window-breakdown";
+import {
+  assertWithinContextWindow,
+  ContextWindowExceededError,
+} from "./normalization/enforce-context-window-limit";
 import { __test, buildModelMessages } from "./prepare-model-messages";
+
+function messagesSegmentTokens(
+  breakdown: ReturnType<typeof buildContextWindowBreakdown>,
+): number {
+  return (
+    breakdown.segments.find((segment) => segment.category === "messages")
+      ?.tokens ?? 0
+  );
+}
 
 const CSV = "a,b,c\n1,2,3";
 const INGESTIBLE = new Set(["text/csv"]);
@@ -93,14 +107,14 @@ test("anthropic non-native endpoint: bytes inlined as text, no cache_control, no
   config.skillsSandbox.enabled = false;
   let modelMessages: ModelMessage[];
   try {
-    modelMessages = await __test.buildModelMessagesForProvider({
+    ({ modelMessages } = await __test.buildModelMessagesForProvider({
       messages,
       provider: "anthropic",
       conversationId: conversation.id,
       ingestibleMimeTypes: INGESTIBLE,
       anthropicNativeEndpoint: false,
       sandboxAvailable: false,
-    });
+    }));
   } finally {
     config.skillsSandbox.enabled = prevEnabled;
   }
@@ -132,14 +146,14 @@ test("native Anthropic (default flag): document file part survives with cache_co
   config.skillsSandbox.enabled = false;
   let modelMessages: ModelMessage[];
   try {
-    modelMessages = await __test.buildModelMessagesForProvider({
+    ({ modelMessages } = await __test.buildModelMessagesForProvider({
       messages,
       provider: "anthropic",
       conversationId: conversation.id,
       ingestibleMimeTypes: INGESTIBLE,
       anthropicNativeEndpoint: true,
       sandboxAvailable: false,
-    });
+    }));
   } finally {
     config.skillsSandbox.enabled = prevEnabled;
   }
@@ -181,7 +195,7 @@ test("buildModelMessages emits the sandbox pointer when the agent can use the sa
   config.skillsSandbox.enabled = true;
   let modelMessages: ModelMessage[];
   try {
-    modelMessages = await buildModelMessages({
+    ({ modelMessages } = await buildModelMessages({
       messages,
       conversationId: conversation.id,
       organizationId: org.id,
@@ -190,7 +204,7 @@ test("buildModelMessages emits the sandbox pointer when the agent can use the sa
       provider: "anthropic",
       selectedModel: "claude-test-model",
       emit: () => {},
-    });
+    }));
   } finally {
     config.skillsSandbox.enabled = prevEnabled;
   }
@@ -224,7 +238,7 @@ test("buildModelMessages omits the sandbox pointer when the agent cannot use the
   config.skillsSandbox.enabled = true;
   let modelMessages: ModelMessage[];
   try {
-    modelMessages = await buildModelMessages({
+    ({ modelMessages } = await buildModelMessages({
       messages,
       conversationId: conversation.id,
       organizationId: org.id,
@@ -233,7 +247,7 @@ test("buildModelMessages omits the sandbox pointer when the agent cannot use the
       provider: "anthropic",
       selectedModel: "claude-test-model",
       emit: () => {},
-    });
+    }));
   } finally {
     config.skillsSandbox.enabled = prevEnabled;
   }
@@ -312,7 +326,7 @@ test("bedrock: a file that rounds to the limit is not rejected", async ({
   const prevEnabled = config.skillsSandbox.enabled;
   config.skillsSandbox.enabled = false;
   try {
-    const modelMessages = await __test.buildModelMessagesForProvider({
+    const { modelMessages } = await __test.buildModelMessagesForProvider({
       messages,
       provider: "bedrock",
       conversationId: conversation.id,
@@ -337,7 +351,7 @@ test("bedrock: a small inline PDF passes the size guard", async ({
   const prevEnabled = config.skillsSandbox.enabled;
   config.skillsSandbox.enabled = false;
   try {
-    const modelMessages = await __test.buildModelMessagesForProvider({
+    const { modelMessages } = await __test.buildModelMessagesForProvider({
       messages,
       provider: "bedrock",
       conversationId: conversation.id,
@@ -347,4 +361,87 @@ test("bedrock: a small inline PDF passes the size guard", async ({
   } finally {
     config.skillsSandbox.enabled = prevEnabled;
   }
+});
+
+test("exposes materialized messages the breakdown can count (the converted modelMessages cannot)", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const messages: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [{ type: "text", text: "lorem ipsum ".repeat(50) }],
+    },
+  ];
+
+  const { modelMessages, materializedMessages } = await buildModelMessages({
+    messages,
+    conversationId: conversation.id,
+    organizationId: agent.organizationId,
+    userId: conversation.userId,
+    agentId: agent.id,
+    provider: "openai",
+    selectedModel: "gpt-4o",
+    emit: () => {},
+  });
+
+  const fromMaterialized = buildContextWindowBreakdown({
+    provider: "openai",
+    model: "gpt-4o",
+    contextLength: 128_000,
+    messages: materializedMessages,
+  });
+  const fromModelMessages = buildContextWindowBreakdown({
+    provider: "openai",
+    model: "gpt-4o",
+    contextLength: 128_000,
+    messages: modelMessages as unknown as ChatMessage[],
+  });
+
+  // The materialized (parts-bearing) messages carry the conversation tokens;
+  // the converted ModelMessages have no `.parts`, so the breakdown sees none —
+  // exactly the latent undercount this wiring fixes.
+  expect(messagesSegmentTokens(fromMaterialized)).toBeGreaterThan(0);
+  expect(messagesSegmentTokens(fromModelMessages)).toBe(0);
+});
+
+test("an assembled prompt larger than the model window is rejected pre-flight", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const messages: ChatMessage[] = [
+    { role: "user", parts: [{ type: "text", text: "word ".repeat(400) }] },
+  ];
+
+  const { materializedMessages } = await buildModelMessages({
+    messages,
+    conversationId: conversation.id,
+    organizationId: agent.organizationId,
+    userId: conversation.userId,
+    agentId: agent.id,
+    provider: "openai",
+    selectedModel: "gpt-4o",
+    emit: () => {},
+  });
+
+  // Same composition routes.ts performs: build the budget from the materialized
+  // messages, then gate on it. A tiny window makes the turn overflow.
+  const breakdown = buildContextWindowBreakdown({
+    provider: "openai",
+    model: "gpt-4o",
+    contextLength: 50,
+    messages: materializedMessages,
+  });
+
+  expect(() => assertWithinContextWindow(breakdown)).toThrow(
+    ContextWindowExceededError,
+  );
 });

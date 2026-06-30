@@ -26,7 +26,6 @@ import type {
   LLMStreamAdapter,
   OpenAi,
 } from "@/types";
-import { internalCodeFromProviderMessage } from "./context-overflow-patterns";
 import {
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
@@ -52,8 +51,8 @@ interface OpenAiCompatibleAdapterOptions {
   ) => OpenAIProvider;
   /**
    * Override context-overflow detection. The default matches OpenAI's structured
-   * `error.code === "context_length_exceeded"` and falls back to the shared
-   * message vocabulary; providers that signal overflow another way supply their own.
+   * `error.code === "context_length_exceeded"`; providers that signal overflow
+   * another way supply their own.
    */
   extractInternalCode?: (
     error: unknown,
@@ -66,9 +65,7 @@ function defaultExtractInternalCode(
   if (get(error, "error.code") === "context_length_exceeded") {
     return ArchestraInternalErrorCode.ContextLengthExceeded;
   }
-  return internalCodeFromProviderMessage(
-    get(error, "error.message") ?? get(error, "message"),
-  );
+  return undefined;
 }
 
 export function createOpenAiCompatibleAdapterFactory(

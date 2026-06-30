@@ -27,6 +27,7 @@ import {
   ProviderError,
   sanitizeChatErrorForFrontend,
 } from "./errors";
+import { ContextWindowExceededError } from "./normalization/enforce-context-window-limit";
 import { RequestTooLargeError } from "./normalization/enforce-request-size-limit";
 
 beforeEach(() => {
@@ -67,6 +68,22 @@ describe("mapProviderError - request too large", () => {
     expect(result.message).toMatch(/\bThis file is 49 MB\b/);
     expect(result.message).toContain("AWS Bedrock");
     expect(result.message).toContain("20 MB");
+  });
+});
+
+describe("mapProviderError - context window exceeded", () => {
+  it("maps ContextWindowExceededError to a non-retryable ContextTooLong card", () => {
+    const result = mapProviderError(
+      new ContextWindowExceededError({
+        model: "claude-test",
+        estimatedTokens: 566_084,
+        contextLength: 262_144,
+      }),
+      "anthropic",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+    expect(result.isRetryable).toBe(false);
   });
 });
 

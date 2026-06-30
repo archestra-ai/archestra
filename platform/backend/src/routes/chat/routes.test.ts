@@ -580,57 +580,61 @@ describe("buildModelMessagesForProvider", () => {
   const conversationId = "conv-model-prep";
 
   it("drops an assistant turn that converts to empty model content", async () => {
-    const modelMessages = await __prepareTest.buildModelMessagesForProvider({
-      provider: "openai",
-      conversationId,
-      sandboxAvailable: false,
-      messages: [
-        { role: "user", parts: [{ type: "text", text: "hi" }] },
-        {
-          // only provider-invisible parts — convertToModelMessages yields an
-          // assistant message with empty content here.
-          role: "assistant",
-          parts: [
-            { type: "step-start" },
-            {
-              type: "data-tool-ui-start",
-              data: { toolCallId: "call_x", toolName: "render_chart" },
-            },
-          ],
-        },
-      ],
-    });
+    const { modelMessages } = await __prepareTest.buildModelMessagesForProvider(
+      {
+        provider: "openai",
+        conversationId,
+        sandboxAvailable: false,
+        messages: [
+          { role: "user", parts: [{ type: "text", text: "hi" }] },
+          {
+            // only provider-invisible parts — convertToModelMessages yields an
+            // assistant message with empty content here.
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              {
+                type: "data-tool-ui-start",
+                data: { toolCallId: "call_x", toolName: "render_chart" },
+              },
+            ],
+          },
+        ],
+      },
+    );
 
     expect(modelMessages.map((message) => message.role)).toEqual(["user"]);
   });
 
   it("keeps normal text and tool assistant turns", async () => {
-    const modelMessages = await __prepareTest.buildModelMessagesForProvider({
-      provider: "openai",
-      conversationId,
-      sandboxAvailable: false,
-      messages: [
-        { role: "user", parts: [{ type: "text", text: "search please" }] },
-        {
-          role: "assistant",
-          parts: [
-            { type: "step-start" },
-            {
-              type: "tool-search",
-              toolCallId: "call_ok",
-              toolName: "search",
-              state: "output-available",
-              input: { q: "query" },
-              output: { hits: [] },
-            },
-          ],
-        },
-        {
-          role: "assistant",
-          parts: [{ type: "text", text: "Here are the results." }],
-        },
-      ],
-    });
+    const { modelMessages } = await __prepareTest.buildModelMessagesForProvider(
+      {
+        provider: "openai",
+        conversationId,
+        sandboxAvailable: false,
+        messages: [
+          { role: "user", parts: [{ type: "text", text: "search please" }] },
+          {
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              {
+                type: "tool-search",
+                toolCallId: "call_ok",
+                toolName: "search",
+                state: "output-available",
+                input: { q: "query" },
+                output: { hits: [] },
+              },
+            ],
+          },
+          {
+            role: "assistant",
+            parts: [{ type: "text", text: "Here are the results." }],
+          },
+        ],
+      },
+    );
 
     const assistantMessages = modelMessages.filter(
       (message) => message.role === "assistant",

@@ -1,5 +1,4 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
-import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 import type { Anthropic } from "@/types";
@@ -737,50 +736,5 @@ describe("anthropicAdapterFactory.execute", () => {
 
     expect(post).toHaveBeenCalled();
     expect(response.content[0]).toMatchObject({ type: "text", text: "ok" });
-  });
-});
-
-describe("extractInternalCode", () => {
-  test("classifies a Kimi-style 'exceeded model token limit' message as overflow", () => {
-    // Kimi's Anthropic-compatible gateway phrases overflow differently from
-    // Anthropic's own "prompt is too long" — this is the #3219 regression.
-    const error = {
-      error: {
-        message:
-          "Invalid request: Your request exceeded model token limit: 262144 (requested: 566084)",
-      },
-    };
-    expect(anthropicAdapterFactory.extractInternalCode(error)).toBe(
-      ArchestraInternalErrorCode.ContextLengthExceeded,
-    );
-  });
-
-  test("still classifies Anthropic's native 'prompt is too long'", () => {
-    const error = {
-      error: {
-        error: {
-          message: "prompt is too long: 201381 tokens > 200000 maximum",
-        },
-      },
-    };
-    expect(anthropicAdapterFactory.extractInternalCode(error)).toBe(
-      ArchestraInternalErrorCode.ContextLengthExceeded,
-    );
-  });
-
-  test("classifies an upstream byte-size limit as request-too-large", () => {
-    const error = {
-      error: { message: "total message size 3275158 exceeds limit 2097152" },
-    };
-    expect(anthropicAdapterFactory.extractInternalCode(error)).toBe(
-      ArchestraInternalErrorCode.RequestTooLarge,
-    );
-  });
-
-  test("leaves an unrelated 400 unclassified", () => {
-    const error = {
-      error: { message: "messages: at least one message is required" },
-    };
-    expect(anthropicAdapterFactory.extractInternalCode(error)).toBeUndefined();
   });
 });

@@ -15,14 +15,13 @@ import {
  * body → the chat-error mapper, which uses it as a uniform cross-provider
  * signal.
  *
- * Providers differ in how they surface categories like "context too long":
- * some return a structured `error.code`, others only a message. Classifying
- * in the adapter and emitting a normalized code keeps the mapper a simple
- * lookup and lets each provider's idiosyncrasies stay local to its adapter.
+ * Adapters classify a category like "context too long" from the provider's
+ * structured `error.code` and emit a normalized code, which keeps the mapper a
+ * simple lookup and lets each provider's idiosyncrasies stay local to its
+ * adapter.
  */
 export const ArchestraInternalErrorCode = {
   ContextLengthExceeded: "context_length_exceeded",
-  RequestTooLarge: "request_too_large",
 } as const;
 
 export type ArchestraInternalErrorCode =

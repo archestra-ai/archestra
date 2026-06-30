@@ -6,10 +6,12 @@ import { ArchestraInternalErrorCode } from "@archestra/shared";
  * them phrase the same condition differently, so keeping one audited pattern list
  * here stops the per-adapter sniffs from drifting (the cause of #3219).
  *
- * Patterns are deliberately conservative: each pairs a context/token noun with an
+ * Patterns are deliberately conservative: each pairs a context/prompt noun with an
  * exceed/limit verb. Bare "too long", "context length", and "reduce the length"
- * are intentionally excluded — they appear in unrelated 400s (field validation,
- * remediation prose) and would misclassify them.
+ * are excluded — they appear in unrelated 400s. The token-budget phrasings
+ * ("token limit", "too many tokens") are anchored to a context/prompt word so a
+ * token *rate*-limit ("exceeded your token limit this minute") is not misread as
+ * context overflow, since this runs on every provider error regardless of status.
  */
 const CONTEXT_OVERFLOW_MESSAGE_PATTERNS: RegExp[] = [
   /prompt is too long/i, // Anthropic native
@@ -19,8 +21,8 @@ const CONTEXT_OVERFLOW_MESSAGE_PATTERNS: RegExp[] = [
   /context length exceeded/i,
   /context window exceed(?:s|ed)?/i, // MiniMax "context window exceeds limit"
   /exceed(?:s|ed)? (?:the |your )?context window/i,
-  /exceed[a-z]* (?:the |your )?(?:model )?token limit/i, // Kimi "exceeded model token limit"
-  /too many tokens/i, // Cohere
+  /exceed(?:s|ed)? (?:the |your )?model token limit/i, // Kimi "exceeded model token limit"
+  /too many tokens\b.*\b(?:prompt|context|input|cannot exceed|maximum)/i, // Cohere
 ];
 
 /**
@@ -34,14 +36,14 @@ const REQUEST_TOO_LARGE_MESSAGE_PATTERNS: RegExp[] = [
   /exceeds the maximum (?:allowed )?(?:request |payload )?size/i,
 ];
 
-export function isContextOverflowMessage(message: unknown): boolean {
+function isContextOverflowMessage(message: unknown): boolean {
   return (
     typeof message === "string" &&
     CONTEXT_OVERFLOW_MESSAGE_PATTERNS.some((p) => p.test(message))
   );
 }
 
-export function isRequestTooLargeMessage(message: unknown): boolean {
+function isRequestTooLargeMessage(message: unknown): boolean {
   return (
     typeof message === "string" &&
     REQUEST_TOO_LARGE_MESSAGE_PATTERNS.some((p) => p.test(message))

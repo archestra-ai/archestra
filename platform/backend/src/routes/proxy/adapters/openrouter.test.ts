@@ -121,22 +121,20 @@ describe("extractInternalCode", () => {
           "This endpoint's maximum context length is 204800 tokens. However, you requested about 309977 tokens (303247 of text input, 6730 of tool input). Please reduce the length of either one.",
       },
     };
-    expect(openrouterAdapterFactory.extractInternalCode?.(error)).toBe(
+    expect(openrouterAdapterFactory.extractInternalCode(error)).toBe(
       ArchestraInternalErrorCode.ContextLengthExceeded,
     );
   });
 
   test("still classifies the structured context_length_exceeded code", () => {
     const error = { error: { code: "context_length_exceeded" } };
-    expect(openrouterAdapterFactory.extractInternalCode?.(error)).toBe(
+    expect(openrouterAdapterFactory.extractInternalCode(error)).toBe(
       ArchestraInternalErrorCode.ContextLengthExceeded,
     );
   });
 
   test("leaves an unrelated 400 unclassified", () => {
     const error = { error: { message: "invalid model specified" } };
-    expect(
-      openrouterAdapterFactory.extractInternalCode?.(error),
-    ).toBeUndefined();
+    expect(openrouterAdapterFactory.extractInternalCode(error)).toBeUndefined();
   });
 });

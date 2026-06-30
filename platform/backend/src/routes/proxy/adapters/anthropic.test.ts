@@ -750,7 +750,7 @@ describe("extractInternalCode", () => {
           "Invalid request: Your request exceeded model token limit: 262144 (requested: 566084)",
       },
     };
-    expect(anthropicAdapterFactory.extractInternalCode?.(error)).toBe(
+    expect(anthropicAdapterFactory.extractInternalCode(error)).toBe(
       ArchestraInternalErrorCode.ContextLengthExceeded,
     );
   });
@@ -763,7 +763,7 @@ describe("extractInternalCode", () => {
         },
       },
     };
-    expect(anthropicAdapterFactory.extractInternalCode?.(error)).toBe(
+    expect(anthropicAdapterFactory.extractInternalCode(error)).toBe(
       ArchestraInternalErrorCode.ContextLengthExceeded,
     );
   });
@@ -772,7 +772,7 @@ describe("extractInternalCode", () => {
     const error = {
       error: { message: "total message size 3275158 exceeds limit 2097152" },
     };
-    expect(anthropicAdapterFactory.extractInternalCode?.(error)).toBe(
+    expect(anthropicAdapterFactory.extractInternalCode(error)).toBe(
       ArchestraInternalErrorCode.RequestTooLarge,
     );
   });
@@ -781,8 +781,6 @@ describe("extractInternalCode", () => {
     const error = {
       error: { message: "messages: at least one message is required" },
     };
-    expect(
-      anthropicAdapterFactory.extractInternalCode?.(error),
-    ).toBeUndefined();
+    expect(anthropicAdapterFactory.extractInternalCode(error)).toBeUndefined();
   });
 });

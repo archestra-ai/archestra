@@ -1,15 +1,10 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
-import {
-  internalCodeFromProviderMessage,
-  isContextOverflowMessage,
-  isRequestTooLargeMessage,
-} from "./context-overflow-patterns";
+import { internalCodeFromProviderMessage } from "./context-overflow-patterns";
 
-describe("isContextOverflowMessage", () => {
+describe("internalCodeFromProviderMessage", () => {
   // Real wordings captured from live providers/gateways plus the phrasings the
-  // per-adapter sniffs already relied on. These are the strings that must classify
-  // as context overflow.
+  // per-adapter sniffs already relied on — all must classify as context overflow.
   test.each([
     // Anthropic native + Bedrock Claude
     "prompt is too long: 201381 tokens > 200000 maximum",
@@ -24,61 +19,51 @@ describe("isContextOverflowMessage", () => {
     "input prompt too long",
     // MiniMax Anthropic-compatible
     "context window exceeds limit (2013)",
-    // Cohere
-    "too many tokens for this model",
+    // Cohere (real full message)
+    "too many tokens: total number of tokens in the prompt cannot exceed 4096",
   ])("classifies overflow: %s", (message) => {
-    expect(isContextOverflowMessage(message)).toBe(true);
     expect(internalCodeFromProviderMessage(message)).toBe(
       ArchestraInternalErrorCode.ContextLengthExceeded,
     );
   });
 
-  // Messages that must NOT be classified as context overflow — guards the
-  // conservative pattern set against false positives.
-  test.each([
-    "total message size 3275158 exceeds limit 2097152", // byte-size, not tokens
-    "Rate limit exceeded, please try again later",
-    "rate_limit_exceeded",
-    "Invalid API key provided",
-    "There was an issue with your request. Please try again.",
-    "stop sequences must be non-empty strings",
-    "Input is too long for requested model", // bare "too long" — intentionally excluded
-  ])("does not classify as overflow: %s", (message) => {
-    expect(isContextOverflowMessage(message)).toBe(false);
-  });
-
-  test("ignores non-string input", () => {
-    expect(isContextOverflowMessage(undefined)).toBe(false);
-    expect(isContextOverflowMessage(null)).toBe(false);
-    expect(isContextOverflowMessage({ message: "prompt is too long" })).toBe(
-      false,
-    );
-  });
-});
-
-describe("isRequestTooLargeMessage", () => {
+  // Request-payload byte-size limits classify as request-too-large, not overflow.
   test.each([
     "total message size 3275158 exceeds limit 2097152",
     "Request Entity Too Large",
     "payload too large",
     "request body exceeds the maximum allowed request size",
   ])("classifies request-too-large: %s", (message) => {
-    expect(isRequestTooLargeMessage(message)).toBe(true);
     expect(internalCodeFromProviderMessage(message)).toBe(
       ArchestraInternalErrorCode.RequestTooLarge,
     );
   });
 
+  // Must stay unclassified — guards the conservative patterns against false
+  // positives, especially token *rate*/quota limits that are not context overflow.
   test.each([
-    "prompt is too long: 201381 tokens > 200000 maximum",
-    "maximum context length is 8192 tokens",
+    "Rate limit exceeded, please try again later",
+    "rate_limit_exceeded",
+    "You have exceeded your token limit for this minute",
+    "too many tokens per minute, slow down",
+    "You've used too many tokens this month; upgrade your plan",
     "Invalid API key provided",
-  ])("does not classify as request-too-large: %s", (message) => {
-    expect(isRequestTooLargeMessage(message)).toBe(false);
+    "There was an issue with your request. Please try again.",
+    "stop sequences must be non-empty strings",
+    "Input is too long for requested model", // bare "too long" — intentionally excluded
+  ])("does not classify: %s", (message) => {
+    expect(internalCodeFromProviderMessage(message)).toBeUndefined();
+  });
+
+  test("ignores non-string input", () => {
+    expect(internalCodeFromProviderMessage(undefined)).toBeUndefined();
+    expect(internalCodeFromProviderMessage(null)).toBeUndefined();
+    expect(
+      internalCodeFromProviderMessage({ message: "prompt is too long" }),
+    ).toBeUndefined();
   });
 
   test("context overflow wins when both could match", () => {
-    // Defensive: a hypothetical message hitting both lists resolves to overflow.
     const message = "maximum context length exceeded; payload too large";
     expect(internalCodeFromProviderMessage(message)).toBe(
       ArchestraInternalErrorCode.ContextLengthExceeded,

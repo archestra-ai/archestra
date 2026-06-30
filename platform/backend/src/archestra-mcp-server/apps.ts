@@ -1623,12 +1623,16 @@ function truncateUtf8(
   return { text: buf.subarray(0, end).toString("utf8"), truncated: true };
 }
 
+// Count every start position where `needle` matches, including overlapping ones
+// (e.g. "\n\n" twice in "\n\n\n"). The edit path uses this to enforce a unique
+// match, so a self-overlapping old_str must read as ambiguous — not collapse to
+// one and silently replace the first occurrence. Advance by one position.
 function countOccurrences(haystack: string, needle: string): number {
   let count = 0;
   let pos = haystack.indexOf(needle);
   while (pos !== -1) {
     count++;
-    pos = haystack.indexOf(needle, pos + needle.length);
+    pos = haystack.indexOf(needle, pos + 1);
   }
   return count;
 }

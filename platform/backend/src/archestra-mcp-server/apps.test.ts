@@ -602,6 +602,21 @@ describe("read_app / edit_app", () => {
     expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 
+  test("a self-overlapping old_str is rejected as ambiguous, not silently replaced", async () => {
+    // "aa" matches at indices 5 and 6 in "aaa" (overlapping). The uniqueness
+    // guard must see both and reject, never collapse to one and edit the first.
+    const { appId, version } = await scaffoldWithHtml("<pre>aaa</pre>");
+    const result = await editApp(appId, version, [
+      { old_str: "aa", new_str: "bb" },
+    ]);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("matched 2 times");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version))?.html,
+    ).toBe("<pre>aaa</pre>");
+  });
+
   test("a no-op edit (old_str === new_str) is rejected", async () => {
     const { appId, version } = await scaffoldWithHtml("<h1>same</h1>");
     const result = await editApp(appId, version, [

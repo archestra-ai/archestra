@@ -180,7 +180,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpGateway: ["read", "create", "update", "delete"],
   mcpOauthClient: ["read"],
   toolPolicy: ["read"],
-  mcpRegistry: ["read"],
+  mcpRegistry: ["read", "update"],
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
   environment: [],
@@ -668,7 +668,13 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpServerInstallation: ["create"],
   },
   [RouteId.ReinstallMcpServer]: {
-    mcpServerInstallation: ["update"],
+    // Reinstalling redeploys a connection the caller can already install, so it
+    // is gated like installation (:create), not :update — mirroring
+    // ReauthenticateMcpServer above. The handler's assertScopedLifecycleAuthorization
+    // does the finer-grained check (owner-only for personal, team-admin for team,
+    // admin for org), so a member can reinstall their OWN connection and nothing
+    // more. Requiring :update here locked owners out of reinstalling their own.
+    mcpServerInstallation: ["create"],
   },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServerInstallation: ["read"],

@@ -348,8 +348,10 @@ describe("deploy_mcp_server", () => {
     await OrganizationModel.patch(org.id, {
       defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
     });
+    // A plain member (non-privileged: mcpRegistry:update but no team-admin/admin)
+    // is the actor the gate targets — privileged authors are exempt.
     const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
+    await makeMember(user.id, org.id, { role: "member" });
     const agent = await makeAgent({ organizationId: org.id });
     const ctx: ArchestraContext = {
       agent: { id: agent.id, name: agent.name },

@@ -39,6 +39,9 @@ vi.mock("@/clients/mcp-client", () => ({
 vi.mock("@/auth/utils", () => ({
   hasPermission: hasPermissionMock,
   userHasPermission: userHasPermissionMock,
+  // The image gate resolves the catalog author's privilege; empty permissions
+  // make the author a non-privileged member, so these image-based cases gate.
+  getPermissionsForUserContext: () => Promise.resolve({}),
 }));
 
 vi.mock("@/k8s/mcp-server-runtime", () => ({

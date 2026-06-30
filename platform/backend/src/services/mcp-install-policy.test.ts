@@ -9,6 +9,7 @@ import {
 import {
   assertInstallAllowedOrBlock,
   flagImageApprovalRequired,
+  holdInstallIfImageGated,
 } from "@/services/mcp-install-policy";
 import { describe, expect, test } from "@/test";
 import type { CatalogItemApprovalStatus } from "@/types";
@@ -355,5 +356,217 @@ describe("flagImageApprovalRequired", () => {
     });
     const required = await flagImageApprovalRequired([item], org.id);
     expect(required.size).toBe(0);
+  });
+
+  test("does not flag an untrusted image authored by a privileged user", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
+    });
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const member = await makeUser();
+    await makeMember(member.id, org.id, { role: "member" });
+
+    const byAdmin = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      authorId: admin.id,
+      scope: "personal",
+      serverType: "local",
+      localConfig: { dockerImage: UNTRUSTED_IMAGE },
+    });
+    const byMember = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      authorId: member.id,
+      scope: "personal",
+      serverType: "local",
+      localConfig: { dockerImage: UNTRUSTED_IMAGE },
+    });
+
+    const required = await flagImageApprovalRequired(
+      [byAdmin, byMember],
+      org.id,
+    );
+    expect(required.has(byAdmin.id)).toBe(false);
+    expect(required.has(byMember.id)).toBe(true);
+  });
+});
+
+describe("author privilege exemption", () => {
+  test("does not gate an untrusted image authored by an admin", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
+    });
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      authorId: admin.id,
+      scope: "personal",
+      serverType: "local",
+      localConfig: { dockerImage: UNTRUSTED_IMAGE },
+    });
+
+    await expect(
+      assertInstallAllowedOrBlock({
+        catalogItem: catalog,
+        organizationId: org.id,
+      }),
+    ).resolves.toBeUndefined();
+    expect(await approvalStatus(catalog.id)).toBeNull();
+  });
+
+  test("does not gate an untrusted image authored by an editor (team-admin)", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
+    });
+    const editor = await makeUser();
+    await makeMember(editor.id, org.id, { role: "editor" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      authorId: editor.id,
+      scope: "personal",
+      serverType: "local",
+      localConfig: { dockerImage: UNTRUSTED_IMAGE },
+    });
+
+    await expect(
+      assertInstallAllowedOrBlock({
+        catalogItem: catalog,
+        organizationId: org.id,
+      }),
+    ).resolves.toBeUndefined();
+    expect(await approvalStatus(catalog.id)).toBeNull();
+  });
+
+  test("gates an untrusted image authored by a plain member", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
+    });
+    const member = await makeUser();
+    await makeMember(member.id, org.id, { role: "member" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      authorId: member.id,
+      scope: "personal",
+      serverType: "local",
+      localConfig: { dockerImage: UNTRUSTED_IMAGE },
+    });
+
+    await expect(
+      assertInstallAllowedOrBlock({
+        catalogItem: catalog,
+        organizationId: org.id,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(await approvalStatus(catalog.id)).toBe("pending");
+  });
+});
+
+describe("holdInstallIfImageGated", () => {
+  test("holds (pending) a non-privileged author's untrusted image edit", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
+    });
+    const member = await makeUser();
+    await makeMember(member.id, org.id, { role: "member" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      authorId: member.id,
+      scope: "personal",
+      serverType: "local",
+      localConfig: { dockerImage: UNTRUSTED_IMAGE },
+    });
+
+    await expect(
+      holdInstallIfImageGated({ catalogItem: catalog, organizationId: org.id }),
+    ).resolves.toBe(true);
+    expect(await approvalStatus(catalog.id)).toBe("pending");
+  });
+
+  test("does not hold a privileged author's untrusted image edit", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
+    });
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      authorId: admin.id,
+      scope: "personal",
+      serverType: "local",
+      localConfig: { dockerImage: UNTRUSTED_IMAGE },
+    });
+
+    await expect(
+      holdInstallIfImageGated({ catalogItem: catalog, organizationId: org.id }),
+    ).resolves.toBe(false);
+    expect(await approvalStatus(catalog.id)).toBeNull();
+  });
+
+  test("does not re-hold an already-approved item", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
+    });
+    const member = await makeUser();
+    await makeMember(member.id, org.id, { role: "member" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      authorId: member.id,
+      scope: "personal",
+      serverType: "local",
+      localConfig: { dockerImage: UNTRUSTED_IMAGE },
+    });
+    await setApproval(catalog.id, "approved");
+    const approved = await InternalMcpCatalogModel.findById(catalog.id);
+
+    await expect(
+      holdInstallIfImageGated({
+        catalogItem: approved!,
+        organizationId: org.id,
+      }),
+    ).resolves.toBe(false);
+    expect(await approvalStatus(catalog.id)).toBe("approved");
   });
 });

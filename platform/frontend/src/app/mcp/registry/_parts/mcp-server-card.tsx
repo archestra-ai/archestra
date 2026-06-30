@@ -859,7 +859,7 @@ export function McpServerCard({
         {chatButton}
         {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
           <PermissionButton
-            permissions={{ mcpServerInstallation: ["update"] }}
+            permissions={{ mcpServerInstallation: ["create"] }}
             onClick={triggerReinstall}
             size="sm"
             variant="outline"
@@ -956,7 +956,7 @@ export function McpServerCard({
             permissions={
               showAdminCatalogReinstall
                 ? { mcpRegistry: ["update"] }
-                : { mcpServerInstallation: ["update"] }
+                : { mcpServerInstallation: ["create"] }
             }
             onClick={triggerCombinedReinstall}
             disabled={reinstallCatalogMutation.isPending}
@@ -984,7 +984,7 @@ export function McpServerCard({
         {chatButton}
         {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
           <PermissionButton
-            permissions={{ mcpServerInstallation: ["update"] }}
+            permissions={{ mcpServerInstallation: ["create"] }}
             onClick={triggerReinstall}
             size="sm"
             variant="outline"
@@ -1119,6 +1119,46 @@ export function McpServerCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">
+        {showApprovalPanel && allServersForCatalog.length > 0 && (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2">
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-amber-600 dark:text-amber-500">
+                  {isInstallAdmin
+                    ? "Image needs approval"
+                    : "Admin review required"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  The Docker image was changed to one that isn't from a trusted
+                  registry. Existing connections keep running the previous image
+                  until an admin approves.
+                </p>
+              </div>
+              {isInstallAdmin ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={openEditorConfiguration}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Review config
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={copyApprovalLink}
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy link
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
         {variant === "local" &&
           (() => {
             // Multi-tenant catalogs alias one K8s pod across many mcp_server

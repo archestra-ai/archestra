@@ -39,7 +39,10 @@ import {
   assertRemoteServerUrlAllowedByNetworkPolicy,
   assertValuesMatchEnvironmentRegex,
 } from "@/services/environments/environment";
-import { flagImageApprovalRequired } from "@/services/mcp-install-policy";
+import {
+  flagImageApprovalRequired,
+  holdInstallIfImageGated,
+} from "@/services/mcp-install-policy";
 import {
   autoReinstallServer,
   localExecutionConfigChanged,
@@ -1087,21 +1090,41 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await mcpServerRuntimeManager.reinstallSharedDeployment(id);
       }
 
-      // Cascade reinstall for the parent's own installs. Use the
-      // unexpanded snapshot so the gate's diff isn't fooled by
-      // expanded-vs-raw asymmetry on bag-bearing rows (see comment
-      // above on `originalCatalogItemForGate`). Force the auto-restart
-      // path when secret bag values rotated — those changes are
-      // invisible to the row-diff gate, so without the override pods
-      // would keep injecting the stale value until something else
-      // triggered a restart.
-      await cascadeReinstallForCatalog(
-        originalCatalogItemForGate,
-        catalogItem,
-        {
-          forceAutoRestart: catalogSharedSecretValuesRotated,
-        },
-      );
+      // Trusted-image gate: when a non-privileged author swaps the image to an
+      // untrusted one, hold the new image for admin approval instead of rolling
+      // it out. Flip the catalog flag to `pending` and skip the auto-reinstall so
+      // every install keeps running its old, approved image until an admin
+      // approves — rather than auto-reinstalling onto an image that the gate
+      // would reject and marking the install failed.
+      const imageHeldForApproval = catalogItem.organizationId
+        ? await holdInstallIfImageGated({
+            catalogItem,
+            organizationId: catalogItem.organizationId,
+          })
+        : false;
+
+      if (imageHeldForApproval) {
+        logger.info(
+          { catalogId: id },
+          "Catalog image edited to an untrusted image by a non-privileged author - holding for admin approval; skipping auto-reinstall",
+        );
+      } else {
+        // Cascade reinstall for the parent's own installs. Use the
+        // unexpanded snapshot so the gate's diff isn't fooled by
+        // expanded-vs-raw asymmetry on bag-bearing rows (see comment
+        // above on `originalCatalogItemForGate`). Force the auto-restart
+        // path when secret bag values rotated — those changes are
+        // invisible to the row-diff gate, so without the override pods
+        // would keep injecting the stale value until something else
+        // triggered a restart.
+        await cascadeReinstallForCatalog(
+          originalCatalogItemForGate,
+          catalogItem,
+          {
+            forceAutoRestart: catalogSharedSecretValuesRotated,
+          },
+        );
+      }
 
       // Note: Tools are NOT deleted - they are synced during reinstall to preserve
       // policies and profile assignments

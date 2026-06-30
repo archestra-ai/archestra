@@ -2815,7 +2815,6 @@ describe("projects feature gating (search_files / save_file / my_file)", () => {
         { ...context, conversationId: conversation.id },
       );
       expect(result.isError).toBe(true);
-      expect(textOf(result)).toContain("my_file");
       expect(spy).not.toHaveBeenCalled();
     });
   });

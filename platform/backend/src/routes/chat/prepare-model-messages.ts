@@ -53,11 +53,12 @@ export async function buildModelMessages(params: {
 }): Promise<{
   modelMessages: ModelMessage[];
   /**
-   * Post-materialization, parts-bearing messages — the closest pre-conversion
-   * representation of what is sent. Used by the caller to build the context-
-   * window breakdown (the converted `modelMessages` carry no `.parts`).
+   * Provider-prepared, parts-bearing messages (post `prepareMessagesForProvider`,
+   * pre-conversion) — the closest representation of what is sent, with inlineable
+   * text documents already rewritten to text. Used by the caller to build the
+   * context-window breakdown; the converted `modelMessages` carry no `.parts`.
    */
-  materializedMessages: ChatMessage[];
+  preparedMessages: ChatMessage[];
 }> {
   const {
     provider,
@@ -117,7 +118,7 @@ export async function buildModelMessages(params: {
     agentId: compaction.agentId ?? undefined,
   });
 
-  const { modelMessages, materializedMessages } =
+  const { modelMessages, preparedMessages } =
     await buildModelMessagesForProvider({
       messages: compactionResult.messages,
       provider,
@@ -134,7 +135,7 @@ export async function buildModelMessages(params: {
       anthropicNativeEndpoint,
       messages: modelMessages,
     }),
-    materializedMessages,
+    preparedMessages,
   };
 }
 
@@ -201,7 +202,7 @@ async function buildModelMessagesForProvider(params: {
     modelMessages: modelMessages.filter(
       (message) => !isEmptyAssistantModelMessage(message),
     ),
-    materializedMessages: materialized,
+    preparedMessages: providerPreparedMessages,
   };
 }
 

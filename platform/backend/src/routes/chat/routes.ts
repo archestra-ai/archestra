@@ -832,7 +832,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   return null;
                 });
 
-                const { modelMessages, materializedMessages } =
+                const { modelMessages, preparedMessages } =
                   await buildModelMessages({
                     messages: normalizedMessagesForLLM,
                     conversationId,
@@ -850,10 +850,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   });
 
                 // Per-category breakdown of the assembled request, powering
-                // the Context Window Visualizer. Built from the materialized,
-                // parts-bearing messages — the converted `modelMessages` carry
-                // no `.parts`, so the breakdown would otherwise count only the
-                // system prompt and tools.
+                // the Context Window Visualizer. Built from the provider-prepared,
+                // parts-bearing messages (inlineable text docs already rewritten
+                // to text) — the converted `modelMessages` carry no `.parts`, so
+                // the breakdown would otherwise count only the system prompt and
+                // tools.
                 //
                 // After tool-call steps we re-emit an updated breakdown using the
                 // provider's exact inputTokens so the visualizer headline stays
@@ -871,7 +872,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     inputPricePerToken: breakdownPricePerToken,
                     systemPrompt,
                     tools: supportsToolCalling ? mcpTools : undefined,
-                    messages: materializedMessages,
+                    messages: preparedMessages,
                   });
                   latestBreakdown = breakdown;
                   writer.write({

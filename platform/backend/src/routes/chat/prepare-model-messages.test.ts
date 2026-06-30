@@ -363,7 +363,7 @@ test("bedrock: a small inline PDF passes the size guard", async ({
   }
 });
 
-test("exposes materialized messages the breakdown can count (the converted modelMessages cannot)", async ({
+test("exposes prepared messages the breakdown can count (the converted modelMessages cannot)", async ({
   makeAgent,
   makeConversation,
 }) => {
@@ -378,7 +378,7 @@ test("exposes materialized messages the breakdown can count (the converted model
     },
   ];
 
-  const { modelMessages, materializedMessages } = await buildModelMessages({
+  const { modelMessages, preparedMessages } = await buildModelMessages({
     messages,
     conversationId: conversation.id,
     organizationId: agent.organizationId,
@@ -389,11 +389,11 @@ test("exposes materialized messages the breakdown can count (the converted model
     emit: () => {},
   });
 
-  const fromMaterialized = buildContextWindowBreakdown({
+  const fromPrepared = buildContextWindowBreakdown({
     provider: "openai",
     model: "gpt-4o",
     contextLength: 128_000,
-    messages: materializedMessages,
+    messages: preparedMessages,
   });
   const fromModelMessages = buildContextWindowBreakdown({
     provider: "openai",
@@ -402,10 +402,10 @@ test("exposes materialized messages the breakdown can count (the converted model
     messages: modelMessages as unknown as ChatMessage[],
   });
 
-  // The materialized (parts-bearing) messages carry the conversation tokens;
-  // the converted ModelMessages have no `.parts`, so the breakdown sees none —
+  // The prepared (parts-bearing) messages carry the conversation tokens; the
+  // converted ModelMessages have no `.parts`, so the breakdown sees none —
   // exactly the latent undercount this wiring fixes.
-  expect(messagesSegmentTokens(fromMaterialized)).toBeGreaterThan(0);
+  expect(messagesSegmentTokens(fromPrepared)).toBeGreaterThan(0);
   expect(messagesSegmentTokens(fromModelMessages)).toBe(0);
 });
 
@@ -421,7 +421,7 @@ test("an assembled prompt larger than the model window is rejected pre-flight", 
     { role: "user", parts: [{ type: "text", text: "word ".repeat(400) }] },
   ];
 
-  const { materializedMessages } = await buildModelMessages({
+  const { preparedMessages } = await buildModelMessages({
     messages,
     conversationId: conversation.id,
     organizationId: agent.organizationId,
@@ -432,13 +432,81 @@ test("an assembled prompt larger than the model window is rejected pre-flight", 
     emit: () => {},
   });
 
-  // Same composition routes.ts performs: build the budget from the materialized
+  // Same composition routes.ts performs: build the budget from the prepared
   // messages, then gate on it. A tiny window makes the turn overflow.
   const breakdown = buildContextWindowBreakdown({
     provider: "openai",
     model: "gpt-4o",
     contextLength: 50,
-    messages: materializedMessages,
+    messages: preparedMessages,
+  });
+
+  expect(() => assertWithinContextWindow(breakdown)).toThrow(
+    ContextWindowExceededError,
+  );
+});
+
+test("an inlineable text-document attachment counts toward the context gate", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  // openai inlines text documents into text parts, so a large CSV becomes real
+  // prompt tokens. The gate must see them in `messages`, not lose them in the
+  // excluded `files` segment — the bug a pre-rewrite (materialized) view had.
+  const bigCsv = `col_a,col_b,col_c\n${"1,2,3\n".repeat(2000)}`;
+  const bytes = Buffer.from(bigCsv, "utf8");
+  const row = await ConversationAttachmentModel.create({
+    organizationId: agent.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "big.csv",
+    mimeType: "text/csv",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+  const messages: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        { type: "text", text: "summarize" },
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "text/csv",
+          filename: "big.csv",
+        },
+      ],
+    },
+  ];
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = false;
+  let preparedMessages: ChatMessage[];
+  try {
+    ({ preparedMessages } = await buildModelMessages({
+      messages,
+      conversationId: conversation.id,
+      organizationId: agent.organizationId,
+      userId: conversation.userId,
+      agentId: agent.id,
+      provider: "openai",
+      selectedModel: "gpt-4o",
+      emit: () => {},
+    }));
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+
+  const breakdown = buildContextWindowBreakdown({
+    provider: "openai",
+    model: "gpt-4o",
+    contextLength: 50,
+    messages: preparedMessages,
   });
 
   expect(() => assertWithinContextWindow(breakdown)).toThrow(

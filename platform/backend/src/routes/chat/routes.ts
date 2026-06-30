@@ -3,6 +3,7 @@ import {
   BUILT_IN_AGENT_IDS,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   type ChatErrorResponse,
+  ChatMessageMetadataSchema,
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
   getModelReadableMimeTypes,
@@ -2600,15 +2601,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Extract first user and assistant messages
-      const { firstUserMessage, firstAssistantMessage } = extractFirstMessages(
-        conversation.messages || [],
+      const { firstUserMessage, firstAssistantMessage, firstUserSkillName } =
+        extractFirstMessages(conversation.messages || []);
+
+      // A bare skill invocation persists an empty first user message, so fall
+      // back to the invoked skill's name as the user-intent signal; the first
+      // assistant reply still supplies the actual topic to the title prompt.
+      const titleUserInput = resolveTitleUserInput(
+        firstUserMessage,
+        firstUserSkillName,
       );
 
-      // Need at least user message to generate title
-      if (!firstUserMessage) {
+      // Need some user-intent signal (typed text or skill name) to title from.
+      if (!titleUserInput) {
         logger.info(
           { conversationId: id },
-          "Skipping title generation - no user message found",
+          "Skipping title generation - no user text or skill found",
         );
         return reply.send(conversation);
       }
@@ -2654,7 +2662,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         conversationId: id,
         systemPrompt,
-        firstUserMessage,
+        firstUserMessage: titleUserInput,
         firstAssistantMessage,
       });
 
@@ -2895,6 +2903,7 @@ interface MessagePart {
 interface Message {
   role: string;
   parts?: MessagePart[];
+  metadata?: unknown;
 }
 
 /**
@@ -2903,7 +2912,18 @@ interface Message {
 export interface ExtractedMessages {
   firstUserMessage: string;
   firstAssistantMessage: string;
+  /**
+   * Name of the skill the user invoked on the first user message, if any. A bare
+   * slash-command invocation persists an empty text part plus skill metadata, so
+   * `firstUserMessage` is empty; the skill name is the only typed-intent signal
+   * available to title generation in that case.
+   */
+  firstUserSkillName: string | null;
 }
+
+// Cap the skill name pulled from (client-controlled) message metadata before it
+// reaches the title prompt.
+const MAX_SKILL_NAME_LENGTH = 80;
 
 /**
  * Extracts the first user message and first assistant message text from conversation messages.
@@ -2912,9 +2932,23 @@ export interface ExtractedMessages {
 export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
   let firstUserMessage = "";
   let firstAssistantMessage = "";
+  let firstUserSkillName: string | null = null;
+  let sawFirstUser = false;
 
   for (const msg of messages) {
     const msgContent = msg as Message;
+    if (msgContent.role === "user" && !sawFirstUser) {
+      sawFirstUser = true;
+      // Collapse whitespace (incl. newlines) so a forged metadata value cannot
+      // break out of the title prompt's "User: ..." line, then cap the length.
+      const skillName = ChatMessageMetadataSchema.safeParse(msgContent.metadata)
+        .data?.skill?.name?.replace(/\s+/g, " ")
+        .trim()
+        .slice(0, MAX_SKILL_NAME_LENGTH);
+      if (skillName) {
+        firstUserSkillName = skillName;
+      }
+    }
     if (!firstUserMessage && msgContent.role === "user") {
       // Extract text from parts
       for (const part of msgContent.parts || []) {
@@ -2936,7 +2970,22 @@ export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
     if (firstUserMessage && firstAssistantMessage) break;
   }
 
-  return { firstUserMessage, firstAssistantMessage };
+  return { firstUserMessage, firstAssistantMessage, firstUserSkillName };
+}
+
+/**
+ * Picks the user-intent string fed to title generation: the typed first message
+ * when present, otherwise the invoked skill's name (a bare slash-command has no
+ * typed text). Empty result means there is nothing to title from.
+ */
+export function resolveTitleUserInput(
+  firstUserMessage: string,
+  firstUserSkillName: string | null,
+): string {
+  return (
+    firstUserMessage ||
+    (firstUserSkillName ? `Skill: ${firstUserSkillName}` : "")
+  );
 }
 
 export function buildChatStopConditions(repeatTracker: ToolCallRepeatTracker) {

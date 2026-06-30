@@ -459,27 +459,19 @@ const registry = defineArchestraTools([
       }
 
       const { userId, organizationId } = context;
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId,
+      const loaded = await loadAppForCaller({
         userId,
-        isAppAdmin: await callerIsAppAdmin(userId, organizationId),
+        organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
-      try {
-        await assertCallerMayModifyApp({
-          userId,
-          organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
-        });
-      } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
-        throw error;
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
+      const authError = await authorizeModifyApp({
+        userId,
+        organizationId,
+        app,
+      });
+      if (authError) return errorResult(authError.error);
 
       const capability = await buildAppCapabilityContext({
         userId,
@@ -614,18 +606,13 @@ const registry = defineArchestraTools([
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
+      const loaded = await loadAppForCaller({
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
+        organizationId: context.organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
       return buildAppRenderResult(app);
     },
   }),
@@ -640,18 +627,13 @@ const registry = defineArchestraTools([
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
+      const loaded = await loadAppForCaller({
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
+        organizationId: context.organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
       const version = args.version ?? app.latestVersion;
       const row = await AppVersionModel.findByAppAndVersion(app.id, version);
       if (!row) {
@@ -682,31 +664,20 @@ const registry = defineArchestraTools([
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
+      const loaded = await loadAppForCaller({
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
+        organizationId: context.organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
 
-      try {
-        await assertCallerMayModifyApp({
-          userId: context.userId,
-          organizationId: context.organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
-        });
-      } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
-        throw error;
-      }
+      const authError = await authorizeModifyApp({
+        userId: context.userId,
+        organizationId: context.organizationId,
+        app,
+      });
+      if (authError) return errorResult(authError.error);
 
       // Edits apply to the bytes the caller read. Versions are immutable, so
       // this snapshot equals the locked head whenever the CAS below passes;
@@ -810,27 +781,19 @@ const registry = defineArchestraTools([
         return errorResult("Authentication required.");
       }
       const { userId, organizationId } = context;
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId,
+      const loaded = await loadAppForCaller({
         userId,
-        isAppAdmin: await callerIsAppAdmin(userId, organizationId),
+        organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
-      try {
-        await assertCallerMayModifyApp({
-          userId,
-          organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
-        });
-      } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
-        throw error;
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
+      const authError = await authorizeModifyApp({
+        userId,
+        organizationId,
+        app,
+      });
+      if (authError) return errorResult(authError.error);
 
       // Fence resolution against the app's bound environment (not the org
       // default scaffold_app uses), so a tool only valid elsewhere is rejected.
@@ -871,18 +834,13 @@ const registry = defineArchestraTools([
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
+      const loaded = await loadAppForCaller({
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
+        organizationId: context.organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
       const head = await AppVersionModel.findByAppAndVersion(
         app.id,
         app.latestVersion,
@@ -955,15 +913,13 @@ const registry = defineArchestraTools([
           "teamIds is only valid when publishing to a team; omit it for org scope.",
         );
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId,
+      const loaded = await loadAppForCaller({
         userId,
-        isAppAdmin: await callerIsAppAdmin(userId, organizationId),
+        organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
 
       let teamIds: string[];
       try {
@@ -1044,30 +1000,19 @@ const registry = defineArchestraTools([
           "preview_app_tool requires human approval, which only the interactive chat surface can present; it cannot be run from this context.",
         );
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
+      const loaded = await loadAppForCaller({
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
+        organizationId: context.organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
-      try {
-        await assertCallerMayModifyApp({
-          userId: context.userId,
-          organizationId: context.organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
-        });
-      } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
-        throw error;
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
+      const authError = await authorizeModifyApp({
+        userId: context.userId,
+        organizationId: context.organizationId,
+        app,
+      });
+      if (authError) return errorResult(authError.error);
 
       // Preview is for the app's assigned upstream MCP tools — the data store
       // and other built-ins are not run through here.
@@ -1135,18 +1080,13 @@ const registry = defineArchestraTools([
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
+      const loaded = await loadAppForCaller({
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
+        organizationId: context.organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
 
       const head = app.latestVersion;
       // The app name is author-set; collapse whitespace and escape angle
@@ -1230,30 +1170,19 @@ const registry = defineArchestraTools([
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
+      const loaded = await loadAppForCaller({
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
+        organizationId: context.organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
-      try {
-        await assertCallerMayModifyApp({
-          userId: context.userId,
-          organizationId: context.organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
-        });
-      } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
-        throw error;
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
+      const authError = await authorizeModifyApp({
+        userId: context.userId,
+        organizationId: context.organizationId,
+        app,
+      });
+      if (authError) return errorResult(authError.error);
       const deleted = await AppModel.delete(args.appId);
       if (!deleted) {
         return errorResult(`Failed to delete app ${args.appId}.`);
@@ -1274,6 +1203,54 @@ export const tools = registry.tools;
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+/**
+ * Load an app the caller may see, resolving app-admin standing for visibility.
+ * Returns the app, or a ready error result text when no visible app matches —
+ * the not-found shape every app tool returns before acting on an id.
+ */
+async function loadAppForCaller(params: {
+  userId: string;
+  organizationId: string;
+  appId: string;
+}): Promise<{ app: App } | { error: string }> {
+  const app = await AppModel.findByIdForCaller({
+    id: params.appId,
+    organizationId: params.organizationId,
+    userId: params.userId,
+    isAppAdmin: await callerIsAppAdmin(params.userId, params.organizationId),
+  });
+  if (!app) {
+    return { error: `No app found with id ${params.appId}.` };
+  }
+  return { app };
+}
+
+/**
+ * Authorize the caller to modify an already-loaded app, mirroring the REST
+ * modify gate (scope + author + the app's teams). Returns an error result text
+ * on a policy denial (ApiError) and null when allowed; non-ApiError faults
+ * propagate.
+ */
+async function authorizeModifyApp(params: {
+  userId: string;
+  organizationId: string;
+  app: App;
+}): Promise<{ error: string } | null> {
+  try {
+    await assertCallerMayModifyApp({
+      userId: params.userId,
+      organizationId: params.organizationId,
+      scope: params.app.scope,
+      authorId: params.app.authorId,
+      resourceTeamIds: await AppAccessModel.getTeamsForApp(params.app.id),
+    });
+    return null;
+  } catch (error) {
+    if (error instanceof ApiError) return { error: error.message };
+    throw error;
+  }
+}
 
 /**
  * Apply ordered str_replace edits to a document. Each `old_str` must occur

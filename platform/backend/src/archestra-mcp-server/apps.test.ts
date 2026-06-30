@@ -624,6 +624,133 @@ describe("read_app / edit_app", () => {
     expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 
+  test("a 0-match edit whose old_str differs only in whitespace returns the exact current text", async () => {
+    // The stored html has a triple space; the model's old_str has one. Exact
+    // match fails, but the recovery hint hands back the real current span.
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body><p>Hello   World</p></body></html>",
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "Hello World", new_str: "Hi" },
+    ]);
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("0 matches");
+    // ground truth surfaced inline, so the model can copy it verbatim
+    expect(text).toContain("Hello   World");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+  });
+
+  test("a whitespace near-miss at the very end of the document recovers the full span", async () => {
+    // Exercises the end-boundary fallback (afterIdx === text length -> uses
+    // haystack.length). The matched span is the last thing in the document.
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body></body></html>\n\n<!-- TAIL    MARKER -->",
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "TAIL MARKER", new_str: "x" },
+    ]);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("TAIL    MARKER");
+  });
+
+  test("a whitespace-only old_str with no near-miss falls back to read_app guidance", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body>nogapshere</body></html>",
+    );
+    // "\t" matches nothing exactly and normalizes to empty, so no hint applies.
+    const result = await editApp(appId, version, [
+      { old_str: "\t", new_str: "x" },
+    ]);
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("0 matches");
+    expect(text).toContain("read_app");
+  });
+
+  test("a 0-match edit with a one-char drift surfaces the current text via a unique anchor", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      [
+        "<html><head><title>Dash</title></head><body>",
+        '<div class="metrics-container-unique-anchor">',
+        "<span>42</span>",
+        "</div>",
+        "</body></html>",
+      ].join("\n"),
+    );
+    // old_str reconstructs the block from memory with 42 -> 43 on the span line.
+    const result = await editApp(appId, version, [
+      {
+        old_str:
+          '<div class="metrics-container-unique-anchor">\n<span>43</span>',
+        new_str: "<span>99</span>",
+      },
+    ]);
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("0 matches");
+    // the window around the unique anchor shows the real current value (42)
+    expect(text).toContain("<span>42</span>");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+  });
+
+  test("a partial edit that strips the document root is rejected atomically", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body><main>keep</main></body></html>",
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "<html><head></head><body>", new_str: "" },
+    ]);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("document root");
+    // nothing saved: still the same head version with its html
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version))?.html,
+    ).toBe("<html><head></head><body><main>keep</main></body></html>");
+  });
+
+  test("a multi-edit array that together strips the document root is rejected atomically", async () => {
+    const html = "<html><head></head><body><main>keep</main></body></html>";
+    const { appId, version } = await scaffoldWithHtml(html);
+    // Two edits (so it is not a whole-document replacement) that between them
+    // remove the <html> and <head> roots.
+    const result = await editApp(appId, version, [
+      { old_str: "<html>", new_str: "" },
+      { old_str: "<head></head>", new_str: "" },
+    ]);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("document root");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version))?.html,
+    ).toBe(html);
+  });
+
+  test("a whole-document rewrite to a fragment is allowed", async () => {
+    const html = "<html><head></head><body><p>full</p></body></html>";
+    const { appId, version } = await scaffoldWithHtml(html);
+    // single edit replacing the entire document — the deliberate "full rewrite"
+    const result = await editApp(appId, version, [
+      { old_str: html, new_str: "<p>just a fragment</p>" },
+    ]);
+    expect(result.isError).toBe(false);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version + 1))?.html,
+    ).toBe("<p>just a fragment</p>");
+  });
+
+  test("a partial edit on an app that was already a fragment is unaffected", async () => {
+    const { appId, version } = await scaffoldWithHtml("<p>frag</p>");
+    const result = await editApp(appId, version, [
+      { old_str: "frag", new_str: "fragment" },
+    ]);
+    expect(result.isError).toBe(false);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version + 1))?.html,
+    ).toBe("<p>fragment</p>");
+  });
+
   test("edits that net back to the head create no new version and say so", async () => {
     const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
     const result = await editApp(appId, version, [

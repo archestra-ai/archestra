@@ -93,6 +93,57 @@ describe("ToolCallRepeatTracker", () => {
     expect(third.count).toBe(3);
   });
 
+  it("lets the first retry run, then nudges on the second repeat after a deterministic error", () => {
+    const tracker = new ToolCallRepeatTracker();
+    const args = { appId: "x", baseVersion: 1, edits: [] };
+
+    // First call executes; the dispatcher marks it a deterministic error.
+    expect(tracker.record("edit_app", args).severity).toBe("none");
+    tracker.noteDeterministicError("edit_app", args);
+
+    // The first identical retry still executes (covers a one-off transient) ...
+    expect(tracker.record("edit_app", args).severity).toBe("none");
+    // ... but the second consecutive retry is nudged, a step before the
+    // standard threshold (which would be count 4).
+    expect(tracker.record("edit_app", args)).toEqual({
+      count: 3,
+      shouldNudge: true,
+      severity: "nudge",
+    });
+  });
+
+  it("only fast-nudges the exact call that errored, not a different one", () => {
+    const tracker = new ToolCallRepeatTracker();
+    tracker.record("edit_app", { a: 1 });
+    tracker.noteDeterministicError("edit_app", { a: 1 });
+
+    // A different call is unaffected by the prior error flag, even when
+    // repeated past the point where the errored call would have been nudged.
+    expect(tracker.record("read_app", { a: 1 }).severity).toBe("none");
+    expect(tracker.record("read_app", { a: 1 }).severity).toBe("none");
+    expect(tracker.record("read_app", { a: 1 }).severity).toBe("none");
+  });
+
+  it("does not fast-nudge a successful call repeated identically", () => {
+    const tracker = new ToolCallRepeatTracker();
+    const args = { path: "/a" };
+    // No noteDeterministicError: a clean repeat keeps the standard threshold.
+    expect(tracker.record("read_file", args).severity).toBe("none");
+    expect(tracker.record("read_file", args).severity).toBe("none");
+    expect(tracker.record("read_file", args).severity).toBe("none");
+  });
+
+  it("does not fast-nudge after a non-consecutive re-issue of a failed call", () => {
+    const tracker = new ToolCallRepeatTracker();
+    const failed = { appId: "x", edits: [] };
+    tracker.record("edit_app", failed);
+    tracker.noteDeterministicError("edit_app", failed);
+    // An intervening different call breaks the consecutive streak ...
+    tracker.record("read_app", { appId: "x" });
+    // ... so re-issuing the once-failed call starts fresh and executes.
+    expect(tracker.record("edit_app", failed).severity).toBe("none");
+  });
+
   it("handles undefined arguments without throwing", () => {
     const tracker = new ToolCallRepeatTracker();
     expect(tracker.record("noop", undefined)).toEqual({

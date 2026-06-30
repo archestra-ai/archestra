@@ -333,12 +333,12 @@ const SearchFilesSchema = z
       .string()
       .optional()
       .describe(
-        "Case-insensitive substring matched against filenames only. Omit it (or pass empty) to list every file.",
+        "Case-insensitive substring matched against filenames only. Omit it (or pass empty) to list the files (the first 200).",
       ),
   })
   .describe(
     "List or search this conversation's persistent files by filename substring; " +
-      "omit the query to list every file. In a project chat, the project's files instead.",
+      "omit the query to list the files (the first 200). In a project chat, the project's files instead.",
   );
 
 const SearchFilesOutputSchema = z.object({
@@ -798,11 +798,12 @@ const registry = defineArchestraTools([
     description:
       "List or search THIS conversation's persistent files (in a project chat, the " +
       "project's files). The query is a case-insensitive substring matched against " +
-      "filenames only, not contents — omit it (or pass empty) to list every file, " +
-      "the reliable way to find a file whose exact name you don't know. Returns " +
-      "metadata only — each result carries a stable `ref`. To work on a found file, " +
-      "pass its `ref` to read_file (read its content), or to upload_file's my_file " +
-      "source (copy it into the sandbox). Requires `sandbox:execute`.",
+      "filenames only, not contents — omit it (or pass empty) to list the files (the " +
+      "first 200; narrow with a substring if there are more), the way to find a file " +
+      "whose exact name you don't know. Returns metadata only — each result carries a " +
+      "stable `ref`. To work on a found file, pass its `ref` to read_file (read its " +
+      "content), or to upload_file's my_file source (copy it into the sandbox). " +
+      "Requires `sandbox:execute`.",
     schema: SearchFilesSchema,
     outputSchema: SearchFilesOutputSchema,
     async handler({ args, context }) {

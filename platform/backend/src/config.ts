@@ -20,7 +20,6 @@ import {
   type EmailProviderType,
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
-import { safeUrl } from "@/utils/base-url";
 import packageJson from "../../package.json";
 
 type ProcessType = "web" | "worker" | "all";
@@ -571,37 +570,31 @@ export const getConnectionBaseUrlSources = (): string[] => {
  * absolute SDK/stylesheet URLs in the owned-app envelope so they resolve from a
  * foreign MCP host's opaque-origin iframe (a relative `/_sandbox/...` has no
  * base there). This URL is handed to the browser as a script source and CSP
- * source, so it must be a public origin that serves those routes directly.
- *
- * Drawn from `ARCHESTRA_API_BASE_URL`, preferring a public `https://` entry over
- * a cluster-internal one. The frontend origin (`ARCHESTRA_FRONTEND_URL`) is
- * excluded even when present: it only reverse-proxies `/_sandbox/*` and may sit
- * behind an auth gate (e.g. IAP), so the asset origin must be the backend
- * itself. Falls back to the local API origin. Never derived from request
- * headers — those are spoofable (see request-origin.ts).
+ * source, so it must be the public origin: `ARCHESTRA_API_BASE_URL` is an
+ * internal-first list (e.g. `http://archestra.default.svc:9000,https://api…`),
+ * so a public `https://` entry is preferred over a cluster-internal one. Each
+ * candidate is parsed to its `URL.origin` (dropping any path and normalizing),
+ * falling back to the local API origin. Never derived from request headers —
+ * those are spoofable (see request-origin.ts).
  * @public — consumed by the owned-app SDK injection
  */
 export const getAppAssetBaseOrigin = (): string => {
   const localFallback = `http://127.0.0.1:${getPortFromUrl()}`;
-  const frontendOrigin = safeUrl(frontendBaseUrl)?.origin ?? null;
   const entries =
     process.env.ARCHESTRA_API_BASE_URL?.split(",")
       .map((entry) => entry.trim())
       .filter(Boolean) ?? [];
-  const httpsEntries = entries.filter((entry) => entry.startsWith("https://"));
   const candidates = [
-    // Prefer a public origin that isn't the frontend; fall back to any entry.
-    ...httpsEntries.filter(
-      (entry) => safeUrl(entry)?.origin !== frontendOrigin,
-    ),
-    ...httpsEntries,
+    ...entries.filter((entry) => entry.startsWith("https://")),
     ...entries,
     localFallback,
   ];
   for (const candidate of candidates) {
-    const origin = safeUrl(candidate)?.origin;
-    if (origin) return origin;
-    // skip a malformed entry and try the next candidate
+    try {
+      return new URL(candidate).origin;
+    } catch {
+      // skip a malformed entry and try the next candidate
+    }
   }
   return new URL(localFallback).origin;
 };
@@ -610,8 +603,11 @@ export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
   const hosts = new Set<string>();
 
   const addHostFromUrl = (raw: string) => {
-    const host = safeUrl(raw)?.host.toLowerCase();
-    if (host) hosts.add(host);
+    try {
+      hosts.add(new URL(raw).host.toLowerCase());
+    } catch {
+      // ignore malformed values
+    }
   };
 
   addHostFromUrl(frontendBaseUrl);

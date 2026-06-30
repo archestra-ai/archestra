@@ -3,7 +3,6 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import {
   AppWindow,
-  ArrowUpRight,
   Download,
   ExternalLink,
   Loader2,
@@ -105,7 +104,7 @@ function OwnedAppCard({
 
   return (
     <>
-      <Card className="group relative flex min-h-[180px] cursor-pointer flex-col gap-0 p-4 transition-shadow hover:shadow-md">
+      <Card className="relative flex min-h-[180px] cursor-pointer flex-col gap-0 p-4 transition-all hover:border-primary hover:bg-muted/40 hover:shadow-md">
         <button
           type="button"
           onClick={handleOpen}
@@ -114,34 +113,21 @@ function OwnedAppCard({
           aria-label={`Open ${app.name} in new chat`}
         />
 
-        {/* Hover (or in-flight) CTA. The pill is visual only — pointer-events-none
-            so the click falls through to the full-card button above. Opening is a
-            round-trip, so its loading state keeps the card from looking frozen. */}
-        <div
-          className={cn(
-            "pointer-events-none absolute inset-0 z-[5] flex items-center justify-center rounded-xl bg-background/70 opacity-0 backdrop-blur-[1px] transition-opacity duration-75 group-hover:opacity-100",
-            isOpening && "opacity-100",
-          )}
-        >
-          <span
-            className={cn(
-              buttonVariants({ variant: "outline", size: "sm" }),
-              "shadow-sm",
-            )}
-          >
-            {isOpening ? (
-              <>
-                <Loader2 className="animate-spin" />
-                Opening…
-              </>
-            ) : (
-              <>
-                <ArrowUpRight />
-                Open in new chat
-              </>
-            )}
-          </span>
-        </div>
+        {/* Opening is a round-trip; while it's in flight show a loading overlay so
+            the card doesn't look frozen. It's visual only (pointer-events-none). */}
+        {isOpening ? (
+          <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center rounded-xl bg-background/70 backdrop-blur-[1px]">
+            <span
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "shadow-sm",
+              )}
+            >
+              <Loader2 className="animate-spin" />
+              Opening…
+            </span>
+          </div>
+        ) : null}
 
         <CardOverflowMenu>
           <DropdownMenuItem asChild>
@@ -208,11 +194,11 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
   return (
     <Card
       className={cn(
-        "relative flex min-h-[180px] flex-col gap-0 p-4 transition-colors",
+        "relative flex min-h-[180px] flex-col gap-0 p-4 transition-all",
         // Only a runnable app is a click target; an uninstalled one offers a
         // footer CTA instead, so it gets no whole-card link or hover affordance.
         app.runnable &&
-          "cursor-pointer hover:border-primary/40 hover:shadow-sm",
+          "cursor-pointer hover:border-primary hover:bg-muted/40 hover:shadow-md",
       )}
     >
       {app.runnable ? (

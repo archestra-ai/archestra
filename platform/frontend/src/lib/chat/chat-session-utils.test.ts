@@ -174,6 +174,72 @@ describe("restoreRenderableAssistantParts", () => {
     ).toBe(nextMessages);
   });
 
+  test("returns the prior restored reference unchanged when re-restoring the same regression (prevents render-loop identity churn)", () => {
+    // previousMessages is the prior render's restored output. Re-running the
+    // restoration against the same persistent regression (e.g. reconnecting to
+    // an in-flight tool call) must hand back that exact reference, not a fresh
+    // structurally-equal array — a new identity each render churns the caller's
+    // stableMessages and loops the chat view (React #185, "Maximum update depth").
+    const user = {
+      id: "user-1",
+      role: "user",
+      parts: [{ type: "text", text: "call your tool" }],
+    } as UIMessage;
+    const restoredParts = [
+      { type: "text", text: "I called the tool successfully." },
+    ];
+    const previousMessages = [
+      user,
+      { id: "assistant-1", role: "assistant", parts: restoredParts },
+    ] as UIMessage[];
+
+    const nextMessages = [
+      user,
+      { id: "assistant-1", role: "assistant", parts: [] },
+    ] as unknown as UIMessage[];
+
+    expect(
+      restoreRenderableAssistantParts({ previousMessages, nextMessages }),
+    ).toBe(previousMessages);
+  });
+
+  test("does not reuse the previous reference when only metadata changed, so persisted-id updates are not dropped", () => {
+    // Same parts, but the live message gains a persistedMessageId in metadata
+    // (which edit/regeneration uses to target the right row). The stability
+    // shortcut must not swallow that update by handing back the prior reference.
+    const user = {
+      id: "user-1",
+      role: "user",
+      parts: [{ type: "text", text: "call your tool" }],
+    } as UIMessage;
+    const restoredParts = [
+      { type: "text", text: "I called the tool successfully." },
+    ];
+    const previousMessages = [
+      user,
+      { id: "assistant-1", role: "assistant", parts: restoredParts },
+    ] as UIMessage[];
+
+    const nextMessages = [
+      user,
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [],
+        metadata: { persistedMessageId: "db-123" },
+      },
+    ] as unknown as UIMessage[];
+
+    const result = restoreRenderableAssistantParts({
+      previousMessages,
+      nextMessages,
+    });
+
+    expect(result).not.toBe(previousMessages);
+    expect(result[1].metadata).toEqual({ persistedMessageId: "db-123" });
+    expect(result[1].parts).toBe(restoredParts);
+  });
+
   test("restores assistant parts when a streamed assistant message is re-keyed but stays in the same position", () => {
     const previousMessages = [
       {

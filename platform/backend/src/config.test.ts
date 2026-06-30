@@ -28,6 +28,7 @@ import config, {
   parseFileStorageFilesystemRoot,
   parseFileStorageProvider,
   parseFileStorageS3Config,
+  parseLogFormat,
   parseMetricsPort,
   parseProcessType,
   parseSampleRate,
@@ -1786,5 +1787,38 @@ describe("betaFeatureEnabled", () => {
     expect(betaFeatureEnabled("TRUE")).toBe(false);
     expect(betaFeatureEnabled("yes")).toBe(false);
     expect(betaFeatureEnabled("1")).toBe(false);
+  });
+});
+
+describe("parseLogFormat", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('accepts "pretty"', () => {
+    expect(parseLogFormat("pretty")).toBe("pretty");
+  });
+
+  test('accepts "json"', () => {
+    expect(parseLogFormat("json")).toBe("json");
+  });
+
+  test("is case-insensitive and trims whitespace", () => {
+    expect(parseLogFormat("  PRETTY  ")).toBe("pretty");
+    expect(parseLogFormat("Json")).toBe("json");
+  });
+
+  test('defaults to "json" when undefined or empty without warning', () => {
+    expect(parseLogFormat(undefined)).toBe("json");
+    expect(parseLogFormat("")).toBe("json");
+    expect(parseLogFormat("   ")).toBe("json");
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test('warns and falls back to "json" on unknown values', () => {
+    expect(parseLogFormat("xml")).toBe("json");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid ARCHESTRA_LOGGING_FORMAT value "xml"'),
+    );
   });
 });

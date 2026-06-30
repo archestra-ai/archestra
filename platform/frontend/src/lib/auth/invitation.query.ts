@@ -1,6 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
-import { handleApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils";
 
 const { checkInvitation } = archestraApiSdk;
 
@@ -14,10 +14,7 @@ export function useInvitationCheck(invitationId: string | null | undefined) {
       if (!invitationId) return null;
 
       const response = await checkInvitation({ path: { id: invitationId } });
-      if (response.error) {
-        handleApiError(response.error);
-        return null;
-      }
+      throwOnApiError(response.error, { allowNotFound: true });
       return response.data ?? null;
     },
     enabled: !!invitationId,

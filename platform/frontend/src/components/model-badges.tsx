@@ -1,4 +1,4 @@
-import { Fingerprint, Github, Sparkles, Star, User } from "lucide-react";
+import { Clock, Fingerprint, Github, Sparkles, Star, User } from "lucide-react";
 import { InlineTag } from "@/components/ui/inline-tag";
 
 /**
@@ -44,6 +44,18 @@ export function FreeModelBadge() {
 export function LatestModelBadge() {
   return (
     <InlineTag className="text-muted-foreground bg-muted">latest</InlineTag>
+  );
+}
+
+/**
+ * Marks an older-generation model that is still selectable but superseded by a
+ * newer generation from the same provider.
+ */
+export function OldModelBadge() {
+  return (
+    <InlineTag icon={<Clock />} className="text-muted-foreground bg-muted">
+      old
+    </InlineTag>
   );
 }
 

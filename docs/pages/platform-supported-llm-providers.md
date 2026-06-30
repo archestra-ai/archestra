@@ -402,6 +402,7 @@ The default base URL is `http://localhost:11434/v1`. Override it per-key in the 
 - **Enabled by default**: Ollama is enabled out of the box with a default base URL of `http://localhost:11434/v1`.
 - **No API key required**: Self-hosted Ollama doesn't require authentication. When adding an Ollama key in the platform, the API key field is marked as optional.
 - **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
+- **Running Archestra in Docker**: When Archestra runs in a container (e.g. the `docker run` quickstart) and Ollama runs on the host, `localhost` resolves to the container itself, not the host. Use `http://host.docker.internal:11434/v1` as the Base URL instead. The platform detects this case and suggests the change when a `localhost` connection fails.
 
 ## Zhipu AI
 

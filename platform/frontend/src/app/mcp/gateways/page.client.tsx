@@ -20,6 +20,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
@@ -140,7 +141,12 @@ function McpGateways({
       : ["mcp_gateway", "profile"]
     : ["mcp_gateway"];
 
-  const { data: agentsResponse, isPending } = useProfilesPaginated({
+  const {
+    data: agentsResponse,
+    isPending,
+    isLoadingError: isGatewaysLoadError,
+    refetch: refetchGateways,
+  } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
     limit: pageSize,
     offset,
@@ -422,6 +428,37 @@ function McpGateways({
       },
     },
   ];
+
+  if (isGatewaysLoadError) {
+    return (
+      <PageLayout
+        title="MCP Gateways"
+        description={
+          <p className="text-sm text-muted-foreground">
+            MCP Gateways provide a unified MCP endpoint for your AI agents to
+            access tools and subagents.
+            {docsUrl && (
+              <>
+                {" "}
+                <ExternalDocsLink
+                  href={docsUrl}
+                  className="underline hover:text-foreground"
+                  showIcon={false}
+                >
+                  Read more in the docs
+                </ExternalDocsLink>
+              </>
+            )}
+          </p>
+        }
+      >
+        <QueryLoadError
+          title="Couldn't load your MCP gateways"
+          onRetry={() => refetchGateways()}
+        />
+      </PageLayout>
+    );
+  }
 
   return (
     <LoadingWrapper

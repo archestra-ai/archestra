@@ -1,7 +1,9 @@
 """tests for the zero-dependency frontmatter parser, with PyYAML as an oracle."""
+import pytest
 import yaml
 
-from frontmatter import emit_frontmatter, parse_frontmatter
+from contracts import ContractError
+from frontmatter import emit_frontmatter, parse_frontmatter, set_name
 
 
 def test_no_fence_is_all_body() -> None:
@@ -105,3 +107,58 @@ def test_indented_fence_does_not_close_frontmatter() -> None:
     assert doc.frontmatter.get("description") == "y"
     assert doc.body == "body"
     assert any("---" in line for line in doc.unparsed_lines)  # the indented line is surfaced
+
+
+# --- set_name: rename a skill's frontmatter name in place ----------------------------------
+
+
+def test_set_name_noop_when_already_matching() -> None:
+    # the verbatim-skill invariant: an unchanged name must not even requote the value.
+    content = "---\nname: summarize-text\ndescription: d\n---\nbody\n"
+    assert set_name(content, "summarize-text") == content
+
+
+def test_set_name_rewrites_existing_name() -> None:
+    content = "---\nname: old\ndescription: d\n---\nbody\n"
+    out = set_name(content, "new-prefix-old")
+    fm = yaml.safe_load(out.split("---", 2)[1])
+    assert fm == {"name": "new-prefix-old", "description": "d"}
+    assert parse_frontmatter(out).body == "body\n"  # body untouched
+
+
+def test_set_name_preserves_other_lines_including_unsupported() -> None:
+    # a nested map ships verbatim through the parser; renaming must not disturb it.
+    content = "---\nname: old\ndescription: d\nmetadata:\n  patterns:\n    - a\n---\nbody\n"
+    out = set_name(content, "renamed")
+    assert "metadata:\n  patterns:\n    - a" in out
+    assert yaml.safe_load(out.split("---", 2)[1])["name"] == "renamed"
+
+
+def test_set_name_inserts_when_name_absent() -> None:
+    content = "---\ndescription: d\n---\nbody\n"
+    out = set_name(content, "added")
+    fm = yaml.safe_load(out.split("---", 2)[1])
+    assert fm == {"name": "added", "description": "d"}
+
+
+def test_set_name_prepends_fence_when_no_frontmatter() -> None:
+    out = set_name("just a body\n", "added")
+    assert yaml.safe_load(out.split("---", 2)[1]) == {"name": "added"}
+    assert out.endswith("just a body\n")
+
+
+def test_set_name_quotes_yaml_hostile_names() -> None:
+    out = set_name("---\nname: old\n---\nb", 'has: colon "and" quotes')
+    assert yaml.safe_load(out.split("---", 2)[1])["name"] == 'has: colon "and" quotes'
+
+
+@pytest.mark.parametrize("value", ["|", ">", "&anchor val", "*alias"])
+def test_set_name_refuses_unrewritable_value_forms(value: str) -> None:
+    # never corrupt a block scalar / anchor by editing only its first line.
+    with pytest.raises(ContractError, match="cannot safely rewrite"):
+        set_name(f"---\nname: {value}\ndescription: d\n---\nb", "renamed")
+
+
+def test_set_name_noop_preserves_crlf() -> None:
+    content = "---\r\nname: x\r\ndescription: d\r\n---\r\nbody\r\n"
+    assert set_name(content, "x") == content  # no-op keeps the original line endings byte-for-byte

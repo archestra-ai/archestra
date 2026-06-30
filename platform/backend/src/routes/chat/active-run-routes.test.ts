@@ -238,6 +238,83 @@ describe("chat active-run routes", () => {
     });
   });
 
+  test("active-run does not replay a recently cancelled run (returns 204)", async () => {
+    const run = await ActiveChatRunModel.create({
+      conversationId,
+      userId: user.id,
+      organizationId,
+    });
+    // A cancelled run mid-tool-call leaves a dangling tool part; replaying it
+    // would resume the client into a stream with no result. The user stopped
+    // it, so there is nothing to deliver — the conversation refetch owns the
+    // outcome. Even within the grace window it must not be replayable.
+    await ActiveChatRunModel.appendEvents({
+      runId: run?.id ?? "",
+      seq: 1,
+      payloads: [
+        { type: "start" },
+        {
+          type: "tool-input-available",
+          toolCallId: "call-1",
+          toolName: "slow_operation",
+          input: {},
+        },
+      ],
+    });
+    await ActiveChatRunModel.markTerminal({
+      runId: run?.id ?? "",
+      status: "cancelled",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversationId}/active-run`,
+    });
+
+    expect(response.statusCode).toBe(204);
+  });
+
+  test("active-run does not fall through to an older completed run when the latest run was cancelled (returns 204)", async () => {
+    // Turn 1 completed normally; both runs are within the grace window. Only the
+    // latest run is reconnectable, so a cancelled turn 2 must not be stood in
+    // for by turn 1's still-in-grace completed run.
+    const completedRun = await ActiveChatRunModel.create({
+      conversationId,
+      userId: user.id,
+      organizationId,
+    });
+    await ActiveChatRunModel.appendEvents({
+      runId: completedRun?.id ?? "",
+      seq: 1,
+      payloads: [
+        { type: "start" },
+        { type: "text-start", id: "text-1" },
+        { type: "text-delta", id: "text-1", delta: "hello" },
+      ],
+    });
+    await ActiveChatRunModel.markTerminal({
+      runId: completedRun?.id ?? "",
+      status: "completed",
+    });
+
+    const cancelledRun = await ActiveChatRunModel.create({
+      conversationId,
+      userId: user.id,
+      organizationId,
+    });
+    await ActiveChatRunModel.markTerminal({
+      runId: cancelledRun?.id ?? "",
+      status: "cancelled",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversationId}/active-run`,
+    });
+
+    expect(response.statusCode).toBe(204);
+  });
+
   test("active-run streams later database events before closing", async () => {
     const run = await ActiveChatRunModel.create({
       conversationId,

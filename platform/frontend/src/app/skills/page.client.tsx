@@ -18,6 +18,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -84,12 +85,17 @@ function SkillsList() {
     data: skills,
     isPending,
     isFetching,
-  } = useSkillsPaginated({
-    limit: pageSize,
-    offset: pageIndex * pageSize,
-    search: search || undefined,
-    sourceRepo: sourceRepo || undefined,
-  });
+    isLoadingError: isSkillsLoadError,
+    refetch: refetchSkills,
+  } = useSkillsPaginated(
+    {
+      limit: pageSize,
+      offset: pageIndex * pageSize,
+      search: search || undefined,
+      sourceRepo: sourceRepo || undefined,
+    },
+    { toastOnError: false },
+  );
   const { data: sourceReposData } = useSkillSourceRepos();
   const sourceRepos = sourceReposData?.repos ?? [];
 
@@ -266,6 +272,17 @@ function SkillsList() {
       },
     },
   ];
+
+  if (isSkillsLoadError) {
+    return (
+      <PageLayout title="Skills" description="">
+        <QueryLoadError
+          title="Couldn't load your skills"
+          onRetry={() => refetchSkills()}
+        />
+      </PageLayout>
+    );
+  }
 
   return (
     <LoadingWrapper

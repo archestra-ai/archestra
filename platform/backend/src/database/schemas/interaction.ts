@@ -4,6 +4,7 @@ import type {
 } from "@archestra/shared";
 import {
   type AnyPgColumn,
+  boolean,
   index,
   integer,
   jsonb,
@@ -160,6 +161,9 @@ const interactionsTable = pgTable(
      */
     baselineModel: varchar("baseline_model"),
     inputTokens: integer("input_tokens"),
+    inputTokensEstimated: boolean("input_tokens_estimated")
+      .notNull()
+      .default(false),
     outputTokens: integer("output_tokens"),
     cacheReadTokens: integer("cache_read_tokens"),
     cacheWriteTokens: integer("cache_write_tokens"),

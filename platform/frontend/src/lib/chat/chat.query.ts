@@ -71,6 +71,37 @@ function invalidateProjectConversationViews(queryClient: QueryClient) {
   queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
 }
 
+/**
+ * Invalidate every cache entry that should refresh when a chat turn produces or
+ * rewrites files. Always refreshes the chat's own Files panel
+ * (`["conversation-files", id]`) and the conversation (for a rewritten
+ * artifact); when the chat belongs to a project, also refreshes that project's
+ * Files panel (`["projects", projectId, "files"]`).
+ *
+ * The project cross-invalidation is the symmetric counterpart to the
+ * project-side mutations that invalidate `["conversation-files"]`. Without it, a
+ * file created inside a project chat stays invisible in the project's Files
+ * panel until a hard reload — navigating there via the breadcrumb keeps the
+ * cached (stale) list because the query was never marked stale.
+ */
+export function invalidateConversationFileQueries(
+  queryClient: QueryClient,
+  {
+    conversationId,
+    projectId,
+  }: { conversationId: string; projectId?: string | null },
+) {
+  queryClient.invalidateQueries({
+    queryKey: ["conversation-files", conversationId],
+  });
+  queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
+  if (projectId) {
+    queryClient.invalidateQueries({
+      queryKey: ["projects", projectId, "files"],
+    });
+  }
+}
+
 export function mergeUpdatedConversationIntoCache(
   oldConversation:
     | archestraApiTypes.GetChatConversationResponses["200"]

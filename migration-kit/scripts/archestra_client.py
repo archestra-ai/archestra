@@ -103,6 +103,7 @@ class CatalogCreate:
 @dataclass(frozen=True)
 class McpInstall:
     catalogId: str
+    name: str
     scope: Scope
     environmentValues: dict[str, str] = field(default_factory=dict)
     agentIds: list[str] = field(default_factory=list)

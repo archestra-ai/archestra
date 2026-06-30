@@ -30,6 +30,7 @@ import {
   replaceAppToolAssignments,
   resolveAppToolsByName,
 } from "@/services/agent-tool-assignment";
+import { buildBuildAppSkillActivation } from "@/services/apps/app-authoring-skill-preload";
 import {
   assertCallerMayModifyApp,
   callerIsAppAdmin,
@@ -49,6 +50,7 @@ import {
   deleteAppBacking,
   syncAppBacking,
 } from "@/services/apps/app-mcp-backing";
+import { buildAppRenderResult } from "@/services/apps/app-render-result";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import {
   buildValidatedVersionPayload,
@@ -331,7 +333,7 @@ const registry = defineArchestraTools([
           resourceTeamIds: [],
         });
         // Scaffold always seeds the single default template.
-        const resolved = resolveCreateAppHtml({});
+        const resolved = resolveCreateAppHtml({ name: args.name });
         const validated = await buildValidatedVersionPayload({
           html: resolved.html,
           uiPermissions: args.uiPermissions,
@@ -425,6 +427,13 @@ const registry = defineArchestraTools([
         warnings.length > 0
           ? `\nValidation warnings (save succeeded; fix via edit_app):\n- ${warnings.join("\n- ")}`
           : "";
+      // Auto-load the Build App skill in this same turn so the model has the
+      // window.archestra SDK contract before its first edit_app, without relying
+      // on it to discover and load the skill itself.
+      const skillActivation = buildBuildAppSkillActivation();
+      const skillNote = skillActivation
+        ? `\n\n${skillActivation.activation}`
+        : "";
       const toolsParts = toolsResultParts(resolvedTools);
       return structuredSuccessResult(
         {
@@ -436,7 +445,7 @@ const registry = defineArchestraTools([
           ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone page: /a/${app.id}${toolsParts.note}${warningsNote}${seededHtmlNote}`,
+        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone page: /a/${app.id}${toolsParts.note}${warningsNote}${seededHtmlNote}${skillNote}`,
       );
     },
   }),
@@ -623,17 +632,7 @@ const registry = defineArchestraTools([
       if (!app) {
         return errorResult(`No app found with id ${args.appId}.`);
       }
-      const summary = {
-        id: app.id,
-        name: app.name,
-        description: app.description,
-        scope: app.scope,
-        latestVersion: app.latestVersion,
-      };
-      return structuredSuccessResult(
-        summary,
-        `${JSON.stringify(summary, null, 2)}\nRendered inline when viewed in chat; standalone page: /a/${app.id}`,
-      );
+      return buildAppRenderResult(app);
     },
   }),
   defineArchestraTool({

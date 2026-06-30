@@ -33,6 +33,8 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "openai:chatCompletions": (i) => new OpenAiChatCompletionInteraction(i),
   "openai:responses": (i) => new OpenAiResponsesInteraction(i),
   "openai:embeddings": (i) => new OpenAiEmbeddingInteraction(i),
+  // Gemini embeddings use the OpenAI-compatible embedding shape.
+  "gemini:embeddings": (i) => new OpenAiEmbeddingInteraction(i),
   "openrouter:chatCompletions": (i) =>
     new OpenrouterChatCompletionInteraction(i),
   "anthropic:messages": (i) => new AnthropicMessagesInteraction(i),
@@ -73,11 +75,15 @@ export interface CostSavingsResult {
   toonTokensSaved: number | null;
   /** Total savings (costOptimization + toon) */
   totalSavings: number;
-  /** Baseline cost before any optimization */
-  baselineCost: number;
-  /** Actual cost after optimization */
+  /**
+   * Estimated cost: what the request would have cost without the optimizations
+   * we attribute (original model + uncompressed tool results). Equals
+   * `actualCost + totalSavings`.
+   */
+  estimatedCost: number;
+  /** Actual cost charged — the stored `cost`, already reflecting every optimization */
   actualCost: number;
-  /** Total savings as percentage of baseline */
+  /** Total savings as a percentage of the estimated cost (0–100) */
   savingsPercent: number;
   /** Whether there are any savings at all */
   hasSavings: boolean;
@@ -106,23 +112,35 @@ export function calculateCostSavings(
       ? input.toonTokensBefore - input.toonTokensAfter
       : null;
 
-  // Calculate cost optimization savings (from model selection)
+  // `cost` is the real spend. It already reflects every applied optimization
+  // (the cheaper model and TOON's reduced billed token count), so it is the
+  // true actual cost. It must never be re-derived by subtracting savings again
+  // — doing so double-counts the TOON savings already baked into `cost` and can
+  // produce a negative cost and a >100% savings percentage.
+  const actualCost = costNum;
+
+  // Savings from model selection: identical token usage priced at the original
+  // model vs. the model actually used.
   const costOptimizationSavings = baselineCostNum - costNum;
 
-  // Calculate total savings
+  // Total savings (model optimization + TOON compression).
   const totalSavings = costOptimizationSavings + toonCostSavingsNum;
 
-  // Calculate savings percentage
+  // The estimated (non-optimized) cost sits exactly `totalSavings` above the
+  // real spend, so the breakdown always reconciles and the percentage stays
+  // within 0–100% for any non-negative savings.
+  const estimatedCost = actualCost + totalSavings;
+
   const savingsPercent =
-    baselineCostNum > 0 ? (totalSavings / baselineCostNum) * 100 : 0;
+    estimatedCost > 0 ? (totalSavings / estimatedCost) * 100 : 0;
 
   return {
     costOptimizationSavings,
     toonSavings: toonCostSavingsNum,
     toonTokensSaved,
     totalSavings,
-    baselineCost: baselineCostNum,
-    actualCost: baselineCostNum - totalSavings,
+    estimatedCost,
+    actualCost,
     savingsPercent,
     hasSavings: totalSavings !== 0,
   };
@@ -171,6 +189,24 @@ export class DynamicInteraction implements InteractionUtils {
     return factory(interaction);
   }
 
+  /**
+   * A failed interaction is persisted with the provider `type` but a
+   * `{ error }` response instead of a provider response. Returns that error
+   * string, or null when the response is a normal provider response.
+   */
+  private getErrorResponseText(): string | null {
+    const response: unknown = this.interaction.response;
+    if (
+      response !== null &&
+      typeof response === "object" &&
+      "error" in response &&
+      typeof (response as { error: unknown }).error === "string"
+    ) {
+      return (response as { error: string }).error;
+    }
+    return null;
+  }
+
   isLastMessageToolCall(): boolean {
     return this.interactionClass.isLastMessageToolCall();
   }
@@ -180,18 +216,30 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   getToolNamesRefused(): string[] {
+    if (this.getErrorResponseText() !== null) {
+      return [];
+    }
     return this.interactionClass.getToolNamesRefused();
   }
 
   getToolNamesRequested(): string[] {
+    if (this.getErrorResponseText() !== null) {
+      return [];
+    }
     return this.interactionClass.getToolNamesRequested();
   }
 
   getToolNamesUsed(): string[] {
+    if (this.getErrorResponseText() !== null) {
+      return [];
+    }
     return this.interactionClass.getToolNamesUsed();
   }
 
   getToolRefusedCount(): number {
+    if (this.getErrorResponseText() !== null) {
+      return 0;
+    }
     return this.interactionClass.getToolRefusedCount();
   }
 
@@ -200,6 +248,10 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   getLastAssistantResponse(): string {
+    const errorText = this.getErrorResponseText();
+    if (errorText !== null) {
+      return errorText;
+    }
     return this.interactionClass.getLastAssistantResponse();
   }
 
@@ -207,7 +259,27 @@ export class DynamicInteraction implements InteractionUtils {
    * Map request messages, combining tool calls with their results and dual LLM analysis
    */
   mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
-    return this.interactionClass.mapToUiMessages(dualLlmAnalyses);
+    const errorText = this.getErrorResponseText();
+    if (errorText === null) {
+      return this.interactionClass.mapToUiMessages(dualLlmAnalyses);
+    }
+    // Failed interaction: the response is `{ error }`, not a provider response.
+    // Recover the request side when the provider mapper tolerates the missing
+    // response fields, then surface the error as the assistant turn.
+    let messages: PartialUIMessage[] = [];
+    try {
+      messages = this.interactionClass.mapToUiMessages(dualLlmAnalyses);
+    } catch {
+      messages = [];
+    }
+    return [
+      ...messages,
+      {
+        id: `${this.id}-error`,
+        role: "assistant",
+        parts: [{ type: "text", text: errorText }],
+      },
+    ];
   }
 
   /**

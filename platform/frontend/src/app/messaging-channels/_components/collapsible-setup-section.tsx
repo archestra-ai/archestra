@@ -26,16 +26,19 @@ export function CollapsibleSetupSection({
 }) {
   const [open, setOpen] = useState(false);
 
-  // Collapse only when setup was already complete on page load. If the last
-  // step completes while the user is here, keep the section expanded so it
-  // doesn't yank the UI out from under them mid-setup.
-  const prevCompleted = useRef<boolean | null>(null);
+  // Decide expanded/collapsed exactly ONCE, on the first settled (non-loading)
+  // render: expanded while setup is incomplete, collapsed once it's complete.
+  // Deciding once (rather than reacting to every allStepsCompleted change) means
+  // query refetch churn can't flip it — the old effect keyed off a null→false→
+  // true transition, so whether it ended up open depended on async settle order.
+  // If setup completes while the user is here, `open` stays true (we never
+  // auto-collapse), so it doesn't yank the UI out from under them. Manual toggles
+  // via the trigger win after the initial decision.
+  const decided = useRef(false);
   useEffect(() => {
-    if (isLoading) return;
-    if (prevCompleted.current === false && allStepsCompleted) {
-      setOpen(true);
-    }
-    prevCompleted.current = allStepsCompleted;
+    if (isLoading || decided.current) return;
+    decided.current = true;
+    setOpen(!allStepsCompleted);
   }, [isLoading, allStepsCompleted]);
 
   // While loading or setup incomplete: always show content, no collapse toggle

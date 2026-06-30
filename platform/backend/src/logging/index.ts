@@ -10,6 +10,8 @@ import {
   SeverityNumber,
 } from "@opentelemetry/api-logs";
 import pino from "pino";
+import pretty from "pino-pretty";
+import { LOG_FORMAT } from "@/logging/log-format";
 import { LOG_LEVEL } from "@/logging/log-level";
 import { getActiveSessionId } from "@/observability/request-context";
 
@@ -59,10 +61,7 @@ function createLogger(): pino.Logger {
       base: undefined,
     },
     pino.multistream([
-      {
-        level: "trace",
-        stream: pino.destination({ fd: 1, sync: false, minLength: 4096 }),
-      },
+      { level: "trace", stream: createStdoutStream() },
       { level: "trace", stream: createOtelLogStream() },
     ]),
   );
@@ -79,6 +78,35 @@ const logger: pino.Logger = new Proxy({} as pino.Logger, {
 });
 
 export default logger;
+
+// --- Internal helpers (stdout stream) ---
+
+/**
+ * Create the stdout half of the pino multistream. Format is selected by
+ * `ARCHESTRA_LOGGING_FORMAT` (see `log-format.ts`).
+ *
+ * - `json` (default): raw JSON to fd:1 via an async, buffered destination so
+ *   log writes don't block the event loop when the stdout pipe is
+ *   backpressured. The machine-readable format consumed by log shippers.
+ * - `pretty`: human-readable single-line colorized output.
+ *
+ * The OTEL multistream branch always receives the same JSON record from pino
+ * before any stream-level transform, so swapping this branch never changes
+ * what the OTLP exporter sees.
+ */
+function createStdoutStream() {
+  if (LOG_FORMAT === "pretty") {
+    return pretty({
+      colorize: true,
+      translateTime: "HH:MM:ss Z",
+      singleLine: true,
+      // Mixin-added fields are valuable in JSON for OTEL/log shippers but
+      // pure noise in a pretty console line.
+      ignore: "pid,hostname,timeIso,trace_id,span_id,trace_flags,session_id",
+    });
+  }
+  return pino.destination({ fd: 1, sync: false, minLength: 4096 });
+}
 
 // --- Internal helpers (trace context injection) ---
 

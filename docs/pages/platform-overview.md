@@ -16,7 +16,7 @@ Archestra is a centralized AI Platform designed for organizations where software
 
 > Fun fact: The team behind Archestra.AI previously worked on Grafana OnCall.
 
-![Platform Architecture](/docs/platform-overview-architecture.webp)
+:::architecture-diagram:::
 
 ## Composable Components
 
@@ -35,7 +35,3 @@ Archestra is built as a set of composable components. Most organizations already
 **[Security & Guardrails](/docs/platform-lethal-trifecta)** and **[Observability](/docs/platform-observability)** — Deterministic tool invocation policies and trusted data policies that cannot be bypassed by prompt injection. Prometheus metrics, OpenTelemetry tracing, and [per-team cost tracking](/docs/platform-costs-and-limits).
 
 See [Pricing Model](/docs/platform-pricing-model) for licensing details.
-
-## Architecture
-
-:::architecture-diagram:::

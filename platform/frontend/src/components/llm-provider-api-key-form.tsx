@@ -932,6 +932,18 @@ export function LlmProviderApiKeyForm({
             Override the default API endpoint. Useful for self-hosted or proxy
             setups.
           </p>
+          {isProviderApiKeyOptional({
+            provider,
+            azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+          }) &&
+            provider !== "azure" && (
+              <p className="text-xs text-muted-foreground">
+                If this app runs in Docker, <code>localhost</code> points at the
+                container, not your host machine. Use{" "}
+                <code>host.docker.internal</code> instead (e.g.{" "}
+                <code>http://host.docker.internal:11434/v1</code>).
+              </p>
+            )}
           <Input
             id="llm-provider-api-key-base-url"
             type="url"

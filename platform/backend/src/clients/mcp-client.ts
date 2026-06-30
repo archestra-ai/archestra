@@ -358,6 +358,13 @@ class McpClient {
       identityProviderRedirectPath?: string;
       elicitationHandler?: McpElicitationHandler;
       /**
+       * Cancels the in-flight upstream request (callTool / listTools /
+       * readResource) when the caller's chat run is stopped. Without it a slow
+       * tool call runs to completion after Stop; see executeToolCall's catch,
+       * which rethrows an aborted call instead of retrying it.
+       */
+      abortSignal?: AbortSignal;
+      /**
        * Pre-resolved catalog tool row for dynamic tool access: lets run_tool
        * execute a tool the agent was never assigned. This governs tool ACCESS
        * only. Whose credential/connection the call uses is still decided by
@@ -608,7 +615,10 @@ class McpClient {
 
         const resourceUri = getSyntheticResourceToolUri(tool.meta);
         if (resourceUri) {
-          const result = await client.readResource({ uri: resourceUri });
+          const result = await client.readResource(
+            { uri: resourceUri },
+            { signal: options?.abortSignal },
+          );
           return await this.createSuccessResult({
             toolCall,
             owner,
@@ -635,12 +645,17 @@ class McpClient {
           client,
           connectionKey,
           targetToolName,
+          options?.abortSignal,
         );
 
-        const result = await client.callTool({
-          name: targetToolName,
-          arguments: toolCall.arguments,
-        });
+        const result = await client.callTool(
+          {
+            name: targetToolName,
+            arguments: toolCall.arguments,
+          },
+          undefined,
+          { signal: options?.abortSignal },
+        );
 
         const isOAuthServer = !!catalogItem.oauthConfig;
         const toolResultAuthError = isAuthRelatedToolResult(result);
@@ -705,6 +720,19 @@ class McpClient {
             | undefined,
         });
       } catch (error) {
+        // A stopped chat run aborts the request; the SDK rejects it as an
+        // McpError(RequestTimeout) — indistinguishable by shape from a real
+        // timeout — so key off the signal, not the error. Rethrow before any
+        // recovery so an aborted call is never retried (token refresh / fresh
+        // session). The aborted call is intentionally not audited from here:
+        // it runs in the AI SDK's abandoned tool-execute promise, so a DB write
+        // at this point is unreliable. Auditing a cancelled (possibly
+        // upstream-committed) call needs a non-abandoned context and is tracked
+        // separately.
+        if (options?.abortSignal?.aborted) {
+          throw error;
+        }
+
         // Handle stale HTTP session.  The MCP SDK skips the `initialize`
         // handshake when `transport.sessionId` is already set (session
         // resumption), so `client.connect()` succeeds without making any
@@ -2135,11 +2163,14 @@ class McpClient {
     client: Client,
     connectionKey: string,
     strippedToolName: string,
+    abortSignal?: AbortSignal,
   ): Promise<string> {
     let nameMap = this.toolNameCache.get(connectionKey);
     if (!nameMap) {
       try {
-        const toolsResult = await client.listTools();
+        const toolsResult = await client.listTools(undefined, {
+          signal: abortSignal,
+        });
         nameMap = new Map<string, string>();
         for (const tool of toolsResult.tools) {
           nameMap.set(tool.name.toLowerCase(), tool.name);

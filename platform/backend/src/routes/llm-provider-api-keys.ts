@@ -16,6 +16,7 @@ import {
   encodeBedrockSigV4Marker,
 } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import config from "@/config";
 import logger from "@/logging";
 import {
   LlmOauthClientModel,
@@ -44,6 +45,7 @@ import {
   SelectLlmProviderApiKeySchema,
   type SelectSecret,
 } from "@/types";
+import { dockerLocalhostConnectionHint } from "@/utils/docker-localhost-hint";
 
 async function testApiKeyOrThrow(
   provider: SupportedProvider,
@@ -54,11 +56,60 @@ async function testApiKeyOrThrow(
   try {
     await testProviderApiKey(provider, apiKey, baseUrl, extraHeaders);
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const hint = dockerLocalhostConnectionHint({
+      baseUrl: effectiveBaseUrlForHint(provider, baseUrl),
+      errorMessage: message,
+    });
     throw new ApiError(
       400,
-      `Invalid API key: Failed to connect to ${capitalize(provider)}: ${error instanceof Error ? error.message : String(error)}`,
+      `Invalid API key: Failed to connect to ${capitalize(provider)}: ${message}${hint ? ` ${hint}` : ""}`,
     );
   }
+}
+
+/**
+ * Verifies connectivity for optional-key providers (Ollama, vLLM) when no API
+ * key was supplied. Unlike {@link testApiKeyOrThrow}, an empty model list is
+ * treated as success: the server is reachable, the user simply hasn't pulled
+ * any models yet, so we shouldn't block key creation. Genuine connection
+ * failures still throw — with a Docker localhost hint when applicable.
+ */
+async function testKeylessConnectivityOrThrow(
+  provider: SupportedProvider,
+  baseUrl?: string | null,
+  extraHeaders?: Record<string, string> | null,
+): Promise<void> {
+  try {
+    await testProviderApiKey(provider, "", baseUrl, extraHeaders);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("Models list is empty")) return;
+    const hint = dockerLocalhostConnectionHint({
+      baseUrl: effectiveBaseUrlForHint(provider, baseUrl),
+      errorMessage: message,
+    });
+    throw new ApiError(
+      400,
+      `Failed to connect to ${capitalize(provider)}: ${message}${hint ? ` ${hint}` : ""}`,
+    );
+  }
+}
+
+/**
+ * The base URL connectivity is actually tested against: an explicit override if
+ * present, otherwise the provider's configured default. Needed so the Docker
+ * hint fires when an Ollama key is created with no Base URL (the default points
+ * at localhost).
+ */
+function effectiveBaseUrlForHint(
+  provider: SupportedProvider,
+  baseUrl: string | null | undefined,
+): string | null {
+  if (baseUrl) return baseUrl;
+  if (provider === "ollama") return config.llm.ollama.baseUrl ?? null;
+  if (provider === "vllm") return config.llm.vllm.baseUrl ?? null;
+  return null;
 }
 
 async function testKeylessAzureEntraOrThrow(
@@ -402,6 +453,23 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             body.extraHeaders,
           );
         }
+      } else if (
+        !actualApiKeyValue &&
+        isProviderApiKeyOptional({
+          provider: body.provider,
+          // azure is handled by the keyless Entra branch above; only the
+          // always-optional self-hosted providers (Ollama, vLLM) fall here.
+          azureEntraIdEnabled: false,
+        })
+      ) {
+        // No API key for a self-hosted provider — still verify connectivity so
+        // connection errors (e.g. the Docker localhost trap) surface with a
+        // helpful hint instead of silently creating an unusable key.
+        await testKeylessConnectivityOrThrow(
+          body.provider,
+          runtimeTestBaseUrl,
+          body.extraHeaders,
+        );
       }
 
       if (
@@ -766,11 +834,21 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             testExtraHeaders,
           );
         } else if (
-          !isProviderApiKeyOptional({
+          isProviderApiKeyOptional({
             provider: apiKeyFromDB.provider,
-            azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+            // azure is handled above; only self-hosted Ollama/vLLM fall here.
+            azureEntraIdEnabled: false,
           })
         ) {
+          // Self-hosted provider with no stored key — re-test connectivity so a
+          // newly-set Base URL that can't be reached (e.g. Docker localhost)
+          // surfaces with a helpful hint.
+          await testKeylessConnectivityOrThrow(
+            apiKeyFromDB.provider,
+            testBaseUrl,
+            testExtraHeaders,
+          );
+        } else {
           throw new ApiError(
             400,
             "Cannot update Base URL, Inference URL, or extra headers without existing API key",

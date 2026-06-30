@@ -14,9 +14,11 @@ import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
   AutonomyPolicyOperator,
+  DiscoveredToolPolicy,
   GlobalToolPolicy,
   ToolInvocation,
 } from "@/types";
+import { defaultDiscoveredToolPolicy } from "@/types";
 
 type EvaluationResult = {
   isAllowed: boolean;
@@ -226,25 +228,45 @@ class ToolInvocationPolicyModel {
     toolInput: Record<string, any>,
     context: PolicyEvaluationContext,
     globalToolPolicy: GlobalToolPolicy,
+    // Defaults to the discovered-tool equivalent of globalToolPolicy so callers
+    // that don't distinguish discovered tools keep single-policy behavior;
+    // production passes it explicitly.
+    discoveredToolPolicy: DiscoveredToolPolicy = defaultDiscoveredToolPolicy(
+      globalToolPolicy,
+    ),
   ): Promise<boolean> {
-    // Permissive mode: skip all approval checks (consistent with evaluateBatch)
-    if (globalToolPolicy === "permissive") {
-      return false;
-    }
-
     // Archestra tools always bypass policies (consistent with evaluateBatch)
     if (archestraMcpBranding.isToolName(toolName)) {
       return false;
     }
 
-    // Find tool by name
+    // Find tool by name. Origin columns decide which policy governs it: a
+    // shared "llm-proxy" discovered tool has all three NULL.
     const [tool] = await db
-      .select({ id: schema.toolsTable.id })
+      .select({
+        id: schema.toolsTable.id,
+        catalogId: schema.toolsTable.catalogId,
+        agentId: schema.toolsTable.agentId,
+        delegateToAgentId: schema.toolsTable.delegateToAgentId,
+      })
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.name, toolName));
 
     if (!tool) {
       logger.debug({ toolName }, "checkApprovalRequired: tool not found in DB");
+      return false;
+    }
+
+    // Permissive effective policy: skip all approval checks (consistent with
+    // evaluateBatch). Discovered tools follow discoveredToolPolicy.
+    const isDiscovered =
+      tool.catalogId === null &&
+      tool.agentId === null &&
+      tool.delegateToAgentId === null;
+    const effectiveAllows = isDiscovered
+      ? discoveredToolPolicy === "relaxed"
+      : globalToolPolicy === "permissive";
+    if (effectiveAllows) {
       return false;
     }
 
@@ -416,14 +438,25 @@ class ToolInvocationPolicyModel {
     context: PolicyEvaluationContext,
     isContextTrusted: boolean,
     globalToolPolicy: GlobalToolPolicy,
+    // Defaults to the discovered-tool equivalent of globalToolPolicy so callers
+    // that don't distinguish discovered tools keep single-policy behavior;
+    // production passes it explicitly.
+    discoveredToolPolicy: DiscoveredToolPolicy = defaultDiscoveredToolPolicy(
+      globalToolPolicy,
+    ),
   ): Promise<EvaluationResult & { toolCallName?: string }> {
     logger.debug(
-      { globalToolPolicy },
+      { globalToolPolicy, discoveredToolPolicy },
       "ToolInvocationPolicy.evaluateBatch: global policy",
     );
 
-    // YOLO mode: allow all tool calls immediately, skip policy evaluation
-    if (globalToolPolicy === "permissive") {
+    // YOLO mode: when neither policy enforces (global permissive AND discovered
+    // relaxed) there is nothing to evaluate. When they differ, the per-tool
+    // effective-policy check below decides which one applies to each tool.
+    if (
+      globalToolPolicy === "permissive" &&
+      discoveredToolPolicy === "relaxed"
+    ) {
       return { isAllowed: true, reason: "" };
     }
 
@@ -440,16 +473,29 @@ class ToolInvocationPolicyModel {
 
     const toolNames = externalToolCalls.map((tc) => tc.toolCallName);
 
-    // Fetch tool IDs for the tool names
+    // Fetch tool IDs for the tool names. The origin columns decide which policy
+    // (global vs discovered) governs each tool: a shared "llm-proxy" discovered
+    // tool has all three NULL.
     const tools = await db
       .select({
         id: schema.toolsTable.id,
         name: schema.toolsTable.name,
+        catalogId: schema.toolsTable.catalogId,
+        agentId: schema.toolsTable.agentId,
+        delegateToAgentId: schema.toolsTable.delegateToAgentId,
       })
       .from(schema.toolsTable)
       .where(inArray(schema.toolsTable.name, toolNames));
 
     const toolIdsByName = new Map(tools.map((t) => [t.name, t.id]));
+    const isDiscoveredByName = new Map(
+      tools.map((t) => [
+        t.name,
+        t.catalogId === null &&
+          t.agentId === null &&
+          t.delegateToAgentId === null,
+      ]),
+    );
     const toolIds = tools.map((t) => t.id);
 
     if (toolIds.length === 0) {
@@ -483,6 +529,17 @@ class ToolInvocationPolicyModel {
     for (const { toolCallName, toolInput } of externalToolCalls) {
       const toolId = toolIdsByName.get(toolCallName);
       if (!toolId) continue;
+
+      // Discovered (llm-proxy) tools follow the discovered-tool policy; all
+      // others follow the global tool policy. When the effective policy does
+      // not enforce (discovered=relaxed / global=permissive) the tool is
+      // allowed without consulting its policy rows.
+      const effectiveAllows = isDiscoveredByName.get(toolCallName)
+        ? discoveredToolPolicy === "relaxed"
+        : globalToolPolicy === "permissive";
+      if (effectiveAllows) {
+        continue;
+      }
 
       const policies = policiesByToolId.get(toolId) || [];
 

@@ -34,6 +34,7 @@ import {
   fetchCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import { cn } from "@/lib/utils";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -52,13 +53,99 @@ const EMPTY_TOOLS: CatalogTool[] = [];
  * environment are offered; a server an existing assignment has left is still
  * shown so the stale assignment can be removed.
  */
-export function AppToolsEditor({ appId }: { appId: string }) {
+export function AppToolsEditor({
+  appId,
+  environmentId,
+  selectedToolIds,
+  onSelectionChange,
+  unbounded = false,
+}: {
+  appId: string;
+  /**
+   * Overrides the app's persisted environment for filtering candidate servers —
+   * lets a caller preview the tools available under a not-yet-saved environment
+   * (e.g. the settings dialog stages environment + tools and saves them as a
+   * pair). Omit to filter by the app's saved environment.
+   */
+  environmentId?: string | null;
+  /**
+   * Controlled selection. When both this and {@link onSelectionChange} are set,
+   * the editor is a staged selector: toggles call `onSelectionChange` instead of
+   * assigning/unassigning immediately. Omit both for the live editor that
+   * persists each toggle through the Apps API.
+   */
+  selectedToolIds?: Set<string>;
+  onSelectionChange?: (next: Set<string>) => void;
+  /**
+   * Let each server's tool list flow at its full height instead of capping it
+   * at a scrollable `max-h-96` box. Set when embedding in a surface that already
+   * scrolls (e.g. the inline settings form) so its wheel scroll isn't captured
+   * by a nested scroller.
+   */
+  unbounded?: boolean;
+}) {
   const { data: app } = useApp(appId);
   const { data: assigned, isPending } = useAppTools(appId);
   const { data: catalogs = [] } = useInternalMcpCatalog();
   const { data: canEdit } = useHasPermissions({ app: ["update"] });
+  const assignTool = useAssignToolToApp();
+  const unassignTool = useUnassignToolFromApp();
 
-  const appEnvironmentId = app?.environmentId ?? null;
+  const controlled =
+    selectedToolIds !== undefined && onSelectionChange !== undefined;
+  const appEnvironmentId =
+    environmentId !== undefined ? environmentId : (app?.environmentId ?? null);
+
+  // The effective selection drives the checkboxes and counts: the staged set in
+  // controlled mode, otherwise the app's persisted assignments.
+  const selection = useMemo(
+    () =>
+      controlled
+        ? (selectedToolIds ?? new Set<string>())
+        : new Set((assigned ?? []).map((t) => t.id)),
+    [controlled, selectedToolIds, assigned],
+  );
+
+  // Applies a per-catalog selection change: re-projects it onto the full
+  // selection (controlled) or assigns/unassigns the delta live (uncontrolled).
+  const changeCatalogSelection = (
+    catalogTools: CatalogTool[],
+    next: Set<string>,
+  ) => {
+    if (controlled) {
+      const merged = new Set(selection);
+      for (const t of catalogTools) merged.delete(t.id);
+      for (const id of next) merged.add(id);
+      onSelectionChange?.(merged);
+      return;
+    }
+    for (const id of next) {
+      if (!selection.has(id)) {
+        assignTool.mutate({
+          appId,
+          toolId: id,
+          body: { credentialResolutionMode: "dynamic" },
+        });
+      }
+    }
+    for (const t of catalogTools) {
+      if (selection.has(t.id) && !next.has(t.id)) {
+        unassignTool.mutate({ appId, toolId: t.id });
+      }
+    }
+  };
+
+  // Removes an orphaned tool: drops it from the staged set (controlled) or
+  // unassigns it live (uncontrolled).
+  const removeTool = (toolId: string) => {
+    if (controlled) {
+      const merged = new Set(selection);
+      merged.delete(toolId);
+      onSelectionChange?.(merged);
+      return;
+    }
+    unassignTool.mutate({ appId, toolId });
+  };
 
   const assignedIdsByCatalog = useMemo(() => {
     const map = new Map<string, Set<string>>();
@@ -141,6 +228,13 @@ export function AppToolsEditor({ appId }: { appId: string }) {
     );
   }, [assigned, catalogs]);
 
+  // Only surface orphans still in the (possibly staged) selection so removing
+  // one in controlled mode hides it immediately.
+  const orphanedVisible = useMemo(
+    () => orphanedAssigned.filter((t) => selection.has(t.id)),
+    [orphanedAssigned, selection],
+  );
+
   const toolsLoading = toolQueries.some((q) => q.isLoading);
 
   if (canEdit !== true) {
@@ -156,7 +250,7 @@ export function AppToolsEditor({ appId }: { appId: string }) {
   return (
     <div className="flex max-w-2xl flex-col gap-4">
       <LoadingWrapper isPending={isPending && !assigned}>
-        {visibleCatalogs.length === 0 && orphanedAssigned.length === 0 ? (
+        {visibleCatalogs.length === 0 && orphanedVisible.length === 0 ? (
           candidates.length > 0 && toolsLoading ? (
             <p className="text-sm text-muted-foreground">Loading tools…</p>
           ) : (
@@ -170,8 +264,20 @@ export function AppToolsEditor({ appId }: { appId: string }) {
             {visibleCatalogs.length > 0 ? (
               <Accordion type="multiple" defaultValue={defaultOpen}>
                 {visibleCatalogs.map((catalog) => {
-                  const assignedCount =
-                    assignedIdsByCatalog.get(catalog.id)?.size ?? 0;
+                  const catalogTools =
+                    toolsByCatalog.get(catalog.id) ?? EMPTY_TOOLS;
+                  // A selected id belongs to this catalog if its tool is loaded
+                  // here or it's a persisted assignment of this catalog — the
+                  // latter keeps the count correct before catalog tools load.
+                  const catalogToolIds = new Set(catalogTools.map((t) => t.id));
+                  const persistedInCatalog =
+                    assignedIdsByCatalog.get(catalog.id) ?? new Set<string>();
+                  const selectedInCatalog = new Set(
+                    [...selection].filter(
+                      (id) =>
+                        catalogToolIds.has(id) || persistedInCatalog.has(id),
+                    ),
+                  );
                   const outOfEnv =
                     !isPlaywrightCatalogItem(catalog.id) &&
                     !isCatalogInEnvironment(catalog, appEnvironmentId);
@@ -192,22 +298,25 @@ export function AppToolsEditor({ appId }: { appId: string }) {
                               (outside this environment)
                             </span>
                           ) : null}
-                          {assignedCount > 0 ? (
+                          {selectedInCatalog.size > 0 ? (
                             <Badge variant="secondary" className="ml-auto">
-                              {assignedCount} selected
+                              {selectedInCatalog.size} selected
                             </Badge>
                           ) : null}
                         </div>
                       </AccordionTrigger>
                       <AccordionContent>
-                        <div className="flex max-h-96 flex-col rounded-md border">
+                        <div
+                          className={cn(
+                            "flex flex-col rounded-md border",
+                            !unbounded && "max-h-96",
+                          )}
+                        >
                           <AppCatalogToolList
-                            appId={appId}
-                            tools={
-                              toolsByCatalog.get(catalog.id) ?? EMPTY_TOOLS
-                            }
-                            assignedToolIds={
-                              assignedIdsByCatalog.get(catalog.id) ?? null
+                            tools={catalogTools}
+                            selectedToolIds={selectedInCatalog}
+                            onSelectionChange={(next) =>
+                              changeCatalogSelection(catalogTools, next)
                             }
                           />
                         </div>
@@ -217,8 +326,11 @@ export function AppToolsEditor({ appId }: { appId: string }) {
                 })}
               </Accordion>
             ) : null}
-            {orphanedAssigned.length > 0 ? (
-              <OrphanedAssignedTools appId={appId} tools={orphanedAssigned} />
+            {orphanedVisible.length > 0 ? (
+              <OrphanedAssignedTools
+                tools={orphanedVisible}
+                onRemove={removeTool}
+              />
             ) : null}
           </>
         )}
@@ -228,14 +340,12 @@ export function AppToolsEditor({ appId }: { appId: string }) {
 }
 
 function OrphanedAssignedTools({
-  appId,
   tools,
+  onRemove,
 }: {
-  appId: string;
   tools: AssignedTool[];
+  onRemove: (toolId: string) => void;
 }) {
-  const unassignTool = useUnassignToolFromApp();
-
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs text-muted-foreground">
@@ -260,7 +370,7 @@ function OrphanedAssignedTools({
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-destructive"
               aria-label={`Remove ${tool.name}`}
-              onClick={() => unassignTool.mutate({ appId, toolId: tool.id })}
+              onClick={() => onRemove(tool.id)}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -272,42 +382,14 @@ function OrphanedAssignedTools({
 }
 
 function AppCatalogToolList({
-  appId,
   tools,
-  assignedToolIds,
+  selectedToolIds,
+  onSelectionChange,
 }: {
-  appId: string;
   tools: CatalogTool[];
-  assignedToolIds: Set<string> | null;
+  selectedToolIds: Set<string>;
+  onSelectionChange: (next: Set<string>) => void;
 }) {
-  const assignTool = useAssignToolToApp();
-  const unassignTool = useUnassignToolFromApp();
-
-  const selectedToolIds = useMemo(
-    () => new Set(assignedToolIds ?? []),
-    [assignedToolIds],
-  );
-
-  // ToolChecklist emits the full next selection; assign/unassign only the delta.
-  // Each mutation invalidates the app's tools query, so the checkboxes track
-  // server state rather than optimistic local state.
-  const handleSelectionChange = (next: Set<string>) => {
-    for (const id of next) {
-      if (!selectedToolIds.has(id)) {
-        assignTool.mutate({
-          appId,
-          toolId: id,
-          body: { credentialResolutionMode: "dynamic" },
-        });
-      }
-    }
-    for (const id of selectedToolIds) {
-      if (!next.has(id)) {
-        unassignTool.mutate({ appId, toolId: id });
-      }
-    }
-  };
-
   if (tools.length === 0) {
     return (
       <p className="px-4 py-3 text-sm text-muted-foreground">
@@ -320,7 +402,7 @@ function AppCatalogToolList({
     <ToolChecklist
       tools={tools}
       selectedToolIds={selectedToolIds}
-      onSelectionChange={handleSelectionChange}
+      onSelectionChange={onSelectionChange}
     />
   );
 }

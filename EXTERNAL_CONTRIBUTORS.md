@@ -669,3 +669,6 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @jabir-dev788
 - @tungdr4
 - @VanshComp
+- @ArtiomGusev
+- @1421906110
+- @netovieira

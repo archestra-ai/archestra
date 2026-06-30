@@ -75,7 +75,11 @@ class ActiveChatRunModel {
     organizationId: string;
     terminalGraceMs: number;
   }): Promise<ChatActiveRun | null> {
-    const terminalCutoff = new Date(Date.now() - params.terminalGraceMs);
+    // Only the conversation's most recent run is reconnectable. Fetch it
+    // unconditionally and decide replayability from its own status, rather than
+    // filtering in SQL — a status filter would skip a non-replayable latest run
+    // and fall through to an older one (e.g. replaying turn 1's completed run
+    // after turn 2 was cancelled), reconnecting the client to a stale stream.
     const [run] = await db
       .select()
       .from(schema.chatActiveRunsTable)
@@ -83,13 +87,28 @@ class ActiveChatRunModel {
         and(
           eq(schema.chatActiveRunsTable.conversationId, params.conversationId),
           eq(schema.chatActiveRunsTable.organizationId, params.organizationId),
-          sql`(${schema.chatActiveRunsTable.status} = 'running' OR ${schema.chatActiveRunsTable.updatedAt} > ${terminalCutoff})`,
         ),
       )
       .orderBy(desc(schema.chatActiveRunsTable.createdAt))
       .limit(1);
 
-    return run ?? null;
+    if (!run) {
+      return null;
+    }
+
+    // A still-'running' run is always reconnectable. Grace-window replay exists
+    // to deliver a final answer the client missed while disconnected, so a
+    // terminal run is replayable only within the window — except 'cancelled':
+    // the user stopped it, so there is no answer to deliver, and replaying its
+    // partial (e.g. a tool call cut off before its result) makes the client
+    // resume into a dangling stream that loops the chat view on reload. The
+    // conversation refetch is the source of truth for a cancelled run.
+    const withinGrace =
+      Date.now() - run.updatedAt.getTime() < params.terminalGraceMs;
+    const isReplayable =
+      run.status === "running" || (run.status !== "cancelled" && withinGrace);
+
+    return isReplayable ? run : null;
   }
 
   static async findRunningByConversation(

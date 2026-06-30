@@ -22,6 +22,7 @@ export function makeOrganization(
     skillSlashCommandsEnabled: false,
     compressionScope: "organization",
     globalToolPolicy: "permissive",
+    discoveredToolPolicy: "relaxed",
     allowChatFileUploads: false,
     allowToolAutoAssignment: true,
     embeddingModel: null,

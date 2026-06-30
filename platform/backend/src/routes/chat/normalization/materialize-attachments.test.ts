@@ -1,4 +1,7 @@
-import { getModelReadableMimeTypes } from "@archestra/shared";
+import {
+  getModelReadableMimeTypes,
+  INLINE_TEXT_MAX_BYTES,
+} from "@archestra/shared";
 import config from "@/config";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
@@ -324,6 +327,102 @@ test("references a non-ingestible attachment in the sandbox instead of inlining 
   // The bytes are NOT inlined into the model payload.
   expect(part.text).not.toContain("data:");
   expect(part.url).toBeUndefined();
+});
+
+test("routes an oversized text document to the sandbox instead of inlining it", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  // text/csv IS model-ingestible here, so only its size — just over the inline
+  // budget — is what diverts it to the sandbox.
+  const bytes = Buffer.alloc(INLINE_TEXT_MAX_BYTES + 1, 0x61);
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "big.csv",
+    mimeType: "text/csv",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const input: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "text/csv",
+          filename: "big.csv",
+        },
+      ],
+    },
+  ];
+
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: new Set(["text/csv"]),
+    sandboxAvailable: true,
+  });
+
+  const part = expectPresent(output[0].parts?.[0]);
+  expect(part.type).toBe("text");
+  expect(part.text).toContain("/home/sandbox/attachments");
+  expect(part.text).not.toContain("data:");
+  expect(part.url).toBeUndefined();
+});
+
+test("inlines a text document that is within the inline budget", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const bytes = Buffer.alloc(INLINE_TEXT_MAX_BYTES, 0x61);
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "fits.csv",
+    mimeType: "text/csv",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const input: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "text/csv",
+          filename: "fits.csv",
+        },
+      ],
+    },
+  ];
+
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: new Set(["text/csv"]),
+    sandboxAvailable: false,
+  });
+
+  const filePart = expectPresent(output[0].parts?.[0]);
+  expect(filePart.type).toBe("file");
+  expect(filePart.url).toContain("data:text/csv");
 });
 
 test("a non-ingestible attachment is NOT pointed at the sandbox when it is unavailable for the agent", async ({

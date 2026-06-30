@@ -44,8 +44,16 @@ import {
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
-import type { GlobalToolPolicy, UnsafeContextBoundary } from "@/types";
-import { agentOwner, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
+import type {
+  DiscoveredToolPolicy,
+  GlobalToolPolicy,
+  UnsafeContextBoundary,
+} from "@/types";
+import {
+  agentOwner,
+  defaultDiscoveredToolPolicy,
+  UNSAFE_CONTEXT_BOUNDARY_REASON,
+} from "@/types";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
 export interface McpGatewayToken {
@@ -89,6 +97,7 @@ export interface ChatToolContext {
   hookRunCollector?: CollectedHookRun[];
   mcpGwToken: McpGatewayToken;
   globalToolPolicy: GlobalToolPolicy;
+  discoveredToolPolicy: DiscoveredToolPolicy;
   considerContextUntrusted: boolean;
   /**
    * Per-run guard against the model re-issuing the identical tool call forever.
@@ -590,6 +599,7 @@ function needsApprovalProps(params: {
           externalAgentId: getChatExternalAgentId(),
         },
         ctx.globalToolPolicy,
+        ctx.discoveredToolPolicy,
       );
     },
   };
@@ -627,7 +637,12 @@ async function executeWithToolSpan<R>(params: {
   } = params;
 
   if (ctx.blockOnApprovalRequired) {
-    await throwIfApprovalRequired(toolName, args, ctx.globalToolPolicy);
+    await throwIfApprovalRequired(
+      toolName,
+      args,
+      ctx.globalToolPolicy,
+      ctx.discoveredToolPolicy,
+    );
   }
 
   logger.info(
@@ -652,13 +667,17 @@ async function executeWithToolSpan<R>(params: {
         throwIfAborted(ctx.abortSignal);
         return await run({ span, startTime });
       } catch (error) {
-        reportToolMetrics({
-          toolName,
-          agentId: ctx.agentId,
-          agentName: ctx.agentName,
-          startTime,
-          isError: true,
-        });
+        const aborted = ctx.abortSignal?.aborted || isAbortLikeError(error);
+        // A stopped run is a cancellation, not a tool failure — don't count it.
+        if (!aborted) {
+          reportToolMetrics({
+            toolName,
+            agentId: ctx.agentId,
+            agentName: ctx.agentName,
+            startTime,
+            isError: true,
+          });
+        }
         const logPayload = {
           agentId: ctx.agentId,
           userId: ctx.userId,
@@ -666,7 +685,7 @@ async function executeWithToolSpan<R>(params: {
           err: error,
           errorMessage: error instanceof Error ? error.message : String(error),
         };
-        if (isAbortLikeError(error)) {
+        if (aborted) {
           logger.info(logPayload, abortLogMessage);
         } else {
           logger.error(logPayload, failureLogMessage);
@@ -788,6 +807,10 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         // mcp-client scopes per-conversation sessions by this key; in UI chat it
         // is the conversation id, in headless executions the execution key.
         conversationId: isolationKey,
+        // Cancels the in-flight upstream call when the chat run is stopped,
+        // instead of letting it run to completion past the post-call
+        // throwIfAborted below. Covers subagents too (shared builder).
+        abortSignal,
         ...(elicitation
           ? { elicitationHandler: elicitation.createHandler({ toolName }) }
           : {}),
@@ -801,13 +824,17 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
       isError: result.isError ?? false,
     });
   } catch (error) {
-    reportToolMetrics({
-      toolName,
-      agentId,
-      agentName,
-      startTime,
-      isError: true,
-    });
+    // A stopped run aborts the call mid-flight; that is a cancellation, not a
+    // tool failure, so don't count it as an error.
+    if (!abortSignal?.aborted) {
+      reportToolMetrics({
+        toolName,
+        agentId,
+        agentName,
+        startTime,
+        isError: true,
+      });
+    }
     throw error;
   }
   throwIfAborted(abortSignal);
@@ -1124,6 +1151,12 @@ async function throwIfApprovalRequired(
   toolName: string,
   args: unknown,
   globalToolPolicy: GlobalToolPolicy,
+  // Defaults to the discovered-tool equivalent of globalToolPolicy so callers
+  // that don't distinguish discovered tools keep single-policy behavior; the
+  // chat path passes it explicitly.
+  discoveredToolPolicy: DiscoveredToolPolicy = defaultDiscoveredToolPolicy(
+    globalToolPolicy,
+  ),
 ): Promise<void> {
   const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
   const requiresApproval =
@@ -1135,6 +1168,7 @@ async function throwIfApprovalRequired(
         externalAgentId: getChatExternalAgentId(),
       },
       globalToolPolicy,
+      discoveredToolPolicy,
     );
   if (requiresApproval) {
     throw new Error(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);

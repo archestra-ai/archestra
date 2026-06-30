@@ -1,8 +1,12 @@
+import { INLINE_TEXT_MAX_BYTES } from "@archestra/shared";
+import { describe } from "vitest";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
 import {
+  assertInlineAttachmentsAcceptable,
   extractInlineAttachments,
+  type InlineAttachmentPolicy,
   isAttachmentRefUrl,
   parseAttachmentIdFromUrl,
 } from "./extract-inline-attachments";
@@ -363,4 +367,104 @@ test("parseAttachmentIdFromUrl validates the URL shape", () => {
   expect(
     parseAttachmentIdFromUrl("/api/other/attachments/abc/content"),
   ).toBeNull();
+});
+
+describe("assertInlineAttachmentsAcceptable", () => {
+  const SANDBOX_LIMIT = 16 * 1024 * 1024;
+
+  function policy(
+    overrides: Partial<InlineAttachmentPolicy> = {},
+  ): InlineAttachmentPolicy {
+    return {
+      ingestibleMimeTypes: new Set(["image/png", "application/pdf"]),
+      sandboxAvailable: false,
+      sandboxByteLimit: SANDBOX_LIMIT,
+      ...overrides,
+    };
+  }
+
+  function messageWith(mime: string, byteLength: number): ChatMessage[] {
+    return [
+      {
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            url: makeDataUrl(mime, Buffer.alloc(byteLength, 0x61)),
+            mediaType: mime,
+            filename: `file.${mime.split("/")[1]}`,
+          },
+        ],
+      },
+    ];
+  }
+
+  function assert(mime: string, byteLength: number, p: InlineAttachmentPolicy) {
+    assertInlineAttachmentsAcceptable({
+      messages: messageWith(mime, byteLength),
+      policy: p,
+    });
+  }
+
+  test("accepts a model-ingestible type regardless of sandbox", () => {
+    expect(() => assert("image/png", 5_000_000, policy())).not.toThrow();
+  });
+
+  test("accepts a small inlineable text file without a sandbox", () => {
+    expect(() =>
+      assert("application/x-yaml", INLINE_TEXT_MAX_BYTES, policy()),
+    ).not.toThrow();
+  });
+
+  test("rejects an oversized text file when no sandbox is available", () => {
+    expect(() =>
+      assert("text/csv", INLINE_TEXT_MAX_BYTES + 1, policy()),
+    ).toThrow();
+  });
+
+  test("routes an oversized text file to the sandbox when available", () => {
+    expect(() =>
+      assert(
+        "text/csv",
+        INLINE_TEXT_MAX_BYTES + 1,
+        policy({ sandboxAvailable: true }),
+      ),
+    ).not.toThrow();
+  });
+
+  test("rejects an unsupported binary type without a sandbox", () => {
+    expect(() => assert("application/zip", 1_000, policy())).toThrow();
+  });
+
+  test("accepts an arbitrary type within the limit when the sandbox is available", () => {
+    expect(() =>
+      assert("application/zip", 1_000, policy({ sandboxAvailable: true })),
+    ).not.toThrow();
+  });
+
+  test("rejects a file over the sandbox artifact limit even when available", () => {
+    expect(() =>
+      assert(
+        "application/zip",
+        SANDBOX_LIMIT + 1,
+        policy({ sandboxAvailable: true }),
+      ),
+    ).toThrow();
+  });
+
+  test("does not throw on a malformed (un-decodable) data: URL", () => {
+    // A bad percent-escape can't be sized; the gate must skip it (extraction's
+    // own per-part catch handles the bad URL) rather than throw a raw URIError.
+    const messages: ChatMessage[] = [
+      {
+        role: "user",
+        parts: [
+          { type: "file", url: "data:text/plain,%E0%A4%A", filename: "x.txt" },
+        ],
+      },
+    ];
+    expect(() =>
+      assertInlineAttachmentsAcceptable({ messages, policy: policy() }),
+    ).not.toThrow();
+  });
 });

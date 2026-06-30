@@ -677,6 +677,53 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(updateResponse2.statusCode).toBe(200);
   });
 
+  test("surfaces a Docker localhost hint when keyless Ollama creation can't connect", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(new Error("fetch failed"));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Ollama Local",
+        provider: "ollama",
+        scope: "personal",
+        baseUrl: "http://localhost:11434/v1",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "http://host.docker.internal:11434/v1",
+    );
+    // Connectivity was tested without an API key.
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "ollama",
+      "",
+      "http://localhost:11434/v1",
+      undefined,
+    );
+  });
+
+  test("treats an empty Ollama model list as a reachable server (keyless create succeeds)", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Models list is empty"),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Ollama No Models",
+        provider: "ollama",
+        scope: "personal",
+        baseUrl: "http://localhost:11434/v1",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ name: "Ollama No Models" });
+  });
+
   test("allows Azure provider keys without API key when Entra ID is enabled", async () => {
     mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
 

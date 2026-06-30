@@ -1,5 +1,7 @@
+import { eq } from "drizzle-orm";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
+import db, { schema } from "@/database";
 import {
   AgentTeamModel,
   ChatOpsChannelBindingModel,
@@ -136,6 +138,134 @@ describe("ChatOpsManager security validation", () => {
       ...overrides,
     };
   }
+
+  // ===========================================================================
+  // Frictionless onboarding: a channel with no agent yet should auto-assign a
+  // clear default (org default, or the sole agent) instead of silently dropping.
+  // ===========================================================================
+
+  function makeManagerWith(provider: ChatOpsProvider): ChatOpsManager {
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = provider;
+    return manager;
+  }
+
+  async function unboundChannelBinding(organizationId: string) {
+    return ChatOpsChannelBindingModel.create({
+      organizationId,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+    });
+  }
+
+  function refetchBinding() {
+    return ChatOpsChannelBindingModel.findByChannel({
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+    });
+  }
+
+  test("auto-assigns the sole agent when a channel has no agent yet", async ({
+    makeOrganization,
+    makeInternalAgent,
+  }) => {
+    mockA2AExecutor();
+    const org = await makeOrganization();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    await unboundChannelBinding(org.id);
+
+    const provider = createMockProvider();
+    await makeManagerWith(provider).processMessage({
+      message: createMockMessage(),
+      provider,
+    });
+
+    expect((await refetchBinding())?.agentId).toBe(agent.id);
+  });
+
+  test("auto-assigns the org-wide default agent over other candidates", async ({
+    makeOrganization,
+    makeInternalAgent,
+  }) => {
+    mockA2AExecutor();
+    const org = await makeOrganization();
+    const preferred = await makeInternalAgent({ organizationId: org.id });
+    await makeInternalAgent({ organizationId: org.id }); // a second, non-default
+    await db
+      .update(schema.organizationsTable)
+      .set({ defaultAgentId: preferred.id })
+      .where(eq(schema.organizationsTable.id, org.id));
+    await unboundChannelBinding(org.id);
+
+    const provider = createMockProvider();
+    await makeManagerWith(provider).processMessage({
+      message: createMockMessage(),
+      provider,
+    });
+
+    expect((await refetchBinding())?.agentId).toBe(preferred.id);
+  });
+
+  test("prompts with the picker (no auto-assign) when multiple agents and no default", async ({
+    makeOrganization,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    await makeInternalAgent({ organizationId: org.id });
+    await makeInternalAgent({ organizationId: org.id });
+    await unboundChannelBinding(org.id);
+
+    const cardSpy = vi.fn().mockResolvedValue(undefined);
+    const provider = createMockProvider();
+    provider.sendAgentSelectionCard = cardSpy;
+
+    const result = await makeManagerWith(provider).processMessage({
+      message: createMockMessage(),
+      provider,
+    });
+
+    expect(cardSpy).toHaveBeenCalled();
+    expect((await refetchBinding())?.agentId).toBeNull();
+    // Handled via the card — not a silent drop.
+    expect(result.success).toBe(true);
+  });
+
+  test("uses the sender's lone personal agent, without pinning it to the channel", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    mockA2AExecutor();
+    const org = await makeOrganization();
+    const user = await makeUser({ email: "joey@example.com" });
+    await makeInternalAgent({
+      organizationId: org.id,
+      scope: "personal",
+      authorId: user.id,
+    });
+    await unboundChannelBinding(org.id);
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const provider = createMockProvider({
+      getUserEmail: async () => "joey@example.com",
+      sendReply: sendReplySpy,
+    });
+
+    const result = await makeManagerWith(provider).processMessage({
+      message: createMockMessage({ senderEmail: "joey@example.com" }),
+      provider,
+    });
+
+    // The sender's personal agent handled the message...
+    expect(result.success).toBe(true);
+    // ...but a personal agent must NOT be pinned as the shared channel default
+    // (other members would be denied access to it).
+    expect((await refetchBinding())?.agentId).toBeNull();
+  });
 
   test("successful authorization - user exists and has team access", async ({
     makeUser,
@@ -2277,9 +2407,81 @@ describe("ChatOpsManager attachment passthrough", () => {
 
     expect(result.success).toBe(true);
     expect(getThreadHistorySpy).not.toHaveBeenCalled();
-    expect(JSON.stringify(executorSpy.mock.calls[0][0].messages)).not.toContain(
-      "Previous conversation:",
+    expect(JSON.stringify(executorSpy.mock.calls[0][0].message)).not.toContain(
+      "Conversation so far:",
     );
+  });
+
+  test("frames thread history as the agent's own, accessible memory", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "ok",
+        messageId: "m",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "m",
+          role: "assistant",
+          parts: [{ type: "text", text: "ok" }],
+        },
+      });
+
+    const user = await makeUser({ email: "thread-history@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "thread-history@example.com",
+    });
+    mockProvider.getThreadHistory = vi.fn().mockResolvedValue([
+      {
+        messageId: "old-1",
+        senderId: "u1",
+        senderName: "Joey",
+        text: "what's 2+2?",
+        timestamp: new Date(Date.now() - 60_000),
+        isFromBot: false,
+      },
+    ]);
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    await manager.processMessage({
+      message: createMockMessage({
+        threadId: "root-message-id",
+        isThreadReply: true,
+        text: "what was the math from earlier?",
+      }),
+      provider: mockProvider,
+    });
+
+    const sent = JSON.stringify(executorSpy.mock.calls[0][0].message);
+    expect(sent).toContain("Conversation so far:");
+    expect(sent).toContain("what's 2+2?");
+    // The directive that stops an empty-prompt agent denying it has context.
+    expect(sent).toContain("you DO have access to it and remember it");
   });
 
   test("hands off to swapped chatops agent in the same turn", async ({

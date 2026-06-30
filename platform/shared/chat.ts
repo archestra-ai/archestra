@@ -412,7 +412,10 @@ export type SupportedChatUploadMimeType =
   | "application/json"
   | "application/octet-stream"
   | "application/pdf"
+  | "application/toml"
   | "application/vnd.ms-excel"
+  | "application/x-yaml"
+  | "application/yaml"
   | "application/xml"
   | "audio/flac"
   | "audio/mpeg"
@@ -430,6 +433,10 @@ export type SupportedChatUploadMimeType =
   | "text/csv"
   | "text/markdown"
   | "text/plain"
+  | "text/tab-separated-values"
+  | "text/x-toml"
+  | "text/xml"
+  | "text/yaml"
   | "video/avi"
   | "video/mp4"
   | "video/quicktime"
@@ -438,6 +445,94 @@ export type SupportedChatUploadMimeType =
 // ============================================================================
 // File Type Utilities
 // ============================================================================
+
+/**
+ * Source of truth for inlineable text document MIME types. A text file of one of
+ * these types that is small enough (see {@link INLINE_TEXT_MAX_BYTES}) is embedded
+ * directly into the prompt as decoded text. The same list gates which non-image
+ * uploads the composer accepts and which file parts the provider-prep path inlines,
+ * so it must stay the single definition shared across frontend and backend.
+ */
+const INLINEABLE_TEXT_MIME_TYPES = [
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+  "text/tab-separated-values",
+  "application/json",
+  "text/xml",
+  "application/xml",
+  "application/x-yaml",
+  "application/yaml",
+  "text/yaml",
+  "application/toml",
+  "text/x-toml",
+  // Legacy CSV aliases some browsers and operating systems report.
+  "application/csv",
+  "application/vnd.ms-excel",
+] as const satisfies readonly SupportedChatUploadMimeType[];
+
+const INLINEABLE_TEXT_MIME_TYPE_SET: ReadonlySet<string> = new Set(
+  INLINEABLE_TEXT_MIME_TYPES,
+);
+
+/**
+ * Whether a MIME type is an inlineable text document — embeddable in the prompt as
+ * decoded text on any provider, rather than handed off as a binary attachment.
+ */
+export function isInlineableTextMimeType(mimeType: string): boolean {
+  return INLINEABLE_TEXT_MIME_TYPE_SET.has(mimeType);
+}
+
+/**
+ * Upper size bound for embedding a text document directly into the prompt. Larger
+ * text files are routed to the sandbox when available, otherwise rejected at ingest.
+ */
+export const INLINE_TEXT_MAX_BYTES = 256 * 1024;
+
+/**
+ * Why an upload is not acceptable, or `null` when it is. Single source of truth
+ * for the attachment policy shared by the backend ingest gate (authoritative)
+ * and the frontend composer (mirrors it for UX). A file is acceptable when the
+ * model can ingest its type, OR it is a small inlineable text document, OR a
+ * sandbox is available to stage it within the sandbox artifact size limit.
+ */
+export type ChatUploadRejectionReason =
+  | "text_too_large"
+  | "too_large_for_sandbox"
+  | "unsupported_type";
+
+export function chatUploadRejectionReason(params: {
+  mimeType: string;
+  byteLength: number;
+  ingestibleMimeTypes: Set<string>;
+  sandboxAvailable: boolean;
+  sandboxByteLimit: number;
+}): ChatUploadRejectionReason | null {
+  const {
+    mimeType,
+    byteLength,
+    ingestibleMimeTypes,
+    sandboxAvailable,
+    sandboxByteLimit,
+  } = params;
+
+  const fitsSandbox = sandboxAvailable && byteLength <= sandboxByteLimit;
+
+  // Inlineable text is size-gated even though a text-capable model lists these
+  // MIMEs as readable: a large text file would otherwise blow the context
+  // window. Checked before the generic ingestible short-circuit for that reason.
+  if (isInlineableTextMimeType(mimeType)) {
+    if (byteLength <= INLINE_TEXT_MAX_BYTES || fitsSandbox) return null;
+    return sandboxAvailable ? "too_large_for_sandbox" : "text_too_large";
+  }
+
+  // Non-text types the model can ingest natively (images, PDFs, …) carry no
+  // inline-text budget; the request body limit is the only size bound.
+  if (ingestibleMimeTypes.has(mimeType)) return null;
+
+  if (fitsSandbox) return null;
+  return sandboxAvailable ? "too_large_for_sandbox" : "unsupported_type";
+}
 
 /**
  * Mapping from input modalities to accepted MIME type patterns.
@@ -449,15 +544,8 @@ const MODALITY_TO_MIME_TYPES: Record<
   ModelInputModality,
   SupportedChatUploadMimeType[] | null
 > = {
-  // Text-capable models can accept plain text, CSV, and JSON documents.
-  text: [
-    "text/plain",
-    "text/markdown",
-    "text/csv",
-    "application/csv",
-    "application/vnd.ms-excel",
-    "application/json",
-  ],
+  // Text-capable models accept the inlineable text document types.
+  text: [...INLINEABLE_TEXT_MIME_TYPES],
   // Image formats commonly supported by vision models
   image: [
     "image/jpeg",
@@ -482,7 +570,7 @@ const MODALITY_TO_MIME_TYPES: Record<
 };
 
 const MODALITY_TO_FILE_TYPE_DESCRIPTION: Record<ModelInputModality, string> = {
-  text: "chat prompts, .txt, .csv, .md, and .json uploads",
+  text: "chat prompts and text files (.txt, .md, .csv, .tsv, .json, .xml, .yaml, .toml)",
   image: "images",
   audio: "audio",
   video: "video",
@@ -581,10 +669,15 @@ export function getMediaType(file: FileLikeWithMediaType): string {
     avi: "video/avi",
     pdf: "application/pdf",
     csv: "text/csv",
+    tsv: "text/tab-separated-values",
     md: "text/markdown",
+    markdown: "text/markdown",
     txt: "text/plain",
     json: "application/json",
     xml: "application/xml",
+    yaml: "application/x-yaml",
+    yml: "application/x-yaml",
+    toml: "application/toml",
   };
 
   return ext

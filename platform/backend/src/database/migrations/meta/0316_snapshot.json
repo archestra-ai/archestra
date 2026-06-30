@@ -1,5 +1,5 @@
 {
-  "id": "7800d1a0-e6be-4dc0-9150-b127530f4558",
+  "id": "a3a39334-98f3-49c8-92d5-b4541ac07f90",
   "prevId": "761f7107-ccd4-4ec3-a4b2-f8e4448a88a7",
   "version": "7",
   "dialect": "postgresql",
@@ -4967,12 +4967,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "trusted_image_registries": {
-          "name": "trusted_image_registries",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "restricted": {
           "name": "restricted",
           "type": "boolean",
@@ -6511,30 +6505,6 @@
           "notNull": true,
           "default": false
         },
-        "catalog_item_approval_status": {
-          "name": "catalog_item_approval_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "catalog_item_approval_reason": {
-          "name": "catalog_item_approval_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "catalog_item_approval_reviewed_by": {
-          "name": "catalog_item_approval_reviewed_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "catalog_item_approval_reviewed_at": {
-          "name": "catalog_item_approval_reviewed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -6740,19 +6710,6 @@
           "tableTo": "environments",
           "columnsFrom": [
             "environment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "internal_mcp_catalog_catalog_item_approval_reviewed_by_user_id_fk": {
-          "name": "internal_mcp_catalog_catalog_item_approval_reviewed_by_user_id_fk",
-          "tableFrom": "internal_mcp_catalog",
-          "tableTo": "user",
-          "columnsFrom": [
-            "catalog_item_approval_reviewed_by"
           ],
           "columnsTo": [
             "id"
@@ -10387,6 +10344,13 @@
           "notNull": true,
           "default": "'permissive'"
         },
+        "discovered_tool_policy": {
+          "name": "discovered_tool_policy",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'relaxed'"
+        },
         "allow_chat_file_uploads": {
           "name": "allow_chat_file_uploads",
           "type": "boolean",
@@ -10661,12 +10625,6 @@
         "default_environment_validation_regex": {
           "name": "default_environment_validation_regex",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "default_environment_trusted_image_registries": {
-          "name": "default_environment_trusted_image_registries",
-          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },

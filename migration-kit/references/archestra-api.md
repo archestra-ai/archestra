@@ -28,11 +28,12 @@ The `archestra_client.py` module wraps every call with typed payloads and raises
 - **MCP catalog**: `serverType` `local` (→ `localConfig{command, arguments[], environment[]}`) or
   `remote` (→ top-level `serverUrl`). For `scope:"team"`, send `teams[]`. A redacted env value becomes an `environment` entry with
   `type:"secret", promptOnInstallation:true` and no value — the user supplies it at install.
-- **MCP install**: references a catalog item by id; resolve the id by catalog name at apply time.
+- **MCP install**: `name` and `catalogId` are both required; resolve the catalog id by catalog name
+  at apply time and reuse that same name for the install.
   Installing a `local` server spins a K8s pod in the KinD cluster — only do it when the user opts in.
   For `scope:"team"`, send `teamId`. Send `agentIds[]` to attach discovered tools to migrated agents.
 - **LLM key**: `provider`, `scope`, `apiKey` (user-supplied; never read from the user's files silently),
-  optional `baseUrl`, and `teamId` for `scope:"team"`.
+  optional `baseUrl`, optional `isPrimary`, and `teamId` for `scope:"team"`.
 - **Tool policy**: `toolId` (must be a tool that exists in Archestra), `conditions[]` of
   `{key, operator, value}` (operators incl. `regex`), `action` (`block_always` etc.), optional `reason`.
   Policies only enforce when the org `globalToolPolicy` is `restrictive` — surface that to the user.

@@ -63,10 +63,17 @@ vi.mock("@/lib/app.query", () => ({
   useApp: vi.fn(() => ({ data: undefined })),
 }));
 
-// Stub the bottom meta bar (it fetches environments/session); its behavior is
-// covered by mcp-app-meta-bar.test.tsx.
-vi.mock("@/components/mcp-app/mcp-app-meta-bar", () => ({
-  McpAppMetaBar: () => <div data-testid="meta-bar" />,
+// Stub the inline settings form: it pulls the environment/teams/auth query
+// chains, which aren't this suite's concern (covered by their own tests). Here
+// we only assert the panel chrome toggles it from the gear.
+vi.mock("@/components/mcp-app/app-settings-form", () => ({
+  AppSettingsForm: ({ onBack }: { onBack: () => void }) => (
+    <div data-testid="settings-form">
+      <button type="button" onClick={onBack}>
+        mock back
+      </button>
+    </div>
+  ),
 }));
 
 // ── Import component under test after mocks ───────────────────────────────────
@@ -455,19 +462,24 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
     expect(inlineIframeHeightPx()).toBe(700);
   });
 
-  it("does not cap a report taller than the viewport", async () => {
+  it("caps an oversized inline report at the card's visual ceiling", async () => {
+    // innerHeight 2000 → ceiling max(320px, 60vh) = 1200. A viewport-relative
+    // app that reports an ever-growing height is clamped here so the iframe
+    // can't inflate without bound (content scrolls within it instead).
     const bridge = await renderReadyApp(2000);
 
     await act(async () => {
       bridge.onsizechange({ height: 100_000 });
     });
 
-    expect(inlineIframeHeightPx()).toBe(100_000);
+    expect(inlineIframeHeightPx()).toBe(1200);
   });
 
-  it("hints no height cap to the guest inline", async () => {
+  it("hints the inline ceiling to the guest", async () => {
+    // innerHeight 2000 → 60vh = 1200. The host shares this honest ceiling so a
+    // cooperative app can lay out within it.
     const bridge = await renderReadyApp(2000);
-    expect(lastGuestContainerDimensions(bridge)).toEqual({});
+    expect(lastGuestContainerDimensions(bridge)).toEqual({ maxHeight: 1200 });
   });
 
   it("hints no cap to the guest when the app fills the panel", async () => {
@@ -710,6 +722,96 @@ describe("McpAppSection superseded renders", () => {
 
     expect(document.querySelector("iframe")).toBeInTheDocument();
     expect(screen.queryByText(/· Updated/)).not.toBeInTheDocument();
+  });
+});
+
+describe("McpAppSection owned-app panel chrome", () => {
+  const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearAllAppDiagnostics();
+  });
+
+  function PanelHost({ target }: { target: HTMLElement }) {
+    const { setPortalTarget } = useApps();
+    useEffect(() => {
+      setPortalTarget(target);
+    }, [setPortalTarget, target]);
+    return null;
+  }
+
+  // Renders an owned app selected into the panel host so the tabbed chrome
+  // branch (renderInPanel && appId && ownedApp) is active. The live card portals
+  // into `target`.
+  async function renderOwnedPanel() {
+    mockUseApp.mockReturnValue({
+      data: { id: APP_ID, name: "To Do App" },
+    } as ReturnType<typeof useApp>);
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+    await act(async () => {
+      render(
+        <AppsProvider
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "To Do App",
+              uiResourceUri: defaultProps.uiResourceUri,
+              createdAt: 0,
+            },
+          ]}
+        >
+          <PanelHost target={target} />
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </AppsProvider>,
+      );
+    });
+    return target;
+  }
+
+  it("toggles the inline settings form from the panel gear", async () => {
+    const user = userEvent.setup();
+    const target = await renderOwnedPanel();
+
+    // Chrome shows a single settings gear (no dropdown / publish popover) over
+    // the live app.
+    const gear = within(target).getByRole("button", { name: /app settings/i });
+    expect(target.querySelector("iframe")).toBeInTheDocument();
+    expect(
+      within(target).queryByTestId("settings-form"),
+    ).not.toBeInTheDocument();
+
+    // Clicking it swaps the body for the settings form (live iframe unmounts).
+    await act(async () => {
+      await user.click(gear);
+    });
+    expect(within(target).getByTestId("settings-form")).toBeInTheDocument();
+    expect(target.querySelector("iframe")).not.toBeInTheDocument();
+
+    // In settings mode the bar shows a back arrow (cancel) and a save action;
+    // clicking back returns to the live app and restores the gear.
+    expect(
+      within(target).getByRole("button", { name: /save settings/i }),
+    ).toBeInTheDocument();
+    await act(async () => {
+      await user.click(
+        within(target).getByRole("button", { name: /back to app/i }),
+      );
+    });
+    expect(
+      within(target).queryByTestId("settings-form"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(target).getByRole("button", { name: /app settings/i }),
+    ).toBeInTheDocument();
+
+    target.remove();
   });
 });
 

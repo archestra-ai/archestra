@@ -1875,4 +1875,115 @@ describe("ToolInvocationPolicyModel", () => {
       expect(result).toBe(false);
     });
   });
+
+  describe("discoveredToolPolicy", () => {
+    // A discovered (llm-proxy) tool has catalogId/agentId/delegateToAgentId all
+    // NULL; makeTool with no catalogId/agentId produces exactly that, plus the
+    // default block_when_context_is_untrusted invocation policy.
+    test("allows a discovered tool in untrusted context when global=restrictive but discovered=relaxed", async ({
+      makeAgent,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+      await makeTool({ name: "discovered-tool" });
+
+      const result = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [{ toolCallName: "discovered-tool", toolInput: {} }],
+        mockContext,
+        false, // untrusted
+        "restrictive",
+        "relaxed",
+      );
+
+      expect(result.isAllowed).toBe(true);
+    });
+
+    test("blocks a discovered tool in untrusted context when discovered=apply_policies", async ({
+      makeAgent,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+      await makeTool({ name: "discovered-tool" });
+
+      const result = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [{ toolCallName: "discovered-tool", toolInput: {} }],
+        mockContext,
+        false, // untrusted
+        "permissive",
+        "apply_policies",
+      );
+
+      expect(result.isAllowed).toBe(false);
+    });
+
+    test("still blocks a catalog tool when global=restrictive even if discovered=relaxed", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+      const catalog = await makeInternalMcpCatalog();
+      await makeTool({ name: "catalog-tool", catalogId: catalog.id });
+
+      const result = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [{ toolCallName: "catalog-tool", toolInput: {} }],
+        mockContext,
+        false, // untrusted
+        "restrictive",
+        "relaxed",
+      );
+
+      // Catalog tools follow globalToolPolicy, not discoveredToolPolicy.
+      expect(result.isAllowed).toBe(false);
+      expect(result.toolCallName).toBe("catalog-tool");
+    });
+
+    test("in a mixed batch, allows the discovered tool but blocks the catalog tool", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+      const catalog = await makeInternalMcpCatalog();
+      await makeTool({ name: "discovered-tool" });
+      await makeTool({ name: "catalog-tool", catalogId: catalog.id });
+
+      const result = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [
+          { toolCallName: "discovered-tool", toolInput: {} },
+          { toolCallName: "catalog-tool", toolInput: {} },
+        ],
+        mockContext,
+        false, // untrusted
+        "restrictive",
+        "relaxed",
+      );
+
+      expect(result.isAllowed).toBe(false);
+      expect(result.toolCallName).toBe("catalog-tool");
+    });
+
+    test("short-circuits to allow when global=permissive and discovered=relaxed", async ({
+      makeAgent,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+      await makeTool({ name: "discovered-tool" });
+
+      const result = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [{ toolCallName: "discovered-tool", toolInput: {} }],
+        mockContext,
+        false, // untrusted
+        "permissive",
+        "relaxed",
+      );
+
+      expect(result.isAllowed).toBe(true);
+    });
+  });
 });

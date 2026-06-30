@@ -22,6 +22,7 @@ import {
  */
 export const ArchestraInternalErrorCode = {
   ContextLengthExceeded: "context_length_exceeded",
+  RequestTooLarge: "request_too_large",
 } as const;
 
 export type ArchestraInternalErrorCode =

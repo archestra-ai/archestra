@@ -23,6 +23,33 @@ export const ValidationRegexSchema = z
     { message: "Must be a valid regular expression" },
   );
 
+/**
+ * A single trusted container image registry entry: a `registry-host` or
+ * `registry-host/repository-prefix` (no scheme, tag, or digest). An image is
+ * trusted when its normalized `host/repository` equals an entry or extends it at
+ * a path boundary (so `ghcr.io/acme` trusts `ghcr.io/acme/foo` but not
+ * `ghcr.io/acme-evil`). Used as an environment's image-registry allowlist for
+ * personal local catalog items.
+ */
+export const TrustedImageRegistryEntrySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(255)
+  .regex(
+    /^[a-z0-9._:/-]+$/i,
+    "Must be a registry reference such as ghcr.io/acme or docker.io/library",
+  );
+
+/**
+ * An environment's list of trusted image registries. NULL or an empty array
+ * disables the check (any image is allowed). Mirrors `ValidationRegexSchema` for
+ * the image-registry policy.
+ */
+export const TrustedImageRegistriesSchema = z
+  .array(TrustedImageRegistryEntrySchema)
+  .max(200);
+
 export const NetworkPolicyEgressModeSchema = z.enum([
   "off",
   "restricted",
@@ -85,6 +112,7 @@ export const SelectEnvironmentSchema = createSelectSchema(
   schema.environmentsTable,
 ).extend({
   networkPolicy: NetworkPolicySchema.nullable(),
+  trustedImageRegistries: TrustedImageRegistriesSchema.nullable(),
 });
 
 /**
@@ -122,11 +150,12 @@ export const CreateEnvironmentSchema = z.object({
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: z.boolean().optional(),
   validationRegex: ValidationRegexSchema.nullable().optional(),
+  trustedImageRegistries: TrustedImageRegistriesSchema.nullable().optional(),
 });
 
 /**
  * All editable fields. Send `null` to clear the nullable ones (namespace,
- * description, validationRegex).
+ * description, validationRegex, trustedImageRegistries).
  */
 export const UpdateEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50).optional(),
@@ -135,6 +164,7 @@ export const UpdateEnvironmentSchema = z.object({
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: z.boolean().optional(),
   validationRegex: ValidationRegexSchema.nullable().optional(),
+  trustedImageRegistries: TrustedImageRegistriesSchema.nullable().optional(),
 });
 
 export type Environment = z.infer<typeof SelectEnvironmentSchema>;
@@ -144,6 +174,9 @@ export type EnvironmentWithAssignedCount = z.infer<
 export type EnvironmentList = z.infer<typeof EnvironmentListSchema>;
 export type CreateEnvironment = z.infer<typeof CreateEnvironmentSchema>;
 export type UpdateEnvironment = z.infer<typeof UpdateEnvironmentSchema>;
+export type TrustedImageRegistries = z.infer<
+  typeof TrustedImageRegistriesSchema
+>;
 export type NetworkPolicyEgressMode = z.infer<
   typeof NetworkPolicyEgressModeSchema
 >;

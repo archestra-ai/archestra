@@ -32,6 +32,7 @@ import {
   findExternalIdentityProviderById,
   findExternalIdentityProviderByProviderId,
 } from "@/services/identity-providers/oidc";
+import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
 import {
   type Account,
@@ -311,6 +312,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
         }
+
+        // Trusted-image-registry gate: a personal local catalog item whose
+        // custom image is not in the target environment's trusted registries is
+        // blocked (HTTP 403) and recorded pending admin approval. Runs before any
+        // secret/deployment work, so a blocked install has no side effects beyond
+        // the pending flag.
+        await assertInstallAllowedOrBlock({ catalogItem, organizationId });
 
         // Update catalog's serviceAccount if user provided a different value
         const normalizedServiceAccount =
@@ -1124,6 +1132,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ],
       });
 
+      // Re-enforce the trusted-image-registry gate BEFORE swapping credentials.
+      // A server whose catalog image is untrusted/unapproved (e.g. the image was
+      // edited after install) is held pending approval, so reject the whole
+      // reauth here rather than swap the secret and then skip the pod restart —
+      // which would leave the pod on stale credentials while reporting success.
+      if (catalogItem) {
+        await assertInstallAllowedOrBlock({ catalogItem, organizationId });
+      }
+
       // Resolve the new secret ID: either provided directly, or create from raw credentials
       let newSecretId = providedSecretId;
 
@@ -1303,7 +1320,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // are keyed by server ID and can otherwise keep reusing the stale auth/session.
       await mcpClient.invalidateConnectionsForServer(id);
 
-      // For local servers, trigger pod restart to pick up new credentials
+      // For local servers, trigger pod restart to pick up new credentials. The
+      // trusted-image-registry gate already ran above (before the credential
+      // swap), so a blocked image never reaches this restart.
       if (mcpServer.serverType === "local") {
         try {
           await McpServerRuntimeManager.restartServer(id);

@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "discovered_tool_policy" varchar DEFAULT 'relaxed' NOT NULL;

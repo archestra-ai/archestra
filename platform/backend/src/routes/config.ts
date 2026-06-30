@@ -13,7 +13,11 @@ import { OrganizationModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
-import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
+import {
+  type DiscoveredToolPolicy,
+  EmailProviderTypeSchema,
+  type GlobalToolPolicy,
+} from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
 
 export const publicConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -76,6 +80,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               bedrockIamAuthEnabled: z.boolean(),
               geminiVertexAiEnabled: z.boolean(),
               globalToolPolicy: z.enum(["permissive", "restrictive"]),
+              discoveredToolPolicy: z.enum(["relaxed", "apply_policies"]),
               incomingEmail: z.object({
                 enabled: z.boolean(),
                 provider: EmailProviderTypeSchema.optional(),
@@ -102,10 +107,12 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      // Get global tool policy from first organization (fallback to permissive)
+      // Get tool policies from first organization (fallback to permissive)
       const org = await OrganizationModel.getFirst();
       const globalToolPolicy: GlobalToolPolicy =
         org?.globalToolPolicy ?? "permissive";
+      const discoveredToolPolicy: DiscoveredToolPolicy =
+        org?.discoveredToolPolicy ?? "relaxed";
 
       const tier = enterpriseTier.getState();
 
@@ -137,6 +144,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           bedrockIamAuthEnabled: isBedrockIamAuthEnabled(),
           geminiVertexAiEnabled: isVertexAiEnabled(),
           globalToolPolicy,
+          discoveredToolPolicy,
           incomingEmail: getEmailProviderInfo(),
           mcpServerBaseImage: config.orchestrator.mcpServerBaseImage,
           orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,

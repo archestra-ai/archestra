@@ -40,6 +40,7 @@ export function makeConfig(
       bedrockIamAuthEnabled: false,
       geminiVertexAiEnabled: false,
       globalToolPolicy: "permissive",
+      discoveredToolPolicy: "relaxed",
       incomingEmail: { enabled: false },
       mcpServerBaseImage: "",
       orchestratorK8sNamespace: "",

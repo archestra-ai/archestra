@@ -663,6 +663,7 @@ describe("websocket MCP deployment statuses", () => {
             state: "running",
             message: "Deployment is running",
             error: null,
+            deploymentName: `mcp-${mcpServer1.id}`,
           },
           [mcpServer2.id]: {
             state: "not_created",

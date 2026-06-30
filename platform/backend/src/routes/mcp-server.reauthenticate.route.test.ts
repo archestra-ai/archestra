@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { OrganizationModel } from "@/models";
 import McpServerModel from "@/models/mcp-server";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -41,10 +42,12 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
 describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
+  let organizationId: string;
 
   beforeEach(async ({ makeUser, makeOrganization, makeMember }) => {
     user = await makeUser();
     const organization = await makeOrganization();
+    organizationId = organization.id;
     await makeMember(user.id, organization.id);
 
     hasPermissionMock.mockResolvedValue({ success: true });
@@ -116,5 +119,42 @@ describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
     expect(row?.oauthRefreshError).toBeNull();
     expect(row?.oauthRefreshErrorMessage).toBeNull();
     expect(row?.oauthRefreshFailedAt).toBeNull();
+  });
+
+  test("rejects re-auth before swapping the secret when the image is untrusted", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    await OrganizationModel.patch(organizationId, {
+      defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      scope: "personal",
+      serverType: "local",
+      localConfig: { dockerImage: "ghcr.io/evil/x:1" },
+    });
+    const newSecret = await secretManager().createSecret(
+      { token: "new" },
+      "reauth-gate-new",
+    );
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "personal",
+      ownerId: user.id,
+    });
+    const secretIdBefore = server.secretId;
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server/${server.id}/reauthenticate`,
+      payload: { secretId: newSecret.id },
+    });
+
+    // Blocked before any mutation: no secret swap, no pod restart, no false 200.
+    expect(response.statusCode).toBe(403);
+    const row = await McpServerModel.findById(server.id);
+    expect(row?.secretId).toBe(secretIdBefore);
+    expect(k8sRestartServerMock).not.toHaveBeenCalled();
   });
 });

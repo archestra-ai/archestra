@@ -14,6 +14,7 @@ const {
   deleteApp,
   assignToolToApp,
   unassignToolFromApp,
+  openAppInChat,
 } = archestraApiSdk;
 
 type AppsQuery = NonNullable<archestraApiTypes.GetAppsData["query"]>;
@@ -113,6 +114,22 @@ export function useCreateApp() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["apps"] });
       toast.success("App created");
+    },
+  });
+}
+
+// Opens an existing app in chat: the backend creates a conversation with the app
+// already rendered and returns its id to navigate to. No cache to invalidate —
+// the caller navigates to `/chat/<conversationId>` on success.
+export function useOpenAppInChat() {
+  return useMutation({
+    mutationFn: async (appId: string) => {
+      const { data, error } = await openAppInChat({ path: { appId } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
     },
   });
 }

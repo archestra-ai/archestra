@@ -15,7 +15,7 @@ import {
   ToolInvocationPolicyModel,
   ToolModel,
 } from "@/models";
-import type { GlobalToolPolicy } from "@/types";
+import type { DiscoveredToolPolicy, GlobalToolPolicy } from "@/types";
 
 /**
  * The App Data Store tools are the ONLY Archestra built-ins an app runtime may
@@ -138,6 +138,11 @@ export async function gateAppToolCall(params: {
   const organization = await OrganizationModel.getById(organizationId);
   const globalToolPolicy: GlobalToolPolicy =
     organization?.globalToolPolicy ?? "permissive";
+  // App tools are catalog tools, never discovered llm-proxy tools, so the
+  // discovered-tool policy never governs them — pass the org value through for
+  // signature completeness.
+  const discoveredToolPolicy: DiscoveredToolPolicy =
+    organization?.discoveredToolPolicy ?? "relaxed";
   // The viewer is the principal executing the call (as the app owner, with the
   // viewer's credentials), so a team-scoped policy is matched against the
   // viewer's teams — not an empty set, which would silently miss them.
@@ -149,6 +154,7 @@ export async function gateAppToolCall(params: {
     policyContext,
     params.isContextTrusted,
     globalToolPolicy,
+    discoveredToolPolicy,
   );
   if (!verdict.isAllowed) {
     return {
@@ -165,6 +171,7 @@ export async function gateAppToolCall(params: {
         toolInput,
         policyContext,
         globalToolPolicy,
+        discoveredToolPolicy,
       );
     if (requiresApproval) {
       return {

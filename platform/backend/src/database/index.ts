@@ -184,6 +184,8 @@ let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
  *   Postgres `max_connections` so that pods × poolMax stays under the server limit.
  * - idleTimeoutMillis: 30s (close idle connections after 30s)
  * - connectionTimeoutMillis: 10s (fail if can't get connection in 10s)
+ * - statement_timeout: ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS (default 30s);
+ *   kills runaway queries so a single slow query can't hang a connection forever.
  *
  * Connection keepalive configuration:
  * - keepAlive: true (enable TCP keepalive probes)
@@ -200,6 +202,9 @@ function createPool(connectionString: string): pg.Pool {
     max: config.database.poolMax,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
+    // Per-connection statement timeout: kills runaway queries instead of
+    // letting them hang a connection indefinitely. 0 disables it.
+    statement_timeout: config.database.statementTimeoutMillis,
     // Keepalive configuration to prevent "Connection terminated unexpectedly"
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000,

@@ -347,6 +347,10 @@ export type McpDeploymentStatusEntry = {
   restartCount?: number;
   podAge?: string; // e.g. "24m", "2h", "3d"
   podName?: string;
+  // Stable per-deployment identity, known at install time (before a pod is
+  // scheduled). Multi-tenant catalogs share one deployment across rows, so the
+  // UI dedupes by this to count pods, not caller rows.
+  deploymentName?: string;
 };
 
 export type McpDeploymentStatusesMessage = {

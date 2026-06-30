@@ -14,7 +14,7 @@ export default function AppRunPage({ appId }: { appId: string }) {
   }, [app?.name]);
 
   // Mount only once resolved so the runtime keys diagnostics to a concrete
-  // version (the chrome=false path doesn't gate on it like chrome does).
+  // version — AppFrame renders the bare runtime and doesn't gate on it.
   if (!app) {
     return isPending ? null : (
       <div className="flex h-screen items-center justify-center p-8 text-center text-sm text-muted-foreground">
@@ -25,11 +25,7 @@ export default function AppRunPage({ appId }: { appId: string }) {
 
   return (
     <div className="h-screen w-full">
-      <AppFrame
-        endpoint={{ kind: "app", appId }}
-        fillContainer
-        chrome={false}
-      />
+      <AppFrame endpoint={{ kind: "app", appId }} fillContainer />
     </div>
   );
 }

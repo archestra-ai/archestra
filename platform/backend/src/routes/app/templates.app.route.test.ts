@@ -61,12 +61,12 @@ describe("GET /api/app-templates", () => {
     const templates = listed.json() as Array<{ id: string; html: string }>;
     expect(templates.map((t) => t.id)).toEqual(["default"]);
 
-    // The single starter is pure UI: it uses the injected window.archestra
-    // runtime, demonstrates storage + tool calls, and carries no SDK bootstrap
-    // glue itself — so it passes the save-time validator unchanged.
+    // The single starter is a pure-UI empty state: its name token is resolved
+    // to a neutral default and it carries no SDK bootstrap glue — so it passes
+    // the save-time validator unchanged.
     const [starter] = templates;
-    expect(starter.html).toContain("window.archestra.storage.user.set");
-    expect(starter.html).toContain("window.archestra.tools.call");
+    expect(starter.html).toContain("My App");
+    expect(starter.html).not.toContain("{{APP_NAME}}");
     expect(starter.html).not.toContain("__ARCHESTRA_APP_SDK_URL__");
     expect(starter.html).not.toContain("PostMessageTransport");
     await expect(

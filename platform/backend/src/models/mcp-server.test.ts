@@ -501,6 +501,7 @@ describe("McpServerModel", () => {
       await makeTool({
         catalogId: catalog.id,
         name: "draw",
+        description: "Draws a picture",
         meta: uiMeta("ui://excalidraw/app.html"),
       });
 
@@ -511,12 +512,42 @@ describe("McpServerModel", () => {
       const entry = res.find((r) => r.catalogId === catalog.id);
       expect(entry).toMatchObject({
         catalogId: catalog.id,
-        name: "Excalidraw",
-        description: "Draw diagrams",
+        serverName: "Excalidraw",
+        toolName: "draw",
+        toolDescription: "Draws a picture",
         resourceUri: "ui://excalidraw/app.html",
         runnable: true,
       });
       expect(entry?.availabilityScopes).toEqual(["org"]);
+    });
+
+    test("strips the server prefix from the tool name", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const catalog = await makeInternalMcpCatalog({
+        name: "Excalidraw Staging",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "excalidraw_staging__create_view",
+        meta: uiMeta("ui://excalidraw/view.html"),
+      });
+
+      const res = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        organizationId: catalog.organizationId!,
+      });
+      expect(res.find((r) => r.catalogId === catalog.id)?.toolName).toBe(
+        "create_view",
+      );
     });
 
     test("orders availabilityScopes by precedence (personal → team → org), not DB order", async ({
@@ -712,7 +743,7 @@ describe("McpServerModel", () => {
       expect(asAuthor.some((r) => r.catalogId === catalog.id)).toBe(true);
     });
 
-    test("collapses a catalog's multiple ui:// tools into one entry using the lowest-named resource", async ({
+    test("lists each of a catalog's ui:// tools as its own app, sorted by tool name", async ({
       makeUser,
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -742,8 +773,14 @@ describe("McpServerModel", () => {
         organizationId: catalog.organizationId!,
       });
       const entries = res.filter((r) => r.catalogId === catalog.id);
-      expect(entries).toHaveLength(1);
-      expect(entries[0]?.resourceUri).toBe("ui://multi/first.html");
+      expect(entries).toHaveLength(2);
+      expect(entries.map((e) => e.toolName)).toEqual(["a_first", "b_second"]);
+      expect(entries.map((e) => e.resourceUri)).toEqual([
+        "ui://multi/first.html",
+        "ui://multi/second.html",
+      ]);
+      // Every app of the same server carries the catalog display name, not a slug.
+      expect(entries.every((e) => e.serverName === "Multi")).toBe(true);
     });
 
     test("detects the legacy flat ui/resourceUri metadata key", async ({
@@ -808,6 +845,34 @@ describe("McpServerModel", () => {
         search: "no-such-server-xyz",
       });
       expect(miss.some((r) => r.catalogId === catalog.id)).toBe(false);
+    });
+
+    test("search filters by tool name", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const catalog = await makeInternalMcpCatalog({
+        name: "Plain Server",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "special_widget",
+        meta: uiMeta("ui://ps/app.html"),
+      });
+
+      const hit = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        organizationId: catalog.organizationId!,
+        search: "special_widget",
+      });
+      expect(hit.some((r) => r.catalogId === catalog.id)).toBe(true);
     });
 
     test("excludes a tool whose resourceUri is not a ui:// scheme", async ({

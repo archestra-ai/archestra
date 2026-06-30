@@ -1,4 +1,4 @@
-import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
+import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@archestra/shared";
 import {
   and,
   eq,
@@ -347,8 +347,9 @@ class McpServerModel {
   }): Promise<
     Array<{
       catalogId: string;
-      name: string;
-      description: string | null;
+      serverName: string;
+      toolName: string;
+      toolDescription: string | null;
       resourceUri: string;
       runnable: boolean;
       availabilityScopes: ResourceVisibilityScope[];
@@ -364,35 +365,40 @@ class McpServerModel {
       );
     if (accessibleCatalogIds.length === 0) return [];
 
-    const uiCatalogs = await McpServerModel.getUiCatalogs({
+    const uiApps = await McpServerModel.getUiApps({
       catalogIds: accessibleCatalogIds,
       search,
     });
-    if (uiCatalogs.length === 0) return [];
+    if (uiApps.length === 0) return [];
 
+    // `runnable`/`availabilityScopes` are server-level: every UI tool of the same
+    // catalog shares its installs, so resolve scopes once per distinct catalog.
     const scopesByCatalog =
       await McpServerModel.getAccessibleInstallScopesByCatalog({
         userId,
-        catalogIds: uiCatalogs.map((c) => c.catalogId),
+        catalogIds: Array.from(new Set(uiApps.map((a) => a.catalogId))),
       });
 
-    return uiCatalogs.map((c) => ({
-      catalogId: c.catalogId,
-      name: c.name,
-      description: c.description,
-      resourceUri: c.resourceUri,
-      runnable: (scopesByCatalog.get(c.catalogId)?.size ?? 0) > 0,
+    return uiApps.map((app) => ({
+      catalogId: app.catalogId,
+      serverName: app.serverName,
+      toolName: app.toolName,
+      toolDescription: app.toolDescription,
+      resourceUri: app.resourceUri,
+      runnable: (scopesByCatalog.get(app.catalogId)?.size ?? 0) > 0,
       availabilityScopes: Array.from(
-        scopesByCatalog.get(c.catalogId) ?? [],
+        scopesByCatalog.get(app.catalogId) ?? [],
       ).sort((a, b) => scopeRank(a) - scopeRank(b)),
     }));
   }
 
   /**
-   * Resolve one UI-providing catalog into its run payload for the caller: the
-   * primary `ui://` resource plus the caller's accessible installs (mcp-apps.md
-   * FR-31), with the default install resolved personal → team → org. Returns
-   * null when the caller may not view the catalog or it is not a UI app.
+   * Resolve one UI-providing catalog into its run payload for the caller: all of
+   * its `ui://` resources (a server may expose several) plus the caller's
+   * accessible installs (mcp-apps.md FR-31), with the default install resolved
+   * personal → team → org. `resourceUri` is the default resource; the run page
+   * validates `?resource=` against `resources`. Returns null when the caller may
+   * not view the catalog or it is not a UI app.
    */
   static async findCatalogAppForCaller(params: {
     userId: string;
@@ -403,6 +409,7 @@ class McpServerModel {
     name: string;
     description: string | null;
     resourceUri: string;
+    resources: Array<{ resourceUri: string; toolName: string; name: string }>;
     defaultMcpServerId: string | null;
     installs: Array<{
       mcpServerId: string;
@@ -423,10 +430,9 @@ class McpServerModel {
       );
     if (!accessibleCatalogIds.includes(catalogId)) return null;
 
-    const [uiCatalog] = await McpServerModel.getUiCatalogs({
-      catalogIds: [catalogId],
-    });
-    if (!uiCatalog) return null;
+    const uiApps = await McpServerModel.getUiApps({ catalogIds: [catalogId] });
+    const primary = uiApps[0];
+    if (!primary) return null;
 
     const installs = await McpServerModel.findAccessibleInstallsForCatalog({
       userId,
@@ -434,10 +440,15 @@ class McpServerModel {
     });
 
     return {
-      catalogId: uiCatalog.catalogId,
-      name: uiCatalog.name,
-      description: uiCatalog.description,
-      resourceUri: uiCatalog.resourceUri,
+      catalogId,
+      name: primary.serverName,
+      description: primary.toolDescription,
+      resourceUri: primary.resourceUri,
+      resources: uiApps.map((app) => ({
+        resourceUri: app.resourceUri,
+        toolName: app.toolName,
+        name: `${app.serverName} / ${app.toolName}`,
+      })),
       defaultMcpServerId: McpServerModel.pickDefaultInstall(installs),
       installs,
     };
@@ -487,15 +498,23 @@ class McpServerModel {
     );
   }
 
-  /** UI-providing catalogs among `catalogIds`, deduped to the lowest-named ui tool. */
-  private static async getUiCatalogs(params: {
+  /**
+   * UI-providing apps among `catalogIds`: one row per UI tool. A single server
+   * (catalog) may expose several `ui://` resources, so each becomes its own app
+   * (no per-catalog dedup). `serverName` is the catalog display name; `toolName`
+   * is the tool's short name (the server prefix is stripped, so a stored
+   * `excalidraw__create_view` surfaces as `create_view`); `toolDescription` is
+   * the tool's own description. Sorted by server then tool for a stable listing.
+   */
+  private static async getUiApps(params: {
     catalogIds: string[];
     search?: string;
   }): Promise<
     Array<{
       catalogId: string;
-      name: string;
-      description: string | null;
+      serverName: string;
+      toolName: string;
+      toolDescription: string | null;
       resourceUri: string;
     }>
   > {
@@ -506,9 +525,9 @@ class McpServerModel {
     const rows = await db
       .select({
         catalogId: schema.internalMcpCatalogTable.id,
-        name: schema.internalMcpCatalogTable.name,
-        description: schema.internalMcpCatalogTable.description,
+        serverName: schema.internalMcpCatalogTable.name,
         toolName: schema.toolsTable.name,
+        toolDescription: schema.toolsTable.description,
         resourceUri: uiResourceUri,
       })
       .from(schema.internalMcpCatalogTable)
@@ -531,40 +550,34 @@ class McpServerModel {
                   schema.internalMcpCatalogTable.description,
                   `%${searchTerm}%`,
                 ),
+                ilike(schema.toolsTable.name, `%${searchTerm}%`),
+                ilike(schema.toolsTable.description, `%${searchTerm}%`),
               )
             : undefined,
         ),
       );
 
-    const byCatalog = new Map<
-      string,
-      {
-        catalogId: string;
-        name: string;
-        description: string | null;
-        resourceUri: string;
-        primaryToolName: string;
-      }
-    >();
-    for (const row of rows) {
-      if (!row.resourceUri) continue;
-      const existing = byCatalog.get(row.catalogId);
-      if (!existing || row.toolName < existing.primaryToolName) {
-        byCatalog.set(row.catalogId, {
-          catalogId: row.catalogId,
-          name: row.name,
-          description: row.description,
-          resourceUri: row.resourceUri,
-          primaryToolName: row.toolName,
-        });
-      }
-    }
-    return Array.from(byCatalog.values()).map((c) => ({
-      catalogId: c.catalogId,
-      name: c.name,
-      description: c.description,
-      resourceUri: c.resourceUri,
-    }));
+    return rows
+      .flatMap((row) =>
+        row.resourceUri
+          ? [
+              {
+                catalogId: row.catalogId,
+                serverName: row.serverName,
+                // Strip the server prefix: catalog tools are stored as
+                // `<server>__<tool>`, but the card shows just the tool.
+                toolName: parseFullToolName(row.toolName).toolName,
+                toolDescription: row.toolDescription,
+                resourceUri: row.resourceUri,
+              },
+            ]
+          : [],
+      )
+      .sort(
+        (a, b) =>
+          a.serverName.localeCompare(b.serverName) ||
+          a.toolName.localeCompare(b.toolName),
+      );
   }
 
   /**

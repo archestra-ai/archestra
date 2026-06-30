@@ -78,8 +78,12 @@ export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
   latestVersion: z.number().int(),
 });
 
-// An external item is keyed by its catalog item and listed once, regardless of
-// how many installs back it (mcp-apps.md FR-26). `runnable` is false when the
+// An external item is one UI-providing tool of an installed MCP server: a single
+// server (catalog) may expose several `ui://` resources, so it can yield several
+// items, each identified by `(catalogId, resourceUri)`. To reuse the owned-app
+// card shape, `name` is `"<server> / <tool>"` (the catalog display name and the
+// short tool name, e.g. "Archestra PM / show_board" — never the slug prefix) and
+// `description` is the tool's own description. `runnable` is false when the
 // caller can see the catalog but has no accessible install (FR-31);
 // `availabilityScopes` are the scopes of the caller's accessible installs, for
 // the card's chips. The concrete installs (the run-page selector) are resolved
@@ -110,16 +114,29 @@ export const ExternalAppInstallSchema = z.object({
 });
 export type ExternalAppInstall = z.infer<typeof ExternalAppInstallSchema>;
 
+/** One UI-providing resource of an external app's catalog (a server may have several). */
+export const ExternalAppResourceSchema = z.object({
+  resourceUri: z.string(),
+  toolName: z.string(),
+  // Card/header label: "${serverName} / ${toolName}".
+  name: z.string(),
+});
+export type ExternalAppResource = z.infer<typeof ExternalAppResourceSchema>;
+
 /**
- * Run-page resolution for an external app: its UI resource plus the caller's
- * accessible installs and the default install (personal → team → org,
- * mcp-apps.md FR-31). `defaultMcpServerId` is null when none is accessible.
+ * Run-page resolution for an external app: the catalog's UI resources plus the
+ * caller's accessible installs and the default install (personal → team → org,
+ * mcp-apps.md FR-31). `resourceUri` is the default resource; `resources` lists
+ * all of them so the run page can validate `?resource=`. `defaultMcpServerId` is
+ * null when no install is accessible.
  */
 export const ExternalAppResolutionSchema = z.object({
   catalogId: z.string(),
+  // The catalog (server) display name; the run page composes per-resource labels.
   name: z.string(),
   description: z.string().nullable(),
   resourceUri: z.string(),
+  resources: z.array(ExternalAppResourceSchema),
   defaultMcpServerId: z.string().nullable(),
   installs: z.array(ExternalAppInstallSchema),
 });

@@ -15727,6 +15727,11 @@ export type GetExternalAppResponses = {
         name: string;
         description: string | null;
         resourceUri: string;
+        resources: Array<{
+            resourceUri: string;
+            toolName: string;
+            name: string;
+        }>;
         defaultMcpServerId: string | null;
         installs: Array<{
             mcpServerId: string;

@@ -54543,6 +54543,29 @@
                     "resourceUri": {
                       "type": "string"
                     },
+                    "resources": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "resourceUri": {
+                            "type": "string"
+                          },
+                          "toolName": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "resourceUri",
+                          "toolName",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "defaultMcpServerId": {
                       "nullable": true,
                       "type": "string"
@@ -54596,6 +54619,7 @@
                     "name",
                     "description",
                     "resourceUri",
+                    "resources",
                     "defaultMcpServerId",
                     "installs"
                   ],

@@ -163,8 +163,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...external.map((catalogApp) => ({
           source: "external" as const,
           catalogId: catalogApp.catalogId,
-          name: catalogApp.name,
-          description: catalogApp.description,
+          // "Server / Tool" as the title (short tool name, never the slug
+          // prefix); the tool's own description as the subtitle.
+          name: `${catalogApp.serverName} / ${catalogApp.toolName}`,
+          description: catalogApp.toolDescription,
           resourceUri: catalogApp.resourceUri,
           runnable: catalogApp.runnable,
           availabilityScopes: catalogApp.availabilityScopes,

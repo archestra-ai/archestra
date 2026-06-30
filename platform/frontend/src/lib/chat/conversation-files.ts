@@ -88,7 +88,7 @@ export function persistentFilesSection(projectId: string | null | undefined): {
   description: string;
 } {
   return projectId != null
-    ? { title: "Project files", description: "Shared with the project" }
+    ? { title: "Project files", description: "Files shared across the project" }
     : {
         title: "Chat files",
         description:

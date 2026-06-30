@@ -120,7 +120,7 @@ describe("persistentFilesSection", () => {
   it("labels a project chat's persistent files as shared with the project", () => {
     expect(persistentFilesSection("proj_1")).toEqual({
       title: "Project files",
-      description: "Shared with the project",
+      description: "Files shared across the project",
     });
   });
 

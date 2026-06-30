@@ -2117,6 +2117,13 @@ class AgentModel {
         agentType: "agent",
         scope: "personal",
         description: "Your personal chat assistant",
+        // The personal assistant should be able to reach every tool the user
+        // can access (e.g. MCP servers they install) without per-tool
+        // assignment. `accessAllTools` grants that dynamic access and, via the
+        // invariant in AgentModel.create, coerces toolExposureMode to
+        // "search_and_run_only" so the search_tools/run_tool dispatch surface
+        // is exposed.
+        accessAllTools: true,
       },
       userId,
     );

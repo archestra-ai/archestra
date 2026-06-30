@@ -123,23 +123,6 @@ class SkillModel {
     return result ?? null;
   }
 
-  static async findByName(
-    organizationId: string,
-    name: string,
-  ): Promise<Skill | null> {
-    const [result] = await db
-      .select()
-      .from(schema.skillsTable)
-      .where(
-        and(
-          eq(schema.skillsTable.organizationId, organizationId),
-          eq(schema.skillsTable.name, name),
-        ),
-      );
-
-    return result ?? null;
-  }
-
   /**
    * All skills sharing a name within an org. Since name uniqueness is now
    * per-scope (personal names per author, shared names per org), a single

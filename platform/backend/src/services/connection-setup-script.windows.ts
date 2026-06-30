@@ -1,4 +1,9 @@
-import { DEFAULT_APP_NAME, VIRTUAL_KEY_HEADER } from "@archestra/shared";
+import {
+  CLAUDE_CODE_CLIENT_ID,
+  DEFAULT_APP_NAME,
+  EXTERNAL_AGENT_ID_HEADER,
+  VIRTUAL_KEY_HEADER,
+} from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
 import type {
   SetupScriptContext,
@@ -359,11 +364,14 @@ function claudeAnthropicProxySection(proxy: SetupScriptProxySection): string {
   if (proxy.virtualKey) {
     values.ANTHROPIC_AUTH_TOKEN = proxy.virtualKey;
   }
-  // Passthrough attribution: append the X-Archestra-Virtual-Key header after the
-  // base-URL merge, preserving any custom headers the user already set.
-  const headerAppend = proxy.passthroughVirtualKey
-    ? `\n${claudeCustomHeaderAppendSnippet(`${VIRTUAL_KEY_HEADER}: ${proxy.passthroughVirtualKey}`)}`
-    : "";
+  // Append our custom headers after the base-URL merge, preserving any the user
+  // already set: X-Archestra-Agent-Id (Claude Code attribution, always) and the
+  // X-Archestra-Virtual-Key passthrough header (user attribution, when present).
+  const headerLines = [`${EXTERNAL_AGENT_ID_HEADER}: ${CLAUDE_CODE_CLIENT_ID}`];
+  if (proxy.passthroughVirtualKey) {
+    headerLines.push(`${VIRTUAL_KEY_HEADER}: ${proxy.passthroughVirtualKey}`);
+  }
+  const headerAppend = `\n${claudeCustomHeaderAppendSnippet(headerLines)}`;
   const passthroughNote = proxy.virtualKey
     ? ""
     : `
@@ -378,13 +386,14 @@ ${mergeJsonFileSnippet({
 }
 
 /**
- * Append-merge a single header into env.ANTHROPIC_CUSTOM_HEADERS in
- * settings.json: keep the user's other headers, replace only our line (matched
+ * Append-merge our headers into env.ANTHROPIC_CUSTOM_HEADERS in settings.json:
+ * keep the user's other headers, replace only our lines (matched
  * case-insensitively by header name) so re-runs / key rotation never duplicate
  * or leave a stale token. Runs right after the base-URL merge created the file,
  * so it neither re-creates the dir nor re-takes the backup.
  */
-function claudeCustomHeaderAppendSnippet(headerLine: string): string {
+function claudeCustomHeaderAppendSnippet(headerLines: string[]): string {
+  const psArray = headerLines.map(psq).join(", ");
   return `$arch_hpath = ${CLAUDE_SETTINGS_PATH}
 $arch_hconfig = [pscustomobject]@{}
 if (Test-Path $arch_hpath) {
@@ -393,15 +402,15 @@ if (Test-Path $arch_hpath) {
 }
 if (-not $arch_hconfig.PSObject.Properties['env']) { $arch_hconfig | Add-Member -NotePropertyName 'env' -NotePropertyValue ([pscustomobject]@{}) }
 $arch_henv = $arch_hconfig.env
-$arch_hline = ${psq(headerLine)}
-$arch_hname = ($arch_hline -split ':',2)[0].Trim().ToLower()
+$arch_hnew = @(${psArray})
+$arch_hnames = @($arch_hnew | ForEach-Object { ($_ -split ':',2)[0].Trim().ToLower() })
 $arch_hexisting = ''
 if ($arch_henv.PSObject.Properties['ANTHROPIC_CUSTOM_HEADERS']) { $arch_hexisting = [string]$arch_henv.ANTHROPIC_CUSTOM_HEADERS }
 $arch_hkept = @()
 foreach ($arch_hl in ($arch_hexisting -split "\\r?\\n")) {
-  if ($arch_hl.Trim() -and (($arch_hl -split ':',2)[0].Trim().ToLower() -ne $arch_hname)) { $arch_hkept += $arch_hl }
+  if ($arch_hl.Trim() -and ($arch_hnames -notcontains ($arch_hl -split ':',2)[0].Trim().ToLower())) { $arch_hkept += $arch_hl }
 }
-$arch_hkept += $arch_hline
+$arch_hkept += $arch_hnew
 $arch_hjoined = ($arch_hkept -join "\`n")
 if ($arch_henv.PSObject.Properties['ANTHROPIC_CUSTOM_HEADERS']) { $arch_henv.ANTHROPIC_CUSTOM_HEADERS = $arch_hjoined } else { $arch_henv | Add-Member -NotePropertyName 'ANTHROPIC_CUSTOM_HEADERS' -NotePropertyValue $arch_hjoined }
 $arch_hconfig | ConvertTo-Json -Depth 32 | Set-Content -Path $arch_hpath -Encoding utf8

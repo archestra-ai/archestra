@@ -3,6 +3,10 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import {
+  CLAUDE_CODE_CLIENT_ID,
+  EXTERNAL_AGENT_ID_HEADER,
+} from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import {
   buildSetupCommand,
@@ -12,6 +16,9 @@ import {
 } from "@/services/connection-setup-script";
 
 const execFileAsync = promisify(execFile);
+
+/** The client-attribution header line the Claude Code setup script emits. */
+const AGENT_ID_HEADER_LINE = `${EXTERNAL_AGENT_ID_HEADER}: ${CLAUDE_CODE_CLIENT_ID}`;
 
 const MCP = {
   serverName: "prod_gateway",
@@ -127,8 +134,9 @@ async function runClaudeSettingsMerge(params: {
       env: {
         ...process.env,
         HOME: home,
-        ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS:
-          "X-Archestra-Virtual-Key: arch_passthroughcafe",
+        // The script exports one "Name: Value" per line — the client-attribution
+        // header plus the passthrough key header — so the merge dedupes both.
+        ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS: `${AGENT_ID_HEADER_LINE}\nX-Archestra-Virtual-Key: arch_passthroughcafe`,
       },
     });
     return JSON.parse(await readFile(settingsPath, "utf8"));
@@ -224,9 +232,11 @@ describe("renderSetupScript", () => {
       proxy: ANTHROPIC_PASSTHROUGH_PROXY,
     });
     await expectValidBash(script);
-    // The attribution header is appended into ANTHROPIC_CUSTOM_HEADERS (colon
-    // form), passed via env so the token never lands in argv.
+    // Both attribution headers are appended into ANTHROPIC_CUSTOM_HEADERS (colon
+    // form), passed via env so the token never lands in argv: the client-id
+    // header and the passthrough virtual-key header.
     expect(script).toContain("ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS");
+    expect(script).toContain(AGENT_ID_HEADER_LINE);
     expect(script).toContain("X-Archestra-Virtual-Key: arch_passthroughcafe");
     expect(script).toContain("ANTHROPIC_CUSTOM_HEADERS");
     // The base URL is still set; the subscription token passes through, so no
@@ -235,18 +245,19 @@ describe("renderSetupScript", () => {
     expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
   });
 
-  test("claude-code anthropic passthrough: no header when no passthrough key", () => {
+  test("claude-code anthropic passthrough: always sends the client-id header, no virtual key when there's no passthrough key", () => {
     const script = renderSetupScript({
       ...fullContext("claude-code"),
       mcp: null,
       skills: null,
       proxy: { ...ANTHROPIC_PASSTHROUGH_PROXY, passthroughVirtualKey: null },
     });
-    // The shared merge python always mentions ANTHROPIC_CUSTOM_HEADERS; the
-    // meaningful signal is that nothing is exported to populate it.
-    expect(script).not.toContain(
+    // The client-attribution header is always exported (it is not a secret and
+    // does not depend on the passthrough key); only the virtual-key line is gated.
+    expect(script).toContain(
       "export ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS",
     );
+    expect(script).toContain(AGENT_ID_HEADER_LINE);
     expect(script).not.toContain("X-Archestra-Virtual-Key");
     expect(script).toContain("ANTHROPIC_BASE_URL");
   });
@@ -279,12 +290,17 @@ describe("renderSetupScript", () => {
       existing: { env: { ANTHROPIC_CUSTOM_HEADERS: "X-Foo: bar" } },
     });
     expect(first.env.ANTHROPIC_CUSTOM_HEADERS).toContain("X-Foo: bar");
+    expect(first.env.ANTHROPIC_CUSTOM_HEADERS).toContain(AGENT_ID_HEADER_LINE);
     expect(first.env.ANTHROPIC_CUSTOM_HEADERS).toContain(
       "X-Archestra-Virtual-Key: arch_passthroughcafe",
     );
 
     const second = await runClaudeSettingsMerge({ existing: first });
     const lines = second.env.ANTHROPIC_CUSTOM_HEADERS.split("\n");
+    // Both of our headers appear exactly once after a re-run; the user's stays.
+    expect(lines.filter((l) => l.startsWith("X-Archestra-Agent-Id:"))).toEqual([
+      AGENT_ID_HEADER_LINE,
+    ]);
     expect(
       lines.filter((l) => l.startsWith("X-Archestra-Virtual-Key:")),
     ).toEqual(["X-Archestra-Virtual-Key: arch_passthroughcafe"]);
@@ -473,6 +489,7 @@ describe("renderSetupScript (windows)", () => {
       proxy: ANTHROPIC_PASSTHROUGH_PROXY,
     });
     expect(script).toContain("ANTHROPIC_CUSTOM_HEADERS");
+    expect(script).toContain(AGENT_ID_HEADER_LINE);
     expect(script).toContain("X-Archestra-Virtual-Key: arch_passthroughcafe");
     // Append/dedupe by header name, preserving the user's other headers.
     expect(script).toContain("-split ':',2");

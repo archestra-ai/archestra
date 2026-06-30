@@ -8,6 +8,7 @@
     ".": "./index.ts",
     "./access-control": "./access-control.ts",
     "./e2e-test-ids": "./e2e-test-ids.ts",
+    "./interactions/client": "./interactions/client.ts",
     "./permission.types": "./permission.types.ts",
     "./test-mcp-server": "./test-mcp-server.ts"
   },

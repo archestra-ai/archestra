@@ -2248,6 +2248,13 @@
       "when": 1782851902992,
       "tag": "0320_flip-default-org-theme-to-caffeine",
       "breakpoints": true
+    },
+    {
+      "idx": 321,
+      "version": "7",
+      "when": 1782904774033,
+      "tag": "0321_backfill-claude-client-external-agent-id",
+      "breakpoints": true
     }
   ]
 }

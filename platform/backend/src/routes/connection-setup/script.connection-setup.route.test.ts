@@ -1,3 +1,7 @@
+import {
+  CLAUDE_CODE_CLIENT_ID,
+  EXTERNAL_AGENT_ID_HEADER,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import {
   ConnectionSetupModel,
@@ -37,6 +41,10 @@ vi.mock("@/cache-manager", async (importOriginal) => {
 import { userHasPermission } from "@/auth";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
+
+// The client-app attribution header is always injected for Claude clients,
+// independent of the passthrough virtual key.
+const AGENT_ID_HEADER_LINE = `${EXTERNAL_AGENT_ID_HEADER}: ${CLAUDE_CODE_CLIENT_ID}`;
 
 let remoteAddressCounter = 0;
 /** Unique IP per request batch so the per-IP rate limit never bleeds between tests. */
@@ -201,7 +209,7 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(response.body).toContain("set -euo pipefail");
   });
 
-  test("provider-key (passthrough) script rewires the base URL without any virtual key (attribution off)", async ({
+  test("provider-key (passthrough) script rewires the base URL without any virtual key, still carrying the client-app agent-id header", async ({
     makeAgent,
   }) => {
     const proxy = await makeAgent({
@@ -223,12 +231,15 @@ describe("GET /api/connection-setups/script/:token", () => {
     const script = response.body;
     expect(script).toContain(`/v1/anthropic/${proxy.id}`);
     expect(script).toContain("ANTHROPIC_BASE_URL");
-    // passthrough, attribution off: no injected key, no auth token, no header
+    // passthrough, attribution off: no injected virtual key, no auth token — but
+    // the client-app agent-id header always rides along, so the header block is
+    // still emitted (carrying only the agent id).
     expect(script).not.toMatch(/arch_[0-9a-f]{64}/);
     expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
-    expect(script).not.toContain(
+    expect(script).toContain(
       "export ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS",
     );
+    expect(script).toContain(AGENT_ID_HEADER_LINE);
     expect(script).toContain("credentials keep working");
   });
 
@@ -261,7 +272,7 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
   });
 
-  test("a revoked attribution key degrades gracefully: script renders without the header, no 410", async ({
+  test("a revoked attribution key degrades gracefully: script drops the virtual-key header but keeps the agent-id, no 410", async ({
     makeAgent,
   }) => {
     const proxy = await makeAgent({
@@ -284,13 +295,16 @@ describe("GET /api/connection-setups/script/:token", () => {
 
     const response = await fetchScript(rawToken);
     // Best-effort: the subscription still passes through, so we render (200),
-    // just without the attribution header — never a 410.
+    // just without the revoked passthrough virtual-key header — never a 410. The
+    // client-app agent-id header is independent of the key, so it stays.
     expect(response.statusCode).toBe(200);
     const script = response.body;
     expect(script).toContain("ANTHROPIC_BASE_URL");
-    expect(script).not.toContain(
+    expect(script).toContain(
       "export ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS",
     );
+    expect(script).toContain(AGENT_ID_HEADER_LINE);
+    expect(script).not.toMatch(/X-Archestra-Virtual-Key: arch_[0-9a-f]{64}/);
   });
 
   test("github-copilot passthrough script embeds the in-script GitHub device flow", async ({

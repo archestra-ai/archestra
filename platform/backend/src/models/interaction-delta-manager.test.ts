@@ -1,3 +1,8 @@
+import {
+  CLAUDE_METADATA_SESSION_SOURCE,
+  LEGACY_CLAUDE_CODE_SESSION_SOURCE,
+  LEGACY_CLAUDE_DESKTOP_SESSION_SOURCE,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -74,7 +79,7 @@ describe("InteractionDeltaManager", () => {
     const data: InsertInteraction = {
       profileId,
       sessionId: opts.sessionId,
-      sessionSource: opts.sessionSource ?? "claude_code",
+      sessionSource: opts.sessionSource ?? CLAUDE_METADATA_SESSION_SOURCE,
       type: "anthropic:messages",
       request: anthropicRequest(
         messages,
@@ -111,7 +116,7 @@ describe("InteractionDeltaManager", () => {
       .values({
         profileId,
         sessionId,
-        sessionSource: "claude_code",
+        sessionSource: LEGACY_CLAUDE_CODE_SESSION_SOURCE,
         type: "anthropic:messages",
         request: anthropicRequest(messages) as InsertInteraction["request"],
         response: RESPONSE as unknown as InsertInteraction["response"],
@@ -530,11 +535,11 @@ describe("InteractionDeltaManager", () => {
     const msgs2 = [m0, assistantMsg("da0"), userMsg("desktop-1")];
     const r1 = await createClaude([m0], {
       sessionId,
-      sessionSource: "claude_desktop",
+      sessionSource: LEGACY_CLAUDE_DESKTOP_SESSION_SOURCE,
     });
     const r2 = await createClaude(msgs2, {
       sessionId,
-      sessionSource: "claude_desktop",
+      sessionSource: LEGACY_CLAUDE_DESKTOP_SESSION_SOURCE,
     });
 
     expect(r1.threadId).not.toBeNull();

@@ -1,6 +1,10 @@
 "use client";
 
-import { DynamicInteraction, getSessionClientLabel } from "@archestra/shared";
+import {
+  CLAUDE_CLIENT_LABEL,
+  DynamicInteraction,
+  isClaudeClientAgentId,
+} from "@archestra/shared";
 import { ArrowLeft, Bot, Layers, Loader2, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -101,8 +105,13 @@ export default function SessionDetailPage({
   const totalToonCostSavings = sessionData?.totalToonCostSavings;
 
   // Session metadata from API
-  // Badge label for the Claude clients (Code and Desktop); null for other sources.
-  const claudeSourceLabel = getSessionClientLabel(sessionData?.sessionSource);
+  // Badge label for Claude clients; null for non-client agent ids. Derived from
+  // the client-attribution column (external_agent_id).
+  const claudeSourceLabel = (sessionData?.externalAgentIds ?? []).some(
+    isClaudeClientAgentId,
+  )
+    ? CLAUDE_CLIENT_LABEL
+    : null;
   const profileName = sessionData?.profileName;
   const userNames = sessionData?.userNames ?? [];
 

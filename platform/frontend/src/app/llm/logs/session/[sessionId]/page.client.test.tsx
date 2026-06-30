@@ -1,3 +1,8 @@
+import {
+  CLAUDE_CLIENT_ID,
+  CLAUDE_CODE_CLIENT_ID,
+  CLAUDE_DESKTOP_CLIENT_ID,
+} from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -105,12 +110,14 @@ describe("SessionDetailPage", () => {
     ).toBeVisible();
   });
 
+  // Every Claude client id (auto-discovered, header-set) renders one "Claude" badge.
   it.each([
-    ["claude_code", "Claude Code"],
-    ["claude_desktop", "Claude Desktop"],
-  ])("renders the %s source badge as '%s'", async (sessionSource, expectedLabel) => {
+    [CLAUDE_CLIENT_ID],
+    [CLAUDE_CODE_CLIENT_ID],
+    [CLAUDE_DESKTOP_CLIENT_ID],
+  ])("renders the Claude badge for client id '%s'", async (externalAgentId) => {
     vi.mocked(useInteractionSessions).mockReturnValue({
-      data: { data: [{ sessionSource }] },
+      data: { data: [{ externalAgentIds: [externalAgentId] }] },
     } as unknown as ReturnType<typeof useInteractionSessions>);
     vi.mocked(useInteractions).mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
@@ -119,12 +126,12 @@ describe("SessionDetailPage", () => {
 
     renderSessionDetailPage();
 
-    expect(await screen.findByText(expectedLabel)).toBeVisible();
+    expect(await screen.findByText("Claude")).toBeVisible();
   });
 
-  it("shows no Claude source badge for non-Claude sessions", async () => {
+  it("shows no Claude badge for non-Claude clients", async () => {
     vi.mocked(useInteractionSessions).mockReturnValue({
-      data: { data: [{ sessionSource: "openai_user" }] },
+      data: { data: [{ externalAgentIds: ["my-custom-agent"] }] },
     } as unknown as ReturnType<typeof useInteractionSessions>);
     vi.mocked(useInteractions).mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
@@ -136,8 +143,7 @@ describe("SessionDetailPage", () => {
     expect(
       await screen.findByText("No interactions found for this session"),
     ).toBeVisible();
-    expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
-    expect(screen.queryByText("Claude Desktop")).not.toBeInTheDocument();
+    expect(screen.queryByText("Claude")).not.toBeInTheDocument();
   });
 
   it("renders the rows-per-page selector when the session has interactions", async () => {

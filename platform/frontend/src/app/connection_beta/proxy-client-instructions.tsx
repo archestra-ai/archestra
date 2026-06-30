@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  EXTERNAL_AGENT_ID_HEADER,
   isSupportedProvider,
   providerDisplayNames,
   type SupportedProvider,
@@ -666,6 +667,7 @@ function StepList({
               <PassthroughKeyField
                 llmProxyId={llmProxyId}
                 variant={s.passthroughKeyVariant ?? "header"}
+                agentId={s.passthroughKeyAgentId}
               />
             )}
             {s.code && <TerminalBlock code={s.code} />}
@@ -690,9 +692,16 @@ type PassthroughKeyState =
 function PassthroughKeyField({
   llmProxyId,
   variant,
+  agentId,
 }: {
   llmProxyId: string;
   variant: "header" | "env";
+  /**
+   * Optional client-attribution value sent as the X-Archestra-Agent-Id header
+   * alongside the passthrough key (e.g. "anthropic_claude_code" / "anthropic_claude_desktop"). Not a
+   * secret — shown in full.
+   */
+  agentId?: string;
 }) {
   const { data: canCreate } = useHasPermissions({ llmVirtualKey: ["create"] });
   const { mutateAsync } = useCreateConnectionPassthroughKey();
@@ -775,18 +784,41 @@ function PassthroughKeyField({
   }
 
   const { key } = state;
+  // The agent-id line (non-secret) rides in the same ANTHROPIC_CUSTOM_HEADERS
+  // value (env) or as its own header row (header), one "Name: Value" per line.
+  const agentIdLine = agentId
+    ? `${EXTERNAL_AGENT_ID_HEADER}: ${agentId}`
+    : null;
   return (
     <div className="grid gap-2">
       {variant === "env" ? (
         // Paste as the ANTHROPIC_CUSTOM_HEADERS value. The key is a secret, so
-        // it is masked on screen and copied in full.
+        // it is masked on screen and copied in full; the agent-id is shown as-is.
         <StackedCopyField
           label="ANTHROPIC_CUSTOM_HEADERS"
-          display={`${VIRTUAL_KEY_HEADER}: ${SECRET_MASK}`}
-          copyValue={`${VIRTUAL_KEY_HEADER}: ${key.value}`}
+          display={[agentIdLine, `${VIRTUAL_KEY_HEADER}: ${SECRET_MASK}`]
+            .filter(Boolean)
+            .join("\n")}
+          copyValue={[agentIdLine, `${VIRTUAL_KEY_HEADER}: ${key.value}`]
+            .filter(Boolean)
+            .join("\n")}
         />
       ) : (
         <>
+          {agentIdLine && (
+            <StackedCopyField
+              label="Header"
+              display={EXTERNAL_AGENT_ID_HEADER}
+              copyValue={EXTERNAL_AGENT_ID_HEADER}
+            />
+          )}
+          {agentIdLine && (
+            <StackedCopyField
+              label="Value"
+              display={agentId ?? ""}
+              copyValue={agentId ?? ""}
+            />
+          )}
           <StackedCopyField
             label="Header"
             display={VIRTUAL_KEY_HEADER}

@@ -33823,9 +33823,9 @@ export type GetInteractionSessionsData = {
          */
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
         /**
-         * Filter by client/session source (e.g. claude_code, claude_desktop)
+         * Filter by client app (queries external_agent_id; e.g. claude)
          */
-        sessionSource?: 'claude_code' | 'claude_desktop';
+        client?: 'claude';
         /**
          * Filter by session ID
          */

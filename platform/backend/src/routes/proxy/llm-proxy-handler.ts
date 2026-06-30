@@ -179,6 +179,20 @@ function getProviderMessagesCount(messages: unknown): number | null {
 }
 
 /**
+ * The subset of a proxied request body we read for session-id and client-app
+ * extraction. Each consumer only touches its own fields (`detectClaudeClientId`
+ * → `system`/`metadata`; `extractSessionInfo` → `metadata`/`user`), so one
+ * shared view keeps the cast in a single place.
+ */
+type RequestBodyForExtraction =
+  | {
+      system?: unknown;
+      metadata?: { user_id?: string | null };
+      user?: string | null;
+    }
+  | undefined;
+
+/**
  * Generic LLM proxy handler that works with any provider through adapters
  */
 export async function handleLLMProxy<
@@ -202,8 +216,13 @@ export async function handleLLMProxy<
     string,
     string | string[] | undefined
   >;
+  const bodyForExtraction = body as RequestBodyForExtraction;
+  // Client-app attribution: the caller-supplied X-Archestra-Agent-Id header (or
+  // X-Archestra-Meta segment 0) wins; otherwise auto-discover a known client
+  // app from the request and record it (Claude clients → "anthropic_claude").
   const externalAgentId =
-    utils.headers.externalAgentId.getExternalAgentId(headersForExtraction);
+    utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
+    utils.headers.clientApp.detectClaudeClientId(bodyForExtraction);
   const executionId =
     utils.headers.executionId.getExecutionId(headersForExtraction);
   const authOverride = (
@@ -229,12 +248,7 @@ export async function handleLLMProxy<
   const { sessionId, sessionSource } =
     utils.headers.sessionId.extractSessionInfo(
       headersForExtraction,
-      body as
-        | {
-            metadata?: { user_id?: string | null };
-            user?: string | null;
-          }
-        | undefined,
+      bodyForExtraction,
     );
 
   // Extract interaction source (chat, chatops, email, etc.)

@@ -1,4 +1,7 @@
-import { SESSION_ID_HEADER } from "@archestra/shared";
+import {
+  CLAUDE_METADATA_SESSION_SOURCE,
+  SESSION_ID_HEADER,
+} from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import { extractSessionInfo } from "./session-id";
 
@@ -42,7 +45,7 @@ describe("extractSessionInfo", () => {
 
     expect(result).toEqual({
       sessionId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      sessionSource: "claude_code",
+      sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
     });
   });
 
@@ -63,11 +66,11 @@ describe("extractSessionInfo", () => {
 
     expect(result).toEqual({
       sessionId: "86ce5c03-16a6-43a5-b890-e64322431a74",
-      sessionSource: "claude_desktop",
+      sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
     });
   });
 
-  test("falls back to claude_code when metadata.user_id is not JSON", () => {
+  test("uses claude_metadata for the legacy non-JSON metadata.user_id format", () => {
     const result = extractSessionInfo(
       {},
       {
@@ -80,7 +83,7 @@ describe("extractSessionInfo", () => {
 
     expect(result).toEqual({
       sessionId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      sessionSource: "claude_code",
+      sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
     });
   });
 
@@ -160,7 +163,7 @@ describe("extractSessionInfo", () => {
 
     expect(result).toEqual({
       sessionId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      sessionSource: "claude_code",
+      sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
     });
   });
 

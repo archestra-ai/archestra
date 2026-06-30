@@ -124952,14 +124952,13 @@
             "schema": {
               "type": "string",
               "enum": [
-                "claude_code",
-                "claude_desktop"
+                "claude"
               ]
             },
             "in": "query",
-            "name": "sessionSource",
+            "name": "client",
             "required": false,
-            "description": "Filter by client/session source (e.g. claude_code, claude_desktop)"
+            "description": "Filter by client app (queries external_agent_id; e.g. claude)"
           },
           {
             "schema": {

@@ -3,8 +3,8 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  type ClientFilter,
   type InteractionSource,
-  type SessionClientSource,
 } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
@@ -167,7 +167,7 @@ export function useInteractionSessions({
   profileId,
   userId,
   source,
-  sessionSource,
+  client,
   sessionId,
   startDate,
   endDate,
@@ -180,7 +180,7 @@ export function useInteractionSessions({
   profileId?: string;
   userId?: string;
   source?: InteractionSource;
-  sessionSource?: SessionClientSource;
+  client?: ClientFilter;
   sessionId?: string;
   startDate?: string;
   endDate?: string;
@@ -203,7 +203,7 @@ export function useInteractionSessions({
       profileId,
       userId,
       source,
-      sessionSource,
+      client,
       effectiveSessionId,
       startDate,
       endDate,
@@ -217,7 +217,7 @@ export function useInteractionSessions({
           ...(profileId ? { profileId } : {}),
           ...(userId ? { userId } : {}),
           ...(source ? { source } : {}),
-          ...(sessionSource ? { sessionSource } : {}),
+          ...(client ? { client } : {}),
           ...(effectiveSessionId ? { sessionId: effectiveSessionId } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
@@ -247,7 +247,7 @@ export function useInteractionSessions({
       !profileId &&
       !userId &&
       !source &&
-      !sessionSource &&
+      !client &&
       !effectiveSessionId &&
       !startDate &&
       !endDate &&

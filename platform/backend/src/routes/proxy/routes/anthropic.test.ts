@@ -14,6 +14,10 @@
  *   directly through reply.raw.write().
  */
 
+import {
+  CLAUDE_CLIENT_ID,
+  CLAUDE_METADATA_SESSION_SOURCE,
+} from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -951,7 +955,7 @@ describe("Anthropic proxy routing", () => {
   });
 });
 
-describe("Anthropic delta encoding (claude_code sessions)", () => {
+describe("Anthropic delta encoding (claude_metadata sessions)", () => {
   beforeEach(() => {
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
       () => createAnthropicTestClient() as never,
@@ -1038,8 +1042,11 @@ describe("Anthropic delta encoding (claude_code sessions)", () => {
     expect(head).toBeDefined();
     expect(child).toBeDefined();
 
-    // Session was attributed to Claude Code and the second row chains to the first.
-    expect(head?.sessionSource).toBe("claude_code");
+    // Session id came from Claude metadata; with no X-Archestra-Agent-Id header
+    // the client is auto-attributed to the generic Claude id. The second row
+    // chains to the first.
+    expect(head?.sessionSource).toBe(CLAUDE_METADATA_SESSION_SOURCE);
+    expect(head?.externalAgentId).toBe(CLAUDE_CLIENT_ID);
     expect(head?.sessionId).toBe(sessionUuid);
     expect(head?.threadId).not.toBeNull();
     expect(child?.parentId).toBe(head?.id);

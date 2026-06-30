@@ -1,4 +1,9 @@
-import { ChatErrorCode } from "@archestra/shared";
+import {
+  ChatErrorCode,
+  CLAUDE_CLIENT_FILTER,
+  CLAUDE_CLIENT_ID,
+  CLAUDE_CODE_CLIENT_ID,
+} from "@archestra/shared";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InsertInteraction } from "@/types";
 import { SelectInteractionSchema } from "@/types";
@@ -2232,7 +2237,7 @@ describe("InteractionModel", () => {
       expect(allSessions.data).toHaveLength(4);
     });
 
-    test("filters sessions by sessionSource (client)", async ({
+    test("filters sessions by client (external_agent_id)", async ({
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
@@ -2242,83 +2247,49 @@ describe("InteractionModel", () => {
         scope: "org",
       });
 
-      // Three sessions: a Claude Code client, a Claude Desktop client, and a
-      // plain API session with no client/session source.
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: "claude-code-session",
-        source: "api",
-        sessionSource: "claude_code",
-        request: { model: "gpt-4", messages: [] },
-        response: {
-          id: "cc",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
+      const make = (sessionId: string, externalAgentId: string | null) =>
+        InteractionModel.create({
+          profileId: agent.id,
+          sessionId,
+          source: "api",
+          externalAgentId,
+          request: { model: "gpt-4", messages: [] },
+          response: {
+            id: sessionId,
+            object: "chat.completion",
+            created: Date.now(),
+            model: "gpt-4",
+            choices: [],
+          },
+          type: "openai:chatCompletions",
+        });
 
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: "claude-desktop-session",
-        source: "api",
-        sessionSource: "claude_desktop",
-        request: { model: "gpt-4", messages: [] },
-        response: {
-          id: "cd",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
+      // Two Claude clients (auto-discovered generic id and header-set Code id),
+      // a customer agent, and a plain session with no client.
+      await make("auto-claude-session", CLAUDE_CLIENT_ID);
+      await make("claude-code-session", CLAUDE_CODE_CLIENT_ID);
+      await make("customer-session", "my-custom-agent");
+      await make("plain-session", null);
 
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: "plain-session",
-        source: "api",
-        sessionSource: null,
-        request: { model: "gpt-4", messages: [] },
-        response: {
-          id: "plain",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      // Filter to Claude Code
-      const claudeCode = await InteractionModel.getSessions(
+      // Filter to Claude — expands to every Claude client id.
+      const claude = await InteractionModel.getSessions(
         { limit: 100, offset: 0 },
         admin.id,
         true,
-        { sessionSource: "claude_code" },
+        { client: CLAUDE_CLIENT_FILTER },
       );
-      expect(claudeCode.data).toHaveLength(1);
-      expect(claudeCode.data[0].sessionSource).toBe("claude_code");
-
-      // Filter to Claude Desktop
-      const claudeDesktop = await InteractionModel.getSessions(
-        { limit: 100, offset: 0 },
-        admin.id,
-        true,
-        { sessionSource: "claude_desktop" },
+      expect(claude.data).toHaveLength(2);
+      expect(claude.data.flatMap((s) => s.externalAgentIds).sort()).toEqual(
+        [CLAUDE_CLIENT_ID, CLAUDE_CODE_CLIENT_ID].sort(),
       );
-      expect(claudeDesktop.data).toHaveLength(1);
-      expect(claudeDesktop.data[0].sessionSource).toBe("claude_desktop");
 
-      // No filter returns all three
+      // No filter returns all four
       const all = await InteractionModel.getSessions(
         { limit: 100, offset: 0 },
         admin.id,
         true,
       );
-      expect(all.data).toHaveLength(3);
+      expect(all.data).toHaveLength(4);
     });
 
     test("marks mixed-source chat sessions without promoting compaction to the session source", async ({

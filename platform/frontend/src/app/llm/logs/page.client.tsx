@@ -2,12 +2,13 @@
 
 import {
   type archestraApiTypes,
+  CLAUDE_CLIENT_LABEL,
+  CLIENT_FILTER_OPTIONS,
+  type ClientFilter,
   DynamicInteraction,
-  getSessionClientLabel,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
-  SESSION_CLIENT_SOURCE_DISPLAY,
-  type SessionClientSource,
+  isClaudeClientAgentId,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Database, Layers, MessageSquare, User } from "lucide-react";
@@ -90,9 +91,12 @@ function getSessionDisplayData(session: SessionData) {
   const conversationTitle = session.conversationTitle;
   const isArchestraChat = conversationTitle && session.sessionId;
   const claudeCodeTitle = session.claudeCodeTitle;
-  // Both Claude clients (Code and Desktop) get a source badge and a labelled
-  // placeholder; other sources fall back to the last user message.
-  const claudeSourceLabel = getSessionClientLabel(session.sessionSource);
+  // Claude clients get a source badge and a labelled placeholder; other clients
+  // fall back to the last user message. Derived from the client-attribution
+  // column (external_agent_id), not the session-id provenance.
+  const claudeSourceLabel = session.externalAgentIds.some(isClaudeClientAgentId)
+    ? CLAUDE_CLIENT_LABEL
+    : null;
 
   let lastUserMessage = "";
   if (session.lastInteractionRequest && session.lastInteractionType) {
@@ -156,14 +160,14 @@ function SessionsTable({
   const profileIdFromUrl = searchParams.get("profileId");
   const userIdFromUrl = searchParams.get("userId");
   const sourceFromUrl = searchParams.get("source");
-  const sessionSourceFromUrl = searchParams.get("sessionSource");
+  const clientFromUrl = searchParams.get("client");
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
   const searchFromUrl = searchParams.get("search");
   const profileFilter = profileIdFromUrl || "all";
   const userFilter = userIdFromUrl || "all";
   const sourceFilter = sourceFromUrl || "all";
-  const clientFilter = sessionSourceFromUrl || "all";
+  const clientFilter = clientFromUrl || "all";
 
   // Date time range picker hook
   const dateTimePicker = useDateTimeRangePicker({
@@ -224,7 +228,7 @@ function SessionsTable({
   const handleClientFilterChange = useCallback(
     (value: string) => {
       updateQueryParams({
-        sessionSource: value === "all" ? null : value,
+        client: value === "all" ? null : value,
         page: "1", // Reset to first page
       });
     },
@@ -243,10 +247,7 @@ function SessionsTable({
     userId: userFilter !== "all" ? userFilter : undefined,
     source:
       sourceFilter !== "all" ? (sourceFilter as InteractionSource) : undefined,
-    sessionSource:
-      clientFilter !== "all"
-        ? (clientFilter as SessionClientSource)
-        : undefined,
+    client: clientFilter !== "all" ? (clientFilter as ClientFilter) : undefined,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
     search: searchFromUrl || undefined,
@@ -276,7 +277,7 @@ function SessionsTable({
       profileId: null,
       userId: null,
       source: null,
-      sessionSource: null,
+      client: null,
       startDate: null,
       endDate: null,
       search: null,
@@ -598,14 +599,12 @@ function SessionsTable({
           placeholder="Filter by Client"
           items={[
             { value: "all", label: "All Clients" },
-            ...Object.entries(SESSION_CLIENT_SOURCE_DISPLAY).map(
-              ([value, { label }]) => ({
-                value,
-                label,
-                content: <ClientFilterOption label={label} />,
-                selectedContent: <ClientFilterOption label={label} />,
-              }),
-            ),
+            ...CLIENT_FILTER_OPTIONS.map(({ value, label }) => ({
+              value,
+              label,
+              content: <ClientFilterOption label={label} />,
+              selectedContent: <ClientFilterOption label={label} />,
+            })),
           ]}
           className="w-[200px]"
         />

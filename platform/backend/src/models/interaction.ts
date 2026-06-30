@@ -1,7 +1,13 @@
 import type {
+  ClientFilter,
   InteractionSource,
   PaginationQuery,
-  SessionClientSource,
+} from "@archestra/shared";
+import {
+  CLAUDE_CLIENT_AGENT_IDS,
+  CLAUDE_CLIENT_FILTER,
+  isClaudeSessionSource,
+  LEGACY_CLAUDE_CODE_SESSION_SOURCE,
 } from "@archestra/shared";
 import {
   and,
@@ -93,8 +99,9 @@ function computeRequestType(
   request: unknown,
   sessionSource: string | null,
 ): "main" | "subagent" {
-  // Only apply detection heuristics for Claude sessions
-  if (sessionSource !== "claude_code" && sessionSource !== "claude_desktop") {
+  // Only apply detection heuristics for Claude sessions (claude_metadata, plus
+  // the legacy claude_code / claude_desktop values on older rows).
+  if (!isClaudeSessionSource(sessionSource)) {
     return "main";
   }
 
@@ -134,7 +141,11 @@ function computeRequestType(
     return "subagent";
   }
 
-  if (sessionSource === "claude_code") {
+  // Legacy rows only: newer Claude requests record session_source as
+  // claude_metadata, which can no longer be distinguished from Claude Desktop,
+  // so the Task-tool negative signal (unsafe for Desktop main agents) is not
+  // applied to them — they fall through to the default below.
+  if (sessionSource === LEGACY_CLAUDE_CODE_SESSION_SOURCE) {
     const tools = req?.tools ?? [];
     const hasTaskTool = tools.some((tool) => tool.name === "Task");
     return hasTaskTool ? "main" : "subagent";
@@ -955,7 +966,7 @@ class InteractionModel {
       profileId?: string;
       userId?: string;
       source?: InteractionSource;
-      sessionSource?: SessionClientSource;
+      client?: ClientFilter;
       externalAgentId?: string;
       sessionId?: string;
       startDate?: Date;
@@ -998,10 +1009,17 @@ class InteractionModel {
       conditions.push(eq(schema.interactionsTable.source, filters.source));
     }
 
-    // Client/session source filter (e.g. claude_code, claude_desktop)
-    if (filters?.sessionSource) {
+    // Client-app filter — queries external_agent_id (the client-attribution
+    // column). CLAUDE_CLIENT_FILTER expands to every Claude client id, matched
+    // case-insensitively (header values, auto-discovered, and backfilled).
+    if (filters?.client === CLAUDE_CLIENT_FILTER) {
+      // Lower both sides so the match stays case-insensitive even if a
+      // mixed-case id is ever added to CLAUDE_CLIENT_AGENT_IDS.
       conditions.push(
-        eq(schema.interactionsTable.sessionSource, filters.sessionSource),
+        inArray(
+          sql`lower(${schema.interactionsTable.externalAgentId})`,
+          CLAUDE_CLIENT_AGENT_IDS.map((id) => id.toLowerCase()),
+        ),
       );
     }
 

@@ -1,4 +1,4 @@
-import type { AppTemplate } from '@/types';
+import type { AppTemplate } from "@/types";
 
 // The one opinionated starter for owned MCP Apps. Pure UI: the platform injects
 // the baseline stylesheet (theme variables, themed element defaults — all
@@ -147,8 +147,8 @@ const html = `<!DOCTYPE html>
 </html>`;
 
 export const defaultTemplate: AppTemplate = {
-  id: 'default',
-  name: 'Starter',
+  id: "default",
+  name: "Starter",
   description:
     "A centered empty state showing the app's name and what it can build on.",
   html,

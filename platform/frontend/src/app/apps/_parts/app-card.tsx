@@ -74,7 +74,7 @@ function OwnedAppCard({
   };
 
   return (
-    <Card className="group relative flex min-h-[194px] cursor-pointer flex-col gap-0 p-5 transition-shadow hover:shadow-md">
+    <Card className="group relative flex min-h-[140px] cursor-pointer flex-col gap-0 p-4 transition-shadow hover:shadow-md">
       <button
         type="button"
         onClick={handleOpen}
@@ -88,7 +88,7 @@ function OwnedAppCard({
           round-trip, so its loading state keeps the card from looking frozen. */}
       <div
         className={cn(
-          "pointer-events-none absolute inset-0 z-[5] flex items-center justify-center rounded-xl bg-background/70 opacity-0 backdrop-blur-[1px] transition-opacity duration-150 group-hover:opacity-100",
+          "pointer-events-none absolute inset-0 z-[5] flex items-center justify-center rounded-xl bg-background/70 opacity-0 backdrop-blur-[1px] transition-opacity duration-75 group-hover:opacity-100",
           isOpening && "opacity-100",
         )}
       >
@@ -107,7 +107,7 @@ function OwnedAppCard({
         </span>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <ResourceVisibilityBadge
           scope={app.scope}
           teams={undefined}
@@ -135,13 +135,13 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
     : `/mcp/registry?search=${encodeURIComponent(app.name)}`;
 
   return (
-    <Card className="group relative min-h-[194px] gap-0 p-5 transition-colors hover:border-primary/40 hover:shadow-sm">
+    <Card className="group relative min-h-[140px] gap-0 p-4 transition-colors hover:border-primary/40 hover:shadow-sm">
       <Link
         href={href}
         className="absolute inset-0 rounded-xl"
         aria-label={`Open ${app.name}`}
       />
-      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
         {app.runnable ? (
           SCOPE_ORDER.filter((s) => app.availabilityScopes.includes(s)).map(
             (s) => {
@@ -168,7 +168,7 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
         </CardDescription>
       ) : null}
 
-      <div className="mt-auto flex items-center gap-2 pt-4 text-xs text-muted-foreground">
+      <div className="mt-auto flex items-center gap-2 pt-3 text-xs text-muted-foreground">
         <span className="truncate">
           {app.runnable
             ? "Runs as the server · declares its own network"

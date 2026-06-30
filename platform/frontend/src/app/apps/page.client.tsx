@@ -1,18 +1,23 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { AppWindow, Globe, LayoutGrid, Plus, User } from "lucide-react";
+import { AppWindow, Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
-import { scopeStyles } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { PermissionButton } from "@/components/ui/permission-button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useApps } from "@/lib/app.query";
 import { useSession } from "@/lib/auth/auth.query";
-import { cn } from "@/lib/utils";
 import { AppCard } from "./_parts/app-card";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
 
@@ -72,43 +77,22 @@ export default function AppsPage() {
           placeholder="Search apps"
           className="relative mr-1 w-[280px]"
         />
-        {[
-          { value: "all", label: "All", icon: LayoutGrid, activeStyle: null },
-          {
-            value: "personal",
-            label: "Personal",
-            icon: User,
-            activeStyle: scopeStyles.personal,
-          },
-          {
-            value: "org",
-            label: "Organization",
-            icon: Globe,
-            activeStyle: scopeStyles.org,
-          },
-        ].map((pill) => {
-          const isActive = filter === pill.value;
-          const Icon = pill.icon;
-          return (
-            <button
-              key={pill.value}
-              type="button"
-              onClick={() =>
-                setParam("filter", pill.value === "all" ? null : pill.value)
-              }
-              className={cn(
-                "inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-colors",
-                isActive
-                  ? (pill.activeStyle ??
-                      "border-primary/20 bg-primary/10 text-primary")
-                  : "border-border bg-background text-muted-foreground hover:bg-muted",
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {pill.label}
-            </button>
-          );
-        })}
+        <Select
+          value={filter}
+          onValueChange={(value) =>
+            setParam("filter", value === "all" ? null : value)
+          }
+        >
+          <SelectTrigger className="w-[160px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" side="bottom" align="start">
+            <SelectItem value="all">All apps</SelectItem>
+            <SelectItem value="personal">Personal</SelectItem>
+            <SelectItem value="team">Team</SelectItem>
+            <SelectItem value="org">Organization</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <LoadingWrapper isPending={isPending && !data}>
@@ -130,7 +114,7 @@ export default function AppsPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
             {filtered.map((app) => (
               <AppCard
                 key={app.source === "external" ? app.catalogId : app.id}
@@ -159,6 +143,10 @@ function matchesFilter(
           !!currentUserId &&
           app.authorId === currentUserId
       : app.availabilityScopes.includes("personal");
+  if (filter === "team")
+    return app.source === "owned"
+      ? app.scope === "team"
+      : app.availabilityScopes.includes("team");
   if (filter === "org")
     return app.source === "owned"
       ? app.scope === "org"

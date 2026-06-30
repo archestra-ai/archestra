@@ -310,8 +310,11 @@ function extractArchestraInternalCode(
   try {
     const parsed = JSON.parse(responseBody);
     const code = parsed?.error?.internal_code;
-    if (code === ArchestraInternalErrorCode.ContextLengthExceeded) {
-      return ArchestraInternalErrorCode.ContextLengthExceeded;
+    if (
+      code === ArchestraInternalErrorCode.ContextLengthExceeded ||
+      code === ArchestraInternalErrorCode.RequestTooLarge
+    ) {
+      return code;
     }
   } catch {
     // Not JSON — fall through.
@@ -1678,6 +1681,8 @@ export function mapProviderError(
   const normalizedCode = extractArchestraInternalCode(responseBody);
   if (normalizedCode === ArchestraInternalErrorCode.ContextLengthExceeded) {
     errorCode = ChatErrorCode.ContextTooLong;
+  } else if (normalizedCode === ArchestraInternalErrorCode.RequestTooLarge) {
+    errorCode = ChatErrorCode.RequestTooLarge;
   }
   const usageLimitError = extractUsageLimitError(responseBody);
 

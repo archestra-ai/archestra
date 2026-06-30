@@ -295,6 +295,26 @@ describe("mergeUpdatedConversationIntoCache", () => {
   });
 });
 
+/**
+ * Seed the four project caches a conversation change might touch, so a test can
+ * assert which ones a mutation marks stale. Returns a reader keyed by surface.
+ */
+const seedProjectCaches = (queryClient: QueryClient) => {
+  const keys = {
+    conversations: ["projects", "p1", "conversations"] as const,
+    files: ["projects", "p1", "files"] as const,
+    instructions: ["projects", "p1", "instructions"] as const,
+    list: ["projects", "list", {}] as const,
+  };
+  for (const key of Object.values(keys)) {
+    queryClient.setQueryData(key, []);
+  }
+  return {
+    isStale: (surface: keyof typeof keys) =>
+      queryClient.getQueryState(keys[surface])?.isInvalidated === true,
+  };
+};
+
 describe("useDeleteConversation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -304,15 +324,14 @@ describe("useDeleteConversation", () => {
     } as Awaited<ReturnType<typeof archestraApiSdk.deleteChatConversation>>);
   });
 
-  // A deleted conversation can belong to a project, and the project views read
-  // from a separate `["projects", id, "conversations"]` cache. Deleting must
-  // invalidate the `["projects"]` family too, or the project page keeps showing
-  // the chat until a manual refresh.
-  it("invalidates both the conversations and projects caches on settle", async () => {
+  // A deleted conversation can belong to a project, whose chat list reads from a
+  // separate `["projects", id, "conversations"]` cache. Deleting must refresh
+  // that list (and the project cards), but NOT a project's files/instructions.
+  it("refreshes only the project chat lists and cards, not files/instructions", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const project = seedProjectCaches(queryClient);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -323,10 +342,10 @@ describe("useDeleteConversation", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: ["conversations"],
-    });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["projects"] });
+    expect(project.isStale("conversations")).toBe(true);
+    expect(project.isStale("list")).toBe(true);
+    expect(project.isStale("files")).toBe(false);
+    expect(project.isStale("instructions")).toBe(false);
   });
 });
 
@@ -339,13 +358,11 @@ describe("useCreateConversation", () => {
     } as Awaited<ReturnType<typeof archestraApiSdk.createChatConversation>>);
   });
 
-  // A chat created inside a project must surface in that project's chat list
-  // (a separate `["projects", …]` cache), so the projects family is invalidated.
-  it("invalidates the projects cache when created inside a project", async () => {
+  it("refreshes the project chat lists/cards (not files/instructions) inside a project", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const project = seedProjectCaches(queryClient);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -356,15 +373,18 @@ describe("useCreateConversation", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["projects"] });
+    expect(project.isStale("conversations")).toBe(true);
+    expect(project.isStale("list")).toBe(true);
+    expect(project.isStale("files")).toBe(false);
+    expect(project.isStale("instructions")).toBe(false);
   });
 
-  // A standalone chat (no project) should not trigger a project refetch.
-  it("does not invalidate the projects cache without a project", async () => {
+  // A standalone chat (no project) should not touch any project cache.
+  it("does not touch project caches without a project", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const project = seedProjectCaches(queryClient);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -375,7 +395,8 @@ describe("useCreateConversation", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ["projects"] });
+    expect(project.isStale("conversations")).toBe(false);
+    expect(project.isStale("list")).toBe(false);
   });
 });
 
@@ -388,13 +409,11 @@ describe("useUpdateConversation", () => {
     } as Awaited<ReturnType<typeof archestraApiSdk.updateChatConversation>>);
   });
 
-  // Renaming a chat must update its title on the project page too, which reads
-  // from a separate `["projects", …]` cache the optimistic title patch misses.
-  it("invalidates the projects cache when the title changes", async () => {
+  it("refreshes the project chat lists/cards (not files/instructions) when the title changes", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const project = seedProjectCaches(queryClient);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -405,16 +424,19 @@ describe("useUpdateConversation", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["projects"] });
+    expect(project.isStale("conversations")).toBe(true);
+    expect(project.isStale("list")).toBe(true);
+    expect(project.isStale("files")).toBe(false);
+    expect(project.isStale("instructions")).toBe(false);
   });
 
-  // A model/key-only update is not project-relevant and must not refetch projects
-  // (preserving the existing "avoid cascading re-renders" behavior).
-  it("does not invalidate the projects cache for a model-only update", async () => {
+  // A model/key-only update isn't project-relevant and must not touch project
+  // caches (preserving the existing "avoid cascading re-renders" behavior).
+  it("does not touch project caches for a model-only update", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const project = seedProjectCaches(queryClient);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -425,7 +447,8 @@ describe("useUpdateConversation", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ["projects"] });
+    expect(project.isStale("conversations")).toBe(false);
+    expect(project.isStale("list")).toBe(false);
   });
 });
 

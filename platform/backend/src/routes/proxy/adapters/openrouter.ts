@@ -12,6 +12,7 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
+import { applyResponseHealing } from "@/clients/openrouter-response-healing";
 import config from "@/config";
 import { metrics } from "@/observability";
 import type {
@@ -264,10 +265,12 @@ export const openrouterAdapterFactory: LLMProvider<
     request: OpenrouterRequest,
   ): Promise<OpenrouterResponse> {
     const openrouterClient = client as OpenAIProvider;
-    const openrouterRequest = {
+    // Force non-streaming before healing so the decision never depends on the
+    // caller having already cleared `stream`.
+    const openrouterRequest = applyResponseHealing({
       ...request,
       stream: false,
-    } as unknown as ChatCompletionCreateParamsNonStreaming;
+    }) as unknown as ChatCompletionCreateParamsNonStreaming;
 
     return (await openrouterClient.chat.completions.create(
       openrouterRequest,

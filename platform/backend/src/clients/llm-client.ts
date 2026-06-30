@@ -38,6 +38,7 @@ import {
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
+import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
 import config from "@/config";
 import logger from "@/logging";
 import { ApiError } from "@/types";
@@ -105,6 +106,9 @@ export function createDirectLLMModel({
     modelName,
     baseURL,
     headers: providerHeaders(cfg),
+    // Direct OpenRouter models bypass the proxy adapter, so heal the request
+    // body here; the wrapper no-ops for non-healable requests.
+    fetch: provider === "openrouter" ? createResponseHealingFetch() : undefined,
   });
 }
 

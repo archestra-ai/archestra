@@ -104,6 +104,56 @@ describe("chat conversation and message routes", () => {
     expect(unpinResponse.json().pinnedAt).toBeNull();
   });
 
+  test("marking a conversation read clears its unread flag in the list", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant", parts: [{ type: "text", text: "hi" }] },
+    });
+
+    const before = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations",
+    });
+    expect(before.json()[0].unread).toBe(true);
+    // The owner's private read marker must never reach the client (a shared
+    // viewer would otherwise see when the owner last read the chat).
+    expect(before.json()[0]).not.toHaveProperty("lastReadAt");
+
+    const readResponse = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/read`,
+    });
+    expect(readResponse.statusCode).toBe(200);
+    expect(readResponse.json()).toEqual({ success: true });
+
+    const after = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations",
+    });
+    expect(after.json()[0].unread).toBe(false);
+  });
+
+  test("marking an unknown conversation read returns 404", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations/00000000-0000-4000-8000-000000000000/read",
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
   test("rejects a conversation update that sets a model without an API key", async ({
     makeAgent,
   }) => {

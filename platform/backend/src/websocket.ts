@@ -917,6 +917,25 @@ class WebSocketService {
       payload: { serverId, status, error },
     });
   }
+
+  broadcastConversationUpdated(
+    ownerUserId: string,
+    organizationId: string,
+    conversationId: string,
+  ): void {
+    if (!this.wss) return;
+    this.sendToClients(
+      { type: "conversation_updated", payload: { conversationId } },
+      (client) => {
+        const ctx = this.clientContexts.get(client);
+        // Scope to the owner's org too: a user with sockets in multiple orgs
+        // must not receive a conversation event for an org they aren't on.
+        return (
+          ctx?.userId === ownerUserId && ctx.organizationId === organizationId
+        );
+      },
+    );
+  }
 }
 
 const websocketService = new WebSocketService();
@@ -932,6 +951,24 @@ export function broadcastMcpInstallationStatus(
   error: string | null = null,
 ): void {
   websocketService.broadcastMcpInstallationStatus(serverId, status, error);
+}
+
+/**
+ * Notify a conversation's owner that a message landed, so the sidebar
+ * new-messages indicator refreshes even when the owner's client missed the
+ * stream completion. Scoped to the owner's (user, org) — other users' and
+ * other-org connections are untouched.
+ */
+export function broadcastConversationUpdated(
+  ownerUserId: string,
+  organizationId: string,
+  conversationId: string,
+): void {
+  websocketService.broadcastConversationUpdated(
+    ownerUserId,
+    organizationId,
+    conversationId,
+  );
 }
 
 export default websocketService;

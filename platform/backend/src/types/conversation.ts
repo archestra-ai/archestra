@@ -37,28 +37,36 @@ const insertUpdateExtendedFields = {
 
 export const SelectConversationSchema = createSelectSchema(
   schema.conversationsTable,
-).extend({
-  // Agent is nullable when the associated profile has been deleted
-  agent: z
-    .object({
-      id: z.string(),
-      name: z.string(),
-      systemPrompt: z.string().nullable(),
-      agentType: z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"]),
-      toolExposureMode: ToolExposureModeSchema,
-      llmApiKeyId: z.string().nullable(),
-    })
-    .nullable(),
-  share: ConversationShareSummarySchema,
-  /** Project name when the chat belongs to one; populated by list queries only. */
-  projectName: z.string().nullable().optional(),
-  /** Project icon (emoji or data URL) for the chat's project; list queries only. */
-  projectIcon: z.string().nullable().optional(),
-  messages: z.array(z.any()), // UIMessage[] from AI SDK
-  chatErrors: z.array(SelectConversationChatErrorSchema),
-  compactions: z.array(SelectConversationCompactionSchema),
-  ...selectExtendedFields,
-});
+)
+  // lastReadAt is the owner's private read marker; it must never reach a
+  // shared/project viewer. Keep it out of the response shape entirely — the
+  // client only needs the derived `unread` flag — so it is stripped from every
+  // response, while the model still reads the raw column to compute `unread`.
+  .omit({ lastReadAt: true })
+  .extend({
+    // Agent is nullable when the associated profile has been deleted
+    agent: z
+      .object({
+        id: z.string(),
+        name: z.string(),
+        systemPrompt: z.string().nullable(),
+        agentType: z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"]),
+        toolExposureMode: ToolExposureModeSchema,
+        llmApiKeyId: z.string().nullable(),
+      })
+      .nullable(),
+    share: ConversationShareSummarySchema,
+    /** Project name when the chat belongs to one; populated by list queries only. */
+    projectName: z.string().nullable().optional(),
+    /** Project icon (emoji or data URL) for the chat's project; list queries only. */
+    projectIcon: z.string().nullable().optional(),
+    /** Has a message landed since the owner last read it; populated by list queries only. */
+    unread: z.boolean().optional(),
+    messages: z.array(z.any()), // UIMessage[] from AI SDK
+    chatErrors: z.array(SelectConversationChatErrorSchema),
+    compactions: z.array(SelectConversationCompactionSchema),
+    ...selectExtendedFields,
+  });
 
 export const InsertConversationSchema = createInsertSchema(
   schema.conversationsTable,

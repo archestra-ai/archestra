@@ -181,6 +181,11 @@ class MessageModel {
       .where(eq(schema.messagesTable.id, messageId))
       .returning();
 
+    // A content change (e.g. a tool call's final output landing in an existing
+    // assistant message) is fresh activity the owner may not have seen, so it
+    // advances the conversation's recency the same way a new message does.
+    await MessageModel.touchConversation(updatedMessage.conversationId);
+
     return updatedMessage;
   }
 

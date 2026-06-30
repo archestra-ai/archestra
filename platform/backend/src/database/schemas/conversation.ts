@@ -70,6 +70,12 @@ const conversationsTable = pgTable("conversations", {
   lastMessageAt: timestamp("last_message_at", { mode: "date" })
     .notNull()
     .defaultNow(),
+  /**
+   * When the owner last viewed this conversation. Drives the sidebar
+   * new-messages indicator: unread = lastMessageAt > lastReadAt. Null means
+   * never explicitly read (fall back to createdAt when comparing).
+   */
+  lastReadAt: timestamp("last_read_at", { mode: "date" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

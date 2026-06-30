@@ -117,6 +117,7 @@ import {
   resolveConversationModel,
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
+import { broadcastConversationUpdated } from "@/websocket";
 import { createAbortiveTurnTracker } from "./abortive-turn";
 import {
   isSafeInlineMimeType,
@@ -1660,6 +1661,32 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/chat/conversations/:id/read",
+    {
+      schema: {
+        operationId: RouteId.MarkChatConversationRead,
+        description:
+          "Mark a conversation read by its owner, clearing the sidebar new-messages indicator.",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params: { id }, user, organizationId }) => {
+      const marked = await ConversationModel.markRead({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      if (!marked) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      return { success: true };
+    },
+  );
+
   fastify.get(
     "/api/chat/conversations/:id/files",
     {
@@ -3184,6 +3211,22 @@ async function persistNewMessages(
       logger.info(
         `Updated ${changedMessages.length} changed messages in conversation ${conversationId} (${context})`,
       );
+    }
+
+    // Tell the owner's sidebar that activity landed so its new-messages
+    // indicator refreshes — covers the case where the client navigated away
+    // before the turn finished and so never saw the stream's onFinish. A
+    // content-only change (persistedCount 0) still counts: a tool call's final
+    // output can land in an existing assistant message.
+    if (persistedCount > 0 || changedMessages.length > 0) {
+      const owner = await ConversationModel.getOwner(conversationId);
+      if (owner) {
+        broadcastConversationUpdated(
+          owner.userId,
+          owner.organizationId,
+          conversationId,
+        );
+      }
     }
 
     return persistedCount + changedMessages.length;

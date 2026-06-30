@@ -158,6 +158,132 @@ describe("ConversationModel", () => {
     expect(conversations.every((c) => Array.isArray(c.messages))).toBe(true);
   });
 
+  test("findAll reports unread once a message lands after the conversation was read", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Unread Agent", teams: [] });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Unread Conversation",
+    });
+
+    const unreadOf = async () => {
+      const [row] = await ConversationModel.findAll(user.id, org.id);
+      return row.unread;
+    };
+
+    // A message arrives after creation (lastMessageAt > createdAt), never read.
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant", parts: [{ type: "text", text: "hi" }] },
+    });
+    expect(await unreadOf()).toBe(true);
+
+    // Reading it clears the flag.
+    expect(
+      await ConversationModel.markRead({
+        id: conversation.id,
+        userId: user.id,
+        organizationId: org.id,
+      }),
+    ).toBe(true);
+    expect(await unreadOf()).toBe(false);
+
+    // A later message makes it unread again.
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant", parts: [{ type: "text", text: "more" }] },
+    });
+    expect(await unreadOf()).toBe(true);
+  });
+
+  test("findAll reports unread when a tool result updates an already-read message", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Tool Update Agent", teams: [] });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Tool Update Conversation",
+    });
+    const message = await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        role: "assistant",
+        parts: [{ type: "text", text: "working" }],
+      },
+    });
+
+    await ConversationModel.markRead({
+      id: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+    const [readRow] = await ConversationModel.findAll(user.id, org.id);
+    expect(readRow.unread).toBe(false);
+
+    // A tool call's final output lands in the existing assistant message (a
+    // content change, not a new message) — it should still surface as unread.
+    await MessageModel.updateContent(message.id, {
+      role: "assistant",
+      parts: [{ type: "text", text: "done" }],
+    });
+    const [afterRow] = await ConversationModel.findAll(user.id, org.id);
+    expect(afterRow.unread).toBe(true);
+  });
+
+  test("markRead does not touch a conversation owned by another user", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const owner = await makeUser();
+    const other = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Owner Agent", teams: [] });
+
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Owned Conversation",
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant", parts: [{ type: "text", text: "hi" }] },
+    });
+
+    // A non-owner marking read matches no row...
+    expect(
+      await ConversationModel.markRead({
+        id: conversation.id,
+        userId: other.id,
+        organizationId: org.id,
+      }),
+    ).toBe(false);
+
+    // ...so the owner still sees it as unread.
+    const [row] = await ConversationModel.findAll(owner.id, org.id);
+    expect(row.unread).toBe(true);
+  });
+
   test("can update a conversation", async ({
     makeUser,
     makeOrganization,

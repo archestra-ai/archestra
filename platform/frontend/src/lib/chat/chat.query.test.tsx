@@ -1,6 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 import { handleApiError } from "@/lib/utils";
@@ -11,6 +11,9 @@ import {
   useConversationEnabledTools,
   useConversationFiles,
   useConversations,
+  useConversationUpdatedCacheSync,
+  useKeepViewedConversationRead,
+  useMarkConversationRead,
   useMemberDefaultModel,
 } from "./chat.query";
 
@@ -21,9 +24,26 @@ vi.mock("@archestra/shared", () => ({
     getChatConversationFiles: vi.fn(),
     getMemberDefaultModel: vi.fn(),
     getConversationEnabledTools: vi.fn(),
+    markChatConversationRead: vi.fn(),
   },
   PLAYWRIGHT_MCP_CATALOG_ID: "playwright-catalog-id",
   PLAYWRIGHT_MCP_SERVER_NAME: "playwright-mcp",
+}));
+
+const mockPathname = { value: "/chat" };
+vi.mock("next/navigation", () => ({
+  usePathname: () => mockPathname.value,
+}));
+
+const wsHandlers: Record<string, (msg: unknown) => void> = {};
+vi.mock("@/lib/websocket/websocket", () => ({
+  default: {
+    connect: vi.fn(),
+    subscribe: (type: string, handler: (msg: unknown) => void) => {
+      wsHandlers[type] = handler;
+      return () => delete wsHandlers[type];
+    },
+  },
 }));
 
 vi.mock("@/lib/utils", async () => {
@@ -365,3 +385,113 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     compactions: [],
   };
 }
+
+describe("conversation read-state hooks", () => {
+  const seededList = (...convs: Array<{ id: string; unread: boolean }>) =>
+    convs.map((c) => ({ ...makeConversation(), id: c.id, unread: c.unread }));
+
+  const renderWithSeed = <T,>(
+    hook: () => T,
+    seed: ReturnType<typeof seededList>,
+  ) => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    // Seeded fresh (staleTime > 0), so useConversations serves it without an
+    // immediate refetch — the hooks read this directly.
+    queryClient.setQueryData(["conversations", undefined], seed);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    return { queryClient, ...renderHook(hook, { wrapper }) };
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPathname.value = "/chat";
+    for (const key of Object.keys(wsHandlers)) delete wsHandlers[key];
+    vi.mocked(archestraApiSdk.markChatConversationRead).mockResolvedValue({
+      data: { success: true },
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.markChatConversationRead>>);
+  });
+
+  it("useMarkConversationRead optimistically clears unread in cached lists", async () => {
+    const { queryClient, result } = renderWithSeed(
+      () => useMarkConversationRead(),
+      seededList({ id: "c1", unread: true }, { id: "c2", unread: true }),
+    );
+
+    act(() => {
+      result.current.mutate({ id: "c1" });
+    });
+
+    const list = queryClient.getQueryData<
+      Array<{ id: string; unread: boolean }>
+    >(["conversations", undefined]);
+    expect(list?.find((c) => c.id === "c1")?.unread).toBe(false);
+    expect(list?.find((c) => c.id === "c2")?.unread).toBe(true);
+    await waitFor(() =>
+      expect(archestraApiSdk.markChatConversationRead).toHaveBeenCalledWith({
+        path: { id: "c1" },
+      }),
+    );
+  });
+
+  it("useKeepViewedConversationRead marks the viewed unread conversation read", async () => {
+    mockPathname.value = "/chat/c1";
+    renderWithSeed(
+      () => useKeepViewedConversationRead(),
+      seededList({ id: "c1", unread: true }),
+    );
+
+    await waitFor(() =>
+      expect(archestraApiSdk.markChatConversationRead).toHaveBeenCalledWith({
+        path: { id: "c1" },
+      }),
+    );
+  });
+
+  it("useKeepViewedConversationRead does not mark an already-read viewed conversation", async () => {
+    mockPathname.value = "/chat/c1";
+    renderWithSeed(
+      () => useKeepViewedConversationRead(),
+      seededList({ id: "c1", unread: false }),
+    );
+
+    await Promise.resolve();
+    expect(archestraApiSdk.markChatConversationRead).not.toHaveBeenCalled();
+  });
+
+  it("useKeepViewedConversationRead does not mark read off a conversation route", async () => {
+    mockPathname.value = "/chat";
+    renderWithSeed(
+      () => useKeepViewedConversationRead(),
+      seededList({ id: "c1", unread: true }),
+    );
+
+    await Promise.resolve();
+    expect(archestraApiSdk.markChatConversationRead).not.toHaveBeenCalled();
+  });
+
+  it("useConversationUpdatedCacheSync invalidates conversations on a push", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    renderHook(() => useConversationUpdatedCacheSync(), { wrapper });
+
+    expect(wsHandlers.conversation_updated).toBeDefined();
+    act(() => {
+      wsHandlers.conversation_updated({
+        type: "conversation_updated",
+        payload: { conversationId: "c1" },
+      });
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["conversations"] });
+  });
+});

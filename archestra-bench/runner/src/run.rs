@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use archestra_bench_core::slug;
 use chrono::Utc;
@@ -2716,12 +2716,15 @@ fn text_block_id(event: &HashMap<String, serde_json::Value>) -> String {
         .to_string()
 }
 
+static RUNTIME_PLACEHOLDER: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"\{\{(cell|agent_id)\}\}").expect("valid regex"));
+
 fn expand_runtime(text: &str, mapping: &HashMap<String, String>) -> String {
-    let re = regex::Regex::new(r"\{\{(cell|agent_id)\}\}").expect("valid regex");
-    re.replace_all(text, |caps: &regex::Captures| {
-        mapping.get(caps[1].trim()).cloned().unwrap_or_default()
-    })
-    .to_string()
+    RUNTIME_PLACEHOLDER
+        .replace_all(text, |caps: &regex::Captures| {
+            mapping.get(caps[1].trim()).cloned().unwrap_or_default()
+        })
+        .to_string()
 }
 
 fn rollout_token(rollout_key: &str, model_name: &str) -> String {

@@ -292,6 +292,10 @@ const DEFAULT_BODY_LIMIT = 70 * 1024 * 1024;
 const DEFAULT_DATABASE_POOL_MAX = 50;
 const MAX_DATABASE_POOL_MAX = 500;
 
+// Per-connection statement timeout (ms). Defense-in-depth: kills runaway
+// queries instead of letting them hang a connection indefinitely. 0 disables.
+const DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS = 30000;
+
 // Default OTEL OTLP endpoint for HTTP/Protobuf (4318). For gRPC, the typical port is 4317.
 const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
 const DEFAULT_OTEL_CONTENT_MAX_LENGTH = 10_000; // 10KB
@@ -422,6 +426,27 @@ export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
       `Invalid ARCHESTRA_DATABASE_POOL_MAX value "${value}", using default ${DEFAULT_DATABASE_POOL_MAX}`,
     );
     return DEFAULT_DATABASE_POOL_MAX;
+  }
+
+  return parsed;
+};
+
+/** @public — exported for testability */
+export const parseDatabaseStatementTimeoutMillis = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  // 0 disables the timeout; negative/NaN falls back to the default.
+  if (Number.isNaN(parsed) || parsed < 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS value "${value}", using default ${DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS}`,
+    );
+    return DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS;
   }
 
   return parsed;
@@ -1006,6 +1031,9 @@ const config = {
   database: {
     url: getDatabaseUrl(),
     poolMax: parseDatabasePoolMax(process.env.ARCHESTRA_DATABASE_POOL_MAX),
+    statementTimeoutMillis: parseDatabaseStatementTimeoutMillis(
+      process.env.ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS,
+    ),
   },
   llm: {
     openai: {

@@ -25,6 +25,7 @@ import config, {
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
   parseDatabasePoolMax,
+  parseDatabaseStatementTimeoutMillis,
   parseFileStorageFilesystemRoot,
   parseFileStorageProvider,
   parseFileStorageS3Config,
@@ -859,6 +860,46 @@ describe("parseDatabasePoolMax", () => {
     expect(parseDatabasePoolMax("501")).toBe(50);
     expect(logger.warn).toHaveBeenCalledWith(
       'Invalid ARCHESTRA_DATABASE_POOL_MAX value "501", using default 50',
+    );
+  });
+});
+
+describe("parseDatabaseStatementTimeoutMillis", () => {
+  test("should return default 30000 when no value provided", () => {
+    expect(parseDatabaseStatementTimeoutMillis(undefined)).toBe(30000);
+  });
+
+  test("should return default when empty string provided", () => {
+    expect(parseDatabaseStatementTimeoutMillis("")).toBe(30000);
+  });
+
+  test("should return default when whitespace-only string provided", () => {
+    expect(parseDatabaseStatementTimeoutMillis("   ")).toBe(30000);
+  });
+
+  test("should parse valid value", () => {
+    expect(parseDatabaseStatementTimeoutMillis("60000")).toBe(60000);
+  });
+
+  test("should trim whitespace and parse value", () => {
+    expect(parseDatabaseStatementTimeoutMillis("  45000  ")).toBe(45000);
+  });
+
+  test("should allow 0 to disable the timeout", () => {
+    expect(parseDatabaseStatementTimeoutMillis("0")).toBe(0);
+  });
+
+  test("should return default and warn for non-numeric value", () => {
+    expect(parseDatabaseStatementTimeoutMillis("abc")).toBe(30000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS value "abc", using default 30000',
+    );
+  });
+
+  test("should return default and warn for negative value", () => {
+    expect(parseDatabaseStatementTimeoutMillis("-1")).toBe(30000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS value "-1", using default 30000',
     );
   });
 });

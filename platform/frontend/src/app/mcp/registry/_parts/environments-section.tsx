@@ -2,7 +2,7 @@
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Info, Pencil, Trash2 } from "lucide-react";
+import { Info, Pencil, Plus, Trash2, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -393,8 +393,11 @@ function EnvironmentEditorDialog({
   const [allowedCidrsText, setAllowedCidrsText] = useState("");
   const [restricted, setRestricted] = useState(false);
   const [validationRegex, setValidationRegex] = useState("");
-  const [trustedImageRegistriesText, setTrustedImageRegistriesText] =
-    useState("");
+  const [trustedImageRegistries, setTrustedImageRegistries] = useState<
+    string[]
+  >([]);
+  const [registryDraft, setRegistryDraft] = useState("");
+  const [registryError, setRegistryError] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const syncNetworkPolicyDraft = useCallback((policy: NetworkPolicy | null) => {
     const nextPolicy = policy ?? EMPTY_NETWORK_POLICY;
@@ -408,6 +411,8 @@ function EnvironmentEditorDialog({
   useEffect(() => {
     if (open) {
       setShowConfirm(false);
+      setRegistryDraft("");
+      setRegistryError(null);
       if (mode === "default") {
         setName(defaultEnvironment?.name ?? "");
         setNamespace(defaultEnvironment?.namespace ?? "");
@@ -415,8 +420,8 @@ function EnvironmentEditorDialog({
         syncNetworkPolicyDraft(defaultEnvironment?.networkPolicy ?? null);
         setRestricted(defaultEnvironment?.restricted ?? false);
         setValidationRegex(defaultEnvironment?.validationRegex ?? "");
-        setTrustedImageRegistriesText(
-          (defaultEnvironment?.trustedImageRegistries ?? []).join("\n"),
+        setTrustedImageRegistries(
+          defaultEnvironment?.trustedImageRegistries ?? [],
         );
       } else {
         setName(environment?.name ?? "");
@@ -425,9 +430,7 @@ function EnvironmentEditorDialog({
         syncNetworkPolicyDraft(environment?.networkPolicy ?? null);
         setRestricted(environment?.restricted ?? false);
         setValidationRegex(environment?.validationRegex ?? "");
-        setTrustedImageRegistriesText(
-          (environment?.trustedImageRegistries ?? []).join("\n"),
-        );
+        setTrustedImageRegistries(environment?.trustedImageRegistries ?? []);
       }
     }
   }, [open, mode, environment, defaultEnvironment, syncNetworkPolicyDraft]);
@@ -441,11 +444,32 @@ function EnvironmentEditorDialog({
   const trimmedDescription = description.trim();
   const validationRegexValue =
     validationRegex.trim() === "" ? null : validationRegex;
-  const trustedImageRegistriesList = splitPolicyList(
-    trustedImageRegistriesText,
-  );
   const trustedImageRegistriesValue =
-    trustedImageRegistriesList.length > 0 ? trustedImageRegistriesList : null;
+    trustedImageRegistries.length > 0 ? trustedImageRegistries : null;
+
+  const addTrustedRegistry = () => {
+    const value = registryDraft.trim();
+    if (!value) return;
+    // Mirror the backend TrustedImageRegistryEntrySchema so an invalid entry is
+    // rejected here instead of failing the whole save.
+    if (!/^[a-z0-9._:/-]+$/i.test(value) || value.length > 255) {
+      setRegistryError(
+        "Use only letters, numbers and . _ : / - (e.g. ghcr.io/acme).",
+      );
+      return;
+    }
+    if (!trustedImageRegistries.includes(value)) {
+      setTrustedImageRegistries([...trustedImageRegistries, value]);
+    }
+    setRegistryDraft("");
+    setRegistryError(null);
+  };
+
+  const removeTrustedRegistry = (value: string) => {
+    setTrustedImageRegistries(
+      trustedImageRegistries.filter((r) => r !== value),
+    );
+  };
   const validationRegexError =
     validationRegexValue !== null &&
     compileValidationRegex(validationRegexValue) === null
@@ -680,9 +704,10 @@ function EnvironmentEditorDialog({
               Trusted image registries
             </Label>
             <p className="text-xs text-muted-foreground">
-              One registry per line. A personal local server whose custom image
-              is not under a trusted registry is held for admin approval before
-              it can deploy. Leave empty to allow any image. Examples:{" "}
+              Add the registries a personal local server may deploy from. An
+              image that isn't under a trusted registry is held for admin
+              approval before it can deploy. Leave empty to allow any image.
+              Examples:{" "}
               <code className="rounded bg-muted px-1 py-0.5 font-mono">
                 ghcr.io/acme
               </code>{" "}
@@ -692,15 +717,59 @@ function EnvironmentEditorDialog({
               </code>
               .
             </p>
-            <Textarea
-              id="environment-trusted-registries"
-              value={trustedImageRegistriesText}
-              onChange={(e) => setTrustedImageRegistriesText(e.target.value)}
-              placeholder={"ghcr.io/acme\ndocker.io/library"}
-              className="font-mono"
-              rows={3}
-              disabled={isPending}
-            />
+            <div className="flex gap-2">
+              <Input
+                id="environment-trusted-registries"
+                value={registryDraft}
+                onChange={(e) => {
+                  setRegistryDraft(e.target.value);
+                  setRegistryError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addTrustedRegistry();
+                  }
+                }}
+                placeholder="ghcr.io/acme"
+                className="font-mono"
+                disabled={isPending}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addTrustedRegistry}
+                disabled={isPending || registryDraft.trim() === ""}
+              >
+                <Plus className="h-4 w-4" />
+                Add
+              </Button>
+            </div>
+            {registryError && (
+              <p className="text-xs text-destructive">{registryError}</p>
+            )}
+            {trustedImageRegistries.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {trustedImageRegistries.map((registry) => (
+                  <Badge
+                    key={registry}
+                    variant="secondary"
+                    className="gap-1 font-mono"
+                  >
+                    {registry}
+                    <button
+                      type="button"
+                      onClick={() => removeTrustedRegistry(registry)}
+                      disabled={isPending}
+                      aria-label={`Remove ${registry}`}
+                      className="rounded-full text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
         )}
         <section className="space-y-4 border-t pt-4">

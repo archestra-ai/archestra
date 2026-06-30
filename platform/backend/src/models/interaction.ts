@@ -1014,19 +1014,63 @@ class InteractionModel {
     // Searches across: request messages content, response content (for titles), and conversation titles
     //
     // IMPORTANT: Claude interaction are delta encoded, i.t. each row only stores a part of the context.
+    //
+    // The predicate is expressed as `interactions.id IN (<UNION subquery>)` rather
+    // than a single cross-table OR. A cross-table OR (mixing interactions columns
+    // with the outer-joined conversations.title) cannot use the per-table trigram
+    // GIN indexes and degrades into a full sequential scan of `interactions`,
+    // casting every (multi-MB) request/response JSONB to text — which made this
+    // query hang. Each UNION leg below references a single table so PostgreSQL can
+    // BitmapOr the relevant trigram indexes.
+    //
+    // DELIBERATE: the legs intentionally carry ONLY the text-match predicate — the
+    // other filters (access control, profile, date range) are applied solely on the
+    // OUTER query. Do NOT push them into the legs. Doing so adds btree-eligible
+    // predicates (created_at, profile_id) alongside the trigram ILIKE, which gives
+    // the planner an alternative driving path. For the common case — a selective
+    // search token with a broad/absent filter (e.g. a request id across all time,
+    // exactly the scenario this fix targets) — pg_trgm's pessimistic ILIKE
+    // selectivity estimate then lures the planner off the trigram GIN index onto a
+    // btree scan of the whole filter window with the JSONB-cast+ILIKE re-applied as
+    // a per-row recheck. Measured on real Postgres that flip was ~8x slower (and on
+    // a large table reopens the original hang). Keeping the legs trigram-only forces
+    // the GIN index. Pushing filters down only helps the rarer narrow-filter +
+    // broad-term case; it is not worth regressing the selective-token path.
     if (filters?.search) {
       const searchPattern = `%${escapeLikePattern(filters.search)}%`;
-      const searchCondition = or(
-        // Search in request messages content (JSONB)
-        sql`${schema.interactionsTable.request}::text ILIKE ${searchPattern}`,
-        // Search in response content (for Claude Code titles)
-        sql`${schema.interactionsTable.response}::text ILIKE ${searchPattern}`,
-        // Search in conversation title (for Archestra Chat sessions)
-        sql`${schema.conversationsTable.title} ILIKE ${searchPattern}`,
+
+      // Leg A: interactions whose own request/response content matches.
+      // Both branches are on `interactions`, so the
+      // interactions_request_trgm_idx / interactions_response_trgm_idx GIN
+      // indexes can be combined via BitmapOr.
+      const byContent = db
+        .select({ id: schema.interactionsTable.id })
+        .from(schema.interactionsTable)
+        .where(
+          or(
+            sql`${schema.interactionsTable.request}::text ILIKE ${searchPattern}`,
+            sql`${schema.interactionsTable.response}::text ILIKE ${searchPattern}`,
+          ),
+        );
+
+      // Leg B: interactions whose session maps to a conversation whose title
+      // matches (for Archestra Chat sessions). Uses conversations_title_trgm_idx
+      // via the same UUID-cast join used for the aggregate query's LEFT JOIN.
+      const byConversationTitle = db
+        .select({ id: schema.interactionsTable.id })
+        .from(schema.interactionsTable)
+        .innerJoin(
+          schema.conversationsTable,
+          sql`CASE WHEN LENGTH(${schema.interactionsTable.sessionId}) = 36 THEN ${schema.interactionsTable.sessionId}::uuid END = ${schema.conversationsTable.id}`,
+        )
+        .where(sql`${schema.conversationsTable.title} ILIKE ${searchPattern}`);
+
+      conditions.push(
+        inArray(
+          schema.interactionsTable.id,
+          byContent.union(byConversationTitle),
+        ),
       );
-      if (searchCondition) {
-        conditions.push(searchCondition);
-      }
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

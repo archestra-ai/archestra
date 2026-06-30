@@ -1997,6 +1997,64 @@ describe("InteractionModel", () => {
       expect(sessionsPage2.data).toHaveLength(2);
       expect(sessionsPage2.pagination.total).toBe(5);
     });
+
+    test("de-duplicates a session that matches both content and conversation title", async ({
+      makeAdmin,
+      makeUser,
+      makeOrganization,
+    }) => {
+      // The search predicate is a UNION of (a) interactions matching their own
+      // request/response content and (b) interactions whose conversation title
+      // matches. An interaction that matches BOTH legs must still surface as a
+      // single session, not be double-counted.
+      const admin = await makeAdmin();
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "DualMatchToken in the title",
+      });
+
+      // Same token lives in BOTH the request content and the conversation title,
+      // so this interaction's id is produced by both legs of the UNION.
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: conversation.id,
+        request: {
+          model: "gpt-4",
+          messages: [
+            { role: "user", content: "Question about DualMatchToken" },
+          ],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { search: "DualMatchToken" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.pagination.total).toBe(1);
+      expect(sessions.data[0].sessionId).toBe(conversation.id);
+    });
   });
 
   describe("getSessions source filtering", () => {

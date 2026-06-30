@@ -2111,6 +2111,68 @@ describe("InteractionModel", () => {
       expect(sessions.data[0].sessionId).toBe(nonUuidSessionId);
       expect(sessions.data[0].conversationTitle).toBeNull();
     });
+
+    test("matches message content but not tool-schema / metadata", async ({
+      makeAdmin,
+    }) => {
+      // Content search uses a tsvector over only the message-bearing subtrees
+      // (request.messages / response.choices, ...), NOT `tools`/`system`. A token
+      // that lives only in a tool schema must not surface as a content match —
+      // both a relevance improvement and proof we don't scan the heavy metadata.
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-tool-only",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Plain user question" }],
+          // The distinctive token lives ONLY in a tool definition.
+          tools: [
+            {
+              type: "function",
+              function: {
+                name: "zzqueryweatherwidget",
+                description: "zzqueryweatherwidget tool schema",
+                parameters: {},
+              },
+            },
+          ],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // In a tool schema only → no content match.
+      const toolHit = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { search: "zzqueryweatherwidget" },
+      );
+      expect(toolHit.data).toHaveLength(0);
+
+      // The same row IS findable by its actual message content.
+      const contentHit = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { search: "Plain user question" },
+      );
+      expect(contentHit.data).toHaveLength(1);
+      expect(contentHit.data[0].sessionId).toBe("session-tool-only");
+    });
   });
 
   describe("getSessions source filtering", () => {

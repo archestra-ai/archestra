@@ -15,7 +15,6 @@ import {
   lte,
   max,
   min,
-  or,
   type SQL,
   sql,
   sum,
@@ -292,6 +291,24 @@ function stripNullBytes<T>(value: T): T {
  */
 function sessionIdMatchesConversation(): SQL {
   return sql`${schema.interactionsTable.sessionId} = ${schema.conversationsTable.id}::text`;
+}
+
+/**
+ * tsvector over the message-bearing JSONB subtrees of an interaction, used for
+ * free-text content search in getSessions.
+ *
+ * This expression MUST stay byte-for-byte equivalent to the one indexed in
+ * migration 0320 (interactions_search_fts_idx) — otherwise the planner can't use
+ * the GIN index and the search falls back to a full scan. It deliberately reads
+ * only the message subtrees (request.messages / request.contents; response
+ * choices / content / candidates / output) and NOT `tools`/`system`, which are
+ * large, non-user-facing metadata. `left(…, 900000)` keeps the input under
+ * tsvector's ~1MB limit. `to_tsvector('english', …)` is IMMUTABLE (explicit
+ * regconfig), required for the expression index.
+ */
+function interactionSearchVector(): SQL {
+  const { request, response } = schema.interactionsTable;
+  return sql`to_tsvector('english', left(coalesce((${request} -> 'messages')::text, '') || ' ' || coalesce((${request} -> 'contents')::text, '') || ' ' || coalesce((${response} -> 'choices')::text, '') || ' ' || coalesce((${response} -> 'content')::text, '') || ' ' || coalesce((${response} -> 'candidates')::text, '') || ' ' || coalesce((${response} -> 'output')::text, ''), 900000))`;
 }
 
 class InteractionModel {
@@ -1029,52 +1046,36 @@ class InteractionModel {
       conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));
     }
 
-    // Free-text search filter (case-insensitive)
-    // Searches across: request messages content, response content (for titles), and conversation titles
+    // Free-text search filter. Matches `interactions.id IN (<UNION subquery>)`,
+    // a UNION of two single-table legs so the planner uses one index per leg
+    // (a cross-table OR over the outer-joined conversations.title can't, and
+    // degrades to a full scan).
     //
-    // IMPORTANT: Claude interaction are delta encoded, i.t. each row only stores a part of the context.
+    // Leg A (content) uses POSTGRES FULL-TEXT SEARCH, not `request::text ILIKE`.
+    // ILIKE forced the trigram recheck to re-cast the multi-MB, mostly-metadata
+    // request/response JSONB to text on every matching row; for a broad term that
+    // exceeded statement_timeout and 500'd. The FTS index (interactions_search_fts_idx,
+    // migration 0320) is a GIN over a tsvector built from ONLY the message-bearing
+    // subtrees, so a match is decided from the index without touching the JSONB —
+    // ~20-80x faster on a large table.
     //
-    // The predicate is expressed as `interactions.id IN (<UNION subquery>)` rather
-    // than a single cross-table OR. A cross-table OR (mixing interactions columns
-    // with the outer-joined conversations.title) cannot use the per-table trigram
-    // GIN indexes and degrades into a full sequential scan of `interactions`,
-    // casting every (multi-MB) request/response JSONB to text — which made this
-    // query hang. Each UNION leg below references a single table so PostgreSQL can
-    // BitmapOr the relevant trigram indexes.
+    // Trade-off vs ILIKE: FTS is lexeme/word based (stemmed, case-insensitive),
+    // not arbitrary-substring. A full token still matches; a partial fragment of a
+    // longer token may not. websearch_to_tsquery gives Google-style semantics
+    // (phrases via quotes, OR, -negation) and safely accepts arbitrary input.
     //
-    // DELIBERATE: the legs intentionally carry ONLY the text-match predicate — the
-    // other filters (access control, profile, date range) are applied solely on the
-    // OUTER query. Do NOT push them into the legs. Doing so adds btree-eligible
-    // predicates (created_at, profile_id) alongside the trigram ILIKE, which gives
-    // the planner an alternative driving path. For the common case — a selective
-    // search token with a broad/absent filter (e.g. a request id across all time,
-    // exactly the scenario this fix targets) — pg_trgm's pessimistic ILIKE
-    // selectivity estimate then lures the planner off the trigram GIN index onto a
-    // btree scan of the whole filter window with the JSONB-cast+ILIKE re-applied as
-    // a per-row recheck. Measured on real Postgres that flip was ~8x slower (and on
-    // a large table reopens the original hang). Keeping the legs trigram-only forces
-    // the GIN index. Pushing filters down only helps the rarer narrow-filter +
-    // broad-term case; it is not worth regressing the selective-token path.
+    // Leg B (conversation title) stays substring ILIKE: `title` is a small text
+    // column (conversations_title_trgm_idx), so there is no JSONB-cast cost and we
+    // keep substring matching for titles.
     if (filters?.search) {
       const searchPattern = `%${escapeLikePattern(filters.search)}%`;
+      const tsQuery = sql`websearch_to_tsquery('english', ${filters.search})`;
 
-      // Leg A: interactions whose own request/response content matches.
-      // Both branches are on `interactions`, so the
-      // interactions_request_trgm_idx / interactions_response_trgm_idx GIN
-      // indexes can be combined via BitmapOr.
       const byContent = db
         .select({ id: schema.interactionsTable.id })
         .from(schema.interactionsTable)
-        .where(
-          or(
-            sql`${schema.interactionsTable.request}::text ILIKE ${searchPattern}`,
-            sql`${schema.interactionsTable.response}::text ILIKE ${searchPattern}`,
-          ),
-        );
+        .where(sql`${interactionSearchVector()} @@ ${tsQuery}`);
 
-      // Leg B: interactions whose session maps to a conversation whose title
-      // matches (for Archestra Chat sessions). Uses conversations_title_trgm_idx
-      // via the same UUID-cast join used for the aggregate query's LEFT JOIN.
       const byConversationTitle = db
         .select({ id: schema.interactionsTable.id })
         .from(schema.interactionsTable)

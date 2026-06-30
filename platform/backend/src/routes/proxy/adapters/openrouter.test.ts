@@ -111,6 +111,61 @@ describe("OpenrouterStreamAdapter", () => {
   });
 });
 
+describe("openrouterAdapterFactory.execute", () => {
+  function captureRequestClient(): {
+    client: unknown;
+    requests: Array<Record<string, unknown>>;
+  } {
+    const requests: Array<Record<string, unknown>> = [];
+    const client = {
+      chat: {
+        completions: {
+          create: (request: Record<string, unknown>) => {
+            requests.push(request);
+            return Promise.resolve(
+              createResponse({
+                role: "assistant",
+                content: "hi",
+                refusal: null,
+              }),
+            );
+          },
+        },
+      },
+    };
+    return { client, requests };
+  }
+
+  function executeWith(
+    request: Partial<Openrouter.Types.ChatCompletionsRequest>,
+  ) {
+    const { client, requests } = captureRequestClient();
+    return openrouterAdapterFactory
+      .execute(client, request as Openrouter.Types.ChatCompletionsRequest)
+      .then(() => requests[0]);
+  }
+
+  test("injects the response-healing plugin for non-streaming json requests", async () => {
+    const sent = await executeWith({
+      model: "openrouter/free-model",
+      messages: [],
+      response_format: { type: "json_schema" },
+    });
+
+    expect(sent.plugins).toEqual([{ id: "response-healing" }]);
+    expect(sent.stream).toBe(false);
+  });
+
+  test("does not inject without a json response_format", async () => {
+    const sent = await executeWith({
+      model: "openrouter/free-model",
+      messages: [],
+    });
+
+    expect(sent.plugins).toBeUndefined();
+  });
+});
+
 describe("extractInternalCode", () => {
   test("classifies OpenRouter's uncoded 'maximum context length' message as overflow", () => {
     // OpenRouter returns a descriptive 400 with no structured error.code — the

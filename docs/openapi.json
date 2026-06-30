@@ -53680,6 +53680,25 @@
                                 "type": "integer",
                                 "minimum": -9007199254740991,
                                 "maximum": 9007199254740991
+                              },
+                              "teams": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name"
+                                  ],
+                                  "additionalProperties": false
+                                }
                               }
                             },
                             "required": [
@@ -53691,7 +53710,8 @@
                               "id",
                               "scope",
                               "authorId",
-                              "latestVersion"
+                              "latestVersion",
+                              "teams"
                             ],
                             "additionalProperties": false
                           },

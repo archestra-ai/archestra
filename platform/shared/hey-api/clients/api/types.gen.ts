@@ -15494,6 +15494,10 @@ export type GetAppsResponses = {
             scope: 'personal' | 'team' | 'org';
             authorId: string | null;
             latestVersion: number;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
         } | {
             name: string;
             description: string | null;

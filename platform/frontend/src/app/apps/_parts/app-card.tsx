@@ -15,10 +15,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import {
-  ResourceVisibilityBadge,
-  scopeStyles,
-} from "@/components/resource-visibility-badge";
+import { scopeStyles } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -43,15 +40,9 @@ type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 type OwnedApp = Extract<AppListItem, { source: "owned" }>;
 type ExternalApp = Extract<AppListItem, { source: "external" }>;
 
-export function AppCard({
-  app,
-  currentUserId,
-}: {
-  app: AppListItem;
-  currentUserId: string | undefined;
-}) {
+export function AppCard({ app }: { app: AppListItem }) {
   return app.source === "owned" ? (
-    <OwnedAppCard app={app} currentUserId={currentUserId} />
+    <OwnedAppCard app={app} />
   ) : (
     <ExternalAppCard app={app} />
   );
@@ -102,10 +93,8 @@ function CardOpeningOverlay() {
   );
 }
 
-// An external app card lists one concrete install, so it carries a scope chip
-// (Personal/Team/Org) to disambiguate sibling installs of the same server.
 const SCOPE_BADGE: Record<
-  ExternalApp["scope"],
+  OwnedApp["scope"],
   { label: string; icon: typeof User }
 > = {
   personal: { label: "Personal", icon: User },
@@ -115,16 +104,31 @@ const SCOPE_BADGE: Record<
 
 // Icon-only scope pill (label rides in the tooltip + aria-label), matching the
 // projects-card visibility pill so personal/team/org reads identically across
-// surfaces. Stays inline in the metadata row, alongside the "MCP server" badge.
-function ExternalAppScopeBadge({ scope }: { scope: ExternalApp["scope"] }) {
-  const { label, icon: Icon } = SCOPE_BADGE[scope];
+// surfaces. Personal is hidden (it's the implicit default and just adds noise);
+// a team app folds its team names into the tooltip ("Team: London HQ").
+function AppScopeBadge({
+  scope,
+  teamNames,
+}: {
+  scope: OwnedApp["scope"];
+  teamNames?: string[];
+}) {
+  if (scope === "personal") return null;
+  const { label: scopeLabel, icon: Icon } = SCOPE_BADGE[scope];
+  const names = teamNames?.filter(Boolean) ?? [];
+  const label =
+    scope === "team" && names.length > 0
+      ? `Team: ${names.join(", ")}`
+      : scopeLabel;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
+        {/* Lift above the full-card click button (absolute inset-0) so the pill
+            can be hovered for its tooltip. */}
         <Badge
           variant="outline"
           aria-label={label}
-          className={cn(scopeStyles[scope], "px-1.5")}
+          className={cn(scopeStyles[scope], "relative z-10 px-1.5")}
         >
           <Icon className="h-3 w-3" />
         </Badge>
@@ -137,13 +141,7 @@ function ExternalAppScopeBadge({ scope }: { scope: ExternalApp["scope"] }) {
 // Clicking the card opens the app in a new chat; the overlay button covers the
 // whole card. The backend seeds a conversation with the app already rendered and
 // returns its id, so we navigate straight to it (no model turn).
-function OwnedAppCard({
-  app,
-  currentUserId,
-}: {
-  app: OwnedApp;
-  currentUserId: string | undefined;
-}) {
+function OwnedAppCard({ app }: { app: OwnedApp }) {
   const router = useRouter();
   const openApp = useOpenAppInChat();
   const { data: canDelete } = useHasPermissions({ app: ["delete"] });
@@ -202,12 +200,9 @@ function OwnedAppCard({
 
         <div className="mb-3 flex flex-wrap items-center gap-1.5 pr-8">
           <AppWindow className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <ResourceVisibilityBadge
+          <AppScopeBadge
             scope={app.scope}
-            teams={undefined}
-            authorId={app.authorId}
-            authorName={undefined}
-            currentUserId={currentUserId}
+            teamNames={app.teams?.map((team) => team.name)}
           />
         </div>
 
@@ -289,9 +284,9 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
       <div className="mb-3 flex flex-wrap items-center gap-1.5 pr-8">
         <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
         <Badge variant="outline" className="gap-1 text-xs">
-          MCP server
+          MCP server app
         </Badge>
-        <ExternalAppScopeBadge scope={app.scope} />
+        <AppScopeBadge scope={app.scope} />
       </div>
 
       <CardTitle className="line-clamp-2 leading-snug break-words">

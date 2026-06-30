@@ -73,6 +73,31 @@ describe("GET /api/apps", () => {
     expect(response.json().pagination.total).toBeGreaterThanOrEqual(1);
   });
 
+  test("includes assigned team names for a team-scoped owned app", async ({
+    makeApp,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, user.id, { name: "London HQ" });
+    await makeTeamMember(team.id, user.id);
+    const owned = await makeApp({
+      organizationId,
+      scope: "team",
+      authorId: user.id,
+      teamIds: [team.id],
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/apps?limit=100&offset=0",
+    });
+    expect(res.statusCode).toBe(200);
+    const item = (res.json().data as Array<Record<string, unknown>>).find(
+      (i) => i.source === "owned" && i.id === owned.id,
+    );
+    expect(item?.teams).toEqual([{ id: team.id, name: "London HQ" }]);
+  });
+
   test("lists external UI-providing servers alongside owned apps, with trust disclosure", async ({
     makeApp,
     makeInternalMcpCatalog,

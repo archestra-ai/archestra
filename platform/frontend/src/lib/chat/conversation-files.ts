@@ -89,17 +89,17 @@ export function persistentFilesSection(projectId: string | null | undefined): {
   description: string;
 } {
   return projectId != null
-    ? { title: "Project files", description: "Shared with the whole project" }
+    ? { title: "Project files", description: "shared with the whole project" }
     : {
         title: "Chat files",
-        description: "Saved to a project if you create one",
+        description: "saved to a project if you create one from this chat",
       };
 }
 
 /** Header label + subtitle for the user's uploaded inputs to a chat. */
 export const ATTACHMENTS_SECTION = {
   title: "Attachments",
-  description: "Stay in this chat",
+  description: "stay in this chat",
 } as const;
 
 /**

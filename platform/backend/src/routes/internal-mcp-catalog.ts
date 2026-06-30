@@ -1336,6 +1336,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { catalogId: catalogItem.id, reviewedBy: request.user.id },
         "Catalog item image approved",
       );
+      // Release the auto-reinstall the gated edit deferred: roll existing
+      // installs onto the now-approved image (mirrors the un-gated image edit,
+      // which auto-reinstalls). A fresh, never-installed catalog item has no
+      // installs, so this is a no-op for the install-from-scratch flow.
+      await reinstallApprovedImage(approved);
       return reply.send(approved);
     },
   );
@@ -1970,6 +1975,19 @@ async function cascadeReinstallForCatalog(
     );
   }
 
+  autoReinstallInstallsInBackground(installedServers, catalogItem);
+}
+
+/**
+ * Roll every install of a single-tenant catalog onto its current spec in the
+ * background, broadcasting status per install. Shared by the catalog-edit auto
+ * cascade and image approval (which releases the auto-reinstall a gated edit
+ * deferred).
+ */
+function autoReinstallInstallsInBackground(
+  installedServers: Awaited<ReturnType<typeof McpServerModel.findByCatalogId>>,
+  catalogItem: InternalMcpCatalog,
+): void {
   setImmediate(async () => {
     try {
       for (const server of installedServers) {
@@ -2011,6 +2029,27 @@ async function cascadeReinstallForCatalog(
       );
     }
   });
+}
+
+/**
+ * Release the auto-reinstall that a gated catalog edit deferred: once an admin
+ * approves the image, roll every install onto it. Single-tenant catalogs
+ * auto-reinstall each pod; multi-tenant catalogs flag `catalogReinstallRequired`
+ * for the admin's "Reinstall catalog" — the non-gated multi-tenant edit path is
+ * manual by design too.
+ */
+async function reinstallApprovedImage(
+  catalogItem: InternalMcpCatalog,
+): Promise<void> {
+  const installedServers = await McpServerModel.findByCatalogId(catalogItem.id);
+  if (installedServers.length === 0) return;
+  if (catalogItem.multitenant === true && catalogItem.serverType === "local") {
+    await InternalMcpCatalogModel.update(catalogItem.id, {
+      catalogReinstallRequired: true,
+    });
+    return;
+  }
+  autoReinstallInstallsInBackground(installedServers, catalogItem);
 }
 
 async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {

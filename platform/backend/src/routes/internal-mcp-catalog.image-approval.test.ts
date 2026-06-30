@@ -6,7 +6,12 @@ import {
 } from "fastify-type-provider-zod";
 import { type Mock, vi } from "vitest";
 import { hasPermission } from "@/auth";
-import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
+import {
+  InternalMcpCatalogModel,
+  McpServerModel,
+  OrganizationModel,
+} from "@/models";
+import { autoReinstallServer } from "@/services/mcp-reinstall";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
@@ -15,7 +20,15 @@ vi.mock("@/auth", () => ({
   hasPermission: vi.fn(),
 }));
 
+// Keep the real diff helpers; stub the pod-recreating reinstall so the
+// approval-triggered cascade is observable without touching Kubernetes.
+vi.mock("@/services/mcp-reinstall", async (importActual) => ({
+  ...(await importActual<typeof import("@/services/mcp-reinstall")>()),
+  autoReinstallServer: vi.fn().mockResolvedValue(undefined),
+}));
+
 const mockHasPermission = hasPermission as Mock;
+const mockAutoReinstall = autoReinstallServer as Mock;
 const UNKNOWN_ID = "00000000-0000-4000-8000-000000000099";
 
 describe("internal MCP catalog image approval", () => {
@@ -26,6 +39,7 @@ describe("internal MCP catalog image approval", () => {
   beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
     vi.clearAllMocks();
     mockHasPermission.mockResolvedValue({ success: true, error: null });
+    mockAutoReinstall.mockResolvedValue(undefined);
 
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -87,6 +101,53 @@ describe("internal MCP catalog image approval", () => {
     const stored = await InternalMcpCatalogModel.findById(catalog.id);
     expect(stored?.catalogItemApprovalStatus).toBe("approved");
     expect(stored?.catalogItemApprovalReviewedBy).toBe(user.id);
+  });
+
+  test("approval rolls a single-tenant install onto the now-approved image", async ({
+    makeMcpServer,
+  }) => {
+    const catalog = await makePersonalLocalCatalog();
+    await InternalMcpCatalogModel.markImageApprovalPending(catalog.id);
+    const install = await makeMcpServer({ catalogId: catalog.id });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${catalog.id}/approve`,
+    });
+    expect(response.statusCode).toBe(200);
+
+    // The reinstall runs in a background setImmediate; wait for it.
+    await vi.waitFor(() => {
+      expect(mockAutoReinstall).toHaveBeenCalledTimes(1);
+    });
+    expect(mockAutoReinstall.mock.calls[0]?.[0]?.id).toBe(install.id);
+  });
+
+  test("approval flags a multi-tenant catalog for reinstall instead of auto-reinstalling", async ({
+    makeMcpServer,
+  }) => {
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: `mt-${crypto.randomUUID().slice(0, 8)}`,
+        serverType: "local",
+        scope: "org",
+        multitenant: true,
+        localConfig: { dockerImage: "ghcr.io/evil/x:1" },
+      },
+      { organizationId, authorId: user.id },
+    );
+    await InternalMcpCatalogModel.markImageApprovalPending(catalog.id);
+    await makeMcpServer({ catalogId: catalog.id });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${catalog.id}/approve`,
+    });
+    expect(response.statusCode).toBe(200);
+
+    const stored = await InternalMcpCatalogModel.findById(catalog.id);
+    expect(stored?.catalogReinstallRequired).toBe(true);
+    expect(mockAutoReinstall).not.toHaveBeenCalled();
   });
 
   test("approve rejects a catalog item not subject to image approval", async () => {

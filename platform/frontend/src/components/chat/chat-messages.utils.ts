@@ -251,7 +251,7 @@ export function deriveAppsFromMessages(
         continue;
       }
 
-      const { outputUri, fullToolName } = parseToolAppRender(
+      const { outputUri, mcpServerId, fullToolName } = parseToolAppRender(
         part,
         earlyToolUiStarts[part.toolCallId],
       );
@@ -267,6 +267,7 @@ export function deriveAppsFromMessages(
           label: mcpToolLabel(fullToolName),
           uiResourceUri: outputUri,
           appId: null,
+          mcpServerId,
           version: null,
           createdAt: createdAt ?? 0,
         });
@@ -584,14 +585,21 @@ function getToolName(part: DynamicToolUIPart | ToolUIPart): string | null {
 function parseToolAppRender(
   part: DynamicToolUIPart | ToolUIPart,
   early: { uiResourceUri?: string; toolName?: string } | undefined,
-): { outputUri: string | null; fullToolName: string } {
-  const outputUri =
-    // biome-ignore lint/suspicious/noExplicitAny: checking nested _meta shape on unknown output
-    ((part.output as any)?._meta?.ui?.resourceUri as string | undefined) ??
-    early?.uiResourceUri ??
-    null;
+): {
+  outputUri: string | null;
+  mcpServerId: string | null;
+  fullToolName: string;
+} {
+  // biome-ignore lint/suspicious/noExplicitAny: checking nested _meta shape on unknown output
+  const ui = (part.output as any)?._meta?.ui as
+    | { resourceUri?: string; mcpServerId?: string }
+    | undefined;
+  const outputUri = ui?.resourceUri ?? early?.uiResourceUri ?? null;
+  // A server-scoped deep link (apps-page open-in-chat) stamps the concrete
+  // install so the chat mounts against it; live tool calls omit it.
+  const mcpServerId = ui?.mcpServerId ?? null;
   const fullToolName = getToolName(part) ?? early?.toolName ?? "";
-  return { outputUri, fullToolName };
+  return { outputUri, mcpServerId, fullToolName };
 }
 
 function finalizeCurrentGroup(params: {

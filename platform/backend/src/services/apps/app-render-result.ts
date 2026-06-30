@@ -22,3 +22,30 @@ export function buildAppRenderResult(app: App): CallToolResult {
     `${JSON.stringify(summary, null, 2)}\nRendered inline when viewed in chat; standalone page: /a/${app.id}`,
   );
 }
+
+/**
+ * The tool result for an external (MCP-server) UI app, byte-compatible with what
+ * a live MCP-UI tool call persists: a text string in `content` plus the UI
+ * pointer in `_meta.ui.resourceUri`. We additionally stamp `_meta.ui.mcpServerId`
+ * so the chat mounts the app against that concrete install via the server
+ * endpoint (`/api/mcp/server/<id>`) — independent of the conversation's agent.
+ * Used by the external open-in-chat conversation seeding.
+ */
+export function buildExternalAppRenderResult(params: {
+  mcpServerId: string;
+  resourceUri: string;
+  label: string;
+}): {
+  content: string;
+  _meta: { ui: { resourceUri: string; mcpServerId: string } };
+} {
+  return {
+    content: `${params.label}\nRendered inline when viewed in chat.`,
+    _meta: {
+      ui: {
+        resourceUri: params.resourceUri,
+        mcpServerId: params.mcpServerId,
+      },
+    },
+  };
+}

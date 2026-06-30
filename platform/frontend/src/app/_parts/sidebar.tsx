@@ -116,11 +116,24 @@ const chatsNavItems: NavItem[] = [
     customIsActive: (pathname: string) => pathname === "/apps",
     beta: true,
   },
+  {
+    title: "Connect",
+    url: "/connection",
+    icon: Cable,
+    customIsActive: (pathname: string) => pathname.startsWith("/connection"),
+    beta: true,
+  },
 ];
 
 /** Which tab a route belongs to; null = no opinion (keep the current tab). */
 function routeSidebarMode(pathname: string): SidebarMode | null {
-  const chatPrefixes = ["/chat", "/projects", "/apps"];
+  const chatPrefixes = [
+    "/chat",
+    "/projects",
+    "/apps",
+    "/connection",
+    "/connection_beta",
+  ];
   if (
     chatPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
   ) {
@@ -133,8 +146,6 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
     "/llm",
     "/knowledge",
     "/audit",
-    "/connection",
-    "/connection_beta",
   ];
   if (
     studioPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
@@ -203,7 +214,7 @@ function SidebarModeToggle({
 
   return (
     <div className="flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden">
-      {segment("chats", "Chats", MessageCircle)}
+      {segment("chats", "AI", MessageCircle)}
       {segment("studio", "Studio", PencilRuler)}
     </div>
   );
@@ -338,13 +349,6 @@ const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/llm/logs") ||
           pathname.startsWith("/mcp/logs") ||
           pathname.startsWith("/audit/logs"),
-      },
-      {
-        title: "Connect",
-        url: "/connection",
-        icon: Cable,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/connection"),
       },
     ],
   },
@@ -638,29 +642,37 @@ export function AppSidebar() {
   // default Connect destination.
   const betaEnabled = useFeature("betaEnabled") === true;
 
-  // Projects and Apps are each gated behind their own feature flags.
+  // Projects and Apps are each gated behind their own feature flags. Connect
+  // requires both MCP gateway and LLM proxy read permissions, and points at
+  // its beta route when ARCHESTRA_BETA is on.
   const filteredChatsNavItems = React.useMemo(
     () =>
-      chatsNavItems.filter((item) => {
-        if (item.title === "Projects") return projectsEnabled;
-        if (item.title === "Apps") return appsEnabled;
-        return true;
-      }),
-    [projectsEnabled, appsEnabled],
+      chatsNavItems
+        .filter((item) => {
+          if (item.title === "Projects") return projectsEnabled;
+          if (item.title === "Apps") return appsEnabled;
+          if (item.title === "Connect") return showConnect;
+          return true;
+        })
+        .map((item) => {
+          if (item.title === "Connect" && betaEnabled) {
+            return { ...item, url: "/connection_beta" };
+          }
+          return item;
+        }),
+    [projectsEnabled, appsEnabled, showConnect, betaEnabled],
   );
 
-  // Filter nav groups based on connect permissions and feature flags
+  // Filter nav groups based on feature flags
   const filteredNavGroups = React.useMemo(() => {
     // With ARCHESTRA_BETA on, these nav items point at their beta routes.
     const betaNavUrls: Record<string, string> = {
-      Connect: "/connection_beta",
       "MCP Registry": "/mcp/registry/beta",
     };
     return contentNavGroups.map((group) => ({
       ...group,
       items: group.items
         .filter((item) => {
-          if (item.title === "Connect" && !showConnect) return false;
           // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env
           // var. It's a top-level item now, so gate it here (not in subItems).
           if (item.url === "/skills" && !skillsEnabled) return false;
@@ -683,7 +695,7 @@ export function AppSidebar() {
             : resolved;
         }),
     }));
-  }, [showConnect, skillsEnabled, projectsEnabled, betaEnabled]);
+  }, [skillsEnabled, projectsEnabled, betaEnabled]);
 
   return (
     <Sidebar collapsible="icon">

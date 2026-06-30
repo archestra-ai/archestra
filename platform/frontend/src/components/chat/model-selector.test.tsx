@@ -119,6 +119,33 @@ describe("ModelSelector coverage matrix", () => {
     await waitFor(() => expect(onModelChange).toHaveBeenCalledWith("m1"));
   });
 
+  // The org-wide GitHub Copilot catalog is flagged "best" but requires a
+  // per-user connection the viewer lacks; auto-select must prefer their own
+  // keyed model rather than silently defaulting to the unconnected provider.
+  it("auto-selects a keyed model over an unconnected per-user 'best' model", async () => {
+    setQuery({
+      modelsByProvider: {
+        "github-copilot": [
+          model({
+            dbId: "copilot-1",
+            provider: "github-copilot",
+            isBest: true,
+            requiresUserConnection: true,
+            isConnected: false,
+          }),
+        ],
+        anthropic: [
+          model({ dbId: "kimi-1", provider: "anthropic", isBest: false }),
+        ],
+      },
+    });
+    const { onModelChange } = renderSelector({
+      selectedModel: "stale-id",
+      variant: "default",
+    });
+    await waitFor(() => expect(onModelChange).toHaveBeenCalledWith("kimi-1"));
+  });
+
   it("renders the empty-selection placeholder and does not auto-select", () => {
     setQuery({ modelsByProvider: { openai: [model()] } });
     const { onModelChange } = renderSelector({

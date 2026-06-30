@@ -15501,9 +15501,9 @@ export type GetAppsResponses = {
             cspOrigin: 'platform-pinned' | 'author-declared';
             source: 'external';
             catalogId: string;
+            mcpServerId: string;
+            scope: 'personal' | 'team' | 'org';
             resourceUri: string;
-            runnable: boolean;
-            availabilityScopes: Array<'personal' | 'team' | 'org'>;
         }>;
         pagination: {
             currentPage: number;
@@ -15727,6 +15727,11 @@ export type GetExternalAppResponses = {
         name: string;
         description: string | null;
         resourceUri: string;
+        resources: Array<{
+            resourceUri: string;
+            toolName: string;
+            name: string;
+        }>;
         defaultMcpServerId: string | null;
         installs: Array<{
             mcpServerId: string;
@@ -15911,6 +15916,93 @@ export type OpenAppInChatResponses = {
 };
 
 export type OpenAppInChatResponse = OpenAppInChatResponses[keyof OpenAppInChatResponses];
+
+export type OpenExternalAppInChatData = {
+    body: {
+        resourceUri: string;
+    };
+    path: {
+        mcpServerId: string;
+    };
+    query?: never;
+    url: '/api/apps/external/{mcpServerId}/open-in-chat';
+};
+
+export type OpenExternalAppInChatErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenExternalAppInChatError = OpenExternalAppInChatErrors[keyof OpenExternalAppInChatErrors];
+
+export type OpenExternalAppInChatResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        conversationId: string;
+    };
+};
+
+export type OpenExternalAppInChatResponse = OpenExternalAppInChatResponses[keyof OpenExternalAppInChatResponses];
 
 export type DeleteAppData = {
     body?: never;

@@ -80,10 +80,9 @@ export function FileSection({
   return (
     <div className="mb-5">
       {title && (
-        // One quiet line — the group name, then its persistence scope after a
-        // middot — echoing the inline "name · description" of the pinned
-        // instructions row below it.
-        <div className="mb-1.5 flex items-baseline gap-1 px-1 text-[11px] leading-none">
+        // One line — the group name, then its persistence scope after a middot,
+        // echoing the inline "name · description" of the instructions row below.
+        <div className="mb-1.5 flex items-baseline gap-1 px-1 text-[13px] leading-none">
           <span className="font-medium text-muted-foreground">{title}</span>
           {description && (
             <span className="text-muted-foreground/60">· {description}</span>

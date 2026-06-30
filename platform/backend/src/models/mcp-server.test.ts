@@ -483,7 +483,7 @@ describe("McpServerModel", () => {
   });
 
   describe("findUiCapableForCaller", () => {
-    test("lists a catalog that exposes a ui:// tool once, with its metadata, resource, and runnable scope", async ({
+    test("lists a catalog's ui:// tool once per accessible install, with its metadata, resource, and install scope", async ({
       makeUser,
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -497,10 +497,14 @@ describe("McpServerModel", () => {
         serverUrl: "https://example.com/mcp",
         scope: "org",
       });
-      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      const install = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "org",
+      });
       await makeTool({
         catalogId: catalog.id,
         name: "draw",
+        description: "Draws a picture",
         meta: uiMeta("ui://excalidraw/app.html"),
       });
 
@@ -511,15 +515,45 @@ describe("McpServerModel", () => {
       const entry = res.find((r) => r.catalogId === catalog.id);
       expect(entry).toMatchObject({
         catalogId: catalog.id,
-        name: "Excalidraw",
-        description: "Draw diagrams",
+        mcpServerId: install.id,
+        scope: "org",
+        serverName: "Excalidraw",
+        toolName: "draw",
+        toolDescription: "Draws a picture",
         resourceUri: "ui://excalidraw/app.html",
-        runnable: true,
       });
-      expect(entry?.availabilityScopes).toEqual(["org"]);
     });
 
-    test("orders availabilityScopes by precedence (personal → team → org), not DB order", async ({
+    test("strips the server prefix from the tool name", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const catalog = await makeInternalMcpCatalog({
+        name: "Excalidraw Staging",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "excalidraw_staging__create_view",
+        meta: uiMeta("ui://excalidraw/view.html"),
+      });
+
+      const res = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        organizationId: catalog.organizationId!,
+      });
+      expect(res.find((r) => r.catalogId === catalog.id)?.toolName).toBe(
+        "create_view",
+      );
+    });
+
+    test("orders per-install entries by scope precedence (personal → team → org), not DB order", async ({
       makeUser,
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -551,12 +585,13 @@ describe("McpServerModel", () => {
         userId: user.id,
         organizationId: catalog.organizationId!,
       });
+      // One entry per accessible install, ordered by scope precedence.
       expect(
-        res.find((r) => r.catalogId === catalog.id)?.availabilityScopes,
+        res.filter((r) => r.catalogId === catalog.id).map((r) => r.scope),
       ).toEqual(["personal", "org"]);
     });
 
-    test("lists a UI catalog once no matter how many installs back it", async ({
+    test("lists a UI catalog once per accessible install", async ({
       makeUser,
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -582,10 +617,13 @@ describe("McpServerModel", () => {
         userId: user.id,
         organizationId: catalog.organizationId!,
       });
-      expect(res.filter((r) => r.catalogId === catalog.id)).toHaveLength(1);
+      const entries = res.filter((r) => r.catalogId === catalog.id);
+      expect(entries).toHaveLength(3);
+      // Each entry is a distinct install of the same UI resource.
+      expect(new Set(entries.map((e) => e.mcpServerId)).size).toBe(3);
     });
 
-    test("lists a visible catalog with no accessible install as not runnable", async ({
+    test("omits a visible catalog with no accessible install entirely", async ({
       makeUser,
       makeInternalMcpCatalog,
       makeTool,
@@ -607,9 +645,7 @@ describe("McpServerModel", () => {
         userId: user.id,
         organizationId: catalog.organizationId!,
       });
-      const entry = res.find((r) => r.catalogId === catalog.id);
-      expect(entry).toMatchObject({ runnable: false });
-      expect(entry?.availabilityScopes).toEqual([]);
+      expect(res.find((r) => r.catalogId === catalog.id)).toBeUndefined();
     });
 
     test("excludes catalogs whose tools carry no ui:// resource", async ({
@@ -680,6 +716,7 @@ describe("McpServerModel", () => {
     test("hides another user's personal-scope catalog, but its author sees it (no admin bypass)", async ({
       makeUser,
       makeInternalMcpCatalog,
+      makeMcpServer,
       makeTool,
     }) => {
       const owner = await makeUser();
@@ -691,6 +728,14 @@ describe("McpServerModel", () => {
         scope: "personal",
         authorId: owner.id,
       });
+      // The author's own personal install (the only thing that makes it listable
+      // to them); the caller has no accessible install of it.
+      const install = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "personal",
+        ownerId: owner.id,
+      });
+      await McpServerUserModel.assignUserToMcpServer(install.id, owner.id);
       await makeTool({
         catalogId: catalog.id,
         name: "draw",
@@ -712,7 +757,7 @@ describe("McpServerModel", () => {
       expect(asAuthor.some((r) => r.catalogId === catalog.id)).toBe(true);
     });
 
-    test("collapses a catalog's multiple ui:// tools into one entry using the lowest-named resource", async ({
+    test("lists each of a catalog's ui:// tools as its own app, sorted by tool name", async ({
       makeUser,
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -742,8 +787,14 @@ describe("McpServerModel", () => {
         organizationId: catalog.organizationId!,
       });
       const entries = res.filter((r) => r.catalogId === catalog.id);
-      expect(entries).toHaveLength(1);
-      expect(entries[0]?.resourceUri).toBe("ui://multi/first.html");
+      expect(entries).toHaveLength(2);
+      expect(entries.map((e) => e.toolName)).toEqual(["a_first", "b_second"]);
+      expect(entries.map((e) => e.resourceUri)).toEqual([
+        "ui://multi/first.html",
+        "ui://multi/second.html",
+      ]);
+      // Every app of the same server carries the catalog display name, not a slug.
+      expect(entries.every((e) => e.serverName === "Multi")).toBe(true);
     });
 
     test("detects the legacy flat ui/resourceUri metadata key", async ({
@@ -808,6 +859,34 @@ describe("McpServerModel", () => {
         search: "no-such-server-xyz",
       });
       expect(miss.some((r) => r.catalogId === catalog.id)).toBe(false);
+    });
+
+    test("search filters by tool name", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const catalog = await makeInternalMcpCatalog({
+        name: "Plain Server",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "special_widget",
+        meta: uiMeta("ui://ps/app.html"),
+      });
+
+      const hit = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        organizationId: catalog.organizationId!,
+        search: "special_widget",
+      });
+      expect(hit.some((r) => r.catalogId === catalog.id)).toBe(true);
     });
 
     test("excludes a tool whose resourceUri is not a ui:// scheme", async ({

@@ -22,6 +22,13 @@ export interface PanelApp {
   uiResourceUri: string;
   /** Owned-app id, when this entry is an Archestra-authored app. External MCP-UI tool calls have none. */
   appId?: string | null;
+  /**
+   * Concrete install backing an external app rendered via a server-scoped deep
+   * link (apps-page open-in-chat). When set, the chat mounts the resource
+   * against this install (`/api/mcp/server/<id>`) instead of the agent gateway.
+   * Live model-driven MCP-UI tool calls leave it unset (they use the agent).
+   */
+  mcpServerId?: string | null;
   /** Latest owned-app version this entry shows. */
   version?: number | null;
   /** Timestamp (ms) when the app first registered — used to order entries and default to the latest. */

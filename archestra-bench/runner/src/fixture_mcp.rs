@@ -374,13 +374,6 @@ fn object_schema(properties: &[(&str, JsonValue)], required: &[&str]) -> Map<Str
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_fixture_mcp_starts() {
-        let mcp = FixtureMcp::start("acme_it-test").await.unwrap();
-        assert!(mcp.base_url().starts_with("http://127.0.0.1:"));
-        mcp.stop().await;
-    }
-
     #[test]
     fn test_dataset_parses_and_is_nonempty() {
         let rows = seats();

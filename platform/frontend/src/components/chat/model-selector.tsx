@@ -543,17 +543,11 @@ export const ModelSelector = memo(function ModelSelector({
   suppressAutoSelect = false,
   fallbackModelName,
 }: ModelSelectorProps) {
-  const {
-    modelsByProvider,
-    // `isLoading` (isPending && isFetching) is true only during a real in-flight
-    // fetch. A disabled query (enabled:false) is `isPending` but never fetches,
-    // so keying off `isPending` would spin forever.
-    isLoading,
-    isPlaceholderData,
-  } = useLlmModelsByProvider({
-    apiKeyId: apiKeyId ?? undefined,
-    enabled,
-  });
+  const { modelsByProvider, isLoading, isPlaceholderData } =
+    useLlmModelsByProvider({
+      apiKeyId: apiKeyId ?? undefined,
+      enabled,
+    });
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
 

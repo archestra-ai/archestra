@@ -570,6 +570,77 @@ async fn stop_mcps(setups: &[(Lane, String, String, BenchmarkMcp, String)]) {
     }
 }
 
+/// Seed an env's backend-wide defaults — skill defaults on, tool auto-assignment off, the `bench`
+/// team, and every env skill — shared by the shared-backend and isolated-lane setup paths. Returns
+/// the team id. The error is pre-stringified so each caller can route it into its own teardown +
+/// failure-reporting style without re-wrapping (preserving today's raw `e.to_string()` text).
+async fn seed_backend_defaults(client: &EvalClient, env: &EnvConfig) -> Result<String, String> {
+    client
+        .enable_skill_defaults()
+        .await
+        .map_err(|e| e.to_string())?;
+    client
+        .disable_tool_auto_assignment()
+        .await
+        .map_err(|e| e.to_string())?;
+    let team_id = client
+        .create_team("bench")
+        .await
+        .map_err(|e| e.to_string())?;
+    for sref in &env.skills {
+        seed_skill_ref(
+            client,
+            &sref.repo,
+            sref.path.as_deref(),
+            &sref.ref_,
+            sref.cap,
+            "org",
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(team_id)
+}
+
+/// Seed an env's remote MCPs (with lock enforcement) and, when enabled, the harness-owned synthetic
+/// fixture MCP, registering all of them to `agent_ids` — every lane's agent on a shared backend, the
+/// single lane's agent on an isolated one. Returns the started fixture (kept alive and torn down by
+/// the caller) or `None`. On error the fixture this call started is stopped here; the caller still
+/// owns benchmark-MCP and backend teardown. The error is pre-stringified to match today's text.
+async fn seed_env_mcps(
+    client: &EvalClient,
+    env: &EnvConfig,
+    ctx: &RunCtx,
+    agent_ids: &[String],
+) -> Result<Option<FixtureMcp>, String> {
+    if !env.mcps.is_empty() {
+        let registered = seed_mcp_fixtures(client, &env.mcps, "org", Some(agent_ids))
+            .await
+            .map_err(|e| e.to_string())?;
+        mcp_lock::enforce(
+            &ctx.envs_dir,
+            &env.id,
+            &env.mcps,
+            &registered,
+            ctx.update_mcp_lock,
+        )?;
+    }
+
+    if !env.fixture_mcp {
+        return Ok(None);
+    }
+    let fixture = FixtureMcp::start(FIXTURE_MCP_NAME)
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Err(e) =
+        register_remote_mcp(client, fixture.name(), fixture.base_url(), "org", Some(agent_ids)).await
+    {
+        fixture.stop().await;
+        return Err(e.to_string());
+    }
+    Ok(Some(fixture))
+}
+
 /// Boot + seed one shared backend for the env (serial, up front), creating a per-lane agent + benchmark
 /// MCP. Returns the live `Instance` (the caller keeps it alive for the whole run and tears it down at the
 /// end) plus the per-lane setup map. On any setup error the instance is torn down and the whole env is
@@ -608,39 +679,13 @@ async fn setup_shared_env(
         }
     };
 
-    if let Err(e) = client.enable_skill_defaults().await {
-        let _ = instance.shutdown().await;
-        return Err(e.to_string());
-    }
-
-    if let Err(e) = client.disable_tool_auto_assignment().await {
-        let _ = instance.shutdown().await;
-        return Err(e.to_string());
-    }
-
-    let team_id = match client.create_team("bench").await {
+    let team_id = match seed_backend_defaults(&client, env).await {
         Ok(id) => id,
         Err(e) => {
             let _ = instance.shutdown().await;
-            return Err(e.to_string());
+            return Err(e);
         }
     };
-
-    for sref in &env.skills {
-        if let Err(e) = seed_skill_ref(
-            &client,
-            &sref.repo,
-            sref.path.as_deref(),
-            &sref.ref_,
-            sref.cap,
-            "org",
-        )
-        .await
-        {
-            let _ = instance.shutdown().await;
-            return Err(e.to_string());
-        }
-    }
 
     let mut setups: Vec<(Lane, String, String, BenchmarkMcp, String)> = Vec::new();
     for lane in &env_plan.lanes {
@@ -683,61 +728,18 @@ async fn setup_shared_env(
         }
     }
 
-    if !env.mcps.is_empty() {
-        let agent_ids: Vec<String> = setups.iter().map(|(_, id, _, _, _)| id.clone()).collect();
-        let registered = match seed_mcp_fixtures(&client, &env.mcps, "org", Some(&agent_ids)).await
-        {
-            Ok(registered) => registered,
-            Err(e) => {
-                stop_mcps(&setups).await;
-                let _ = instance.shutdown().await;
-                return Err(e.to_string());
-            }
-        };
-        if let Err(e) = mcp_lock::enforce(
-            &ctx.envs_dir,
-            &env.id,
-            &env.mcps,
-            &registered,
-            ctx.update_mcp_lock,
-        ) {
+    let agent_ids: Vec<String> = if env.mcps.is_empty() && !env.fixture_mcp {
+        Vec::new()
+    } else {
+        setups.iter().map(|(_, id, _, _, _)| id.clone()).collect()
+    };
+    let fixture = match seed_env_mcps(&client, env, ctx, &agent_ids).await {
+        Ok(fixture) => fixture,
+        Err(e) => {
             stop_mcps(&setups).await;
             let _ = instance.shutdown().await;
             return Err(e);
         }
-    }
-
-    // One harness-owned synthetic MCP for the whole shared backend: it serves fixed, stateless content
-    // (see fixture_mcp.rs), so a single instance registered to every lane's agent is safe under
-    // concurrency -- mirroring how the public distractor MCPs above are seeded once for all agents.
-    let fixture = if env.fixture_mcp {
-        let agent_ids: Vec<String> = setups.iter().map(|(_, id, _, _, _)| id.clone()).collect();
-        match FixtureMcp::start(FIXTURE_MCP_NAME).await {
-            Ok(fixture) => {
-                if let Err(e) = register_remote_mcp(
-                    &client,
-                    fixture.name(),
-                    fixture.base_url(),
-                    "org",
-                    Some(agent_ids.as_slice()),
-                )
-                .await
-                {
-                    fixture.stop().await;
-                    stop_mcps(&setups).await;
-                    let _ = instance.shutdown().await;
-                    return Err(e.to_string());
-                }
-                Some(fixture)
-            }
-            Err(e) => {
-                stop_mcps(&setups).await;
-                let _ = instance.shutdown().await;
-                return Err(e.to_string());
-            }
-        }
-    } else {
-        None
     };
 
     if let Err(e) = client.warm_user_token().await {
@@ -794,39 +796,13 @@ async fn run_isolated_lane(
         }
     };
 
-    if let Err(e) = client.enable_skill_defaults().await {
-        let _ = instance.shutdown().await;
-        return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
-    }
-
-    if let Err(e) = client.disable_tool_auto_assignment().await {
-        let _ = instance.shutdown().await;
-        return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
-    }
-
-    let team_id = match client.create_team("bench").await {
+    let team_id = match seed_backend_defaults(&client, &env).await {
         Ok(id) => id,
         Err(e) => {
             let _ = instance.shutdown().await;
-            return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
+            return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e);
         }
     };
-
-    for sref in &env.skills {
-        if let Err(e) = seed_skill_ref(
-            &client,
-            &sref.repo,
-            sref.path.as_deref(),
-            &sref.ref_,
-            sref.cap,
-            "org",
-        )
-        .await
-        {
-            let _ = instance.shutdown().await;
-            return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
-        }
-    }
 
     let mcp = match BenchmarkMcp::start(BENCH_MCP_NAME).await {
         Ok(m) => m,
@@ -846,85 +822,14 @@ async fn run_isolated_lane(
         }
     };
 
-    if !env.mcps.is_empty() {
-        let registered = match seed_mcp_fixtures(
-            &client,
-            &env.mcps,
-            "org",
-            Some(std::slice::from_ref(&agent_id)),
-        )
-        .await
-        {
-            Ok(registered) => registered,
-            Err(e) => {
-                mcp.stop().await;
-                let _ = instance.shutdown().await;
-                return infra_results_for_lane(
-                    &env,
-                    &tasks,
-                    &lane,
-                    &ctx,
-                    &progress,
-                    &e.to_string(),
-                );
-            }
-        };
-        if let Err(e) = mcp_lock::enforce(
-            &ctx.envs_dir,
-            &env.id,
-            &env.mcps,
-            &registered,
-            ctx.update_mcp_lock,
-        ) {
+    let fixture_mcp = match seed_env_mcps(&client, &env, &ctx, std::slice::from_ref(&agent_id)).await
+    {
+        Ok(fixture) => fixture,
+        Err(e) => {
             mcp.stop().await;
             let _ = instance.shutdown().await;
             return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e);
         }
-    }
-
-    let fixture_mcp = if env.fixture_mcp {
-        // Isolated-lane fixture: one server per lane, torn down with the lane. Shared-backend envs start
-        // the fixture once in setup_shared_env instead; both are supported.
-        match FixtureMcp::start(FIXTURE_MCP_NAME).await {
-            Ok(fixture) => {
-                if let Err(e) = register_remote_mcp(
-                    &client,
-                    fixture.name(),
-                    fixture.base_url(),
-                    "org",
-                    Some(std::slice::from_ref(&agent_id)),
-                )
-                .await
-                {
-                    fixture.stop().await;
-                    mcp.stop().await;
-                    let _ = instance.shutdown().await;
-                    return infra_results_for_lane(
-                        &env,
-                        &tasks,
-                        &lane,
-                        &ctx,
-                        &progress,
-                        &e.to_string(),
-                    );
-                }
-                Some(fixture)
-            }
-            Err(e) => {
-                mcp.stop().await;
-                let _ = instance.shutdown().await;
-                return infra_results_for_lane(
-                    &env,
-                    &tasks,
-                    &lane,
-                    &ctx,
-                    &progress,
-                    &e.to_string(),
-                );
-            }
-        }
-    } else {
-        None
     };
 
     let results = run_lane(

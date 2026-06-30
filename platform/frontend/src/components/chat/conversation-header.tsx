@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import {
+  CalendarClock,
   Download,
   FileText,
   FolderPlus,
@@ -52,9 +53,11 @@ interface ConversationHeaderProps {
   isShared: boolean;
   /** Whether this chat is eligible to be turned into a project. */
   canCreateProject: boolean;
+  canScheduleTask: boolean;
   onShare: () => void;
   onExportMarkdown: () => void;
   onCreateProject: () => void;
+  onScheduleTask: () => void;
   panel: PanelControls;
 }
 
@@ -66,19 +69,23 @@ export function ConversationHeader({
   canManageShare,
   isShared,
   canCreateProject,
+  canScheduleTask,
   onShare,
   onExportMarkdown,
   onCreateProject,
+  onScheduleTask,
   panel,
 }: ConversationHeaderProps) {
   const actionsProps = {
     canManageShare,
     isShared,
     canCreateProject,
+    canScheduleTask,
     messageCount,
     onShare,
     onExportMarkdown,
     onCreateProject,
+    onScheduleTask,
   };
 
   return (
@@ -253,18 +260,22 @@ function ChatActionItems({
   canManageShare,
   isShared,
   canCreateProject,
+  canScheduleTask,
   messageCount,
   onShare,
   onExportMarkdown,
   onCreateProject,
+  onScheduleTask,
 }: {
   canManageShare: boolean;
   isShared: boolean;
   canCreateProject: boolean;
+  canScheduleTask: boolean;
   messageCount: number;
   onShare: () => void;
   onExportMarkdown: () => void;
   onCreateProject: () => void;
+  onScheduleTask: () => void;
 }) {
   return (
     <>
@@ -287,6 +298,12 @@ function ChatActionItems({
         <DropdownMenuItem onSelect={onCreateProject}>
           <FolderPlus className="h-4 w-4" />
           Create project
+        </DropdownMenuItem>
+      )}
+      {canScheduleTask && (
+        <DropdownMenuItem onSelect={onScheduleTask}>
+          <CalendarClock className="h-4 w-4" />
+          Schedule task
         </DropdownMenuItem>
       )}
       {messageCount > 0 && (

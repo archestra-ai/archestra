@@ -414,7 +414,7 @@ describe("OAuth helper functions", () => {
       expect(result).toEqual({
         configuredScopes: ["READ"],
         discoveredScopes: [],
-        scopesToUse: ["READ"],
+        scopesToUse: ["READ", "offline_access"],
       });
       expect(fetchMock).not.toHaveBeenCalled();
 
@@ -443,7 +443,7 @@ describe("OAuth helper functions", () => {
       expect(result).toEqual({
         configuredScopes: [],
         discoveredScopes: ["jira:read"],
-        scopesToUse: ["jira:read"],
+        scopesToUse: ["jira:read", "offline_access"],
       });
 
       globalThis.fetch = originalFetch;
@@ -470,8 +470,49 @@ describe("OAuth helper functions", () => {
       expect(result).toEqual({
         configuredScopes: [],
         discoveredScopes: ["jira:write"],
-        scopesToUse: ["jira:write"],
+        scopesToUse: ["jira:write", "offline_access"],
       });
+
+      globalThis.fetch = originalFetch;
+    });
+
+    test("requests offline_access so the provider issues a refresh token", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          authorization_endpoint: "https://example.com/authorize",
+          token_endpoint: "https://example.com/token",
+          scopes_supported: ["api://server/access_as_user"],
+        }),
+      }) as Mock;
+
+      const result = await resolveOAuthScopesForAuthorization({
+        oauthConfig: {
+          server_url: "https://example.com",
+          supports_resource_metadata: false,
+          scopes: [],
+        },
+      });
+
+      expect(result.scopesToUse).toContain("offline_access");
+
+      globalThis.fetch = originalFetch;
+    });
+
+    test("does not duplicate offline_access when it is already configured", async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
+      globalThis.fetch = fetchMock;
+
+      const result = await resolveOAuthScopesForAuthorization({
+        oauthConfig: {
+          server_url: "https://example.com",
+          supports_resource_metadata: false,
+          scopes: ["read", "offline_access"],
+        },
+      });
+
+      expect(result.scopesToUse).toEqual(["read", "offline_access"]);
+      expect(fetchMock).not.toHaveBeenCalled();
 
       globalThis.fetch = originalFetch;
     });

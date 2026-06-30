@@ -120,15 +120,14 @@ describe("persistentFilesSection", () => {
   it("labels a project chat's persistent files as shared with the project", () => {
     expect(persistentFilesSection("proj_1")).toEqual({
       title: "Project files",
-      description: "Files shared across the project",
+      description: "Shared with the whole project",
     });
   });
 
   it("labels a personal chat's persistent files as chat-scoped", () => {
     const chatScoped = {
       title: "Chat files",
-      description:
-        "Files made here. They'll move to the project if you convert this chat into one.",
+      description: "Saved to a project if you create one",
     };
     expect(persistentFilesSection(null)).toEqual(chatScoped);
     expect(persistentFilesSection(undefined)).toEqual(chatScoped);

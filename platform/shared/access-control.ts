@@ -1407,6 +1407,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAppTemplates]: { app: ["read"] },
   // Opens an app in chat: reads the app and creates a seeded conversation.
   [RouteId.OpenAppInChat]: { app: ["read"], chat: ["create"] },
+  [RouteId.OpenExternalAppInChat]: { app: ["read"], chat: ["create"] },
   // The trusted host page reports a viewer's render diagnostics; the handler
   // re-checks app-visibility, so app:read is the right coarse gate.
   [RouteId.PostAppRenderDiagnostics]: { app: ["read"] },

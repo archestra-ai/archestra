@@ -330,15 +330,17 @@ class McpServerModel {
   }
 
   /**
-   * UI-providing catalog items the caller may view, listed once each (not once
-   * per install). Drives the external half of the unified Apps listing
-   * (mcp-apps.md FR-26/FR-27). A catalog is included when the caller can see it
+   * UI-providing catalog items the caller may view, expanded to one entry per
+   * accessible install (mcp-apps.md FR-26/FR-27). Drives the external half of
+   * the unified Apps listing. A catalog is included when the caller can see it
    * in the registry — no admin bypass, so another user's personal catalog is
    * never surfaced as an app (FR-31) — and it exposes a tool whose
    * `_meta.ui.resourceUri` (or legacy `ui/resourceUri`) names a `ui://`
-   * resource. `runnable` is true when the caller has at least one accessible
-   * install of the catalog; `availabilityScopes` are those installs' scopes.
-   * The built-in Archestra catalog and server-type `app` backings are excluded.
+   * resource. Each `(UI resource × accessible install)` pair becomes its own
+   * entry carrying the concrete `mcpServerId` + that install's `scope`, so
+   * personal/team/org installs surface as separate cards. Catalogs with no
+   * accessible install yield no entries. The built-in Archestra catalog and
+   * server-type `app` backings are excluded.
    */
   static async findUiCapableForCaller(params: {
     userId: string;
@@ -347,12 +349,12 @@ class McpServerModel {
   }): Promise<
     Array<{
       catalogId: string;
+      mcpServerId: string;
+      scope: ResourceVisibilityScope;
       serverName: string;
       toolName: string;
       toolDescription: string | null;
       resourceUri: string;
-      runnable: boolean;
-      availabilityScopes: ResourceVisibilityScope[];
     }>
   > {
     const { userId, organizationId, search } = params;
@@ -371,25 +373,65 @@ class McpServerModel {
     });
     if (uiApps.length === 0) return [];
 
-    // `runnable`/`availabilityScopes` are server-level: every UI tool of the same
-    // catalog shares its installs, so resolve scopes once per distinct catalog.
-    const scopesByCatalog =
-      await McpServerModel.getAccessibleInstallScopesByCatalog({
+    // Every UI tool of a catalog shares its installs, so resolve installs once
+    // per distinct catalog, then expand each UI resource across them.
+    const installsByCatalog =
+      await McpServerModel.getAccessibleInstallsByCatalog({
         userId,
         catalogIds: Array.from(new Set(uiApps.map((a) => a.catalogId))),
       });
 
-    return uiApps.map((app) => ({
-      catalogId: app.catalogId,
-      serverName: app.serverName,
-      toolName: app.toolName,
-      toolDescription: app.toolDescription,
-      resourceUri: app.resourceUri,
-      runnable: (scopesByCatalog.get(app.catalogId)?.size ?? 0) > 0,
-      availabilityScopes: Array.from(
-        scopesByCatalog.get(app.catalogId) ?? [],
-      ).sort((a, b) => scopeRank(a) - scopeRank(b)),
-    }));
+    return uiApps.flatMap((app) =>
+      (installsByCatalog.get(app.catalogId) ?? []).map((install) => ({
+        catalogId: app.catalogId,
+        mcpServerId: install.mcpServerId,
+        scope: install.scope,
+        serverName: app.serverName,
+        toolName: app.toolName,
+        toolDescription: app.toolDescription,
+        resourceUri: app.resourceUri,
+      })),
+    );
+  }
+
+  /**
+   * Validate that `mcpServerId` is an install the caller can reach and that it
+   * exposes a `ui://` resource matching `resourceUri`, returning the catalog +
+   * label parts (server/tool names) for that resource. Backs external
+   * open-in-chat (a card's `(mcpServerId, resourceUri)` must resolve to a real,
+   * accessible UI resource before a conversation is seeded). Returns null when
+   * the install is not accessible or exposes no such resource.
+   */
+  static async findInstalledUiResourceForCaller(params: {
+    userId: string;
+    mcpServerId: string;
+    resourceUri: string;
+  }): Promise<{
+    catalogId: string;
+    serverName: string;
+    toolName: string;
+    resourceUri: string;
+  } | null> {
+    const accessibleServerIds = await McpServerModel.getAccessibleInstallIds(
+      params.userId,
+    );
+    if (!accessibleServerIds.includes(params.mcpServerId)) return null;
+
+    const server = await McpServerModel.findById(params.mcpServerId);
+    if (!server?.catalogId) return null;
+
+    const uiApps = await McpServerModel.getUiApps({
+      catalogIds: [server.catalogId],
+    });
+    const match = uiApps.find((a) => a.resourceUri === params.resourceUri);
+    if (!match) return null;
+
+    return {
+      catalogId: server.catalogId,
+      serverName: match.serverName,
+      toolName: match.toolName,
+      resourceUri: match.resourceUri,
+    };
   }
 
   /**
@@ -603,12 +645,21 @@ class McpServerModel {
     return catalogIds;
   }
 
-  /** Distinct scopes of the caller's accessible installs, keyed by catalog. */
-  private static async getAccessibleInstallScopesByCatalog(params: {
+  /**
+   * The caller's accessible installs keyed by catalog, each `{ mcpServerId,
+   * scope }`. Installs are ordered by scope precedence (personal → team → org)
+   * then name, giving the Apps listing a stable per-install order.
+   */
+  private static async getAccessibleInstallsByCatalog(params: {
     userId: string;
     catalogIds: string[];
-  }): Promise<Map<string, Set<ResourceVisibilityScope>>> {
-    const map = new Map<string, Set<ResourceVisibilityScope>>();
+  }): Promise<
+    Map<string, Array<{ mcpServerId: string; scope: ResourceVisibilityScope }>>
+  > {
+    const map = new Map<
+      string,
+      Array<{ mcpServerId: string; scope: ResourceVisibilityScope }>
+    >();
     if (params.catalogIds.length === 0) return map;
     const accessibleServerIds = await McpServerModel.getAccessibleInstallIds(
       params.userId,
@@ -617,7 +668,9 @@ class McpServerModel {
     const rows = await db
       .select({
         catalogId: schema.mcpServersTable.catalogId,
+        mcpServerId: schema.mcpServersTable.id,
         scope: schema.mcpServersTable.scope,
+        name: schema.mcpServersTable.name,
       })
       .from(schema.mcpServersTable)
       .where(
@@ -626,10 +679,14 @@ class McpServerModel {
           inArray(schema.mcpServersTable.catalogId, params.catalogIds),
         ),
       );
+    rows.sort(
+      (a, b) =>
+        scopeRank(a.scope) - scopeRank(b.scope) || a.name.localeCompare(b.name),
+    );
     for (const r of rows) {
-      const set = map.get(r.catalogId) ?? new Set<ResourceVisibilityScope>();
-      set.add(r.scope);
-      map.set(r.catalogId, set);
+      const list = map.get(r.catalogId) ?? [];
+      list.push({ mcpServerId: r.mcpServerId, scope: r.scope });
+      map.set(r.catalogId, list);
     }
     return map;
   }

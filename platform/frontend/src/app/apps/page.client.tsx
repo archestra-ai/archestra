@@ -122,7 +122,7 @@ export default function AppsPage() {
                 key={
                   app.source === "owned"
                     ? app.id
-                    : `${app.catalogId}:${app.resourceUri}`
+                    : `${app.mcpServerId}:${app.resourceUri}`
                 }
                 app={app}
                 currentUserId={currentUserId}
@@ -148,14 +148,8 @@ function matchesFilter(
       ? app.scope === "personal" &&
           !!currentUserId &&
           app.authorId === currentUserId
-      : app.availabilityScopes.includes("personal");
-  if (filter === "team")
-    return app.source === "owned"
-      ? app.scope === "team"
-      : app.availabilityScopes.includes("team");
-  if (filter === "org")
-    return app.source === "owned"
-      ? app.scope === "org"
-      : app.availabilityScopes.includes("org");
+      : app.scope === "personal";
+  if (filter === "team") return app.scope === "team";
+  if (filter === "org") return app.scope === "org";
   return true;
 }

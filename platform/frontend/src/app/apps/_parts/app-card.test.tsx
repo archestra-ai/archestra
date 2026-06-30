@@ -1,10 +1,15 @@
 import type { archestraApiTypes } from "@archestra/shared";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppCard } from "./app-card";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
+
+const { pushMock, openExternalMutate } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  openExternalMutate: vi.fn(),
+}));
 
 vi.mock("next/link", () => ({
   default: ({ children, ...props }: { children: ReactNode }) => (
@@ -13,11 +18,12 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: pushMock }),
 }));
 
 vi.mock("@/lib/app.query", () => ({
   useOpenAppInChat: () => ({ mutateAsync: vi.fn() }),
+  useOpenExternalAppInChat: () => ({ mutateAsync: openExternalMutate }),
 }));
 
 vi.mock("@/lib/auth/auth.query", () => ({
@@ -82,35 +88,56 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
 const externalApp: Extract<AppListItem, { source: "external" }> = {
   source: "external",
   catalogId: "cat-1",
+  mcpServerId: "srv-1",
+  scope: "org",
   // "<server> / <tool>" as the title, the tool's description as the subtitle.
   name: "Archestra PM / show_board",
   description: "Shows the project board",
   resourceUri: "ui://pm/board.html",
-  runnable: true,
-  availabilityScopes: ["org"],
   executionModel: "server-scoped",
   cspOrigin: "author-declared",
 };
 
 describe("ExternalAppCard", () => {
-  it("titles the card '<server> / <tool>' (not a slug) with the tool description", () => {
+  beforeEach(() => {
+    pushMock.mockReset();
+    openExternalMutate.mockReset();
+  });
+
+  it("titles the card '<server> / <tool>' (not a slug) with the tool description and scope", () => {
     render(<AppCard app={externalApp} currentUserId="user-1" />);
 
     expect(screen.getByText("Archestra PM / show_board")).toBeInTheDocument();
     expect(screen.getByText("Shows the project board")).toBeInTheDocument();
     expect(screen.queryByText(/archestra_pm/)).not.toBeInTheDocument();
     expect(screen.getByText("MCP server")).toBeInTheDocument();
+    // Per-install card carries an icon-only scope pill (label in aria/tooltip)
+    // to disambiguate sibling installs.
+    expect(screen.getByLabelText("Organization")).toBeInTheDocument();
   });
 
-  it("opens the specific ui:// resource and links 'Manage MCP server'", () => {
+  it("opens the install in chat and navigates to the seeded conversation", async () => {
+    openExternalMutate.mockResolvedValue({ conversationId: "conv-1" });
+    render(<AppCard app={externalApp} currentUserId="user-1" />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Open Archestra PM / show_board in new chat",
+      }),
+    );
+
+    expect(openExternalMutate).toHaveBeenCalledWith({
+      mcpServerId: "srv-1",
+      resourceUri: "ui://pm/board.html",
+    });
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/chat/conv-1"));
+  });
+
+  it("links 'Open in new tab' to the install-pinned run page and 'Manage MCP server'", () => {
     render(<AppCard app={externalApp} currentUserId="user-1" />);
 
     const expectedRun =
-      "/apps/catalog/cat-1/run?resource=ui%3A%2F%2Fpm%2Fboard.html";
-
-    expect(
-      screen.getByRole("link", { name: "Open Archestra PM / show_board" }),
-    ).toHaveAttribute("href", expectedRun);
+      "/apps/catalog/cat-1/run?install=srv-1&resource=ui%3A%2F%2Fpm%2Fboard.html";
 
     const newTab = screen.getByRole("link", { name: /open in new tab/i });
     expect(newTab).toHaveAttribute("href", expectedRun);
@@ -118,25 +145,6 @@ describe("ExternalAppCard", () => {
 
     expect(
       screen.getByRole("link", { name: /manage mcp server/i }),
-    ).toHaveAttribute("href", "/mcp/registry/beta/cat-1");
-  });
-
-  it("makes a non-runnable app non-clickable with an install CTA", () => {
-    render(
-      <AppCard app={{ ...externalApp, runnable: false }} currentUserId="u" />,
-    );
-
-    // No whole-card open link, and no overflow menu (its lone action would just
-    // duplicate the install CTA).
-    expect(
-      screen.queryByRole("link", { name: /^open /i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /more actions/i }),
-    ).not.toBeInTheDocument();
-    // A clear footer CTA points at the server page to install.
-    expect(
-      screen.getByRole("link", { name: /install mcp server to run/i }),
     ).toHaveAttribute("href", "/mcp/registry/beta/cat-1");
   });
 });

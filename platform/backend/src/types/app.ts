@@ -78,22 +78,21 @@ export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
   latestVersion: z.number().int(),
 });
 
-// An external item is one UI-providing tool of an installed MCP server: a single
-// server (catalog) may expose several `ui://` resources, so it can yield several
-// items, each identified by `(catalogId, resourceUri)`. To reuse the owned-app
-// card shape, `name` is `"<server> / <tool>"` (the catalog display name and the
-// short tool name, e.g. "Archestra PM / show_board" — never the slug prefix) and
-// `description` is the tool's own description. `runnable` is false when the
-// caller can see the catalog but has no accessible install (FR-31);
-// `availabilityScopes` are the scopes of the caller's accessible installs, for
-// the card's chips. The concrete installs (the run-page selector) are resolved
-// lazily via `GET /api/apps/external/:catalogId`.
+// An external item is one UI-providing tool of one *install* of an MCP server.
+// A catalog may expose several `ui://` resources and the caller may have several
+// accessible installs (personal/team/org), so the listing yields one item per
+// `(mcpServerId, resourceUri)` — installs are surfaced separately, each carrying
+// the concrete `mcpServerId` to open in chat and its `scope`. Catalogs with no
+// accessible install are omitted entirely (every listed item is runnable). To
+// reuse the owned-app card shape, `name` is `"<server> / <tool>"` (the catalog
+// display name and the short tool name, e.g. "Archestra PM / show_board" — never
+// the slug prefix) and `description` is the tool's own description.
 export const ExternalAppListItemSchema = AppListItemBaseSchema.extend({
   source: z.literal("external"),
   catalogId: z.string(),
+  mcpServerId: z.string(),
+  scope: AppScopeSchema,
   resourceUri: z.string(),
-  runnable: z.boolean(),
-  availabilityScopes: z.array(AppScopeSchema),
 });
 
 export const AppListItemSchema = z.discriminatedUnion("source", [

@@ -287,6 +287,42 @@ describe("deriveAppsFromMessages", () => {
         label: "pm / show_board",
         uiResourceUri: "ui://pm/board",
         appId: null,
+        mcpServerId: null,
+        version: null,
+        createdAt: Date.parse("2026-05-29T18:13:52.000Z"),
+      },
+    ]);
+  });
+
+  it("captures the concrete install from _meta.ui.mcpServerId (server-scoped deep link)", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        metadata: { createdAt: "2026-05-29T18:13:52.000Z" },
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "pm__show_board",
+            toolCallId: "call_1",
+            state: "output-available",
+            output: {
+              _meta: {
+                ui: { resourceUri: "ui://pm/board", mcpServerId: "srv-1" },
+              },
+            },
+          },
+        ],
+      },
+    ] as never;
+
+    expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
+      {
+        toolCallId: "call_1",
+        label: "pm / show_board",
+        uiResourceUri: "ui://pm/board",
+        appId: null,
+        mcpServerId: "srv-1",
         version: null,
         createdAt: Date.parse("2026-05-29T18:13:52.000Z"),
       },
@@ -327,6 +363,7 @@ describe("deriveAppsFromMessages", () => {
         label: "pm / show_board",
         uiResourceUri: "ui://pm/board",
         appId: null,
+        mcpServerId: null,
         version: null,
         createdAt: 0,
       },
@@ -557,6 +594,7 @@ describe("deriveAppsFromMessages", () => {
         label: "pm / show_board",
         uiResourceUri: "ui://pm/board",
         appId: null,
+        mcpServerId: null,
         version: null,
         createdAt: Date.parse("2026-05-29T18:00:00.000Z"),
       },
@@ -565,6 +603,7 @@ describe("deriveAppsFromMessages", () => {
         label: "pm / show_board",
         uiResourceUri: "ui://pm/board",
         appId: null,
+        mcpServerId: null,
         version: null,
         createdAt: Date.parse("2026-05-29T18:05:00.000Z"),
       },

@@ -3,17 +3,22 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import {
   AppWindow,
-  Download,
   ExternalLink,
+  Globe,
   Loader2,
   MoreHorizontal,
   Server,
   Trash2,
+  User,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import {
+  ResourceVisibilityBadge,
+  scopeStyles,
+} from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -24,7 +29,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useOpenAppInChat } from "@/lib/app.query";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useOpenAppInChat, useOpenExternalAppInChat } from "@/lib/app.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils";
 import { AppDeleteDialog } from "./app-delete-dialog";
@@ -73,6 +83,57 @@ function CardOverflowMenu({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Opening is a round-trip; while it's in flight show a loading overlay so the
+// card doesn't look frozen. Visual only (pointer-events-none). Shared by both
+// card kinds since both open into chat the same way.
+function CardOpeningOverlay() {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center rounded-xl bg-background/70 backdrop-blur-[1px]">
+      <span
+        className={cn(
+          buttonVariants({ variant: "outline", size: "sm" }),
+          "shadow-sm",
+        )}
+      >
+        <Loader2 className="animate-spin" />
+        Opening…
+      </span>
+    </div>
+  );
+}
+
+// An external app card lists one concrete install, so it carries a scope chip
+// (Personal/Team/Org) to disambiguate sibling installs of the same server.
+const SCOPE_BADGE: Record<
+  ExternalApp["scope"],
+  { label: string; icon: typeof User }
+> = {
+  personal: { label: "Personal", icon: User },
+  team: { label: "Team", icon: Users },
+  org: { label: "Organization", icon: Globe },
+};
+
+// Icon-only scope pill (label rides in the tooltip + aria-label), matching the
+// projects-card visibility pill so personal/team/org reads identically across
+// surfaces. Stays inline in the metadata row, alongside the "MCP server" badge.
+function ExternalAppScopeBadge({ scope }: { scope: ExternalApp["scope"] }) {
+  const { label, icon: Icon } = SCOPE_BADGE[scope];
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge
+          variant="outline"
+          aria-label={label}
+          className={cn(scopeStyles[scope], "px-1.5")}
+        >
+          <Icon className="h-3 w-3" />
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 // Clicking the card opens the app in a new chat; the overlay button covers the
 // whole card. The backend seeds a conversation with the app already rendered and
 // returns its id, so we navigate straight to it (no model turn).
@@ -113,21 +174,7 @@ function OwnedAppCard({
           aria-label={`Open ${app.name} in new chat`}
         />
 
-        {/* Opening is a round-trip; while it's in flight show a loading overlay so
-            the card doesn't look frozen. It's visual only (pointer-events-none). */}
-        {isOpening ? (
-          <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center rounded-xl bg-background/70 backdrop-blur-[1px]">
-            <span
-              className={cn(
-                buttonVariants({ variant: "outline", size: "sm" }),
-                "shadow-sm",
-              )}
-            >
-              <Loader2 className="animate-spin" />
-              Opening…
-            </span>
-          </div>
-        ) : null}
+        {isOpening ? <CardOpeningOverlay /> : null}
 
         <CardOverflowMenu>
           <DropdownMenuItem asChild>
@@ -183,60 +230,68 @@ function OwnedAppCard({
   );
 }
 
-// External UI-providing apps open the standalone run page for their specific
-// `ui://` resource, or route to the MCP server page when the caller has no
-// accessible install. The title is the chat-style "<server> / <tool>" label
-// (the catalog display name, never the slug prefix).
+// External MCP-server apps open in chat exactly like owned apps: clicking seeds
+// a conversation with the UI rendered against this install and navigates to it.
+// Each card is one concrete install (only accessible installs are listed), so
+// the whole card is always a click target. The title is the chat-style
+// "<server> / <tool>" label (the catalog display name, never the slug prefix).
 function ExternalAppCard({ app }: { app: ExternalApp }) {
-  const runHref = `/apps/catalog/${app.catalogId}/run?resource=${encodeURIComponent(app.resourceUri)}`;
+  const router = useRouter();
+  const openApp = useOpenExternalAppInChat();
+  // Stays true from click through the redirect; see OwnedAppCard for the same
+  // reasoning. Only a failure resets it (the card unmounts on success).
+  const [isOpening, setIsOpening] = useState(false);
+
+  // Run page pinned to this exact install for explicit "open in new tab".
+  const runHref = `/apps/catalog/${app.catalogId}/run?install=${encodeURIComponent(app.mcpServerId)}&resource=${encodeURIComponent(app.resourceUri)}`;
   const serverHref = `/mcp/registry/beta/${app.catalogId}`;
 
+  const handleOpen = async () => {
+    setIsOpening(true);
+    const result = await openApp.mutateAsync({
+      mcpServerId: app.mcpServerId,
+      resourceUri: app.resourceUri,
+    });
+    if (result?.conversationId) {
+      router.push(`/chat/${result.conversationId}`);
+    } else {
+      setIsOpening(false);
+    }
+  };
+
   return (
-    <Card
-      className={cn(
-        "relative flex min-h-[180px] flex-col gap-0 p-4 transition-all",
-        // Only a runnable app is a click target; an uninstalled one offers a
-        // footer CTA instead, so it gets no whole-card link or hover affordance.
-        app.runnable &&
-          "cursor-pointer hover:border-primary hover:bg-muted/40 hover:shadow-md",
-      )}
-    >
-      {app.runnable ? (
-        <Link
-          href={runHref}
-          className="absolute inset-0 rounded-xl"
-          aria-label={`Open ${app.name}`}
-        />
-      ) : null}
+    <Card className="relative flex min-h-[180px] cursor-pointer flex-col gap-0 p-4 transition-all hover:border-primary hover:bg-muted/40 hover:shadow-md">
+      <button
+        type="button"
+        onClick={handleOpen}
+        disabled={isOpening}
+        className="absolute inset-0 rounded-xl"
+        aria-label={`Open ${app.name} in new chat`}
+      />
 
-      {/* An uninstalled app has only the install CTA below, so it gets no menu. */}
-      {app.runnable ? (
-        <CardOverflowMenu>
-          <DropdownMenuItem asChild>
-            <Link href={runHref} target="_blank" rel="noreferrer">
-              <ExternalLink className="h-4 w-4" />
-              Open in new tab
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href={serverHref}>
-              <Server className="h-4 w-4" />
-              Manage MCP server
-            </Link>
-          </DropdownMenuItem>
-        </CardOverflowMenu>
-      ) : null}
+      {isOpening ? <CardOpeningOverlay /> : null}
 
-      <div
-        className={cn(
-          "mb-3 flex flex-wrap items-center gap-1.5",
-          app.runnable && "pr-8",
-        )}
-      >
+      <CardOverflowMenu>
+        <DropdownMenuItem asChild>
+          <Link href={runHref} target="_blank" rel="noreferrer">
+            <ExternalLink className="h-4 w-4" />
+            Open in new tab
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href={serverHref}>
+            <Server className="h-4 w-4" />
+            Manage MCP server
+          </Link>
+        </DropdownMenuItem>
+      </CardOverflowMenu>
+
+      <div className="mb-3 flex flex-wrap items-center gap-1.5 pr-8">
         <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
         <Badge variant="outline" className="gap-1 text-xs">
           MCP server
         </Badge>
+        <ExternalAppScopeBadge scope={app.scope} />
       </div>
 
       <CardTitle className="line-clamp-2 leading-snug break-words">
@@ -247,18 +302,6 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
           {app.description}
         </CardDescription>
       ) : null}
-
-      {app.runnable ? null : (
-        <div className="mt-auto pt-3">
-          <Link
-            href={serverHref}
-            className="relative z-10 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Install MCP server to run
-          </Link>
-        </div>
-      )}
     </Card>
   );
 }

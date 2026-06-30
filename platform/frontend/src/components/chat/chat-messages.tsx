@@ -1538,9 +1538,13 @@ const MessageTool = memo(
   }) {
     const rawOutput = toolResultPart ? toolResultPart.output : part.output;
     const mcpOutput = rawOutput as McpToolOutput | undefined;
-    const uiResourceUri =
-      (mcpOutput?._meta?.ui as { resourceUri?: string } | undefined)
-        ?.resourceUri ?? earlyToolUiData?.uiResourceUri;
+    const uiMeta = mcpOutput?._meta?.ui as
+      | { resourceUri?: string; mcpServerId?: string }
+      | undefined;
+    const uiResourceUri = uiMeta?.resourceUri ?? earlyToolUiData?.uiResourceUri;
+    // A server-scoped deep link (apps-page open-in-chat) stamps the concrete
+    // install so the chat mounts against it instead of the agent gateway.
+    const uiMcpServerId = uiMeta?.mcpServerId;
 
     // When the model dispatched through run_tool, the MCP App belongs to the
     // *target* tool. Unwrap so the app receives the target tool's name (for the
@@ -1802,6 +1806,7 @@ const MessageTool = memo(
               {uiResourceUri ? (
                 <McpAppSection
                   uiResourceUri={uiResourceUri}
+                  mcpServerId={uiMcpServerId}
                   agentId={agentId}
                   toolName={mcpAppToolName}
                   toolCallId={part.toolCallId}
@@ -1908,6 +1913,7 @@ const MessageTool = memo(
             agentId && (
               <McpAppSection
                 uiResourceUri={uiResourceUri}
+                mcpServerId={uiMcpServerId}
                 agentId={agentId}
                 toolName={mcpAppToolName}
                 toolCallId={part.toolCallId}

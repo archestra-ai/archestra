@@ -483,7 +483,7 @@ describe("McpServerModel", () => {
   });
 
   describe("findUiCapableForCaller", () => {
-    test("lists a catalog that exposes a ui:// tool once, with its metadata, resource, and runnable scope", async ({
+    test("lists a catalog's ui:// tool once per accessible install, with its metadata, resource, and install scope", async ({
       makeUser,
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -497,7 +497,10 @@ describe("McpServerModel", () => {
         serverUrl: "https://example.com/mcp",
         scope: "org",
       });
-      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      const install = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "org",
+      });
       await makeTool({
         catalogId: catalog.id,
         name: "draw",
@@ -512,13 +515,13 @@ describe("McpServerModel", () => {
       const entry = res.find((r) => r.catalogId === catalog.id);
       expect(entry).toMatchObject({
         catalogId: catalog.id,
+        mcpServerId: install.id,
+        scope: "org",
         serverName: "Excalidraw",
         toolName: "draw",
         toolDescription: "Draws a picture",
         resourceUri: "ui://excalidraw/app.html",
-        runnable: true,
       });
-      expect(entry?.availabilityScopes).toEqual(["org"]);
     });
 
     test("strips the server prefix from the tool name", async ({
@@ -550,7 +553,7 @@ describe("McpServerModel", () => {
       );
     });
 
-    test("orders availabilityScopes by precedence (personal → team → org), not DB order", async ({
+    test("orders per-install entries by scope precedence (personal → team → org), not DB order", async ({
       makeUser,
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -582,12 +585,13 @@ describe("McpServerModel", () => {
         userId: user.id,
         organizationId: catalog.organizationId!,
       });
+      // One entry per accessible install, ordered by scope precedence.
       expect(
-        res.find((r) => r.catalogId === catalog.id)?.availabilityScopes,
+        res.filter((r) => r.catalogId === catalog.id).map((r) => r.scope),
       ).toEqual(["personal", "org"]);
     });
 
-    test("lists a UI catalog once no matter how many installs back it", async ({
+    test("lists a UI catalog once per accessible install", async ({
       makeUser,
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -613,10 +617,13 @@ describe("McpServerModel", () => {
         userId: user.id,
         organizationId: catalog.organizationId!,
       });
-      expect(res.filter((r) => r.catalogId === catalog.id)).toHaveLength(1);
+      const entries = res.filter((r) => r.catalogId === catalog.id);
+      expect(entries).toHaveLength(3);
+      // Each entry is a distinct install of the same UI resource.
+      expect(new Set(entries.map((e) => e.mcpServerId)).size).toBe(3);
     });
 
-    test("lists a visible catalog with no accessible install as not runnable", async ({
+    test("omits a visible catalog with no accessible install entirely", async ({
       makeUser,
       makeInternalMcpCatalog,
       makeTool,
@@ -638,9 +645,7 @@ describe("McpServerModel", () => {
         userId: user.id,
         organizationId: catalog.organizationId!,
       });
-      const entry = res.find((r) => r.catalogId === catalog.id);
-      expect(entry).toMatchObject({ runnable: false });
-      expect(entry?.availabilityScopes).toEqual([]);
+      expect(res.find((r) => r.catalogId === catalog.id)).toBeUndefined();
     });
 
     test("excludes catalogs whose tools carry no ui:// resource", async ({
@@ -711,6 +716,7 @@ describe("McpServerModel", () => {
     test("hides another user's personal-scope catalog, but its author sees it (no admin bypass)", async ({
       makeUser,
       makeInternalMcpCatalog,
+      makeMcpServer,
       makeTool,
     }) => {
       const owner = await makeUser();
@@ -722,6 +728,14 @@ describe("McpServerModel", () => {
         scope: "personal",
         authorId: owner.id,
       });
+      // The author's own personal install (the only thing that makes it listable
+      // to them); the caller has no accessible install of it.
+      const install = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "personal",
+        ownerId: owner.id,
+      });
+      await McpServerUserModel.assignUserToMcpServer(install.id, owner.id);
       await makeTool({
         catalogId: catalog.id,
         name: "draw",

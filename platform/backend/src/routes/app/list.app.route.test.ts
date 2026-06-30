@@ -118,17 +118,17 @@ describe("GET /api/apps", () => {
     ).toMatchObject({
       source: "external",
       catalogId: catalog.id,
+      scope: "org",
       // "<server> / <tool>" title, tool description as subtitle.
       name: "Get Time / get-time",
       description: "Tells the current time",
       resourceUri: "ui://get-time/app.html",
-      runnable: true,
       executionModel: "server-scoped",
       cspOrigin: "author-declared",
     });
   });
 
-  test("lists a UI catalog once regardless of how many installs back it", async ({
+  test("lists a UI catalog's tool once per accessible install", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTool,
@@ -154,11 +154,12 @@ describe("GET /api/apps", () => {
       url: "/api/apps?limit=100&offset=0",
     });
     const items = res.json().data as Array<Record<string, unknown>>;
-    expect(
-      items.filter(
-        (i) => i.source === "external" && i.catalogId === catalog.id,
-      ),
-    ).toHaveLength(1);
+    const external = items.filter(
+      (i) => i.source === "external" && i.catalogId === catalog.id,
+    );
+    // One card per concrete install, each carrying a distinct mcpServerId.
+    expect(external).toHaveLength(3);
+    expect(new Set(external.map((i) => i.mcpServerId)).size).toBe(3);
   });
 
   test("lists each ui:// tool of one server as its own card (server title, tool subtitle)", async ({

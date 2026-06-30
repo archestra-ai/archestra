@@ -36,23 +36,20 @@ const ResponseFormatSchema = z
   .passthrough();
 
 /**
- * OpenRouter request-level plugin, e.g. `{ id: "response-healing" }`.
- * `.passthrough()` preserves any per-plugin configuration.
+ * OpenRouter is OpenAI-compatible but additionally accepts `response_format`.
+ * It MUST be declared here: the OpenAI base schema is a plain `z.object`, so
+ * inbound Zod validation strips any field it doesn't declare before the request
+ * reaches OpenRouter — which would prevent structured outputs (and the
+ * response-healing plugin that depends on them) from ever working.
  *
- * @see https://openrouter.ai/docs/guides/features/plugins
- */
-const PluginSchema = z.object({ id: z.string() }).passthrough();
-
-/**
- * OpenRouter is OpenAI-compatible but additionally accepts `response_format`
- * and `plugins`. These MUST be declared here: the OpenAI base schema is a plain
- * `z.object`, so inbound Zod validation strips any field it doesn't declare
- * before the request reaches OpenRouter.
+ * The response-healing plugin itself is injected server-side after validation
+ * (see `applyResponseHealing`), so we deliberately do NOT admit a client-supplied
+ * `plugins` field — that would let callers route arbitrary (billable) OpenRouter
+ * plugins through the proxy.
  */
 export const ChatCompletionRequestSchema =
   OpenAIChatCompletionRequestSchema.extend({
     response_format: ResponseFormatSchema.optional(),
-    plugins: z.array(PluginSchema).optional(),
   });
 
 export const ChatCompletionResponseSchema =

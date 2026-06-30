@@ -68,6 +68,8 @@ export function createResponseHealingFetch(
   baseFetch: typeof globalThis.fetch = globalThis.fetch,
 ): typeof globalThis.fetch {
   return (input, init) => {
+    // The Vercel AI SDK always calls fetch as `(url, { body: <json string> })`,
+    // so we only handle string bodies; any other shape is forwarded untouched.
     const body = init?.body;
     if (typeof body !== "string") {
       return baseFetch(input, init);

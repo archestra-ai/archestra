@@ -1,3 +1,6 @@
+import { createOpenAI } from "@ai-sdk/openai";
+import { generateObject } from "ai";
+import { z } from "zod";
 import config from "@/config";
 import { afterEach, describe, expect, test } from "@/test";
 import {
@@ -175,5 +178,52 @@ describe("createResponseHealingFetch", () => {
     });
 
     expect(calls[0].init?.body).toBe(body);
+  });
+
+  // Boundary test: drive the real Vercel AI SDK so we verify the actual
+  // outbound request shape (string body + json_schema response_format), not a
+  // synthetic body. This is the only injection point for direct OpenRouter calls.
+  test("injects the plugin into a real generateObject request", async () => {
+    let sentBody: string | undefined;
+    const baseFetch = ((_input: unknown, init?: RequestInit) => {
+      sentBody = init?.body as string;
+      const completion = {
+        id: "chatcmpl-test",
+        object: "chat.completion",
+        created: 0,
+        model: "openrouter/test",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: JSON.stringify({ answer: "hi" }),
+            },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      };
+      return Promise.resolve(
+        new Response(JSON.stringify(completion), {
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    }) as typeof globalThis.fetch;
+
+    const model = createOpenAI({
+      apiKey: "test-key",
+      fetch: createResponseHealingFetch(baseFetch),
+    }).chat("openrouter/test");
+
+    await generateObject({
+      model,
+      schema: z.object({ answer: z.string() }),
+      prompt: "say hi",
+    });
+
+    const sent = JSON.parse(sentBody as string);
+    expect(sent.response_format?.type).toBe("json_schema");
+    expect(sent.plugins).toEqual([healingPlugin]);
   });
 });

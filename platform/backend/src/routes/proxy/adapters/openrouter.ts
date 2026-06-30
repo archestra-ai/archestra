@@ -266,10 +266,12 @@ export const openrouterAdapterFactory: LLMProvider<
     request: OpenrouterRequest,
   ): Promise<OpenrouterResponse> {
     const openrouterClient = client as OpenAIProvider;
-    const openrouterRequest = {
-      ...applyResponseHealing(request),
+    // Force non-streaming before healing so the decision never depends on the
+    // caller having already cleared `stream`.
+    const openrouterRequest = applyResponseHealing({
+      ...request,
       stream: false,
-    } as unknown as ChatCompletionCreateParamsNonStreaming;
+    }) as unknown as ChatCompletionCreateParamsNonStreaming;
 
     return (await openrouterClient.chat.completions.create(
       openrouterRequest,

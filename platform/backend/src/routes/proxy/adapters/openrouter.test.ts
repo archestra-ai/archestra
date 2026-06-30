@@ -1,6 +1,6 @@
 import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
-import type { Openrouter } from "@/types";
+import { Openrouter } from "@/types";
 import { openrouterAdapterFactory } from "./openrouter";
 
 function createResponse(
@@ -191,5 +191,36 @@ describe("extractInternalCode", () => {
   test("leaves an unrelated 400 unclassified", () => {
     const error = { error: { message: "invalid model specified" } };
     expect(openrouterAdapterFactory.extractInternalCode(error)).toBeUndefined();
+  });
+});
+
+describe("ChatCompletionRequestSchema", () => {
+  test("preserves the nested json_schema body so it reaches OpenRouter", () => {
+    const responseFormat = {
+      type: "json_schema",
+      json_schema: {
+        name: "out",
+        strict: true,
+        schema: { type: "object", properties: { a: { type: "string" } } },
+      },
+    };
+
+    const parsed = Openrouter.API.ChatCompletionRequestSchema.parse({
+      model: "openrouter/free-model",
+      messages: [],
+      response_format: responseFormat,
+    });
+
+    expect(parsed.response_format).toEqual(responseFormat);
+  });
+
+  test("strips a client-supplied plugins field", () => {
+    const parsed = Openrouter.API.ChatCompletionRequestSchema.parse({
+      model: "openrouter/free-model",
+      messages: [],
+      plugins: [{ id: "web" }],
+    });
+
+    expect("plugins" in parsed).toBe(false);
   });
 });

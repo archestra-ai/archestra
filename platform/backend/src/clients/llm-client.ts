@@ -108,7 +108,10 @@ export function createDirectLLMModel({
     headers: providerHeaders(cfg),
     // Direct OpenRouter models bypass the proxy adapter, so heal the request
     // body here; the wrapper no-ops for non-healable requests.
-    fetch: provider === "openrouter" ? createResponseHealingFetch() : undefined,
+    fetch:
+      provider === "openrouter" && config.llm.openrouter.responseHealing
+        ? createResponseHealingFetch()
+        : undefined,
   });
 }
 

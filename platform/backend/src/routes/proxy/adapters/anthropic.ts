@@ -1,5 +1,5 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
-import { ArchestraInternalErrorCode } from "@archestra/shared";
+import type { ArchestraInternalErrorCode } from "@archestra/shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import {
@@ -1246,19 +1246,10 @@ export const anthropicAdapterFactory: LLMProvider<
     } as AnthropicProvider.Messages.MessageCreateParamsStreaming);
   },
 
-  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
-    // Anthropic returns 400 invalid_request_error when the prompt exceeds
-    // the model's context window, with a message like "prompt is too long:
-    // X tokens > Y maximum". There is no structured code — message sniffing
-    // is the only signal.
-    const message: unknown =
-      get(error, "error.error.message") ?? get(error, "error.message");
-    if (
-      typeof message === "string" &&
-      message.toLowerCase().includes("prompt is too long")
-    ) {
-      return ArchestraInternalErrorCode.ContextLengthExceeded;
-    }
+  extractInternalCode(_error: unknown): ArchestraInternalErrorCode | undefined {
+    // Anthropic and its compatible gateways signal context overflow only via the
+    // message with no structured code, so there is no structured signal to
+    // classify overflow against.
     return undefined;
   },
 

@@ -21630,6 +21630,7 @@ export type GetChatConversationsResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -21792,6 +21793,7 @@ export type CreateChatConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -22035,6 +22037,7 @@ export type GetChatConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -22200,6 +22203,7 @@ export type UpdateChatConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -22330,6 +22334,91 @@ export type SetConversationHooksDebugResponses = {
 };
 
 export type SetConversationHooksDebugResponse = SetConversationHooksDebugResponses[keyof SetConversationHooksDebugResponses];
+
+export type MarkChatConversationReadData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/read';
+};
+
+export type MarkChatConversationReadErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type MarkChatConversationReadError = MarkChatConversationReadErrors[keyof MarkChatConversationReadErrors];
+
+export type MarkChatConversationReadResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type MarkChatConversationReadResponse = MarkChatConversationReadResponses[keyof MarkChatConversationReadResponses];
 
 export type GetChatConversationFilesData = {
     body?: never;
@@ -22713,6 +22802,7 @@ export type ForkChatConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -23060,6 +23150,7 @@ export type CompactChatConversationResponses = {
             } | null;
             projectName?: string | null;
             projectIcon?: string | null;
+            unread?: boolean;
             messages: Array<unknown>;
             chatErrors: Array<{
                 id: string;
@@ -23492,6 +23583,7 @@ export type GetSharedConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -23653,6 +23745,7 @@ export type ForkSharedConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -23816,6 +23909,7 @@ export type GenerateChatConversationTitleResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -23978,6 +24072,7 @@ export type UpdateChatMessageResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -57269,6 +57364,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;

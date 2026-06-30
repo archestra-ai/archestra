@@ -10,7 +10,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { jsonSchema, type Tool } from "ai";
 import { beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { TeamTokenModel } from "@/models";
+import { AgentModel, TeamTokenModel } from "@/models";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { describe, expect, test } from "@/test";
 import { agentOwner } from "@/types";
@@ -1364,6 +1364,76 @@ describe("clearChatMcpClient", () => {
 
     // Cleanup
     chatClient.clearChatMcpClient(agent2.id);
+  });
+});
+
+describe("AgentModel.update evicts cached chat MCP clients", () => {
+  // The cached chat MCP connection freezes the agent's advertised tool surface
+  // (toolExposureMode / accessAllTools) at build time, so changing that config
+  // must evict the connection — otherwise switching an agent to "all tools" /
+  // search_and_run_only doesn't expose run_tool/search_tools until the cache is
+  // rebuilt for some unrelated reason.
+  test("evicts when toolExposureMode changes", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    // makeAgent defaults to full mode + accessAllTools=false.
+    const agent = await makeAgent();
+
+    const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
+    const mockClient = { ping: vi.fn(), listTools: vi.fn(), close: vi.fn() };
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
+
+    await AgentModel.update(agent.id, {
+      toolExposureMode: "search_and_run_only",
+    });
+
+    expect(mockClient.close).toHaveBeenCalledTimes(1);
+  });
+
+  test("evicts when accessAllTools is turned on", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const agent = await makeAgent();
+
+    const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
+    const mockClient = { ping: vi.fn(), listTools: vi.fn(), close: vi.fn() };
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
+
+    await AgentModel.update(agent.id, { accessAllTools: true });
+
+    expect(mockClient.close).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not evict when an unrelated field changes", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const agent = await makeAgent();
+
+    const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
+    const mockClient = { ping: vi.fn(), listTools: vi.fn(), close: vi.fn() };
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
+
+    await AgentModel.update(agent.id, { description: "a new description" });
+
+    expect(mockClient.close).not.toHaveBeenCalled();
+
+    // Cleanup
+    chatClient.clearChatMcpClient(agent.id);
   });
 });
 

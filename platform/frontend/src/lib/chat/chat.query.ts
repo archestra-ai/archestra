@@ -11,6 +11,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
@@ -23,6 +24,7 @@ import {
 } from "@/lib/chat/conversation-files";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { handleApiError } from "@/lib/utils";
+import websocketService from "@/lib/websocket/websocket";
 
 const {
   getChatConversations,
@@ -32,6 +34,7 @@ const {
   createChatConversation,
   updateChatConversation,
   setConversationHooksDebug,
+  markChatConversationRead,
   clearChatConversationErrors,
   compactChatConversation,
   deleteChatConversation,
@@ -255,8 +258,84 @@ export function useConversations({
     enabled,
     staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise
     gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    // Backstop for the conversation_updated websocket push (see
+    // useConversationUpdatedCacheSync): if the socket was down when a message
+    // landed, refocusing or reconnecting still refreshes the unread indicators.
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
+}
+
+/**
+ * Mark a conversation read (owner-only on the server), clearing its sidebar
+ * new-messages dot. Optimistically flips `unread` to false across cached
+ * conversation lists so the dot disappears the instant the chat is opened; the
+ * optimistic write also stops {@link useKeepViewedConversationRead} from
+ * re-firing while the request is in flight.
+ */
+export function useMarkConversationRead() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      callApi(() => markChatConversationRead({ path: { id } }), null),
+    onMutate: ({ id }) => {
+      queryClient.setQueriesData<
+        archestraApiTypes.GetChatConversationsResponses["200"]
+      >({ queryKey: ["conversations"] }, (old) =>
+        old
+          ? old.map((c) =>
+              c.id === id && c.unread ? { ...c, unread: false } : c,
+            )
+          : old,
+      );
+    },
+  });
+}
+
+/**
+ * Keep the conversation shown in the URL marked read: whenever it appears
+ * unread in the list cache — on open, or when the conversation_updated push
+ * refreshes the list while you're viewing it — POST a read. Keyed on the live
+ * pathname, not page-held state, so a freshly-created chat whose id lags the
+ * URL never clears a chat you have already navigated away from.
+ */
+export function useKeepViewedConversationRead() {
+  const pathname = usePathname();
+  const { mutate: markRead } = useMarkConversationRead();
+  const { data: conversations } = useConversations({});
+
+  const viewedConversationId = pathname.startsWith("/chat/")
+    ? (pathname.split("/").at(-1) ?? undefined)
+    : undefined;
+  const isViewedUnread = viewedConversationId
+    ? !!conversations?.find((c) => c.id === viewedConversationId)?.unread
+    : false;
+
+  useEffect(() => {
+    if (viewedConversationId && isViewedUnread) {
+      markRead({ id: viewedConversationId });
+    }
+  }, [viewedConversationId, isViewedUnread, markRead]);
+}
+
+/**
+ * Refresh the sidebar's unread indicators when the server pushes a
+ * conversation_updated message (a turn finished in one of the owner's chats).
+ * This is what surfaces the dot on a backgrounded chat whose stream completion
+ * the client never witnessed. Mount once, app-wide.
+ */
+export function useConversationUpdatedCacheSync(enabled = true) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    websocketService.connect();
+    return websocketService.subscribe("conversation_updated", () => {
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    });
+  }, [enabled, queryClient]);
 }
 
 export function useCreateConversation() {

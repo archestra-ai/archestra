@@ -56,7 +56,12 @@ import {
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
-import { EventDedupMap, errorMessage, isSlackDmChannel } from "./utils";
+import {
+  EventDedupMap,
+  errorMessage,
+  formatApprovalToolArgs,
+  isSlackDmChannel,
+} from "./utils";
 
 /**
  * Slack provider using Slack Web API.
@@ -456,11 +461,24 @@ class SlackProvider implements ChatOpsProvider {
             },
           ],
         });
-      } else if (options.footer) {
-        blocks.push({
-          type: "context",
-          elements: [{ type: "plain_text", text: options.footer, emoji: true }],
-        });
+      } else {
+        // An even-more-subtle hint (e.g. the one-time mute tip) sits on its own
+        // context line ABOVE the agent footer, so the footer stays the last
+        // line of the reply.
+        if (options.hint) {
+          blocks.push({
+            type: "context",
+            elements: [{ type: "plain_text", text: options.hint, emoji: true }],
+          });
+        }
+        if (options.footer) {
+          blocks.push({
+            type: "context",
+            elements: [
+              { type: "plain_text", text: options.footer, emoji: true },
+            ],
+          });
+        }
       }
 
       const fallbackText = truncateFallbackText(
@@ -538,6 +556,7 @@ class SlackProvider implements ChatOpsProvider {
       };
     };
 
+    const argsText = formatApprovalToolArgs(options.toolArgs);
     const postArgs = {
       channel: options.channelId,
       text: "",
@@ -549,6 +568,17 @@ class SlackProvider implements ChatOpsProvider {
             text: `\`${options.toolName}\``,
           },
         },
+        ...(argsText
+          ? [
+              {
+                type: "section" as const,
+                text: {
+                  type: "mrkdwn" as const,
+                  text: `\`\`\`\n${argsText}\n\`\`\``,
+                },
+              },
+            ]
+          : []),
         {
           type: "actions" as const,
           elements: [
@@ -1978,9 +2008,10 @@ function truncateFallbackText(text: string): string {
 }
 
 // Slack rejects chat.postMessage with more than 50 expanded blocks. Each
-// sendReply message reserves 1 slot for a context footer (continuation hint
-// or agent footer), so the markdown block's expansion is bounded to 45 — 4
-// under the 49 ceiling for safety against estimator drift.
+// sendReply message reserves slots for context footers (a continuation hint, or
+// the agent footer plus an optional one-time mute hint — at most 2), so the
+// markdown block's expansion is bounded to 45, keeping the worst case (45 + 2)
+// safely under the 50 ceiling against estimator drift.
 const MAX_ESTIMATED_RENDERED_BLOCKS = 45;
 
 /**

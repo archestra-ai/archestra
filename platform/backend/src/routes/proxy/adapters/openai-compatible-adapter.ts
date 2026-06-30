@@ -51,8 +51,8 @@ interface OpenAiCompatibleAdapterOptions {
   ) => OpenAIProvider;
   /**
    * Override context-overflow detection. The default matches OpenAI's structured
-   * `error.code === "context_length_exceeded"`; providers that only return a plain
-   * message (vLLM, Ollama) supply their own substring check.
+   * `error.code === "context_length_exceeded"`; providers that signal overflow
+   * another way supply their own.
    */
   extractInternalCode?: (
     error: unknown,

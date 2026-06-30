@@ -5,8 +5,6 @@
  * configured for vLLM via createOpenAiCompatibleAdapterFactory.
  * See: https://docs.vllm.ai/en/latest/features/openai_api.html
  */
-import { ArchestraInternalErrorCode } from "@archestra/shared";
-import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import config from "@/config";
 import { metrics } from "@/observability";
@@ -37,16 +35,5 @@ export const vllmAdapterFactory = createOpenAiCompatibleAdapterFactory({
       fetch: customFetch,
       defaultHeaders: options.defaultHeaders,
     });
-  },
-  // vLLM returns a plain message (no structured error.code) on context overflow.
-  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
-    const message: unknown = get(error, "error.message");
-    if (
-      typeof message === "string" &&
-      message.toLowerCase().includes("maximum context length")
-    ) {
-      return ArchestraInternalErrorCode.ContextLengthExceeded;
-    }
-    return undefined;
   },
 });

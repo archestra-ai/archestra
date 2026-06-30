@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ArchestraInternalErrorCode } from "@archestra/shared";
+import type { ArchestraInternalErrorCode } from "@archestra/shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
@@ -928,18 +928,10 @@ function extractErrorMessage(error: unknown): string {
 }
 
 function extractInternalCode(
-  error: unknown,
+  _error: unknown,
 ): ArchestraInternalErrorCode | undefined {
-  // Cohere 400 bodies are `{ message: string }` and the context-overflow
-  // messages start with "too many tokens: total number of tokens in the
-  // prompt cannot exceed N". No structured code in the public error schema.
-  const message: unknown = get(error, "error.message") ?? get(error, "message");
-  if (
-    typeof message === "string" &&
-    message.toLowerCase().includes("too many tokens")
-  ) {
-    return ArchestraInternalErrorCode.ContextLengthExceeded;
-  }
+  // Cohere 400 bodies are `{ message: string }` with no structured code, so there
+  // is no structured signal to classify overflow against.
   return undefined;
 }
 

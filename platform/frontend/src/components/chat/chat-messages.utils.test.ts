@@ -11,6 +11,7 @@ import {
   getAppRenderVerb,
   hasTextPart,
   identifyCompactToolGroups,
+  isBlankAssistantTextPart,
   isSupersededRender,
   mcpToolLabel,
 } from "./chat-messages.utils";
@@ -877,5 +878,45 @@ describe("getAppRenderVerb", () => {
 
   it("returns null for non-app tools", () => {
     expect(getAppRenderVerb("google__search")).toBeNull();
+  });
+});
+
+describe("isBlankAssistantTextPart", () => {
+  const textPart = (text: string): UIMessage["parts"][number] => ({
+    type: "text",
+    text,
+  });
+
+  it.each([
+    " ",
+    "   ",
+    "\n\n",
+    "\t",
+    "\n  \t ",
+  ])("suppresses whitespace-only assistant text %j", (text) => {
+    expect(isBlankAssistantTextPart(textPart(text), "assistant")).toBe(true);
+  });
+
+  it("suppresses an empty-string assistant text part", () => {
+    expect(isBlankAssistantTextPart(textPart(""), "assistant")).toBe(true);
+  });
+
+  it("keeps assistant text that has real content", () => {
+    expect(isBlankAssistantTextPart(textPart("  hello  "), "assistant")).toBe(
+      false,
+    );
+  });
+
+  it("never suppresses non-assistant (user) text, even when blank", () => {
+    expect(isBlankAssistantTextPart(textPart("\n\n"), "user")).toBe(false);
+  });
+
+  it("ignores non-text parts", () => {
+    expect(
+      isBlankAssistantTextPart(
+        { type: "step-start" } as UIMessage["parts"][number],
+        "assistant",
+      ),
+    ).toBe(false);
   });
 });

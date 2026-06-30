@@ -1,3 +1,19 @@
+import { vi } from "vitest";
+
+// Control the one-time mute-hint claim per test (the real one hits the
+// distributed cache, which isn't started in this suite). The `mock`-prefixed
+// name is referenced lazily inside the factory so it survives vi.mock hoisting.
+const mockClaimThreadMuteHint = vi.fn();
+vi.mock("./channel-activation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./channel-activation")>();
+  return {
+    ...actual,
+    claimThreadMuteHint: (
+      ...args: Parameters<typeof actual.claimThreadMuteHint>
+    ) => mockClaimThreadMuteHint(...args),
+  };
+});
+
 import { eq } from "drizzle-orm";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
@@ -8,7 +24,7 @@ import {
   ChatOpsConfigModel,
   ChatOpsThreadAgentOverrideModel,
 } from "@/models";
-import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type {
   ChatOpsApprovalDecision,
   ChatOpsProvider,
@@ -24,6 +40,7 @@ import {
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_NO_REPLY_SENTINEL,
+  THREAD_MUTE_HINT,
 } from "./constants";
 
 describe("matchesAgentName", () => {
@@ -382,6 +399,157 @@ describe("ChatOpsManager security validation", () => {
         text: expect.stringContaining("/settings"),
       }),
     );
+  });
+
+  // ===========================================================================
+  // One-time "you can mute me" hint: rides the bot's first reply in a channel
+  // thread (where sticky auto-reply applies), and nowhere else.
+  // ===========================================================================
+
+  // A channel whose sender is a known, authorized team member, so replies
+  // reach the agent-response path (where the hint lives) rather than an
+  // access-denied/onboarding branch.
+  async function bindAuthorizedChannel(ctx: {
+    makeOrganization: (...args: never[]) => Promise<{ id: string }>;
+    makeUser: (opts: { email: string }) => Promise<{ id: string }>;
+    makeTeam: (orgId: string, userId: string) => Promise<{ id: string }>;
+    makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
+    makeInternalAgent: (opts: {
+      organizationId: string;
+      teams: string[];
+    }) => Promise<{ id: string }>;
+  }): Promise<{ senderEmail: string }> {
+    const senderEmail = "member@example.com";
+    const org = await ctx.makeOrganization();
+    const user = await ctx.makeUser({ email: senderEmail });
+    const team = await ctx.makeTeam(org.id, user.id);
+    await ctx.makeTeamMember(team.id, user.id);
+    const agent = await ctx.makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+    return { senderEmail };
+  }
+
+  async function processChannelReply(params: {
+    message: IncomingChatMessage;
+    senderEmail: string;
+  }): Promise<ReturnType<typeof vi.fn>> {
+    mockA2AExecutor();
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const provider = createMockProvider({
+      sendReply: sendReplySpy,
+      getUserEmail: async () => params.senderEmail,
+    });
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = provider;
+    await manager.processMessage({ message: params.message, provider });
+    return sendReplySpy;
+  }
+
+  test("rides the bot's first reply in a channel thread", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const { senderEmail } = await bindAuthorizedChannel({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    });
+    mockClaimThreadMuteHint.mockReset().mockResolvedValue(true);
+
+    const sendReplySpy = await processChannelReply({
+      senderEmail,
+      message: createMockMessage({
+        threadId: "thread-1",
+        senderEmail,
+        metadata: { conversationType: "channel", botMentioned: true },
+      }),
+    });
+
+    expect(mockClaimThreadMuteHint).toHaveBeenCalledWith({
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      threadId: "thread-1",
+    });
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({ hint: THREAD_MUTE_HINT }),
+    );
+  });
+
+  test("omits the hint on later replies once the thread's slot is claimed", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const { senderEmail } = await bindAuthorizedChannel({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    });
+    // Slot already taken → claim returns false.
+    mockClaimThreadMuteHint.mockReset().mockResolvedValue(false);
+
+    const sendReplySpy = await processChannelReply({
+      senderEmail,
+      message: createMockMessage({
+        threadId: "thread-1",
+        senderEmail,
+        metadata: { conversationType: "channel", botMentioned: false },
+      }),
+    });
+
+    expect(mockClaimThreadMuteHint).toHaveBeenCalled();
+    expect(sendReplySpy.mock.calls[0][0].hint).toBeUndefined();
+  });
+
+  test("never hints outside a channel thread (DMs/group chats have no sticky auto-reply)", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const { senderEmail } = await bindAuthorizedChannel({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    });
+    mockClaimThreadMuteHint.mockReset().mockResolvedValue(true);
+
+    const sendReplySpy = await processChannelReply({
+      senderEmail,
+      message: createMockMessage({
+        threadId: "thread-1",
+        senderEmail,
+        metadata: { conversationType: "groupChat", botMentioned: true },
+      }),
+    });
+
+    // Gated out before the cache is even consulted.
+    expect(mockClaimThreadMuteHint).not.toHaveBeenCalled();
+    expect(sendReplySpy.mock.calls[0][0].hint).toBeUndefined();
   });
 
   test("suppresses the reply when the agent answers with the no-reply sentinel", async ({

@@ -1871,6 +1871,19 @@ class AgentModel {
           clearChatMcpClient(parentAgentId);
         }
       }
+
+      // The advertised tool surface depends on toolExposureMode (full vs the
+      // search_tools/run_tool dispatch surface) and accessAllTools. A cached
+      // chat MCP client freezes that surface at connection-build time, so a
+      // change here must evict the client — otherwise switching an agent to
+      // "all tools" / search_and_run_only doesn't expose run_tool/search_tools
+      // until the connection is rebuilt for some unrelated reason.
+      if (
+        updatedAgent.toolExposureMode !== existingAgent.toolExposureMode ||
+        updatedAgent.accessAllTools !== existingAgent.accessAllTools
+      ) {
+        clearChatMcpClient(id);
+      }
     } else {
       updatedAgent = existingAgent;
     }
@@ -2117,6 +2130,13 @@ class AgentModel {
         agentType: "agent",
         scope: "personal",
         description: "Your personal chat assistant",
+        // The personal assistant should be able to reach every tool the user
+        // can access (e.g. MCP servers they install) without per-tool
+        // assignment. `accessAllTools` grants that dynamic access and, via the
+        // invariant in AgentModel.create, coerces toolExposureMode to
+        // "search_and_run_only" so the search_tools/run_tool dispatch surface
+        // is exposed.
+        accessAllTools: true,
       },
       userId,
     );

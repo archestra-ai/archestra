@@ -79,6 +79,21 @@ export function hasTextPart(parts: UIMessage["parts"] | undefined): boolean {
   return parts?.some((p) => p.type === "text") ?? false;
 }
 
+/**
+ * Assistant turns routinely contain throwaway whitespace-only `text` parts that
+ * the model streams right before a tool call (e.g. `" "`, `"   "`, `"\n\n"`).
+ * They carry no content and must not render as empty message bubbles. The check
+ * trims before testing for emptiness, matching the `text.trim().length > 0`
+ * guards used elsewhere in the message stream; a bare `!part.text` only catches
+ * the strictly-empty string and lets whitespace through.
+ */
+export function isBlankAssistantTextPart(
+  part: UIMessage["parts"][number],
+  role: UIMessage["role"],
+): boolean {
+  return role === "assistant" && part.type === "text" && !part.text.trim();
+}
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

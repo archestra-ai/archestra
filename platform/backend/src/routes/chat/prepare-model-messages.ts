@@ -50,7 +50,16 @@ export async function buildModelMessages(params: {
    * Defaults to true (genuine Anthropic / other providers unaffected).
    */
   anthropicNativeEndpoint?: boolean;
-}): Promise<ModelMessage[]> {
+}): Promise<{
+  modelMessages: ModelMessage[];
+  /**
+   * Provider-prepared, parts-bearing messages (post `prepareMessagesForProvider`,
+   * pre-conversion) — the closest representation of what is sent, with inlineable
+   * text documents already rewritten to text. Used by the caller to build the
+   * context-window breakdown; the converted `modelMessages` carry no `.parts`.
+   */
+  preparedMessages: ChatMessage[];
+}> {
   const {
     provider,
     selectedModel,
@@ -109,19 +118,25 @@ export async function buildModelMessages(params: {
     agentId: compaction.agentId ?? undefined,
   });
 
-  return applyPromptCacheBreakpoints({
-    provider,
-    model: selectedModel,
-    anthropicNativeEndpoint,
-    messages: await buildModelMessagesForProvider({
+  const { modelMessages, preparedMessages } =
+    await buildModelMessagesForProvider({
       messages: compactionResult.messages,
       provider,
       conversationId,
       ingestibleMimeTypes: getModelReadableMimeTypes(inputModalities),
       anthropicNativeEndpoint,
       sandboxAvailable,
+    });
+
+  return {
+    modelMessages: applyPromptCacheBreakpoints({
+      provider,
+      model: selectedModel,
+      anthropicNativeEndpoint,
+      messages: modelMessages,
     }),
-  });
+    preparedMessages,
+  };
 }
 
 export const __test = {
@@ -183,9 +198,12 @@ async function buildModelMessagesForProvider(params: {
   // placeholders survive while other providers never see an empty turn. An
   // empty assistant message has no tool-call block, so removing it cannot
   // orphan a tool result.
-  return modelMessages.filter(
-    (message) => !isEmptyAssistantModelMessage(message),
-  );
+  return {
+    modelMessages: modelMessages.filter(
+      (message) => !isEmptyAssistantModelMessage(message),
+    ),
+    preparedMessages: providerPreparedMessages,
+  };
 }
 
 function isEmptyAssistantModelMessage(message: {

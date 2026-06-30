@@ -97,6 +97,7 @@ import {
   useConversationFiles,
   useCreateConversation,
   useHasPlaywrightMcpTools,
+  useKeepViewedConversationRead,
   useMemberDefaultModel,
   useStopChatStream,
   useUpdateConversation,
@@ -494,6 +495,10 @@ export function ChatPageContent({
 
   // Conversations whose title should play the typing animation (shared via chat context)
   const { animatingTitleIds: headerAnimatingTitles } = useGlobalChat();
+
+  // Viewing a conversation marks it read (clears the sidebar new-messages dot).
+  // Reads the viewed id from the URL internally.
+  useKeepViewedConversationRead();
 
   // Restore the right-side panel (open state + selected tab) when a conversation
   // loads. Both are remembered per-conversation in localStorage.

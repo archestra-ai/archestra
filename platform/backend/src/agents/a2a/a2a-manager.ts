@@ -662,6 +662,7 @@ function extractApprovalRequestsFromUiMessage(
     state: string;
     type: string;
     toolCallId: string;
+    input?: unknown;
   }[];
   for (const part of parts) {
     if (
@@ -673,6 +674,15 @@ function extractApprovalRequestsFromUiMessage(
         approvalId: part.approval.id,
         toolCallId: part.toolCallId,
         toolName: part.type.substring("tool-".length),
+        // The tool call's arguments, carried so approval prompts can describe
+        // what the tool will do (and unwrap a `run_tool` dispatch to its real
+        // target). Only an object input is meaningful here.
+        toolInput:
+          typeof part.input === "object" &&
+          part.input !== null &&
+          !Array.isArray(part.input)
+            ? (part.input as Record<string, unknown>)
+            : undefined,
         approved: Boolean(part.approval?.approved),
         resolved: part.state === "approval-responded",
       });

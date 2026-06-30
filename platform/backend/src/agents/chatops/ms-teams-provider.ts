@@ -50,7 +50,7 @@ import {
   CHATOPS_TEAM_CACHE,
   CHATOPS_THREAD_HISTORY,
 } from "./constants";
-import { errorMessage } from "./utils";
+import { errorMessage, formatApprovalToolArgs } from "./utils";
 
 /**
  * MS Teams provider using Bot Framework SDK.
@@ -405,8 +405,16 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
 
     let replyText = options.text;
+    // An even-more-subtle hint (e.g. the one-time mute tip) on its own italic
+    // line ABOVE the footer, so the agent footer stays the last line. Italics
+    // keep it visually quieter than the footer.
+    if (options.hint) {
+      replyText += `\n\n---\n\n_${options.hint}_`;
+    }
     if (options.footer) {
-      replyText += `\n\n---\n\n${options.footer}`;
+      replyText += options.hint
+        ? `\n\n${options.footer}`
+        : `\n\n---\n\n${options.footer}`;
     }
 
     // If a placeholder "Thinking..." message was sent (Teams channels),
@@ -561,6 +569,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       },
     });
 
+    const argsText = formatApprovalToolArgs(options.toolArgs);
     const approvalCard = {
       type: "AdaptiveCard",
       $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
@@ -571,6 +580,17 @@ class MSTeamsProvider implements ChatOpsProvider {
           text: `\`${options.toolName}\``,
           wrap: true,
         },
+        ...(argsText
+          ? [
+              {
+                type: "TextBlock",
+                text: argsText,
+                wrap: true,
+                fontType: "Monospace",
+                spacing: "Small",
+              },
+            ]
+          : []),
         {
           type: "ActionSet",
           spacing: "Small",

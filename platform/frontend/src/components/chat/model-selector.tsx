@@ -543,14 +543,11 @@ export const ModelSelector = memo(function ModelSelector({
   suppressAutoSelect = false,
   fallbackModelName,
 }: ModelSelectorProps) {
-  const {
-    modelsByProvider,
-    isPending: isLoading,
-    isPlaceholderData,
-  } = useLlmModelsByProvider({
-    apiKeyId: apiKeyId ?? undefined,
-    enabled,
-  });
+  const { modelsByProvider, isLoading, isPlaceholderData } =
+    useLlmModelsByProvider({
+      apiKeyId: apiKeyId ?? undefined,
+      enabled,
+    });
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
 

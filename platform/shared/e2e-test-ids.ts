@@ -118,6 +118,9 @@ export const E2eTestId = {
   // Chat Model Selector
   ChatModelSelectorTrigger: "chat-model-selector-trigger",
   ChatPromptTextarea: "chat-prompt-textarea",
+  // Chat sidebar item status indicators
+  ChatItemGeneratingIndicator: "chat-item-generating-indicator",
+  ChatItemUnreadIndicator: "chat-item-unread-indicator",
   QuickstartAddApiKeyButton: "quickstart-add-api-key-button",
   ApiKeysLoadErrorRetry: "api-keys-load-error-retry",
   // MCP Logs
@@ -152,6 +155,18 @@ export function getChatApiKeySelectorProviderGroupTestId(
   provider: string,
 ): string {
   return `chat-api-key-selector-provider-${provider}`;
+}
+
+export function getChatItemGeneratingIndicatorTestId(
+  conversationId: string,
+): string {
+  return `${E2eTestId.ChatItemGeneratingIndicator}-${conversationId}`;
+}
+
+export function getChatItemUnreadIndicatorTestId(
+  conversationId: string,
+): string {
+  return `${E2eTestId.ChatItemUnreadIndicator}-${conversationId}`;
 }
 
 export function getChatApiKeySelectorOptionTestId(keyId: string): string {

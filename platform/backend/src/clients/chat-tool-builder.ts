@@ -27,6 +27,7 @@ import {
   archestraMcpBranding,
   executeArchestraTool,
 } from "@/archestra-mcp-server";
+import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import type {
@@ -1179,24 +1180,7 @@ function resolveApprovalPolicyTarget(
   toolName: string,
   args: unknown,
 ): { toolName: string; toolInput: Record<string, unknown> } {
-  const toolInput = isRecord(args) ? args : {};
-  const shortName = archestraMcpBranding.getToolShortName(toolName);
-  if (shortName !== TOOL_RUN_TOOL_SHORT_NAME) {
-    return { toolName, toolInput };
-  }
-
-  const targetToolName = toolInput.tool_name;
-  if (typeof targetToolName !== "string" || targetToolName.length === 0) {
-    return { toolName, toolInput };
-  }
-
-  const targetToolInput = isRecord(toolInput.tool_args)
-    ? toolInput.tool_args
-    : {};
-  return {
-    toolName: targetToolName,
-    toolInput: targetToolInput,
-  };
+  return resolveRunToolTarget(toolName, args);
 }
 
 function reportToolMetrics(params: {

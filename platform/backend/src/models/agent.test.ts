@@ -2430,6 +2430,11 @@ describe("AgentModel", () => {
       expect(agent?.scope).toBe("personal");
       expect(agent?.agentType).toBe("agent");
       expect(agent?.authorId).toBe(user.id);
+      // The personal assistant must reach every tool the user can access, which
+      // only works through the search/run dispatch surface — so it is seeded
+      // with dynamic tool access and the coerced search_and_run_only mode.
+      expect(agent?.accessAllTools).toBe(true);
+      expect(agent?.toolExposureMode).toBe("search_and_run_only");
     });
 
     test("is idempotent - second call does not create duplicate", async ({

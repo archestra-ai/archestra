@@ -275,6 +275,25 @@ function stripNullBytes<T>(value: T): T {
   return value;
 }
 
+/**
+ * Join predicate linking an interaction's `session_id` (VARCHAR) to a
+ * conversation's `id` (UUID) — used for Archestra Chat sessions whose
+ * session_id IS the conversation id.
+ *
+ * The only reason a cast is needed at all is type compatibility: Postgres has no
+ * `varchar = uuid` operator. We cast the TRUSTED side (`conversations.id::text`,
+ * which can never fail) rather than the untrusted `session_id::uuid` — a non-uuid
+ * session_id (e.g. some a2a / external-agent ids) would otherwise throw
+ * "invalid input syntax for type uuid" and 500 the whole query (see utils/uuid.ts).
+ * Comparing as text, a non-conversation session_id simply matches no row, and the
+ * equality on the bare `session_id` column can use interactions_session_*_idx.
+ * Conversation ids are generated as canonical lowercase uuids, so they match the
+ * canonical lowercase form `id::text` produces.
+ */
+function sessionIdMatchesConversation(): SQL {
+  return sql`${schema.interactionsTable.sessionId} = ${schema.conversationsTable.id}::text`;
+}
+
 class InteractionModel {
   static async existsByExecutionId(executionId: string): Promise<boolean> {
     const [result] = await db
@@ -1059,10 +1078,7 @@ class InteractionModel {
       const byConversationTitle = db
         .select({ id: schema.interactionsTable.id })
         .from(schema.interactionsTable)
-        .innerJoin(
-          schema.conversationsTable,
-          sql`CASE WHEN LENGTH(${schema.interactionsTable.sessionId}) = 36 THEN ${schema.interactionsTable.sessionId}::uuid END = ${schema.conversationsTable.id}`,
-        )
+        .innerJoin(schema.conversationsTable, sessionIdMatchesConversation())
         .where(sql`${schema.conversationsTable.title} ILIKE ${searchPattern}`);
 
       conditions.push(
@@ -1134,13 +1150,7 @@ class InteractionModel {
           schema.usersTable,
           eq(schema.interactionsTable.userId, schema.usersTable.id),
         )
-        .leftJoin(
-          schema.conversationsTable,
-          // Only join when session_id is a valid UUID format (conversation IDs are UUIDs)
-          // Non-UUID session IDs (like "a2a-...") won't match any conversation
-          // Use CASE to safely handle the cast - only cast when length is 36 (UUID format)
-          sql`CASE WHEN LENGTH(${schema.interactionsTable.sessionId}) = 36 THEN ${schema.interactionsTable.sessionId}::uuid END = ${schema.conversationsTable.id}`,
-        )
+        .leftJoin(schema.conversationsTable, sessionIdMatchesConversation())
         .where(whereClause)
         .groupBy(
           sessionGroupExpr,
@@ -1153,11 +1163,7 @@ class InteractionModel {
       db
         .select({ total: sql<number>`COUNT(DISTINCT ${sessionGroupExpr})` })
         .from(schema.interactionsTable)
-        .leftJoin(
-          schema.conversationsTable,
-          // Only join when session_id is a valid UUID format (conversation IDs are UUIDs)
-          sql`CASE WHEN LENGTH(${schema.interactionsTable.sessionId}) = 36 THEN ${schema.interactionsTable.sessionId}::uuid END = ${schema.conversationsTable.id}`,
-        )
+        .leftJoin(schema.conversationsTable, sessionIdMatchesConversation())
         .where(whereClause),
     ]);
 

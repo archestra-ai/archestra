@@ -837,6 +837,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetConversationHooksDebug]: {
     chat: ["update"],
   },
+  // Marking your own conversation read clears its sidebar new-messages dot —
+  // a chat-state edit, same gate as the other conversation mutations.
+  [RouteId.MarkChatConversationRead]: {
+    chat: ["update"],
+  },
   [RouteId.DeleteChatConversation]: {
     chat: ["delete"],
   },

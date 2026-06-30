@@ -408,6 +408,13 @@ class MSTeamsProvider implements ChatOpsProvider {
     if (options.footer) {
       replyText += `\n\n---\n\n${options.footer}`;
     }
+    // An even-more-subtle hint (e.g. the one-time mute tip) on its own italic
+    // line below the footer. Italics keep it visually quieter than the footer.
+    if (options.hint) {
+      replyText += options.footer
+        ? `\n\n_${options.hint}_`
+        : `\n\n---\n\n_${options.hint}_`;
+    }
 
     // If a placeholder "Thinking..." message was sent (Teams channels),
     // update it with the actual response instead of sending a new message.

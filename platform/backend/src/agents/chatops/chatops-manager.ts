@@ -43,12 +43,14 @@ import {
   ensureProvisionedUser,
   isSsoConfigured,
 } from "./auto-provision";
+import { claimThreadMuteHint } from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_CHANNEL_DISCOVERY,
   CHATOPS_MESSAGE_RETENTION,
   CHATOPS_NO_REPLY_SENTINEL,
   SLACK_DEFAULT_CONNECTION_MODE,
+  THREAD_MUTE_HINT,
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
@@ -1570,6 +1572,11 @@ export class ChatOpsManager {
         originalMessage: message,
         text: agentResponse,
         footer: `🤖 ${agent.name}`,
+        // Teach the off switch once per channel thread: sticky auto-reply only
+        // applies in channels, so the hint rides the bot's first reply there.
+        ...((await this.shouldHintThreadMute(provider, message)) && {
+          hint: THREAD_MUTE_HINT,
+        }),
         conversationReference: message.metadata?.conversationReference,
       });
     } else if (
@@ -1608,6 +1615,27 @@ export class ChatOpsManager {
       agentResponse,
       interactionId: resultMessage.messageId,
     };
+  }
+
+  /**
+   * Whether this reply should carry the one-time "you can mute me" hint.
+   *
+   * True only on the bot's FIRST reply in a channel thread — sticky auto-reply
+   * (and thus muting) exists only in channels, and claimThreadMuteHint ensures
+   * the hint rides a single reply per thread rather than every one.
+   */
+  private async shouldHintThreadMute(
+    provider: ChatOpsProvider,
+    message: IncomingChatMessage,
+  ): Promise<boolean> {
+    if (message.metadata?.conversationType !== "channel" || !message.threadId) {
+      return false;
+    }
+    return await claimThreadMuteHint({
+      provider: provider.providerId,
+      channelId: message.channelId,
+      threadId: message.threadId,
+    });
   }
 
   private async replyWithApprovalForm(params: {

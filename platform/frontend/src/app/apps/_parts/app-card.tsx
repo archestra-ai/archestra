@@ -1,15 +1,11 @@
 "use client";
 
-import type {
-  archestraApiTypes,
-  ResourceVisibilityScope,
-} from "@archestra/shared";
-import { Globe, Loader2, MessageSquare, User, Users } from "lucide-react";
+import type { archestraApiTypes } from "@archestra/shared";
+import { ArrowUpRight, Loader2, Server } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { useOpenAppInChat } from "@/lib/app.query";
@@ -18,19 +14,6 @@ import { cn } from "@/lib/utils";
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 type OwnedApp = Extract<AppListItem, { source: "owned" }>;
 type ExternalApp = Extract<AppListItem, { source: "external" }>;
-
-// An external app is listed once per catalog item; its availability chips show
-// which scopes the caller has an install in. Stable order keeps chips from
-// reshuffling between renders.
-const SCOPE_META: Record<
-  ResourceVisibilityScope,
-  { label: string; Icon: typeof Globe }
-> = {
-  personal: { label: "Personal", Icon: User },
-  team: { label: "Team", Icon: Users },
-  org: { label: "Organization", Icon: Globe },
-};
-const SCOPE_ORDER: ResourceVisibilityScope[] = ["personal", "team", "org"];
 
 export function AppCard({
   app,
@@ -80,7 +63,7 @@ function OwnedAppCard({
         onClick={handleOpen}
         disabled={isOpening}
         className="absolute inset-0 rounded-xl"
-        aria-label={`View and edit ${app.name} in chat`}
+        aria-label={`Open ${app.name} in new chat`}
       />
 
       {/* Hover (or in-flight) CTA. The pill is visual only — pointer-events-none
@@ -92,7 +75,12 @@ function OwnedAppCard({
           isOpening && "opacity-100",
         )}
       >
-        <span className={cn(buttonVariants({ size: "sm" }), "shadow-sm")}>
+        <span
+          className={cn(
+            buttonVariants({ variant: "outline", size: "sm" }),
+            "shadow-sm",
+          )}
+        >
           {isOpening ? (
             <>
               <Loader2 className="animate-spin" />
@@ -100,8 +88,8 @@ function OwnedAppCard({
             </>
           ) : (
             <>
-              <MessageSquare />
-              View & edit in chat
+              <ArrowUpRight />
+              Open in new chat
             </>
           )}
         </span>
@@ -141,27 +129,10 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
         className="absolute inset-0 rounded-xl"
         aria-label={`Open ${app.name}`}
       />
-      <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        {app.runnable ? (
-          SCOPE_ORDER.filter((s) => app.availabilityScopes.includes(s)).map(
-            (s) => {
-              const { label, Icon: ScopeIcon } = SCOPE_META[s];
-              return (
-                <Badge key={s} variant="outline" className="gap-1 text-xs">
-                  <ScopeIcon className="h-3 w-3" />
-                  {label}
-                </Badge>
-              );
-            },
-          )
-        ) : (
-          <Badge variant="outline" className="text-xs text-muted-foreground">
-            Not installed
-          </Badge>
-        )}
+      <div className="flex items-center gap-2">
+        <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <CardTitle className="min-w-0 truncate">{app.name}</CardTitle>
       </div>
-
-      <CardTitle className="truncate">{app.name}</CardTitle>
       {app.description ? (
         <CardDescription className="mt-1 line-clamp-2">
           {app.description}

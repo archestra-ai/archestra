@@ -44,7 +44,11 @@ export default function AppsPage() {
   );
   const [createOpen, setCreateOpen] = useState(false);
 
-  const apps = useMemo(() => data?.data ?? [], [data]);
+  // Temporarily hiding external (MCP-server-backed) apps; only owned apps show.
+  const apps = useMemo(
+    () => (data?.data ?? []).filter((app) => app.source === "owned"),
+    [data],
+  );
   const filtered = useMemo(
     () => apps.filter((app) => matchesFilter(app, filter, currentUserId)),
     [apps, filter, currentUserId],
@@ -116,11 +120,7 @@ export default function AppsPage() {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
             {filtered.map((app) => (
-              <AppCard
-                key={app.source === "external" ? app.catalogId : app.id}
-                app={app}
-                currentUserId={currentUserId}
-              />
+              <AppCard key={app.id} app={app} currentUserId={currentUserId} />
             ))}
           </div>
         )}

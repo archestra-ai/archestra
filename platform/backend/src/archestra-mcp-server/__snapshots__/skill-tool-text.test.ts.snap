@@ -83,7 +83,7 @@ exports[`skill and sandbox tool text > archestra__delete_file 1`] = `
 
 exports[`skill and sandbox tool text > archestra__download_file 1`] = `
 {
-  "description": "Copy a file that already exists at a path in the conversation's sandbox into the conversation's persistent files, where it shows up in the chat's Files panel. Use this for anything on the sandbox's disk — a file run_command wrote (text or binary) or a chat attachment under /home/sandbox/attachments/ — the bytes move server-side, so you never read them back or re-type them. To read a skill's own source files, use load_skill with a path instead. Requires \`sandbox:execute\`.",
+  "description": "Copy a file that already exists at a path in the conversation's sandbox into the conversation's persistent files, where it shows up in the chat's Files panel. Use this for anything on the sandbox's disk — a file run_command wrote (text or binary) or a chat attachment under /home/sandbox/attachments/ — the bytes move server-side, so you never read them back or re-type them. Pass \`overwrite: true\` to replace an existing same-named persistent file in place. To read a skill's own source files, use load_skill with a path instead. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -93,6 +93,11 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
         "description": "Optional MIME type recorded with the file. Sniffed from the bytes when omitted.",
         "minLength": 1,
         "type": "string",
+      },
+      "overwrite": {
+        "default": false,
+        "description": "Replace an existing same-named persistent file in place, keeping its id. Default false errors if the name is already taken.",
+        "type": "boolean",
       },
       "path": {
         "description": "Path to the file inside the container — absolute, or relative to the sandbox's working directory.",
@@ -127,7 +132,7 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
 
 exports[`skill and sandbox tool text > archestra__edit_file 1`] = `
 {
-  "description": "Edit an existing persistent file by replacing a snippet, keeping its id and filename. Give the exact \`old_string\` to find (read the file first with read_file) and the \`new_string\` to put in its place; set \`replace_all\` to change every occurrence. Identify the file by \`id\` (from search_files / save_file) or by \`filename\`. Text files only — to replace a binary file, use save_file with overwrite. In a project chat only the project's files can be edited. Requires \`sandbox:execute\`.",
+  "description": "Edit an existing persistent file by replacing a snippet, keeping its id and filename. Give the exact \`old_string\` to find (read the file first with read_file) and the \`new_string\` to put in its place; set \`replace_all\` to change every occurrence. Identify the file by \`id\` (from search_files / save_file) or by \`filename\`. Text files only — to replace a binary file, use save_file with overwrite for inline content, or download_file with overwrite for a file in the sandbox. In a project chat only the project's files can be edited. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

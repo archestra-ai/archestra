@@ -248,6 +248,69 @@ class SkillSandboxRuntimeService {
         buffer: data,
         claimed: params.mimeType,
       });
+      const filename = storageFilename({
+        originalName: null,
+        path: resolvedPath,
+      });
+
+      // Overwrite: replace an existing same-named persistent file in this scope
+      // in place, keeping its id — the export-side counterpart of save_file's
+      // overwrite, so a regenerated sandbox file can replace the one it produced
+      // earlier. Falls through to create when none exists.
+      if (params.overwrite) {
+        const ownerScope =
+          params.projectId != null
+            ? { kind: "project" as const, projectId: params.projectId }
+            : sandbox.conversationId != null
+              ? {
+                  kind: "conversation" as const,
+                  conversationId: sandbox.conversationId,
+                }
+              : null;
+        const existing = ownerScope
+          ? await fileStore.resolveMyFileRef({
+              organizationId: sandbox.organizationId,
+              userId: sandbox.userId,
+              filename,
+              scope: ownerScope,
+            })
+          : await fileStore.resolveOrphanRef({
+              organizationId: sandbox.organizationId,
+              userId: sandbox.userId,
+              filename,
+            });
+        if (!("error" in existing)) {
+          const updated = await fileStore.update({
+            file: existing,
+            mimeType,
+            sizeBytes: data.byteLength,
+            data,
+          });
+          if (updated) {
+            return {
+              artifactId: updated.id,
+              sandboxId: params.sandboxId,
+              path: resolvedPath,
+              mimeType: updated.mimeType,
+              sizeBytes: updated.sizeBytes,
+              stagingNotices,
+              overwritten: true,
+            };
+          }
+          // Row vanished between resolve and update — update already wrote the
+          // replacement bytes, so mirror save_file and surface a retryable error
+          // instead of re-creating (which could orphan bytes or false-collide).
+          throw new SkillSandboxError(
+            `The persistent file "${filename}" changed during export; run the export again.`,
+          );
+        } else if (existing.error !== "not_found") {
+          throw new SkillSandboxError(
+            `Could not replace "${filename}": more than one persistent file shares that name. Remove the duplicate or export under a new name.`,
+          );
+        }
+        // not_found → create below.
+      }
+
       let row: Awaited<ReturnType<typeof fileStore.put>>;
       try {
         row = await fileStore.put({
@@ -256,7 +319,7 @@ class SkillSandboxRuntimeService {
           projectId: params.projectId ?? null,
           conversationId: sandbox.conversationId,
           sandboxId: params.sandboxId,
-          filename: storageFilename({ originalName: null, path: resolvedPath }),
+          filename,
           mimeType,
           sizeBytes: data.byteLength,
           data,
@@ -282,6 +345,7 @@ class SkillSandboxRuntimeService {
         mimeType: row.mimeType,
         sizeBytes: row.sizeBytes,
         stagingNotices,
+        overwritten: false,
       };
     });
   }

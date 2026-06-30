@@ -193,6 +193,14 @@ const DownloadFileSchema = z
         "Optional MIME type recorded with the file. Sniffed from the bytes " +
           "when omitted.",
       ),
+    overwrite: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        "Replace an existing same-named persistent file in place, keeping its id. " +
+          "Default false errors if the name is already taken.",
+      ),
     target: SandboxTargetSchema,
   })
   .describe(
@@ -215,6 +223,9 @@ const DownloadFileOutputSchema = z.object({
       "Notices about chat attachments that could not be auto-staged (e.g. too " +
         "large). Empty when all attachments are available in the sandbox.",
     ),
+  overwritten: z
+    .boolean()
+    .describe("True when an existing same-named file was replaced in place."),
 });
 
 const UploadSourceSchema = z.discriminatedUnion("type", [
@@ -633,7 +644,8 @@ const registry = defineArchestraTools([
       "conversation's persistent files, where it shows up in the chat's Files panel. Use this for " +
       "anything on the sandbox's disk — a file run_command wrote (text or binary) or a chat " +
       `attachment under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/ — the bytes move server-side, so you ` +
-      "never read them back or re-type them. To read a skill's own source files, use load_skill " +
+      "never read them back or re-type them. Pass `overwrite: true` to replace an existing " +
+      "same-named persistent file in place. To read a skill's own source files, use load_skill " +
       "with a path instead. Requires `sandbox:execute`.",
     schema: DownloadFileSchema,
     outputSchema: DownloadFileOutputSchema,
@@ -666,6 +678,7 @@ const registry = defineArchestraTools([
           path: args.path,
           mimeType: args.mimeType,
           projectId: scope?.projectId ?? null,
+          overwrite: args.overwrite,
           environment: await resolveEnvironmentTarget(context),
         });
 
@@ -688,9 +701,10 @@ const registry = defineArchestraTools([
             mimeType: result.mimeType,
             sizeBytes: result.sizeBytes,
             stagingNotices: result.stagingNotices,
+            overwritten: result.overwritten,
           },
           withStagingNotices(
-            `Saved ${result.path} (${result.sizeBytes} bytes). It is available in the Files panel.`,
+            `${result.overwritten ? "Replaced" : "Saved"} ${result.path} (${result.sizeBytes} bytes). It is available in the Files panel.`,
             result.stagingNotices,
           ),
         );
@@ -1186,7 +1200,8 @@ const registry = defineArchestraTools([
       "the file first with read_file) and the `new_string` to put in its place; " +
       "set `replace_all` to change every occurrence. Identify the file by `id` " +
       "(from search_files / save_file) or by `filename`. Text files only — to " +
-      "replace a binary file, use save_file with overwrite. In a project chat " +
+      "replace a binary file, use save_file with overwrite for inline content, or " +
+      "download_file with overwrite for a file in the sandbox. In a project chat " +
       "only the project's files can be edited. Requires `sandbox:execute`.",
     schema: EditFileSchema,
     outputSchema: EditFileOutputSchema,

@@ -381,8 +381,10 @@ describe("ArchestraPromptInput", () => {
       expect(
         screen.getByTestId(E2eTestId.ChatFileUploadButton),
       ).toBeInTheDocument();
+      // Enabled state shows the supported-types tooltip rather than the
+      // disabled "does not support file uploads" message.
       expect(screen.getByTestId("tooltip-content")).toHaveTextContent(
-        "Supports: chat prompts, .txt, .csv, .md, and .json uploads",
+        "Supports:",
       );
     });
 
@@ -673,8 +675,9 @@ describe("ArchestraPromptInput", () => {
       localStorage.setItem(draftKey, text);
       mockControllerState.value = text;
 
-      // Mirrors NewChatComposer rejecting a submit (e.g. attachment toast) by
-      // throwing synchronously after the user confirms "Send anyway".
+      // Mirrors a consumer rejecting a submit by throwing synchronously after
+      // the user confirms "Send anyway" (e.g. the main composer's
+      // "stop-not-submit" throw that keeps a half-typed follow-up).
       const onSubmit = vi.fn(() => {
         throw new Error("rejected");
       });

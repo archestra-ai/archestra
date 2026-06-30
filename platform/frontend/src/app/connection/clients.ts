@@ -103,12 +103,6 @@ export interface ProxyStep {
    * ANTHROPIC_CUSTOM_HEADERS value for an env block (Claude Code).
    */
   passthroughKeyVariant?: "header" | "env";
-  /**
-   * When true, render the final verify UI beneath this step: a copyable sample
-   * message with a unique marker plus a "Test your setup" link that searches the
-   * LLM logs for exactly that message.
-   */
-  testSetupLink?: boolean;
 }
 
 export type ProxyInstruction =
@@ -250,11 +244,6 @@ claude`,
               showPassthroughKey: true,
               passthroughKeyVariant: "env",
             },
-            {
-              title: "Restart Claude Code and send a test message",
-              body: "Quit and reopen Claude Code, start a new chat, and send the message below.",
-              testSetupLink: true,
-            },
           ],
         };
       },
@@ -326,11 +315,6 @@ claude`,
             title: "Add your personal auth key header",
             body: 'In the same form, expand "Custom headers" and add a header with the name and value below to authenticate on the LLM Proxy. This is in addition to the API key above, which Claude Desktop still needs.',
             showPassthroughKey: true,
-          },
-          {
-            title: "Restart Claude Desktop and send a test message",
-            body: "Quit and reopen Claude Desktop, start a new chat, and send the message below.",
-            testSetupLink: true,
           },
         ],
       }),

@@ -20,6 +20,7 @@ import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -120,7 +121,12 @@ export function ScheduleTriggersIndexPage() {
         })),
     [members, currentUserId],
   );
-  const { data: triggersResponse, isLoading } = useScheduleTriggers({
+  const {
+    data: triggersResponse,
+    isLoading,
+    isLoadingError: isTriggersLoadError,
+    refetch: refetchTriggers,
+  } = useScheduleTriggers({
     limit: pageSize,
     offset: pageIndex * pageSize,
     name: searchName || undefined,
@@ -131,6 +137,7 @@ export function ScheduleTriggersIndexPage() {
         ? selectedAuthorIds
         : undefined,
     refetchInterval: 5_000,
+    toastOnError: false,
   });
   const { data: agents = [], isLoading: agentsLoading } = useProfiles({
     filters: { agentType: "agent" },
@@ -401,6 +408,17 @@ export function ScheduleTriggersIndexPage() {
     [agents, openEditComposer, showOtherUsers],
   );
 
+  if (isTriggersLoadError) {
+    return (
+      <div className="flex w-full flex-col gap-5">
+        <QueryLoadError
+          title="Couldn't load your scheduled tasks"
+          onRetry={() => refetchTriggers()}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex w-full flex-col gap-5">
       <div className="flex items-center gap-4">
@@ -587,7 +605,12 @@ export function ScheduleTriggerDetailPage({
     () => new Set(userTeams.map((t) => t.id)),
     [userTeams],
   );
-  const { data: trigger, isLoading } = useScheduleTrigger(triggerId, {
+  const {
+    data: trigger,
+    isLoading,
+    isLoadingError: isTriggerLoadError,
+    refetch: refetchTrigger,
+  } = useScheduleTrigger(triggerId, {
     refetchInterval: 5_000,
   });
   const { data: agents = [], isLoading: agentsLoading } = useProfiles({
@@ -724,6 +747,15 @@ export function ScheduleTriggerDetailPage({
         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         <span className="text-sm text-muted-foreground">Loading...</span>
       </div>
+    );
+  }
+
+  if (isTriggerLoadError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load this scheduled task"
+        onRetry={() => refetchTrigger()}
+      />
     );
   }
 

@@ -753,19 +753,26 @@ describe("getChatMcpTools repeated-call circuit breaker", () => {
 });
 
 describe("getChatMcpTools failure and cache gating", () => {
-  test("returns no tools when the gateway listing fails", async () => {
+  test("throws and evicts the failing client when the gateway listing fails", async () => {
+    const failingClient = {
+      ping: vi.fn().mockResolvedValue({}),
+      listTools: vi.fn().mockRejectedValue(new Error("gateway down")),
+      callTool: vi.fn(),
+      close: vi.fn(),
+    };
     const { baseParams } = await setupChatToolEnv({
-      gatewayClient: {
-        ping: vi.fn().mockResolvedValue({}),
-        listTools: vi.fn().mockRejectedValue(new Error("gateway down")),
-        callTool: vi.fn(),
-        close: vi.fn(),
-      } as unknown as Client,
+      gatewayClient: failingClient as unknown as Client,
     });
 
-    const tools = await chatClient.getChatMcpTools(baseParams);
+    // A failed listing must surface as an error, not an empty tool set that
+    // would let the model stream against a tool-demanding system prompt.
+    await expect(chatClient.getChatMcpTools(baseParams)).rejects.toBeInstanceOf(
+      chatClient.McpToolsUnavailableError,
+    );
 
-    expect(tools).toEqual({});
+    // The failing session is evicted (closed) so the next turn rebuilds it
+    // rather than reusing a sticky failure until the idle TTL.
+    expect(failingClient.close).toHaveBeenCalledTimes(1);
   });
 
   test("abortSignal bypasses the tool cache; calls without it reuse the entry", async () => {

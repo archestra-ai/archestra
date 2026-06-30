@@ -6,7 +6,7 @@ import {
   TOOL_EDIT_FILE_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
-  TOOL_SAVE_RESULT_SHORT_NAME,
+  TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
 } from "@archestra/shared";
@@ -49,6 +49,7 @@ import {
   SkillSandboxError,
 } from "@/skills-sandbox/types";
 import { asSandboxId, type PersistedFile, type SandboxId } from "@/types";
+import { isUuid } from "@/utils/uuid";
 import {
   defineArchestraTool,
   defineArchestraTools,
@@ -74,9 +75,6 @@ import type { ArchestraContext } from "./types";
  * Model-facing text in this file follows the skill terminology glossary in
  * `skills/skill-activation.ts` and is pinned by `skill-tool-text.test.ts`.
  */
-
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // read_file default line window (matches the SOTA Read default).
 const READ_FILE_DEFAULT_LINES = 2000;
@@ -198,7 +196,7 @@ const DownloadFileSchema = z
     target: SandboxTargetSchema,
   })
   .describe(
-    "Copy a file out of the sandbox into durable storage, where it shows up in " +
+    "Copy a file out of the sandbox into the conversation's persistent files, where it shows up in " +
       "the chat's Files panel. Use this for any binary or generated output — " +
       "run_command only returns text. In a project chat the file is saved to the " +
       "project. (To read a skill's source files, use load_skill with a path.)",
@@ -226,7 +224,7 @@ const UploadSourceSchema = z.discriminatedUnion("type", [
         .string()
         .min(1)
         .refine(
-          (v) => UUID_REGEX.test(v),
+          (v) => isUuid(v),
           "must be the attachment's id, not its filename",
         )
         .describe(
@@ -258,7 +256,7 @@ const UploadSourceSchema = z.discriminatedUnion("type", [
         .string()
         .trim()
         .refine(
-          (v) => UUID_REGEX.test(v) || v.startsWith(OBJECT_REF_PREFIX),
+          (v) => isUuid(v) || v.startsWith(OBJECT_REF_PREFIX),
           "must be a file id or ref from search_files",
         )
         .optional()
@@ -276,7 +274,7 @@ const UploadSourceSchema = z.discriminatedUnion("type", [
       message: "provide exactly one of `id` or `filename`",
     })
     .describe(
-      "Copy a file from the user's persistent storage (My Files) into the " +
+      "Copy a file from the user's persistent files into the " +
         "sandbox. Find files with search_files first.",
     ),
 ]);
@@ -297,7 +295,7 @@ const UploadFileSchema = z
         '`type`: a chat attachment (`{"type":"chat_attachment","attachmentId":...}`), ' +
         'inline base64 (`{"type":"base64","dataBase64":...}`), inline text ' +
         '(`{"type":"text","text":"print(1)"}`), or a file from the user\'s ' +
-        'persistent storage (`{"type":"my_file","filename":...}`, found via ' +
+        'persistent files (`{"type":"my_file","filename":...}`, found via ' +
         "search_files). Use this to place input bytes; to create a file the " +
         "sandbox will then run or read, write it with run_command instead.",
     ),
@@ -328,8 +326,8 @@ const SearchFilesSchema = z
       ),
   })
   .describe(
-    "Search this conversation's persistent files: files exported from its " +
-      "sandbox or written with save_result. In a project chat, searches the " +
+    "Search this conversation's persistent files: files exported with " +
+      "download_file or written with save_file. In a project chat, searches the " +
       "project's files instead.",
   );
 
@@ -363,7 +361,7 @@ const ReadFileSchema = z
       .optional()
       .describe(
         "Id or ref of the file to read — the `id` or `ref` from search_files, " +
-          "or a fileId from save_result.",
+          "or a fileId from save_file.",
       ),
     filename: z
       .string()
@@ -394,7 +392,7 @@ const ReadFileSchema = z
     "Read a persistent file directly — no sandbox roundtrip. Text " +
       "files come back as numbered lines (`<n>\\t<line>`); images (PNG, JPEG, " +
       "WebP, GIF) are returned inline so you can see them. Identify the file by " +
-      "`id` (from search_files / save_result) or by `filename`. Page large text " +
+      "`id` (from search_files / save_file) or by `filename`. Page large text " +
       "files with `offset`/`limit`. For other binary types (PDF, archives, …), " +
       "copy the file into the sandbox with upload_file + run_command. Only this " +
       "conversation's files are visible (in a project chat, the project's " +
@@ -427,7 +425,7 @@ const ReadFileOutputSchema = z.object({
     ),
 });
 
-const SaveResultSchema = z
+const SaveFileSchema = z
   .strictObject({
     filename: z
       .string()
@@ -460,11 +458,12 @@ const SaveResultSchema = z
     message: "provide exactly one of `content` or `contentBase64`",
   })
   .describe(
-    "Save content straight to the user's persistent file storage — no " +
-      "sandbox needed. In a project chat the file is saved to the project.",
+    "Save content you already have (inline text or base64) straight to the " +
+      "conversation's persistent files — no sandbox needed. In a project chat " +
+      "the file is saved to the project.",
   );
 
-const SaveResultOutputSchema = z.object({
+const SaveFileOutputSchema = z.object({
   fileId: z.string(),
   filename: z.string(),
   projectName: z
@@ -484,7 +483,7 @@ const EditFileSchema = z
       .string()
       .min(1)
       .optional()
-      .describe("Id of the file to edit (from search_files / save_result)."),
+      .describe("Id of the file to edit (from search_files / save_file)."),
     filename: z
       .string()
       .min(1)
@@ -519,10 +518,10 @@ const EditFileSchema = z
     message: "new_string must differ from old_string",
   })
   .describe(
-    "Edit an existing persistent file (My Files) by replacing a snippet, keeping " +
+    "Edit an existing persistent file by replacing a snippet, keeping " +
       "its id and filename. Give the exact `old_string` to find and the " +
       "`new_string` to put in its place; set `replace_all` to change every " +
-      "occurrence. Text files only — to replace a binary file, use save_result " +
+      "occurrence. Text files only — to replace a binary file, use save_file " +
       "with overwrite. In a project chat only the project's files can be edited.",
   );
 
@@ -542,7 +541,7 @@ const DeleteFileSchema = z
       .string()
       .min(1)
       .optional()
-      .describe("Id of the file to delete (from search_files / save_result)."),
+      .describe("Id of the file to delete (from search_files / save_file)."),
     filename: z
       .string()
       .min(1)
@@ -555,7 +554,7 @@ const DeleteFileSchema = z
     message: "provide exactly one of `id` or `filename`",
   })
   .describe(
-    "Permanently delete a persistent file (My Files). In a project chat only " +
+    "Permanently delete a persistent file. In a project chat only " +
       "the project's files can be deleted.",
   );
 
@@ -630,7 +629,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_DOWNLOAD_FILE_SHORT_NAME,
     title: "Download File",
     description:
-      "Copy a file out of the conversation's sandbox into durable storage, where " +
+      "Copy a file out of the conversation's sandbox into the conversation's persistent files, where " +
       "it shows up in the chat's Files panel. Use this for any binary or " +
       "generated output — run_command only returns text. To read a skill's own " +
       "source files, use load_skill with a path instead. Requires `sandbox:execute`.",
@@ -704,7 +703,7 @@ const registry = defineArchestraTools([
     description:
       "Upload a file into the conversation's sandbox from a chat attachment, " +
       "inline base64, inline text, or a file from the user's persistent " +
-      "storage (the my_file source). The bytes become part of the sandbox " +
+      "files (the my_file source). The bytes become part of the sandbox " +
       "recipe, so the file is present on every later run_command and " +
       `download_file call. Note: files the user attached to the chat are already auto-staged under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/ — use this tool ` +
       "to write inline content, place a file at a specific path, or upload " +
@@ -782,7 +781,7 @@ const registry = defineArchestraTools([
     title: "Search Files",
     description:
       "Search the persistent files of THIS conversation: files exported with " +
-      "download_file or written with save_result here. Returns metadata only — " +
+      "download_file or written with save_file here. Returns metadata only — " +
       "each result carries a stable `ref`. To work on a found file, pass its " +
       "`ref` to read_file (read its content), or to upload_file's my_file source " +
       "(copy it into the sandbox). In a project chat, searches the project's " +
@@ -850,7 +849,7 @@ const registry = defineArchestraTools([
       "Read a persistent file directly — no sandbox roundtrip. Text " +
       "files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are " +
       "returned inline so you can see them. Identify the file by `id` (from " +
-      "search_files / save_result) or by `filename`. Page large text files with " +
+      "search_files / save_file) or by `filename`. Page large text files with " +
       "`offset`/`limit`. For other binary types, copy " +
       "the file into the sandbox with upload_file and inspect it with " +
       "run_command. Only this conversation's files are visible (in a project " +
@@ -1032,19 +1031,19 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: TOOL_SAVE_RESULT_SHORT_NAME,
-    title: "Save Result",
+    shortName: TOOL_SAVE_FILE_SHORT_NAME,
+    title: "Save File",
     description:
-      "Save inline content directly to the user's persistent file storage " +
-      "(My Files) — no sandbox roundtrip. Use it " +
-      "for results you produced in the conversation itself (text, markdown, " +
-      "small data files). Pass `overwrite: true` to replace an existing " +
-      "same-named file in place (e.g. a full rewrite); otherwise a duplicate " +
-      "name is rejected. In a project chat the file is saved to the project. " +
-      "For files generated INSIDE the sandbox, use download_file instead. " +
-      "Requires `sandbox:execute`.",
-    schema: SaveResultSchema,
-    outputSchema: SaveResultOutputSchema,
+      "Save content you already have — inline text or base64 — straight to the " +
+      "conversation's persistent files (no sandbox needed); it then shows up in " +
+      "the chat's Files panel. Good for results produced in the conversation " +
+      "itself (text, markdown, small data files). Pass `overwrite: true` to " +
+      "replace an existing same-named file in place (e.g. a full rewrite); " +
+      "otherwise a duplicate name is rejected. In a project chat the file is " +
+      "saved to the project. For a file that already exists at a path inside the " +
+      "sandbox, use download_file instead. Requires `sandbox:execute`.",
+    schema: SaveFileSchema,
+    outputSchema: SaveFileOutputSchema,
     async handler({ args, context }) {
       const guard = ensureUsable(context);
       if ("error" in guard) return errorResult(guard.error);
@@ -1069,9 +1068,9 @@ const registry = defineArchestraTools([
       } else {
         data = Buffer.from(args.content ?? "", "utf8");
       }
-      if (data.byteLength === 0) {
-        return errorResult("the file content is empty.");
-      }
+      // An empty file is allowed: the model may intentionally create a blank
+      // file (parity with the in-place file editor and project instructions,
+      // which both accept empty content). Only the byte cap is enforced.
       const limit = config.skillsSandbox.artifactBytesLimit;
       if (data.byteLength > limit) {
         return errorResult(
@@ -1127,7 +1126,7 @@ const registry = defineArchestraTools([
           if (!updated) {
             return errorResult(describeMyFileError("not_found", filename));
           }
-          return saveResultSuccess({
+          return saveFileSuccess({
             row: updated,
             filename,
             scope,
@@ -1151,7 +1150,7 @@ const registry = defineArchestraTools([
           sizeBytes: data.byteLength,
           data,
         });
-        return saveResultSuccess({ row, filename, scope, overwritten: false });
+        return saveFileSuccess({ row, filename, scope, overwritten: false });
       } catch (error) {
         if (error instanceof FileNameExistsError) {
           return errorResult(
@@ -1172,12 +1171,12 @@ const registry = defineArchestraTools([
     shortName: TOOL_EDIT_FILE_SHORT_NAME,
     title: "Edit File",
     description:
-      "Edit an existing persistent file (My Files) by replacing a snippet, " +
+      "Edit an existing persistent file by replacing a snippet, " +
       "keeping its id and filename. Give the exact `old_string` to find (read " +
       "the file first with read_file) and the `new_string` to put in its place; " +
       "set `replace_all` to change every occurrence. Identify the file by `id` " +
-      "(from search_files / save_result) or by `filename`. Text files only — to " +
-      "replace a binary file, use save_result with overwrite. In a project chat " +
+      "(from search_files / save_file) or by `filename`. Text files only — to " +
+      "replace a binary file, use save_file with overwrite. In a project chat " +
       "only the project's files can be edited. Requires `sandbox:execute`.",
     schema: EditFileSchema,
     outputSchema: EditFileOutputSchema,
@@ -1236,7 +1235,7 @@ const registry = defineArchestraTools([
       const text = decodeUtf8Text(current.data);
       if (text === null) {
         return errorResult(
-          `edit_file edits text files only; "${resolved.filename}" (${resolved.mimeType}) is not UTF-8 text. Replace it wholesale with save_result (overwrite: true).`,
+          `edit_file edits text files only; "${resolved.filename}" (${resolved.mimeType}) is not UTF-8 text. Replace it wholesale with save_file (overwrite: true).`,
         );
       }
 
@@ -1300,8 +1299,8 @@ const registry = defineArchestraTools([
     shortName: TOOL_DELETE_FILE_SHORT_NAME,
     title: "Delete File",
     description:
-      "Permanently delete a persistent file (My Files), identified by `id` " +
-      "(from search_files / save_result) or by `filename`. In a project chat " +
+      "Permanently delete a persistent file, identified by `id` " +
+      "(from search_files / save_file) or by `filename`. In a project chat " +
       "only the project's files can be deleted. Requires `sandbox:execute`.",
     schema: DeleteFileSchema,
     outputSchema: DeleteFileOutputSchema,
@@ -1467,7 +1466,7 @@ function normalizeTarget(
   }
   const id = target.id?.trim();
   if (id) {
-    if (!UUID_REGEX.test(id)) {
+    if (!isUuid(id)) {
       return {
         error: `target.id must be a sandbox id (UUID). Omit \`target\` to use the conversation's default sandbox, or pass \`target: { fresh: true }\` to create a new one.`,
       };
@@ -1734,8 +1733,8 @@ function numberLines(params: {
   };
 }
 
-/** Build the save_result success result for both the create and overwrite paths. */
-function saveResultSuccess(params: {
+/** Build the save_file success result for both the create and overwrite paths. */
+function saveFileSuccess(params: {
   row: PersistedFile;
   filename: string;
   scope: ProjectFileScope | null;
@@ -1760,7 +1759,7 @@ function saveResultSuccess(params: {
       sizeBytes: row.sizeBytes,
       overwritten,
     },
-    `${overwritten ? "Overwrote" : "Saved"} ${scope ? `${scope.projectName}/` : ""}${filename} (${row.sizeBytes} bytes)${overwritten ? " in place" : " to persistent storage"}.`,
+    `${overwritten ? "Overwrote" : "Saved"} ${scope ? `${scope.projectName}/` : ""}${filename} (${row.sizeBytes} bytes)${overwritten ? " in place" : " to persistent files"}.`,
   );
 }
 
@@ -1856,7 +1855,7 @@ async function loadUploadSource(params: {
       // the id column is uuid-typed, so querying it with a non-UUID throws an
       // unhandled Postgres error that aborts the whole turn instead of
       // surfacing as the graceful "no such attachment" result below.
-      if (!UUID_REGEX.test(source.attachmentId)) {
+      if (!isUuid(source.attachmentId)) {
         logger.warn(
           {
             organizationId: userCtx.organizationId,

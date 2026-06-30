@@ -112,6 +112,15 @@ function withEmpty() {
   };
 }
 
+function withLoadError(refetch = vi.fn()) {
+  return {
+    data: undefined,
+    isFetching: false,
+    isLoadingError: true,
+    refetch,
+  };
+}
+
 function renderTable() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -337,6 +346,21 @@ describe("AuditLogTable", () => {
     expect(
       screen.getByText(/No audit events recorded yet/i),
     ).toBeInTheDocument();
+  });
+
+  it("shows a retry panel (not the empty state) when the query fails to load", async () => {
+    const refetch = vi.fn();
+    mockUseAuditLogs.mockReturnValue(withLoadError(refetch));
+
+    renderTable();
+
+    // A failed fetch must not be misread as "no events recorded".
+    expect(
+      screen.queryByText(/No audit events recorded yet/i),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /retry/i }));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 
   it("renders When / Where headers and surfaces the client IP in the grid", () => {

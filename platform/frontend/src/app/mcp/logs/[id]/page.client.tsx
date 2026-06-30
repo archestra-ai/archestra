@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
+import { QueryLoadError } from "@/components/query-load-error";
 import {
   Accordion,
   AccordionContent,
@@ -51,7 +52,12 @@ function McpToolCallDetail({
   };
   id: string;
 }) {
-  const { data: mcpToolCall, isPending } = useMcpToolCall({
+  const {
+    data: mcpToolCall,
+    isPending,
+    isLoadingError,
+    refetch,
+  } = useMcpToolCall({
     mcpToolCallId: id,
     initialData: initialData?.mcpToolCall,
   });
@@ -62,6 +68,15 @@ function McpToolCallDetail({
 
   if (isPending) {
     return <LoadingSpinner />;
+  }
+
+  if (isLoadingError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load this tool call"
+        onRetry={() => refetch()}
+      />
+    );
   }
 
   if (!mcpToolCall) {

@@ -307,6 +307,7 @@ function TeamSection(props: {
             value={props.name}
             onChange={(event) => props.onNameChange(event.target.value)}
             disabled={props.readOnlyDetails}
+            maxLength={256}
           />
         </div>
         <div className="space-y-2">

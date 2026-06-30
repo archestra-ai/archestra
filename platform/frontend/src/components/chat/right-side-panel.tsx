@@ -68,7 +68,7 @@ export function RightSidePanel({
   initialNavigateUrl,
   onInitialNavigateComplete,
 }: RightSidePanelProps) {
-  const { apps, setPortalTarget } = useApps();
+  const { apps, setPortalTarget, setSettingsOpen } = useApps();
   const portalDivRef = useRef<HTMLDivElement | null>(null);
 
   let resolvedTab: RightPanelTab = activeTab;
@@ -131,7 +131,12 @@ export function RightSidePanel({
               variant="ghost"
               size="icon"
               className="h-8 w-8"
-              onClick={onClose}
+              onClick={() => {
+                // Collapsing the panel drops the owned-app settings form so it
+                // reopens on the live app, not the form.
+                setSettingsOpen(false);
+                onClose();
+              }}
               title="Close panel"
             >
               <PanelRightClose className="h-4 w-4" />

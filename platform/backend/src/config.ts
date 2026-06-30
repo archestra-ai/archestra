@@ -20,6 +20,7 @@ import {
   type EmailProviderType,
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
+import { safeUrl } from "@/utils/base-url";
 import packageJson from "../../package.json";
 
 type ProcessType = "web" | "worker" | "all";
@@ -396,6 +397,20 @@ export const parseContentMaxLength = (
 };
 
 /** @public — exported for testability */
+export const parseLogFormat = (
+  envValue?: string | undefined,
+): "json" | "pretty" => {
+  const value = envValue?.toLowerCase().trim();
+  if (value === "pretty" || value === "json") return value;
+  if (value && value.length > 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_LOGGING_FORMAT value "${envValue}", using default "json"`,
+    );
+  }
+  return "json";
+};
+
+/** @public — exported for testability */
 export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
   const value = envValue?.trim();
   if (!value) {
@@ -556,31 +571,37 @@ export const getConnectionBaseUrlSources = (): string[] => {
  * absolute SDK/stylesheet URLs in the owned-app envelope so they resolve from a
  * foreign MCP host's opaque-origin iframe (a relative `/_sandbox/...` has no
  * base there). This URL is handed to the browser as a script source and CSP
- * source, so it must be the public origin: `ARCHESTRA_API_BASE_URL` is an
- * internal-first list (e.g. `http://archestra.default.svc:9000,https://api…`),
- * so a public `https://` entry is preferred over a cluster-internal one. Each
- * candidate is parsed to its `URL.origin` (dropping any path and normalizing),
- * falling back to the local API origin. Never derived from request headers —
- * those are spoofable (see request-origin.ts).
+ * source, so it must be a public origin that serves those routes directly.
+ *
+ * Drawn from `ARCHESTRA_API_BASE_URL`, preferring a public `https://` entry over
+ * a cluster-internal one. The frontend origin (`ARCHESTRA_FRONTEND_URL`) is
+ * excluded even when present: it only reverse-proxies `/_sandbox/*` and may sit
+ * behind an auth gate (e.g. IAP), so the asset origin must be the backend
+ * itself. Falls back to the local API origin. Never derived from request
+ * headers — those are spoofable (see request-origin.ts).
  * @public — consumed by the owned-app SDK injection
  */
 export const getAppAssetBaseOrigin = (): string => {
   const localFallback = `http://127.0.0.1:${getPortFromUrl()}`;
+  const frontendOrigin = safeUrl(frontendBaseUrl)?.origin ?? null;
   const entries =
     process.env.ARCHESTRA_API_BASE_URL?.split(",")
       .map((entry) => entry.trim())
       .filter(Boolean) ?? [];
+  const httpsEntries = entries.filter((entry) => entry.startsWith("https://"));
   const candidates = [
-    ...entries.filter((entry) => entry.startsWith("https://")),
+    // Prefer a public origin that isn't the frontend; fall back to any entry.
+    ...httpsEntries.filter(
+      (entry) => safeUrl(entry)?.origin !== frontendOrigin,
+    ),
+    ...httpsEntries,
     ...entries,
     localFallback,
   ];
   for (const candidate of candidates) {
-    try {
-      return new URL(candidate).origin;
-    } catch {
-      // skip a malformed entry and try the next candidate
-    }
+    const origin = safeUrl(candidate)?.origin;
+    if (origin) return origin;
+    // skip a malformed entry and try the next candidate
   }
   return new URL(localFallback).origin;
 };
@@ -589,11 +610,8 @@ export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
   const hosts = new Set<string>();
 
   const addHostFromUrl = (raw: string) => {
-    try {
-      hosts.add(new URL(raw).host.toLowerCase());
-    } catch {
-      // ignore malformed values
-    }
+    const host = safeUrl(raw)?.host.toLowerCase();
+    if (host) hosts.add(host);
   };
 
   addHostFromUrl(frontendBaseUrl);
@@ -1357,7 +1375,7 @@ const config = {
    * Projects + the persistent "My Files" file system on top of the skill
    * sandbox. Ships dark: off by default until ready to surface. Gates the
    * project APIs, the My Files endpoints, the persistent-file MCP tools
-   * (search_files, read_file, save_result, edit_file, delete_file), and the
+   * (search_files, read_file, save_file, edit_file, delete_file), and the
    * my_file upload source.
    */
   projects: {
@@ -1396,6 +1414,9 @@ const config = {
      * Mirrors the CORS/trusted-origin configuration so all three stay in sync.
      */
     allowedOrigins: addLoopbackEquivalents(getConfiguredOrigins()),
+  },
+  logging: {
+    format: parseLogFormat(process.env.ARCHESTRA_LOGGING_FORMAT),
   },
   observability: {
     otel: {

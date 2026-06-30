@@ -74,7 +74,7 @@ describe("POST /api/apps", () => {
     });
   });
 
-  test("seeds the default template server-side when html is omitted", async () => {
+  test("seeds the default template server-side with the app name when html is omitted", async () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
@@ -86,10 +86,10 @@ describe("POST /api/apps", () => {
       method: "GET",
       url: `/api/apps/${created.json().id}/versions`,
     });
-    expect(versions.json()[0].html).toContain(
-      "window.archestra.storage.user.set",
-    );
-    expect(versions.json()[0].html).toContain("window.archestra.tools.call");
+    const { html } = versions.json()[0];
+    expect(html).toContain("<title>Seeded</title>");
+    expect(html).toContain("<h1>Seeded</h1>");
+    expect(html).not.toContain("{{APP_NAME}}");
   });
 
   test("rejects SDK self-bootstrap html and surfaces soft warnings", async () => {

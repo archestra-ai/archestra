@@ -1,4 +1,5 @@
 import {
+  ApiError,
   isAgentTool,
   isBrowserMcpTool,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
@@ -35,7 +36,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
-import type { GlobalToolPolicy } from "@/types";
+import type { DiscoveredToolPolicy, GlobalToolPolicy } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 
@@ -45,6 +46,23 @@ import { buildMcpClientInfo } from "@/utils/mcp-client-info";
  * Derives from the configured API port to work in multi-pod deployments.
  */
 const MCP_GATEWAY_BASE_URL = `http://localhost:${config.api.port}/v1/mcp`;
+
+/**
+ * Raised when the agent's MCP tool set could not be fetched (no gateway token,
+ * the gateway connection failed, or `tools/list` threw) — as distinct from an
+ * agent that genuinely exposes no model-visible tools. Callers must not stream
+ * the model with an empty tool set on failure: the agent's system prompt still
+ * demands tool calls, so the model hallucinates them as text. Surfaces as a 503
+ * through the Fastify error handler; `internalCode` discriminates it from other
+ * 503s for callers and tests.
+ *
+ * @public — thrown from getChatMcpTools, asserted in its tests
+ */
+export class McpToolsUnavailableError extends ApiError {
+  constructor(reason: string) {
+    super(503, `MCP tools unavailable: ${reason}`, "mcp_tools_unavailable");
+  }
+}
 
 // Idle TTL for conversation-scoped MCP clients. These sessions are expensive
 // enough that we do not want them to linger forever after a chat/browser tab
@@ -89,6 +107,7 @@ const clientCache = new LRUCacheManager<Client>({
 const TOOL_CACHE_TTL_MS = 30 * TimeInMs.Second;
 const CLIENT_PING_TIMEOUT_MS = 5 * TimeInMs.Second;
 const CLIENT_PING_VALIDATION_INTERVAL_MS = 30 * TimeInMs.Second;
+const CLIENT_CONNECT_TIMEOUT_MS = 15 * TimeInMs.Second;
 
 /**
  * Maximum tool cache size to prevent unbounded memory growth.
@@ -563,7 +582,39 @@ export async function getChatMcpClient(
       { agentId, userId, url: mcpGatewayUrl },
       "Connecting to MCP Gateway...",
     );
-    await client.connect(transport);
+    // Bound the connect: a loopback gateway that stalls (e.g. during a deploy)
+    // would otherwise hang this await indefinitely and wedge the chat turn. A
+    // timeout surfaces as a connect failure → token fallback → typed throw.
+    let connectTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        client.connect(transport),
+        new Promise<never>((_, reject) => {
+          connectTimer = setTimeout(() => {
+            reject(
+              new Error(
+                `MCP Gateway connect timeout after ${CLIENT_CONNECT_TIMEOUT_MS}ms`,
+              ),
+            );
+          }, CLIENT_CONNECT_TIMEOUT_MS);
+          connectTimer.unref?.();
+        }),
+      ]);
+    } catch (connectError) {
+      // The race only stops awaiting; close the half-open client so a connect
+      // that completes after the timeout can't leak its transport and socket.
+      try {
+        await client.close();
+      } catch (closeError) {
+        logger.warn(
+          { agentId, userId, closeError },
+          "Error closing timed-out MCP client (non-fatal)",
+        );
+      }
+      throw connectError;
+    } finally {
+      if (connectTimer) clearTimeout(connectTimer);
+    }
     return client;
   };
 
@@ -789,9 +840,9 @@ export async function getChatMcpTools({
   if (!mcpGwToken) {
     logger.warn(
       { agentId, userId },
-      "No valid team token available for user - cannot execute tools",
+      "No valid team token available for user - cannot fetch tools",
     );
-    return {};
+    throw new McpToolsUnavailableError("no gateway token for user");
   }
 
   // Still use MCP client for listing tools (via MCP Gateway)
@@ -808,9 +859,9 @@ export async function getChatMcpTools({
   if (!client) {
     logger.warn(
       { agentId, userId },
-      "No MCP client available, returning empty tools",
+      "No MCP client available - failing the turn instead of streaming with empty tools",
     );
-    return {}; // No tools available
+    throw new McpToolsUnavailableError("could not connect to MCP Gateway");
   }
 
   try {
@@ -828,10 +879,15 @@ export async function getChatMcpTools({
       return !(uiVisibility && !uiVisibility.includes("model"));
     });
 
+    // rawToolCount vs toolCount makes a successful-but-model-empty fetch
+    // diagnosable: when the gateway returns tools but every one is filtered out
+    // (all app-only, or stripped as agent tools), the model still sees nothing.
+    // That is a legitimate state (we don't throw), but the gap is worth logging.
     logger.info(
       {
         agentId,
         userId,
+        rawToolCount: mcpTools.length,
         toolCount: filteredMcpTools.length,
         toolNames: filteredMcpTools.map((t) => t.name),
       },
@@ -849,6 +905,8 @@ export async function getChatMcpTools({
     ]);
     const globalToolPolicy: GlobalToolPolicy =
       org?.globalToolPolicy ?? "permissive";
+    const discoveredToolPolicy: DiscoveredToolPolicy =
+      org?.discoveredToolPolicy ?? "relaxed";
     const considerContextUntrusted = agent?.considerContextUntrusted ?? false;
 
     // Convert MCP tools to AI SDK Tool format
@@ -871,6 +929,7 @@ export async function getChatMcpTools({
       hookRunCollector,
       mcpGwToken,
       globalToolPolicy,
+      discoveredToolPolicy,
       considerContextUntrusted,
       teams,
       userTeams,
@@ -948,7 +1007,22 @@ export async function getChatMcpTools({
       { agentId, userId, error },
       "Failed to fetch tools from MCP Gateway",
     );
-    return {};
+    // Evict the client so a transient tools/list failure self-heals on the next
+    // turn instead of reusing the same failing session until the idle TTL. The
+    // detail stays in the log above; the thrown message is kept generic so raw
+    // gateway error text never reaches the API client.
+    const cacheKey = getCacheKey(agentId, userId, scopeKey);
+    try {
+      await client.close();
+    } catch (closeError) {
+      logger.warn(
+        { agentId, userId, closeError },
+        "Error closing MCP client after tool fetch failure (non-fatal)",
+      );
+    }
+    clientCache.delete(cacheKey);
+    clientLastValidatedAt.delete(cacheKey);
+    throw new McpToolsUnavailableError("tool listing failed");
   }
 }
 

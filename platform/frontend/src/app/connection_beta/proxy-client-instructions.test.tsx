@@ -31,12 +31,6 @@ vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => hasPermissionsMock(),
 }));
 
-// The verify step pulls in app-name/session queries that need a QueryClient;
-// these tests are about the attribution header, not the verify UI, so stub it.
-vi.mock("./test-setup-link", () => ({
-  TestSetupStep: () => <div data-testid="test-setup-step" />,
-}));
-
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: () => availableKeysMock(),
 }));

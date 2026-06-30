@@ -3,7 +3,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "./utils";
+import { handleApiError, throwOnApiError } from "./utils";
 
 const { getHooks, createHook, updateHook, deleteHook } = archestraApiSdk;
 
@@ -29,10 +29,7 @@ export function useAgentHooks(agentId: string | undefined) {
       const response = await getHooks({
         query: { agentId: agentId as string },
       });
-      if (response.error) {
-        handleApiError(response.error);
-        return [];
-      }
+      throwOnApiError(response.error);
       return response.data ?? [];
     },
     enabled: !!agentId,

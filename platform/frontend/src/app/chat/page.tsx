@@ -27,16 +27,14 @@ import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-serv
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
+import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { AppsProvider } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import {
-  collectBrowserToolCallIds,
-  deriveAppsFromMessages,
-} from "@/components/chat/chat-messages.utils";
+import { collectBrowserToolCallIds } from "@/components/chat/chat-messages.utils";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
@@ -51,6 +49,7 @@ import {
 } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
+import { useChatApps } from "@/components/chat/use-chat-apps";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread, {
   type PartialUIMessage,
@@ -90,6 +89,7 @@ import {
 } from "@/lib/chat/app-diagnostics-store";
 import {
   fetchConversationEnabledTools,
+  invalidateConversationFileQueries,
   useClearChatErrors,
   useCompactConversation,
   useConversation,
@@ -117,6 +117,10 @@ import {
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
+  drainPendingChatHandoffFiles,
+  hasPendingChatHandoffFiles,
+} from "@/lib/chat/pending-chat-handoff-files";
+import {
   applyPendingActions,
   clearPendingActions,
   getPendingActions,
@@ -134,7 +138,6 @@ import {
   type SupportedProvider,
   useLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
-import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useOrganization } from "@/lib/organization.query";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { useProjectFiles } from "@/lib/projects/projects.query";
@@ -305,8 +308,15 @@ export function ChatPageContent({
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
     useLlmModelsByProvider({ enabled: canUseProviderSettings });
-  const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
-    useLlmProviderApiKeys({ enabled: hasChatAccess && canUseProviderSettings });
+  const {
+    data: chatApiKeys = [],
+    isLoading: isLoadingApiKeys,
+    isLoadingError: isApiKeysLoadError,
+    refetch: refetchApiKeys,
+  } = useLlmProviderApiKeys({
+    enabled: hasChatAccess && canUseProviderSettings,
+    toastOnError: false,
+  });
   const { data: organization, isPending: isOrgLoading } = useOrganization();
   // The user's saved default (model, key) pair — top of the resolution chain
   // for a new chat ("member" level).
@@ -799,21 +809,11 @@ export function ChatPageContent({
         : persistedConversationMessages,
     [chatSession?.messages, persistedConversationMessages],
   );
-  // Derive the MCP App list from the conversation itself so the panel selector
-  // is deterministic and survives transient section unmounts (the previous
-  // mount-effect registry could empty when a single app's section briefly
-  // unmounted).
-  const { getToolShortName: getArchestraToolShortName } =
-    useArchestraMcpIdentity();
-  const mcpApps = useMemo(
-    () =>
-      deriveAppsFromMessages(
-        messages,
-        chatSession?.earlyToolUiStarts ?? {},
-        getArchestraToolShortName,
-      ),
-    [messages, chatSession?.earlyToolUiStarts, getArchestraToolShortName],
-  );
+  const mcpApps = useChatApps({
+    messages,
+    earlyToolUiStarts: chatSession?.earlyToolUiStarts ?? {},
+    filterDeleted: true,
+  });
   const sendMessage = chatSession?.sendMessage;
   const regenerateUserMessage = chatSession?.regenerateUserMessage;
   const status = chatSession?.status ?? "ready";
@@ -1225,11 +1225,9 @@ export function ChatPageContent({
     if (!isWaitingForAssistant) return;
 
     const interval = setInterval(() => {
-      queryClient.invalidateQueries({
-        queryKey: ["conversation", conversationId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["conversation-files", conversationId],
+      invalidateConversationFileQueries(queryClient, {
+        conversationId,
+        projectId: conversation?.projectId,
       });
     }, 3000);
 
@@ -1237,6 +1235,7 @@ export function ChatPageContent({
   }, [
     conversationId,
     conversation?.messages,
+    conversation?.projectId,
     messages.length,
     status,
     queryClient,
@@ -1248,13 +1247,11 @@ export function ChatPageContent({
   // Files panel can follow the latest output.
   useEffect(() => {
     if (!conversationId || status !== "ready") return;
-    queryClient.invalidateQueries({
-      queryKey: ["conversation-files", conversationId],
+    invalidateConversationFileQueries(queryClient, {
+      conversationId,
+      projectId: conversation?.projectId,
     });
-    queryClient.invalidateQueries({
-      queryKey: ["conversation", conversationId],
-    });
-  }, [status, conversationId, queryClient]);
+  }, [status, conversationId, conversation?.projectId, queryClient]);
 
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
   // or when conversation loads (e.g., new chat created, hard refresh)
@@ -1423,6 +1420,32 @@ export function ChatPageContent({
     autoOpenedRunsRef.current = conversationId;
     openRightPanelTab("runs");
   }, [scheduledRunTriggerId, conversationId, openRightPanelTab]);
+
+  // When a conversation has an app but no saved right-panel preference yet (the
+  // user hasn't manually opened/closed it in this chat), open the Apps tab once
+  // so the app shows immediately — e.g. landing on a freshly-seeded "open app"
+  // chat. A manual override is respected; once opened, openRightPanelTab persists
+  // the preference, so this never fights the restore effect.
+  const autoOpenedAppsRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!conversationId || isLoadingConversation) return;
+    if (mcpApps.length === 0) return;
+    if (autoOpenedAppsRef.current === conversationId) return;
+    autoOpenedAppsRef.current = conversationId;
+    if (
+      localStorage.getItem(
+        conversationStorageKeys(conversationId).rightPanelOpen,
+      ) !== null
+    ) {
+      return;
+    }
+    openRightPanelTab("apps");
+  }, [
+    conversationId,
+    isLoadingConversation,
+    mcpApps.length,
+    openRightPanelTab,
+  ]);
 
   const toggleRightPanel = useCallback(() => {
     if (isRightPanelOpen) {
@@ -1694,8 +1717,16 @@ export function ChatPageContent({
 
   // Auto-send message from URL when conditions are met (deep link support)
   useEffect(() => {
-    // Skip if already triggered or no user_prompt in URL
-    if (autoSendTriggeredRef.current || !initialUserPrompt) return;
+    if (autoSendTriggeredRef.current) return;
+
+    // A handoff that stashed attachments stamps `attachments=1` and may carry no
+    // prompt (files-only), so it triggers the send too — but only when the files
+    // are actually still in memory, else a reloaded handoff URL (store cleared)
+    // would create an empty conversation.
+    const handoffHasAttachments = searchParams.get("attachments") === "1";
+    const handoffFilesReady =
+      handoffHasAttachments && hasPendingChatHandoffFiles();
+    if (!initialUserPrompt && !handoffFilesReady) return;
 
     // Skip if conversation already exists
     if (conversationId) return;
@@ -1713,8 +1744,13 @@ export function ChatPageContent({
       searchParams,
     });
 
-    // Store the message to send after conversation is created
+    // Store the message to send after conversation is created. Draining is
+    // gated on the URL marker so the shared auto-send path never pulls stashed
+    // files into an unrelated handoff (app / SSO / a2a / deep link).
     pendingPromptRef.current = initialUserPrompt;
+    pendingFilesRef.current = handoffHasAttachments
+      ? drainPendingChatHandoffFiles()
+      : [];
 
     createInitialConversation((newConversation) => {
       // the init effect on the /chat/<id> mount reads this preference and
@@ -1829,6 +1865,15 @@ export function ChatPageContent({
     );
   }
 
+  // The first keys fetch failed with no cached list (e.g. offline cold start).
+  // Show a retry state rather than the setup prompt, which would wrongly imply
+  // the user has no keys configured. `isLoadingError` is scoped to the
+  // first-fetch failure: a failed background refetch keeps the last successful
+  // result, so we don't flip a working or known-empty screen to this one.
+  if (isApiKeysLoadError) {
+    return <ApiKeyLoadError onRetry={() => refetchApiKeys()} />;
+  }
+
   // If API key is not configured, show setup prompt with inline creation dialog
   if (!hasAnyApiKey) {
     // Reset to a clean /chat URL after a key is added so no stale conversation
@@ -1905,6 +1950,7 @@ export function ChatPageContent({
     <AppsProvider
       apps={mcpApps}
       onShowInPanel={() => openRightPanelTab("apps" as RightPanelTab)}
+      onClosePanel={closeRightPanel}
     >
       <div className="flex h-full w-full min-h-0">
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
@@ -2396,6 +2442,9 @@ function clearUserPromptQueryParam(params: {
 }) {
   const nextSearchParams = new URLSearchParams(params.searchParams.toString());
   nextSearchParams.delete("user_prompt");
+  // The attachments marker is one-shot too: drop it once consumed so a remount
+  // can't re-trigger a drain (which would now find an empty store).
+  nextSearchParams.delete("attachments");
   const nextUrl = nextSearchParams.toString()
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;

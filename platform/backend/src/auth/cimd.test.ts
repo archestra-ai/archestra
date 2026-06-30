@@ -1,3 +1,4 @@
+import { OAUTH_SCOPES } from "@archestra/shared";
 import { afterEach, describe, expect, vi } from "vitest";
 import { OAuthClientModel } from "@/models";
 import { test } from "@/test";
@@ -358,6 +359,78 @@ describe("CIMD", () => {
 
       const name = await OAuthClientModel.getNameByClientId(clientIdUrl);
       expect(name).toBe("Auto-Registered Client");
+    });
+
+    test("persists the scope declared in the CIMD document", async () => {
+      const clientIdUrl = `https://cimd-test.example.com/${crypto.randomUUID()}/client.json`;
+
+      mockFetchWithDocument({
+        client_id: clientIdUrl,
+        client_name: "Scoped Client",
+        redirect_uris: ["http://localhost:8005/callback"],
+        grant_types: ["authorization_code", "refresh_token"],
+        scope: "mcp offline_access",
+      });
+
+      await ensureCimdClientRegistered(clientIdUrl);
+
+      const found = await OAuthClientModel.findByClientId(clientIdUrl);
+      expect(found?.scopes).toEqual(["mcp", "offline_access"]);
+    });
+
+    test("defaults to the full supported scope set when the document omits scope", async () => {
+      // Regression: a null scopes column lets the provider fall back to its full
+      // scope list, but `ensureOfflineAccessScope` later coalesces null into a
+      // partial array that omits `mcp` — producing `invalid_scope: mcp`. The
+      // client must register with a non-null set that includes `mcp`.
+      const clientIdUrl = `https://cimd-test.example.com/${crypto.randomUUID()}/client.json`;
+
+      mockFetchWithDocument({
+        client_id: clientIdUrl,
+        client_name: "Unscoped Client",
+        redirect_uris: ["http://localhost:8005/callback"],
+        grant_types: ["authorization_code", "refresh_token"],
+      });
+
+      await ensureCimdClientRegistered(clientIdUrl);
+
+      const found = await OAuthClientModel.findByClientId(clientIdUrl);
+      expect(found?.scopes).toEqual([...OAUTH_SCOPES]);
+      expect(found?.scopes).toContain("mcp");
+    });
+
+    test("keeps the `mcp` scope after the offline_access self-heal (Claude Code)", async () => {
+      // End-to-end regression for the `invalid_scope: mcp` Claude Code reported.
+      // Claude Code's CIMD document declares a refresh_token grant and NO scope,
+      // and it requests `mcp offline_access` at authorize. The authorize handler
+      // calls `ensureOfflineAccessScope` to persist offline_access onto the
+      // client. Before the fix, registration left scopes null, so that self-heal
+      // produced `['offline_access']` — a non-null set without `mcp` — and the
+      // OAuth provider then rejected the `mcp` scope. The client's stored scopes
+      // must still contain `mcp` after the self-heal runs.
+      const clientIdUrl = `https://cimd-test.example.com/${crypto.randomUUID()}/client.json`;
+
+      // Mirror the real document at
+      // https://claude.ai/oauth/claude-code-client-metadata (no `scope` field).
+      mockFetchWithDocument({
+        client_id: clientIdUrl,
+        client_name: "Claude Code",
+        redirect_uris: [
+          "http://localhost/callback",
+          "http://127.0.0.1/callback",
+        ],
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+      });
+
+      await ensureCimdClientRegistered(clientIdUrl);
+      // The authorize handler runs this when the request asks for offline_access.
+      await OAuthClientModel.ensureOfflineAccessScope(clientIdUrl);
+
+      const found = await OAuthClientModel.findByClientId(clientIdUrl);
+      expect(found?.scopes).toContain("mcp");
+      expect(found?.scopes).toContain("offline_access");
     });
 
     test("uses cache on repeated calls within TTL", async () => {

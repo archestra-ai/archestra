@@ -3098,6 +3098,63 @@ describe("ToolModel", () => {
         );
       expect(catalogRows).toHaveLength(1);
     });
+
+    test("does not promote a default-prefixed discovery when the branded short-name twin is already cataloged", async () => {
+      const brandedOrg = { appName: "Acme Copilot", iconLogo: null };
+      archestraMcpBranding.syncFromOrganization(brandedOrg);
+
+      const brandedName = archestraMcpBranding.getToolName(
+        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+      );
+      const defaultName = getArchestraToolFullName(
+        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+        { appName: null, fullWhiteLabeling: false },
+      );
+      expect(brandedName).not.toBe(defaultName); // branded env: prefixes differ
+
+      await db.insert(schema.internalMcpCatalogTable).values({
+        id: ARCHESTRA_MCP_CATALOG_ID,
+        ...getArchestraMcpCatalogMetadata(),
+      });
+      // The canonical, branded built-in already lives in the catalog.
+      await db.insert(schema.toolsTable).values({
+        name: brandedName,
+        parameters: {},
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        agentId: null,
+      });
+      // Off-brand discovery: the same built-in arrived under the DEFAULT prefix as
+      // a shared proxy tool (catalog_id NULL) — what LLM-proxy auto-discovery used
+      // to persist before the persistTools guard recognized both prefixes.
+      const [discovered] = await db
+        .insert(schema.toolsTable)
+        .values({
+          name: defaultName,
+          parameters: {},
+          catalogId: null,
+          agentId: null,
+        })
+        .returning();
+
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID, brandedOrg);
+
+      // The discovered twin must NOT be promoted into the catalog…
+      const [after] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.id, discovered.id));
+      expect(after?.catalogId).toBeNull();
+
+      // …and the catalog holds exactly one row for the artifact_write short name.
+      const catalogRows = await db
+        .select({ name: schema.toolsTable.name })
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID));
+      const twins = catalogRows
+        .map((r) => r.name)
+        .filter((name) => name === brandedName || name === defaultName);
+      expect(twins).toEqual([brandedName]);
+    });
   });
 
   describe("findAllWithAssignments", () => {

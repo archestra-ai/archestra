@@ -56,6 +56,8 @@ export interface ChatPromptInputToolsProps {
   onProviderChange?: (provider: SupportedProvider, apiKeyId: string) => void;
   /** Whether file uploads are allowed (controlled by organization setting) */
   allowFileUploads?: boolean;
+  /** Whether the agent has a code sandbox available (allows any file type) */
+  sandboxAvailable?: boolean;
   /** Whether models are still loading - passed to API key selector */
   isModelsLoading?: boolean;
   /** Estimated tokens used in the conversation (for context indicator) */
@@ -110,6 +112,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onApiKeyChange,
   onProviderChange,
   allowFileUploads = false,
+  sandboxAvailable = false,
   isModelsLoading = false,
   tokensUsed = 0,
   cachedTokens,
@@ -153,10 +156,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   // Determine if file uploads should be shown
   // 1. Organization must allow file uploads (allowFileUploads)
   // 2. Model must support at least one file type (modelSupportsFiles)
+  // A sandbox-equipped agent can process any file (staged for run_command), so
+  // uploads are offered even when the model itself has no file modalities.
   const showFileUploadButton =
-    allowFileUploads && supportsFileUploads(inputModalities);
-  const supportedTypesDescription =
-    getSupportedFileTypesDescription(inputModalities);
+    allowFileUploads &&
+    (supportsFileUploads(inputModalities) || sandboxAvailable);
+  const supportedTypesDescription = sandboxAvailable
+    ? "any file type"
+    : getSupportedFileTypesDescription(inputModalities);
 
   // Check if user can update agent settings (to show settings link in tooltip)
   const { data: canUpdateAgentSettings } = useHasPermissions({

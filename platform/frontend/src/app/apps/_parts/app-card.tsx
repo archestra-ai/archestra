@@ -1,55 +1,19 @@
 "use client";
 
-import type {
-  archestraApiTypes,
-  ResourceVisibilityScope,
-} from "@archestra/shared";
-import {
-  ExternalLink,
-  Globe,
-  MessageSquare,
-  MoreHorizontal,
-  Pencil,
-  Route,
-  Trash2,
-  User,
-  Users,
-} from "lucide-react";
+import type { archestraApiTypes } from "@archestra/shared";
+import { ArrowUpRight, Loader2, Server } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { buildAppChatHandoffUrl } from "@/lib/apps/app-chat-handoff";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { AppDeleteDialog } from "./app-delete-dialog";
-import { AppEditConfigDialog } from "./app-edit-config-dialog";
+import { useOpenAppInChat } from "@/lib/app.query";
+import { cn } from "@/lib/utils";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 type OwnedApp = Extract<AppListItem, { source: "owned" }>;
 type ExternalApp = Extract<AppListItem, { source: "external" }>;
-
-// An external app is listed once per catalog item; its availability chips show
-// which scopes the caller has an install in. Stable order keeps chips from
-// reshuffling between renders.
-const SCOPE_META: Record<
-  ResourceVisibilityScope,
-  { label: string; Icon: typeof Globe }
-> = {
-  personal: { label: "Personal", Icon: User },
-  team: { label: "Team", Icon: Users },
-  org: { label: "Organization", Icon: Globe },
-};
-const SCOPE_ORDER: ResourceVisibilityScope[] = ["personal", "team", "org"];
 
 export function AppCard({
   app,
@@ -65,9 +29,9 @@ export function AppCard({
   );
 }
 
-// Clicking the card chats with the app; everything else lives in the top-right
-// kebab. The chat-link overlay sits under the content, so only the kebab (and
-// its portalled menu/dialogs) is raised above it.
+// Clicking the card opens the app in a new chat; the overlay button covers the
+// whole card. The backend seeds a conversation with the app already rendered and
+// returns its id, so we navigate straight to it (no model turn).
 function OwnedAppCard({
   app,
   currentUserId,
@@ -76,82 +40,62 @@ function OwnedAppCard({
   currentUserId: string | undefined;
 }) {
   const router = useRouter();
-  const [renameOpen, setRenameOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const { data: canUpdate } = useHasPermissions({ app: ["update"] });
-  const { data: canDelete } = useHasPermissions({ app: ["delete"] });
+  const openApp = useOpenAppInChat();
+  // Stays true from click through the redirect: the mutation resolving flips
+  // isPending off before navigation paints, so spin on this instead. On success
+  // the card unmounts mid-navigation, so it never resets; only a failure does.
+  const [isOpening, setIsOpening] = useState(false);
+
+  const handleOpen = async () => {
+    setIsOpening(true);
+    const result = await openApp.mutateAsync(app.id);
+    if (result?.conversationId) {
+      router.push(`/chat/${result.conversationId}`);
+    } else {
+      setIsOpening(false);
+    }
+  };
 
   return (
-    <Card className="group relative flex min-h-[194px] flex-col gap-0 p-5 transition-colors hover:border-primary/40 hover:shadow-sm">
-      <Link
-        href={buildAppChatHandoffUrl({ appId: app.id, appName: app.name })}
+    <Card className="group relative flex min-h-[140px] cursor-pointer flex-col gap-0 p-4 transition-shadow hover:shadow-md">
+      <button
+        type="button"
+        onClick={handleOpen}
+        disabled={isOpening}
         className="absolute inset-0 rounded-xl"
-        aria-label={`Chat with ${app.name}`}
+        aria-label={`Open ${app.name} in new chat`}
       />
 
-      {/* Hover scrim + centered chat CTA. pointer-events-none so the click
-          falls through to the chat link beneath; the kebab (z-10) stays above. */}
-      <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center rounded-xl bg-background/75 opacity-0 backdrop-blur-[1px] transition-opacity duration-150 group-hover:opacity-100">
-        <span className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
-          <MessageSquare className="h-4 w-4" />
-          Open in chat
+      {/* Hover (or in-flight) CTA. The pill is visual only — pointer-events-none
+          so the click falls through to the full-card button above. Opening is a
+          round-trip, so its loading state keeps the card from looking frozen. */}
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-0 z-[5] flex items-center justify-center rounded-xl bg-background/70 opacity-0 backdrop-blur-[1px] transition-opacity duration-75 group-hover:opacity-100",
+          isOpening && "opacity-100",
+        )}
+      >
+        <span
+          className={cn(
+            buttonVariants({ variant: "outline", size: "sm" }),
+            "shadow-sm",
+          )}
+        >
+          {isOpening ? (
+            <>
+              <Loader2 className="animate-spin" />
+              Opening…
+            </>
+          ) : (
+            <>
+              <ArrowUpRight />
+              Open in new chat
+            </>
+          )}
         </span>
       </div>
 
-      <div className="absolute right-3 top-3 z-10">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="App actions"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onSelect={() =>
-                window.open(`/a/${app.id}`, "_blank", "noopener,noreferrer")
-              }
-            >
-              <ExternalLink className="h-4 w-4" />
-              Open in new tab
-            </DropdownMenuItem>
-            {canUpdate && (
-              <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
-                <Pencil className="h-4 w-4" />
-                Rename
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem
-              onSelect={() =>
-                router.push(
-                  `/mcp/registry/beta?search=${encodeURIComponent(app.name)}`,
-                )
-              }
-            >
-              <Route className="h-4 w-4" />
-              Manage MCP
-            </DropdownMenuItem>
-            {canDelete && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onSelect={() => setDeleteOpen(true)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <div className="mb-4 flex flex-wrap items-center gap-1.5 pr-8">
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <ResourceVisibilityBadge
           scope={app.scope}
           teams={undefined}
@@ -167,17 +111,6 @@ function OwnedAppCard({
           {app.description}
         </CardDescription>
       ) : null}
-
-      <AppEditConfigDialog
-        app={app}
-        open={renameOpen}
-        onOpenChange={setRenameOpen}
-      />
-      <AppDeleteDialog
-        app={app}
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-      />
     </Card>
   );
 }
@@ -190,40 +123,23 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
     : `/mcp/registry?search=${encodeURIComponent(app.name)}`;
 
   return (
-    <Card className="group relative min-h-[194px] gap-0 p-5 transition-colors hover:border-primary/40 hover:shadow-sm">
+    <Card className="group relative min-h-[140px] gap-0 p-4 transition-colors hover:border-primary/40 hover:shadow-sm">
       <Link
         href={href}
         className="absolute inset-0 rounded-xl"
         aria-label={`Open ${app.name}`}
       />
-      <div className="mb-4 flex flex-wrap items-center gap-1.5">
-        {app.runnable ? (
-          SCOPE_ORDER.filter((s) => app.availabilityScopes.includes(s)).map(
-            (s) => {
-              const { label, Icon: ScopeIcon } = SCOPE_META[s];
-              return (
-                <Badge key={s} variant="outline" className="gap-1 text-xs">
-                  <ScopeIcon className="h-3 w-3" />
-                  {label}
-                </Badge>
-              );
-            },
-          )
-        ) : (
-          <Badge variant="outline" className="text-xs text-muted-foreground">
-            Not installed
-          </Badge>
-        )}
+      <div className="flex items-center gap-2">
+        <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <CardTitle className="min-w-0 truncate">{app.name}</CardTitle>
       </div>
-
-      <CardTitle className="truncate">{app.name}</CardTitle>
       {app.description ? (
         <CardDescription className="mt-1 line-clamp-2">
           {app.description}
         </CardDescription>
       ) : null}
 
-      <div className="mt-auto flex items-center gap-2 pt-4 text-xs text-muted-foreground">
+      <div className="mt-auto flex items-center gap-2 pt-3 text-xs text-muted-foreground">
         <span className="truncate">
           {app.runnable
             ? "Runs as the server · declares its own network"

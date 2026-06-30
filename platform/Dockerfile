@@ -138,7 +138,7 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
-RUN corepack prepare pnpm@11.5.2 --activate
+RUN corepack prepare pnpm@11.9.0 --activate
 
 # Dependencies stage
 FROM base AS deps

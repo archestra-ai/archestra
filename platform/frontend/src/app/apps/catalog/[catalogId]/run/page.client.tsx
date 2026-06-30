@@ -115,7 +115,6 @@ export default function CatalogAppRunPage({
           <AppFrame
             endpoint={{ kind: "server", mcpServerId: activeInstallId }}
             resourceUri={data.resourceUri}
-            chrome={false}
           />
         ) : null}
       </main>

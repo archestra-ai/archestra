@@ -1,11 +1,18 @@
 import crypto from "node:crypto";
 import {
+  type ChatUploadRejectionReason,
+  chatUploadRejectionReason,
+  getModelReadableMimeTypes,
+  INLINE_TEXT_MAX_BYTES,
   type InteractionSource,
+  isInlineableTextMimeType,
   PLAYWRIGHT_MCP_CATALOG_ID,
+  type SupportedProvider,
 } from "@archestra/shared";
 import type { ModelMessage, UIMessage, UserContent } from "ai";
 import {
   consumeStream as consumeReadableStream,
+  convertToModelMessages,
   NoOutputGeneratedError,
   stepCountIs,
   type streamText,
@@ -22,16 +29,24 @@ import {
   repeatCeilingStopCondition,
   ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
+import config from "@/config";
 import logger from "@/logging";
-import { AgentModel, McpServerModel } from "@/models";
+import { AgentModel, McpServerModel, ModelModel } from "@/models";
 import {
   formatUnavailableToolErrorDetails,
   getUnavailableToolErrorDetails,
   mapProviderError,
   ProviderError,
 } from "@/routes/chat/errors";
+import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
+import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
+import type { ChatMessage } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import {
+  type StageResult,
+  stageAttachmentsIntoSandbox,
+} from "./a2a/stage-attachments";
 
 /**
  * Source-agnostic attachment for A2A execution.
@@ -249,7 +264,7 @@ export async function executeA2AMessage(
     // Pass sessionId to group A2A requests with the calling session
     // Pass delegationChain as externalAgentId so agent names appear in logs
     // Pass agent's llmApiKeyId so it can be used without user access check
-    const { model } = await createLLMModelForAgent({
+    const { model, anthropicNativeEndpoint } = await createLLMModelForAgent({
       organizationId,
       userId,
       agentId: agent.id,
@@ -262,11 +277,57 @@ export async function executeA2AMessage(
       contextIsTrusted: parentContextIsTrusted,
     });
 
-    // Build multimodal user content when image attachments are present
-    const { content: userContent, skippedNote } = buildUserContent(
+    // Which attachment mime types this model can read. A missing model row
+    // (lookup failure or unknown model) falls back to the safe default set
+    // (text + images + PDF) rather than dropping everything.
+    const modelRow = await ModelModel.findByProviderAndModelId(
+      provider,
+      selectedModel,
+    ).catch(() => null);
+    const ingestibleMimeTypes = getModelReadableMimeTypes(
+      modelRow?.inputModalities ?? null,
+    );
+
+    // A file the model cannot read inline is staged into the agent's sandbox when
+    // one is usable for this caller. Resolved only when there are attachments, so
+    // text-only turns (the common case) skip the permission/DB chain. Skip the
+    // lookup for the synthetic "system" actor (external A2A v2) — it can never
+    // hold `sandbox:execute`.
+    const sandboxAvailable =
+      (attachments?.length ?? 0) > 0 && userId && userId !== "system"
+        ? await isSkillSandboxAvailableForAgent({
+            userId,
+            organizationId,
+            agentId,
+          })
+        : false;
+
+    // Build the current user turn from the message + attachments, gated by the
+    // model's capabilities and normalized for the provider. `params.messages`
+    // carries only prior context; this turn is appended to it below. Passing
+    // `stageAttachments` is what tells `buildUserContent` a sandbox is available.
+    const { content: userContent, note } = await buildUserContent(
       message,
       attachments,
+      {
+        provider,
+        anthropicNativeEndpoint,
+        ingestibleMimeTypes,
+        sandboxByteLimit: config.skillsSandbox.artifactBytesLimit,
+        stageAttachments: sandboxAvailable
+          ? (atts) =>
+              stageAttachmentsIntoSandbox({
+                attachments: atts,
+                organizationId,
+                userId,
+                conversationId: params.conversationId ?? null,
+                isolationKey,
+                agentId,
+              })
+          : undefined,
+      },
     );
+    const currentTurnText = message + note;
 
     // Execute via the shared agent-run primitive: it owns the streamText call
     // and transparently recovers empty/abortive/context-length turns before any
@@ -275,8 +336,12 @@ export async function executeA2AMessage(
     // previously had no recovery — a clean-but-empty turn returned an empty
     // success. It now retries and, on exhaustion, throws (mapped to a
     // ProviderError below), matching the interactive chat path.
-    // Prefer the explicit `messages` param; otherwise use a `messages` user turn
-    // when images are present, falling back to a plain `prompt` for text only.
+    // The executor owns the current user turn: `params.messages` (when present)
+    // is prior context only, and the turn built from `message`/`attachments` is
+    // appended to it. When there is no current turn (e.g. an approval-decision
+    // message with no text or attachments), the context is used as-is. Callers
+    // without context (delegation, scheduled, A2A v1) fall back to a plain
+    // `prompt` for text, or a single `messages` turn when attachments survive.
     const baseConfig = {
       model,
       system: systemPrompt,
@@ -287,15 +352,23 @@ export async function executeA2AMessage(
       ],
       abortSignal,
     };
-    const config: Parameters<typeof streamText>[0] =
+    const currentTurn: { role: "user"; content: UserContent } | null =
+      userContent !== null
+        ? { role: "user", content: userContent }
+        : currentTurnText.trim().length > 0
+          ? { role: "user", content: currentTurnText }
+          : null;
+    const streamConfig: Parameters<typeof streamText>[0] =
       params.messages !== undefined
-        ? { ...baseConfig, messages: params.messages }
-        : userContent
-          ? {
-              ...baseConfig,
-              messages: [{ role: "user" as const, content: userContent }],
-            }
-          : { ...baseConfig, prompt: message + skippedNote };
+        ? {
+            ...baseConfig,
+            messages: currentTurn
+              ? [...params.messages, currentTurn]
+              : params.messages,
+          }
+        : currentTurn
+          ? { ...baseConfig, messages: [currentTurn] }
+          : { ...baseConfig, prompt: currentTurnText };
 
     let finalText: string;
     let usage: Awaited<ReturnType<typeof streamText>["usage"]>;
@@ -306,7 +379,7 @@ export async function executeA2AMessage(
     let getCapturedStreamError: () => unknown = () => undefined;
     try {
       const runStream = await runAgentStream({
-        config,
+        config: streamConfig,
         recovery: { logContext: { agentId: agent.id, sessionId } },
       });
       const stream = runStream.result;
@@ -440,23 +513,50 @@ export async function executeA2AMessage(
 // Exported helper functions
 // ============================================================================
 
+/** Stages raw (non-DB) attachments into the agent's per-execution sandbox. */
+type StageAttachmentsFn = (
+  attachments: A2AAttachment[],
+) => Promise<StageResult[]>;
+
 /**
- * Build AI SDK UserContent from a text message and optional attachments.
- * Returns `content: null` when there are no image attachments (caller should use plain `prompt` instead).
- * Returns `skippedNote` with a human-readable note about non-image attachments that were dropped,
- * so the caller can append it to the prompt for the LLM to mention.
+ * Build the current user turn's AI SDK content from a text message and optional
+ * attachments, mirroring the chat-side attachment policy
+ * (`chatUploadRejectionReason`):
+ *   - images: kept inline, minus the tiny-broken-image filter;
+ *   - inlineable text ≤ {@link INLINE_TEXT_MAX_BYTES}: kept inline (decoded per
+ *     provider by `prepareMessagesForProvider`);
+ *   - other model-ingestible types (PDF, audio, video): kept inline at any size;
+ *   - anything else, when a sandbox is available and it fits the artifact limit:
+ *     staged into the sandbox and referenced by a pointer in `note` so the model
+ *     can read it with `run_command`;
+ *   - the rest: named in `note` with the reason they could not be provided.
  *
- * Only image attachments are currently supported as inline content parts.
- * Non-image attachments are noted so the LLM can inform the user.
+ * Returns `content: null` when nothing survives inline, so the caller falls back
+ * to a plain text turn carrying `note`.
  * @public — exported for testability
  */
-export function buildUserContent(
+export async function buildUserContent(
   message: string,
-  attachments?: A2AAttachment[],
-): { content: UserContent | null; skippedNote: string } {
+  attachments: A2AAttachment[] | undefined,
+  opts: {
+    provider: SupportedProvider;
+    anthropicNativeEndpoint: boolean;
+    ingestibleMimeTypes: Set<string>;
+    sandboxByteLimit?: number;
+    stageAttachments?: StageAttachmentsFn;
+  },
+): Promise<{ content: UserContent | null; note: string }> {
   const allAttachments = attachments ?? [];
+  // A sandbox is usable iff the caller supplied a stager; deriving it here (vs a
+  // separate flag) makes the "available but unstageable" state unrepresentable.
+  const sandboxAvailable = opts.stageAttachments !== undefined;
+  const sandboxByteLimit =
+    opts.sandboxByteLimit ?? config.skillsSandbox.artifactBytesLimit;
 
-  // Split into image and non-image attachments
+  // Images are matched broadly by `image/*` and always kept (subject to the
+  // tiny-broken-image filter), deliberately bypassing the mime classifier: a
+  // model's readable set may omit a non-standard subtype (e.g. `image/jpg`) that
+  // the provider still renders, so images are never staged or rejected here.
   const imageAttachments = allAttachments.filter((a) =>
     a.contentType.startsWith("image/"),
   );
@@ -465,69 +565,165 @@ export function buildUserContent(
   );
 
   // Filter out tiny images (broken inline references from email replies).
-  // Estimate actual byte size from base64 length: every 4 base64 chars = 3 bytes.
-  const validImageAttachments = imageAttachments.filter((a) => {
-    const estimatedBytes = Math.ceil((a.contentBase64.length * 3) / 4);
-    return estimatedBytes >= MIN_IMAGE_ATTACHMENT_SIZE;
-  });
-  const tinyImageAttachments = imageAttachments.filter((a) => {
-    const estimatedBytes = Math.ceil((a.contentBase64.length * 3) / 4);
-    return estimatedBytes < MIN_IMAGE_ATTACHMENT_SIZE;
-  });
+  const validImageAttachments = imageAttachments.filter(
+    (a) => estimateAttachmentBytes(a) >= MIN_IMAGE_ATTACHMENT_SIZE,
+  );
+  const tinyImageAttachments = imageAttachments.filter(
+    (a) => estimateAttachmentBytes(a) < MIN_IMAGE_ATTACHMENT_SIZE,
+  );
 
-  if (tinyImageAttachments.length > 0) {
-    logger.debug(
-      {
-        count: tinyImageAttachments.length,
-        images: tinyImageAttachments.map((a) => ({
-          name: a.name ?? "unnamed",
-          contentType: a.contentType,
-          estimatedBytes: Math.ceil((a.contentBase64.length * 3) / 4),
-        })),
-      },
-      "Filtering out tiny image attachments (likely broken inline references from email replies)",
-    );
+  // Classify each non-image attachment with the shared policy, then split the
+  // accepted ones into inline-now vs stage-into-sandbox.
+  const inlineNonImage: A2AAttachment[] = [];
+  const toStage: A2AAttachment[] = [];
+  const rejected: Array<{
+    att: A2AAttachment;
+    reason: ChatUploadRejectionReason;
+  }> = [];
+  for (const att of nonImageAttachments) {
+    const reason = chatUploadRejectionReason({
+      mimeType: att.contentType,
+      byteLength: estimateAttachmentBytes(att),
+      ingestibleMimeTypes: opts.ingestibleMimeTypes,
+      sandboxAvailable,
+      sandboxByteLimit,
+    });
+    if (reason) {
+      rejected.push({ att, reason });
+    } else if (canInlineAttachment(att, opts.ingestibleMimeTypes)) {
+      inlineNonImage.push(att);
+    } else {
+      toStage.push(att);
+    }
   }
 
-  if (nonImageAttachments.length > 0) {
-    logger.debug(
-      {
-        skippedCount: nonImageAttachments.length,
-        skippedTypes: nonImageAttachments.map(
-          (a) => `${a.name ?? "unnamed"} (${a.contentType})`,
-        ),
-      },
-      "Skipping non-image attachments in buildUserContent (only image/* is currently supported)",
-    );
+  // Stage the sandbox-bound attachments. A creation/upload failure surfaces as a
+  // note (no silent drop) and the turn continues with whatever else survived.
+  const stagedPointers: Array<{ name: string; path: string }> = [];
+  const stageFailed: A2AAttachment[] = [];
+  if (toStage.length > 0) {
+    const results = opts.stageAttachments
+      ? await opts.stageAttachments(toStage)
+      : toStage.map(() => ({ error: true as const }));
+    results.forEach((result, i) => {
+      if ("path" in result) {
+        stagedPointers.push({
+          name: toStage[i].name ?? "unnamed",
+          path: result.path,
+        });
+      } else {
+        stageFailed.push(toStage[i]);
+      }
+    });
   }
 
-  // Build a note about all skipped attachments so the LLM can mention them
-  const allSkipped = [...nonImageAttachments, ...tinyImageAttachments];
-  const skippedNote =
-    allSkipped.length > 0
-      ? `\n\n[Note: This message also included ${allSkipped.length} attachment(s) that could not be processed: ${allSkipped.map((a) => `${a.name ?? "unnamed"} (${a.contentType})`).join(", ")}]`
-      : "";
+  const unprovidable = [
+    ...tinyImageAttachments.map(describeAttachment),
+    ...rejected.map(
+      (r) => `${describeAttachment(r.att)} — ${rejectionText(r.reason)}`,
+    ),
+    ...stageFailed.map((a) => `${describeAttachment(a)} — could not be staged`),
+  ];
 
-  if (validImageAttachments.length === 0) {
-    return { content: null, skippedNote };
+  logger.debug(
+    {
+      inlined: validImageAttachments.length + inlineNonImage.length,
+      staged: stagedPointers.length,
+      rejected: rejected.length,
+      tinyImages: tinyImageAttachments.length,
+      stageFailed: stageFailed.length,
+    },
+    "[A2A] attachment policy outcome in buildUserContent",
+  );
+
+  let note = "";
+  if (unprovidable.length > 0) {
+    note += `\n\n[Note: This message also included ${unprovidable.length} attachment(s) that could not be processed: ${unprovidable.join(", ")}]`;
+  }
+  // Identical content dedupes to one upload (and one path) via `uploadFile`, so
+  // collapse pointers by path to avoid naming the same staged file twice.
+  const uniquePointers = [
+    ...new Map(stagedPointers.map((p) => [p.path, p])).values(),
+  ];
+  if (uniquePointers.length > 0) {
+    note += `\n\n[Note: ${uniquePointers.length} attachment(s) were placed in your sandbox: ${uniquePointers
+      .map((p) => `"${p.name}" at ${p.path}`)
+      .join(", ")}. Use the run_command tool to read or process them.]`;
   }
 
-  return {
-    content: [
-      { type: "text" as const, text: message + skippedNote },
-      ...validImageAttachments.map((a) => ({
-        type: "file" as const,
-        data: Buffer.from(a.contentBase64, "base64"),
+  const keptAttachments = [...validImageAttachments, ...inlineNonImage];
+  if (keptAttachments.length === 0) {
+    return { content: null, note };
+  }
+
+  // Hand the inline attachments to the chat provider-normalization pipeline as a
+  // synthetic user message (data: URL file parts), so each provider's SDK
+  // receives documents in the shape it accepts (Anthropic documents, decoded
+  // text for OpenAI-compatible endpoints, etc.).
+  const text = message + note;
+  const userMessage: ChatMessage = {
+    role: "user",
+    parts: [
+      ...(text.length > 0 ? [{ type: "text", text }] : []),
+      ...keptAttachments.map((a) => ({
+        type: "file",
+        url: `data:${a.contentType};base64,${a.contentBase64}`,
         mediaType: a.contentType,
+        filename: a.name,
       })),
     ],
-    skippedNote,
   };
+
+  const [preparedMessage] = prepareMessagesForProvider({
+    messages: [userMessage],
+    provider: opts.provider,
+    anthropicNativeEndpoint: opts.anthropicNativeEndpoint,
+  });
+  const modelMessages = await convertToModelMessages([
+    preparedMessage,
+  ] as unknown as Omit<UIMessage, "id">[]);
+
+  const content = (modelMessages[0]?.content ?? null) as UserContent | null;
+  return { content, note };
 }
 
 // ============================================================================
 // Internal helper functions
 // ============================================================================
+
+/** Estimate decoded byte size from base64 length: every 4 chars = 3 bytes. */
+function estimateAttachmentBytes(att: A2AAttachment): number {
+  return Math.ceil((att.contentBase64.length * 3) / 4);
+}
+
+function describeAttachment(att: A2AAttachment): string {
+  return `${att.name ?? "unnamed"} (${att.contentType})`;
+}
+
+/**
+ * Whether an accepted non-image attachment is delivered inline (vs staged):
+ * small inlineable text, or a non-text type the model ingests natively.
+ */
+function canInlineAttachment(
+  att: A2AAttachment,
+  ingestibleMimeTypes: Set<string>,
+): boolean {
+  if (isInlineableTextMimeType(att.contentType)) {
+    return estimateAttachmentBytes(att) <= INLINE_TEXT_MAX_BYTES;
+  }
+  return ingestibleMimeTypes.has(att.contentType);
+}
+
+function rejectionText(reason: ChatUploadRejectionReason): string {
+  switch (reason) {
+    case "text_too_large":
+      return "text too large to inline";
+    case "too_large_for_sandbox":
+      return "exceeds the sandbox size limit";
+    case "unsupported_type":
+      return "type not supported by this model";
+  }
+}
 
 /**
  * Clean up browser tab state after A2A execution.

@@ -264,6 +264,8 @@ export enum ChatErrorCode {
   NotFound = "not_found",
   /** Input exceeds the model's context window */
   ContextTooLong = "context_too_long",
+  /** Request payload (e.g. a large inline attachment) exceeds the provider's size limit */
+  RequestTooLarge = "request_too_large",
   /** Content blocked by safety filters */
   ContentFiltered = "content_filtered",
   /** Provider server error - retryable */
@@ -304,6 +306,8 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
     "The selected model is not available. Please choose a different model.",
   [ChatErrorCode.ContextTooLong]:
     "Your conversation is too long. Please start a new chat or remove some messages.",
+  [ChatErrorCode.RequestTooLarge]:
+    "This request is too large for the selected model. Compress or split large attachments — or remove some — and try again.",
   [ChatErrorCode.ContentFiltered]:
     "Your message was blocked by content filters. Please rephrase your request.",
   [ChatErrorCode.ServerError]: "The AI provider is experiencing issues.",

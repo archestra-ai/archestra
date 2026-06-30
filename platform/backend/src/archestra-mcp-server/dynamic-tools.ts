@@ -252,7 +252,7 @@ function isSandboxToolEnabled(shortName: string): boolean {
 // EXCEPTIONS riding the relaxation:
 // - the sandbox runtime tools (run_command/upload_file/download_file) when the
 //   sandbox runtime is on, and the persistent-files tools
-//   (search_files/read_file/save_result/edit_file/delete_file) when the
+//   (search_files/read_file/save_file/edit_file/delete_file) when the
 //   Projects feature is on, so a user with sandbox:execute can discover and run
 //   them without a manual assignment (see isSandboxToolEnabled);
 // - query_knowledge_sources when the user can access a knowledge connector

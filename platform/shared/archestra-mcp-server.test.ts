@@ -83,7 +83,7 @@ describe("archestra MCP tool names", () => {
       // unlike delete_app below).
       "search_files",
       "read_file",
-      "save_result",
+      "save_file",
       "edit_file",
       "delete_file",
       "scaffold_app",

@@ -73,6 +73,7 @@ export function buildSlackManifest(params: {
               "message.channels",
               "message.groups",
               "message.im",
+              "reaction_added",
             ],
           }
         : {
@@ -84,6 +85,7 @@ export function buildSlackManifest(params: {
               "message.channels",
               "message.groups",
               "message.im",
+              "reaction_added",
             ],
           },
       interactivity: isSocket

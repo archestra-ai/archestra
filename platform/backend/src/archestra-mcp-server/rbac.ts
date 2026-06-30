@@ -144,7 +144,7 @@ export const TOOL_PERMISSIONS: Record<
   upload_file: { resource: "sandbox", action: "execute" },
   search_files: { resource: "sandbox", action: "execute" },
   read_file: { resource: "sandbox", action: "execute" },
-  save_result: { resource: "sandbox", action: "execute" },
+  save_file: { resource: "sandbox", action: "execute" },
   edit_file: { resource: "sandbox", action: "execute" },
   delete_file: { resource: "sandbox", action: "execute" },
 

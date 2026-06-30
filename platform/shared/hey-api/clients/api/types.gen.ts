@@ -11008,6 +11008,7 @@ export type GetAgentsResponses = {
             resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
+            sandboxAvailable?: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -11248,6 +11249,7 @@ export type CreateAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     };
 };
 
@@ -11453,6 +11455,7 @@ export type GetAllAgentsResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     }>;
 };
 
@@ -11633,6 +11636,7 @@ export type GetDefaultMcpGatewayResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     };
 };
 
@@ -11813,6 +11817,7 @@ export type GetDefaultLlmProxyResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     };
 };
 
@@ -12072,6 +12077,7 @@ export type ImportAgentResponses = {
             resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
+            sandboxAvailable?: boolean;
         };
         warnings: Array<{
             type: 'tool' | 'knowledgeBase' | 'connector' | 'delegation';
@@ -12345,6 +12351,7 @@ export type GetAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     };
 };
 
@@ -12578,6 +12585,7 @@ export type UpdateAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     };
 };
 
@@ -12760,6 +12768,7 @@ export type CloneAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     };
 };
 
@@ -13103,6 +13112,7 @@ export type RestoreAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     };
 };
 
@@ -15522,6 +15532,7 @@ export type CreateAppData = {
         };
         environmentId?: string | null;
         teamIds?: Array<string>;
+        openInChat?: boolean;
     };
     path?: never;
     query?: never;
@@ -15619,6 +15630,7 @@ export type CreateAppResponses = {
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
         warnings?: Array<string>;
+        conversationId?: string;
     };
 };
 
@@ -15806,6 +15818,91 @@ export type GetAppTemplatesResponses = {
 };
 
 export type GetAppTemplatesResponse = GetAppTemplatesResponses[keyof GetAppTemplatesResponses];
+
+export type OpenAppInChatData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/open-in-chat';
+};
+
+export type OpenAppInChatErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAppInChatError = OpenAppInChatErrors[keyof OpenAppInChatErrors];
+
+export type OpenAppInChatResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        conversationId: string;
+    };
+};
+
+export type OpenAppInChatResponse = OpenAppInChatResponses[keyof OpenAppInChatResponses];
 
 export type DeleteAppData = {
     body?: never;
@@ -21538,7 +21635,7 @@ export type GetChatConversationsResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -21700,7 +21797,7 @@ export type CreateChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -21943,7 +22040,7 @@ export type GetChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -22108,7 +22205,7 @@ export type UpdateChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -22621,7 +22718,7 @@ export type ForkChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -22968,7 +23065,7 @@ export type CompactChatConversationResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -23400,7 +23497,7 @@ export type GetSharedConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -23561,7 +23658,7 @@ export type ForkSharedConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -23724,7 +23821,7 @@ export type GenerateChatConversationTitleResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -23886,7 +23983,7 @@ export type UpdateChatMessageResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -25724,6 +25821,7 @@ export type GetConfigResponses = {
             betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
             sandbox: boolean;
+            sandboxArtifactBytesLimit: number;
             agentSkillsEnabled: boolean;
             agentEnvironmentsEnabled: boolean;
             appsEnabled: boolean;
@@ -25734,6 +25832,7 @@ export type GetConfigResponses = {
             bedrockIamAuthEnabled: boolean;
             geminiVertexAiEnabled: boolean;
             globalToolPolicy: 'permissive' | 'restrictive';
+            discoveredToolPolicy: 'relaxed' | 'apply_policies';
             incomingEmail: {
                 enabled: boolean;
                 provider?: 'outlook';
@@ -30338,6 +30437,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -30355,7 +30455,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -30534,6 +30634,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -30551,7 +30652,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -30636,6 +30737,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -30653,7 +30755,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -30714,6 +30816,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -30731,7 +30834,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -30794,6 +30897,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -30811,7 +30915,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31272,6 +31376,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31289,7 +31394,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31352,6 +31457,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31369,7 +31475,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31432,6 +31538,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31449,7 +31556,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31512,6 +31619,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31529,7 +31637,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31592,6 +31700,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31609,7 +31718,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31672,6 +31781,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31689,7 +31799,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31752,6 +31862,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31769,7 +31880,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31832,6 +31943,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31849,7 +31961,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31910,6 +32022,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31927,7 +32040,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31988,6 +32101,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -32005,7 +32119,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -32068,6 +32182,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -32085,7 +32200,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -32148,6 +32263,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -32165,7 +32281,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -32869,6 +32985,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -32886,7 +33003,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -32949,6 +33066,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -32966,7 +33084,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -33096,6 +33214,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -33113,7 +33232,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -33292,6 +33411,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -33309,7 +33429,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -33793,6 +33913,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -33810,7 +33931,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -33989,6 +34110,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34006,7 +34128,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -34091,6 +34213,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34108,7 +34231,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -34169,6 +34292,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34186,7 +34310,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -34249,6 +34373,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34266,7 +34391,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -34727,6 +34852,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34744,7 +34870,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -34807,6 +34933,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34824,7 +34951,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -34887,6 +35014,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34904,7 +35032,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -34967,6 +35095,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34984,7 +35113,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35047,6 +35176,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35064,7 +35194,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35127,6 +35257,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35144,7 +35275,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35207,6 +35338,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35224,7 +35356,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35287,6 +35419,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35304,7 +35437,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35365,6 +35498,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35382,7 +35516,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35443,6 +35577,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35460,7 +35595,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35523,6 +35658,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35540,7 +35676,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35603,6 +35739,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35620,7 +35757,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -36324,6 +36461,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -36341,7 +36479,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -36404,6 +36542,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -36421,7 +36560,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -36551,6 +36690,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -36568,7 +36708,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -36747,6 +36887,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -36764,7 +36905,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -51360,6 +51501,7 @@ export type GetOrganizationResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        discoveredToolPolicy: 'relaxed' | 'apply_policies';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -51653,6 +51795,7 @@ export type UpdateAppearanceSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        discoveredToolPolicy: 'relaxed' | 'apply_policies';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -51726,6 +51869,7 @@ export type UpdateAppearanceSettingsResponse = UpdateAppearanceSettingsResponses
 export type UpdateSecuritySettingsData = {
     body: {
         globalToolPolicy?: 'permissive' | 'restrictive';
+        discoveredToolPolicy?: 'relaxed' | 'apply_policies';
         allowChatFileUploads?: boolean;
         allowToolAutoAssignment?: boolean;
     };
@@ -51818,6 +51962,7 @@ export type UpdateSecuritySettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        discoveredToolPolicy: 'relaxed' | 'apply_policies';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -51982,6 +52127,7 @@ export type UpdateLlmSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        discoveredToolPolicy: 'relaxed' | 'apply_policies';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -52148,6 +52294,7 @@ export type UpdateAgentSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        discoveredToolPolicy: 'relaxed' | 'apply_policies';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -52324,6 +52471,7 @@ export type UpdateConnectionSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        discoveredToolPolicy: 'relaxed' | 'apply_policies';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -52497,6 +52645,7 @@ export type UpdateDefaultEnvironmentResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        discoveredToolPolicy: 'relaxed' | 'apply_policies';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -52661,6 +52810,7 @@ export type UpdateAuthSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        discoveredToolPolicy: 'relaxed' | 'apply_policies';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -52827,6 +52977,7 @@ export type UpdateKnowledgeSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        discoveredToolPolicy: 'relaxed' | 'apply_policies';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -52988,6 +53139,7 @@ export type DropEmbeddingConfigResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        discoveredToolPolicy: 'relaxed' | 'apply_policies';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -53238,6 +53390,7 @@ export type CompleteOnboardingResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        discoveredToolPolicy: 'relaxed' | 'apply_policies';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -54681,6 +54834,97 @@ export type GetProjectFilesResponses = {
 };
 
 export type GetProjectFilesResponse = GetProjectFilesResponses[keyof GetProjectFilesResponses];
+
+export type UploadProjectFilesData = {
+    body: {
+        name: string;
+        mimeType: string;
+        dataBase64: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/files';
+};
+
+export type UploadProjectFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UploadProjectFilesError = UploadProjectFilesErrors[keyof UploadProjectFilesErrors];
+
+export type UploadProjectFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        filename: string;
+        mimeType: string;
+    };
+};
+
+export type UploadProjectFilesResponse = UploadProjectFilesResponses[keyof UploadProjectFilesResponses];
 
 export type GetProjectInstructionsData = {
     body?: never;
@@ -56294,7 +56538,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -59423,6 +59667,97 @@ export type GetSkillSandboxArtifactResponses = {
      */
     200: unknown;
 };
+
+export type UpdateSkillSandboxArtifactContentData = {
+    body: {
+        content: string;
+    };
+    path: {
+        artifactId: string;
+    };
+    query?: never;
+    url: '/api/skill-sandbox/artifacts/{artifactId}/content';
+};
+
+export type UpdateSkillSandboxArtifactContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateSkillSandboxArtifactContentError = UpdateSkillSandboxArtifactContentErrors[keyof UpdateSkillSandboxArtifactContentErrors];
+
+export type UpdateSkillSandboxArtifactContentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+        fileId: string;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+    };
+};
+
+export type UpdateSkillSandboxArtifactContentResponse = UpdateSkillSandboxArtifactContentResponses[keyof UpdateSkillSandboxArtifactContentResponses];
 
 export type GetSkillSandboxConversationArtifactsData = {
     body?: never;

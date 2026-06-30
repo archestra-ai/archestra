@@ -320,6 +320,12 @@ export type McpExecClosedMessage = {
   type: "mcp_exec_closed";
   payload: {
     serverId: string;
+    /**
+     * Human-readable reason the session ended, populated when the K8s exec
+     * reported a failure status (e.g. the image is distroless and has no
+     * `/bin/sh`). Absent on a clean exit.
+     */
+    reason?: string;
   };
 };
 

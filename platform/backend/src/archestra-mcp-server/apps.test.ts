@@ -30,10 +30,10 @@ import {
 } from "@/clients/chat-mcp-elicitation";
 import config from "@/config";
 import {
+  AppAccessModel,
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
-  AppTeamModel,
   AppToolModel,
   AppVersionModel,
   EnvironmentModel,
@@ -289,18 +289,30 @@ describe("app tool execution", () => {
     expect(head?.uiPermissions).toEqual({ camera: {} });
   });
 
-  test("scaffold seeds the default template and returns its HTML", async () => {
+  test("scaffold seeds the default template with the app name and returns its HTML", async () => {
     const created = await scaffold({ name: "From Template" });
     expect(created.isError).toBe(false);
     const appId = structured(created).id as string;
 
     const head = await AppVersionModel.findByAppAndVersion(appId, 1);
-    expect(head?.html).toContain("window.archestra.storage.user.set");
+    expect(head?.html).toContain("<h1>From Template</h1>");
+    expect(head?.html).not.toContain("{{APP_NAME}}");
     // Scaffold-then-edit: the seeded html rides the result text so the model
     // can edit_app without a read-back.
     expect((created.content[0] as any).text).toContain(
-      "window.archestra.storage.user.set",
+      "<h1>From Template</h1>",
     );
+  });
+
+  test("scaffold result preloads the Build App skill (SDK contract)", async () => {
+    const created = await scaffold({ name: "Counter" });
+    expect(created.isError).toBe(false);
+    // The Build App skill is auto-loaded in the same turn so the model has the
+    // namespaced window.archestra surface before its first edit_app — without
+    // discovering and calling load_skill itself.
+    const text = (created.content[0] as any).text as string;
+    expect(text).toContain('<skill_content name="Build App">');
+    expect(text).toContain("archestra.storage.user");
   });
 
   test("edit rejects SDK self-bootstrap html and surfaces fragment warnings", async () => {
@@ -1678,7 +1690,7 @@ describe("publish_app", () => {
     );
     expect(result.isError).toBe(false);
     expect(structured(result).scope).toBe("team");
-    expect(await AppTeamModel.getTeamsForApp(app.id)).toEqual([team.id]);
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
   });
 
   // The source-scope gate: a team admin (editor) can see every org app but must
@@ -1711,7 +1723,7 @@ describe("publish_app", () => {
     expect(result.isError).toBe(true);
     // the org app is untouched — neither demoted nor reassigned
     expect((await AppModel.findById(app.id))?.scope).toBe("org");
-    expect(await AppTeamModel.getTeamsForApp(app.id)).toEqual([]);
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([]);
   });
 
   test("rejects teamIds when publishing to org scope", async ({

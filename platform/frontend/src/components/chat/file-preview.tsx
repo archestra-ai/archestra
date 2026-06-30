@@ -1,8 +1,10 @@
 "use client";
 
+import { EDITABLE_TEXT_FILE_MAX_BYTES } from "@archestra/shared";
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
+import { PlainTextEditor } from "@/components/chat/plain-text-editor";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -11,6 +13,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { getFilePreviewKind } from "@/lib/chat/file-preview-kind";
+import { useUpdateFileContent } from "@/lib/skills-sandbox/use-update-file-content";
 
 /** Anything previewable: a display name, a MIME type, and a byte endpoint. */
 export type PreviewableFile = {
@@ -22,48 +25,150 @@ export type PreviewableFile = {
 /**
  * Content-only preview for a file served from a byte endpoint: markdown
  * rendered, images inline, text/CSV as text/table, everything else a download
- * prompt. Extracted from the chat Files panel so My Files and project pages
- * preview identically.
+ * prompt. Extracted from the chat Files panel so the project pages preview
+ * identically.
+ *
+ * Editing is controlled by the caller: when `editing` is true and a row-backed
+ * `fileId` is given, the body swaps to an in-place text editor. The Edit toggle
+ * itself lives in the caller's action row (next to Download/Delete); the caller
+ * owns authorization and the `editing` flag, and `onExitEdit` fires when the
+ * editor saves or cancels. An edit changes only the bytes — not the filename,
+ * type, or list order — so the caller's file list needs no refresh.
  */
 export function FilePreview({
   file,
   onClose,
+  editing = false,
+  fileId,
+  onExitEdit,
 }: {
   file: PreviewableFile;
   onClose?: () => void;
+  /** Show the in-place editor instead of the preview (requires `fileId`). */
+  editing?: boolean;
+  /** The backing row id; required to edit (rowless objects aren't editable). */
+  fileId?: string;
+  /** Called when the editor saves or cancels, so the caller can clear `editing`. */
+  onExitEdit?: () => void;
 }) {
   const kind = getFilePreviewKind(file.mimeType, file.name);
+  // After a save the bytes change but the URL doesn't, so a plain re-render would
+  // show stale content (useFileText only refetches when the URL changes). Bump a
+  // nonce into the URL to force the reload; the byte route is `no-cache`/ETag so
+  // it revalidates against the new content.
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const contentUrl = withReload(file.contentUrl, reloadNonce);
+
+  if (editing && fileId) {
+    return (
+      <FileContentEditor
+        key={contentUrl}
+        fileId={fileId}
+        contentUrl={contentUrl}
+        onCancel={() => onExitEdit?.()}
+        onSaved={() => {
+          setReloadNonce((n) => n + 1);
+          onExitEdit?.();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-0 flex-1 overflow-auto">
       {kind === "markdown" && (
         <RemoteMarkdownPreview
-          contentUrl={file.contentUrl}
+          contentUrl={contentUrl}
           onClose={onClose ?? (() => {})}
         />
       )}
       {kind === "image" && (
         <div className="flex h-full items-center justify-center p-4">
           <img
-            src={file.contentUrl}
+            src={contentUrl}
             alt={file.name}
             className="max-h-full max-w-full object-contain"
           />
         </div>
       )}
-      {kind === "html" && <HtmlPreview contentUrl={file.contentUrl} />}
+      {kind === "html" && <HtmlPreview contentUrl={contentUrl} />}
       {(kind === "text" || kind === "csv") && (
-        <FileTextPreview
-          contentUrl={file.contentUrl}
-          asTable={kind === "csv"}
-        />
+        <FileTextPreview contentUrl={contentUrl} asTable={kind === "csv"} />
       )}
       {kind === "unsupported" && <UnsupportedPreview file={file} />}
     </div>
   );
 }
 
+/** Append a cache-busting nonce so a re-fetch sees post-save bytes. */
+function withReload(url: string, nonce: number): string {
+  if (nonce === 0 || !url) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}_r=${nonce}`;
+}
+
+/**
+ * In-place editor for a `.md`/`.txt` file: loads the current bytes as text,
+ * seeds a textarea, and saves the whole content back through the artifact-content
+ * route. Byte-counted against the same cap the backend enforces. On success the
+ * parent reloads the preview's bytes.
+ */
+function FileContentEditor({
+  fileId,
+  contentUrl,
+  onSaved,
+  onCancel,
+}: {
+  fileId: string;
+  contentUrl: string;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const { text, failed } = useFileText(contentUrl);
+  const update = useUpdateFileContent();
+  const [draft, setDraft] = useState<string | null>(null);
+
+  // Seed the draft once, from the loaded bytes (an empty file is valid content).
+  useEffect(() => {
+    if (text !== null)
+      setDraft((current) => (current === null ? text : current));
+  }, [text]);
+
+  if (failed) {
+    return (
+      <p className="p-4 text-xs text-muted-foreground">
+        Failed to load the file for editing.
+      </p>
+    );
+  }
+  if (draft === null) {
+    return <p className="p-4 text-xs text-muted-foreground">Loading…</p>;
+  }
+
+  return (
+    <PlainTextEditor
+      value={draft}
+      onChange={(value) => setDraft(value)}
+      // Files are bounded by stored byte size, not character count.
+      count={new TextEncoder().encode(draft).length}
+      max={EDITABLE_TEXT_FILE_MAX_BYTES}
+      saving={update.isPending}
+      onSave={async () => {
+        const ok = await update.mutateAsync({ fileId, content: draft });
+        if (ok) onSaved();
+      }}
+      onCancel={onCancel}
+    />
+  );
+}
+
 // === internal components ===
+
+/** Shown when a previewable text file has zero bytes (a valid, empty file). */
+function EmptyFileNotice() {
+  return (
+    <p className="p-4 text-xs text-muted-foreground">This file is empty.</p>
+  );
+}
 
 /** Fetch a file's bytes as text from its content endpoint. */
 function useFileText(contentUrl: string): {
@@ -114,6 +219,11 @@ function RemoteMarkdownPreview({
   }
   if (text === null) {
     return <p className="p-4 text-xs text-muted-foreground">Loading…</p>;
+  }
+  // An empty file is a real, valid file — render an explicit notice rather than
+  // the artifact panel's "No artifact yet" placeholder, which reads as missing.
+  if (text === "") {
+    return <EmptyFileNotice />;
   }
   return (
     <ConversationArtifactPanel
@@ -173,6 +283,9 @@ function FileTextPreview({
   }
   if (text === null) {
     return <p className="p-4 text-xs text-muted-foreground">Loading…</p>;
+  }
+  if (text === "") {
+    return <EmptyFileNotice />;
   }
   if (asTable) {
     // Naive CSV: split on newlines/commas. Good enough for a preview; does not

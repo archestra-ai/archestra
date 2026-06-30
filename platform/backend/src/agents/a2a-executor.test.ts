@@ -3,6 +3,7 @@ import { NoSuchToolError } from "ai";
 import { describe, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { expect, test } from "@/test";
+import type { StageResult } from "./a2a/stage-attachments";
 import {
   type A2AAttachment,
   buildUserContent,
@@ -88,132 +89,100 @@ function renderableFullStream(): AsyncIterable<{ type: string }> {
 }
 
 describe("buildUserContent", () => {
-  test("returns null content when no attachments are provided", () => {
-    const { content, skippedNote } = buildUserContent("Hello");
+  // gemini passes file parts through unchanged, so kept attachments surface as
+  // `file` content parts with their original mediaType — the simplest provider
+  // to assert which attachments survived.
+  const geminiOpts = (ingestibleMimeTypes: Set<string>) => ({
+    provider: "gemini" as const,
+    anthropicNativeEndpoint: false,
+    ingestibleMimeTypes,
+  });
+  const PDF_AND_IMAGES = new Set([
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/gif",
+    "image/webp",
+    "image/svg+xml",
+  ]);
+
+  // Returns the mediaTypes of all `file` content parts produced.
+  function fileMediaTypes(content: unknown): string[] {
+    if (!Array.isArray(content)) {
+      return [];
+    }
+    return content
+      .filter(
+        (p): p is { type: "file"; mediaType: string } =>
+          typeof p === "object" &&
+          p !== null &&
+          (p as { type?: unknown }).type === "file",
+      )
+      .map((p) => p.mediaType);
+  }
+
+  test("returns null content when no attachments are provided", async () => {
+    const { content, note } = await buildUserContent(
+      "Hello",
+      undefined,
+      geminiOpts(PDF_AND_IMAGES),
+    );
     expect(content).toBeNull();
-    expect(skippedNote).toBe("");
+    expect(note).toBe("");
   });
 
-  test("returns null content when attachments array is empty", () => {
-    const { content, skippedNote } = buildUserContent("Hello", []);
+  test("returns null content when attachments array is empty", async () => {
+    const { content, note } = await buildUserContent(
+      "Hello",
+      [],
+      geminiOpts(PDF_AND_IMAGES),
+    );
     expect(content).toBeNull();
-    expect(skippedNote).toBe("");
+    expect(note).toBe("");
   });
 
-  test("returns null content with skipped note when attachments contain no images", () => {
+  test("keeps a PDF when the model can read it", async () => {
     const attachments: A2AAttachment[] = [
       {
         contentType: "application/pdf",
         contentBase64: "JVBERi0xLjQ=",
         name: "doc.pdf",
       },
+    ];
+
+    const { content, note } = await buildUserContent(
+      "Summarize this",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
+
+    expect(fileMediaTypes(content)).toContain("application/pdf");
+    expect(note).toBe("");
+  });
+
+  test("drops a non-image the model cannot read and names it in the note", async () => {
+    const attachments: A2AAttachment[] = [
       {
-        contentType: "text/plain",
-        contentBase64: "SGVsbG8=",
-        name: "note.txt",
+        contentType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        contentBase64: "AAAA",
+        name: "report.docx",
       },
     ];
 
-    const { content, skippedNote } = buildUserContent("Hello", attachments);
+    const { content, note } = await buildUserContent(
+      "Read this",
+      attachments,
+      // Model reads PDFs/images but not docx.
+      geminiOpts(PDF_AND_IMAGES),
+    );
 
     expect(content).toBeNull();
-    expect(skippedNote).toContain("2 attachment(s)");
-    expect(skippedNote).toContain("doc.pdf");
-    expect(skippedNote).toContain("note.txt");
+    expect(note).toContain("report.docx");
   });
 
-  test("builds content parts with a single image attachment", () => {
-    const attachments: A2AAttachment[] = [
-      {
-        contentType: "image/png",
-        contentBase64: VALID_IMAGE_BASE64,
-        name: "photo.png",
-      },
-    ];
-
-    const { content } = buildUserContent("Describe this image", attachments);
-
-    expect(content).toHaveLength(2);
-    expect(content?.[0]).toEqual({ type: "text", text: "Describe this image" });
-    expect(content?.[1]).toHaveProperty("type", "file");
-    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
-    expect(content?.[1]).toHaveProperty("data");
-    // Verify the data is a Buffer with the correct decoded bytes
-    const filePart = content?.[1] as { data: Buffer; mediaType: string };
-    expect(Buffer.isBuffer(filePart.data)).toBe(true);
-    expect(filePart.data.toString("base64")).toBe(VALID_IMAGE_BASE64);
-  });
-
-  test("builds content parts with multiple image attachments", () => {
-    const pngBase64 = "B".repeat(3000);
-    const jpegBase64 = "C".repeat(3000);
-    const attachments: A2AAttachment[] = [
-      {
-        contentType: "image/png",
-        contentBase64: pngBase64,
-        name: "image1.png",
-      },
-      {
-        contentType: "image/jpeg",
-        contentBase64: jpegBase64,
-        name: "image2.jpg",
-      },
-    ];
-
-    const { content } = buildUserContent(
-      "What's in these photos?",
-      attachments,
-    );
-
-    expect(content).toHaveLength(3); // 1 text + 2 files
-    expect(content?.[0]).toEqual({
-      type: "text",
-      text: "What's in these photos?",
-    });
-    expect(content?.[1]).toHaveProperty("type", "file");
-    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
-    expect(content?.[2]).toHaveProperty("type", "file");
-    expect(content?.[2]).toHaveProperty("mediaType", "image/jpeg");
-  });
-
-  test("filters out non-image attachments from mixed set and appends note", () => {
-    const attachments: A2AAttachment[] = [
-      {
-        contentType: "application/pdf",
-        contentBase64: "JVBERi0xLjQ=",
-        name: "doc.pdf",
-      },
-      {
-        contentType: "image/png",
-        contentBase64: VALID_IMAGE_BASE64,
-        name: "photo.png",
-      },
-      {
-        contentType: "text/plain",
-        contentBase64: "SGVsbG8=",
-        name: "note.txt",
-      },
-    ];
-
-    const { content, skippedNote } = buildUserContent(
-      "Check this",
-      attachments,
-    );
-
-    expect(content).toHaveLength(2); // 1 text + 1 file
-    expect(content?.[0]).toHaveProperty("type", "text");
-    // The text part should include the skipped note
-    expect((content?.[0] as { text: string }).text).toContain("Check this");
-    expect((content?.[0] as { text: string }).text).toContain(
-      "2 attachment(s)",
-    );
-    expect(content?.[1]).toHaveProperty("type", "file");
-    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
-    expect(skippedNote).toContain("doc.pdf");
-    expect(skippedNote).toContain("note.txt");
-  });
-
-  test("handles various image MIME types", () => {
+  test("keeps images regardless of the readable mime set, including image/jpg", async () => {
     const attachments: A2AAttachment[] = [
       {
         contentType: "image/png",
@@ -221,72 +190,87 @@ describe("buildUserContent", () => {
         name: "a.png",
       },
       {
-        contentType: "image/jpeg",
+        // Non-standard mime that is NOT in the model-readable set; images must
+        // still pass via the broad image/* check.
+        contentType: "image/jpg",
         contentBase64: VALID_IMAGE_BASE64,
         name: "b.jpg",
       },
-      {
-        contentType: "image/gif",
-        contentBase64: VALID_IMAGE_BASE64,
-        name: "c.gif",
-      },
-      {
-        contentType: "image/webp",
-        contentBase64: VALID_IMAGE_BASE64,
-        name: "d.webp",
-      },
-      {
-        contentType: "image/svg+xml",
-        contentBase64: VALID_IMAGE_BASE64,
-        name: "e.svg",
-      },
     ];
 
-    const { content } = buildUserContent("Describe", attachments);
+    const { content, note } = await buildUserContent(
+      "Describe",
+      attachments,
+      // Deliberately omit image/jpg from the readable set.
+      geminiOpts(new Set(["application/pdf"])),
+    );
 
-    expect(content).toHaveLength(6); // 1 text + 5 files
-    expect(content?.[0]).toHaveProperty("type", "text");
-    for (let i = 1; i < (content?.length ?? 0); i++) {
-      expect(content?.[i]).toHaveProperty("type", "file");
-    }
+    const mediaTypes = fileMediaTypes(content);
+    expect(mediaTypes).toContain("image/png");
+    expect(mediaTypes).toContain("image/jpg");
+    expect(note).toBe("");
   });
 
-  test("works with attachments that have no name", () => {
-    const attachments: A2AAttachment[] = [
-      {
-        contentType: "image/png",
-        contentBase64: VALID_IMAGE_BASE64,
-      },
-    ];
-
-    const { content } = buildUserContent("What is this?", attachments);
-
-    expect(content).toHaveLength(2);
-    expect(content?.[0]).toEqual({ type: "text", text: "What is this?" });
-    expect(content?.[1]).toHaveProperty("type", "file");
-    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
-  });
-
-  test("skipped note uses 'unnamed' for attachments without names", () => {
+  test("keeps readable attachments and notes unreadable ones in a mixed set", async () => {
     const attachments: A2AAttachment[] = [
       {
         contentType: "application/pdf",
         contentBase64: "JVBERi0xLjQ=",
+        name: "doc.pdf",
+      },
+      {
+        contentType: "image/png",
+        contentBase64: VALID_IMAGE_BASE64,
+        name: "photo.png",
+      },
+      {
+        contentType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        contentBase64: "AAAA",
+        name: "report.docx",
       },
     ];
 
-    const { skippedNote } = buildUserContent("Hello", attachments);
+    const { content, note } = await buildUserContent(
+      "Check this",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
 
-    expect(skippedNote).toContain("unnamed (application/pdf)");
+    const mediaTypes = fileMediaTypes(content);
+    expect(mediaTypes).toContain("application/pdf");
+    expect(mediaTypes).toContain("image/png");
+    expect(note).toContain("report.docx");
+    // The note travels on the kept turn's text part too.
+    const textPart = (content as { type: string; text?: string }[]).find(
+      (p) => p.type === "text",
+    );
+    expect(textPart?.text).toContain("Check this");
+    expect(textPart?.text).toContain("report.docx");
   });
 
-  test("filters out tiny image attachments below MIN_IMAGE_ATTACHMENT_SIZE", () => {
-    // Create a tiny image (~988 bytes, like broken Outlook inline references)
-    // Base64 length of ~1317 chars → ~988 decoded bytes (below 2KB threshold)
-    const tinyBase64 = "A".repeat(1317);
+  test("surfaces an unreadable attachment that has no filename", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        contentBase64: "AAAA",
+      },
+    ];
 
-    // Create a valid-sized image (above 2KB threshold)
-    // Base64 length of ~2732 chars → ~2048 decoded bytes
+    const { note } = await buildUserContent(
+      "Hello",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
+
+    // No filename, but the unreadable attachment is still surfaced (not dropped).
+    expect(note).not.toBe("");
+  });
+
+  test("filters out tiny image attachments below MIN_IMAGE_ATTACHMENT_SIZE", async () => {
+    // ~988 decoded bytes (below the 2KB threshold), like broken inline refs.
+    const tinyBase64 = "A".repeat(1317);
     const validBase64 = "B".repeat(2732);
 
     const attachments: A2AAttachment[] = [
@@ -302,44 +286,41 @@ describe("buildUserContent", () => {
       },
     ];
 
-    const { content, skippedNote } = buildUserContent(
+    const { content, note } = await buildUserContent(
       "Check this",
       attachments,
+      geminiOpts(PDF_AND_IMAGES),
     );
 
-    // Should include only the valid image
-    expect(content).toHaveLength(2); // 1 text + 1 file
-    expect(content?.[1]).toHaveProperty("type", "file");
-    expect(content?.[1]).toHaveProperty("mediaType", "image/jpeg");
-
-    // Skipped note should mention the filtered tiny image
-    expect(skippedNote).toContain("broken-inline-ref.png");
-    expect(skippedNote).toContain("1 attachment(s)");
+    expect(fileMediaTypes(content)).toEqual(["image/jpeg"]);
+    expect(note).toContain("broken-inline-ref.png");
   });
 
-  test("returns null content when all images are below minimum size", () => {
-    const tinyBase64 = "A".repeat(100); // ~75 bytes
-
+  test("returns null content when all images are below minimum size", async () => {
     const attachments: A2AAttachment[] = [
       {
         contentType: "image/png",
-        contentBase64: tinyBase64,
+        contentBase64: "A".repeat(100), // ~75 bytes
         name: "tiny.png",
       },
     ];
 
-    const { content, skippedNote } = buildUserContent("Hello", attachments);
+    const { content, note } = await buildUserContent(
+      "Hello",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
 
     expect(content).toBeNull();
-    expect(skippedNote).toContain("tiny.png");
+    expect(note).toContain("tiny.png");
   });
 
-  test("does not filter images at or above the minimum size threshold", () => {
-    // Create an image exactly at the threshold (2048 bytes = MIN_IMAGE_ATTACHMENT_SIZE)
-    // 2048 bytes → base64 length = ceil(2048 * 4/3) = 2731 chars
+  test("does not filter images at or above the minimum size threshold", async () => {
+    // 2048 bytes = MIN_IMAGE_ATTACHMENT_SIZE → base64 length 2731 chars.
     const thresholdBase64 = "C".repeat(2731);
-    const estimatedBytes = Math.ceil((2731 * 3) / 4);
-    expect(estimatedBytes).toBeGreaterThanOrEqual(MIN_IMAGE_ATTACHMENT_SIZE);
+    expect(Math.ceil((2731 * 3) / 4)).toBeGreaterThanOrEqual(
+      MIN_IMAGE_ATTACHMENT_SIZE,
+    );
 
     const attachments: A2AAttachment[] = [
       {
@@ -349,10 +330,289 @@ describe("buildUserContent", () => {
       },
     ];
 
-    const { content } = buildUserContent("Test", attachments);
+    const { content } = await buildUserContent(
+      "Test",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
 
-    expect(content).toHaveLength(2); // 1 text + 1 file
-    expect(content?.[1]).toHaveProperty("type", "file");
+    expect(fileMediaTypes(content)).toEqual(["image/png"]);
+  });
+
+  // Concatenated text of all `text` content parts (gemini decode-and-inlines
+  // text documents, so an inlined doc's bytes land here rather than as a file).
+  function allText(content: unknown): string {
+    if (!Array.isArray(content)) {
+      return "";
+    }
+    return content
+      .filter(
+        (p): p is { type: "text"; text: string } =>
+          typeof p === "object" &&
+          p !== null &&
+          (p as { type?: unknown }).type === "text",
+      )
+      .map((p) => p.text)
+      .join("");
+  }
+
+  function recordingStager(results: StageResult[]) {
+    const calls: A2AAttachment[][] = [];
+    return {
+      calls,
+      fn: async (atts: A2AAttachment[]): Promise<StageResult[]> => {
+        calls.push(atts);
+        return results;
+      },
+    };
+  }
+
+  test("inlines a small inlineable text type the model does not list as readable", async () => {
+    // yaml is not in the readable mime set, but it is inlineable text ≤ 256KB.
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "application/x-yaml",
+        contentBase64: Buffer.from("key: value").toString("base64"),
+        name: "config.yaml",
+      },
+    ];
+
+    const { content, note } = await buildUserContent(
+      "Read this",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
+
+    expect(content).not.toBeNull();
+    expect(note).toBe("");
+    // gemini inlines the decoded text, so the file content reaches the model.
+    expect(allText(content)).toContain("key: value");
+  });
+
+  test("stages a non-readable binary into the sandbox when one is available", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "application/octet-stream",
+        contentBase64: Buffer.from("sqlite-bytes").toString("base64"),
+        name: "repair.sqlite",
+      },
+    ];
+    const stager = recordingStager([
+      { path: "/home/sandbox/attachments/repair.sqlite" },
+    ]);
+
+    const { content, note } = await buildUserContent(
+      "Inspect this",
+      attachments,
+      {
+        ...geminiOpts(PDF_AND_IMAGES),
+        stageAttachments: stager.fn,
+      },
+    );
+
+    expect(stager.calls).toHaveLength(1);
+    expect(stager.calls[0][0].name).toBe("repair.sqlite");
+    expect(content).toBeNull();
+    expect(note).toContain("/home/sandbox/attachments/repair.sqlite");
+  });
+
+  test("names a non-readable binary in the note when no sandbox is available", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "application/octet-stream",
+        contentBase64: Buffer.from("sqlite-bytes").toString("base64"),
+        name: "repair.sqlite",
+      },
+    ];
+
+    const { content, note } = await buildUserContent(
+      "Inspect this",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
+
+    expect(content).toBeNull();
+    expect(note).toContain("repair.sqlite");
+  });
+
+  test("routes oversized inlineable text to the sandbox instead of inlining it", async () => {
+    // ~262KB of decoded bytes, over the 256KB inline cap.
+    const bigText = "A".repeat(349528);
+    const attachments: A2AAttachment[] = [
+      { contentType: "text/csv", contentBase64: bigText, name: "big.csv" },
+    ];
+    const stager = recordingStager([
+      { path: "/home/sandbox/attachments/big.csv" },
+    ]);
+
+    const { content, note } = await buildUserContent("Analyze", attachments, {
+      ...geminiOpts(new Set(["text/csv"])),
+      stageAttachments: stager.fn,
+    });
+
+    expect(stager.calls).toHaveLength(1);
+    expect(content).toBeNull();
+    expect(note).toContain("/home/sandbox/attachments/big.csv");
+  });
+
+  test("skips oversized inlineable text when no sandbox is available", async () => {
+    const bigText = "A".repeat(349528);
+    const attachments: A2AAttachment[] = [
+      { contentType: "text/csv", contentBase64: bigText, name: "big.csv" },
+    ];
+
+    const { content, note } = await buildUserContent(
+      "Analyze",
+      attachments,
+      geminiOpts(new Set(["text/csv"])),
+    );
+
+    expect(content).toBeNull();
+    expect(note).toContain("big.csv");
+  });
+
+  test("does not attempt to stage a file larger than the sandbox limit", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "application/octet-stream",
+        contentBase64: Buffer.from("0123456789abcdef").toString("base64"),
+        name: "big.bin",
+      },
+    ];
+    const stager = recordingStager([]);
+
+    const { content, note } = await buildUserContent("Inspect", attachments, {
+      ...geminiOpts(PDF_AND_IMAGES),
+      sandboxByteLimit: 4,
+      stageAttachments: stager.fn,
+    });
+
+    expect(stager.calls).toHaveLength(0);
+    expect(content).toBeNull();
+    expect(note).toContain("big.bin");
+  });
+
+  test("surfaces a staging failure in the note rather than dropping it silently", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "application/octet-stream",
+        contentBase64: Buffer.from("sqlite-bytes").toString("base64"),
+        name: "repair.sqlite",
+      },
+    ];
+    const stager = recordingStager([{ error: true }]);
+
+    const { content, note } = await buildUserContent("Inspect", attachments, {
+      ...geminiOpts(PDF_AND_IMAGES),
+      stageAttachments: stager.fn,
+    });
+
+    expect(stager.calls).toHaveLength(1);
+    expect(content).toBeNull();
+    // The file is named (not silently dropped) but carries no sandbox pointer.
+    expect(note).toContain("repair.sqlite");
+    expect(note).not.toContain("/home/sandbox");
+  });
+});
+
+describe("executeA2AMessage current turn assembly", () => {
+  function primeStreamMocks() {
+    mockGetChatMcpTools.mockResolvedValue({});
+    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+      chatApiKeyId: "org-key",
+      selectedModel: "claude-sonnet-4-6",
+      selectedProvider: "anthropic",
+    });
+    mockCreateLLMModelForAgent.mockResolvedValue({
+      model: { provider: "mock" },
+      provider: "anthropic",
+      apiKeySource: "org",
+      anthropicNativeEndpoint: true,
+    });
+    mockStreamText.mockReturnValue({
+      toUIMessageStream: vi.fn((options) => {
+        const responseMessage = {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "ok" }],
+        };
+        options?.onFinish?.({
+          messages: [responseMessage],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage,
+          finishReason: "stop",
+        });
+        return new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        });
+      }),
+      fullStream: renderableFullStream(),
+      text: Promise.resolve("ok"),
+      usage: Promise.resolve(undefined),
+      finishReason: Promise.resolve("stop"),
+    });
+  }
+
+  test("appends exactly one current user turn to the provided history", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    primeStreamMocks();
+
+    const history = [
+      { role: "user" as const, content: "prior question" },
+      { role: "assistant" as const, content: "earlier reply" },
+    ];
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "current question",
+      messages: history,
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    const config = mockStreamText.mock.calls[0]?.[0];
+    expect(config.messages).toHaveLength(history.length + 1);
+    expect(config.messages.at(-1)).toEqual({
+      role: "user",
+      content: "current question",
+    });
+  });
+
+  test("uses history as-is when the current turn has no text or attachments", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    primeStreamMocks();
+
+    const history = [{ role: "user" as const, content: "prior question" }];
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "",
+      messages: history,
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    const config = mockStreamText.mock.calls[0]?.[0];
+    expect(config.messages).toEqual(history);
   });
 });
 

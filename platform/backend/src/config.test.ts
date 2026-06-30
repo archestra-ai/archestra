@@ -28,6 +28,7 @@ import config, {
   parseFileStorageFilesystemRoot,
   parseFileStorageProvider,
   parseFileStorageS3Config,
+  parseLogFormat,
   parseMetricsPort,
   parseProcessType,
   parseSampleRate,
@@ -1685,6 +1686,68 @@ describe("getMCPGatewayOauthAllowedPublicHosts", () => {
   });
 });
 
+describe("getAppAssetBaseOrigin", () => {
+  const originalEnv = process.env;
+
+  // frontendBaseUrl is captured at module load, so each test reloads ./config
+  // after setting ARCHESTRA_FRONTEND_URL to control which origin is the frontend.
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    vi.resetModules();
+    delete process.env.ARCHESTRA_API_BASE_URL;
+    delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("excludes the frontend origin even when it is listed first", async () => {
+    process.env.ARCHESTRA_FRONTEND_URL = "https://frontend.example.com";
+    process.env.ARCHESTRA_API_BASE_URL =
+      "https://frontend.example.com,https://backend.example.com";
+    const { getAppAssetBaseOrigin: fn } = await import("./config");
+    expect(fn()).toBe("https://backend.example.com");
+  });
+
+  test("prefers a public https origin over a cluster-internal http one", async () => {
+    process.env.ARCHESTRA_FRONTEND_URL = "https://frontend.example.com";
+    process.env.ARCHESTRA_API_BASE_URL =
+      "http://archestra.default.svc:9000,https://backend.example.com";
+    const { getAppAssetBaseOrigin: fn } = await import("./config");
+    expect(fn()).toBe("https://backend.example.com");
+  });
+
+  test("matches the frontend on origin, ignoring path and trailing slash", async () => {
+    process.env.ARCHESTRA_FRONTEND_URL = "https://frontend.example.com/app/";
+    process.env.ARCHESTRA_API_BASE_URL =
+      "https://frontend.example.com,https://backend.example.com";
+    const { getAppAssetBaseOrigin: fn } = await import("./config");
+    expect(fn()).toBe("https://backend.example.com");
+  });
+
+  test("falls back to the frontend https entry when it is the only one", async () => {
+    process.env.ARCHESTRA_FRONTEND_URL = "https://frontend.example.com";
+    process.env.ARCHESTRA_API_BASE_URL = "https://frontend.example.com";
+    const { getAppAssetBaseOrigin: fn } = await import("./config");
+    expect(fn()).toBe("https://frontend.example.com");
+  });
+
+  test("skips malformed entries and resolves the next valid one", async () => {
+    process.env.ARCHESTRA_FRONTEND_URL = "https://frontend.example.com";
+    process.env.ARCHESTRA_API_BASE_URL =
+      "not-a-url,https://backend.example.com";
+    const { getAppAssetBaseOrigin: fn } = await import("./config");
+    expect(fn()).toBe("https://backend.example.com");
+  });
+
+  test("falls back to the local API origin when unset", async () => {
+    process.env.ARCHESTRA_FRONTEND_URL = "https://frontend.example.com";
+    const { getAppAssetBaseOrigin: fn } = await import("./config");
+    expect(fn()).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+  });
+});
+
 describe("parseAuditLogRetentionDays", () => {
   test("returns 0 (disabled) when env var is not set", () => {
     expect(parseAuditLogRetentionDays(undefined)).toBe(0);
@@ -1786,5 +1849,38 @@ describe("betaFeatureEnabled", () => {
     expect(betaFeatureEnabled("TRUE")).toBe(false);
     expect(betaFeatureEnabled("yes")).toBe(false);
     expect(betaFeatureEnabled("1")).toBe(false);
+  });
+});
+
+describe("parseLogFormat", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('accepts "pretty"', () => {
+    expect(parseLogFormat("pretty")).toBe("pretty");
+  });
+
+  test('accepts "json"', () => {
+    expect(parseLogFormat("json")).toBe("json");
+  });
+
+  test("is case-insensitive and trims whitespace", () => {
+    expect(parseLogFormat("  PRETTY  ")).toBe("pretty");
+    expect(parseLogFormat("Json")).toBe("json");
+  });
+
+  test('defaults to "json" when undefined or empty without warning', () => {
+    expect(parseLogFormat(undefined)).toBe("json");
+    expect(parseLogFormat("")).toBe("json");
+    expect(parseLogFormat("   ")).toBe("json");
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test('warns and falls back to "json" on unknown values', () => {
+    expect(parseLogFormat("xml")).toBe("json");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid ARCHESTRA_LOGGING_FORMAT value "xml"'),
+    );
   });
 });

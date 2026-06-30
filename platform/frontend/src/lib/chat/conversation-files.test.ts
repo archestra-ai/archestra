@@ -3,6 +3,7 @@ import {
   assembleFileSections,
   type ConversationFileItem,
   deleteTargetFor,
+  persistentFilesSection,
 } from "@/lib/chat/conversation-files";
 
 function fileItem(
@@ -112,6 +113,26 @@ describe("assembleFileSections", () => {
         source: "project",
       },
     ]);
+  });
+});
+
+describe("persistentFilesSection", () => {
+  it("labels a project chat's persistent files as shared with the project", () => {
+    expect(persistentFilesSection("proj_1")).toEqual({
+      title: "Project files",
+      description: "Shared with the project",
+    });
+  });
+
+  it("labels a personal chat's persistent files as chat-scoped", () => {
+    expect(persistentFilesSection(null)).toEqual({
+      title: "Chat files",
+      description: "Created in this chat",
+    });
+    expect(persistentFilesSection(undefined)).toEqual({
+      title: "Chat files",
+      description: "Created in this chat",
+    });
   });
 });
 

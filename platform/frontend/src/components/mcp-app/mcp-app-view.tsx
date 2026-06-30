@@ -702,6 +702,7 @@ export const McpAppRuntime = function McpAppRuntime({
               ? INITIAL_INLINE_HEIGHT
               : UNCAPPED_INITIAL_HEIGHT)
           }
+          maxHeight={containerMaxHeight}
           onDiagnostic={ownedAppId ? handleDiagnostic : undefined}
           onScreenshot={ownedAppId ? handleScreenshot : undefined}
           ownedApp={ownedAppId != null}
@@ -739,6 +740,7 @@ function SandboxIframe({
   onSizeChanged,
   useDedicatedOrigin,
   initialHeight = UNCAPPED_INITIAL_HEIGHT,
+  maxHeight,
   onDiagnostic,
   onScreenshot,
   ownedApp,
@@ -756,6 +758,14 @@ function SandboxIframe({
   useDedicatedOrigin?: boolean;
   /** Iframe height before the first app size report. */
   initialHeight?: number;
+  /**
+   * Visual ceiling for the iframe height. When set, reported heights are clamped
+   * to it so a viewport-relative app (e.g. one sized to `100vh`) can't drive the
+   * auto-resize SDK into an ever-growing feedback loop; content past the cap
+   * scrolls within the iframe. Absent on uncapped surfaces (panel fill,
+   * fullscreen, apps page).
+   */
+  maxHeight?: number;
   /** Raw runtime-error / csp-violation payloads forwarded by the sandbox proxy. */
   onDiagnostic?: (data: unknown) => void;
   /** Raw screenshot payload forwarded by the sandbox proxy. */
@@ -783,6 +793,9 @@ function SandboxIframe({
   // Read at iframe-creation time only; a ref keeps it out of the effect deps so
   // the iframe never remounts when the height changes.
   const initialHeightRef = useRef(initialHeight);
+  // Read inside the (effect-bound) size handler; a ref keeps the latest cap
+  // without re-binding onsizechange on every cap change.
+  const maxHeightRef = useRef(maxHeight);
 
   useEffect(() => {
     onSizeChangedRef.current = onSizeChanged;
@@ -790,6 +803,7 @@ function SandboxIframe({
     onDiagnosticRef.current = onDiagnostic;
     onScreenshotRef.current = onScreenshot;
     initialHeightRef.current = initialHeight;
+    maxHeightRef.current = maxHeight;
   });
 
   // Create iframe, wait for proxy-ready, connect bridge
@@ -903,13 +917,21 @@ function SandboxIframe({
     if (!ready) return;
 
     appBridge.onsizechange = (params) => {
-      onSizeChangedRef.current?.(params);
+      // Clamp to the surface ceiling before applying or reporting: an app sized
+      // to the iframe viewport (e.g. 100vh) otherwise makes each measurement
+      // taller than the last, inflating the iframe without bound. Reporting the
+      // clamped height also keeps the frozen panel placeholder honest.
+      const max = maxHeightRef.current;
+      const height =
+        params.height !== undefined && max != null
+          ? Math.min(params.height, max)
+          : params.height;
+      onSizeChangedRef.current?.({ width: params.width, height });
       const iframe = iframeRef.current;
       if (iframe) {
         if (params.width !== undefined)
           iframe.style.width = `${params.width}px`;
-        if (params.height !== undefined)
-          iframe.style.height = `${params.height}px`;
+        if (height !== undefined) iframe.style.height = `${height}px`;
       }
     };
 

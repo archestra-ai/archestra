@@ -14,7 +14,7 @@ use tokio::time::{Duration, timeout};
 use tracing::{error, info, warn};
 
 use crate::chat_stream::{ChatRecordKind, ChatRunResult, ChatStreamRecord, apply_chat_event};
-use crate::client::{AgentCreate, EvalClient, FilePart};
+use crate::client::{AgentCreate, ContractError, EvalClient, FilePart};
 use crate::config::types::{EnvConfig, Stage, Task, ToolExposureMode};
 use crate::config::{Lane, load_envs, load_lanes};
 use crate::fixture_mcp::{FIXTURE_MCP_NAME, FixtureMcp};
@@ -1083,6 +1083,20 @@ async fn setup_lane_agent(
     Ok((agent_id, submit_tool))
 }
 
+/// Pull a required `id` string from a platform API object. A missing or non-string `id` is a
+/// broken-contract error surfaced loudly, never an empty id silently fed into downstream calls.
+fn require_id(value: &HashMap<String, serde_json::Value>, what: &str) -> Result<String, RunError> {
+    value
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            RunError::Client(
+                ContractError(format!("{what}: API response missing string `id`")).into(),
+            )
+        })
+}
+
 async fn ensure_agent(
     client: &EvalClient,
     name: &str,
@@ -1098,11 +1112,7 @@ async fn ensure_agent(
         .iter()
         .find(|a| a.get("name").and_then(|v| v.as_str()) == Some(name))
     {
-        return Ok(agent
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string());
+        return require_id(agent, "agent");
     }
     let created = client
         .create_agent(&AgentCreate {
@@ -1114,11 +1124,7 @@ async fn ensure_agent(
             teams: vec![team_id.to_string()],
         })
         .await?;
-    Ok(created
-        .get("id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string())
+    require_id(&created, "agent")
 }
 
 async fn setup_agent_tools(
@@ -1230,11 +1236,7 @@ async fn strip_mutating_skill_tools(
         if let Some(name) = name
             && strip.contains(name)
         {
-            let tool_id = tool
-                .get("id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+            let tool_id = require_id(&tool, "agent tool")?;
             client.unassign_tool(agent_id, &tool_id).await?;
         }
     }
@@ -1258,11 +1260,7 @@ async fn resolve_tool_ids(
                 "required tool {exact:?} not found exactly once; is sandbox tooling enabled?"
             )));
         }
-        let id = matches[0]
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let id = require_id(&matches[0], "tool")?;
         resolved.insert(short_name.clone(), id);
     }
     Ok(resolved)

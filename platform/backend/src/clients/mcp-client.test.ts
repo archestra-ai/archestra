@@ -209,7 +209,7 @@ describe("McpClient", () => {
     expect(mockConnect).toHaveBeenCalledTimes(1);
   });
 
-  test("forwards the abort signal to client.callTool", async () => {
+  test("forwards the abort signal to client.callTool and listTools", async () => {
     const tool = await ToolModel.createToolIfNotExists({
       name: "github-mcp-server__list_repos",
       description: "List repos",
@@ -240,6 +240,10 @@ describe("McpClient", () => {
       undefined,
       { signal: controller.signal },
     );
+    // Name resolution (listTools) is on the same cancellable path.
+    expect(mockListTools).toHaveBeenCalledWith(undefined, {
+      signal: controller.signal,
+    });
   });
 
   test("rethrows an aborted call instead of retrying it", async () => {
@@ -4824,6 +4828,64 @@ describe("McpClient", () => {
 
         // callTool should have been called twice (first stale, then fresh)
         expect(mockCallTool).toHaveBeenCalledTimes(2);
+      });
+
+      test("skips the stale-session retry when the call is aborted", async () => {
+        const { StreamableHTTPError } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "stale-session-server__aborted_no_retry",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+        vi.spyOn(
+          McpHttpSessionModel,
+          "findRecordByConnectionKey",
+        ).mockResolvedValue({
+          sessionId: "stale-session-id",
+          sessionEndpointUrl: null,
+          sessionEndpointPodName: null,
+        });
+        mockConnect.mockResolvedValue(undefined);
+
+        // The sibling test above proves this exact error triggers a
+        // fresh-session retry. With the run aborted, the abort guard must
+        // short-circuit before that retry — no second callTool, no session
+        // teardown — and propagate the abort.
+        mockCallTool.mockRejectedValue(
+          new StreamableHTTPError(
+            404,
+            "Error POSTing to endpoint: Session not found",
+          ),
+        );
+
+        const controller = new AbortController();
+        controller.abort();
+
+        await expect(
+          mcpClient.executeToolCallForOwner(
+            {
+              id: "call_aborted_no_retry",
+              name: "stale-session-server__aborted_no_retry",
+              arguments: {},
+            },
+            agentOwner(agentId),
+            undefined,
+            { abortSignal: controller.signal },
+          ),
+        ).rejects.toThrow();
+
+        expect(mockCallTool).toHaveBeenCalledTimes(1);
+        expect(McpHttpSessionModel.deleteStaleSession).not.toHaveBeenCalled();
       });
     });
 

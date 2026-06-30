@@ -461,20 +461,24 @@ class SlackProvider implements ChatOpsProvider {
             },
           ],
         });
-      } else if (options.footer) {
-        blocks.push({
-          type: "context",
-          elements: [{ type: "plain_text", text: options.footer, emoji: true }],
-        });
-      }
-
-      // An even-more-subtle hint (e.g. the one-time mute tip) rides the final
-      // message on its own context line, below the footer.
-      if (isFinal && options.hint) {
-        blocks.push({
-          type: "context",
-          elements: [{ type: "plain_text", text: options.hint, emoji: true }],
-        });
+      } else {
+        // An even-more-subtle hint (e.g. the one-time mute tip) sits on its own
+        // context line ABOVE the agent footer, so the footer stays the last
+        // line of the reply.
+        if (options.hint) {
+          blocks.push({
+            type: "context",
+            elements: [{ type: "plain_text", text: options.hint, emoji: true }],
+          });
+        }
+        if (options.footer) {
+          blocks.push({
+            type: "context",
+            elements: [
+              { type: "plain_text", text: options.footer, emoji: true },
+            ],
+          });
+        }
       }
 
       const fallbackText = truncateFallbackText(

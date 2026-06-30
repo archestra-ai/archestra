@@ -853,14 +853,14 @@ describe("MSTeamsProvider.sendReply", () => {
     return sendActivity.mock.calls[0][0] as string;
   }
 
-  test("appends the mute hint on its own italic line below the footer", async () => {
+  test("puts the mute hint on its own italic line above the footer", async () => {
     const text = await captureReplyText({
       footer: "🤖 Agent",
       hint: 'Reply "mute" to stop',
     });
 
     expect(text).toBe(
-      'Here is your answer\n\n---\n\n🤖 Agent\n\n_Reply "mute" to stop_',
+      'Here is your answer\n\n---\n\n_Reply "mute" to stop_\n\n🤖 Agent',
     );
   });
 

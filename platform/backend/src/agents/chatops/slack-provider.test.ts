@@ -1037,7 +1037,7 @@ describe("SlackProvider.sendReply", () => {
     });
   });
 
-  test("renders the mute hint as its own subtle context block below the footer", async () => {
+  test("renders the mute hint as its own subtle context block above the footer", async () => {
     const provider = createProvider();
     const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
@@ -1062,18 +1062,18 @@ describe("SlackProvider.sendReply", () => {
     });
 
     const { blocks } = postMessage.mock.calls[0][0];
-    // markdown, then footer context, then the hint context as the final block.
+    // markdown, then the hint context, then the footer as the final block.
     expect(blocks).toEqual([
       { type: "markdown", text: "hi there" },
-      {
-        type: "context",
-        elements: [{ type: "plain_text", text: "🤖 Agent", emoji: true }],
-      },
       {
         type: "context",
         elements: [
           { type: "plain_text", text: 'Reply "mute" to stop', emoji: true },
         ],
+      },
+      {
+        type: "context",
+        elements: [{ type: "plain_text", text: "🤖 Agent", emoji: true }],
       },
     ]);
   });

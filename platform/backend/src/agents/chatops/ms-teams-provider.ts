@@ -405,15 +405,16 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
 
     let replyText = options.text;
-    if (options.footer) {
-      replyText += `\n\n---\n\n${options.footer}`;
-    }
     // An even-more-subtle hint (e.g. the one-time mute tip) on its own italic
-    // line below the footer. Italics keep it visually quieter than the footer.
+    // line ABOVE the footer, so the agent footer stays the last line. Italics
+    // keep it visually quieter than the footer.
     if (options.hint) {
-      replyText += options.footer
-        ? `\n\n_${options.hint}_`
-        : `\n\n---\n\n_${options.hint}_`;
+      replyText += `\n\n---\n\n_${options.hint}_`;
+    }
+    if (options.footer) {
+      replyText += options.hint
+        ? `\n\n${options.footer}`
+        : `\n\n---\n\n${options.footer}`;
     }
 
     // If a placeholder "Thinking..." message was sent (Teams channels),

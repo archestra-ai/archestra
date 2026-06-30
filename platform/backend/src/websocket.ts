@@ -664,6 +664,7 @@ class WebSocketService {
             restartCount: deploymentStatus.restartCount,
             podAge: deploymentStatus.podAge,
             podName: deploymentStatus.podName,
+            deploymentName: deploymentStatus.deploymentName ?? undefined,
           };
         } else {
           result[serverId] = {

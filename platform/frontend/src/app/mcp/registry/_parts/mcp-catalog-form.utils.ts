@@ -726,6 +726,7 @@ export function transformExternalCatalogToFormValues(
   return {
     name: server.display_name || server.name,
     description: server.description || "",
+    instructions: server.instructions ?? undefined,
     icon: server.icon ?? null,
     serverType: server.server.type as "remote" | "local",
     multitenant: server.server.type === "local" && authMethod !== "none",

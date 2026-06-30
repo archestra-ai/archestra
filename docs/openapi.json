@@ -10387,6 +10387,23 @@
           "stream": {
             "nullable": true,
             "type": "boolean"
+          },
+          "response_format": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "json_object",
+                  "json_schema"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": {}
           }
         },
         "required": [
@@ -28043,6 +28060,23 @@
           "stream": {
             "nullable": true,
             "type": "boolean"
+          },
+          "response_format": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "json_object",
+                  "json_schema"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": {}
           }
         },
         "required": [
@@ -115987,13 +116021,13 @@
                                 "type": "string"
                               },
                               "request": {
-                                "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                                "$ref": "#/components/schemas/OpenrouterChatCompletionRequest"
                               },
                               "processedRequest": {
                                 "nullable": true,
                                 "allOf": [
                                   {
-                                    "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                                    "$ref": "#/components/schemas/OpenrouterChatCompletionRequest"
                                   }
                                 ]
                               },
@@ -134330,13 +134364,13 @@
                           "type": "string"
                         },
                         "request": {
-                          "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                          "$ref": "#/components/schemas/OpenrouterChatCompletionRequest"
                         },
                         "processedRequest": {
                           "nullable": true,
                           "allOf": [
                             {
-                              "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                              "$ref": "#/components/schemas/OpenrouterChatCompletionRequest"
                             }
                           ]
                         },
@@ -195095,7 +195129,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+                "$ref": "#/components/schemas/OpenrouterChatCompletionRequestInput"
               }
             }
           }
@@ -195374,7 +195408,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+                "$ref": "#/components/schemas/OpenrouterChatCompletionRequestInput"
               }
             }
           }

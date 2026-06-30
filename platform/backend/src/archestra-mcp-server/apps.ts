@@ -30,6 +30,7 @@ import {
   replaceAppToolAssignments,
   resolveAppToolsByName,
 } from "@/services/agent-tool-assignment";
+import { buildBuildAppSkillActivation } from "@/services/apps/app-authoring-skill-preload";
 import {
   assertCallerMayModifyApp,
   callerIsAppAdmin,
@@ -426,6 +427,13 @@ const registry = defineArchestraTools([
         warnings.length > 0
           ? `\nValidation warnings (save succeeded; fix via edit_app):\n- ${warnings.join("\n- ")}`
           : "";
+      // Auto-load the Build App skill in this same turn so the model has the
+      // window.archestra SDK contract before its first edit_app, without relying
+      // on it to discover and load the skill itself.
+      const skillActivation = buildBuildAppSkillActivation();
+      const skillNote = skillActivation
+        ? `\n\n${skillActivation.activation}`
+        : "";
       const toolsParts = toolsResultParts(resolvedTools);
       return structuredSuccessResult(
         {
@@ -437,7 +445,7 @@ const registry = defineArchestraTools([
           ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone page: /a/${app.id}${toolsParts.note}${warningsNote}${seededHtmlNote}`,
+        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone page: /a/${app.id}${toolsParts.note}${warningsNote}${seededHtmlNote}${skillNote}`,
       );
     },
   }),

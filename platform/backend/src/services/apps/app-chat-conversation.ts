@@ -1,8 +1,10 @@
 import {
   ARCHESTRA_TOOL_PREFIX,
+  TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { generateId, type UIMessage } from "ai";
+import { successResult } from "@/archestra-mcp-server/helpers";
 import {
   AgentModel,
   AppModel,
@@ -10,6 +12,7 @@ import {
   MemberModel,
   MessageModel,
 } from "@/models";
+import { buildBuildAppSkillActivation } from "@/services/apps/app-authoring-skill-preload";
 import { callerIsAppAdmin } from "@/services/apps/app-authorization";
 import { buildAppRenderResult } from "@/services/apps/app-render-result";
 import { ApiError } from "@/types";
@@ -17,6 +20,8 @@ import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution"
 
 const RENDER_APP_TOOL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_RENDER_APP_SHORT_NAME}` as const;
+const LOAD_SKILL_TOOL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_LOAD_SKILL_SHORT_NAME}` as const;
 
 /**
  * Create a chat conversation with the app already mounted: it seeds a synthetic
@@ -73,6 +78,34 @@ export async function createSeededAppConversation(params: {
     modelId: llmSelection.modelId,
     chatApiKeyId: llmSelection.chatApiKeyId,
   });
+
+  // Preload the Build App skill as a synthetic `load_skill` turn first, so the
+  // model has the window.archestra SDK contract before its first edit_app on this
+  // app — this path never runs scaffold_app (the app already exists), so the
+  // contract has to be in history already. Kept a separate message so the
+  // render_app one below stays byte-for-byte a model-driven render.
+  const skillPreload = buildBuildAppSkillActivation();
+  if (skillPreload) {
+    const skillMessage: UIMessage = {
+      id: generateId(),
+      role: "assistant",
+      parts: [
+        {
+          type: "dynamic-tool",
+          toolName: LOAD_SKILL_TOOL_NAME,
+          toolCallId: generateId(),
+          state: "output-available",
+          input: { name: skillPreload.skillName },
+          output: successResult(skillPreload.activation),
+        },
+      ],
+    };
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: skillMessage,
+    });
+  }
 
   // Typed as the AI SDK's UIMessage so the hand-built shape is checked at compile
   // time (the `content` column is `$type<any>`): `id`/`toolCallId` use the SDK's

@@ -304,6 +304,17 @@ describe("app tool execution", () => {
     );
   });
 
+  test("scaffold result preloads the Build App skill (SDK contract)", async () => {
+    const created = await scaffold({ name: "Counter" });
+    expect(created.isError).toBe(false);
+    // The Build App skill is auto-loaded in the same turn so the model has the
+    // namespaced window.archestra surface before its first edit_app — without
+    // discovering and calling load_skill itself.
+    const text = (created.content[0] as any).text as string;
+    expect(text).toContain('<skill_content name="Build App">');
+    expect(text).toContain("archestra.storage.user");
+  });
+
   test("edit rejects SDK self-bootstrap html and surfaces fragment warnings", async () => {
     const created = await scaffold({ name: "Editable" });
     const appId = structured(created).id as string;

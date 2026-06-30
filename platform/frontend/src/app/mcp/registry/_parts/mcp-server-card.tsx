@@ -10,6 +10,7 @@ import {
 import {
   AlertTriangle,
   Copy,
+  FileSearch,
   MessageSquare,
   Pencil,
   Plus,
@@ -1111,15 +1112,15 @@ export function McpServerCard({
                   : "Admin review required"}
               </span>
               {isInstallAdmin ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="ml-auto h-7 shrink-0"
+                <button
+                  type="button"
                   onClick={openEditorConfiguration}
+                  title="Review config"
+                  aria-label="Review config"
+                  className="shrink-0 rounded p-0.5 hover:bg-amber-500/10"
                 >
-                  <Pencil className="h-4 w-4" />
-                  Review config
-                </Button>
+                  <FileSearch className="h-4 w-4" />
+                </button>
               ) : (
                 <button
                   type="button"

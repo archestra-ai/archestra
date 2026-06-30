@@ -22,9 +22,11 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { CallPolicyToggle } from "@/components/call-policy-toggle";
 import { LoadingSpinner } from "@/components/loading";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PermissivePolicyOverlay } from "@/components/permissive-policy-overlay";
+import { ResultPolicyToggle } from "@/components/result-policy-toggle";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -82,7 +84,6 @@ import {
   OBSERVED_TOOL_SOURCE_DESCRIPTION,
   OBSERVED_TOOL_SOURCE_LABEL,
 } from "./assigned-tools-table.utils";
-import { CallPolicyToggle } from "./call-policy-toggle";
 
 type GetToolsWithAssignmentsQueryParams = NonNullable<
   archestraApiTypes.GetToolsWithAssignmentsData["query"]
@@ -707,11 +708,6 @@ export function AssignedToolsTable({
             resultPolicies ?? { byProfileToolId: {} },
           );
 
-          const actionLabel =
-            RESULT_POLICY_ACTION_OPTIONS.find(
-              (opt) => opt.value === resultAction,
-            )?.label ?? resultAction;
-
           return (
             <WithPermissions
               permissions={{ toolPolicy: ["update"] }}
@@ -719,34 +715,19 @@ export function AssignedToolsTable({
             >
               {({ hasPermission }) => (
                 <div className="flex items-center gap-2">
-                  <Select
+                  <ResultPolicyToggle
+                    size="sm"
                     value={resultAction}
-                    disabled={isUpdating || !hasPermission}
-                    onValueChange={(value) => {
-                      // Only update if value actually changed
-                      if (value === resultAction) return;
+                    onChange={(action) => {
+                      if (action === resultAction) return;
                       handleSingleRowUpdate(
                         row.original.id,
                         "resultPolicyAction",
-                        value as ResultPolicyAction,
+                        action,
                       );
                     }}
-                  >
-                    <SelectTrigger
-                      className="h-8 w-[150px] text-xs"
-                      onClick={(e) => e.stopPropagation()}
-                      size="sm"
-                    >
-                      <SelectValue>{actionLabel}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {RESULT_POLICY_ACTION_OPTIONS.map(({ value, label }) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    disabled={isUpdating || !hasPermission}
+                  />
                   {isUpdating && (
                     <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
                   )}

@@ -1,0 +1,2 @@
+ALTER TABLE "organization" ADD COLUMN "default_discovered_tool_invocation_policy" varchar DEFAULT 'allow_when_context_is_untrusted' NOT NULL;--> statement-breakpoint
+ALTER TABLE "organization" ADD COLUMN "default_discovered_tool_result_policy" varchar DEFAULT 'mark_as_untrusted' NOT NULL;

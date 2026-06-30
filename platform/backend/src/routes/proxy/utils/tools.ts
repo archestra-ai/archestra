@@ -2,6 +2,7 @@ import { isAgentTool } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import { ToolModel } from "@/models";
+import type { ToolInvocation, TrustedData } from "@/types";
 
 /**
  * Persist tools if present in the request
@@ -17,6 +18,11 @@ export const persistTools = async (
     toolDescription?: string;
   }>,
   agentId: string,
+  /** Org-configured defaults applied to each newly discovered tool's policies. */
+  defaults?: {
+    invocationAction?: ToolInvocation.ToolInvocationPolicyAction;
+    resultAction?: TrustedData.TrustedDataPolicyAction;
+  },
 ) => {
   logger.debug(
     { agentId, toolCount: tools.length },
@@ -100,6 +106,7 @@ export const persistTools = async (
       }),
     ),
     agentId,
+    defaults,
   );
 
   logger.debug(

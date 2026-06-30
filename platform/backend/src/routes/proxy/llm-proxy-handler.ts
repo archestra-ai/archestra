@@ -33,6 +33,7 @@ import {
   LimitValidationService,
   LlmProviderApiKeyModel,
   ModelModel,
+  OrganizationModel,
   TeamModel,
   ToolInvocationPolicyModel,
   UserModel,
@@ -643,6 +644,11 @@ export async function handleLLMProxy<
           { toolCount: tools.length },
           `[${providerName}Proxy] Processing tools from request`,
         );
+        // Apply the org's configured default policies to every newly
+        // discovered tool persisted below.
+        const organization = await OrganizationModel.getById(
+          resolvedAgent.organizationId,
+        );
         await utils.tools.persistTools(
           tools.map((t) => ({
             toolName: t.name,
@@ -650,6 +656,13 @@ export async function handleLLMProxy<
             toolDescription: t.description,
           })),
           resolvedAgentId,
+          organization
+            ? {
+                invocationAction:
+                  organization.defaultDiscoveredToolInvocationPolicy,
+                resultAction: organization.defaultDiscoveredToolResultPolicy,
+              }
+            : undefined,
         );
       }
     }

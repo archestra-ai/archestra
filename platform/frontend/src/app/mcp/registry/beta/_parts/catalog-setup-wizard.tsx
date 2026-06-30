@@ -18,8 +18,8 @@ import {
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { CallPolicyToggle } from "@/app/mcp/tool-guardrails/_parts/call-policy-toggle";
 import { ToolDetailsDialog } from "@/app/mcp/tool-guardrails/_parts/tool-details-dialog";
+import { CallPolicyToggle } from "@/components/call-policy-toggle";
 import { LoadingSpinner } from "@/components/loading";
 import {
   OAuthConfirmationDialog,

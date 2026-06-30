@@ -17,13 +17,14 @@ import {
 import type {
   ConnectionBaseUrl,
   ConnectionDefaultProviderKeys,
-  DiscoveredToolPolicy,
   GlobalToolPolicy,
   LimitCleanupInterval,
   NetworkPolicy,
   OnboardingWizard,
   OrganizationChatLink,
   OrganizationCompressionScope,
+  ToolInvocation,
+  TrustedData,
   TrustedImageRegistries,
 } from "@/types";
 import modelsTable from "./model";
@@ -59,14 +60,37 @@ const organizationsTable = pgTable("organization", {
     .notNull()
     .default("permissive"),
   /**
-   * Policy for tools auto-discovered via the LLM proxy. Resolved independently
-   * of globalToolPolicy so a restrictive global posture does not block tools
-   * Claude Code / Claude Desktop discover by default. Defaults to "relaxed".
+   * @deprecated Inert leftover column from the reverted PR #6027 (added by
+   * migration 0316). No code reads or writes it; retained for
+   * backward-compatibility and typed as a plain string so the schema stays
+   * consistent without re-introducing the reverted policy type. Safe to drop in
+   * a future migration.
    */
   discoveredToolPolicy: varchar("discovered_tool_policy")
-    .$type<DiscoveredToolPolicy>()
     .notNull()
     .default("relaxed"),
+  /**
+   * Admin-configurable default invocation policy applied to every tool the LLM
+   * proxy auto-discovers and persists. Defaults to "allow_when_context_is_untrusted"
+   * ("Allow always") so discovered tools are not blocked by default.
+   */
+  defaultDiscoveredToolInvocationPolicy: varchar(
+    "default_discovered_tool_invocation_policy",
+  )
+    .$type<ToolInvocation.ToolInvocationPolicyAction>()
+    .notNull()
+    .default("allow_when_context_is_untrusted"),
+  /**
+   * Admin-configurable default result policy applied to every tool the LLM proxy
+   * auto-discovers and persists. Defaults to "mark_as_untrusted" ("Mark as
+   * sensitive") so discovered-tool output is treated as untrusted by default.
+   */
+  defaultDiscoveredToolResultPolicy: varchar(
+    "default_discovered_tool_result_policy",
+  )
+    .$type<TrustedData.TrustedDataPolicyAction>()
+    .notNull()
+    .default("mark_as_untrusted"),
   /**
    * Whether file uploads are allowed in chat.
    * Defaults to true. Security policies currently only work on text-based content,

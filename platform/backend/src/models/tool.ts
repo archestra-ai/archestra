@@ -57,8 +57,10 @@ import type {
   SortDirection,
   Tool,
   ToolFilters,
+  ToolInvocation,
   ToolSortBy,
   ToolWithAssignments,
+  TrustedData,
   UpdateTool,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -259,13 +261,24 @@ class ToolModel {
    * Create default policies for a newly created tool:
    * - Default invocation policy: block_when_context_is_untrusted (empty conditions)
    * - Default result policy: mark_as_untrusted (empty conditions)
+   *
+   * `options.invocationAction` / `options.resultAction` override those defaults —
+   * used by the LLM proxy discovery path to honor the org's configured defaults.
+   * When omitted, the original hardcoded defaults are used (MCP/catalog tools are
+   * unaffected).
    */
-  static async createDefaultPolicies(toolId: string): Promise<void> {
+  static async createDefaultPolicies(
+    toolId: string,
+    options?: {
+      invocationAction?: ToolInvocation.ToolInvocationPolicyAction;
+      resultAction?: TrustedData.TrustedDataPolicyAction;
+    },
+  ): Promise<void> {
     // Create default invocation policy
     await ToolInvocationPolicyModel.create({
       toolId,
       conditions: [],
-      action: "block_when_context_is_untrusted",
+      action: options?.invocationAction ?? "block_when_context_is_untrusted",
       reason: null,
     });
 
@@ -273,7 +286,7 @@ class ToolModel {
     await TrustedDataPolicyModel.create({
       toolId,
       conditions: [],
-      action: "mark_as_untrusted",
+      action: options?.resultAction ?? "mark_as_untrusted",
       description: null,
     });
   }
@@ -2402,6 +2415,11 @@ class ToolModel {
     }>,
     /** @deprecated No longer used. Proxy tools are shared (agentId=NULL). Kept for call-site compatibility. */
     _agentId: string,
+    /** Org-configured defaults applied to each newly discovered tool's policies. */
+    defaults?: {
+      invocationAction?: ToolInvocation.ToolInvocationPolicyAction;
+      resultAction?: TrustedData.TrustedDataPolicyAction;
+    },
   ): Promise<Tool[]> {
     if (tools.length === 0) {
       return [];
@@ -2449,7 +2467,7 @@ class ToolModel {
 
       // Create default policies for newly inserted tools
       for (const tool of insertedTools) {
-        await ToolModel.createDefaultPolicies(tool.id);
+        await ToolModel.createDefaultPolicies(tool.id, defaults);
       }
 
       // If some tools weren't inserted due to conflict, fetch them

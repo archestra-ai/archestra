@@ -221,3 +221,171 @@ describe("emit + persist round-trip", () => {
     ).toBe(true);
   });
 });
+
+describe("createSubagentToolStreamBridge payload handling", () => {
+  it("caps an oversized input the same way as output", () => {
+    const bridge = createSubagentToolStreamBridge();
+    const huge = "y".repeat(50_000);
+    bridge.emit({
+      parentToolCallId: "P1",
+      toolCallId: "C1",
+      toolName: "fetch",
+      input: { body: huge },
+    });
+    const data = bridge.collected()[0]?.data as { input: unknown };
+    expect(typeof data.input).toBe("string");
+    expect((data.input as string).length).toBeLessThan(huge.length);
+    expect(data.input as string).toContain("truncated");
+  });
+
+  it("caps an oversized errorText string", () => {
+    const bridge = createSubagentToolStreamBridge();
+    const huge = "boom ".repeat(5_000);
+    bridge.emit({
+      parentToolCallId: "P1",
+      toolCallId: "C1",
+      toolName: "fetch",
+      errorText: huge,
+    });
+    const data = bridge.collected()[0]?.data as { errorText: string };
+    expect(data.errorText.length).toBeLessThan(huge.length);
+    expect(data.errorText).toContain("truncated");
+  });
+
+  it("replaces a value JSON.stringify cannot serialize (BigInt) with a marker", () => {
+    const bridge = createSubagentToolStreamBridge();
+    bridge.emit({
+      parentToolCallId: "P1",
+      toolCallId: "C1",
+      toolName: "calc",
+      output: { n: 10n },
+    });
+    const data = bridge.collected()[0]?.data as { output: unknown };
+    expect(data.output).toBe("[unserializable]");
+  });
+
+  it("replaces a value with no JSON representation (a function) with a marker", () => {
+    const bridge = createSubagentToolStreamBridge();
+    bridge.emit({
+      parentToolCallId: "P1",
+      toolCallId: "C1",
+      toolName: "calc",
+      input: () => {},
+    });
+    const data = bridge.collected()[0]?.data as { input: unknown };
+    expect(data.input).toBe("[unserializable]");
+  });
+
+  it("omits optional fields that were not provided", () => {
+    const bridge = createSubagentToolStreamBridge();
+    bridge.emit({ parentToolCallId: "P1", toolCallId: "C1", toolName: "noop" });
+    const data = bridge.collected()[0]?.data as Record<string, unknown>;
+    expect(Object.keys(data).sort()).toEqual(
+      ["parentToolCallId", "toolCallId", "toolName"].sort(),
+    );
+  });
+
+  it("accumulates multiple emitted calls in order", () => {
+    const bridge = createSubagentToolStreamBridge();
+    bridge.emit({ parentToolCallId: "P1", toolCallId: "C1", toolName: "a" });
+    bridge.emit({ parentToolCallId: "P1", toolCallId: "C2", toolName: "b" });
+    const ids = bridge
+      .collected()
+      .map((p) => (p.data as { toolCallId: string }).toolCallId);
+    expect(ids).toEqual(["C1", "C2"]);
+  });
+});
+
+describe("applySubagentToolCallsToMessages routing", () => {
+  it("returns the input unchanged when no assistant message follows the last user turn", () => {
+    const input: ChatMessage[] = [
+      { role: "user", parts: [{ type: "text", text: "go" }] },
+    ];
+    expect(
+      applySubagentToolCallsToMessages(input, [subagentPart("P1", "C1")]),
+    ).toBe(input);
+  });
+
+  it("routes each child to the assistant message holding its own delegation call", () => {
+    const input: ChatMessage[] = [
+      { role: "user", parts: [{ type: "text", text: "go" }] },
+      {
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-agent__a",
+            toolCallId: "P1",
+            state: "output-available",
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-agent__b",
+            toolCallId: "P2",
+            state: "output-available",
+          },
+        ],
+      },
+    ];
+    const result = applySubagentToolCallsToMessages(input, [
+      subagentPart("P1", "C1"),
+      subagentPart("P2", "C2"),
+    ]);
+    const idsAt = (i: number) =>
+      result[i].parts
+        ?.filter((p) => p.type === SUBAGENT_TOOL_CALL_PART_TYPE)
+        .map((p) => (p.data as { toolCallId: string }).toolCallId);
+    expect(idsAt(1)).toEqual(["C1"]);
+    expect(idsAt(2)).toEqual(["C2"]);
+  });
+
+  it("routes a part with a non-string parentToolCallId to the last assistant message", () => {
+    const input: ChatMessage[] = [
+      { role: "user", parts: [{ type: "text", text: "go" }] },
+      {
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-agent__a",
+            toolCallId: "P1",
+            state: "output-available",
+          },
+        ],
+      },
+    ];
+    const orphan = {
+      type: SUBAGENT_TOOL_CALL_PART_TYPE,
+      data: { toolCallId: "X1", toolName: "fetch", state: "output-available" },
+    } as unknown as ChatMessagePart;
+    const result = applySubagentToolCallsToMessages(input, [orphan]);
+    expect(
+      result[1].parts?.some((p) => p.type === SUBAGENT_TOOL_CALL_PART_TYPE),
+    ).toBe(true);
+  });
+
+  it("shallow-copies only the messages it touches", () => {
+    const input: ChatMessage[] = [
+      { role: "user", parts: [{ type: "text", text: "go" }] },
+      {
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-agent__a",
+            toolCallId: "P1",
+            state: "output-available",
+          },
+        ],
+      },
+      { role: "assistant", parts: [{ type: "text", text: "later" }] },
+    ];
+    const result = applySubagentToolCallsToMessages(input, [
+      subagentPart("P1", "C1"),
+    ]);
+    expect(result[0]).toBe(input[0]);
+    expect(result[2]).toBe(input[2]);
+    expect(result[1]).not.toBe(input[1]);
+  });
+});

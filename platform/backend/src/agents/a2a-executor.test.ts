@@ -869,4 +869,78 @@ describe("emitSubagentToolCalls", () => {
     });
     expect(emitted).toHaveLength(0);
   });
+
+  test("collapses input-available then output-available for the same id (last wins)", () => {
+    const { bridge, emitted } = fakeBridge();
+    emitSubagentToolCalls({
+      bridge,
+      parentToolCallId: "P1",
+      message: {
+        id: "m",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-web_search",
+            toolCallId: "C1",
+            state: "input-available",
+            input: { q: "x" },
+          },
+          {
+            type: "tool-web_search",
+            toolCallId: "C1",
+            state: "output-available",
+            input: { q: "x" },
+            output: { hits: 1 },
+          },
+        ],
+      } as unknown as UIMessage,
+    });
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      toolCallId: "C1",
+      state: "output-available",
+      output: { hits: 1 },
+    });
+  });
+
+  test("falls back to 'unknown' for a dynamic-tool part with no toolName", () => {
+    const { bridge, emitted } = fakeBridge();
+    emitSubagentToolCalls({
+      bridge,
+      parentToolCallId: "P1",
+      message: {
+        id: "m",
+        role: "assistant",
+        parts: [
+          { type: "dynamic-tool", toolCallId: "C1", state: "output-available" },
+        ],
+      } as unknown as UIMessage,
+    });
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].toolName).toBe("unknown");
+  });
+
+  test("skips a tool part that has no toolCallId", () => {
+    const { bridge, emitted } = fakeBridge();
+    emitSubagentToolCalls({
+      bridge,
+      parentToolCallId: "P1",
+      message: {
+        id: "m",
+        role: "assistant",
+        parts: [{ type: "tool-web_search", state: "output-available" }],
+      } as unknown as UIMessage,
+    });
+    expect(emitted).toHaveLength(0);
+  });
+
+  test("emits nothing for a message with no parts", () => {
+    const { bridge, emitted } = fakeBridge();
+    emitSubagentToolCalls({
+      bridge,
+      parentToolCallId: "P1",
+      message: { id: "m", role: "assistant" } as unknown as UIMessage,
+    });
+    expect(emitted).toHaveLength(0);
+  });
 });

@@ -285,9 +285,7 @@ For upstream servers that use OAuth, Archestra handles the token lifecycle autom
 
 #### Troubleshooting refresh failures
 
-A provider issues a refresh token only when `offline_access` is among the requested scopes. Some providers — Microsoft Entra in particular — return an access token but no refresh token when it is missing, and omit `offline_access` from their published scope metadata. Archestra always adds `offline_access` to the upstream authorization-code flow, so you do not need to list it in the catalog item's **Scopes** field.
-
-If a server's status shows a `no_refresh_token` error, the provider returned no refresh token at authorization. The stored access token works until it expires — often about an hour — after which tool calls fail with authentication errors. Reconnect the server to run a fresh authorization; a connection stored without a refresh token never gains one until you re-authenticate. If the error persists, confirm the provider grants `offline_access` for this application — some tenants require it to be enabled on the app registration or approved through admin consent.
+`no_refresh_token` means the provider issued no refresh token, so the connection breaks once the access token expires. Refresh tokens require the `offline_access` scope; Archestra requests it automatically (Microsoft Entra omits it from its metadata and returns none otherwise). Reconnect to re-authorize — if it persists, grant `offline_access` for the app, which some tenants gate behind admin consent.
 
 ### Enterprise Identity Credential Resolution
 

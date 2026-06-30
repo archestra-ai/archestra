@@ -853,6 +853,11 @@ export function McpServerCard({
     </PermissionButton>
   );
 
+  // The trusted-image-registry policy holds this catalog's image until an admin
+  // approves it: block install/reinstall up front and surface why. Declared
+  // before the card-content variants since they gate the reinstall button on it.
+  const showApprovalPanel = item.imageApprovalRequired === true;
+
   const remoteCardContent = (
     <>
       <div className="flex flex-wrap gap-2">
@@ -861,6 +866,7 @@ export function McpServerCard({
           <PermissionButton
             permissions={{ mcpServerInstallation: ["create"] }}
             onClick={triggerReinstall}
+            disabled={showApprovalPanel}
             size="sm"
             variant="outline"
             className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
@@ -879,12 +885,9 @@ export function McpServerCard({
     </>
   );
 
-  // The trusted-image-registry policy holds this catalog's image: an untrusted
-  // personal local image can't be installed until an admin approves it. The
-  // backend flags `imageApprovalRequired` so we prevent the install up front
-  // (rather than letting it fail). An admin reviews the config and approves in
-  // the edit form; the requester gets a copy-link to share.
-  const showApprovalPanel = item.imageApprovalRequired === true;
+  // `showApprovalPanel` is declared above (before the card-content variants).
+  // An admin reviews the config and approves in the edit form; the requester
+  // gets a copy-link to share.
   const isInstallAdmin = !!isMcpServerInstallAdmin;
 
   const copyApprovalLink = () => {
@@ -959,7 +962,7 @@ export function McpServerCard({
                 : { mcpServerInstallation: ["create"] }
             }
             onClick={triggerCombinedReinstall}
-            disabled={reinstallCatalogMutation.isPending}
+            disabled={reinstallCatalogMutation.isPending || showApprovalPanel}
             size="sm"
             variant="outline"
             className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
@@ -986,6 +989,7 @@ export function McpServerCard({
           <PermissionButton
             permissions={{ mcpServerInstallation: ["create"] }}
             onClick={triggerReinstall}
+            disabled={showApprovalPanel}
             size="sm"
             variant="outline"
             className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"

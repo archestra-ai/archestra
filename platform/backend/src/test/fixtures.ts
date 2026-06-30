@@ -183,10 +183,7 @@ async function makeVirtualApiKey(
  */
 async function makeOrganization(
   overrides: Partial<
-    Pick<
-      InsertOrganization,
-      "name" | "slug" | "globalToolPolicy" | "discoveredToolPolicy"
-    >
+    Pick<InsertOrganization, "name" | "slug" | "globalToolPolicy">
   > = {},
 ) {
   const orgId = crypto.randomUUID();

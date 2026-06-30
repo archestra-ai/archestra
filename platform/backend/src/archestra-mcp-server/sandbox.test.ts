@@ -1229,6 +1229,22 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
       ]);
       expect(allOut.files.every((f) => f.id)).toBe(true);
 
+      // A model that passes an empty string instead of omitting the query must browse,
+      // not hit a validation error: the schema accepts "" and lists every file.
+      const emptyQuery = await executeArchestraTool(
+        TOOL_SEARCH_FILES_FULL_NAME,
+        { query: "" },
+        ctx,
+      );
+      expect(emptyQuery.isError).toBe(false);
+      const emptyOut = structuredOf<{ files: Array<{ filename: string }> }>(
+        emptyQuery,
+      );
+      expect(emptyOut.files.map((f) => f.filename).sort()).toEqual([
+        "notes.txt",
+        "q2-report.txt",
+      ]);
+
       const filtered = await executeArchestraTool(
         TOOL_SEARCH_FILES_FULL_NAME,
         { query: "REPORT" },

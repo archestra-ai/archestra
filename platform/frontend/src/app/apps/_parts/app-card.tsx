@@ -51,9 +51,16 @@ export function AppCard({ app }: { app: AppListItem }) {
 // Shared card chrome: a full-card click target (rendered by the caller) sits
 // behind the content, and the overflow menu floats above it (z-10) so its own
 // clicks don't fall through to the card action.
-function CardOverflowMenu({ children }: { children: React.ReactNode }) {
+function CardOverflowMenu({
+  leading,
+  children,
+}: {
+  leading?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="absolute right-2 top-2 z-10">
+    <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5">
+      {leading}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -123,15 +130,35 @@ function AppScopeBadge({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        {/* Lift above the full-card click button (absolute inset-0) so the pill
-            can be hovered for its tooltip. */}
         <Badge
           variant="outline"
           aria-label={label}
-          className={cn(scopeStyles[scope], "relative z-10 px-1.5")}
+          className={cn(scopeStyles[scope], "px-1.5")}
         >
           <Icon className="h-3 w-3" />
         </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+// The app's type, as the leading icon. The label (what "owned" vs "external"
+// means) rides in the tooltip + aria-label rather than a separate badge. Lifted
+// above the full-card click button so it can be hovered.
+function AppTypeIcon({ owned }: { owned: boolean }) {
+  const Icon = owned ? AppWindow : Server;
+  const label = owned ? "MCP app" : "MCP server app";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          role="img"
+          aria-label={label}
+          className="relative z-10 inline-flex text-muted-foreground"
+        >
+          <Icon className="h-4 w-4" />
+        </span>
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
@@ -174,7 +201,14 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
 
         {isOpening ? <CardOpeningOverlay /> : null}
 
-        <CardOverflowMenu>
+        <CardOverflowMenu
+          leading={
+            <AppScopeBadge
+              scope={app.scope}
+              teamNames={app.teams?.map((team) => team.name)}
+            />
+          }
+        >
           <DropdownMenuItem asChild>
             <Link href={`/a/${app.id}`} target="_blank" rel="noreferrer">
               <ExternalLink className="h-4 w-4" />
@@ -198,12 +232,8 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
           ) : null}
         </CardOverflowMenu>
 
-        <div className="mb-3 flex flex-wrap items-center gap-1.5 pr-8">
-          <AppWindow className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <AppScopeBadge
-            scope={app.scope}
-            teamNames={app.teams?.map((team) => team.name)}
-          />
+        <div className="mb-3 flex items-center gap-1.5 pr-16">
+          <AppTypeIcon owned />
         </div>
 
         <CardTitle className="line-clamp-2 leading-snug break-words">
@@ -266,7 +296,7 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
 
       {isOpening ? <CardOpeningOverlay /> : null}
 
-      <CardOverflowMenu>
+      <CardOverflowMenu leading={<AppScopeBadge scope={app.scope} />}>
         <DropdownMenuItem asChild>
           <Link href={runHref} target="_blank" rel="noreferrer">
             <ExternalLink className="h-4 w-4" />
@@ -281,12 +311,8 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
         </DropdownMenuItem>
       </CardOverflowMenu>
 
-      <div className="mb-3 flex flex-wrap items-center gap-1.5 pr-8">
-        <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <Badge variant="outline" className="gap-1 text-xs">
-          MCP server app
-        </Badge>
-        <AppScopeBadge scope={app.scope} />
+      <div className="mb-3 flex items-center gap-1.5 pr-16">
+        <AppTypeIcon owned={false} />
       </div>
 
       <CardTitle className="line-clamp-2 leading-snug break-words">

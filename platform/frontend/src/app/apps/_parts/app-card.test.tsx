@@ -111,7 +111,7 @@ describe("ExternalAppCard", () => {
     expect(screen.getByText("Archestra PM / show_board")).toBeInTheDocument();
     expect(screen.getByText("Shows the project board")).toBeInTheDocument();
     expect(screen.queryByText(/archestra_pm/)).not.toBeInTheDocument();
-    expect(screen.getByText("MCP server app")).toBeInTheDocument();
+    expect(screen.getByLabelText("MCP server app")).toBeInTheDocument();
     // Per-install card carries an icon-only scope pill (label in aria/tooltip)
     // to disambiguate sibling installs.
     expect(screen.getByLabelText("Organization")).toBeInTheDocument();
@@ -155,6 +155,7 @@ describe("OwnedAppCard", () => {
     render(<AppCard app={ownedApp} />);
 
     expect(screen.getByText("My Owned App")).toBeInTheDocument();
+    expect(screen.getByLabelText("MCP app")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /open in new tab/i }),
     ).toHaveAttribute("href", "/a/owned-1");

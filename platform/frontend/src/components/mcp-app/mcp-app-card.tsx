@@ -7,10 +7,9 @@ import { cn } from "@/lib/utils";
  * Shared layout chrome for every MCP App surface (chat, right panel, Apps page).
  * Owns the card frame, the inline / fullscreen / fill geometry, body sizing, and
  * the optional frozen placeholder. The per-surface controls are passed in as the
- * `topBar` and `bottomBar` slots — see the building blocks in `mcp-app-chrome`
- * ({@link McpAppTopBar} / {@link McpAppRefreshButton} / {@link McpAppVersionBar}
- * and the discrete action buttons) — so the card itself stays free of action
- * wiring.
+ * `topBar` slot — see the building blocks in `mcp-app-chrome`
+ * ({@link McpAppTopBar} / {@link McpAppRefreshButton} and the discrete action
+ * buttons) — so the card itself stays free of action wiring.
  *
  * Between the bars sit an optional diagnostics badge and the app body — either
  * the live runtime (`children`) or, when `placeholder` is set, a frozen-height
@@ -30,7 +29,6 @@ export function McpAppCard({
   placeholder,
   frozenHeight,
   topBar,
-  bottomBar,
 }: {
   displayMode: McpUiDisplayMode;
   onToggleFullscreen: () => void;
@@ -56,7 +54,6 @@ export function McpAppCard({
   placeholder?: React.ReactNode;
   frozenHeight?: number;
   topBar?: React.ReactNode;
-  bottomBar?: React.ReactNode;
 }) {
   const isFullscreen = displayMode === "fullscreen";
   const [bounds, setBounds] = useState<{
@@ -153,8 +150,6 @@ export function McpAppCard({
           {children}
         </div>
       )}
-
-      {bottomBar}
     </div>
   );
 }

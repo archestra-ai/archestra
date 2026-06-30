@@ -37,7 +37,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
-import type { GlobalToolPolicy } from "@/types";
+import type { DiscoveredToolPolicy, GlobalToolPolicy } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 
@@ -914,6 +914,8 @@ export async function getChatMcpTools({
     ]);
     const globalToolPolicy: GlobalToolPolicy =
       org?.globalToolPolicy ?? "permissive";
+    const discoveredToolPolicy: DiscoveredToolPolicy =
+      org?.discoveredToolPolicy ?? "relaxed";
     const considerContextUntrusted = agent?.considerContextUntrusted ?? false;
 
     // Convert MCP tools to AI SDK Tool format
@@ -937,6 +939,7 @@ export async function getChatMcpTools({
       subagentToolStream,
       mcpGwToken,
       globalToolPolicy,
+      discoveredToolPolicy,
       considerContextUntrusted,
       teams,
       userTeams,

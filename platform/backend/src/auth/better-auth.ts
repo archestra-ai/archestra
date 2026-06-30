@@ -286,6 +286,24 @@ export const auth = betterAuth({
     },
   },
 
+  session: {
+    // Cache the resolved session in a short-lived signed cookie so the common
+    // case — an authenticated API request — can validate the session without a
+    // database round-trip. The session table stays the source of truth; the
+    // cookie just front-runs the lookup for up to `maxAge` seconds.
+    //
+    // RBAC role/permission decisions are NOT affected: populateUserInfo still
+    // re-reads the user from the database on every request (request.user), so
+    // role changes apply immediately. Only session-level facts embedded in the
+    // cookie (e.g. a freshly banned user or a revoked session) can lag by up to
+    // `maxAge`. 60s is a deliberate trade of that small staleness window for
+    // removing a per-request session lookup.
+    cookieCache: {
+      enabled: true,
+      maxAge: 60,
+    },
+  },
+
   advanced: {
     cookiePrefix: "archestra",
     defaultCookieAttributes: {

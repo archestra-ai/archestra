@@ -15,7 +15,6 @@ import {
   TOOL_SCAFFOLD_APP_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
-import { startCase } from "lodash-es";
 import {
   getToolErrorText,
   isCompactEligible,
@@ -208,14 +207,12 @@ export function getAppRenderVerb(toolName: string): string | null {
  */
 
 /**
- * Friendly label for an external MCP tool, derived from its full name.
- * "system__get-system-stats" -> "System / Get System Stats"; "render_app" -> "Render App".
+ * Address-bar label for an external MCP tool: the raw server and tool name from
+ * its full name, e.g. "Archestra PM__show_board" -> "Archestra PM / show_board".
  */
-export function humanizeToolLabel(fullToolName: string): string {
+export function mcpToolLabel(fullToolName: string): string {
   const { serverName, toolName } = parseFullToolName(fullToolName);
-  return serverName
-    ? `${startCase(serverName)} / ${startCase(toolName)}`
-    : startCase(toolName);
+  return serverName ? `${serverName} / ${toolName}` : toolName;
 }
 
 export function deriveAppsFromMessages(
@@ -254,7 +251,7 @@ export function deriveAppsFromMessages(
         seen.add(part.toolCallId);
         apps.push({
           toolCallId: part.toolCallId,
-          label: humanizeToolLabel(fullToolName),
+          label: mcpToolLabel(fullToolName),
           uiResourceUri: outputUri,
           appId: null,
           version: null,
@@ -283,7 +280,7 @@ export function deriveAppsFromMessages(
 
       const entry: PanelApp = {
         toolCallId: part.toolCallId,
-        label: ownedApp.appName ?? humanizeToolLabel(fullToolName),
+        label: ownedApp.appName ?? mcpToolLabel(fullToolName),
         uiResourceUri: getArchestraAppResourceUri(ownedApp.appId),
         appId: ownedApp.appId,
         version: ownedApp.latestVersion,

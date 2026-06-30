@@ -30,6 +30,7 @@ import logger from "@/logging";
 import { getActiveSessionId } from "@/observability/request-context";
 import { captureRawProviderErrorInSentry } from "@/observability/sentry";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
+import { RequestTooLargeError } from "./normalization/enforce-request-size-limit";
 
 // =============================================================================
 // ProviderError — carries a fully-mapped ChatErrorResponse with correct provider
@@ -309,8 +310,11 @@ function extractArchestraInternalCode(
   try {
     const parsed = JSON.parse(responseBody);
     const code = parsed?.error?.internal_code;
-    if (code === ArchestraInternalErrorCode.ContextLengthExceeded) {
-      return ArchestraInternalErrorCode.ContextLengthExceeded;
+    if (
+      code === ArchestraInternalErrorCode.ContextLengthExceeded ||
+      code === ArchestraInternalErrorCode.RequestTooLarge
+    ) {
+      return code;
     }
   } catch {
     // Not JSON — fall through.
@@ -1506,6 +1510,17 @@ export function mapProviderError(
 ): ChatErrorResponse {
   logger.debug({ provider }, "[ChatErrorMapper] Mapping provider error");
 
+  // Oversized request caught pre-flight (a large inline attachment) → an
+  // actionable size error instead of the provider's generic rejection. The
+  // error already carries the user-facing message with the size and limit.
+  if (error instanceof RequestTooLargeError) {
+    return {
+      code: ChatErrorCode.RequestTooLarge,
+      message: error.message,
+      isRetryable: false,
+    };
+  }
+
   // Per-user provider with no linked account → an actionable "connect" prompt,
   // not a generic key error. Carries authAction so the UI renders a link card.
   if (error instanceof LlmProviderAuthRequiredError) {
@@ -1666,6 +1681,8 @@ export function mapProviderError(
   const normalizedCode = extractArchestraInternalCode(responseBody);
   if (normalizedCode === ArchestraInternalErrorCode.ContextLengthExceeded) {
     errorCode = ChatErrorCode.ContextTooLong;
+  } else if (normalizedCode === ArchestraInternalErrorCode.RequestTooLarge) {
+    errorCode = ChatErrorCode.RequestTooLarge;
   }
   const usageLimitError = extractUsageLimitError(responseBody);
 

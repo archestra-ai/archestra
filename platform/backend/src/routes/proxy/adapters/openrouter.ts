@@ -23,6 +23,7 @@ import type {
   Openrouter,
   StreamAccumulatorState,
 } from "@/types";
+import { internalCodeFromProviderMessage } from "./context-overflow-patterns";
 import {
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
@@ -301,7 +302,7 @@ export const openrouterAdapterFactory: LLMProvider<
     if (get(error, "error.code") === "context_length_exceeded") {
       return ArchestraInternalErrorCode.ContextLengthExceeded;
     }
-    return undefined;
+    return internalCodeFromProviderMessage(get(error, "error.message"));
   },
 
   extractErrorMessage(error: unknown): string {

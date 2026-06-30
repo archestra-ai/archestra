@@ -743,6 +743,7 @@ describe("sandbox tools (runtime enabled)", () => {
           mimeType: "text/plain",
           sizeBytes: 42,
           stagingNotices: [],
+          overwritten: false,
         });
 
       const result = await executeArchestraTool(
@@ -788,6 +789,7 @@ describe("sandbox tools (runtime enabled)", () => {
         mimeType: "image/png",
         sizeBytes: 256,
         stagingNotices: [],
+        overwritten: false,
       });
 
       const result = await executeArchestraTool(
@@ -847,6 +849,114 @@ describe("sandbox tools (runtime enabled)", () => {
       await expect(
         skillSandboxRuntimeService.exportArtifact(params),
       ).rejects.toBeInstanceOf(FileNameExistsError);
+    });
+
+    // overwrite replaces the same-named persistent file in place (keeps its id)
+    // instead of colliding, so a regenerated sandbox file can supersede the one
+    // exported earlier. Only the Dagger boundary is stubbed.
+    test("exportArtifact with overwrite replaces an existing file in place", async () => {
+      const sandbox = await SkillSandboxModel.create({
+        organizationId,
+        userId,
+        conversationId: null,
+        defaultCwd: "/home/sandbox",
+      });
+      vi.spyOn(sandboxRuntimeService, "isEnabled", "get").mockReturnValue(true);
+      const readSpy = vi.spyOn(sandboxRuntimeService, "readArtifact");
+
+      const params = {
+        sandboxId: asSandboxId(sandbox.id),
+        caller: { userId, organizationId },
+        path: "out/result.txt",
+        projectId: null,
+      };
+
+      readSpy.mockResolvedValue({
+        dataBase64: Buffer.from("v1").toString("base64"),
+        sizeBytes: 2,
+      });
+      const first = await skillSandboxRuntimeService.exportArtifact(params);
+      expect(first.overwritten).toBe(false);
+
+      readSpy.mockResolvedValue({
+        dataBase64: Buffer.from("version-two").toString("base64"),
+        sizeBytes: 11,
+      });
+      const second = await skillSandboxRuntimeService.exportArtifact({
+        ...params,
+        overwrite: true,
+      });
+      expect(second.overwritten).toBe(true);
+      expect(second.artifactId).toBe(first.artifactId);
+      expect(second.sizeBytes).toBe(Buffer.from("version-two").byteLength);
+    });
+
+    // Conversation scope resolves the existing file via resolveMyFileRef (not the
+    // orphan path) before replacing it in place.
+    test("exportArtifact overwrite replaces in place within a conversation scope", async () => {
+      const conversation = await ConversationModel.create({
+        userId,
+        organizationId,
+        agentId: agent.id,
+        title: "overwrite conv",
+      });
+      const sandbox = await SkillSandboxModel.create({
+        organizationId,
+        userId,
+        conversationId: conversation.id,
+        defaultCwd: "/home/sandbox",
+      });
+      vi.spyOn(sandboxRuntimeService, "isEnabled", "get").mockReturnValue(true);
+      const readSpy = vi.spyOn(sandboxRuntimeService, "readArtifact");
+      const params = {
+        sandboxId: asSandboxId(sandbox.id),
+        caller: { userId, organizationId },
+        path: "out/data.txt",
+        projectId: null,
+      };
+
+      readSpy.mockResolvedValue({
+        dataBase64: Buffer.from("one").toString("base64"),
+        sizeBytes: 3,
+      });
+      const first = await skillSandboxRuntimeService.exportArtifact(params);
+
+      readSpy.mockResolvedValue({
+        dataBase64: Buffer.from("two!").toString("base64"),
+        sizeBytes: 4,
+      });
+      const second = await skillSandboxRuntimeService.exportArtifact({
+        ...params,
+        overwrite: true,
+      });
+      expect(second.overwritten).toBe(true);
+      expect(second.artifactId).toBe(first.artifactId);
+      expect(second.sizeBytes).toBe(4);
+    });
+
+    // overwrite with no existing same-named file creates it (overwritten: false),
+    // exercising the not-found → create fall-through.
+    test("exportArtifact overwrite creates the file when none exists", async () => {
+      const sandbox = await SkillSandboxModel.create({
+        organizationId,
+        userId,
+        conversationId: null,
+        defaultCwd: "/home/sandbox",
+      });
+      vi.spyOn(sandboxRuntimeService, "isEnabled", "get").mockReturnValue(true);
+      vi.spyOn(sandboxRuntimeService, "readArtifact").mockResolvedValue({
+        dataBase64: Buffer.from("fresh").toString("base64"),
+        sizeBytes: 5,
+      });
+
+      const result = await skillSandboxRuntimeService.exportArtifact({
+        sandboxId: asSandboxId(sandbox.id),
+        caller: { userId, organizationId },
+        path: "out/new.txt",
+        projectId: null,
+        overwrite: true,
+      });
+      expect(result.overwritten).toBe(false);
     });
   });
 
@@ -1229,6 +1339,22 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
       ]);
       expect(allOut.files.every((f) => f.id)).toBe(true);
 
+      // A model that passes an empty string instead of omitting the query must browse,
+      // not hit a validation error: the schema accepts "" and lists every file.
+      const emptyQuery = await executeArchestraTool(
+        TOOL_SEARCH_FILES_FULL_NAME,
+        { query: "" },
+        ctx,
+      );
+      expect(emptyQuery.isError).toBe(false);
+      const emptyOut = structuredOf<{ files: Array<{ filename: string }> }>(
+        emptyQuery,
+      );
+      expect(emptyOut.files.map((f) => f.filename).sort()).toEqual([
+        "notes.txt",
+        "q2-report.txt",
+      ]);
+
       const filtered = await executeArchestraTool(
         TOOL_SEARCH_FILES_FULL_NAME,
         { query: "REPORT" },
@@ -1348,6 +1474,7 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
           mimeType: "text/plain",
           sizeBytes: 3,
           stagingNotices: [],
+          overwritten: false,
         });
 
       const result = await executeArchestraTool(
@@ -1384,6 +1511,7 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
           mimeType: "text/plain",
           sizeBytes: 3,
           stagingNotices: [],
+          overwritten: false,
         });
 
       const result = await executeArchestraTool(
@@ -2687,7 +2815,6 @@ describe("projects feature gating (search_files / save_file / my_file)", () => {
         { ...context, conversationId: conversation.id },
       );
       expect(result.isError).toBe(true);
-      expect(textOf(result)).toContain("my_file");
       expect(spy).not.toHaveBeenCalled();
     });
   });

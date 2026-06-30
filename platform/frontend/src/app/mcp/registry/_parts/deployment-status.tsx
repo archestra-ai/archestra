@@ -90,6 +90,16 @@ export interface DeploymentStatusSummary {
   overallState: DeploymentState;
 }
 
+// Highest observed state wins when collapsing entries that map to one pod, so
+// a failed alias still surfaces over a running/pending sibling.
+const STATE_PRIORITY: Record<string, number> = {
+  failed: 4,
+  running: 3,
+  succeeded: 3,
+  pending: 2,
+  not_created: 1,
+};
+
 /**
  * Compute an aggregate deployment status summary from a set of server IDs
  * and their individual deployment statuses.
@@ -100,21 +110,34 @@ export function computeDeploymentStatusSummary(
 ): DeploymentStatusSummary | null {
   if (serverIds.length === 0) return null;
 
-  // Multi-tenant catalogs alias one K8s pod across many mcp_server rows.
-  // Dedupe entries by podName so the count reflects pods, not callers.
-  // Entries without a podName count individually (no aliasing known).
-  const seenPodNames = new Set<string>();
-  const uniqueEntries: McpDeploymentStatusEntry[] = [];
+  // Dedupe entries that map to the same pod so the count reflects pods, not
+  // caller rows. A deployment's identity (deploymentName) is stable from
+  // install time — known before a pod is scheduled — so multi-tenant catalogs,
+  // which share one deployment across rows, collapse to a single pod even while
+  // a freshly-installed row's podName is still null. Fall back to podName, then
+  // count individually when neither identity is known.
+  const byKey = new Map<string, McpDeploymentStatusEntry>();
+  const unkeyed: McpDeploymentStatusEntry[] = [];
   for (const id of serverIds) {
     const entry = statuses[id];
     if (!entry || entry.state === "not_created") continue;
-    const podName = entry.podName;
-    if (podName) {
-      if (seenPodNames.has(podName)) continue;
-      seenPodNames.add(podName);
+    const key = entry.deploymentName ?? entry.podName;
+    if (!key) {
+      unkeyed.push(entry);
+      continue;
     }
-    uniqueEntries.push(entry);
+    const existing = byKey.get(key);
+    if (
+      !existing ||
+      (STATE_PRIORITY[entry.state] ?? 0) > (STATE_PRIORITY[existing.state] ?? 0)
+    ) {
+      byKey.set(key, entry);
+    }
   }
+  const uniqueEntries: McpDeploymentStatusEntry[] = [
+    ...byKey.values(),
+    ...unkeyed,
+  ];
 
   let total = 0;
   let running = 0;

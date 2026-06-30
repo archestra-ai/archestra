@@ -119,6 +119,7 @@ export const E2eTestId = {
   ChatModelSelectorTrigger: "chat-model-selector-trigger",
   ChatPromptTextarea: "chat-prompt-textarea",
   QuickstartAddApiKeyButton: "quickstart-add-api-key-button",
+  ApiKeysLoadErrorRetry: "api-keys-load-error-retry",
   // MCP Logs
   McpLogsDialog: "mcp-logs-dialog",
   McpLogsContent: "mcp-logs-content",
@@ -126,6 +127,9 @@ export const E2eTestId = {
   McpLogsViewButton: "mcp-logs-view-button",
   McpLogsEditConfigButton: "mcp-logs-edit-config-button",
   McpLogsTab: "mcp-logs-tab",
+  // Connectivity / offline status bar
+  ConnectivityStatusBar: "connectivity-status-bar",
+  ConnectivityStatusBarRetry: "connectivity-status-bar-retry",
   // Role debugger / impersonation
   ImpersonationBanner: "impersonation-banner",
   ImpersonationStopButton: "impersonation-stop-button",

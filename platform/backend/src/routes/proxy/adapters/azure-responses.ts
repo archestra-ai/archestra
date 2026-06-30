@@ -38,6 +38,7 @@ import type {
   UsageView,
 } from "@/types";
 import { ApiError, createStreamAccumulatorState } from "@/types";
+import { internalCodeFromProviderMessage } from "./context-overflow-patterns";
 
 type AzureResponsesRequest = Azure.Types.ResponsesRequest;
 type AzureResponsesResponse = Azure.Types.ResponsesResponse;
@@ -169,7 +170,7 @@ export const azureResponsesAdapterFactory: LLMProvider<
     if (get(error, "error.code") === "context_length_exceeded") {
       return ArchestraInternalErrorCode.ContextLengthExceeded;
     }
-    return undefined;
+    return internalCodeFromProviderMessage(get(error, "error.message"));
   },
 
   extractErrorMessage(error: unknown): string {

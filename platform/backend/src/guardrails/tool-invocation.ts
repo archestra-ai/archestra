@@ -15,7 +15,8 @@ import {
   ToolModel,
 } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
-import type { GlobalToolPolicy } from "@/types";
+import type { DiscoveredToolPolicy, GlobalToolPolicy } from "@/types";
+import { defaultDiscoveredToolPolicy } from "@/types";
 
 /**
  * Result returned when tool invocation policies block a tool call.
@@ -53,17 +54,22 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
     return null;
   }
 
-  const [teamIds, organizationPolicy, enabledToolNames] = await Promise.all([
+  const [teamIds, organizationPolicies, enabledToolNames] = await Promise.all([
     AgentTeamModel.getTeamsForAgent(params.agentId),
     params.organizationId
-      ? OrganizationModel.getById(params.organizationId).then(
-          (organization) => organization?.globalToolPolicy,
+      ? OrganizationModel.getById(params.organizationId).then((organization) =>
+          organization
+            ? {
+                globalToolPolicy: organization.globalToolPolicy,
+                discoveredToolPolicy: organization.discoveredToolPolicy,
+              }
+            : undefined,
         )
       : Promise.resolve(undefined),
     params.enabledToolNames ?? ToolModel.getAssignedToolNames(params.agentId),
   ]);
-  const globalToolPolicy =
-    organizationPolicy ?? (await getGlobalToolPolicy(params.agentId));
+  const { globalToolPolicy, discoveredToolPolicy } =
+    organizationPolicies ?? (await getToolPolicies(params.agentId));
   const policyContext = {
     teamIds,
     externalAgentId: params.externalAgentId,
@@ -81,6 +87,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
     params.contextIsTrusted,
     enabledToolNames,
     globalToolPolicy,
+    discoveredToolPolicy,
   );
   if (policyBlock) {
     return policyBlock;
@@ -96,6 +103,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
       params.toolInput,
       policyContext,
       globalToolPolicy,
+      discoveredToolPolicy,
     );
   if (!requiresApproval) {
     return null;
@@ -121,6 +129,8 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
  * @param contextIsTrusted - Whether the context is trusted
  * @param enabledToolNames - Optional set of tool names that are enabled in the request.
  *                          If provided, tool calls not in this set will be filtered and reported as disabled.
+ * @param globalToolPolicy - The org's global tool policy (governs non-discovered tools).
+ * @param discoveredToolPolicy - The org's discovered-tool policy (governs llm-proxy discovered tools).
  */
 export const evaluatePolicies = async (
   toolCalls: Array<{ toolCallName: string; toolCallArgs: string }>,
@@ -129,6 +139,12 @@ export const evaluatePolicies = async (
   contextIsTrusted: boolean,
   enabledToolNames: Set<string>,
   globalToolPolicy: GlobalToolPolicy,
+  // Defaults to the discovered-tool equivalent of globalToolPolicy so callers
+  // that don't distinguish discovered tools keep single-policy behavior;
+  // production passes it explicitly.
+  discoveredToolPolicy: DiscoveredToolPolicy = defaultDiscoveredToolPolicy(
+    globalToolPolicy,
+  ),
 ): Promise<PolicyBlockResult | null> => {
   logger.debug(
     {
@@ -213,6 +229,7 @@ export const evaluatePolicies = async (
       context,
       contextIsTrusted,
       globalToolPolicy,
+      discoveredToolPolicy,
     );
 
   logger.debug(
@@ -245,17 +262,20 @@ export const evaluatePolicies = async (
 };
 
 /**
- * Resolve the global tool policy for an agent.
- * 1. Try to get organizationId from agent's teams
- * 2. Fallback to first organization in database if agent has no teams
- *
- * @param agentId - The agent ID to resolve policy for
- * @returns The global tool policy ("permissive" or "restrictive"), defaults to "permissive"
+ * Resolve both tool policies for an agent in a single organization fetch:
+ * 1. Use the organization of the agent's first team, if any.
+ * 2. Fallback to the first organization in the database.
+ * Global defaults to "permissive" and discovered defaults to "apply_policies"
+ * when no organization can be resolved.
  */
-export async function getGlobalToolPolicy(
-  agentId: string,
-): Promise<GlobalToolPolicy> {
-  const fallbackPolicy: GlobalToolPolicy = "permissive";
+export async function getToolPolicies(agentId: string): Promise<{
+  globalToolPolicy: GlobalToolPolicy;
+  discoveredToolPolicy: DiscoveredToolPolicy;
+}> {
+  const fallback = {
+    globalToolPolicy: "permissive",
+    discoveredToolPolicy: "relaxed",
+  } as const;
   const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
 
   // Agent has teams - get organization from first team
@@ -263,25 +283,27 @@ export async function getGlobalToolPolicy(
     const teams = await TeamModel.findByIds(agentTeamIds);
     if (teams.length > 0 && teams[0].organizationId) {
       const organizationId = teams[0].organizationId;
-      logger.debug(
-        { agentId, organizationId },
-        "GlobalToolPolicy: resolved organizationId from team",
-      );
-
       const organization = await OrganizationModel.getById(organizationId);
       if (!organization) {
         logger.warn(
           { agentId, organizationId },
-          `GlobalToolPolicy: organization not found, defaulting to ${fallbackPolicy}`,
+          `getToolPolicies: organization not found, defaulting to ${fallback.globalToolPolicy}`,
         );
-        return fallbackPolicy;
+        return fallback;
       }
-
       logger.debug(
-        { agentId, organizationId, policy: organization.globalToolPolicy },
-        "GlobalToolPolicy: resolved policy from organization",
+        {
+          agentId,
+          organizationId,
+          globalToolPolicy: organization.globalToolPolicy,
+          discoveredToolPolicy: organization.discoveredToolPolicy,
+        },
+        "getToolPolicies: resolved policies from team organization",
       );
-      return organization.globalToolPolicy;
+      return {
+        globalToolPolicy: organization.globalToolPolicy,
+        discoveredToolPolicy: organization.discoveredToolPolicy,
+      };
     }
   }
 
@@ -290,21 +312,29 @@ export async function getGlobalToolPolicy(
   if (!firstOrg) {
     logger.warn(
       { agentId },
-      `GlobalToolPolicy: could not resolve organization, defaulting to ${fallbackPolicy}`,
+      `getToolPolicies: could not resolve organization, defaulting to ${fallback.globalToolPolicy}`,
     );
-    return fallbackPolicy;
+    return fallback;
   }
-
   logger.debug(
-    { agentId, organizationId: firstOrg.id },
-    "GlobalToolPolicy: agent has no teams - using fallback organization",
+    {
+      agentId,
+      organizationId: firstOrg.id,
+      globalToolPolicy: firstOrg.globalToolPolicy,
+      discoveredToolPolicy: firstOrg.discoveredToolPolicy,
+    },
+    "getToolPolicies: agent has no teams - using fallback organization",
   );
-  logger.debug(
-    { agentId, organizationId: firstOrg.id, policy: firstOrg.globalToolPolicy },
-    "GlobalToolPolicy: resolved policy from organization",
-  );
+  return {
+    globalToolPolicy: firstOrg.globalToolPolicy,
+    discoveredToolPolicy: firstOrg.discoveredToolPolicy,
+  };
+}
 
-  return firstOrg.globalToolPolicy;
+export async function getGlobalToolPolicy(
+  agentId: string,
+): Promise<GlobalToolPolicy> {
+  return (await getToolPolicies(agentId)).globalToolPolicy;
 }
 
 function buildToolInvocationPolicyBlockResult(params: {

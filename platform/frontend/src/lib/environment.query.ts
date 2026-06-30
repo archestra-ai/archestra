@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 export const environmentKeys = {
   all: ["environments"] as const,
@@ -26,10 +26,7 @@ export function useEnvironments(enabled = true) {
     queryKey: environmentKeys.list(),
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.listEnvironments();
-      if (error) {
-        handleApiError(error);
-        return EMPTY_ENVIRONMENT_LIST;
-      }
+      throwOnApiError(error);
       return data ?? EMPTY_ENVIRONMENT_LIST;
     },
     enabled,
@@ -42,10 +39,7 @@ export function useK8sCapabilities(enabled = true) {
     queryKey: environmentKeys.k8sCapabilities(),
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getK8sCapabilities();
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error);
       return data ?? null;
     },
     enabled,

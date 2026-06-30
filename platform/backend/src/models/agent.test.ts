@@ -111,6 +111,42 @@ describe("AgentModel", () => {
     });
   });
 
+  describe("sandboxAvailable", () => {
+    test("is false on findById when the sandbox feature is disabled", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      // The sandbox feature is off in the test environment, so the per-agent
+      // availability check short-circuits to false for any user.
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const agent = await AgentModel.create({
+        name: "Sandbox Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+      });
+
+      const fetched = await AgentModel.findById(agent.id, user.id, true);
+      expect(fetched?.sandboxAvailable).toBe(false);
+    });
+
+    test("is left absent when no requesting user is given (fail-closed)", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await AgentModel.create({
+        name: "Userless Lookup Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+      });
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.sandboxAvailable).toBeUndefined();
+    });
+  });
+
   describe("findBasicByOrganizationIdAndIds", () => {
     test("returns only agents from the requested organization", async ({
       makeOrganization,
@@ -2394,6 +2430,11 @@ describe("AgentModel", () => {
       expect(agent?.scope).toBe("personal");
       expect(agent?.agentType).toBe("agent");
       expect(agent?.authorId).toBe(user.id);
+      // The personal assistant must reach every tool the user can access, which
+      // only works through the search/run dispatch surface — so it is seeded
+      // with dynamic tool access and the coerced search_and_run_only mode.
+      expect(agent?.accessAllTools).toBe(true);
+      expect(agent?.toolExposureMode).toBe("search_and_run_only");
     });
 
     test("is idempotent - second call does not create duplicate", async ({

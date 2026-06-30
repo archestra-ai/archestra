@@ -36,6 +36,7 @@ import { SelectableFileList } from "@/components/chat/selectable-file-list";
 import { FileDropZone } from "@/components/files/file-drop-zone";
 import { PageLayout } from "@/components/page-layout";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
+import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -73,7 +74,7 @@ export default function ProjectDetailPageClient() {
 function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { data: project, isPending } = useProject(id);
+  const { data: project, isPending, isLoadingError, refetch } = useProject(id);
   // Chats are hidden from admin oversight, so don't even fetch them there.
   const { data: conversations } = useProjectConversations(id, {
     enabled: !!project && project.viewerRole !== "admin",
@@ -97,6 +98,16 @@ function ProjectDetail() {
         <p className="py-12 text-center text-sm text-muted-foreground">
           Loading…
         </p>
+      </PageLayout>
+    );
+  }
+  if (isLoadingError) {
+    return (
+      <PageLayout title="Project" description="">
+        <QueryLoadError
+          title="Couldn't load this project"
+          onRetry={() => refetch()}
+        />
       </PageLayout>
     );
   }

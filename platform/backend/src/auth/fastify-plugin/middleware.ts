@@ -55,7 +55,7 @@ export class Authnz {
     );
 
     // Populate request.user and request.organizationId after successful authentication
-    await this.populateUserInfo(request);
+    await this.populateUserInfo(request, reply);
 
     // Guard: if populateUserInfo silently failed, user info is missing
     if (!request.user || !request.organizationId) {
@@ -209,9 +209,11 @@ export class Authnz {
 
     try {
       logger.trace("[Authnz] Attempting session-based authentication");
-      const session = await betterAuth.api.getSession({
+      // Reads the short-lived cookie cache when present (see session.cookieCache
+      // in better-auth config), falling back to the session table on a miss.
+      const { response: session } = await betterAuth.api.getSession({
         headers,
-        query: { disableCookieCache: true },
+        returnHeaders: true,
       });
 
       if (session) {
@@ -328,17 +330,24 @@ export class Authnz {
     return result;
   };
 
-  private populateUserInfo = async (request: FastifyRequest): Promise<void> => {
+  private populateUserInfo = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
     try {
       const headers = new Headers(request.headers as HeadersInit);
 
       // Try session-based authentication first
       try {
         logger.trace("[Authnz] populateUserInfo: trying session-based lookup");
-        const session = await betterAuth.api.getSession({
-          headers,
-          query: { disableCookieCache: true },
-        });
+        // returnHeaders so we can forward better-auth's refreshed cookie-cache
+        // Set-Cookie back to the client. Without this the cache would only be
+        // rewritten by the dedicated /api/auth/get-session endpoint, so the
+        // short TTL would lapse between those calls and most API requests would
+        // still hit the session table.
+        const { response: session, headers: authHeaders } =
+          await betterAuth.api.getSession({ headers, returnHeaders: true });
+        this.forwardSessionCookies(reply, authHeaders);
 
         if (session?.user?.id) {
           logger.trace(
@@ -421,6 +430,22 @@ export class Authnz {
         { error: error instanceof Error ? error.message : "unknown" },
         "[Authnz] populateUserInfo: failed to populate user info",
       );
+    }
+  };
+
+  /**
+   * Forward any Set-Cookie headers better-auth produced (the refreshed
+   * cookie-cache cookie) onto the Fastify reply, so the next request can
+   * validate the session from the cookie instead of the database. Only
+   * Set-Cookie is copied to avoid clobbering other response headers.
+   */
+  private forwardSessionCookies = (
+    reply: FastifyReply,
+    authHeaders: Headers,
+  ): void => {
+    const setCookies = authHeaders.getSetCookie();
+    if (setCookies.length > 0) {
+      reply.header("set-cookie", setCookies);
     }
   };
 

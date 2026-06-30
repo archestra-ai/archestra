@@ -3,8 +3,12 @@
 import {
   type ChatSkillMetadata,
   type ContextWindowBreakdown,
+  chatUploadRejectionReason,
   E2eTestId,
   getAcceptedFileTypes,
+  getMediaType,
+  getModelReadableMimeTypes,
+  INLINE_TEXT_MAX_BYTES,
   supportsFileUploads,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
@@ -31,6 +35,7 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
+import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
 import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
@@ -57,6 +62,15 @@ import {
 
 const CHAT_ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024;
 const CHAT_ATTACHMENT_MAX_MB = CHAT_ATTACHMENT_MAX_BYTES / (1024 * 1024);
+// Fallback sandbox artifact limit when /api/config has not loaded yet (mirrors
+// the backend default). Only consulted when a sandbox is available.
+const DEFAULT_SANDBOX_ARTIFACT_BYTES = 16 * 1024 * 1024;
+
+function formatBytes(bytes: number): string {
+  return bytes >= 1024 * 1024
+    ? `${Math.round(bytes / (1024 * 1024))} MB`
+    : `${Math.round(bytes / 1024)} KB`;
+}
 
 export interface ArchestraPromptInputProps
   extends Omit<ChatPromptInputToolsProps, "textareaRef"> {
@@ -141,8 +155,10 @@ const PromptInputContent = ({
   onResetModelOverride,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
+  sandboxAvailable,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
+  sandboxAvailable: boolean;
 }) => {
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
@@ -153,10 +169,16 @@ const PromptInputContent = ({
     string | null
   >(null);
 
-  // Derive file upload capabilities from model input modalities
+  // Derive file upload capabilities from model input modalities. When the agent
+  // has a sandbox available, any file type is allowed (it is staged for
+  // run_command), so uploads are offered even for a non-multimodal model and the
+  // OS picker is unrestricted.
   const showFileUploadButton =
-    allowFileUploads && supportsFileUploads(inputModalities);
-  const acceptedFileTypes = getAcceptedFileTypes(inputModalities);
+    allowFileUploads &&
+    (supportsFileUploads(inputModalities) || sandboxAvailable);
+  const acceptedFileTypes = sandboxAvailable
+    ? undefined
+    : getAcceptedFileTypes(inputModalities);
 
   // Chat placeholders from organization settings
   const { data: orgData } = useOrganization();
@@ -646,6 +668,7 @@ const PromptInputContent = ({
             onApiKeyChange={onApiKeyChange}
             onProviderChange={onProviderChange}
             allowFileUploads={allowFileUploads}
+            sandboxAvailable={sandboxAvailable}
             isModelsLoading={isModelsLoading}
             tokensUsed={tokensUsed}
             cachedTokens={cachedTokens}
@@ -719,9 +742,39 @@ const ArchestraPromptInput = ({
   agentRequiresPerUserConnect,
   agentModelDisplayName,
 }: ArchestraPromptInputProps) => {
+  const { data: activeAgent } = useProfile(agentId);
+  const sandboxAvailable = activeAgent?.sandboxAvailable ?? false;
+  const sandboxByteLimit =
+    useFeature("sandboxArtifactBytesLimit") ?? DEFAULT_SANDBOX_ARTIFACT_BYTES;
+
+  // Per-file policy mirroring the backend ingest gate (which is authoritative).
+  // Returns a friendly reason to drop the file, or null to accept it.
+  const validateFile = useCallback(
+    (file: File): string | null => {
+      const reason = chatUploadRejectionReason({
+        mimeType: getMediaType(file),
+        byteLength: file.size,
+        ingestibleMimeTypes: getModelReadableMimeTypes(inputModalities),
+        sandboxAvailable,
+        sandboxByteLimit,
+      });
+      switch (reason) {
+        case null:
+          return null;
+        case "text_too_large":
+          return `"${file.name}" is too large to include as text (max ${formatBytes(INLINE_TEXT_MAX_BYTES)}). Enable the sandbox to work with larger files.`;
+        case "too_large_for_sandbox":
+          return `"${file.name}" exceeds the maximum size of ${formatBytes(sandboxByteLimit)}.`;
+        case "unsupported_type":
+          return `This model can't read "${file.name}". Enable the sandbox to use any file type.`;
+      }
+    },
+    [inputModalities, sandboxAvailable, sandboxByteLimit],
+  );
+
   const handleProviderFileError = useCallback(
     (err: {
-      code: "max_files" | "max_file_size" | "accept";
+      code: "max_files" | "max_file_size" | "accept" | "rejected";
       message: string;
     }) => {
       if (err.code === "max_file_size") {
@@ -730,6 +783,10 @@ const ArchestraPromptInput = ({
         );
       } else if (err.code === "max_files") {
         toast.error("Too many files attached.");
+      } else if (err.code === "rejected") {
+        // Policy rejection (unsupported type / too large to inline). Gentle,
+        // not an error toast — the message already explains the next step.
+        toast(err.message);
       }
     },
     [],
@@ -739,6 +796,7 @@ const ArchestraPromptInput = ({
     <div className="flex size-full flex-col justify-end">
       <PromptInputProvider
         maxFileSize={CHAT_ATTACHMENT_MAX_BYTES}
+        validateFile={validateFile}
         onError={handleProviderFileError}
       >
         <PromptInputContent
@@ -774,6 +832,7 @@ const ArchestraPromptInput = ({
           onResetModelOverride={onResetModelOverride}
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}
+          sandboxAvailable={sandboxAvailable}
         />
       </PromptInputProvider>
     </div>

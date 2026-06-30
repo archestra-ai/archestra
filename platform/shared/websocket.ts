@@ -320,6 +320,12 @@ export type McpExecClosedMessage = {
   type: "mcp_exec_closed";
   payload: {
     serverId: string;
+    /**
+     * Human-readable reason the session ended, populated when the K8s exec
+     * reported a failure status (e.g. the image is distroless and has no
+     * `/bin/sh`). Absent on a clean exit.
+     */
+    reason?: string;
   };
 };
 
@@ -341,6 +347,10 @@ export type McpDeploymentStatusEntry = {
   restartCount?: number;
   podAge?: string; // e.g. "24m", "2h", "3d"
   podName?: string;
+  // Stable per-deployment identity, known at install time (before a pod is
+  // scheduled). Multi-tenant catalogs share one deployment across rows, so the
+  // UI dedupes by this to count pods, not caller rows.
+  deploymentName?: string;
 };
 
 export type McpDeploymentStatusesMessage = {

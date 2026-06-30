@@ -102,6 +102,7 @@ export function makeInteraction(
     model: "gpt-4o",
     baselineModel: null,
     inputTokens: 100,
+    inputTokensEstimated: false,
     outputTokens: 50,
     cacheReadTokens: 0,
     cacheWriteTokens: 0,

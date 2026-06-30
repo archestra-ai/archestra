@@ -1,4 +1,4 @@
-import { ApiError } from "@archestra/shared";
+import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import type { Openrouter } from "@/types";
 import { openrouterAdapterFactory } from "./openrouter";
@@ -108,5 +108,33 @@ describe("OpenrouterStreamAdapter", () => {
         choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
       }),
     ).not.toThrow();
+  });
+});
+
+describe("extractInternalCode", () => {
+  test("classifies OpenRouter's uncoded 'maximum context length' message as overflow", () => {
+    // OpenRouter returns a descriptive 400 with no structured error.code — the
+    // structured-only check missed it (#3219).
+    const error = {
+      error: {
+        message:
+          "This endpoint's maximum context length is 204800 tokens. However, you requested about 309977 tokens (303247 of text input, 6730 of tool input). Please reduce the length of either one.",
+      },
+    };
+    expect(openrouterAdapterFactory.extractInternalCode(error)).toBe(
+      ArchestraInternalErrorCode.ContextLengthExceeded,
+    );
+  });
+
+  test("still classifies the structured context_length_exceeded code", () => {
+    const error = { error: { code: "context_length_exceeded" } };
+    expect(openrouterAdapterFactory.extractInternalCode(error)).toBe(
+      ArchestraInternalErrorCode.ContextLengthExceeded,
+    );
+  });
+
+  test("leaves an unrelated 400 unclassified", () => {
+    const error = { error: { message: "invalid model specified" } };
+    expect(openrouterAdapterFactory.extractInternalCode(error)).toBeUndefined();
   });
 });

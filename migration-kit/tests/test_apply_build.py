@@ -12,20 +12,35 @@ import pytest
 import yaml
 
 from apply import (
-    BuiltAgent,
-    BuiltCatalog,
     BuiltHook,
     BuiltInstall,
-    BuiltLlmKey,
     BuiltPolicy,
-    BuiltSkill,
     _build_payload,
     _Built,
+    _execute,
     _flag_hook_collisions,
     _redacted_for_print,
+    _require_skill_frontmatter,
 )
-from archestra_client import CatalogCreate, LlmKeyCreate, LocalConfig, McpEnvVar
-from contracts import ContractError, Decision, HookData, HookItem, Item, SkillItem, to_jsonable
+from archestra_client import (
+    AgentCreate,
+    ArchestraClient,
+    CatalogCreate,
+    LlmKeyCreate,
+    LocalConfig,
+    McpEnvVar,
+    SkillCreate,
+)
+from contracts import (
+    ContractError,
+    Decision,
+    HookData,
+    HookItem,
+    Item,
+    SkillData,
+    SkillItem,
+    to_jsonable,
+)
 from discover import discover
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample-setup"
@@ -45,29 +60,84 @@ def _decide(index: dict[str, Item], source_id: str, target_kind: str, **kw: Any)
 
 def test_claude_md_builds_agent(index: dict[str, Item]) -> None:
     _, built = _decide(index, "claude_md", "agent")
-    assert isinstance(built, BuiltAgent)
-    assert built.payload.agentType == "agent"
-    assert built.payload.scope == "personal"
-    assert built.payload.systemPrompt is not None
-    assert "note assistant" in built.payload.systemPrompt.lower()
+    assert isinstance(built, AgentCreate)
+    assert built.agentType == "agent"
+    assert built.scope == "personal"
+    assert built.systemPrompt is not None
+    assert "note assistant" in built.systemPrompt.lower()
 
 
 def test_subagent_builds_skill_with_allowlist_note(index: dict[str, Item]) -> None:
     _, built = _decide(index, "subagent:fact-checker", "skill")
-    assert isinstance(built, BuiltSkill)
-    fm = yaml.safe_load(built.payload.content.split("---", 2)[1])
+    assert isinstance(built, SkillCreate)
+    fm = yaml.safe_load(built.content.split("---", 2)[1])
     assert fm["name"] == "fact-checker"
-    assert "not enforced" in built.payload.content.lower()
-    assert "Read, Bash, Skill" in built.payload.content
+    assert "not enforced" in built.content.lower()
+    assert "Read, Bash, Skill" in built.content
 
 
 def test_skill_is_verbatim(index: dict[str, Item]) -> None:
     _, built = _decide(index, "skill:summarize-text", "skill")
-    assert isinstance(built, BuiltSkill)
+    assert isinstance(built, SkillCreate)
     source = index["skill:summarize-text"]
     assert isinstance(source, SkillItem)
-    assert built.payload.content == source.data.content
-    assert {f.path for f in built.payload.files} == {"reference.md"}
+    assert built.content == source.data.content
+    assert {f.path for f in built.files} == {"reference.md"}
+
+
+def test_skill_name_override_renames_frontmatter(index: dict[str, Item]) -> None:
+    # archestra reads the skill name from the content frontmatter, so a name_override must land
+    # there -- and the returned display name must match it (idempotency keys on that name).
+    name, built = _decide(index, "skill:summarize-text", "skill", name_override="proj-summarize")
+    assert isinstance(built, SkillCreate)
+    assert name == "proj-summarize"
+    assert yaml.safe_load(built.content.split("---", 2)[1])["name"] == "proj-summarize"
+
+
+def _skill_item(content: str) -> SkillItem:
+    return SkillItem(id="skill:x", name="x", path=".claude/skills/x/SKILL.md", summary="",
+                     data=SkillData(content=content, frontmatter={}), files=[])
+
+
+def test_require_skill_frontmatter_accepts_valid() -> None:
+    _require_skill_frontmatter("---\nname: x\ndescription: d\n---\nbody", ctx="t")  # no raise
+
+
+@pytest.mark.parametrize(
+    ("content", "match"),
+    [
+        ("no frontmatter at all", "must start with"),
+        ("---\ndescription: d\n---\nb", "missing `name`"),
+        ("---\nname: x\n---\nb", "missing `description`"),
+        ("---\nname: x\ndescription:   \n---\nb", "missing `description`"),
+    ],
+)
+def test_require_skill_frontmatter_rejects(content: str, match: str) -> None:
+    with pytest.raises(ContractError, match=match):
+        _require_skill_frontmatter(content, ctx="t")
+
+
+def test_require_skill_frontmatter_rejects_duplicate_name() -> None:
+    with pytest.raises(ContractError, match="duplicate/ambiguous"):
+        _require_skill_frontmatter("---\nname: a\nname: b\ndescription: d\n---\nbody", ctx="t")
+
+
+def test_build_skill_rejects_description_less_content() -> None:
+    # a description-less SKILL.md passes set_name (name present) but the server would 400 it;
+    # the build must fail offline so --dry-run reports it invalid rather than the network.
+    decision = Decision(source_id="skill:x", target_kind="skill", scope="personal")
+    with pytest.raises(ContractError, match="missing `description`"):
+        _build_payload(decision, _skill_item("---\nname: x\n---\nbody"))
+
+
+def test_build_skill_auto_supplies_missing_name() -> None:
+    # name is supplied from name_override (or the source dir) when the SKILL.md omits it; only
+    # description -- which cannot be invented -- gates the build.
+    decision = Decision(source_id="skill:x", target_kind="skill", scope="personal",
+                        name_override="proj-x")
+    _, built = _build_payload(decision, _skill_item("---\ndescription: d\n---\nbody"))
+    assert isinstance(built, SkillCreate)
+    assert yaml.safe_load(built.content.split("---", 2)[1])["name"] == "proj-x"
 
 
 def test_team_scoped_skill_requires_team_ids(index: dict[str, Item]) -> None:
@@ -88,23 +158,23 @@ def test_team_scoped_skill_carries_team_ids(index: dict[str, Item]) -> None:
         ),
         index["skill:summarize-text"],
     )
-    assert isinstance(built, BuiltSkill)
-    assert built.payload.scope == "team"
-    assert built.payload.teamIds == ["team-a", "team-b"]
+    assert isinstance(built, SkillCreate)
+    assert built.scope == "team"
+    assert built.teamIds == ["team-a", "team-b"]
 
 
 def test_local_tool_builds_skill_bundling_script(index: dict[str, Item]) -> None:
     _, built = _decide(index, "local_tool:word_count", "skill")
-    assert isinstance(built, BuiltSkill)
-    assert "python3 tools/word_count.py" in built.payload.content
-    assert built.payload.files[0].path == "tools/word_count.py"
+    assert isinstance(built, SkillCreate)
+    assert "python3 tools/word_count.py" in built.content
+    assert built.files[0].path == "tools/word_count.py"
 
 
 def test_remote_mcp_builds_remote_catalog(index: dict[str, Item]) -> None:
     _, built = _decide(index, "mcp:weather", "mcp_catalog")
-    assert isinstance(built, BuiltCatalog)
-    assert built.payload.serverType == "remote"
-    assert built.payload.serverUrl == "https://mcp.example.com/weather"
+    assert isinstance(built, CatalogCreate)
+    assert built.serverType == "remote"
+    assert built.serverUrl == "https://mcp.example.com/weather"
 
 
 def test_team_scoped_agent_carries_team_ids(index: dict[str, Item]) -> None:
@@ -117,8 +187,8 @@ def test_team_scoped_agent_carries_team_ids(index: dict[str, Item]) -> None:
         ),
         index["claude_md"],
     )
-    assert isinstance(built, BuiltAgent)
-    assert built.payload.teams == ["team-a", "team-b"]
+    assert isinstance(built, AgentCreate)
+    assert built.teams == ["team-a", "team-b"]
 
 
 def test_team_scoped_install_uses_single_team_id(index: dict[str, Item]) -> None:
@@ -146,8 +216,8 @@ def test_team_scoped_llm_key_carries_team_id(index: dict[str, Item]) -> None:
         ),
         index["openclaw"],
     )
-    assert isinstance(built, BuiltLlmKey)
-    assert built.payload.teamId == "team-a"
+    assert isinstance(built, LlmKeyCreate)
+    assert built.teamId == "team-a"
 
 
 def test_team_answer_precedence_when_both_present(index: dict[str, Item]) -> None:
@@ -158,8 +228,8 @@ def test_team_answer_precedence_when_both_present(index: dict[str, Item]) -> Non
         Decision(source_id="claude_md", target_kind="agent", scope="team", user_answers=both),
         index["claude_md"],
     )
-    assert isinstance(built, BuiltAgent)
-    assert built.payload.teams == ["team-a", "team-b"]
+    assert isinstance(built, AgentCreate)
+    assert built.teams == ["team-a", "team-b"]
     _, built = _build_payload(
         Decision(
             source_id="mcp:github", target_kind="mcp_install", scope="team", user_answers=both,
@@ -172,10 +242,10 @@ def test_team_answer_precedence_when_both_present(index: dict[str, Item]) -> Non
 
 def test_stdio_mcp_redacted_env_becomes_prompted_secret(index: dict[str, Item]) -> None:
     _, built = _decide(index, "mcp:github", "mcp_catalog")
-    assert isinstance(built, BuiltCatalog)
-    assert built.payload.serverType == "local"
-    assert built.payload.localConfig is not None
-    env = {e.key: e for e in built.payload.localConfig.environment}
+    assert isinstance(built, CatalogCreate)
+    assert built.serverType == "local"
+    assert built.localConfig is not None
+    env = {e.key: e for e in built.localConfig.environment}
     assert env["GITHUB_TOKEN"].type == "secret"
     assert env["GITHUB_TOKEN"].promptOnInstallation is True
     assert env["GITHUB_TOKEN"].value is None  # secret value not carried
@@ -187,9 +257,9 @@ def test_llm_key_requires_user_supplied_secret(index: dict[str, Item]) -> None:
         _decide(index, "openclaw", "llm_key", user_answers={"provider": "anthropic"})
     _, built = _decide(index, "openclaw", "llm_key",
                        user_answers={"apiKey": "sk-ant-real", "provider": "anthropic"})
-    assert isinstance(built, BuiltLlmKey)
-    assert built.payload.apiKey == "sk-ant-real"
-    assert built.payload.provider == "anthropic"
+    assert isinstance(built, LlmKeyCreate)
+    assert built.apiKey == "sk-ant-real"
+    assert built.provider == "anthropic"
 
 
 def test_llm_key_rejects_unknown_provider(index: dict[str, Item]) -> None:
@@ -205,21 +275,21 @@ def test_generated_frontmatter_is_valid_yaml_with_hostile_name(index: dict[str, 
                  name_override='evil: name "with" #chars'),
         index["subagent:fact-checker"],
     )
-    assert isinstance(built, BuiltSkill)
-    fm = built.payload.content.split("---", 2)[1]
+    assert isinstance(built, SkillCreate)
+    fm = built.content.split("---", 2)[1]
     assert yaml.safe_load(fm)["name"] == 'evil: name "with" #chars'
 
 
 def test_dry_run_redaction_hides_user_secrets() -> None:
-    llm = _redacted_for_print(BuiltLlmKey(LlmKeyCreate(
-        provider="anthropic", scope="personal", apiKey="sk-real", name="k")))
+    llm = _redacted_for_print(LlmKeyCreate(
+        provider="anthropic", scope="personal", apiKey="sk-real", name="k"))
     assert llm["apiKey"] == "<redacted>"
     install = _redacted_for_print(BuiltInstall(
         catalog_name="fs", scope="personal", environment_values={"GITHUB_TOKEN": "ghp_real"}, agent_ids=[]))
     env = install["environmentValues"]
     assert isinstance(env, dict)
     assert env["GITHUB_TOKEN"] == "<redacted>"
-    catalog = _redacted_for_print(BuiltCatalog(CatalogCreate(
+    catalog = _redacted_for_print(CatalogCreate(
         name="github",
         serverType="local",
         scope="personal",
@@ -228,7 +298,7 @@ def test_dry_run_redaction_hides_user_secrets() -> None:
             arguments=["--key", "sk-argsecret00000000"],
             environment=[McpEnvVar(key="GITHUB_TOKEN", type="secret", value="ghp_real")],
         ),
-    )))
+    ))
     local = catalog["localConfig"]
     assert isinstance(local, dict)
     catalog_env = local["environment"]
@@ -239,9 +309,9 @@ def test_dry_run_redaction_hides_user_secrets() -> None:
     assert "ghp_commandsecret00000" not in json.dumps(catalog)
     assert "sk-argsecret00000000" not in json.dumps(catalog)
     # a remote server URL with basic-auth + a secret query param is scrubbed too.
-    remote = _redacted_for_print(BuiltCatalog(CatalogCreate(
+    remote = _redacted_for_print(CatalogCreate(
         name="weather", serverType="remote", scope="personal",
-        serverUrl="https://user:hunter2@mcp.example.com/w?api_key=plaintextsecret&region=us")))
+        serverUrl="https://user:hunter2@mcp.example.com/w?api_key=plaintextsecret&region=us"))
     shown_url = json.dumps(remote)
     assert "hunter2" not in shown_url
     assert "plaintextsecret" not in shown_url
@@ -425,3 +495,64 @@ def test_dry_run_writes_planned_result_without_network(tmp_path: Path) -> None:
     result = json.loads(result_path.read_text(encoding="utf-8"))
     assert result["summary"] == {"planned": 1}
     assert result["ops"][0]["target_kind"] == "agent"
+
+
+def test_dry_run_manual_decision_without_target_kind(tmp_path: Path) -> None:
+    """a manual decision needs no target_kind; it is reported by its action, not crashed."""
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("ARCHESTRA_BASE_URL", "ARCHESTRA_API_KEY")}
+    proc, result_path = _run_apply_cli(tmp_path, {
+        "schema_version": 1,
+        "default_scope": "personal",
+        "decisions": [{"source_id": "openclaw", "action": "manual", "scope": "personal",
+                       "notes": "port the openclaw config by hand"}],
+    }, "--dry-run", env=env)
+
+    assert proc.returncode == 0
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    op = result["ops"][0]
+    assert op["outcome"] == "manual"
+    assert op["target_kind"] == "manual"
+
+
+def test_install_execute_sends_catalog_name() -> None:
+    """apply wires the catalog item's name into the install payload (the live API requires `name`)."""
+    posted: list[dict[str, object]] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args: object) -> None:
+            pass
+
+        def _json(self, body: dict[str, object]) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(body).encode())
+
+        def do_GET(self) -> None:
+            if self.path == "/api/internal_mcp_catalog":
+                self._json({"items": [{"id": "cat-1", "name": "science-playwright", "scope": "personal"}]})
+            else:  # GET /api/mcp_server?catalogId=cat-1 -> no existing install
+                self._json({"items": []})
+
+        def do_POST(self) -> None:
+            raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            posted.append(json.loads(raw))
+            self._json({"id": "srv-1"})
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with ArchestraClient(f"http://127.0.0.1:{server.server_address[1]}") as client:
+            decision = Decision(source_id="mcp:playwright", target_kind="mcp_install", scope="personal")
+            built = BuiltInstall(catalog_name="science-playwright", scope="personal",
+                                 environment_values={}, agent_ids=[])
+            op = _execute(client, decision, "science-playwright", built)
+    finally:
+        server.shutdown()
+        thread.join()
+
+    assert op.outcome == "created"
+    assert posted[0]["catalogId"] == "cat-1"
+    assert posted[0]["name"] == "science-playwright"

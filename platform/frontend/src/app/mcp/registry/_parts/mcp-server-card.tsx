@@ -9,6 +9,8 @@ import {
 } from "@archestra/shared";
 import {
   AlertTriangle,
+  Copy,
+  FileSearch,
   MessageSquare,
   Pencil,
   Plus,
@@ -851,14 +853,20 @@ export function McpServerCard({
     </PermissionButton>
   );
 
+  // The trusted-image-registry policy holds this catalog's image until an admin
+  // approves it: block install/reinstall up front and surface why. Declared
+  // before the card-content variants since they gate the reinstall button on it.
+  const showApprovalPanel = item.imageApprovalRequired === true;
+
   const remoteCardContent = (
     <>
       <div className="flex flex-wrap gap-2">
         {chatButton}
         {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
           <PermissionButton
-            permissions={{ mcpServerInstallation: ["update"] }}
+            permissions={{ mcpServerInstallation: ["create"] }}
             onClick={triggerReinstall}
+            disabled={showApprovalPanel}
             size="sm"
             variant="outline"
             className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
@@ -877,7 +885,22 @@ export function McpServerCard({
     </>
   );
 
-  const localInstallButton = (
+  // `showApprovalPanel` is declared above (before the card-content variants).
+  // An admin reviews the config and approves in the edit form; the requester
+  // gets a copy-link to share.
+  const isInstallAdmin = !!isMcpServerInstallAdmin;
+
+  const copyApprovalLink = () => {
+    void navigator.clipboard.writeText(
+      `${window.location.origin}/mcp/registry?${MCP_CATALOG_EDIT_QUERY_PARAM}=${item.id}`,
+    );
+    toast.success("Link copied — share it with an admin to approve this image");
+  };
+
+  // When the image is gated, the full-width approval banner at the top of the
+  // card body explains it and carries the action — so drop the inline install
+  // button entirely (it would only fail the gate).
+  const localInstallButton = showApprovalPanel ? null : (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -914,10 +937,10 @@ export function McpServerCard({
             permissions={
               showAdminCatalogReinstall
                 ? { mcpRegistry: ["update"] }
-                : { mcpServerInstallation: ["update"] }
+                : { mcpServerInstallation: ["create"] }
             }
             onClick={triggerCombinedReinstall}
-            disabled={reinstallCatalogMutation.isPending}
+            disabled={reinstallCatalogMutation.isPending || showApprovalPanel}
             size="sm"
             variant="outline"
             className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
@@ -942,8 +965,9 @@ export function McpServerCard({
         {chatButton}
         {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
           <PermissionButton
-            permissions={{ mcpServerInstallation: ["update"] }}
+            permissions={{ mcpServerInstallation: ["create"] }}
             onClick={triggerReinstall}
+            disabled={showApprovalPanel}
             size="sm"
             variant="outline"
             className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
@@ -1077,6 +1101,45 @@ export function McpServerCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">
+        {showApprovalPanel && (
+          <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2.5">
+            <div className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-500">
+              <span>
+                {isInstallAdmin
+                  ? "Image needs approval"
+                  : "Admin review required"}
+              </span>
+              {isInstallAdmin ? (
+                <button
+                  type="button"
+                  onClick={openEditorConfiguration}
+                  title="Review config"
+                  aria-label="Review config"
+                  className="shrink-0 rounded p-0.5 hover:bg-amber-500/10"
+                >
+                  <FileSearch className="h-4 w-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={copyApprovalLink}
+                  title="Copy link"
+                  aria-label="Copy link"
+                  className="shrink-0 rounded p-0.5 hover:bg-amber-500/10"
+                >
+                  <Copy className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {allServersForCatalog.length > 0
+                ? "The Docker image was changed to one that isn't from a trusted registry. Existing connections keep running the previous image until an admin approves."
+                : isInstallAdmin
+                  ? "This MCP server Docker image isn't from a trusted image registry. Review and approve configuration to allow installs."
+                  : "This MCP server Docker image isn't from a trusted image registry. An admin must approve it before it can be installed."}
+            </p>
+          </div>
+        )}
         {variant === "local" &&
           (() => {
             // Multi-tenant catalogs alias one K8s pod across many mcp_server

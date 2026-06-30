@@ -29,6 +29,7 @@ import type {
   UsageView,
 } from "@/types";
 import { ApiError, createStreamAccumulatorState } from "@/types";
+import { internalCodeFromProviderMessage } from "./context-overflow-patterns";
 
 type OpenAiResponsesRequest = OpenAi.Types.ResponsesRequest;
 type OpenAiResponsesResponse = OpenAi.Types.ResponsesResponse;
@@ -135,7 +136,7 @@ export const openAiResponsesAdapterFactory: LLMProvider<
     if (get(error, "error.code") === "context_length_exceeded") {
       return ArchestraInternalErrorCode.ContextLengthExceeded;
     }
-    return undefined;
+    return internalCodeFromProviderMessage(get(error, "error.message"));
   },
 
   extractErrorMessage(error: unknown): string {

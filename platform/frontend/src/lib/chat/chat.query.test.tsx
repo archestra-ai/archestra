@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 import { handleApiError } from "@/lib/utils";
 import {
+  invalidateConversationFileQueries,
   mergeUpdatedConversationIntoCache,
   useConversation,
   useConversationEnabledTools,
@@ -286,6 +287,46 @@ describe("mergeUpdatedConversationIntoCache", () => {
     expect(merged.agentId).toBe("agent-a");
     expect(merged.chatApiKeyId).toBe("key-openai");
     expect(merged.modelId).toBe("model-gpt41");
+  });
+});
+
+describe("invalidateConversationFileQueries", () => {
+  test("refreshes the project Files panel for a project chat", () => {
+    const queryClient = new QueryClient();
+    const spy = vi.spyOn(queryClient, "invalidateQueries");
+
+    invalidateConversationFileQueries(queryClient, {
+      conversationId: "c1",
+      projectId: "p1",
+    });
+
+    expect(spy).toHaveBeenCalledWith({
+      queryKey: ["conversation-files", "c1"],
+    });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["conversation", "c1"] });
+    // The fix: a file created in a project chat must mark the project's Files
+    // list stale so navigating to the project view refetches it.
+    expect(spy).toHaveBeenCalledWith({
+      queryKey: ["projects", "p1", "files"],
+    });
+  });
+
+  test("leaves project queries untouched for a non-project chat", () => {
+    const queryClient = new QueryClient();
+    const spy = vi.spyOn(queryClient, "invalidateQueries");
+
+    invalidateConversationFileQueries(queryClient, {
+      conversationId: "c1",
+      projectId: null,
+    });
+
+    expect(spy).toHaveBeenCalledWith({
+      queryKey: ["conversation-files", "c1"],
+    });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["conversation", "c1"] });
+    // Only the two conversation keys — no `["projects", …]` invalidation that
+    // would refetch an unrelated project's files for a plain chat.
+    expect(spy).toHaveBeenCalledTimes(2);
   });
 });
 

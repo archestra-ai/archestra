@@ -4,7 +4,11 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_GET_MCP_SERVERS_SHORT_NAME,
 } from "@archestra/shared";
-import { EnvironmentModel, InternalMcpCatalogModel } from "@/models";
+import {
+  EnvironmentModel,
+  InternalMcpCatalogModel,
+  OrganizationModel,
+} from "@/models";
 import { createEnvironment } from "@/services/environments/environment";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
@@ -332,6 +336,49 @@ describe("mcp server tool execution", () => {
 
 describe("deploy_mcp_server", () => {
   const DEPLOY_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}deploy_mcp_server`;
+
+  test("blocks a personal local install whose image is not trusted", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
+    });
+    // A plain member (non-privileged: mcpRegistry:update but no team-admin/admin)
+    // is the actor the gate targets — privileged authors are exempt.
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      authorId: user.id,
+      scope: "personal",
+      serverType: "local",
+      localConfig: { dockerImage: "ghcr.io/evil/x:1" },
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "personal" },
+      ctx,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "pending administrator approval",
+    );
+    const flagged = await InternalMcpCatalogModel.findById(catalog.id);
+    expect(flagged?.catalogItemApprovalStatus).toBe("pending");
+  });
 
   test("personal install: admin succeeds", async ({
     makeAgent,

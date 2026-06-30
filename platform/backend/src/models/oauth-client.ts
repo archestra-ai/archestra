@@ -99,6 +99,13 @@ class OAuthClientModel {
       redirectUris: data.redirectUris,
       grantTypes: data.grantTypes,
       responseTypes: data.responseTypes,
+      // Persist scopes so the OAuth provider's authorize-time scope check has a
+      // non-null set to validate against. A null scopes column lets the provider
+      // fall back to its full configured scope list — but `ensureOfflineAccessScope`
+      // later turns that null into a partial array (e.g. ['offline_access']),
+      // which then rejects the `mcp` scope. Storing scopes here keeps `mcp` in the
+      // client's set.
+      scopes: data.scopes,
       tokenEndpointAuthMethod: data.tokenEndpointAuthMethod,
       public: data.isPublic,
       metadata: data.metadata,

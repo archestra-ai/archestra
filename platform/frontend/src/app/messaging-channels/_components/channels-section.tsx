@@ -17,6 +17,7 @@ import { useCallback, useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import Divider from "@/components/divider";
 import { LoadingSpinner } from "@/components/loading";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -104,6 +105,8 @@ export function ChannelsSection({
     data: bindingsResponse,
     isLoading,
     isFetching,
+    isLoadingError,
+    refetch: refetchBindings,
   } = useChatOpsBindings({
     provider: providerConfig.provider,
     limit: pageSize,
@@ -352,6 +355,11 @@ export function ChannelsSection({
 
       {isLoading && !bindingsResponse ? (
         <ChannelTableSkeleton />
+      ) : isLoadingError ? (
+        <QueryLoadError
+          title="Couldn't load your channels"
+          onRetry={() => refetchBindings()}
+        />
       ) : hasAnyChannels ? (
         <>
           {/* Search + filters + bulk assign */}
@@ -634,6 +642,7 @@ function ChannelRows({
               assignedAgent={undefined}
               isUpdating={isDmUpdating}
               onAssign={onDmAssignAgent}
+              isDm
             />
           </TableCell>
           <TableCell>
@@ -718,6 +727,7 @@ function ChannelRows({
                 assignedAgent={assignedAgent}
                 isUpdating={isUpdating}
                 onAssign={(agentId) => onAssignAgent(binding.id, agentId)}
+                isDm={binding.isDm}
               />
             </TableCell>
             <TableCell>
@@ -812,7 +822,16 @@ function BulkAssignButton({
           <Command>
             <CommandInput placeholder="Search agents..." />
             <CommandList>
-              <CommandEmpty>No agents found.</CommandEmpty>
+              <CommandEmpty>
+                <div className="px-2 py-3 text-center">
+                  <p className="text-sm">No agents found.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Only organization and team agents can be a channel's
+                    default. Personal agents are available in direct messages
+                    only.
+                  </p>
+                </div>
+              </CommandEmpty>
               <CommandGroup>
                 <CommandItem
                   onSelect={() => {
@@ -881,11 +900,13 @@ function AgentPicker({
   assignedAgent,
   isUpdating,
   onAssign,
+  isDm = false,
 }: {
   agents: Agent[];
   assignedAgent: Agent | undefined;
   isUpdating: boolean;
   onAssign: (agentId: string | null) => void;
+  isDm?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -924,7 +945,18 @@ function AgentPicker({
         <Command>
           <CommandInput placeholder="Search agents..." />
           <CommandList>
-            <CommandEmpty>No agents found.</CommandEmpty>
+            <CommandEmpty>
+              <div className="px-2 py-3 text-center">
+                <p className="text-sm">No agents found.</p>
+                {!isDm && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Only organization and team agents can be a channel's
+                    default. Personal agents are available in direct messages
+                    only.
+                  </p>
+                )}
+              </div>
+            </CommandEmpty>
             <CommandGroup>
               {assignedAgent && (
                 <>

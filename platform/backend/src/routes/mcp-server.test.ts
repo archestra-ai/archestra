@@ -1164,6 +1164,250 @@ describe("mcp server inspect route", () => {
     await drainPendingReinstall(mcpServer.id);
   });
 
+  // A partial reinstall (user fills only a newly-added required header) must
+  // not 400 on a required header whose value is already on the install's bag.
+  test("reinstall accepts a body that omits required userConfig fields already on the install's secret bag", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Remote Reinstall Required UserConfig From Bag",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        header_existing: {
+          type: "string",
+          title: "x-existing",
+          description: "Existing header set at original install",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-existing",
+        },
+        header_new: {
+          type: "string",
+          title: "x-new",
+          description: "New header added in a catalog edit",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-new",
+        },
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await db
+      .update(schema.mcpServersTable)
+      .set({ serverType: "remote" })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    const existingBag = await secretManager().createSecret(
+      { header_existing: "on-the-bag" },
+      `${mcpServer.name}-existing-bag`,
+    );
+    await db
+      .update(schema.mcpServersTable)
+      .set({ secretId: existingBag.id })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: {
+        userConfigValues: { header_new: "user-fills-only-the-new-one" },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const [updatedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    expect(updatedServer?.secretId).toBeTruthy();
+
+    const storedSecret = await secretManager().getSecret(
+      updatedServer.secretId!,
+    );
+    expect(storedSecret?.secret).toMatchObject({
+      header_existing: "on-the-bag",
+      header_new: "user-fills-only-the-new-one",
+    });
+
+    await drainPendingReinstall(mcpServer.id);
+  });
+
+  // An explicit empty string clears an optional userConfig field from the bag
+  // while leaving unrelated entries (OAuth tokens, etc.) untouched.
+  test("reinstall body with empty string for an optional userConfig field deletes it from the bag", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Remote Reinstall Optional UserConfig Clear",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        header_optional: {
+          type: "string",
+          title: "x-optional",
+          description: "Optional header the user can clear",
+          promptOnInstallation: true,
+          required: false,
+          sensitive: false,
+          headerName: "x-optional",
+        },
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await db
+      .update(schema.mcpServersTable)
+      .set({ serverType: "remote" })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    const existingBag = await secretManager().createSecret(
+      { header_optional: "to-be-cleared", unrelated_key: "keep-me" },
+      `${mcpServer.name}-existing-bag`,
+    );
+    await db
+      .update(schema.mcpServersTable)
+      .set({ secretId: existingBag.id })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: { userConfigValues: { header_optional: "" } },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const [updatedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    const storedSecret = await secretManager().getSecret(
+      updatedServer.secretId!,
+    );
+    expect(storedSecret?.secret).not.toHaveProperty("header_optional");
+    // Unrelated bag entries (OAuth tokens, etc.) must stay put.
+    expect(storedSecret?.secret).toMatchObject({ unrelated_key: "keep-me" });
+
+    await drainPendingReinstall(mcpServer.id);
+  });
+
+  // A whitespace-only submission for a required userConfig field passes
+  // validation via the existing-bag fallback; it must not then overwrite the
+  // stored header with whitespace.
+  test("reinstall ignores a whitespace-only userConfig submission and keeps the stored value", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Remote Reinstall Whitespace UserConfig",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        header_required: {
+          type: "string",
+          title: "x-required",
+          description: "Required header already set at install",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-required",
+        },
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await db
+      .update(schema.mcpServersTable)
+      .set({ serverType: "remote" })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    const existingBag = await secretManager().createSecret(
+      { header_required: "valid-value" },
+      `${mcpServer.name}-existing-bag`,
+    );
+    await db
+      .update(schema.mcpServersTable)
+      .set({ secretId: existingBag.id })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: { userConfigValues: { header_required: "   " } },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const [updatedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    const storedSecret = await secretManager().getSecret(
+      updatedServer.secretId!,
+    );
+    expect(storedSecret?.secret).toMatchObject({
+      header_required: "valid-value",
+    });
+
+    await drainPendingReinstall(mcpServer.id);
+  });
+
+  // Required-userConfig validation runs even on an empty body, so a newly-added
+  // required connection setting that nothing satisfies fails fast with 400
+  // rather than starting the server on stale config.
+  test("reinstall with an empty body 400s when a required userConfig field is unsatisfied", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Remote Reinstall Empty Body Missing UserConfig",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        header_required: {
+          type: "string",
+          title: "x-required",
+          description: "Required header with no value anywhere yet",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-required",
+        },
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await db
+      .update(schema.mcpServersTable)
+      .set({ serverType: "remote" })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("header_required");
+  });
+
   // Regression: reinstall of a local MCP server with a newly-added prompted
   // plain_text env var used to land the value only in the K8s secret bag.
   // On the next pod start, the secret-typed-only filter dropped it, and the

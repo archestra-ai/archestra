@@ -52,7 +52,44 @@ export function restoreRenderableAssistantParts(params: {
     };
   });
 
-  return changed ? restoredMessages : nextMessages;
+  if (!changed) {
+    return nextMessages;
+  }
+
+  // While a non-renderable assistant persists (e.g. reconnecting to an in-flight
+  // tool call on reload), this restoration runs on every render and would hand
+  // back a fresh array each time. That churns the caller's stableMessages
+  // identity, which re-fires the session-sync effect → setSessionVersion →
+  // re-render in a storm that crashes the chat view (React #185, "Maximum update
+  // depth"). previousMessages is the prior render's restored output, so when the
+  // rebuild is structurally identical, reuse it to keep the reference stable.
+  if (messagesShallowEqual(restoredMessages, previousMessages)) {
+    return previousMessages;
+  }
+
+  return restoredMessages;
+}
+
+// Compares every field of UIMessage (id, role, metadata, parts) so reusing the
+// previous reference can never silently drop a non-parts update — e.g. an
+// assistant message gaining its metadata.persistedMessageId after streaming,
+// which edit/regeneration relies on to target the right persisted row. parts and
+// metadata are compared by reference: a genuine change produces a new reference,
+// while a stable render reuses them, so this stays both correct and cheap.
+function messagesShallowEqual(a: UIMessage[], b: UIMessage[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  return a.every((message, index) => {
+    const other = b[index];
+    return (
+      !!other &&
+      message.id === other.id &&
+      message.role === other.role &&
+      message.metadata === other.metadata &&
+      message.parts === other.parts
+    );
+  });
 }
 
 /**

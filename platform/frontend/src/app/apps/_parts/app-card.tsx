@@ -4,19 +4,15 @@ import type { archestraApiTypes } from "@archestra/shared";
 import {
   AppWindow,
   ExternalLink,
-  Globe,
   Loader2,
   MoreHorizontal,
   Server,
   Trash2,
-  User,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { scopeStyles } from "@/components/resource-visibility-badge";
-import { Badge } from "@/components/ui/badge";
+import { ScopeBadge } from "@/components/scope-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import {
@@ -100,49 +96,6 @@ function CardOpeningOverlay() {
   );
 }
 
-const SCOPE_BADGE: Record<
-  OwnedApp["scope"],
-  { label: string; icon: typeof User }
-> = {
-  personal: { label: "Personal", icon: User },
-  team: { label: "Team", icon: Users },
-  org: { label: "Organization", icon: Globe },
-};
-
-// Icon-only scope pill (label rides in the tooltip + aria-label), matching the
-// projects-card visibility pill so personal/team/org reads identically across
-// surfaces. Personal is hidden (it's the implicit default and just adds noise);
-// a team app folds its team names into the tooltip ("Team: London HQ").
-function AppScopeBadge({
-  scope,
-  teamNames,
-}: {
-  scope: OwnedApp["scope"];
-  teamNames?: string[];
-}) {
-  if (scope === "personal") return null;
-  const { label: scopeLabel, icon: Icon } = SCOPE_BADGE[scope];
-  const names = teamNames?.filter(Boolean) ?? [];
-  const label =
-    scope === "team" && names.length > 0
-      ? `Team: ${names.join(", ")}`
-      : scopeLabel;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Badge
-          variant="outline"
-          aria-label={label}
-          className={cn(scopeStyles[scope], "px-1.5")}
-        >
-          <Icon className="h-3 w-3" />
-        </Badge>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
 // The app's type, as the leading icon. The label (what "owned" vs "external"
 // means) rides in the tooltip + aria-label rather than a separate badge. Lifted
 // above the full-card click button so it can be hovered.
@@ -203,9 +156,10 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
 
         <CardOverflowMenu
           leading={
-            <AppScopeBadge
+            <ScopeBadge
               scope={app.scope}
               teamNames={app.teams?.map((team) => team.name)}
+              hidePersonal
             />
           }
         >
@@ -296,7 +250,7 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
 
       {isOpening ? <CardOpeningOverlay /> : null}
 
-      <CardOverflowMenu leading={<AppScopeBadge scope={app.scope} />}>
+      <CardOverflowMenu leading={<ScopeBadge scope={app.scope} hidePersonal />}>
         <DropdownMenuItem asChild>
           <Link href={runHref} target="_blank" rel="noreferrer">
             <ExternalLink className="h-4 w-4" />

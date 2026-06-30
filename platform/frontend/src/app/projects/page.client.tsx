@@ -26,8 +26,9 @@ import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { ProjectScopeFilter } from "@/components/project-scope-filter";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
-import { ProjectVisibilityBadge } from "@/components/projects/project-visibility-badge";
+import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ScopeBadge } from "@/components/scope-badge";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -309,8 +310,8 @@ function ProjectCard({
               added only on another member's PERSONAL project (admin oversight),
               where the personal pill alone can't say whose it is — for team/org
               the scope pill already conveys the sharing. */}
-          <ProjectVisibilityBadge
-            visibility={project.visibility}
+          <ScopeBadge
+            scope={projectVisibilityToScope(project.visibility)}
             teamNames={project.shareTeamNames}
           />
           {project.viewerRole === "admin" && project.visibility === null && (

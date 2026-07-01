@@ -5,6 +5,7 @@ packages:
   - "shared"
   - "archestra-rs/sandbox-rs"
   - "archestra-rs/app-runtime-rs"
+  - "archestra-rs/image-rs"
   - "e2e-tests"
 
 catalog:

@@ -113,6 +113,12 @@ importers:
         specifier: ^3.4.0
         version: 3.6.2(@emnapi/runtime@1.8.1)(@types/node@25.9.1)
 
+  archestra-rs/image-rs:
+    devDependencies:
+      '@napi-rs/cli':
+        specifier: ^3.4.0
+        version: 3.6.2(@emnapi/runtime@1.8.1)(@types/node@25.9.1)
+
   archestra-rs/sandbox-rs:
     devDependencies:
       '@napi-rs/cli':
@@ -160,6 +166,9 @@ importers:
       '@archestra/app-runtime-rs':
         specifier: workspace:*
         version: link:../archestra-rs/app-runtime-rs
+      '@archestra/image-rs':
+        specifier: workspace:*
+        version: link:../archestra-rs/image-rs
       '@archestra/sandbox-rs':
         specifier: workspace:*
         version: link:../archestra-rs/sandbox-rs

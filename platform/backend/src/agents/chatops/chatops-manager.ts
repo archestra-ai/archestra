@@ -54,7 +54,11 @@ import {
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
-import { errorMessage, isSlackDmChannel } from "./utils";
+import {
+  buildSkippedAttachmentsNote,
+  errorMessage,
+  isSlackDmChannel,
+} from "./utils";
 
 /**
  * ChatOps Manager - handles chatops provider lifecycle and message processing
@@ -800,6 +804,13 @@ export class ChatOpsManager {
     if (contextMessages.length > 0) {
       fullMessage = `${systemPrefix}\n\nThe earlier messages in this thread are below — this is your shared history in this conversation, so you DO have access to it and remember it. Use it to answer follow-up questions and references to "earlier", "before", or "what I just asked".\n\nConversation so far:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
     }
+
+    // Tell the model about files that were attached but not delivered (e.g. too
+    // large), so it doesn't deny they exist. Current message only — history
+    // drops are not surfaced.
+    fullMessage += buildSkippedAttachmentsNote(
+      message.skippedAttachments ?? [],
+    );
 
     // Merge history attachments with current message attachments
     const mergedAttachments = [

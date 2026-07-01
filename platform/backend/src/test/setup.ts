@@ -35,6 +35,12 @@ process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED = "true";
 // branch's project / My-Files / PFS-tool tests run. The gating ("OFF") tests
 // flip config.projects.enabled to false locally.
 process.env.ARCHESTRA_PROJECTS_ENABLED = "true";
+// Same for Apps: app route/tool tests exercise the enabled paths, and the
+// gating ("OFF") tests flip config.apps.enabled to false in their own
+// beforeEach. Before the per-test config restore existed, these tests rode a
+// cross-file config.apps.enabled leak (or the developer's .env) — make the
+// default explicit so CI and local agree.
+process.env.ARCHESTRA_APPS_ENABLED = "true";
 // Pin "My Files" byte storage to the inline (db) provider for hermetic tests,
 // independent of the dev .env. The filesystem-specific suites opt in by
 // overriding config.fileStorage at runtime against a temp root.

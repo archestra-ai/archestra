@@ -1,5 +1,4 @@
 import {
-  ADMIN_ROLE_NAME,
   TOOL_ADD_TEAM_MEMBER_SHORT_NAME,
   TOOL_CREATE_TEAM_SHORT_NAME,
   TOOL_DELETE_TEAM_SHORT_NAME,
@@ -12,10 +11,16 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { hasAnyAgentTypeAdminPermission } from "@/auth/agent-type-permissions";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
-import { AgentToolModel, MemberModel, TeamModel } from "@/models";
+import { MemberModel, TeamModel } from "@/models";
+import {
+  canManageTeamMembers,
+  canReadTeam,
+  checkLastAdminInvariant,
+  cleanupCredentialSourcesAfterMemberRemoval,
+  getTeamForOrg,
+} from "@/services/team-authorization";
 import type { Team, TeamMember, TeamMemberListItem } from "@/types";
 import { TeamMemberRoleSchema, UuidIdSchema } from "@/types";
 import {
@@ -298,17 +303,17 @@ async function findTeamInOrg(
   teamId: string,
   organizationId: string | undefined,
 ): Promise<Team | null> {
-  const team = await TeamModel.findById(teamId);
-  if (!team || team.organizationId !== organizationId) {
+  if (!organizationId) {
     return null;
   }
-  return team;
+  return getTeamForOrg({ teamId, organizationId });
 }
 
 /**
  * Whether the caller can manage every team in the org. Mirrors the REST route:
  * the org-level `team:create` permission is the "team manager" signal (held by
- * admins and custom roles granted it).
+ * admins and custom roles granted it). MCP sessions carry no request headers,
+ * so this resolves from the user's role permissions.
  */
 async function isOrgTeamManager(context: ArchestraContext): Promise<boolean> {
   if (!context.userId || !context.organizationId) {
@@ -323,49 +328,46 @@ async function isOrgTeamManager(context: ArchestraContext): Promise<boolean> {
 }
 
 /**
- * Read access to a specific team: an org-level team manager sees every team; a
- * regular user only teams they belong to. Returns null when allowed, or a
- * not-found error (never disclosing the team's existence) when denied — the
- * same shape the REST route returns.
+ * Read access to a specific team, mapped to an MCP result: allowed → null;
+ * denied → a not-found error (never disclosing the team's existence, matching
+ * the REST route). Authorization itself lives in the shared service.
  */
 async function assertCanReadTeam(
   context: ArchestraContext,
   teamId: string,
 ): Promise<CallToolResult | null> {
-  if (await isOrgTeamManager(context)) {
-    return null;
+  if (!context.userId) {
+    return errorResult(`Team with ID ${teamId} not found.`);
   }
-  if (
-    context.userId &&
-    (await TeamModel.isUserInTeam(teamId, context.userId))
-  ) {
-    return null;
-  }
-  return errorResult(`Team with ID ${teamId} not found.`);
+  const allowed = await canReadTeam({
+    isOrgTeamManager: await isOrgTeamManager(context),
+    userId: context.userId,
+    teamId,
+  });
+  return allowed ? null : errorResult(`Team with ID ${teamId} not found.`);
 }
 
 /**
- * Membership-management access: an org-level team manager may manage any team's
- * members; otherwise the caller must be an admin of that specific team. Mirrors
- * the REST route's `assertCanManageTeam`. Returns null when allowed, or a
- * permission error when denied.
+ * Membership-management access, mapped to an MCP result: allowed → null;
+ * denied → a permission error. Authorization itself lives in the shared
+ * service (org-level team manager OR admin of that specific team).
  */
 async function assertCanManageTeamMembers(
   context: ArchestraContext,
   teamId: string,
 ): Promise<CallToolResult | null> {
-  if (await isOrgTeamManager(context)) {
-    return null;
-  }
-  if (
-    context.userId &&
-    (await TeamModel.isUserTeamAdmin(teamId, context.userId))
-  ) {
-    return null;
-  }
-  return errorResult(
-    "You must be a team admin or have organization-level team management permission to manage this team's members.",
-  );
+  const allowed =
+    !!context.userId &&
+    (await canManageTeamMembers({
+      isOrgTeamManager: await isOrgTeamManager(context),
+      userId: context.userId,
+      teamId,
+    }));
+  return allowed
+    ? null
+    : errorResult(
+        "You must be a team admin or have organization-level team management permission to manage this team's members.",
+      );
 }
 
 function serializeTeam(team: Team, memberCount: number) {
@@ -824,20 +826,17 @@ async function handleRemoveTeamMember(params: {
       return errorResult("Team member not found.");
     }
 
-    // Mirror the REST route: drop personal-credential assignments the removed
-    // user can no longer reach through any team. Best-effort — a cleanup
-    // failure must not fail the removal.
+    // Drop personal-credential assignments the removed user can no longer reach
+    // through any team. Best-effort — a cleanup failure must not fail the
+    // removal (same contract as the REST route).
     if (context.userId) {
       try {
-        const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
-          userId: context.userId,
+        await cleanupCredentialSourcesAfterMemberRemoval({
+          actingUserId: context.userId,
+          removedUserId: args.user_id,
+          teamId: args.team_id,
           organizationId: context.organizationId,
         });
-        await AgentToolModel.cleanupInvalidCredentialSourcesForUser(
-          args.user_id,
-          args.team_id,
-          userIsAgentAdmin,
-        );
       } catch (cleanupError) {
         logger.error(
           { err: cleanupError, teamId: args.team_id, userId: args.user_id },
@@ -856,31 +855,21 @@ async function handleRemoveTeamMember(params: {
 }
 
 /**
- * Guard mirroring the REST route: refuse to demote or remove the sole admin of
- * a team. Returns an error result to surface, or null when the change is safe.
+ * Map the shared last-admin invariant onto an MCP result: allowed → null;
+ * denied → the corresponding error.
  */
 async function checkNotRemovingLastAdmin(params: {
   teamId: string;
   userId: string;
   nextRole: z.infer<typeof TeamMemberRoleSchema> | null;
 }): Promise<CallToolResult | null> {
-  const members = await TeamModel.getTeamMembers(params.teamId);
-  const target = members.find((member) => member.userId === params.userId);
-
-  if (!target) {
-    return errorResult("Team member not found.");
-  }
-
-  if (target.role !== ADMIN_ROLE_NAME || params.nextRole === ADMIN_ROLE_NAME) {
+  const check = await checkLastAdminInvariant(params);
+  if (check.ok) {
     return null;
   }
-
-  const adminCount = members.filter(
-    (member) => member.role === ADMIN_ROLE_NAME,
-  ).length;
-  if (adminCount <= 1) {
-    return errorResult("Cannot remove the last admin from a team.");
-  }
-
-  return null;
+  return errorResult(
+    check.reason === "last_admin"
+      ? "Cannot remove the last admin from a team."
+      : "Team member not found.",
+  );
 }

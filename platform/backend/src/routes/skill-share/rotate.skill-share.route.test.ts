@@ -49,6 +49,37 @@ describe("POST /api/skill-share-links/:id/rotate", () => {
     ).not.toBeNull();
   });
 
+  test("keeps the marketplace name frozen at create time", async ({
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const skill = await seedSkill({
+      organizationId: ctx.organizationId,
+      name: "frozen-name",
+    });
+    // a name that does NOT match what deriveMarketplaceName would produce for
+    // this org (e.g. the link was created under earlier branding)
+    const frozenName = "legacy-brand-marketplace-skills";
+    const { link } = await SkillShareLinkModel.create({
+      organizationId: ctx.organizationId,
+      createdByUserId: ctx.user.id,
+      skillIds: [skill.id],
+      marketplaceName: frozenName,
+    });
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: `/api/skill-share-links/${link.id}/rotate`,
+      payload: { skillIds: [skill.id] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const rotated = await SkillShareLinkModel.findById(response.json().link.id);
+    expect(rotated?.marketplaceName).toBe(frozenName);
+  });
+
   test("forwards expiresAt to the replacement link", async ({ makeMember }) => {
     await makeMember(ctx.user.id, ctx.organizationId, {
       role: ADMIN_ROLE_NAME,

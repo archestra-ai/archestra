@@ -679,6 +679,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, organizationId, user }, reply) => {
       const skill = await findSkillOrThrow(id, organizationId);
+      // Check scope-visibility first (404 if the caller can't see the skill),
+      // before revealing its sourceType via a 400, matching the update/delete
+      // routes and the authorizeSkillModify contract (no scope leak).
+      await authorizeSkillModify({ skill, userId: user.id, organizationId });
 
       if (skill.sourceType !== "built_in") {
         throw new ApiError(400, "Only built-in skills can be reset to default");
@@ -689,8 +693,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!definition) {
         throw new ApiError(404, "No shipped default exists for this skill");
       }
-
-      await authorizeSkillModify({ skill, userId: user.id, organizationId });
 
       // brand the shipped default under this org's white-label identity before
       // writing it, matching syncBuiltInSkills (no-op unless full white-labeling

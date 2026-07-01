@@ -4,22 +4,15 @@ import type { archestraApiTypes } from "@archestra/shared";
 import {
   AppWindow,
   ExternalLink,
-  Globe,
   Loader2,
   MoreHorizontal,
   Server,
   Trash2,
-  User,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import {
-  ResourceVisibilityBadge,
-  scopeStyles,
-} from "@/components/resource-visibility-badge";
-import { Badge } from "@/components/ui/badge";
+import { ScopeBadge } from "@/components/scope-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import {
@@ -43,15 +36,9 @@ type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 type OwnedApp = Extract<AppListItem, { source: "owned" }>;
 type ExternalApp = Extract<AppListItem, { source: "external" }>;
 
-export function AppCard({
-  app,
-  currentUserId,
-}: {
-  app: AppListItem;
-  currentUserId: string | undefined;
-}) {
+export function AppCard({ app }: { app: AppListItem }) {
   return app.source === "owned" ? (
-    <OwnedAppCard app={app} currentUserId={currentUserId} />
+    <OwnedAppCard app={app} />
   ) : (
     <ExternalAppCard app={app} />
   );
@@ -60,9 +47,16 @@ export function AppCard({
 // Shared card chrome: a full-card click target (rendered by the caller) sits
 // behind the content, and the overflow menu floats above it (z-10) so its own
 // clicks don't fall through to the card action.
-function CardOverflowMenu({ children }: { children: React.ReactNode }) {
+function CardOverflowMenu({
+  leading,
+  children,
+}: {
+  leading?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="absolute right-2 top-2 z-10">
+    <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5">
+      {leading}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -102,32 +96,22 @@ function CardOpeningOverlay() {
   );
 }
 
-// An external app card lists one concrete install, so it carries a scope chip
-// (Personal/Team/Org) to disambiguate sibling installs of the same server.
-const SCOPE_BADGE: Record<
-  ExternalApp["scope"],
-  { label: string; icon: typeof User }
-> = {
-  personal: { label: "Personal", icon: User },
-  team: { label: "Team", icon: Users },
-  org: { label: "Organization", icon: Globe },
-};
-
-// Icon-only scope pill (label rides in the tooltip + aria-label), matching the
-// projects-card visibility pill so personal/team/org reads identically across
-// surfaces. Stays inline in the metadata row, alongside the "MCP server" badge.
-function ExternalAppScopeBadge({ scope }: { scope: ExternalApp["scope"] }) {
-  const { label, icon: Icon } = SCOPE_BADGE[scope];
+// The app's type, as the leading icon. The label (what "owned" vs "external"
+// means) rides in the tooltip + aria-label rather than a separate badge. Lifted
+// above the full-card click button so it can be hovered.
+function AppTypeIcon({ owned }: { owned: boolean }) {
+  const Icon = owned ? AppWindow : Server;
+  const label = owned ? "MCP app" : "MCP server app";
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Badge
-          variant="outline"
+        <span
+          role="img"
           aria-label={label}
-          className={cn(scopeStyles[scope], "px-1.5")}
+          className="relative z-10 inline-flex text-muted-foreground"
         >
-          <Icon className="h-3 w-3" />
-        </Badge>
+          <Icon className="h-4 w-4" />
+        </span>
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
@@ -137,13 +121,7 @@ function ExternalAppScopeBadge({ scope }: { scope: ExternalApp["scope"] }) {
 // Clicking the card opens the app in a new chat; the overlay button covers the
 // whole card. The backend seeds a conversation with the app already rendered and
 // returns its id, so we navigate straight to it (no model turn).
-function OwnedAppCard({
-  app,
-  currentUserId,
-}: {
-  app: OwnedApp;
-  currentUserId: string | undefined;
-}) {
+function OwnedAppCard({ app }: { app: OwnedApp }) {
   const router = useRouter();
   const openApp = useOpenAppInChat();
   const { data: canDelete } = useHasPermissions({ app: ["delete"] });
@@ -176,7 +154,15 @@ function OwnedAppCard({
 
         {isOpening ? <CardOpeningOverlay /> : null}
 
-        <CardOverflowMenu>
+        <CardOverflowMenu
+          leading={
+            <ScopeBadge
+              scope={app.scope}
+              teamNames={app.teams?.map((team) => team.name)}
+              hidePersonal
+            />
+          }
+        >
           <DropdownMenuItem asChild>
             <Link href={`/a/${app.id}`} target="_blank" rel="noreferrer">
               <ExternalLink className="h-4 w-4" />
@@ -200,15 +186,8 @@ function OwnedAppCard({
           ) : null}
         </CardOverflowMenu>
 
-        <div className="mb-3 flex flex-wrap items-center gap-1.5 pr-8">
-          <AppWindow className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <ResourceVisibilityBadge
-            scope={app.scope}
-            teams={undefined}
-            authorId={app.authorId}
-            authorName={undefined}
-            currentUserId={currentUserId}
-          />
+        <div className="mb-3 flex items-center gap-1.5 pr-16">
+          <AppTypeIcon owned />
         </div>
 
         <CardTitle className="line-clamp-2 leading-snug break-words">
@@ -271,7 +250,7 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
 
       {isOpening ? <CardOpeningOverlay /> : null}
 
-      <CardOverflowMenu>
+      <CardOverflowMenu leading={<ScopeBadge scope={app.scope} hidePersonal />}>
         <DropdownMenuItem asChild>
           <Link href={runHref} target="_blank" rel="noreferrer">
             <ExternalLink className="h-4 w-4" />
@@ -286,12 +265,8 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
         </DropdownMenuItem>
       </CardOverflowMenu>
 
-      <div className="mb-3 flex flex-wrap items-center gap-1.5 pr-8">
-        <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <Badge variant="outline" className="gap-1 text-xs">
-          MCP server
-        </Badge>
-        <ExternalAppScopeBadge scope={app.scope} />
+      <div className="mb-3 flex items-center gap-1.5 pr-16">
+        <AppTypeIcon owned={false} />
       </div>
 
       <CardTitle className="line-clamp-2 leading-snug break-words">

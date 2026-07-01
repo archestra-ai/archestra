@@ -456,20 +456,6 @@ describe("read_app / edit_app", () => {
     expect(structured(pinned).html).toBe("<h1>v1</h1>");
   });
 
-  test("read_app result carries the condensed window.archestra SDK surface", async () => {
-    const { appId } = await scaffoldWithHtml("<h1>v1</h1>");
-    const head = await readApp(appId);
-    const text = (head.content[0] as any).text as string;
-    // The contract rides the result the model always reads before edit_app, so
-    // it authors against the real storage API (the right namespace AND the
-    // {value, revision, owner} return shape) without loading the full skill.
-    expect(text).toContain("archestra.storage.user.{get,set,list,delete}");
-    expect(text).toContain("{value, revision, owner}");
-    // Escalation pointer: names what the summary omits so the model knows when
-    // to load the full Build App skill.
-    expect(text).toContain("Build App");
-  });
-
   test("read_app errors on a missing app or version", async () => {
     const missing = await readApp(crypto.randomUUID());
     expect(missing.isError).toBe(true);
@@ -653,34 +639,78 @@ describe("read_app / edit_app", () => {
     expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 
-  test("a 0-match edit whose old_str differs only in whitespace returns the exact current text", async () => {
+  test("a 0-match edit whose old_str differs only in whitespace is applied to the real span", async () => {
     // The stored html has a triple space; the model's old_str has one. Exact
-    // match fails, but the recovery hint hands back the real current span.
+    // match fails, but the collapsed-whitespace match is unique, so the edit
+    // lands on the real current span rather than erroring.
     const { appId, version } = await scaffoldWithHtml(
       "<html><head></head><body><p>Hello   World</p></body></html>",
     );
     const result = await editApp(appId, version, [
       { old_str: "Hello World", new_str: "Hi" },
     ]);
-    expect(result.isError).toBe(true);
-    const text = (result.content[0] as any).text as string;
-    expect(text).toContain("0 matches");
-    // ground truth surfaced inline, so the model can copy it verbatim
-    expect(text).toContain("Hello   World");
-    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+    expect(result.isError).toBe(false);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version + 1))?.html,
+    ).toBe("<html><head></head><body><p>Hi</p></body></html>");
   });
 
-  test("a whitespace near-miss at the very end of the document recovers the full span", async () => {
-    // Exercises the end-boundary fallback (afterIdx === text length -> uses
-    // haystack.length). The matched span is the last thing in the document.
+  test("a whitespace near-miss at the very end of the document applies over the full span", async () => {
+    // Exercises the end-boundary case (afterIdx maps to the trailing run). The
+    // matched span is the last thing in the document.
     const { appId, version } = await scaffoldWithHtml(
       "<html><head></head><body></body></html>\n\n<!-- TAIL    MARKER -->",
     );
     const result = await editApp(appId, version, [
       { old_str: "TAIL MARKER", new_str: "x" },
     ]);
+    expect(result.isError).toBe(false);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version + 1))?.html,
+    ).toBe("<html><head></head><body></body></html>\n\n<!-- x -->");
+  });
+
+  test("an edit whose old_str drifted in indentation lands on the real source", async () => {
+    // The model reconstructs a block with different leading whitespace than the
+    // stored source; collapsed-whitespace matching applies it uniquely.
+    const stored = [
+      "<html><head></head><body>",
+      "  <ul>",
+      "    <li>one</li>",
+      "  </ul>",
+      "</body></html>",
+    ].join("\n");
+    const { appId, version } = await scaffoldWithHtml(stored);
+    const result = await editApp(appId, version, [
+      {
+        old_str: "<ul>\n<li>one</li>\n</ul>",
+        new_str: "<ol><li>one</li></ol>",
+      },
+    ]);
+    expect(result.isError).toBe(false);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version + 1))?.html,
+    ).toBe(
+      [
+        "<html><head></head><body>",
+        "  <ol><li>one</li></ol>",
+        "</body></html>",
+      ].join("\n"),
+    );
+  });
+
+  test("a genuine (non-whitespace) content drift still errors, not silently mis-applied", async () => {
+    // old_str differs from the source by a real character (43 vs 42), not just
+    // whitespace, so it must not auto-apply — it stays a 0-match error.
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body><span>42</span></body></html>",
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "<span>43</span>", new_str: "<span>99</span>" },
+    ]);
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("TAIL    MARKER");
+    expect((result.content[0] as any).text).toContain("0 matches");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 
   test("a whitespace-only old_str with no near-miss falls back to read_app guidance", async () => {

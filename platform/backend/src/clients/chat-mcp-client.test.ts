@@ -2188,6 +2188,65 @@ describe("buildArchestraToolOutput", () => {
 
     expect(result).toBe("Diagram displayed!");
   });
+
+  test("preserves a structured auth error (with credential scope) for a run_tool dispatch so chat renders the rich card", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const archestraError = {
+      type: "auth_expired" as const,
+      message: 'Expired or invalid authentication for "GitHub"',
+      catalogId: "cat_1",
+      catalogName: "GitHub",
+      serverId: "srv_1",
+      reauthUrl: "http://localhost:3000/mcp/registry?reauth=cat_1&server=srv_1",
+      credentialScope: "team" as const,
+      credentialTeamName: "Platform Team",
+    };
+
+    const result = await buildArchestraToolOutput({
+      response: {
+        content: [{ type: "text" as const, text: archestraError.message }],
+        isError: true,
+        _meta: { archestraError },
+        structuredContent: { archestraError },
+      },
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: "github__whoami", tool_args: {} },
+      agentId: agent.id,
+    });
+
+    // Rich shape (not a bare string) so extractMcpToolError finds the structured
+    // error and the frontend renders the scoped re-auth card.
+    expect(result).toMatchObject({
+      content: archestraError.message,
+      _meta: {
+        archestraError: {
+          type: "auth_expired",
+          credentialScope: "team",
+          credentialTeamName: "Platform Team",
+        },
+      },
+      structuredContent: { archestraError: { type: "auth_expired" } },
+    });
+  });
+
+  test("still returns plain text for a run_tool dispatch error without a structured Archestra error", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const result = await buildArchestraToolOutput({
+      response: {
+        content: [{ type: "text" as const, text: "Error: rate limited." }],
+        isError: true,
+      },
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: "github__whoami", tool_args: {} },
+      agentId: agent.id,
+    });
+
+    expect(result).toBe("Error: rate limited.");
+  });
 });
 
 describe("throwIfApprovalRequired", () => {

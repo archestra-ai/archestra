@@ -29,6 +29,23 @@ describe("parseSkillManifest", () => {
     expect(parsed.metadata).toEqual({});
   });
 
+  test("parses a manifest that starts with a UTF-8 BOM", () => {
+    const raw = `﻿${[
+      "---",
+      "name: bom-skill",
+      "description: Has a byte order mark.",
+      "---",
+      "",
+      "# Body",
+    ].join("\n")}`;
+
+    const parsed = parseSkillManifest(raw);
+
+    expect(parsed.name).toBe("bom-skill");
+    expect(parsed.description).toBe("Has a byte order mark.");
+    expect(parsed.content).toBe("# Body");
+  });
+
   test("normalizes allowed-tools from a string or a YAML sequence", () => {
     const fromString = parseSkillManifest(
       [

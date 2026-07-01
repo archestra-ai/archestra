@@ -15,6 +15,7 @@
 platform/CLAUDE_LOCAL.md
 .pnpm-store/
 .dev-bin/
+.worktree-bootstrap.failed
 
 *.pyc
 __pycache__/

@@ -2000,7 +2000,17 @@ async fn drive_stage(
         coalescer.feed(&record).await;
         match record.kind {
             ChatRecordKind::Event if record.event.is_some() => {
-                apply_chat_event(run, &record.event.unwrap());
+                let event = record.event.unwrap();
+                // Auto-answer any elicitation this event carries before folding it. Backend
+                // heartbeats keep the stream from going idle, so a failed answer would otherwise
+                // hang until the backend's 10-minute elicitation timeout; fail the stage instead.
+                if let Err(e) = client.answer_if_elicitation(&event).await {
+                    if stream_parse_error.is_none() {
+                        stream_parse_error = Some(format!("failed to answer MCP elicitation: {e}"));
+                    }
+                    break;
+                }
+                apply_chat_event(run, &event);
             }
             ChatRecordKind::ParseError if stream_parse_error.is_none() => {
                 stream_parse_error = Some(record.reason.unwrap_or_else(|| {

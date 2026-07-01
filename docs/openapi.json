@@ -53680,6 +53680,25 @@
                                 "type": "integer",
                                 "minimum": -9007199254740991,
                                 "maximum": 9007199254740991
+                              },
+                              "teams": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name"
+                                  ],
+                                  "additionalProperties": false
+                                }
                               }
                             },
                             "required": [
@@ -53691,7 +53710,8 @@
                               "id",
                               "scope",
                               "authorId",
-                              "latestVersion"
+                              "latestVersion",
+                              "teams"
                             ],
                             "additionalProperties": false
                           },
@@ -68225,6 +68245,59 @@
                                 "required": [
                                   "cachePoint"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "reasoningContent": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "reasoningText": {
+                                            "type": "object",
+                                            "properties": {
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "signature": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "text"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "reasoningText"
+                                        ]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "redactedReasoning": {
+                                            "type": "object",
+                                            "properties": {
+                                              "data": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "data"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "redactedReasoning"
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "reasoningContent"
+                                ]
                               }
                             ]
                           }
@@ -68328,6 +68401,10 @@
                           "required": [
                             "cachePoint"
                           ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       ]
                     }
@@ -69497,6 +69574,59 @@
                                 "required": [
                                   "cachePoint"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "reasoningContent": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "reasoningText": {
+                                            "type": "object",
+                                            "properties": {
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "signature": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "text"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "reasoningText"
+                                        ]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "redactedReasoning": {
+                                            "type": "object",
+                                            "properties": {
+                                              "data": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "data"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "redactedReasoning"
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "reasoningContent"
+                                ]
                               }
                             ]
                           }
@@ -69600,6 +69730,10 @@
                           "required": [
                             "cachePoint"
                           ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       ]
                     }
@@ -70779,6 +70913,59 @@
                                 "required": [
                                   "cachePoint"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "reasoningContent": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "reasoningText": {
+                                            "type": "object",
+                                            "properties": {
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "signature": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "text"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "reasoningText"
+                                        ]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "redactedReasoning": {
+                                            "type": "object",
+                                            "properties": {
+                                              "data": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "data"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "redactedReasoning"
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "reasoningContent"
+                                ]
                               }
                             ]
                           }
@@ -70882,6 +71069,10 @@
                           "required": [
                             "cachePoint"
                           ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       ]
                     }
@@ -71591,6 +71782,59 @@
                                 "required": [
                                   "cachePoint"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "reasoningContent": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "reasoningText": {
+                                            "type": "object",
+                                            "properties": {
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "signature": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "text"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "reasoningText"
+                                        ]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "redactedReasoning": {
+                                            "type": "object",
+                                            "properties": {
+                                              "data": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "data"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "redactedReasoning"
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "reasoningContent"
+                                ]
                               }
                             ]
                           }
@@ -71694,6 +71938,10 @@
                           "required": [
                             "cachePoint"
                           ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       ]
                     }
@@ -72413,6 +72661,59 @@
                                 "required": [
                                   "cachePoint"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "reasoningContent": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "reasoningText": {
+                                            "type": "object",
+                                            "properties": {
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "signature": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "text"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "reasoningText"
+                                        ]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "redactedReasoning": {
+                                            "type": "object",
+                                            "properties": {
+                                              "data": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "data"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "redactedReasoning"
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "reasoningContent"
+                                ]
                               }
                             ]
                           }
@@ -72516,6 +72817,10 @@
                           "required": [
                             "cachePoint"
                           ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       ]
                     }
@@ -73700,6 +74005,59 @@
                                 "required": [
                                   "cachePoint"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "reasoningContent": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "reasoningText": {
+                                            "type": "object",
+                                            "properties": {
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "signature": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "text"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "reasoningText"
+                                        ]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "redactedReasoning": {
+                                            "type": "object",
+                                            "properties": {
+                                              "data": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "data"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "redactedReasoning"
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "reasoningContent"
+                                ]
                               }
                             ]
                           }
@@ -73803,6 +74161,10 @@
                           "required": [
                             "cachePoint"
                           ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       ]
                     }
@@ -112145,6 +112507,64 @@
                                                   "cachePoint"
                                                 ],
                                                 "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "reasoningContent": {
+                                                    "anyOf": [
+                                                      {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "reasoningText": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "text": {
+                                                                "type": "string"
+                                                              },
+                                                              "signature": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "text"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "reasoningText"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      },
+                                                      {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "redactedReasoning": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "data": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "data"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "redactedReasoning"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      }
+                                                    ]
+                                                  }
+                                                },
+                                                "required": [
+                                                  "reasoningContent"
+                                                ],
+                                                "additionalProperties": false
                                               }
                                             ]
                                           }
@@ -112237,6 +112657,10 @@
                                             "cachePoint"
                                           ],
                                           "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "additionalProperties": {}
                                         }
                                       ]
                                     }
@@ -112950,6 +113374,64 @@
                                                   "cachePoint"
                                                 ],
                                                 "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "reasoningContent": {
+                                                    "anyOf": [
+                                                      {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "reasoningText": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "text": {
+                                                                "type": "string"
+                                                              },
+                                                              "signature": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "text"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "reasoningText"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      },
+                                                      {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "redactedReasoning": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "data": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "data"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "redactedReasoning"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      }
+                                                    ]
+                                                  }
+                                                },
+                                                "required": [
+                                                  "reasoningContent"
+                                                ],
+                                                "additionalProperties": false
                                               }
                                             ]
                                           }
@@ -113042,6 +113524,10 @@
                                             "cachePoint"
                                           ],
                                           "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "additionalProperties": {}
                                         }
                                       ]
                                     }
@@ -130487,6 +130973,64 @@
                                             "cachePoint"
                                           ],
                                           "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "reasoningContent": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "reasoningText": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "text": {
+                                                          "type": "string"
+                                                        },
+                                                        "signature": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "text"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "reasoningText"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "redactedReasoning": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "data": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "data"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "redactedReasoning"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "reasoningContent"
+                                          ],
+                                          "additionalProperties": false
                                         }
                                       ]
                                     }
@@ -130579,6 +131123,10 @@
                                       "cachePoint"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {}
                                   }
                                 ]
                               }
@@ -131292,6 +131840,64 @@
                                             "cachePoint"
                                           ],
                                           "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "reasoningContent": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "reasoningText": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "text": {
+                                                          "type": "string"
+                                                        },
+                                                        "signature": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "text"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "reasoningText"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "redactedReasoning": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "data": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "data"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "redactedReasoning"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "reasoningContent"
+                                          ],
+                                          "additionalProperties": false
                                         }
                                       ]
                                     }
@@ -131384,6 +131990,10 @@
                                       "cachePoint"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {}
                                   }
                                 ]
                               }

@@ -15494,6 +15494,10 @@ export type GetAppsResponses = {
             scope: 'personal' | 'team' | 'org';
             authorId: string | null;
             latestVersion: number;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
         } | {
             name: string;
             description: string | null;
@@ -19614,6 +19618,17 @@ export type BedrockConverseWithDefaultAgentData = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                reasoningContent: {
+                    reasoningText: {
+                        text: string;
+                        signature?: string;
+                    };
+                } | {
+                    redactedReasoning: {
+                        data: string;
+                    };
+                };
             }>;
         }>;
         system?: Array<{
@@ -19633,6 +19648,8 @@ export type BedrockConverseWithDefaultAgentData = {
                 type: string;
                 ttl?: string;
             };
+        } | {
+            [key: string]: unknown;
         }>;
         inferenceConfig?: {
             maxTokens?: number;
@@ -19938,6 +19955,17 @@ export type BedrockConverseWithAgentData = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                reasoningContent: {
+                    reasoningText: {
+                        text: string;
+                        signature?: string;
+                    };
+                } | {
+                    redactedReasoning: {
+                        data: string;
+                    };
+                };
             }>;
         }>;
         system?: Array<{
@@ -19957,6 +19985,8 @@ export type BedrockConverseWithAgentData = {
                 type: string;
                 ttl?: string;
             };
+        } | {
+            [key: string]: unknown;
         }>;
         inferenceConfig?: {
             maxTokens?: number;
@@ -20264,6 +20294,17 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                reasoningContent: {
+                    reasoningText: {
+                        text: string;
+                        signature?: string;
+                    };
+                } | {
+                    redactedReasoning: {
+                        data: string;
+                    };
+                };
             }>;
         }>;
         system?: Array<{
@@ -20283,6 +20324,8 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                 type: string;
                 ttl?: string;
             };
+        } | {
+            [key: string]: unknown;
         }>;
         inferenceConfig?: {
             maxTokens?: number;
@@ -20459,6 +20502,17 @@ export type BedrockConverseStreamWithAgentData = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                reasoningContent: {
+                    reasoningText: {
+                        text: string;
+                        signature?: string;
+                    };
+                } | {
+                    redactedReasoning: {
+                        data: string;
+                    };
+                };
             }>;
         }>;
         system?: Array<{
@@ -20478,6 +20532,8 @@ export type BedrockConverseStreamWithAgentData = {
                 type: string;
                 ttl?: string;
             };
+        } | {
+            [key: string]: unknown;
         }>;
         inferenceConfig?: {
             maxTokens?: number;
@@ -20656,6 +20712,17 @@ export type BedrockConverseWithAgentAndModelData = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                reasoningContent: {
+                    reasoningText: {
+                        text: string;
+                        signature?: string;
+                    };
+                } | {
+                    redactedReasoning: {
+                        data: string;
+                    };
+                };
             }>;
         }>;
         system?: Array<{
@@ -20675,6 +20742,8 @@ export type BedrockConverseWithAgentAndModelData = {
                 type: string;
                 ttl?: string;
             };
+        } | {
+            [key: string]: unknown;
         }>;
         inferenceConfig?: {
             maxTokens?: number;
@@ -20983,6 +21052,17 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                reasoningContent: {
+                    reasoningText: {
+                        text: string;
+                        signature?: string;
+                    };
+                } | {
+                    redactedReasoning: {
+                        data: string;
+                    };
+                };
             }>;
         }>;
         system?: Array<{
@@ -21002,6 +21082,8 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                 type: string;
                 ttl?: string;
             };
+        } | {
+            [key: string]: unknown;
         }>;
         inferenceConfig?: {
             maxTokens?: number;
@@ -31352,6 +31434,17 @@ export type GetInteractionsResponses = {
                             type: string;
                             ttl?: string;
                         };
+                    } | {
+                        reasoningContent: {
+                            reasoningText: {
+                                text: string;
+                                signature?: string;
+                            };
+                        } | {
+                            redactedReasoning: {
+                                data: string;
+                            };
+                        };
                     }>;
                 }>;
                 system?: Array<{
@@ -31368,6 +31461,8 @@ export type GetInteractionsResponses = {
                         type: string;
                         ttl?: string;
                     };
+                } | {
+                    [key: string]: unknown;
                 }>;
                 inferenceConfig?: {
                     maxTokens?: number;
@@ -31521,6 +31616,17 @@ export type GetInteractionsResponses = {
                             type: string;
                             ttl?: string;
                         };
+                    } | {
+                        reasoningContent: {
+                            reasoningText: {
+                                text: string;
+                                signature?: string;
+                            };
+                        } | {
+                            redactedReasoning: {
+                                data: string;
+                            };
+                        };
                     }>;
                 }>;
                 system?: Array<{
@@ -31537,6 +31643,8 @@ export type GetInteractionsResponses = {
                         type: string;
                         ttl?: string;
                     };
+                } | {
+                    [key: string]: unknown;
                 }>;
                 inferenceConfig?: {
                     maxTokens?: number;
@@ -34967,6 +35075,17 @@ export type GetInteractionResponses = {
                         type: string;
                         ttl?: string;
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             }>;
             system?: Array<{
@@ -34983,6 +35102,8 @@ export type GetInteractionResponses = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                [key: string]: unknown;
             }>;
             inferenceConfig?: {
                 maxTokens?: number;
@@ -35136,6 +35257,17 @@ export type GetInteractionResponses = {
                         type: string;
                         ttl?: string;
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             }>;
             system?: Array<{
@@ -35152,6 +35284,8 @@ export type GetInteractionResponses = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                [key: string]: unknown;
             }>;
             inferenceConfig?: {
                 maxTokens?: number;

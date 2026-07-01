@@ -3,6 +3,7 @@
 pub mod chat_stream;
 pub mod client;
 pub mod config;
+pub mod elicitation;
 pub mod fixture_mcp;
 pub mod interactions;
 pub mod lifecycle;

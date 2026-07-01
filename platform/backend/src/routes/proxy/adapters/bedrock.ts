@@ -51,7 +51,14 @@ type BedrockCommandContext = {
     modelId: string;
     messages: BedrockMessages | undefined;
     system:
-      | Array<{ text?: string; guardContent?: unknown; cachePoint?: unknown }>
+      | Array<{
+          text?: string;
+          guardContent?: unknown;
+          cachePoint?: unknown;
+          // Passthrough for Bedrock-native system blocks we don't model
+          // explicitly (see SystemContentBlockSchema forward-compat fallback).
+          [key: string]: unknown;
+        }>
       | undefined;
     inferenceConfig: BedrockRequest["inferenceConfig"];
     toolConfig:
@@ -1560,7 +1567,7 @@ function buildBedrockCommandContext(
         isNova: shouldEncodeHyphens,
       }),
       system: request.system?.map((s) => {
-        if ("text" in s) return { text: s.text };
+        if ("text" in s && typeof s.text === "string") return { text: s.text };
         return s;
       }),
       inferenceConfig: request.inferenceConfig,

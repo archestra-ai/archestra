@@ -125,7 +125,6 @@ export default function AppsPage() {
                     : `${app.mcpServerId}:${app.resourceUri}`
                 }
                 app={app}
-                currentUserId={currentUserId}
               />
             ))}
           </div>

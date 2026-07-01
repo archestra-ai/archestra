@@ -54,18 +54,9 @@ type ExtractedPage = {
 };
 type CrawlerCheerioApi = CheerioCrawlingContext["$"];
 type CrawlerCheerioSelection = ReturnType<CrawlerCheerioApi>;
-type WebCrawlerConnectorOptions = {
-  allowPrivateNetwork?: boolean;
-};
 
 export class WebCrawlerConnector extends BaseConnector {
   type = "web_crawler" as const;
-  private readonly allowPrivateNetwork: boolean;
-
-  constructor(options: WebCrawlerConnectorOptions = {}) {
-    super();
-    this.allowPrivateNetwork = options.allowPrivateNetwork ?? false;
-  }
 
   async validateConfig(
     config: Record<string, unknown>,
@@ -80,7 +71,7 @@ export class WebCrawlerConnector extends BaseConnector {
 
     const error = await validateParsedConfig({
       config: parsed,
-      allowPrivateNetwork: this.allowPrivateNetwork,
+      allowPrivateNetwork: parsed.allowPrivateNetwork ?? false,
     });
     if (error) {
       return { valid: false, error };
@@ -99,7 +90,7 @@ export class WebCrawlerConnector extends BaseConnector {
     }
     const configError = await validateParsedConfig({
       config: parsed,
-      allowPrivateNetwork: this.allowPrivateNetwork,
+      allowPrivateNetwork: parsed.allowPrivateNetwork ?? false,
     });
     if (configError) {
       return { success: false, error: configError };
@@ -138,7 +129,7 @@ export class WebCrawlerConnector extends BaseConnector {
     }
     const configError = await validateParsedConfig({
       config: parsed,
-      allowPrivateNetwork: this.allowPrivateNetwork,
+      allowPrivateNetwork: parsed.allowPrivateNetwork ?? false,
     });
     if (configError) {
       throw new Error(configError);
@@ -206,7 +197,7 @@ export class WebCrawlerConnector extends BaseConnector {
             }
             await assertPublicCrawlUrl({
               url: _context.request.url,
-              allowPrivateNetwork: this.allowPrivateNetwork,
+              allowPrivateNetwork: params.config.allowPrivateNetwork ?? false,
             });
 
             gotOptions.headers = {
@@ -249,7 +240,8 @@ export class WebCrawlerConnector extends BaseConnector {
                   }
                   await assertPublicCrawlUrl({
                     url: target.href,
-                    allowPrivateNetwork: this.allowPrivateNetwork,
+                    allowPrivateNetwork:
+                      params.config.allowPrivateNetwork ?? false,
                   });
                 },
               ],

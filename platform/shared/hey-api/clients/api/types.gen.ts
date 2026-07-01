@@ -40980,6 +40980,7 @@ export type GetConnectorsResponses = {
                 batchSize?: number;
                 requestDelayMs?: number;
                 userAgent?: string;
+                allowPrivateNetwork?: boolean;
             } | {
                 type: 'perforce';
                 serverUrl: unknown;
@@ -41152,6 +41153,7 @@ export type CreateConnectorData = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+            allowPrivateNetwork?: boolean;
         } | {
             type: 'perforce';
             serverUrl: string;
@@ -41382,6 +41384,7 @@ export type CreateConnectorResponses = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+            allowPrivateNetwork?: boolean;
         } | {
             type: 'perforce';
             serverUrl: unknown;
@@ -41704,6 +41707,7 @@ export type GetConnectorResponses = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+            allowPrivateNetwork?: boolean;
         } | {
             type: 'perforce';
             serverUrl: unknown;
@@ -41862,6 +41866,7 @@ export type UpdateConnectorData = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+            allowPrivateNetwork?: boolean;
         } | {
             type: 'perforce';
             serverUrl: string;
@@ -42093,6 +42098,7 @@ export type UpdateConnectorResponses = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+            allowPrivateNetwork?: boolean;
         } | {
             type: 'perforce';
             serverUrl: unknown;

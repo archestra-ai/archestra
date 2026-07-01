@@ -156974,6 +156974,9 @@
                                   "userAgent": {
                                     "type": "string",
                                     "minLength": 1
+                                  },
+                                  "allowPrivateNetwork": {
+                                    "type": "boolean"
                                   }
                                 },
                                 "required": [
@@ -158206,6 +158209,9 @@
                           "userAgent": {
                             "type": "string",
                             "minLength": 1
+                          },
+                          "allowPrivateNetwork": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -159090,6 +159096,9 @@
                             "userAgent": {
                               "type": "string",
                               "minLength": 1
+                            },
+                            "allowPrivateNetwork": {
+                              "type": "boolean"
                             }
                           },
                           "required": [
@@ -160272,6 +160281,9 @@
                             "userAgent": {
                               "type": "string",
                               "minLength": 1
+                            },
+                            "allowPrivateNetwork": {
+                              "type": "boolean"
                             }
                           },
                           "required": [
@@ -161336,6 +161348,9 @@
                           "userAgent": {
                             "type": "string",
                             "minLength": 1
+                          },
+                          "allowPrivateNetwork": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -162221,6 +162236,9 @@
                             "userAgent": {
                               "type": "string",
                               "minLength": 1
+                            },
+                            "allowPrivateNetwork": {
+                              "type": "boolean"
                             }
                           },
                           "required": [

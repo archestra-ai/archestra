@@ -176,12 +176,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .datetime()
               .optional()
               .describe("Filter by end date (ISO 8601 format)"),
-            search: z
-              .string()
-              .optional()
-              .describe(
-                "Free-text search across session content (case-insensitive)",
-              ),
           })
           .merge(PaginationQuerySchema),
         response: constructResponseSchema(
@@ -199,7 +193,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sessionId,
           startDate,
           endDate,
-          search,
           limit,
           offset,
         },
@@ -227,7 +220,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sessionId,
           startDate,
           endDate,
-          search,
           pagination,
         },
         "GetInteractionSessions request",
@@ -245,7 +237,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sessionId,
           startDate: startDate ? new Date(startDate) : undefined,
           endDate: endDate ? new Date(endDate) : undefined,
-          search: search || undefined,
         },
       );
 

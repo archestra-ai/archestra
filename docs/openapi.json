@@ -125471,15 +125471,6 @@
           },
           {
             "schema": {
-              "type": "string"
-            },
-            "in": "query",
-            "name": "search",
-            "required": false,
-            "description": "Free-text search across session content (case-insensitive)"
-          },
-          {
-            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,

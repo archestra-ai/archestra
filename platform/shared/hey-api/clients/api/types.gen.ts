@@ -33945,10 +33945,6 @@ export type GetInteractionSessionsData = {
          * Filter by end date (ISO 8601 format)
          */
         endDate?: string;
-        /**
-         * Free-text search across session content (case-insensitive)
-         */
-        search?: string;
         limit?: number;
         offset?: number;
     };

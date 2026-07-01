@@ -18,8 +18,13 @@ const {
   getUniqueUserIds,
 } = archestraApiSdk;
 
-const isSessionId = (value: string): boolean => {
-  // Either <UUID>, or scheduled-<UUID>
+/**
+ * True when `value` is a full session ID — either a bare `<UUID>` or a
+ * `scheduled-<UUID>`. The logs search box only supports session-ID lookup
+ * (free-text content search was removed), so callers use this to decide
+ * whether a typed term should filter or be ignored.
+ */
+export const isSessionId = (value: string): boolean => {
   const sessionIdRegex =
     /^(scheduled-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return sessionIdRegex.test(value);
@@ -171,7 +176,6 @@ export function useInteractionSessions({
   sessionId,
   startDate,
   endDate,
-  search,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   initialData,
@@ -184,18 +188,11 @@ export function useInteractionSessions({
   sessionId?: string;
   startDate?: string;
   endDate?: string;
-  search?: string;
   limit?: number;
   offset?: number;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
   toastOnError?: boolean;
 } = {}) {
-  // If the search value is a sessionId, we want to treat it as a sessionId search instead
-  const isSessionIdSearch = search ? isSessionId(search) : false;
-  const effectiveSessionId =
-    sessionId ?? (isSessionIdSearch ? search : undefined);
-  const effectiveSearch = isSessionIdSearch ? undefined : search;
-
   return useQuery({
     queryKey: [
       "interactions",
@@ -204,10 +201,9 @@ export function useInteractionSessions({
       userId,
       source,
       client,
-      effectiveSessionId,
+      sessionId,
       startDate,
       endDate,
-      effectiveSearch,
       limit,
       offset,
     ],
@@ -218,10 +214,9 @@ export function useInteractionSessions({
           ...(userId ? { userId } : {}),
           ...(source ? { source } : {}),
           ...(client ? { client } : {}),
-          ...(effectiveSessionId ? { sessionId: effectiveSessionId } : {}),
+          ...(sessionId ? { sessionId } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
-          ...(effectiveSearch ? { search: effectiveSearch } : {}),
           limit,
           offset,
         },
@@ -248,10 +243,9 @@ export function useInteractionSessions({
       !userId &&
       !source &&
       !client &&
-      !effectiveSessionId &&
+      !sessionId &&
       !startDate &&
-      !endDate &&
-      !effectiveSearch
+      !endDate
         ? initialData
         : undefined,
   });

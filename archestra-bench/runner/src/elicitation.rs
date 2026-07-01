@@ -52,31 +52,48 @@ pub(crate) struct ElicitationAnswer {
     pub content: Option<Map<String, JsonValue>>,
 }
 
-/// Parse a chat SSE event into an elicitation request, or `None` when it is not one. Fields live
-/// under the nested `data` object, matching the backend writer and frontend reader.
-pub(crate) fn parse_elicitation_request(
-    event: &HashMap<String, JsonValue>,
-) -> Option<ElicitationRequest> {
+/// Outcome of inspecting a chat SSE event for an elicitation request.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ElicitationParse {
+    /// Not an elicitation event — ignore it.
+    NotElicitation,
+    /// An elicitation event missing the `data.id`/`data.conversationId` needed to answer it. It
+    /// cannot be answered, so the caller must fail loudly rather than leave the tool blocked.
+    Malformed,
+    /// A well-formed elicitation request.
+    Request(ElicitationRequest),
+}
+
+/// Inspect a chat SSE event. Fields live under the nested `data` object, matching the backend writer
+/// and frontend reader. A `data-mcp-elicitation` event we cannot answer is `Malformed`, never
+/// silently ignored.
+pub(crate) fn parse_elicitation_event(event: &HashMap<String, JsonValue>) -> ElicitationParse {
     if event.get("type").and_then(|v| v.as_str()) != Some(ELICITATION_EVENT_TYPE) {
-        return None;
+        return ElicitationParse::NotElicitation;
     }
-    let data = event.get("data").and_then(|v| v.as_object())?;
-    let id = data.get("id").and_then(|v| v.as_str())?.to_string();
-    let conversation_id = data
-        .get("conversationId")
-        .and_then(|v| v.as_str())?
-        .to_string();
-    let mode = match data.get("mode").and_then(|v| v.as_str()) {
-        // The backend defaults an absent mode to "form" (chat-mcp-elicitation.ts), so mirror that.
-        Some("url") => ElicitationMode::Url,
-        _ => ElicitationMode::Form,
-    };
-    Some(ElicitationRequest {
-        id,
-        conversation_id,
-        mode,
-        requested_schema: data.get("requestedSchema").cloned(),
-    })
+    let parsed = (|| {
+        let data = event.get("data").and_then(|v| v.as_object())?;
+        let id = data.get("id").and_then(|v| v.as_str())?.to_string();
+        let conversation_id = data
+            .get("conversationId")
+            .and_then(|v| v.as_str())?
+            .to_string();
+        let mode = match data.get("mode").and_then(|v| v.as_str()) {
+            // The backend defaults an absent mode to "form" (chat-mcp-elicitation.ts), so mirror it.
+            Some("url") => ElicitationMode::Url,
+            _ => ElicitationMode::Form,
+        };
+        Some(ElicitationRequest {
+            id,
+            conversation_id,
+            mode,
+            requested_schema: data.get("requestedSchema").cloned(),
+        })
+    })();
+    match parsed {
+        Some(req) => ElicitationParse::Request(req),
+        None => ElicitationParse::Malformed,
+    }
 }
 
 /// The auto-answer: accept a form with recommended defaults; decline a URL flow (it cannot be
@@ -169,7 +186,9 @@ mod tests {
                 "requestedSchema": { "type": "object", "properties": {} }
             }
         }));
-        let req = parse_elicitation_request(&event).expect("parsed");
+        let ElicitationParse::Request(req) = parse_elicitation_event(&event) else {
+            panic!("expected a well-formed request");
+        };
         assert_eq!(req.id, "elicit-1");
         assert_eq!(req.conversation_id, "conv-1");
         assert_eq!(req.mode, ElicitationMode::Form);
@@ -182,25 +201,29 @@ mod tests {
             "type": "data-mcp-elicitation",
             "data": { "id": "a", "conversationId": "b" }
         }));
+        let ElicitationParse::Request(req) = parse_elicitation_event(&event) else {
+            panic!("expected a well-formed request");
+        };
+        assert_eq!(req.mode, ElicitationMode::Form);
+    }
+
+    #[test]
+    fn non_elicitation_event_is_ignored() {
+        let event = event_from(json!({ "type": "text-delta", "delta": "hi" }));
         assert_eq!(
-            parse_elicitation_request(&event).unwrap().mode,
-            ElicitationMode::Form
+            parse_elicitation_event(&event),
+            ElicitationParse::NotElicitation
         );
     }
 
     #[test]
-    fn non_elicitation_event_is_none() {
-        let event = event_from(json!({ "type": "text-delta", "delta": "hi" }));
-        assert!(parse_elicitation_request(&event).is_none());
-    }
-
-    #[test]
-    fn missing_ids_is_none() {
+    fn elicitation_missing_ids_is_malformed() {
+        // Typed as an elicitation but unanswerable (no id) — must surface, not be silently skipped.
         let event = event_from(json!({
             "type": "data-mcp-elicitation",
             "data": { "conversationId": "b" }
         }));
-        assert!(parse_elicitation_request(&event).is_none());
+        assert_eq!(parse_elicitation_event(&event), ElicitationParse::Malformed);
     }
 
     #[test]

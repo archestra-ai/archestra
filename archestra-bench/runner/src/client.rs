@@ -14,7 +14,7 @@ use tracing::info;
 
 use crate::chat_stream;
 use crate::config::types::ToolExposureMode;
-use crate::elicitation::{ElicitationAnswer, answer_for, parse_elicitation_request};
+use crate::elicitation::{ElicitationAnswer, ElicitationParse, answer_for, parse_elicitation_event};
 
 const DEFAULT_CHAT_TIMEOUT_S: f64 = 1800.0;
 
@@ -603,8 +603,17 @@ impl EvalClient {
         &self,
         event: &HashMap<String, JsonValue>,
     ) -> Result<(), ClientError> {
-        let Some(req) = parse_elicitation_request(event) else {
-            return Ok(());
+        let req = match parse_elicitation_event(event) {
+            ElicitationParse::NotElicitation => return Ok(()),
+            // A `data-mcp-elicitation` event we can't answer would otherwise leave the tool blocked
+            // for 10 minutes; surface it instead of silently ignoring it.
+            ElicitationParse::Malformed => {
+                return Err(ContractError(
+                    "unanswerable data-mcp-elicitation event: missing id/conversationId".to_string(),
+                )
+                .into());
+            }
+            ElicitationParse::Request(req) => req,
         };
         let answer = answer_for(&req);
         self.resolve_elicitation(&req.id, &req.conversation_id, &answer)

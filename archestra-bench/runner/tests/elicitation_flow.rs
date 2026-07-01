@@ -190,3 +190,21 @@ async fn failed_answer_post_surfaces_error() {
         "a failed answer POST must surface as an error"
     );
 }
+
+#[tokio::test]
+async fn malformed_elicitation_event_surfaces_error() {
+    // Typed as an elicitation but missing the id needed to answer it. It must fail loudly rather
+    // than be silently skipped (which would leave the tool blocked). No POST is attempted, so the
+    // base URL is never contacted.
+    let client = EvalClient::new("http://127.0.0.1:1", None);
+    let event: HashMap<String, Value> = serde_json::from_value(json!({
+        "type": "data-mcp-elicitation",
+        "data": { "conversationId": "c1" }
+    }))
+    .unwrap();
+
+    assert!(
+        client.answer_if_elicitation(&event).await.is_err(),
+        "an unanswerable elicitation event must surface as an error"
+    );
+}

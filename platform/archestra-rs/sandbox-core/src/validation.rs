@@ -326,6 +326,19 @@ mod tests {
             .unwrap_or(false)
     }
 
+    /// true when the guard behavioural test must be skipped; hard-fails under `CI`
+    /// so the security test can never silently no-op on the Linux runners.
+    fn skip_guard_shell_tests() -> bool {
+        if gnu_realpath_available() {
+            return false;
+        }
+        assert!(
+            std::env::var("CI").is_err(),
+            "GNU `realpath -e` is required to run the symlink-guard tests under CI"
+        );
+        true
+    }
+
     fn make_tmp_root() -> std::path::PathBuf {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -339,7 +352,7 @@ mod tests {
 
     #[test]
     fn symlink_guard_allows_in_root_paths_and_denies_escapes() {
-        if !gnu_realpath_available() {
+        if skip_guard_shell_tests() {
             return;
         }
         use std::os::unix::fs::symlink;

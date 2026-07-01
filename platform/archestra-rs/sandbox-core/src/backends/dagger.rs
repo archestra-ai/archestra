@@ -1034,33 +1034,46 @@ fn apply_upload_file(
     file: &ReplayInputFile,
 ) -> Result<Container> {
     let temp_path = format!("/.archestra-upload-{index}");
-    let decode = match file.encoding.as_str() {
+    let script = upload_file_script(&file.path, &temp_path, &file.encoding, SANDBOX_ROOTS)?;
+    Ok(container
+        .with_user("root")
+        .with_new_file(&temp_path, &file.content)
+        .with_exec(vec!["bash".to_string(), "-c".to_string(), script])
+        .with_user(SKILL_SANDBOX_USER))
+}
+
+/// the root shell script that decodes staged bytes into an upload's target: guard
+/// the ancestors and target against a symlink escaping `roots`, then decode, chown
+/// to the sandbox user, and remove the staged file. `temp_path` is the root-only
+/// staging path; `target` is the validated destination under the roots.
+fn upload_file_script(
+    target: &str,
+    temp_path: &str,
+    encoding: &str,
+    roots: &[&str],
+) -> Result<String> {
+    let decode = match encoding {
         "base64" => format!(
             "base64 -d {} > {}",
-            shell_quote(&temp_path),
-            shell_quote(&file.path),
+            shell_quote(temp_path),
+            shell_quote(target)
         ),
-        "utf8" => format!("cp {} {}", shell_quote(&temp_path), shell_quote(&file.path)),
+        "utf8" => format!("cp {} {}", shell_quote(temp_path), shell_quote(target)),
         other => {
             return Err(SandboxError::InvalidInput(format!(
                 "unsupported upload encoding: {other}"
             )));
         }
     };
-    let script = format!(
-        "{helpers}; {parents}{target_guard}{decode} && chown {user} {target} && rm -f {temp}",
-        helpers = symlink_guard_helpers(SANDBOX_ROOTS),
-        parents = guarded_parent_creation(&file.path, SANDBOX_ROOTS, true),
-        target_guard = guarded_target_symlink(&file.path),
+    Ok(format!(
+        "{helpers}; {parents}{target_guard}{decode} && chown {user} {tgt} && rm -f {temp}",
+        helpers = symlink_guard_helpers(roots),
+        parents = guarded_parent_creation(target, roots, true),
+        target_guard = guarded_target_symlink(target),
         user = SKILL_SANDBOX_USER,
-        target = shell_quote(&file.path),
-        temp = shell_quote(&temp_path),
-    );
-    Ok(container
-        .with_user("root")
-        .with_new_file(&temp_path, &file.content)
-        .with_exec(vec!["bash".to_string(), "-c".to_string(), script])
-        .with_user(SKILL_SANDBOX_USER))
+        tgt = shell_quote(target),
+        temp = shell_quote(temp_path),
+    ))
 }
 
 /// absolute parent directories of `path`, shallowest first, excluding the root
@@ -1897,6 +1910,20 @@ mod tests {
             .unwrap_or(false)
     }
 
+    /// true when the guard behavioural tests must be skipped (no GNU `realpath -e`,
+    /// e.g. on BSD/macOS). Hard-fails under `CI` so the security tests can never
+    /// silently no-op on the Linux runners.
+    fn skip_guard_shell_tests() -> bool {
+        if gnu_realpath_available() {
+            return false;
+        }
+        assert!(
+            std::env::var("CI").is_err(),
+            "GNU `realpath -e` is required to run the symlink-guard tests under CI"
+        );
+        true
+    }
+
     fn make_tmp_root() -> PathBuf {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -1917,7 +1944,7 @@ mod tests {
 
     #[test]
     fn read_artifact_command_resolves_symlinks_and_enforces_roots() {
-        if !gnu_realpath_available() {
+        if skip_guard_shell_tests() {
             return;
         }
         use std::os::unix::fs::symlink;
@@ -1960,7 +1987,7 @@ mod tests {
 
     #[test]
     fn guarded_parent_creation_blocks_symlinked_ancestor_but_creates_normal_dirs() {
-        if !gnu_realpath_available() {
+        if skip_guard_shell_tests() {
             return;
         }
         use std::os::unix::fs::symlink;
@@ -1995,8 +2022,49 @@ mod tests {
     }
 
     #[test]
+    fn upload_file_script_fails_closed_when_the_target_escapes_the_roots() {
+        if skip_guard_shell_tests() {
+            return;
+        }
+        use std::os::unix::fs::symlink;
+        let root = make_tmp_root();
+        let home = root.join("home");
+        std::fs::create_dir_all(&home).unwrap();
+        // `secret` is outside the declared root (`{root}/home`); the upload target
+        // is a symlink pointing at it.
+        let secret = root.join("secret");
+        std::fs::write(&secret, b"orig").unwrap();
+        let target = home.join("evil");
+        symlink(&secret, &target).unwrap();
+        // stage the bytes at a path the script reads; the guard aborts before decode.
+        let temp = root.join("stage");
+        std::fs::write(&temp, b"attacker").unwrap();
+
+        let root_str = home.to_str().unwrap();
+        let script = upload_file_script(
+            target.to_str().unwrap(),
+            temp.to_str().unwrap(),
+            "utf8",
+            &[root_str],
+        )
+        .unwrap();
+        let out = run_script(script);
+        assert_ne!(
+            out.status.code(),
+            Some(0),
+            "assembled script must fail closed"
+        );
+        assert_eq!(
+            std::fs::read(&secret).unwrap(),
+            b"orig",
+            "the decode must not follow the escaping target symlink"
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
     fn skill_root_reset_unlinks_an_escaping_symlink_without_following_it() {
-        if !gnu_realpath_available() {
+        if skip_guard_shell_tests() {
             return;
         }
         use std::os::unix::fs::symlink;
@@ -2029,7 +2097,7 @@ mod tests {
 
     #[test]
     fn guarded_target_symlink_rejects_a_symlink_escaping_the_roots() {
-        if !gnu_realpath_available() {
+        if skip_guard_shell_tests() {
             return;
         }
         use std::os::unix::fs::symlink;

@@ -10,9 +10,7 @@ import {
 import { ApiError } from "@/types";
 
 // Mock modules with factory functions to avoid hoisting issues
-vi.mock("@/auth", async () =>
-  (await import("@/test/mocks/auth")).authModuleMock(),
-);
+vi.mock("@/auth");
 
 vi.mock("@/auth/utils", () => ({
   hasPermission: vi.fn(),

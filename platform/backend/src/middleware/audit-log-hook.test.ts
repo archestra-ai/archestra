@@ -18,9 +18,7 @@ const KNOWN_RESOURCE_ID = vi.hoisted(
   () => "00000000-0000-0000-0000-000000000001",
 );
 
-vi.mock("@/logging", async () =>
-  (await import("@/test/mocks/logging")).loggingModuleMock(),
-);
+vi.mock("@/logging");
 
 vi.mock("./audit-log-registry", async () => {
   const { AuditEventNameSchema } =

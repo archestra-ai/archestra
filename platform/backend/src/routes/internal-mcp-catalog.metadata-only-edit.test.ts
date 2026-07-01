@@ -21,9 +21,7 @@ async function assertCascadeDidNotFire(spy: MockInstance): Promise<void> {
   expect(spy).not.toHaveBeenCalled();
 }
 
-vi.mock("@/auth", async () =>
-  (await import("@/test/mocks/auth")).authModuleMock(),
-);
+vi.mock("@/auth");
 
 import { hasPermission } from "@/auth";
 

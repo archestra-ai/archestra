@@ -5,9 +5,7 @@ import { TeamModel, TeamTokenModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 
 // Mock the hasPermission function
-vi.mock("@/auth", async () =>
-  (await import("@/test/mocks/auth")).authModuleMock(),
-);
+vi.mock("@/auth");
 
 import { hasPermission } from "@/auth";
 

@@ -15,9 +15,7 @@ import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { type Agent, ApiError, type User } from "@/types";
 
-vi.mock("@/auth", async () =>
-  (await import("@/test/mocks/auth")).authModuleMock(),
-);
+vi.mock("@/auth");
 
 const mockGetAgentTypePermissionChecker = getAgentTypePermissionChecker as Mock;
 const mockRequireAgentModifyPermission = requireAgentModifyPermission as Mock;

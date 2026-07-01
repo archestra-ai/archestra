@@ -5,9 +5,7 @@ import { cacheManager } from "@/cache-manager";
 import type * as originalConfigModule from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 
-vi.mock("@/logging", async () =>
-  (await import("@/test/mocks/logging")).loggingModuleMock(),
-);
+vi.mock("@/logging");
 
 import logger from "@/logging";
 import {

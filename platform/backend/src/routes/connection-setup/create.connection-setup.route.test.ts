@@ -5,9 +5,7 @@ import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-vi.mock("@/auth", async () =>
-  (await import("@/test/mocks/auth")).authModuleMock(),
-);
+vi.mock("@/auth");
 
 // cacheManager needs a live PostgreSQL connection that PGlite tests don't
 // have; back it with a Map (same convention as src/agents/utils.test.ts).

@@ -16,9 +16,7 @@ const { createOrgRoleMock, updateOrgRoleMock, deleteOrgRoleMock } = vi.hoisted(
   }),
 );
 
-vi.mock("@/auth", async () =>
-  (await import("@/test/mocks/auth")).authModuleMock(),
-);
+vi.mock("@/auth");
 
 const hasPermissionMock = vi.mocked(hasPermission);
 

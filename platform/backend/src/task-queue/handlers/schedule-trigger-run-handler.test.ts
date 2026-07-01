@@ -28,9 +28,7 @@ vi.mock("@/models", () => ({
   },
 }));
 
-vi.mock("@/auth", async () =>
-  (await import("@/test/mocks/auth")).authModuleMock(),
-);
+vi.mock("@/auth");
 
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 

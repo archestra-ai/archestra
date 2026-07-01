@@ -32,9 +32,7 @@ import { createAnthropicTestClient } from "@/test/llm-provider-stubs";
 import { anthropicAdapterFactory } from "../adapters";
 import anthropicProxyRoutes from "./anthropic";
 
-vi.mock("@/logging", async () =>
-  (await import("@/test/mocks/logging")).loggingModuleMock(),
-);
+vi.mock("@/logging");
 
 function findAnthropicRequestLog(message: string) {
   return vi

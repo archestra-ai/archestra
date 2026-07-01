@@ -17,9 +17,7 @@ import type { User } from "@/types";
  * `userHasPermission` varies per test; the route ORs the admin + deploy probes
  * into `canDeployToRestricted` and feeds `assertCanAssignEnvironment`.
  */
-vi.mock("@/auth", async () =>
-  (await import("@/test/mocks/auth")).authModuleMock(),
-);
+vi.mock("@/auth");
 
 import {
   getAgentTypePermissionChecker,

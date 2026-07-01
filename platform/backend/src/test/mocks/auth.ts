@@ -3,18 +3,17 @@ import { vi } from "vitest";
 /**
  * Canonical module mock for `@/auth`.
  *
- * Usage (the async-factory form is required so the hoisted `vi.mock` call can
- * reach this helper):
+ * Test files activate it with a bare `vi.mock("@/auth");` — Vitest resolves
+ * the Jest-style `src/auth/__mocks__/index.ts`, which re-exports this
+ * factory's surface:
  *
  * ```ts
- * vi.mock("@/auth", async () =>
- *   (await import("@/test/mocks/auth")).authModuleMock(),
- * );
+ * vi.mock("@/auth");
  *
  * import { hasPermission } from "@/auth";
  *
  * beforeEach(() => {
- *   vi.mocked(hasPermission).mockResolvedValue(true);
+ *   vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
  * });
  * ```
  *

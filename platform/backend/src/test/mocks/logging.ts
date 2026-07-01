@@ -2,12 +2,11 @@ import { vi } from "vitest";
 
 /**
  * Canonical module mock for `@/logging`, for tests that ASSERT on logger
- * calls:
+ * calls. Activated with a bare `vi.mock("@/logging");` — Vitest resolves the
+ * Jest-style `src/logging/__mocks__/index.ts`, which re-exports this factory:
  *
  * ```ts
- * vi.mock("@/logging", async () =>
- *   (await import("@/test/mocks/logging")).loggingModuleMock(),
- * );
+ * vi.mock("@/logging");
  *
  * import logger from "@/logging";
  * expect(vi.mocked(logger.error)).toHaveBeenCalledWith(...);

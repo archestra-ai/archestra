@@ -11,9 +11,7 @@ const mockConfig = vi.hoisted(() => ({
 }));
 vi.mock("@/config", () => ({ default: mockConfig }));
 
-vi.mock("@/logging", async () =>
-  (await import("@/test/mocks/logging")).loggingModuleMock(),
-);
+vi.mock("@/logging");
 
 import logger from "@/logging";
 import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";

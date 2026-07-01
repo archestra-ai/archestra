@@ -150,8 +150,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/
+COPY archestra-rs/napi-loader/package.json archestra-rs/napi-loader/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
 COPY archestra-rs/app-runtime-rs/package.json archestra-rs/app-runtime-rs/
+COPY archestra-rs/image-rs/package.json archestra-rs/image-rs/
 
 # Install all dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
@@ -185,6 +187,7 @@ COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY --from=deps /app/archestra-rs/sandbox-rs/node_modules ./archestra-rs/sandbox-rs/node_modules
 COPY --from=deps /app/archestra-rs/app-runtime-rs/node_modules ./archestra-rs/app-runtime-rs/node_modules
+COPY --from=deps /app/archestra-rs/image-rs/node_modules ./archestra-rs/image-rs/node_modules
 
 # Copy source files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
@@ -192,10 +195,13 @@ COPY backend ./backend
 COPY frontend ./frontend
 COPY shared ./shared
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
+COPY archestra-rs/napi-loader ./archestra-rs/napi-loader
 COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
 COPY archestra-rs/sandbox-rs ./archestra-rs/sandbox-rs
 COPY archestra-rs/app-runtime-core ./archestra-rs/app-runtime-core
 COPY archestra-rs/app-runtime-rs ./archestra-rs/app-runtime-rs
+COPY archestra-rs/image-core ./archestra-rs/image-core
+COPY archestra-rs/image-rs ./archestra-rs/image-rs
 
 # Build the Rust N-API skill sandbox addon during the JS workspace build.
 RUN apk add --no-cache build-base cargo rust
@@ -214,7 +220,7 @@ FROM builder-base AS rust-napi-musl-smoke
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/app/archestra-rs/target \
-    pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs check:musl
+    pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs --filter @archestra/image-rs check:musl
 
 # <----- Builder stage ----->
 FROM builder-base AS builder
@@ -348,8 +354,10 @@ VOLUME /var/lib/postgresql/data /app/data
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
+COPY archestra-rs/napi-loader/package.json archestra-rs/napi-loader/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
 COPY archestra-rs/app-runtime-rs/package.json archestra-rs/app-runtime-rs/
+COPY archestra-rs/image-rs/package.json archestra-rs/image-rs/
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 # slim Dagger Engine manifest (rendered in the dagger-manifest stage above)
@@ -394,6 +402,13 @@ COPY --from=builder /app/archestra-rs/sandbox-rs/*.node ./archestra-rs/sandbox-r
 COPY --from=builder /app/archestra-rs/app-runtime-rs/index.cjs ./archestra-rs/app-runtime-rs/
 COPY --from=builder /app/archestra-rs/app-runtime-rs/index.d.ts ./archestra-rs/app-runtime-rs/
 COPY --from=builder /app/archestra-rs/app-runtime-rs/*.node ./archestra-rs/app-runtime-rs/
+COPY --from=builder /app/archestra-rs/image-rs/index.cjs ./archestra-rs/image-rs/
+COPY --from=builder /app/archestra-rs/image-rs/index.d.ts ./archestra-rs/image-rs/
+COPY --from=builder /app/archestra-rs/image-rs/*.node ./archestra-rs/image-rs/
+# Shared JS loader required at runtime by the three NAPI crates' index.cjs
+# (pure JS, no .node); the prod install links it into each crate's node_modules.
+COPY --from=builder /app/archestra-rs/napi-loader/index.cjs ./archestra-rs/napi-loader/
+COPY --from=builder /app/archestra-rs/napi-loader/index.d.ts ./archestra-rs/napi-loader/
 RUN chmod +x /app/backend/scripts/start-production.sh
 
 # Copy built frontend

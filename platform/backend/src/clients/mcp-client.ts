@@ -30,6 +30,7 @@ import type {
 } from "@modelcontextprotocol/sdk/types.js";
 import QuickLRU from "quick-lru";
 import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-recovery-messages";
+import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
@@ -44,6 +45,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import {
   classifyThrownRefreshError,
   discoverOAuthEndpoints,
@@ -1689,13 +1691,24 @@ class McpClient {
       };
     }
 
-    // No server found - return an actionable error with install link
+    // No server found. Offer a self-service install link only when the caller
+    // can actually reach it; otherwise the catalog item is not shared with them
+    // (e.g. another user's personal-scope server) and the link is a dead end.
     const catalogDisplayName = tool.catalogName || catalogItem.name;
-    const authError = this.buildAuthRequiredMessage(
-      catalogDisplayName,
+    const authError = (await this.callerCanConnectCatalog(
       tool.catalogId,
       tokenAuth,
-    );
+    ))
+      ? this.buildAuthRequiredMessage(
+          catalogDisplayName,
+          tool.catalogId,
+          tokenAuth,
+        )
+      : this.buildConnectionUnavailableMessage(
+          catalogDisplayName,
+          tool.catalogId,
+          tokenAuth,
+        );
     return {
       error: await this.createErrorResult(
         toolCall,
@@ -2506,6 +2519,64 @@ class McpClient {
 
     this.oauthRefreshLocks.set(secretId, refreshPromise);
     return refreshPromise;
+  }
+
+  /**
+   * Whether the calling identity could set up its own connection for a catalog
+   * item — i.e. the item is visible and installable to it. A user token that
+   * cannot (another user's personal-scope item, or a team item for a team it is
+   * not in) must not be handed a self-service install link it cannot act on.
+   * Team/org-token callers, callers whose organization is unknown, and any
+   * lookup error fall back to the install-link guidance rather than being
+   * suppressed.
+   */
+  private async callerCanConnectCatalog(
+    catalogId: string,
+    tokenAuth?: TokenAuthContext,
+  ): Promise<boolean> {
+    if (!tokenAuth?.userId || !tokenAuth.organizationId) {
+      return true;
+    }
+    try {
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: tokenAuth.userId,
+        organizationId: tokenAuth.organizationId,
+      });
+      const accessibleIds =
+        await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+          tokenAuth.userId,
+          checker.isAdmin,
+          tokenAuth.organizationId,
+        );
+      return accessibleIds.includes(catalogId);
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * Auth-required error for a caller who cannot set up their own connection to
+   * the catalog item because it is not shared with them. Carries no install
+   * `actionUrl` or `action`, so no client (chat card, non-UI client, or the
+   * model relaying the text) presents a self-service link the caller cannot use;
+   * the message names the remediations open to them.
+   */
+  private buildConnectionUnavailableMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+    tokenAuth?: TokenAuthContext,
+  ): AuthRequiredMcpToolError {
+    const context = this.formatAuthContext(tokenAuth);
+    return {
+      type: "auth_required",
+      message:
+        `The tool's MCP server "${catalogDisplayName}" is not shared with your account (${context}), ` +
+        "so it cannot run for you and you cannot set up your own connection to it. " +
+        "Ask the server's owner or an administrator to share it with your team or organization, " +
+        "to designate a shared connection for it, or to run this tool on your behalf.",
+      catalogId,
+      catalogName: catalogDisplayName,
+    };
   }
 
   /**

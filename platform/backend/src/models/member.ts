@@ -1,5 +1,5 @@
 import type { AnyRoleName } from "@archestra/shared";
-import { and, count, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, count, eq, ilike, inArray, isNull, or } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
@@ -59,8 +59,13 @@ class MemberModel {
    * the original membership is always older than any later duplicate created
    * (e.g. by an auto-accepted invitation), so it wins.
    */
-  static async getByUserId(userId: string, organizationId: string) {
-    const [member] = await db
+  static async getByUserId(
+    userId: string,
+    organizationId: string,
+    tx?: Transaction,
+  ) {
+    const dbOrTx = tx ?? db;
+    const [member] = await dbOrTx
       .select()
       .from(schema.membersTable)
       .where(
@@ -72,6 +77,36 @@ class MemberModel {
       .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
       .limit(1);
     return member;
+  }
+
+  static async listMembersWithoutAccounts(
+    organizationId: string,
+    tx?: Transaction,
+  ) {
+    const dbOrTx = tx ?? db;
+    return await dbOrTx
+      .select({
+        id: schema.usersTable.id,
+        email: schema.usersTable.email,
+        name: schema.usersTable.name,
+        image: schema.usersTable.image,
+        role: schema.membersTable.role,
+      })
+      .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.membersTable.userId, schema.usersTable.id),
+      )
+      .leftJoin(
+        schema.accountsTable,
+        eq(schema.accountsTable.userId, schema.usersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, organizationId),
+          isNull(schema.accountsTable.id),
+        ),
+      );
   }
 
   /**

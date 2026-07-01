@@ -75,9 +75,10 @@ class UserModel {
   /**
    * Get a user by ID with their organization membership
    */
-  static async getById(id: string) {
+  static async getById(id: string, tx?: Transaction) {
     logger.trace("UserModel.getById: fetching user");
-    const [user] = await db
+    const dbOrTx = tx ?? db;
+    const [user] = await dbOrTx
       .select({
         ...getTableColumns(schema.usersTable),
         organizationId: schema.membersTable.organizationId,

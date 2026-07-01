@@ -1,17 +1,14 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
-  AUTO_PROVISIONED_INVITATION_STATUS,
   addNomicTaskPrefix,
   isModelSelectionComplete,
   providerRequiresPerUserCredential,
   RouteId,
   type SupportedProvider,
 } from "@archestra/shared";
-import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
-import db, { schema } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import { callEmbedding } from "@/knowledge-base/embedding-clients";
@@ -21,7 +18,6 @@ import {
   AgentModel,
   InteractionModel,
   InternalMcpCatalogModel,
-  InvitationModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
   LlmProviderApiKeyModel,
@@ -30,10 +26,12 @@ import {
   ModelModel,
   OrganizationModel,
   ToolModel,
-  UserModel,
-  UserTokenModel,
 } from "@/models";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
+import {
+  deletePendingSignupMember,
+  listPendingSignupMembers,
+} from "@/services/organization-pending-signup";
 import {
   ApiError,
   AppearanceSettingsSchema,
@@ -744,93 +742,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId }, reply) => {
-      // Get all member user IDs for this organization
-      const members = await db
-        .select({ userId: schema.membersTable.userId })
-        .from(schema.membersTable)
-        .where(eq(schema.membersTable.organizationId, organizationId));
-
-      if (members.length === 0) {
-        return reply.send({ pendingSignupMembers: [] });
-      }
-
-      const memberUserIds = members.map((m) => m.userId);
-
-      // Find which of these users have an account record
-      const usersWithAccounts = await db
-        .select({ userId: schema.accountsTable.userId })
-        .from(schema.accountsTable)
-        .where(inArray(schema.accountsTable.userId, memberUserIds));
-
-      const hasAccountSet = new Set(usersWithAccounts.map((a) => a.userId));
-      const pendingUserIds = memberUserIds.filter(
-        (id) => !hasAccountSet.has(id),
-      );
-
-      if (pendingUserIds.length === 0) {
-        return reply.send({ pendingSignupMembers: [] });
-      }
-
-      // Look up auto-provisioned invitations to get provider and invitation ID
-      const invitations = await db
-        .select({
-          id: schema.invitationsTable.id,
-          email: schema.invitationsTable.email,
-          status: schema.invitationsTable.status,
-        })
-        .from(schema.invitationsTable)
-        .where(
-          like(
-            schema.invitationsTable.status,
-            `${AUTO_PROVISIONED_INVITATION_STATUS}%`,
-          ),
-        );
-
-      // Build email → { provider, invitationId } map
-      const emailToInvitation = new Map<
-        string,
-        { provider: string | null; invitationId: string }
-      >();
-      for (const inv of invitations) {
-        const parts = inv.status.split(":");
-        emailToInvitation.set(inv.email, {
-          provider: parts.length === 2 ? parts[1] : null,
-          invitationId: inv.id,
-        });
-      }
-
-      // Get emails for pending users
-      const pendingUsers = await db
-        .select({
-          id: schema.usersTable.id,
-          email: schema.usersTable.email,
-          name: schema.usersTable.name,
-          image: schema.usersTable.image,
-          role: schema.membersTable.role,
-        })
-        .from(schema.membersTable)
-        .innerJoin(
-          schema.usersTable,
-          eq(schema.membersTable.userId, schema.usersTable.id),
-        )
-        .where(
-          and(
-            eq(schema.membersTable.organizationId, organizationId),
-            inArray(schema.usersTable.id, pendingUserIds),
-          ),
-        );
-
-      const pendingSignupMembers = pendingUsers.map((u) => {
-        const inv = emailToInvitation.get(u.email);
-        return {
-          userId: u.id,
-          name: u.name,
-          email: u.email,
-          image: u.image,
-          role: u.role,
-          provider: inv?.provider ?? null,
-          invitationId: inv?.invitationId ?? null,
-        };
+      const pendingSignupMembers = await listPendingSignupMembers({
+        organizationId,
       });
 
       return reply.send({ pendingSignupMembers });
@@ -839,7 +752,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   /**
    * Delete an auto-provisioned member who hasn't completed signup.
-   * Removes the member, invitation, user token, and user record.
+   * Removes the member, invitation, personal token, and user record if unused.
    */
   fastify.delete(
     "/api/organization/members/:userId/pending-signup",
@@ -855,53 +768,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, params }, reply) => {
       const { userId } = params;
-
-      // Verify user has no account (is actually pending signup)
-      const [account] = await db
-        .select({ userId: schema.accountsTable.userId })
-        .from(schema.accountsTable)
-        .where(eq(schema.accountsTable.userId, userId))
-        .limit(1);
-
-      if (account) {
-        throw new ApiError(
-          400,
-          "Cannot delete a member who has already completed signup",
-        );
-      }
-
-      // Get user email to find their invitation
-      const user = await UserModel.getById(userId);
-      if (!user) {
-        throw new ApiError(404, "User not found");
-      }
-
-      // Delete invitation(s) with auto-provisioned status for this email
-      const invitations = await db
-        .select({ id: schema.invitationsTable.id })
-        .from(schema.invitationsTable)
-        .where(
-          and(
-            eq(schema.invitationsTable.email, user.email),
-            like(
-              schema.invitationsTable.status,
-              `${AUTO_PROVISIONED_INVITATION_STATUS}%`,
-            ),
-          ),
-        );
-
-      for (const inv of invitations) {
-        await InvitationModel.delete(inv.id);
-      }
-
-      // Delete personal tokens
-      await UserTokenModel.deleteByUserAndOrg(userId, organizationId);
-
-      // Delete member record
-      await MemberModel.deleteByMemberOrUserId(userId, organizationId);
-
-      // Delete user record (no other memberships since auto-provisioned)
-      await UserModel.delete(userId);
+      await deletePendingSignupMember({ userId, organizationId });
 
       return reply.send({ success: true });
     },

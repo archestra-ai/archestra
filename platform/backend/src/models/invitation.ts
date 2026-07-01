@@ -1,6 +1,9 @@
-import { MEMBER_ROLE_NAME } from "@archestra/shared";
-import { and, eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import {
+  AUTO_PROVISIONED_INVITATION_STATUS,
+  MEMBER_ROLE_NAME,
+} from "@archestra/shared";
+import { and, eq, inArray, like } from "drizzle-orm";
+import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 import type {
   BetterAuthSession,
@@ -68,6 +71,84 @@ class InvitationModel {
       "InvitationModel.findPendingByEmail: completed",
     );
     return pending;
+  }
+
+  static async findAutoProvisionedByEmailsInOrg(params: {
+    emails: string[];
+    organizationId: string;
+    tx?: Transaction;
+  }) {
+    const uniqueEmails = [...new Set(params.emails)];
+    if (uniqueEmails.length === 0) return [];
+
+    logger.debug(
+      {
+        organizationId: params.organizationId,
+        emailCount: uniqueEmails.length,
+      },
+      "InvitationModel.findAutoProvisionedByEmailsInOrg: fetching invitations",
+    );
+
+    const dbOrTx = params.tx ?? db;
+    const invitations = await dbOrTx
+      .select({
+        id: schema.invitationsTable.id,
+        email: schema.invitationsTable.email,
+        status: schema.invitationsTable.status,
+      })
+      .from(schema.invitationsTable)
+      .where(
+        and(
+          eq(schema.invitationsTable.organizationId, params.organizationId),
+          inArray(schema.invitationsTable.email, uniqueEmails),
+          like(
+            schema.invitationsTable.status,
+            `${AUTO_PROVISIONED_INVITATION_STATUS}%`,
+          ),
+        ),
+      );
+
+    logger.debug(
+      { organizationId: params.organizationId, count: invitations.length },
+      "InvitationModel.findAutoProvisionedByEmailsInOrg: completed",
+    );
+    return invitations;
+  }
+
+  static async deleteAutoProvisionedForEmailInOrg(params: {
+    email: string;
+    organizationId: string;
+    tx?: Transaction;
+  }): Promise<number> {
+    logger.debug(
+      { email: params.email, organizationId: params.organizationId },
+      "InvitationModel.deleteAutoProvisionedForEmailInOrg: deleting invitations",
+    );
+
+    const dbOrTx = params.tx ?? db;
+    const deleted = await dbOrTx
+      .delete(schema.invitationsTable)
+      .where(
+        and(
+          eq(schema.invitationsTable.email, params.email),
+          eq(schema.invitationsTable.organizationId, params.organizationId),
+          like(
+            schema.invitationsTable.status,
+            `${AUTO_PROVISIONED_INVITATION_STATUS}%`,
+          ),
+        ),
+      )
+      .returning({ id: schema.invitationsTable.id });
+
+    logger.debug(
+      {
+        email: params.email,
+        organizationId: params.organizationId,
+        count: deleted.length,
+      },
+      "InvitationModel.deleteAutoProvisionedForEmailInOrg: completed",
+    );
+    return deleted.length;
   }
 
   /**

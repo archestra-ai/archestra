@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type { SelectUserToken } from "@/types";
@@ -108,8 +108,12 @@ class UserTokenModel {
   /**
    * Find a token by ID
    */
-  static async findById(id: string): Promise<SelectUserToken | null> {
-    const [token] = await db
+  static async findById(
+    id: string,
+    tx?: Transaction,
+  ): Promise<SelectUserToken | null> {
+    const dbOrTx = tx ?? db;
+    const [token] = await dbOrTx
       .select()
       .from(schema.userTokensTable)
       .where(eq(schema.userTokensTable.id, id))
@@ -124,8 +128,10 @@ class UserTokenModel {
   static async findByUserAndOrg(
     userId: string,
     organizationId: string,
+    tx?: Transaction,
   ): Promise<SelectUserToken | null> {
-    const [token] = await db
+    const dbOrTx = tx ?? db;
+    const [token] = await dbOrTx
       .select()
       .from(schema.userTokensTable)
       .where(
@@ -164,7 +170,7 @@ class UserTokenModel {
       .where(eq(schema.userTokensTable.id, id));
 
     // Also delete the secret explicitly
-    await secretManager().deleteSecret(token.secretId);
+    await UserTokenModel.deleteSecret(token.secretId);
 
     logger.info({ tokenId: id }, "UserTokenModel.delete: token deleted");
 
@@ -182,6 +188,29 @@ class UserTokenModel {
     if (!token) return false;
 
     return UserTokenModel.delete(token.id);
+  }
+
+  static async deleteRecordByUserAndOrg(
+    userId: string,
+    organizationId: string,
+    tx: Transaction,
+  ): Promise<SelectUserToken | null> {
+    const token = await UserTokenModel.findByUserAndOrg(
+      userId,
+      organizationId,
+      tx,
+    );
+    if (!token) return null;
+
+    await tx
+      .delete(schema.userTokensTable)
+      .where(eq(schema.userTokensTable.id, token.id));
+
+    return token;
+  }
+
+  static async deleteSecret(secretId: string): Promise<void> {
+    await secretManager().deleteSecret(secretId);
   }
 
   /**

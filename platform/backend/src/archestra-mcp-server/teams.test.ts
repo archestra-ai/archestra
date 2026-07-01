@@ -219,6 +219,23 @@ describe("team tool execution", () => {
     expect(persisted?.description).toBe("Updated");
   });
 
+  test("edit_team clears the description when passed null", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId, {
+      name: "Has Desc",
+      description: "to be cleared",
+    });
+    const result = await executeArchestraTool(
+      toolName("edit_team"),
+      { id: team.id, description: null },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const persisted = await TeamModel.findById(team.id);
+    expect(persisted?.description).toBeNull();
+  });
+
   test("edit_team returns error for nonexistent team", async () => {
     const result = await executeArchestraTool(
       toolName("edit_team"),

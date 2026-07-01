@@ -112,8 +112,11 @@ const EditTeamToolArgsSchema = z
       .describe("Optional new team name."),
     description: z
       .string()
+      .nullable()
       .optional()
-      .describe("Optional new team description."),
+      .describe(
+        "Optional new team description. Pass null to clear an existing description.",
+      ),
   })
   .strict();
 
@@ -413,7 +416,8 @@ async function handleCreateTeam(params: {
       createdBy: context.userId,
     });
 
-    const serialized = serializeTeam(team, team.members?.length ?? 0);
+    // A freshly created team has no members yet.
+    const serialized = serializeTeam(team, 0);
     return structuredSuccessResult(
       { team: serialized },
       `Successfully created team.\n\nTeam ID: ${serialized.id}\nName: ${serialized.name}${
@@ -488,6 +492,8 @@ async function handleListTeams(params: {
   }
 
   try {
+    // Non-manager visibility filtering below relies on `findByOrganization`
+    // hydrating each team's `members` relation.
     const teams = await TeamModel.findByOrganization(context.organizationId);
     // Org-level team managers see every team; everyone else only the teams
     // they belong to (mirrors the REST GET /api/teams behavior).

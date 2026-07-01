@@ -720,7 +720,7 @@ Required RBAC permission: `team:update`
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the team to update. |
 | `name` | `string` | No | Optional new team name. |
-| `description` | `string` | No | Optional new team description. |
+| `description` | `string \| null` | No | Optional new team description. Pass null to clear an existing description. |
 
 ##### Output
 

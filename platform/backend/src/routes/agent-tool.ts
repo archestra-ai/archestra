@@ -2,7 +2,7 @@ import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   RouteId,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { policyConfigurationService } from "@/agents/subagents/policy-configuration";
@@ -29,7 +29,7 @@ import {
   type PrefetchedMcpServer,
   validateAssignment,
 } from "@/services/agent-tool-assignment";
-import type { InternalMcpCatalog } from "@/types";
+import type { InternalMcpCatalog, Tool } from "@/types";
 import {
   AgentToolAssignmentBodySchema,
   AgentToolFilterSchema,
@@ -157,7 +157,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         toolId,
         mcpServerId,
         resolveAtCallTime,
-        credentialResolutionMode,
+        credentialResolutionMode:
+          credentialResolutionMode ??
+          (await inferEnterpriseManagedCredentialMode({
+            toolId,
+            resolveAtCallTime,
+          })),
       });
 
       if (result && result !== "duplicate" && result !== "updated") {
@@ -292,13 +297,20 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const failed: { agentId: string; toolId: string; error: string }[] = [];
 
       for (const assignment of assignments) {
+        const normalizedAssignment =
+          normalizeBulkAssignmentCredentialResolutionMode({
+            assignment,
+            toolsMap,
+            catalogItemsMap,
+          });
         const validationError = await validateAssignment({
-          agentId: assignment.agentId,
-          toolId: assignment.toolId,
-          mcpServerId: assignment.mcpServerId,
+          agentId: normalizedAssignment.agentId,
+          toolId: normalizedAssignment.toolId,
+          mcpServerId: normalizedAssignment.mcpServerId,
           preFetchedData,
-          resolveAtCallTime: assignment.resolveAtCallTime,
-          credentialResolutionMode: assignment.credentialResolutionMode,
+          resolveAtCallTime: normalizedAssignment.resolveAtCallTime,
+          credentialResolutionMode:
+            normalizedAssignment.credentialResolutionMode,
         });
         if (validationError) {
           failed.push({
@@ -307,7 +319,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             error: validationError.error.message,
           });
         } else {
-          validated.push(assignment);
+          validated.push(normalizedAssignment);
         }
       }
 
@@ -934,3 +946,50 @@ function mapAgentToolAssignmentErrorCodeToHttpStatus(
 }
 
 export default agentToolRoutes;
+
+function normalizeBulkAssignmentCredentialResolutionMode(params: {
+  assignment: z.infer<typeof BulkAgentToolAssignmentSchema>;
+  toolsMap: Map<string, Tool>;
+  catalogItemsMap: Map<string, InternalMcpCatalog>;
+}): z.infer<typeof BulkAgentToolAssignmentSchema> {
+  const { assignment, toolsMap, catalogItemsMap } = params;
+  if (assignment.credentialResolutionMode || !assignment.resolveAtCallTime) {
+    return assignment;
+  }
+
+  const tool = toolsMap.get(assignment.toolId);
+  const catalogItem = tool?.catalogId
+    ? catalogItemsMap.get(tool.catalogId)
+    : null;
+
+  if (!catalogItem?.enterpriseManagedConfig) {
+    return assignment;
+  }
+
+  return {
+    ...assignment,
+    credentialResolutionMode: "enterprise_managed",
+  };
+}
+
+async function inferEnterpriseManagedCredentialMode(params: {
+  toolId: string;
+  resolveAtCallTime?: boolean;
+}): Promise<"enterprise_managed" | undefined> {
+  if (!params.resolveAtCallTime) {
+    return undefined;
+  }
+
+  const tool = await ToolModel.findById(params.toolId);
+  if (!tool?.catalogId) {
+    return undefined;
+  }
+
+  const catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId, {
+    expandSecrets: false,
+  });
+
+  return catalogItem?.enterpriseManagedConfig
+    ? ("enterprise_managed" as const)
+    : undefined;
+}

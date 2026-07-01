@@ -1,10 +1,15 @@
 import { randomBytes } from "node:crypto";
-import { LLM_PROXY_OAUTH_SCOPE } from "@shared";
+import {
+  LLM_PROXY_OAUTH_SCOPE,
+  OFFLINE_ACCESS_OAUTH_SCOPE,
+} from "@archestra/shared";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq, ilike, inArray, sql } from "drizzle-orm";
+import { hashOauthClientSecret } from "@/auth/oauth-client-secret";
 import db, { schema } from "@/database";
 import {
   LLM_OAUTH_CLIENT_METADATA_TYPE,
+  type LlmOauthClientGrantType,
   LlmOauthClientMetadataSchema,
   type LlmOauthClientProviderKey,
 } from "@/types/llm-oauth-client";
@@ -42,16 +47,35 @@ class LlmOauthClientModel {
   static async create(params: {
     organizationId: string;
     name: string;
-    allowedLlmProxyIds: string[];
-    providerApiKeys: LlmOauthClientProviderKey[];
+    grantType?: LlmOauthClientGrantType;
+    allowedLlmProxyIds?: string[];
+    providerApiKeys?: LlmOauthClientProviderKey[];
+    redirectUris?: string[];
   }) {
+    const grantType = params.grantType ?? "client_credentials";
+    const isAuthorizationCode = grantType === "authorization_code";
     const clientSecret = createClientSecret();
-    const clientSecretHash = await hashClientSecret(clientSecret);
+    // authorization_code secrets are verified by better-auth (deterministic
+    // hash); client_credentials secrets are verified by this model (bcrypt).
+    const clientSecretHash = isAuthorizationCode
+      ? hashOauthClientSecret(clientSecret)
+      : await hashClientSecret(clientSecret);
+    // allowedLlmProxyIds governs both grant types, but differently:
+    // - client_credentials: the SOLE authority — the token may only reach the
+    //   listed proxies (there is no acting user).
+    // - authorization_code: an ADDITIVE, admin-controlled grant — a user who
+    //   authenticates through the client may reach these proxies IN ADDITION to
+    //   their own RBAC. Empty = pure identity passthrough.
+    // providerApiKeys never apply to authorization_code clients: the acting
+    // user's own keys are resolved at call time.
     const metadata = {
       type: LLM_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
-      allowedLlmProxyIds: params.allowedLlmProxyIds,
-      providerApiKeys: params.providerApiKeys,
+      grantType,
+      allowedLlmProxyIds: params.allowedLlmProxyIds ?? [],
+      providerApiKeys: isAuthorizationCode
+        ? []
+        : (params.providerApiKeys ?? []),
     };
 
     const [client] = await db
@@ -61,12 +85,20 @@ class LlmOauthClientModel {
         clientId: `llm_oauth_${randomBytes(18).toString("base64url")}`,
         clientSecret: clientSecretHash,
         name: params.name,
-        redirectUris: [],
+        // authorization_code is a confidential client (client_secret_post) that
+        // additionally requires PKCE; its tokens flow through better-auth's
+        // standard authorize→token exchange and are user-bound.
+        redirectUris: isAuthorizationCode ? (params.redirectUris ?? []) : [],
         tokenEndpointAuthMethod: "client_secret_post",
-        grantTypes: ["client_credentials"],
-        responseTypes: [],
+        grantTypes: isAuthorizationCode
+          ? ["authorization_code", "refresh_token"]
+          : ["client_credentials"],
+        responseTypes: isAuthorizationCode ? ["code"] : [],
+        requirePKCE: isAuthorizationCode,
         public: false,
-        scopes: [LLM_PROXY_OAUTH_SCOPE],
+        scopes: isAuthorizationCode
+          ? [LLM_PROXY_OAUTH_SCOPE, OFFLINE_ACCESS_OAUTH_SCOPE]
+          : [LLM_PROXY_OAUTH_SCOPE],
         type: "service",
         metadata,
         createdAt: new Date(),
@@ -149,11 +181,18 @@ class LlmOauthClientModel {
   }
 
   static async rotateSecret(params: { id: string; organizationId: string }) {
+    // Hash the new secret with the scheme this client's grant type uses.
+    const existing = await LlmOauthClientModel.findById(params);
+    if (!existing) return null;
     const clientSecret = createClientSecret();
+    const clientSecretHash =
+      existing.grantType === "authorization_code"
+        ? hashOauthClientSecret(clientSecret)
+        : await hashClientSecret(clientSecret);
     const [client] = await db
       .update(schema.oauthClientsTable)
       .set({
-        clientSecret: await hashClientSecret(clientSecret),
+        clientSecret: clientSecretHash,
         updatedAt: new Date(),
       })
       .where(
@@ -176,14 +215,34 @@ class LlmOauthClientModel {
     id: string;
     organizationId: string;
     name: string;
-    allowedLlmProxyIds: string[];
-    providerApiKeys: LlmOauthClientProviderKey[];
+    allowedLlmProxyIds?: string[];
+    providerApiKeys?: LlmOauthClientProviderKey[];
+    redirectUris?: string[];
   }) {
+    // The grant type is fixed at creation; reload the client to preserve it and
+    // to apply only the fields that grant type actually uses.
+    const existing = await LlmOauthClientModel.findById({
+      id: params.id,
+      organizationId: params.organizationId,
+    });
+    if (!existing) return null;
+    const isAuthorizationCode = existing.grantType === "authorization_code";
+
+    // allowedLlmProxyIds applies to both grant types (see create()); update it
+    // for either. providerApiKeys never apply to authorization_code clients.
     const metadata = {
       type: LLM_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
-      allowedLlmProxyIds: params.allowedLlmProxyIds,
-      providerApiKeys: params.providerApiKeys,
+      grantType: existing.grantType,
+      allowedLlmProxyIds:
+        params.allowedLlmProxyIds ?? existing.allowedLlmProxyIds,
+      providerApiKeys: isAuthorizationCode
+        ? []
+        : (params.providerApiKeys ??
+          existing.providerApiKeys.map((key) => ({
+            provider: key.provider,
+            providerApiKeyId: key.providerApiKeyId,
+          }))),
     };
 
     const [client] = await db
@@ -191,6 +250,9 @@ class LlmOauthClientModel {
       .set({
         name: params.name,
         metadata,
+        ...(isAuthorizationCode
+          ? { redirectUris: params.redirectUris ?? existing.redirectUris }
+          : {}),
         updatedAt: new Date(),
       })
       .where(
@@ -232,6 +294,7 @@ class LlmOauthClientModel {
       name: client.name,
       clientId: client.clientId,
       organizationId: client.organizationId,
+      grantType: client.grantType,
       allowedLlmProxyIds: [...client.allowedLlmProxyIds].sort(),
       // Sort by providerApiKeyId so audit diffs ignore source ordering and
       // only flag genuine add/remove changes.
@@ -242,6 +305,7 @@ class LlmOauthClientModel {
           providerApiKeyId: p.providerApiKeyId,
           providerApiKeyName: p.providerApiKeyName,
         })),
+      redirectUris: [...client.redirectUris].sort(),
       disabled: client.disabled,
       createdAt: client.createdAt.toISOString(),
       updatedAt: client.updatedAt.toISOString(),
@@ -303,6 +367,7 @@ async function hydrateOauthClients(
         clientId: client.clientId,
         name: client.name ?? client.clientId,
         organizationId: metadata.organizationId,
+        grantType: metadata.grantType,
         allowedLlmProxyIds: metadata.allowedLlmProxyIds,
         providerApiKeys: metadata.providerApiKeys.map((mapping) => ({
           ...mapping,
@@ -310,6 +375,7 @@ async function hydrateOauthClients(
             apiKeyNames.get(mapping.providerApiKeyId) ??
             mapping.providerApiKeyId,
         })),
+        redirectUris: client.redirectUris ?? [],
         disabled: client.disabled ?? false,
         createdAt: client.createdAt,
         updatedAt: client.updatedAt,

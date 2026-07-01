@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
+import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -12,6 +12,16 @@ import type { SelectUserToken } from "@/types";
  * 2. They might not work with BYOS Vault (which is read-only from customer's Vault)
  */
 const FORCE_DB = true;
+
+/** Raised by `create` when a concurrent request already created the (org, user) token. */
+class UserTokenConflictError extends Error {
+  constructor(userId: string, organizationId: string) {
+    super(
+      `user token already exists for user ${userId} in organization ${organizationId}`,
+    );
+    this.name = "UserTokenConflictError";
+  }
+}
 
 /** Length of random part (16 bytes = 32 hex chars) */
 const TOKEN_RANDOM_LENGTH = 16;
@@ -61,7 +71,8 @@ class UserTokenModel {
       FORCE_DB,
     );
 
-    // Create token record
+    // Create token record. onConflictDoNothing makes the UNIQUE(org, user) constraint race-safe:
+    // concurrent first-time creates no longer 500, the loser just gets no row back.
     const [token] = await db
       .insert(schema.userTokensTable)
       .values({
@@ -71,7 +82,20 @@ class UserTokenModel {
         secretId: secret.id,
         tokenStart,
       })
+      .onConflictDoNothing({
+        target: [
+          schema.userTokensTable.organizationId,
+          schema.userTokensTable.userId,
+        ],
+      })
       .returning();
+
+    if (!token) {
+      // Lost the race: the secret we minted now references no token, so delete it before surfacing
+      // the conflict -- otherwise it leaks (nothing else points at it).
+      await secretManager().deleteSecret(secret.id);
+      throw new UserTokenConflictError(userId, organizationId);
+    }
 
     logger.info(
       { userId, organizationId, tokenId: token.id },
@@ -261,8 +285,20 @@ class UserTokenModel {
     );
     if (existing) return existing;
 
-    const { token } = await UserTokenModel.create(userId, organizationId);
-    return token;
+    try {
+      const { token } = await UserTokenModel.create(userId, organizationId);
+      return token;
+    } catch (error) {
+      if (error instanceof UserTokenConflictError) {
+        // A concurrent request won the race and created the token; return that one.
+        const winner = await UserTokenModel.findByUserAndOrg(
+          userId,
+          organizationId,
+        );
+        if (winner) return winner;
+      }
+      throw error;
+    }
   }
 
   static async findByIdForAudit(

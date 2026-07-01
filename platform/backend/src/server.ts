@@ -17,16 +17,18 @@ if (isMainModule) {
 }
 
 import { readFileSync } from "node:fs";
-import fastifyCors from "@fastify/cors";
-import fastifyFormbody from "@fastify/formbody";
-import fastifySwagger from "@fastify/swagger";
-import type { McpUiResourceCsp } from "@modelcontextprotocol/ext-apps";
-import * as Sentry from "@sentry/node";
+import { createRequire } from "node:module";
+import path from "node:path";
 import {
   EmbeddingDimensionsSchema,
   LocalConfigEnvironmentDefaultSchema,
   SUPPORTED_EMBEDDING_DIMENSIONS,
-} from "@shared";
+} from "@archestra/shared";
+import fastifyCors, { type FastifyCorsOptions } from "@fastify/cors";
+import fastifyFormbody from "@fastify/formbody";
+import fastifySwagger from "@fastify/swagger";
+import { trace } from "@opentelemetry/api";
+import * as Sentry from "@sentry/node";
 import Fastify, { type FastifyRequest } from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
@@ -51,10 +53,11 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
-import { codeRuntimeService } from "@/code-runtime/code-runtime-service";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
+import { enterpriseTier } from "@/enterprise-tier";
+import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
@@ -62,8 +65,16 @@ import { initAuditDecisions } from "@/middleware/audit-decisions";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
+import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
+import { activeChatRunService } from "@/services/active-chat-run";
+import {
+  APP_BASE_CSS_PATH,
+  APP_SDK_PATH,
+} from "@/services/apps/app-sdk-injection";
+import { posthogErrorTrackingService } from "@/services/error-tracking";
+import { instanceAnalyticsService } from "@/services/instance-analytics";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { taskQueueService } from "@/task-queue";
@@ -89,7 +100,9 @@ import {
 import websocketService from "@/websocket";
 import * as routes from "./routes";
 import { publicConfigRoutes } from "./routes/config";
+import { createOAuthAwareCorsDelegate } from "./routes/oauth-cors";
 import {
+  CONNECTION_SETUP_SCRIPT_PREFIX,
   HEALTH_PATH,
   MCP_GATEWAY_PREFIX,
   READY_PATH,
@@ -102,14 +115,13 @@ import {
 
 /** Max time to wait for cleanup operations during graceful shutdown before exiting */
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
+const ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS = 60 * 1000;
 
-// Load enterprise routes if license is activated OR if running in codegen mode
-// (codegen mode ensures OpenAPI spec always includes all enterprise routes)
-const eeRoutes =
-  config.enterpriseFeatures.core || config.codegenMode
-    ? // biome-ignore lint/style/noRestrictedImports: conditional schema
-      await import("./routes/index.ee")
-    : ({} as Record<string, never>);
+// Enterprise routes are always loaded. Access is gated at request time by the
+// EnterpriseTierService, which auto-enables enterprise features for teams below
+// the small-team threshold even when no enterprise license env var is set.
+// biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
+import * as eeRoutes from "./routes/index.ee";
 
 const {
   api: {
@@ -291,6 +303,7 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.cerebrasProxyRoutes);
   fastify.register(routes.cohereProxyRoutes);
   fastify.register(routes.deepseekProxyRoutes);
+  fastify.register(routes.githubCopilotProxyRoutes);
   fastify.register(routes.groqProxyRoutes);
   fastify.register(routes.minimaxProxyRoutes);
   fastify.register(routes.modelRouterProxyRoutes);
@@ -328,6 +341,54 @@ function buildRequestErrorContext(request: FastifyRequest) {
   };
 }
 
+/**
+ * Read the PostHog session/distinct id that posthog-js injects into browser
+ * requests (via its `tracing_headers` config). These let a captured backend
+ * exception be cross-referenced with the originating session replay and person.
+ */
+function getPostHogTraceContext(request: FastifyRequest): {
+  distinctId?: string;
+  sessionId?: string;
+} {
+  return {
+    distinctId: firstHeaderValue(request.headers["x-posthog-distinct-id"]),
+    sessionId: firstHeaderValue(request.headers["x-posthog-session-id"]),
+  };
+}
+
+function firstHeaderValue(
+  value: string | string[] | undefined,
+): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
+/**
+ * Forward an unexpected server-side error (5xx) to PostHog Error Tracking,
+ * scoped to the failing request's session/trace. Never throws — capture is
+ * best-effort and must not disturb the error response.
+ */
+function captureServerException(
+  request: FastifyRequest,
+  error: unknown,
+  extraProperties?: Record<string, unknown>,
+): void {
+  const { distinctId, sessionId } = getPostHogTraceContext(request);
+  posthogErrorTrackingService.captureException({
+    error,
+    distinctId,
+    sessionId,
+    traceId: trace.getActiveSpan()?.spanContext().traceId,
+    properties: {
+      method: request.method,
+      url: request.url,
+      route: request.routeOptions?.url,
+      reqId: request.id,
+      ...extraProperties,
+    },
+  });
+}
+
 function parseContentLength(request: FastifyRequest): number | undefined {
   const raw = request.headers["content-length"];
   if (typeof raw !== "string") return undefined;
@@ -362,6 +423,13 @@ export const createFastifyInstance = () =>
     disableRequestLogging: true,
     trustProxy: config.api.trustProxy,
     bodyLimit: config.api.bodyLimit,
+    // Some path params are opaque, base64url-encoded handles longer than
+    // Fastify's 100-char default (e.g. skill-sandbox artifact `obj_` refs that
+    // encode a scope + object key). Without this, such a request fails to match
+    // its route and falls through to the auth hook, surfacing as a 403.
+    routerOptions: {
+      maxParamLength: 4096,
+    },
   })
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)
@@ -400,6 +468,11 @@ export const createFastifyInstance = () =>
           tags: {
             error_type: "response_serialization",
           },
+        });
+
+        captureServerException(request, error, {
+          error_type: "response_serialization",
+          validation_errors: validationErrors,
         });
 
         return reply.status(500).send({
@@ -466,6 +539,11 @@ export const createFastifyInstance = () =>
 
         if (statusCode >= 500) {
           this.log.error(logPayload, "HTTP 50x request error occurred");
+          captureServerException(request, error, {
+            error_type: "api_error",
+            status_code: statusCode,
+            ...(internalCode && { internal_code: internalCode }),
+          });
         } else if (statusCode >= 400) {
           this.log.info(logPayload, "HTTP 40x request error occurred");
         } else {
@@ -496,6 +574,12 @@ export const createFastifyInstance = () =>
         },
         "HTTP 50x request error occurred",
       );
+
+      captureServerException(request, error, {
+        error_type: "unhandled_error",
+        status_code: statusCode,
+        ...(errorCode && { code: errorCode }),
+      });
 
       return reply.status(statusCode).send({
         error: {
@@ -618,46 +702,6 @@ const startMetricsServer = async () => {
 // ============ MCP Sandbox Server ============
 
 /**
- * Allowlist-validate CSP domain entries.
- * Only permits valid hostnames and wildcard-subdomain patterns (e.g. *.example.com).
- * Blocks dangerous CSP sources like *, data:, blob:, https: that a denylist would miss.
- */
-// Matches bare domains (esm.sh), wildcard subdomains (*.esm.sh),
-// scheme-prefixed domains (https://esm.sh, wss://esm.sh), and optional port (:8443).
-const VALID_CSP_DOMAIN =
-  /^(wss?:\/\/|https?:\/\/)?(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+(:\d{1,5})?$/;
-
-export function sanitizeCspDomains(domains?: string[]): string[] {
-  if (!domains) return [];
-  return domains.filter(
-    (d) => typeof d === "string" && VALID_CSP_DOMAIN.test(d),
-  );
-}
-
-export function buildCspHeader(csp?: McpUiResourceCsp): string {
-  const resourceDomains = sanitizeCspDomains(csp?.resourceDomains).join(" ");
-  const connectDomains = sanitizeCspDomains(csp?.connectDomains).join(" ");
-  const frameDomains = sanitizeCspDomains(csp?.frameDomains).join(" ") || null;
-  const baseUriDomains =
-    sanitizeCspDomains(csp?.baseUriDomains).join(" ") || null;
-
-  const directives = [
-    "default-src 'none'",
-    `script-src 'self' 'unsafe-inline' blob: data: ${resourceDomains}`.trim(),
-    `style-src 'self' 'unsafe-inline' blob: data: ${resourceDomains}`.trim(),
-    `img-src 'self' data: blob: ${resourceDomains}`.trim(),
-    `font-src 'self' data: blob: ${resourceDomains}`.trim(),
-    `connect-src 'self' ${connectDomains}`.trim(),
-    `worker-src 'self' blob: ${resourceDomains}`.trim(),
-    frameDomains ? `frame-src ${frameDomains}` : "frame-src 'none'",
-    "object-src 'none'",
-    baseUriDomains ? `base-uri ${baseUriDomains}` : "base-uri 'none'",
-  ];
-
-  return directives.join("; ");
-}
-
-/**
  * Read and prepare the sandbox proxy HTML at startup.
  * Returns null if the file is not found (non-fatal — sandbox route won't be registered).
  */
@@ -682,6 +726,78 @@ const loadSandboxHtml = (): string | null => {
 };
 
 const sandboxHtml = loadSandboxHtml();
+
+/**
+ * Load the ext-apps guest SDK bundle (the `App` client + its deps) so it can be
+ * served same-deployment under /_sandbox/. The Archestra Apps SDK imports it to
+ * connect to the host — apps never touch it directly. Resolved from
+ * node_modules at startup so it tracks the installed ext-apps version. Returns
+ * null (non-fatal) if it can't be read.
+ */
+const loadExtAppsSdk = (): string | null => {
+  try {
+    const sdkPath = createRequire(import.meta.url).resolve(
+      "@modelcontextprotocol/ext-apps/app-with-deps",
+    );
+    return readFileSync(sdkPath, "utf-8");
+  } catch (err) {
+    logger.warn(
+      { err },
+      "ext-apps guest SDK bundle not found — /_sandbox/ext-apps-app.js will not be registered",
+    );
+    return null;
+  }
+};
+
+const extAppsSdk = loadExtAppsSdk();
+
+/**
+ * Load the Archestra Apps SDK (the `window.archestra` microframework injected
+ * into owned apps — see services/apps/app-sdk-injection.ts) so it can be
+ * served same-deployment under /_sandbox/. Returns null (non-fatal) if it
+ * can't be read.
+ */
+const loadArchestraAppSdk = (): string | null => {
+  // co-located with the sandbox proxy HTML in the backend static dir
+  const sdkPath = path.join(
+    path.dirname(config.mcpSandbox.filePath),
+    "archestra-app-sdk.js",
+  );
+  try {
+    return readFileSync(sdkPath, "utf-8");
+  } catch (err) {
+    logger.warn(
+      { err, sdkPath },
+      "Archestra Apps SDK not found — /_sandbox/archestra-app-sdk.js will not be registered",
+    );
+    return null;
+  }
+};
+
+const archestraAppSdk = loadArchestraAppSdk();
+
+/**
+ * Load the platform baseline stylesheet injected into every owned app at serve
+ * time (see services/apps/app-sdk-injection.ts) so it can be served
+ * same-deployment under /_sandbox/. Returns null (non-fatal) if unreadable.
+ */
+const loadArchestraAppBaseCss = (): string | null => {
+  const cssPath = path.join(
+    path.dirname(config.mcpSandbox.filePath),
+    "archestra-app-base.css",
+  );
+  try {
+    return readFileSync(cssPath, "utf-8");
+  } catch (err) {
+    logger.warn(
+      { err, cssPath },
+      "Archestra app base stylesheet not found — /_sandbox/archestra-app-base.css will not be registered",
+    );
+    return null;
+  }
+};
+
+const archestraAppBaseCss = loadArchestraAppBaseCss();
 
 /**
  * Register the sandbox proxy route on the main Fastify instance.
@@ -735,6 +851,44 @@ const registerSandboxRoute = (
     void reply.type("text/html");
     return reply.send(sandboxHtml);
   });
+
+  // The ext-apps guest SDK, served same-deployment so app templates can import
+  // it (see loadExtAppsSdk). Module imports from an opaque-origin guest are
+  // cross-origin, so allow any origin — the bundle is a public, immutable asset.
+  if (extAppsSdk) {
+    fastify.get("/_sandbox/ext-apps-app.js", async (_request, reply) => {
+      void reply.header("Access-Control-Allow-Origin", "*");
+      // The URL is not content-hashed and the bundle tracks the installed
+      // ext-apps version, so cache briefly (not immutable) — an upgrade must
+      // reach clients without waiting out a year-long cache.
+      void reply.header("Cache-Control", "public, max-age=3600");
+      void reply.type("text/javascript");
+      return reply.send(extAppsSdk);
+    });
+  }
+
+  // The Archestra Apps SDK (window.archestra), loaded by the <script src>
+  // injected into every owned app at serve time. Same delivery posture as the
+  // ext-apps bundle above: public asset, brief cache so fixes roll out.
+  if (archestraAppSdk) {
+    fastify.get(APP_SDK_PATH, async (_request, reply) => {
+      void reply.header("Access-Control-Allow-Origin", "*");
+      void reply.header("Cache-Control", "public, max-age=3600");
+      void reply.type("text/javascript");
+      return reply.send(archestraAppSdk);
+    });
+  }
+
+  // The platform baseline stylesheet, loaded by the <link> injected into every
+  // owned app at serve time. Same delivery posture as the SDK above.
+  if (archestraAppBaseCss) {
+    fastify.get(APP_BASE_CSS_PATH, async (_request, reply) => {
+      void reply.header("Access-Control-Allow-Origin", "*");
+      void reply.header("Cache-Control", "public, max-age=3600");
+      void reply.type("text/css");
+      return reply.send(archestraAppBaseCss);
+    });
+  }
 };
 
 const startMcpServerRuntime = async (
@@ -792,6 +946,8 @@ const startWebServer = async () => {
       return true;
     // token is embedded in the URL path; never log it
     if (url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`)) return true;
+    // one-time setup token is embedded in the URL path; never log it
+    if (url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) return true;
     return false;
   };
 
@@ -878,6 +1034,10 @@ const startWebServer = async () => {
     // Start cache manager's background cleanup interval
     cacheManager.start();
 
+    // Start the enterprise tier service so it has a fresh user count
+    // before the first request hits a license-gated route.
+    await enterpriseTier.start();
+
     // Initialize metrics with keys of custom agent labels
     // Set OpenMetrics content type to enable exemplar support on histograms
     const promClient = await import("prom-client");
@@ -899,18 +1059,30 @@ const startWebServer = async () => {
       `Observability initialized with ${labelKeys.length} agent label keys`,
     );
 
+    instanceAnalyticsService.trackStartup().catch((error) => {
+      logger.warn({ err: error }, "Failed to track instance analytics");
+    });
+
+    posthogErrorTrackingService.init().catch((error) => {
+      logger.warn(
+        { err: error },
+        "Failed to initialize PostHog error tracking",
+      );
+    });
+
     startMcpServerRuntime(fastify);
 
     // Start the sandboxed code runtime in the background (non-blocking pre-warm).
-    codeRuntimeService.init().catch((error) => {
-      logger.error({ err: error }, "Failed to initialize code runtime");
-    });
     skillSandboxRuntimeService.init().catch((error) => {
       logger.error(
         { err: error },
         "Failed to initialize skill sandbox runtime",
       );
     });
+
+    // Eagerly provision a per-environment Dagger engine + egress policy for every
+    // environment, so environment-bound agents don't route to a non-existent pod.
+    void daggerEnvironmentRuntimeManager.reconcileAll();
 
     // Initialize incoming email provider (if configured)
     // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set
@@ -919,6 +1091,10 @@ const startWebServer = async () => {
     // Initialize chatops providers (MS Teams, Slack, etc.)
     // Seeds DB from env vars on first run, then loads config from DB.
     await chatOpsManager.initialize();
+
+    // Bring up the ngrok tunnel (if ARCHESTRA_NGROK_AUTH_TOKEN is set) so the
+    // instance is reachable from the Internet for inbound chatops webhooks.
+    await ngrokTunnelManager.initialize();
 
     // Start task queue worker for knowledge base connector syncs and embeddings
     // In "web" mode, a separate worker Deployment handles background jobs
@@ -948,6 +1124,14 @@ const startWebServer = async () => {
       });
     }, PROCESSED_EMAIL_CLEANUP_INTERVAL_MS);
 
+    // Safety net for chat runs orphaned 'running' by a hard kill that skipped
+    // graceful shutdown. Registered only on the web server (workers never create
+    // chat runs); every web replica runs it, which is safe because the underlying
+    // UPDATE is filtered on status='running' and is idempotent across pods.
+    const activeChatRunReaperIntervalId = setInterval(() => {
+      void activeChatRunService.reapStaleRuns();
+    }, ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS);
+
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
      * inside of this server instance. Metrics are actually exposed on a different port
@@ -955,8 +1139,19 @@ const startWebServer = async () => {
      */
     await registerMetricsPlugin(fastify, false);
 
-    // Register CORS plugin to allow cross-origin requests
-    await fastify.register(fastifyCors, {
+    // Register CORS plugin to allow cross-origin requests. The policy is
+    // resolved per request:
+    //   - the browser-facing OAuth `authorize` endpoint gets CORS disabled
+    //     (no Access-Control-Allow-Origin): it is only ever a top-level
+    //     navigation carrying the session cookie, so the browser blocks any
+    //     cross-origin fetch while navigation still works — and it needs no
+    //     configured-origin allow-list. See isOAuthAuthorizePath.
+    //   - the public OAuth authorization-server endpoints get a permissive,
+    //     credential-less policy (reflect any origin) so browser-based MCP
+    //     clients on arbitrary origins can complete the OAuth handshake.
+    //   - every other route keeps the restricted, credentialed policy bound to
+    //     the configured origins. See isPublicOAuthCorsPath for the rationale.
+    const restrictedCorsOptions: FastifyCorsOptions = {
       origin: corsOrigins,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: [
@@ -967,7 +1162,28 @@ const startWebServer = async () => {
       ],
       exposedHeaders: ["Set-Cookie"],
       credentials: true,
-    });
+    };
+    const publicOAuthCorsOptions: FastifyCorsOptions = {
+      origin: true,
+      methods: ["GET", "POST", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+      credentials: false,
+    };
+    // `origin: false` makes @fastify/cors emit no Access-Control-Allow-Origin,
+    // which disables CORS for the route: cross-origin fetches are blocked by the
+    // browser, while top-level navigation (how `authorize` is actually reached)
+    // is unaffected.
+    const authorizeDisabledCorsOptions: FastifyCorsOptions = {
+      origin: false,
+    };
+    await fastify.register(
+      fastifyCors,
+      createOAuthAwareCorsDelegate({
+        restricted: restrictedCorsOptions,
+        publicOAuth: publicOAuthCorsOptions,
+        authorizeDisabled: authorizeDisabledCorsOptions,
+      }),
+    );
 
     logger.info(
       {
@@ -1016,6 +1232,7 @@ const startWebServer = async () => {
     registerWebServerShutdown(fastify, {
       emailRenewalIntervalId,
       processedEmailCleanupIntervalId,
+      activeChatRunReaperIntervalId,
     });
   } catch (err) {
     fastify.log.error(err);
@@ -1047,12 +1264,33 @@ function registerWebServerShutdown(
   intervalIds: {
     emailRenewalIntervalId?: NodeJS.Timeout;
     processedEmailCleanupIntervalId?: NodeJS.Timeout;
+    activeChatRunReaperIntervalId?: NodeJS.Timeout;
   } = {},
 ): void {
   const gracefulShutdown = async (signal: string) => {
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
 
+    // Stop accepting new runs before snapshotting, so nothing created after this
+    // point escapes the cleanup below.
+    activeChatRunService.beginShutdown();
+
+    // Fail this pod's in-flight chat runs first: a long SSE stream keeps Fastify
+    // connections open, so waiting for fastify.close() risks SIGKILL before the
+    // runs are freed, leaving their conversations blocked until the reaper runs.
+    // This is a single fast UPDATE, bounded so a slow DB cannot stall shutdown.
+    await Promise.race([
+      activeChatRunService.failInFlightRuns().catch((error) => {
+        fastify.log.error({ error }, "Failed to fail in-flight chat runs");
+      }),
+      new Promise<void>((resolve) =>
+        setTimeout(resolve, SHUTDOWN_CLEANUP_TIMEOUT_MS),
+      ),
+    ]);
+
     try {
+      if (intervalIds.activeChatRunReaperIntervalId) {
+        clearInterval(intervalIds.activeChatRunReaperIntervalId);
+      }
       if (metricsServerInstance) {
         await metricsServerInstance.close();
         fastify.log.info("Metrics server closed");
@@ -1072,15 +1310,19 @@ function registerWebServerShutdown(
 
       cacheManager.shutdown();
 
-      // Stop accepting new code-runtime / skill-sandbox runs
-      await codeRuntimeService.shutdown();
+      // Flush any buffered exceptions before exit (internally time-bounded).
+      await posthogErrorTrackingService.shutdown();
+
+      // Stop accepting new skill-sandbox runs
       await skillSandboxRuntimeService.shutdown();
 
       if (shouldRunWorker) {
         await taskQueueService.stopWorker();
       }
 
-      const completedCleanups = new Set<"emailProvider" | "chatOps">();
+      const completedCleanups = new Set<
+        "emailProvider" | "chatOps" | "ngrok"
+      >();
       const cleanupPromise = Promise.allSettled([
         cleanupEmailProvider().then(() => {
           completedCleanups.add("emailProvider");
@@ -1090,9 +1332,13 @@ function registerWebServerShutdown(
           completedCleanups.add("chatOps");
           fastify.log.info("ChatOps provider cleanup completed");
         }),
+        ngrokTunnelManager.cleanup().then(() => {
+          completedCleanups.add("ngrok");
+          fastify.log.info("ngrok tunnel cleanup completed");
+        }),
       ]).then(() => "completed" as const);
 
-      const allCleanupNames = ["emailProvider", "chatOps"] as const;
+      const allCleanupNames = ["emailProvider", "chatOps", "ngrok"] as const;
       const result = await Promise.race([
         cleanupPromise,
         new Promise<"timeout">((resolve) =>
@@ -1132,11 +1378,12 @@ const startWorker = async () => {
   try {
     await initializeDatabase();
     cacheManager.start();
+    await enterpriseTier.start();
 
     // Sync Archestra MCP branding so the worker recognises branded tool names
     // (e.g. "archestra_staging__artifact_write") when executing scheduled tasks.
     // Without this, isToolName() only matches the default "archestra__" prefix
-    // and builtin tools fall through to mcpClient.executeToolCall() which fails
+    // and builtin tools fall through to mcpClient.executeToolCallForOwner() which fails
     // because they have credentialResolutionMode "static" with no mcpServerId.
     const organization = await OrganizationModel.getFirst();
     archestraMcpBranding.syncFromOrganization(organization);
@@ -1157,16 +1404,23 @@ const startWorker = async () => {
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();
 
-    // Pre-warm the code runtime so scheduled agents avoid a cold first run.
-    codeRuntimeService.init().catch((error) => {
-      logger.error({ err: error }, "Failed to initialize code runtime");
+    posthogErrorTrackingService.init().catch((error) => {
+      logger.warn(
+        { err: error },
+        "Failed to initialize PostHog error tracking",
+      );
     });
+
+    // Pre-warm the code runtime so scheduled agents avoid a cold first run.
     skillSandboxRuntimeService.init().catch((error) => {
       logger.error(
         { err: error },
         "Failed to initialize skill sandbox runtime",
       );
     });
+
+    // Eagerly provision per-environment Dagger engines + egress policies.
+    void daggerEnvironmentRuntimeManager.reconcileAll();
 
     // Worker server for Kubernetes probes, Prometheus scraping,
     // and LLM Proxy / MCP Gateway routes for A2A and scheduled task execution.
@@ -1218,7 +1472,7 @@ const startWorker = async () => {
       try {
         await healthServer.close();
         cacheManager.shutdown();
-        await codeRuntimeService.shutdown();
+        await posthogErrorTrackingService.shutdown();
         await skillSandboxRuntimeService.shutdown();
         await taskQueueService.stopWorker();
         clearTimeout(forceExitTimeout);
@@ -1243,6 +1497,10 @@ const startWorker = async () => {
 // This handler logs those leaks and keeps the server alive.
 process.on("unhandledRejection", (reason) => {
   logger.error({ err: reason }, "Unhandled promise rejection");
+  posthogErrorTrackingService.captureException({
+    error: reason,
+    properties: { error_type: "unhandled_rejection" },
+  });
 });
 
 /**

@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 type LlmProviderApiKey =
   archestraApiTypes.GetLlmProviderApiKeysResponses["200"][number];
@@ -44,6 +44,7 @@ export function makeVirtualKey(
     id: "test-virtual-key",
     organizationId: "test-org",
     name: "test-virtual-key",
+    keyType: "standard",
     secretId: "test-vk-secret",
     tokenStart: "archestra_test",
     scope: "personal",

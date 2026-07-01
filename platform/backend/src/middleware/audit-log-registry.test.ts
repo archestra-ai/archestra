@@ -38,6 +38,14 @@ describe("resolveAuditableRouteConfig", () => {
     expect(typeof resolved?.cfg.fetchById).toBe("function");
   });
 
+  test("skill reset route uses updated action instead of POST create fallback", () => {
+    const resolved = resolveAuditableRouteConfig("/api/skills/:id/reset");
+    expect(resolved?.viaWalkUp).toBe(false);
+    expect(resolved?.cfg.resourceType).toBe("skill");
+    expect(resolved?.cfg.action).toBe("skill.updated");
+    expect(typeof resolved?.cfg.fetchById).toBe("function");
+  });
+
   test("walk-up match returns viaWalkUp=true with the parent config", () => {
     // /api/mcp_server/:id/some-subroute is not registered; walks up to /api/mcp_server/:id
     const resolved = resolveAuditableRouteConfig(

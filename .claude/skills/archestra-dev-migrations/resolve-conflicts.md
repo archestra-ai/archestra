@@ -1,8 +1,9 @@
 # Resolving Drizzle migration merge conflicts
 
 When main has landed migrations that collide with your branch's migration
-number, you must renumber YOUR migration to come AFTER main's. Never edit
-main's migrations.
+number, drop YOUR generated migration artifacts and regenerate the migration
+after taking main's migration metadata. Never edit main's migrations, and do
+not hand-renumber a migration unless regeneration is impossible.
 
 `pnpm db:generate` emits ONLY schema DDL diffed against the latest snapshot.
 Any data-migration tail (UPDATE, INSERT, DO $$ blocks, mutating CTEs) is NOT
@@ -89,14 +90,18 @@ resolving with `git checkout --ours` or `--theirs` just-enough-to-parse is
 fine; for hand-written code, resolve properly. Run `git status` and check
 for any `UU` entries; resolve each before continuing.
 
-### 3. Delete your old SQL file
+### 3. Delete your old generated migration artifacts
 
 ```
-git rm -f platform/backend/src/database/migrations/<COLLIDING>_<your_name>.sql
+git rm -f \
+  platform/backend/src/database/migrations/<COLLIDING>_<your_name>.sql \
+  platform/backend/src/database/migrations/meta/<COLLIDING>_snapshot.json
 ```
 
-(The file is staged from the in-progress rebase/merge; plain `git rm`
-refuses to remove staged files, so `-f` is needed.)
+The files are often staged from the in-progress rebase/merge; plain `git rm`
+can refuse to remove staged files, so `-f` is needed. If your branch's
+journal entry still exists in `_journal.json`, remove that entry before
+regenerating. The journal should end at main's latest migration at this point.
 
 ### 4. Regenerate the migration with your descriptive name
 
@@ -108,7 +113,8 @@ Drizzle picks the next free `<NEW>`, emits `<NEW>_<your_name>.sql` with
 schema-only DDL diffed against main's snapshot, writes
 `meta/<NEW>_snapshot.json`, and appends a journal entry tagged
 `<NEW>_<your_name>`. The `--name=` flag means the filename and tag are
-right the first time — no journal-tag rename needed.
+right the first time — no journal-tag rename needed. Let Drizzle create the
+journal timestamp; do not copy the old timestamp from your collided migration.
 
 If Drizzle reports "No schema changes, nothing to migrate", your branch was
 pure-data; generate a custom empty migration instead:
@@ -136,7 +142,18 @@ Schema DDL must run before the data migration so column references resolve.
 cd platform/backend && pnpm exec drizzle-kit check
 ```
 
-Must print **"Everything's fine"**. If it reports drift, compare
+Must print **"Everything's fine"**. Then run the same journal ordering check
+that CI runs:
+
+```
+cd platform/backend && pnpm check:migrations
+```
+
+This must print **"Drizzle migration journal ordering is valid."** If it
+fails, your regenerated migration was not appended after main's latest
+migration, or its journal timestamp was copied/edited incorrectly.
+
+If `drizzle-kit check` reports drift, compare
 `/tmp/<COLLIDING>_<your_name>.original.sql` against the regenerated SQL and
 either (a) restore a missed data-migration statement to the tail, or
 (b) update your schema files so the regenerated DDL matches what your

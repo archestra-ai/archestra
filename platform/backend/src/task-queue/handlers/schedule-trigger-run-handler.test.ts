@@ -36,10 +36,36 @@ vi.mock("@/auth", () => ({
 }));
 
 const mockExecuteA2AMessage = vi.hoisted(() =>
-  vi.fn().mockResolvedValue({ messageId: "msg-1", text: "done" }),
+  vi.fn().mockResolvedValue({
+    messageId: "msg-1",
+    text: "done",
+    finishReason: "stop",
+    responseUiMessage: {
+      id: "asst-1",
+      role: "assistant",
+      parts: [{ type: "text", text: "done" }],
+    },
+  }),
 );
 vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: mockExecuteA2AMessage,
+}));
+
+const mockCreateAndLinkRunConversation = vi.hoisted(() => vi.fn());
+const mockPersistRunConversationMessages = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(undefined),
+);
+const mockRecordRunConversationError = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(undefined),
+);
+const mockPersistRunUserMessage = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(undefined),
+);
+vi.mock("@/services/scheduled-run-conversation", () => ({
+  createAndLinkRunConversation: mockCreateAndLinkRunConversation,
+  persistRunConversationMessages: mockPersistRunConversationMessages,
+  persistRunUserMessage: mockPersistRunUserMessage,
+  recordRunConversationError: mockRecordRunConversationError,
 }));
 
 vi.mock("@/logging", () => ({
@@ -107,9 +133,22 @@ describe("handleScheduleTriggerRunExecution", () => {
     mockAgentFindById.mockResolvedValue(null);
     mockUserHasAgentAccess.mockResolvedValue(true);
     mockHasAnyAgentTypeAdminPermission.mockResolvedValue({ success: false });
+    mockCreateAndLinkRunConversation.mockReset();
+    mockPersistRunConversationMessages.mockReset();
+    mockPersistRunConversationMessages.mockResolvedValue(undefined);
+    mockRecordRunConversationError.mockReset();
+    mockRecordRunConversationError.mockResolvedValue(undefined);
+    mockPersistRunUserMessage.mockReset();
+    mockPersistRunUserMessage.mockResolvedValue(undefined);
     mockExecuteA2AMessage.mockResolvedValue({
       messageId: "msg-1",
       text: "done",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: "asst-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "done" }],
+      },
     });
   });
 
@@ -232,5 +271,135 @@ describe("handleScheduleTriggerRunExecution", () => {
     await expect(
       handleScheduleTriggerRunExecution({ triggerId: "trigger-1" }),
     ).rejects.toThrow("Missing runId");
+  });
+
+  test("persists the run transcript from the executor result on a successful project-scoped run", async () => {
+    mockRunFindById.mockResolvedValue(makeRun());
+    mockTriggerFindById.mockResolvedValue(
+      makeTrigger({ projectId: "project-1" }),
+    );
+    mockUserGetById.mockResolvedValue(makeUser());
+    mockAgentFindById.mockResolvedValue(makeAgent());
+    mockUserHasAgentAccess.mockResolvedValue(true);
+    mockCreateAndLinkRunConversation.mockResolvedValue({
+      id: "conv-1",
+      userId: "user-1",
+    });
+
+    await handleScheduleTriggerRunExecution({
+      runId: "run-1",
+      triggerId: "trigger-1",
+    });
+
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: "conv-1" }),
+    );
+    expect(mockRunMarkCompleted).toHaveBeenCalledWith({
+      runId: "run-1",
+      status: "success",
+      error: null,
+    });
+    // Transcript comes from the executor's in-memory result — the user prompt and
+    // the complete assistant turn — not reconstructed from interactions.
+    expect(mockPersistRunConversationMessages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversation: expect.objectContaining({ id: "conv-1" }),
+        userText: "Run the task",
+        assistantMessage: expect.objectContaining({
+          role: "assistant",
+          parts: [{ type: "text", text: "done" }],
+        }),
+      }),
+    );
+  });
+
+  test("does not persist messages for an unscoped run", async () => {
+    mockRunFindById.mockResolvedValue(makeRun());
+    mockTriggerFindById.mockResolvedValue(makeTrigger());
+    mockUserGetById.mockResolvedValue(makeUser());
+    mockAgentFindById.mockResolvedValue(makeAgent());
+    mockUserHasAgentAccess.mockResolvedValue(true);
+
+    await handleScheduleTriggerRunExecution({
+      runId: "run-1",
+      triggerId: "trigger-1",
+    });
+
+    expect(mockCreateAndLinkRunConversation).not.toHaveBeenCalled();
+    expect(mockPersistRunConversationMessages).not.toHaveBeenCalled();
+  });
+
+  test("does not persist messages when a project-scoped run fails", async () => {
+    mockRunFindById.mockResolvedValue(makeRun());
+    mockTriggerFindById.mockResolvedValue(
+      makeTrigger({ projectId: "project-1" }),
+    );
+    mockUserGetById.mockResolvedValue(makeUser());
+    mockAgentFindById.mockResolvedValue(makeAgent());
+    mockUserHasAgentAccess.mockResolvedValue(true);
+    mockCreateAndLinkRunConversation.mockResolvedValue({
+      id: "conv-1",
+      userId: "user-1",
+    });
+    mockExecuteA2AMessage.mockRejectedValue(new Error("LLM provider down"));
+
+    await handleScheduleTriggerRunExecution({
+      runId: "run-1",
+      triggerId: "trigger-1",
+    });
+
+    expect(mockRunMarkCompleted).toHaveBeenCalledWith({
+      runId: "run-1",
+      status: "failed",
+      error: "LLM provider down",
+    });
+    expect(mockPersistRunConversationMessages).not.toHaveBeenCalled();
+    // The failed run keeps its conversation: the scheduled prompt is persisted as
+    // the user message (so the chat carries it and "Try again" can resend it)...
+    expect(mockPersistRunUserMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversation: expect.objectContaining({ id: "conv-1" }),
+        userText: "Run the task",
+      }),
+    );
+    // ...and the error is recorded as a chat error so the run's chat shows an
+    // inline error card. A plain Error (not a ProviderError) becomes the generic
+    // fallback card carrying the message.
+    expect(mockRecordRunConversationError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: "conv-1",
+        error: expect.objectContaining({ message: "LLM provider down" }),
+      }),
+    );
+  });
+
+  test("a persist failure does not fail the run", async () => {
+    mockRunFindById.mockResolvedValue(makeRun());
+    mockTriggerFindById.mockResolvedValue(
+      makeTrigger({ projectId: "project-1" }),
+    );
+    mockUserGetById.mockResolvedValue(makeUser());
+    mockAgentFindById.mockResolvedValue(makeAgent());
+    mockUserHasAgentAccess.mockResolvedValue(true);
+    mockCreateAndLinkRunConversation.mockResolvedValue({
+      id: "conv-1",
+      userId: "user-1",
+    });
+    mockPersistRunConversationMessages.mockRejectedValue(
+      new Error("persist blew up"),
+    );
+
+    await expect(
+      handleScheduleTriggerRunExecution({
+        runId: "run-1",
+        triggerId: "trigger-1",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(mockRunMarkCompleted).toHaveBeenCalledWith({
+      runId: "run-1",
+      status: "success",
+      error: null,
+    });
   });
 });

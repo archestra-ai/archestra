@@ -2,7 +2,7 @@ import {
   getArchestraToolFullName,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_WHOAMI_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import type { PolicyEvaluationContext } from "./tool-invocation-policy";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";

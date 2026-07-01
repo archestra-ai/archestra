@@ -1,4 +1,4 @@
-import type { AnyRoleName } from "@shared";
+import type { AnyRoleName } from "@archestra/shared";
 import { and, count, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";

@@ -1,6 +1,13 @@
 "use client";
 
 import {
+  getChatItemGeneratingIndicatorTestId,
+  getChatItemUnreadIndicatorTestId,
+} from "@archestra/shared";
+import {
+  Folder,
+  FolderPlus,
+  Loader2,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -10,7 +17,11 @@ import {
   UsersRound,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
+import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
+import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
+import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
@@ -22,7 +33,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
   SidebarMenuButton,
+  SidebarMenuItem,
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
@@ -49,10 +65,32 @@ import {
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
+import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
+import { useFeature } from "@/lib/config/config.query";
+import type { Once } from "@/lib/hooks/use-once";
+import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
+import { usePinProject, useProjects } from "@/lib/projects/projects.query";
 import { cn } from "@/lib/utils";
 
-const SIDEBAR_CHAT_SLOTS = 3;
+const DEFAULT_SIDEBAR_CHAT_SLOTS = 3;
 const MAX_TITLE_LENGTH = 100;
+
+function ChatListFadeIn({
+  fadeIn,
+  children,
+}: {
+  fadeIn: Once;
+  children: ReactNode;
+}) {
+  // Capture once so regular re-renders don't drop the class mid-animation.
+  const [className] = useState(() =>
+    fadeIn.pending() ? "animate-in fade-in-0 duration-300" : "",
+  );
+
+  useEffect(() => fadeIn.done(), [fadeIn.done]);
+
+  return <div className={className}>{children}</div>;
+}
 
 function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
   return (
@@ -63,7 +101,18 @@ function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
   );
 }
 
-export function ChatSidebarSection() {
+export function ChatSidebarSection({
+  slots = DEFAULT_SIDEBAR_CHAT_SLOTS,
+  flat = false,
+  fadeIn,
+}: {
+  /** How many chats to show before the "More" affordance. */
+  slots?: number;
+  /** Render without the sub-menu indentation (used by the Chats tab). */
+  flat?: boolean;
+  /** One-shot latch so the list fades in only the first time it's shown this session. */
+  fadeIn: Once;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const isAuthenticated = useIsAuthenticated();
@@ -90,9 +139,17 @@ export function ChatSidebarSection() {
   const { data: canDeleteConversation } = useHasPermissions({
     chat: ["delete"],
   });
+  const { data: canCreateProject } = useHasPermissions({
+    project: ["create"],
+  });
+  const [createProjectConv, setCreateProjectConv] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
 
-  // Conversations whose title should play the typing animation (shared via chat context)
-  const { animatingTitleIds, markTitleAnimating } = useGlobalChat();
+  // Conversations whose title should play the typing animation (shared via chat
+  // context); getSession drives the live "generating" spinner.
+  const { animatingTitleIds, markTitleAnimating, getSession } = useGlobalChat();
 
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -100,12 +157,20 @@ export function ChatSidebarSection() {
     ? (pathname.split("/").at(-1) ?? null)
     : null;
 
-  const pinnedChats = conversations
-    .filter((c) => c.pinnedAt)
-    .slice(0, SIDEBAR_CHAT_SLOTS);
-  const recentUnpinnedChats = conversations
-    .filter((c) => !c.pinnedAt)
-    .slice(0, Math.max(0, SIDEBAR_CHAT_SLOTS - pinnedChats.length));
+  const recentUnpinnedChats = conversations.filter(
+    (c) => !c.pinnedAt && !isScheduledRunConversation(c),
+  );
+
+  const projectsEnabled = useFeature("projectsEnabled") === true;
+  const { data: projectsData } = useProjects({ enabled: projectsEnabled });
+  const pinProjectMutation = usePinProject();
+  const pinnedProjects = projectsEnabled
+    ? (projectsData ?? []).filter((p) => p.pinnedAt)
+    : [];
+  const pinnedItems = buildPinnedSidebarItems({
+    chats: conversations.filter((c) => !isScheduledRunConversation(c)),
+    projects: pinnedProjects,
+  });
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -183,6 +248,17 @@ export function ChatSidebarSection() {
     pinConversationMutation.mutate({ id, pinned: !isPinned });
   };
 
+  const handleSelectProject = (id: string) => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    router.push(`/projects/${id}`);
+  };
+
+  const handleUnpinProject = (id: string) => {
+    pinProjectMutation.mutate({ id, pinned: false });
+  };
+
   const openConversationSearch = () => {
     window.dispatchEvent(
       new CustomEvent("open-conversation-search", {
@@ -191,11 +267,16 @@ export function ChatSidebarSection() {
     );
   };
 
-  const renderConversationItem = (
-    conv: (typeof conversations)[number],
-    showPinIcon = false,
-  ) => {
+  const renderConversationItem = (conv: (typeof conversations)[number]) => {
     const isCurrentConversation = currentConversationId === conv.id;
+    const sessionStatus = getSession(conv.id)?.status;
+    const isGenerating =
+      sessionStatus === "submitted" || sessionStatus === "streaming";
+    // `unread` is server-derived (lastMessageAt > lastReadAt). Suppressed on the
+    // chat you're viewing (its read marker is being updated) and while it is
+    // actively generating (the spinner wins).
+    const isUnread =
+      !isGenerating && !isCurrentConversation && conv.unread === true;
     const displayTitle = getConversationDisplayTitle(conv.title, conv.messages);
     const hasRecentlyGeneratedTitle = animatingTitleIds.has(conv.id);
     const isRegenerating =
@@ -203,6 +284,11 @@ export function ChatSidebarSection() {
       generateTitleMutation.variables?.id === conv.id;
     const isMenuOpen = openMenuId === conv.id;
     const isPinned = !!conv.pinnedAt;
+    const showCreateProject = canCreateProjectFromChat({
+      projectsEnabled,
+      hasCreatePermission: canCreateProject === true,
+      conversation: conv,
+    });
 
     return (
       <SidebarMenuSubItem key={conv.id}>
@@ -260,9 +346,6 @@ export function ChatSidebarSection() {
               className="cursor-pointer flex-1 justify-between"
             >
               <span className="flex items-center gap-2 min-w-0 flex-1">
-                {showPinIcon && (
-                  <Pin className="h-3 w-3 shrink-0 text-muted-foreground" />
-                )}
                 {conv.share && (
                   <TooltipProvider>
                     <Tooltip>
@@ -304,7 +387,37 @@ export function ChatSidebarSection() {
                   />
                 )}
               </span>
-              {(canUpdateConversation || canDeleteConversation) && (
+              {isGenerating ? (
+                <Loader2
+                  aria-label="Generating"
+                  data-testid={getChatItemGeneratingIndicatorTestId(conv.id)}
+                  className="ml-1 h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground"
+                />
+              ) : isUnread ? (
+                <span
+                  role="img"
+                  aria-label="New messages"
+                  data-testid={getChatItemUnreadIndicatorTestId(conv.id)}
+                  className="ml-1 h-2 w-2 shrink-0 rounded-full bg-primary"
+                />
+              ) : null}
+              {conv.projectName && (
+                <span className="ml-1 flex max-w-24 shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                  {conv.projectIcon ? (
+                    <AgentIcon
+                      icon={conv.projectIcon}
+                      fallbackType="project"
+                      size={10}
+                    />
+                  ) : (
+                    <Folder className="h-2.5 w-2.5 shrink-0" />
+                  )}
+                  <span className="truncate">{conv.projectName}</span>
+                </span>
+              )}
+              {(canUpdateConversation ||
+                canDeleteConversation ||
+                showCreateProject) && (
                 <DropdownMenu
                   open={isMenuOpen}
                   onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
@@ -361,6 +474,21 @@ export function ChatSidebarSection() {
                         </DropdownMenuItem>
                       </>
                     )}
+                    {showCreateProject && (
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuId(null);
+                          setCreateProjectConv({
+                            id: conv.id,
+                            title: displayTitle,
+                          });
+                        }}
+                      >
+                        <FolderPlus className="h-4 w-4 mr-2" />
+                        Create project
+                      </DropdownMenuItem>
+                    )}
                     {canDeleteConversation && (
                       <DropdownMenuItem
                         onClick={(e) => {
@@ -383,41 +511,129 @@ export function ChatSidebarSection() {
     );
   };
 
-  if (!isLoading && conversations.length === 0) {
+  const renderProjectItem = (project: (typeof pinnedProjects)[number]) => {
+    const isActive = pathname === `/projects/${project.id}`;
+    const menuKey = `project:${project.id}`;
+    const isMenuOpen = openMenuId === menuKey;
+
+    return (
+      <SidebarMenuSubItem key={menuKey}>
+        <div className="flex items-center justify-between w-full gap-1">
+          <SidebarMenuButton
+            onClick={() => handleSelectProject(project.id)}
+            isActive={isActive}
+            className="cursor-pointer flex-1 justify-between"
+          >
+            <span className="flex items-center gap-2 min-w-0 flex-1">
+              {project.icon ? (
+                <AgentIcon
+                  icon={project.icon}
+                  fallbackType="project"
+                  size={14}
+                />
+              ) : (
+                <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              )}
+              <TruncatedText
+                message={project.name}
+                maxLength={MAX_TITLE_LENGTH}
+                className="truncate"
+                showTooltip={false}
+              />
+            </span>
+            <DropdownMenu
+              open={isMenuOpen}
+              onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
+            >
+              <DropdownMenuTrigger asChild>
+                <MoreHorizontal
+                  className={cn(
+                    "h-4 w-4 p-0 shrink-0 transition-opacity",
+                    isMenuOpen
+                      ? "opacity-100"
+                      : "opacity-0 group-hover/menu-sub-item:opacity-100",
+                  )}
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="right">
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleUnpinProject(project.id);
+                  }}
+                >
+                  <PinOff className="h-4 w-4 mr-2" />
+                  Unpin
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuButton>
+        </div>
+      </SidebarMenuSubItem>
+    );
+  };
+
+  if (!isLoading && conversations.length === 0 && pinnedProjects.length === 0) {
     return null;
   }
 
+  const subClass = flat ? "mx-0 border-l-0 px-0" : "mx-0 ml-3.5 px-0 pl-2.5";
+  const showMore = recentUnpinnedChats.length > slots;
+
   return (
     <>
-      <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
-        {isLoading ? (
-          <SidebarMenuSubItem>
-            <div className="flex items-center gap-2 px-2 py-1.5">
-              <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
-              <span className="text-xs text-muted-foreground">
-                Loading chats...
-              </span>
-            </div>
-          </SidebarMenuSubItem>
-        ) : (
-          <>
-            {pinnedChats.map((conv) => renderConversationItem(conv, true))}
-            {recentUnpinnedChats.map((conv) => renderConversationItem(conv))}
-            {conversations.length >
-              pinnedChats.length + recentUnpinnedChats.length && (
-              <SidebarMenuSubItem>
-                <SidebarMenuSubButton
-                  className="cursor-pointer text-sidebar-foreground/70"
-                  onClick={openConversationSearch}
-                >
-                  <MoreHorizontal />
-                  <span>More</span>
-                </SidebarMenuSubButton>
-              </SidebarMenuSubItem>
-            )}
-          </>
-        )}
-      </SidebarMenuSub>
+      {isLoading ? (
+        <ChatListSkeleton subClass={subClass} />
+      ) : (
+        <ChatListFadeIn fadeIn={fadeIn}>
+          {pinnedItems.length > 0 && (
+            <SidebarGroup className="pt-0">
+              <SidebarGroupLabel>Pinned</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuSub className={subClass}>
+                      {pinnedItems.map((it) =>
+                        it.type === "chat"
+                          ? renderConversationItem(it.item)
+                          : renderProjectItem(it.item),
+                      )}
+                    </SidebarMenuSub>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+
+          {recentUnpinnedChats.length > 0 && (
+            <SidebarGroup className="pt-0">
+              <SidebarGroupLabel>Recents</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuSub className={subClass}>
+                      {recentUnpinnedChats
+                        .slice(0, slots)
+                        .map((conv) => renderConversationItem(conv))}
+                      {showMore && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            className="cursor-pointer text-sidebar-foreground/70"
+                            onClick={openConversationSearch}
+                          >
+                            <MoreHorizontal />
+                            <span>More</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      )}
+                    </SidebarMenuSub>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+        </ChatListFadeIn>
+      )}
 
       <DeleteConfirmDialog
         open={deleteConfirmId !== null}
@@ -433,6 +649,13 @@ export function ChatSidebarSection() {
         }}
         confirmLabel="Delete"
         pendingLabel="Deleting..."
+      />
+
+      <CreateProjectFromChatDialog
+        conversationId={createProjectConv?.id ?? null}
+        defaultName={createProjectConv?.title ?? ""}
+        open={createProjectConv !== null}
+        onOpenChange={(open) => !open && setCreateProjectConv(null)}
       />
     </>
   );

@@ -91,7 +91,7 @@ Tool call policies control whether a tool may run in the current context.
 Available actions:
 
 - **Allow always**: The tool can run even when the current context is marked sensitive or untrusted.
-- **Allow in safe context**: The tool can run only while the current context is still safe.
+- **Block in sensitive context**: The tool is blocked when the current context is sensitive. The context becomes sensitive once a tool with a "Results are: Sensitive" policy has been called previously.
 - **Require approval**: The tool requires explicit user approval in chat. In autonomous execution contexts, the call is blocked.
 - **Block always**: The tool is never allowed to run automatically.
 
@@ -127,6 +127,12 @@ This lets the same agent behave normally in safe contexts and become more restri
 Policies can also be scoped to specific agents. For example, you might allow an internal support agent to use `send_email` for `@mycompany.com` recipients while keeping the same tool blocked for a broader research agent.
 
 Subagent "delegation" does not reset that trust state. If a parent agent delegates to a subagent after the conversation has already become sensitive, the subagent inherits that unsafe context and the same tool call restrictions continue to apply.
+
+### Load Tools When Needed
+
+When an agent or MCP Gateway uses [Load tools when needed](/docs/platform-agents#load-tools-when-needed), the initial MCP `tools/list` only includes `search_tools` and `run_tool`.
+
+Tool call policies are still evaluated against the tool that actually runs. If `run_tool` is asked to execute `send_email`, Archestra evaluates the `send_email` policies with the submitted `tool_args`, current trust state, and policy context. Input conditions, team conditions, untrusted-context rules, and approval-required rules work the same way as a direct `send_email` tool call.
 
 ## Policy Configuration Agent
 

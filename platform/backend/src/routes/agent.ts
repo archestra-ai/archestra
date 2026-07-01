@@ -2,17 +2,17 @@ import {
   type AgentType,
   createPaginatedResponseSchema,
   isModelSelectionComplete,
-  LABELS_ENTRY_DELIMITER,
-  LABELS_VALUE_DELIMITER,
   PaginationQuerySchema,
+  parseLabelsParam,
   RouteId,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
   requireAgentModifyPermission,
+  userHasPermission,
 } from "@/auth";
 import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
@@ -27,6 +27,7 @@ import {
 import { initializeObservabilityMetrics } from "@/observability";
 import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
   AgentExportPayloadSchema,
   type AgentScope,
@@ -349,7 +350,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       return reply.send(
-        await AgentModel.getLLMProxyOrCreateDefault(request.organizationId),
+        await AgentModel.ensurePersonalLlmProxy({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+        }),
       );
     },
   );
@@ -502,6 +506,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "An agent's model and API key must be set together",
         );
       }
+
+      // Always assert on create: a null/omitted environment still lands on the
+      // org default, which may itself be restricted (mirrors the MCP-catalog path).
+      await assertEnvironmentAssignable({
+        userId: user.id,
+        organizationId,
+        environmentId: body.environmentId ?? null,
+      });
 
       // Omit teams if scope is not 'team' — scope takes precedence
       const createData = {
@@ -956,6 +968,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      if (body.environmentId !== undefined) {
+        await assertEnvironmentAssignable({
+          userId: user.id,
+          organizationId,
+          environmentId: body.environmentId,
+        });
+      }
+
       const agent = await AgentModel.update(id, updateData);
 
       if (!agent) {
@@ -1301,27 +1321,6 @@ async function validateConnectorAccess(params: {
   }
 }
 
-function parseLabelsParam(
-  labels: string | undefined,
-): Record<string, string[]> | undefined {
-  if (!labels) return undefined;
-  const result: Record<string, string[]> = {};
-  for (const entry of labels.split(LABELS_ENTRY_DELIMITER)) {
-    const colonIdx = entry.indexOf(":");
-    if (colonIdx === -1) continue;
-    const key = entry.slice(0, colonIdx).trim();
-    const values = entry
-      .slice(colonIdx + 1)
-      .split(LABELS_VALUE_DELIMITER)
-      .map((v) => v.trim())
-      .filter(Boolean);
-    if (key && values.length > 0) {
-      result[key] = values;
-    }
-  }
-  return Object.keys(result).length > 0 ? result : undefined;
-}
-
 function getPermittedAgentTypesForList(params: {
   checker: AgentTypePermissionChecker;
   effectiveTypes: AgentType[] | undefined;
@@ -1342,4 +1341,33 @@ function getPermittedAgentTypesForList(params: {
   }
 
   return permittedTypes;
+}
+
+/**
+ * Binding an agent to a restricted environment routes its code sandbox to that
+ * environment's isolated runtime, so it is gated by the same
+ * environment:deploy-to-restricted permission the MCP-catalog assignment path
+ * uses (environment:admin implies it). Throws 403/404 if the caller may not
+ * assign the environment.
+ */
+async function assertEnvironmentAssignable(params: {
+  userId: string;
+  organizationId: string;
+  environmentId: string | null;
+}): Promise<void> {
+  const { userId, organizationId, environmentId } = params;
+  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
+    userHasPermission(userId, organizationId, "environment", "admin"),
+    userHasPermission(
+      userId,
+      organizationId,
+      "environment",
+      "deploy-to-restricted",
+    ),
+  ]);
+  await assertCanAssignEnvironment({
+    environmentId,
+    organizationId,
+    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
+  });
 }

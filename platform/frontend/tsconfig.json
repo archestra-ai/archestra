@@ -39,11 +39,13 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     ".next-pw/types/**/*.ts",
-    ".next-pw/dev/types/**/*.ts"
+    ".next-pw/dev/types/**/*.ts",
+    ".next-pw/dev/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     ".next",
+    ".next-pw",
     ".turbo"
   ]
 }

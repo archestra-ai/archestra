@@ -15,6 +15,8 @@ Plug your agents straight into your company's knowledge across Jira, Confluence,
 
 The full RAG stack (chunking, embedding, hybrid search, reranking) runs inside Archestra. No external vector database or separate retrieval service required.
 
+> **Enterprise feature** (team-scoped access control) — see the [Pricing Model](/docs/platform-pricing-model).
+
 ![Agent answering from a Jira Knowledge Base with cited sources](/docs/automated_screenshots/platform-knowledge-bases_chat-with-citations.webp)
 
 ## Configuration
@@ -44,20 +46,6 @@ Pick the LLM that scores and reorders search results by relevance.
 ## Creating a Knowledge Base
 
 A Knowledge Base is a set of connectors. Create one from the **Knowledge** page and assign connectors to get data from. The same Knowledge Base can be reused across multiple agents and MCP Gateways.
-
-## Files
-
-Files are static documents uploaded from **Knowledge > Files** and assigned directly to agents or MCP Gateways. Use files when you want reusable retrieval from `.txt`, `.md`, `.csv`, `.json`, `.xml`, or `.pdf` documents without setting up an external connector.
-
-Files use the same visibility model as other knowledge resources.
-
-- **Owner** — only the uploader can view and query the file.
-- **Teams** — only members of selected teams can view and query the file.
-- **Organization** — anyone in the organization can view and query the file.
-
-Chat attachments stay with one conversation unless they are saved to **Knowledge > Files**.
-
-For production deployments, file bytes are stored in PostgreSQL by default. To store bytes in S3, configure external blob storage in [Knowledge Base Configuration](/docs/platform-deployment#knowledge-files-external-blob-storage).
 
 ## Creating a Connector
 

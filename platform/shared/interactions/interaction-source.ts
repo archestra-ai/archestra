@@ -10,6 +10,7 @@ export const InteractionSourceSchema = z.enum([
   "chat",
   "chat:compaction",
   "chat:title_generation",
+  "skill:description_generation",
   "chatops:slack",
   "chatops:ms-teams",
   "email",
@@ -17,6 +18,7 @@ export const InteractionSourceSchema = z.enum([
   "knowledge:embedding",
   "knowledge:reranker",
   "knowledge:query-expansion",
+  "app:llm_complete",
 ]);
 
 export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
@@ -35,6 +37,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   chat: { label: "Chat" },
   "chat:compaction": { label: "Chat Compaction" },
   "chat:title_generation": { label: "Chat Title Generation" },
+  "skill:description_generation": { label: "Skill Description Generation" },
   "chatops:slack": { label: "Slack" },
   "chatops:ms-teams": { label: "MS Teams" },
   email: { label: "Email" },
@@ -42,6 +45,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   "knowledge:embedding": { label: "Knowledge - Embedding" },
   "knowledge:reranker": { label: "Knowledge - Reranker" },
   "knowledge:query-expansion": { label: "Knowledge - Query Expansion" },
+  "app:llm_complete": { label: "App LLM Completion" },
 };
 
 /**

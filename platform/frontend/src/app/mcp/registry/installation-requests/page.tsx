@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { CheckCircle, Clock, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";

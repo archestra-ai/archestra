@@ -1,6 +1,6 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 
@@ -10,9 +10,20 @@ interface LightDarkButtonsProps {
 
 export function LightDarkButtons({ size = "default" }: LightDarkButtonsProps) {
   const { theme, setTheme } = useTheme();
+  const iconClassName = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
 
   return (
     <div className="flex gap-1">
+      <Button
+        variant={theme === "system" ? "default" : "outline"}
+        size={size}
+        className="gap-1.5"
+        onClick={() => setTheme("system")}
+        aria-pressed={theme === "system"}
+      >
+        <Monitor className={iconClassName} />
+        System
+      </Button>
       <Button
         variant={theme === "light" ? "default" : "outline"}
         size={size}
@@ -20,7 +31,7 @@ export function LightDarkButtons({ size = "default" }: LightDarkButtonsProps) {
         onClick={() => setTheme("light")}
         aria-pressed={theme === "light"}
       >
-        <Sun className={size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"} />
+        <Sun className={iconClassName} />
         Light
       </Button>
       <Button
@@ -30,7 +41,7 @@ export function LightDarkButtons({ size = "default" }: LightDarkButtonsProps) {
         onClick={() => setTheme("dark")}
         aria-pressed={theme === "dark"}
       >
-        <Moon className={size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"} />
+        <Moon className={iconClassName} />
         Dark
       </Button>
     </div>

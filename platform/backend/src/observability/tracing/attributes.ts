@@ -53,6 +53,26 @@ export const ATTR_GENAI_RESPONSE_FINISH_REASONS =
 export const ATTR_GENAI_USAGE_INPUT_TOKENS = "gen_ai.usage.input_tokens";
 export const ATTR_GENAI_USAGE_OUTPUT_TOKENS = "gen_ai.usage.output_tokens";
 export const ATTR_GENAI_USAGE_TOTAL_TOKENS = "gen_ai.usage.total_tokens";
+// Prompt-cache token counts, per the GenAI semconv. Read = served from a
+// provider cache, creation = written to it. Both are a subset of
+// gen_ai.usage.input_tokens (the span attribute adds cache read/write back onto
+// our internally-uncached input count, so the spec's subset relationship holds).
+export const ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS =
+  "gen_ai.usage.cache_read.input_tokens";
+export const ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS =
+  "gen_ai.usage.cache_creation.input_tokens";
+// Portion of cache-creation tokens written at the 1-hour TTL (Anthropic/Bedrock),
+// billed at a higher surcharge than the 5-minute default. The GenAI semconv has no
+// per-TTL breakdown of cache_creation tokens, so this uses the archestra.* namespace.
+// The rest of gen_ai.usage.cache_creation.input_tokens is the 5m-TTL remainder.
+export const ATTR_ARCHESTRA_USAGE_CACHE_CREATION_1H_INPUT_TOKENS =
+  "archestra.usage.cache_creation.1h_input_tokens";
+// Output tokens spent on reasoning / extended thinking. Per the GenAI semconv this
+// value is a subset of gen_ai.usage.output_tokens. Reported by OpenAI
+// (reasoning_tokens) and Gemini (thoughtsTokenCount); unset for providers that
+// do not break reasoning tokens out separately.
+export const ATTR_GENAI_USAGE_REASONING_OUTPUT_TOKENS =
+  "gen_ai.usage.reasoning.output_tokens";
 
 // --- gen_ai content events ---
 export const EVENT_GENAI_CONTENT_PROMPT = "gen_ai.content.prompt";
@@ -76,7 +96,12 @@ export const ATTR_ARCHESTRA_APP_NAME = "archestra.app.name";
 export const ATTR_ARCHESTRA_USER_ID = "archestra.user.id";
 export const ATTR_ARCHESTRA_USER_EMAIL = "archestra.user.email";
 export const ATTR_ARCHESTRA_USER_NAME = "archestra.user.name";
-export const ATTR_ARCHESTRA_LABEL_PREFIX = "archestra.label.";
+export const ATTR_ARCHESTRA_AGENT_LABEL_PREFIX = "archestra.agent.label.";
+// Team metadata. Teams are an Archestra concept with no OTEL semantic-convention
+// registry equivalent, so the custom `archestra.<scope>.team.*` namespace is
+// used, where scope is the principal the teams belong to (`agent` or `user`). A
+// principal can belong to multiple teams, so ids/names are array-valued and team
+// label values are merged per key across all of the principal's teams.
 
 // --- MCP custom ---
 export const ATTR_MCP_SERVER_NAME = "mcp.server.name";
@@ -94,6 +119,15 @@ export interface SpanAgentInfo {
   agentType?: string;
   labels?: { key: string; value: string }[];
 }
+
+export interface SpanTeamInfo {
+  id: string;
+  name: string;
+  labels?: { key: string; value: string }[];
+}
+
+/** The principal a set of teams belongs to, used to namespace team span attributes. */
+type TeamScope = "agent" | "user";
 
 export interface SpanUserInfo {
   id: string;
@@ -116,10 +150,48 @@ export function setAgentAttributes(span: Span, agent: SpanAgentInfo): void {
   if (agent.labels && agent.labels.length > 0) {
     for (const label of agent.labels) {
       span.setAttribute(
-        `${ATTR_ARCHESTRA_LABEL_PREFIX}${label.key}`,
+        `${ATTR_ARCHESTRA_AGENT_LABEL_PREFIX}${label.key}`,
         label.value,
       );
     }
+  }
+}
+
+/**
+ * Set team span attributes for a principal under `archestra.<scope>.team.*`:
+ * `.ids` and `.names` (array-valued, since a principal can belong to multiple
+ * teams) and `.label.<key>` (label values merged per key across the principal's
+ * teams). `scope` distinguishes the agent's teams from the requesting user's.
+ */
+export function setTeamAttributes(
+  span: Span,
+  teams: SpanTeamInfo[] | null | undefined,
+  scope: TeamScope,
+): void {
+  if (!teams || teams.length === 0) return;
+
+  const base = `archestra.${scope}.team`;
+  span.setAttribute(
+    `${base}.ids`,
+    teams.map((team) => team.id),
+  );
+  span.setAttribute(
+    `${base}.names`,
+    teams.map((team) => team.name),
+  );
+
+  // Merge label values per key across the principal's teams. A key can carry
+  // different values on different teams, so each attribute is array-valued.
+  const valuesByKey = new Map<string, Set<string>>();
+  for (const team of teams) {
+    for (const label of team.labels ?? []) {
+      const values = valuesByKey.get(label.key) ?? new Set<string>();
+      values.add(label.value);
+      valuesByKey.set(label.key, values);
+    }
+  }
+  for (const [key, values] of valuesByKey) {
+    span.setAttribute(`${base}.label.${key}`, [...values]);
   }
 }
 

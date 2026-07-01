@@ -1863,6 +1863,405 @@
       "when": 1780255334907,
       "tag": "0265_kind_zarek",
       "breakpoints": true
+    },
+    {
+      "idx": 266,
+      "version": "7",
+      "when": 1780326644899,
+      "tag": "0266_silky_slapstick",
+      "breakpoints": true
+    },
+    {
+      "idx": 267,
+      "version": "7",
+      "when": 1780392851404,
+      "tag": "0267_curious_marrow",
+      "breakpoints": true
+    },
+    {
+      "idx": 268,
+      "version": "7",
+      "when": 1780394552365,
+      "tag": "0268_rename_environment_to_environments",
+      "breakpoints": true
+    },
+    {
+      "idx": 269,
+      "version": "7",
+      "when": 1780397149205,
+      "tag": "0269_typical_bill_hollister",
+      "breakpoints": true
+    },
+    {
+      "idx": 270,
+      "version": "7",
+      "when": 1780407104791,
+      "tag": "0270_add_playwright_catalog_icon",
+      "breakpoints": true
+    },
+    {
+      "idx": 271,
+      "version": "7",
+      "when": 1780434112833,
+      "tag": "0271_odd_sleepwalker",
+      "breakpoints": true
+    },
+    {
+      "idx": 272,
+      "version": "7",
+      "when": 1780474421866,
+      "tag": "0272_narrow_mad_thinker",
+      "breakpoints": true
+    },
+    {
+      "idx": 273,
+      "version": "7",
+      "when": 1780487668988,
+      "tag": "0273_remarkable_punisher",
+      "breakpoints": true
+    },
+    {
+      "idx": 274,
+      "version": "7",
+      "when": 1780493123672,
+      "tag": "0274_futuristic_madelyne_pryor",
+      "breakpoints": true
+    },
+    {
+      "idx": 275,
+      "version": "7",
+      "when": 1780571335736,
+      "tag": "0275_breezy_lord_hawal",
+      "breakpoints": true
+    },
+    {
+      "idx": 276,
+      "version": "7",
+      "when": 1780652682162,
+      "tag": "0276_squash_skill_sandbox_and_versioning",
+      "breakpoints": true
+    },
+    {
+      "idx": 277,
+      "version": "7",
+      "when": 1780915546685,
+      "tag": "0277_faulty_pyro",
+      "breakpoints": true
+    },
+    {
+      "idx": 278,
+      "version": "7",
+      "when": 1781006952402,
+      "tag": "0278_sloppy_gwen_stacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 279,
+      "version": "7",
+      "when": 1781014582608,
+      "tag": "0279_agent_lifecycle_hooks",
+      "breakpoints": true
+    },
+    {
+      "idx": 280,
+      "version": "7",
+      "when": 1781028695085,
+      "tag": "0280_greedy_killer_shrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 281,
+      "version": "7",
+      "when": 1781032687067,
+      "tag": "0281_remove_team_admin_rbac_action",
+      "breakpoints": true
+    },
+    {
+      "idx": 282,
+      "version": "7",
+      "when": 1781148753123,
+      "tag": "0282_colossal_fallen_one",
+      "breakpoints": true
+    },
+    {
+      "idx": 283,
+      "version": "7",
+      "when": 1781180160590,
+      "tag": "0283_safe_hemingway",
+      "breakpoints": true
+    },
+    {
+      "idx": 284,
+      "version": "7",
+      "when": 1781186651182,
+      "tag": "0284_odd_zeigeist",
+      "breakpoints": true
+    },
+    {
+      "idx": 285,
+      "version": "7",
+      "when": 1781274807410,
+      "tag": "0285_dedup_archestra_builtin_tools_by_short_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 286,
+      "version": "7",
+      "when": 1781294131210,
+      "tag": "0286_glamorous_the_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 287,
+      "version": "7",
+      "when": 1781344711260,
+      "tag": "0287_mcp_apps",
+      "breakpoints": true
+    },
+    {
+      "idx": 288,
+      "version": "7",
+      "when": 1781515672027,
+      "tag": "0288_agent_environment_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 289,
+      "version": "7",
+      "when": 1781611325761,
+      "tag": "0289_skill_sandbox_projects_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 290,
+      "version": "7",
+      "when": 1781621276808,
+      "tag": "0290_backfill_artifact_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 291,
+      "version": "7",
+      "when": 1781696376294,
+      "tag": "0291_messy_genesis",
+      "breakpoints": true
+    },
+    {
+      "idx": 292,
+      "version": "7",
+      "when": 1781738400001,
+      "tag": "0292_fixed_madrox",
+      "breakpoints": true
+    },
+    {
+      "idx": 293,
+      "version": "7",
+      "when": 1781803268096,
+      "tag": "0293_dynamic_tool_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 294,
+      "version": "7",
+      "when": 1781839440184,
+      "tag": "0294_projects_and_scheduled_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 295,
+      "version": "7",
+      "when": 1781872377363,
+      "tag": "0295_conversation_file_touches",
+      "breakpoints": true
+    },
+    {
+      "idx": 296,
+      "version": "7",
+      "when": 1781891433454,
+      "tag": "0296_filesystem_file_storage",
+      "breakpoints": true
+    },
+    {
+      "idx": 297,
+      "version": "7",
+      "when": 1781899258905,
+      "tag": "0297_remove_knowledge_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 298,
+      "version": "7",
+      "when": 1781966151604,
+      "tag": "0298_cloudy_triathlon",
+      "breakpoints": true
+    },
+    {
+      "idx": 299,
+      "version": "7",
+      "when": 1781979715500,
+      "tag": "0299_backfill_orphaned_schedule_projects",
+      "breakpoints": true
+    },
+    {
+      "idx": 300,
+      "version": "7",
+      "when": 1782058452626,
+      "tag": "0300_rainy_madrox",
+      "breakpoints": true
+    },
+    {
+      "idx": 301,
+      "version": "7",
+      "when": 1782117226973,
+      "tag": "0301_smiling_scalphunter",
+      "breakpoints": true
+    },
+    {
+      "idx": 302,
+      "version": "7",
+      "when": 1782141505231,
+      "tag": "0302_coerce_all_tools_agents_to_progressive",
+      "breakpoints": true
+    },
+    {
+      "idx": 303,
+      "version": "7",
+      "when": 1782168863366,
+      "tag": "0303_minor_brother_voodoo",
+      "breakpoints": true
+    },
+    {
+      "idx": 304,
+      "version": "7",
+      "when": 1782211728112,
+      "tag": "0304_wild_sandman",
+      "breakpoints": true
+    },
+    {
+      "idx": 305,
+      "version": "7",
+      "when": 1782215899438,
+      "tag": "0305_drop_conversation_file_touches",
+      "breakpoints": true
+    },
+    {
+      "idx": 306,
+      "version": "7",
+      "when": 1782231531164,
+      "tag": "0306_greedy_ares",
+      "breakpoints": true
+    },
+    {
+      "idx": 307,
+      "version": "7",
+      "when": 1782287892624,
+      "tag": "0307_last_dark_beast",
+      "breakpoints": true
+    },
+    {
+      "idx": 308,
+      "version": "7",
+      "when": 1782307085912,
+      "tag": "0308_slim_lilith",
+      "breakpoints": true
+    },
+    {
+      "idx": 309,
+      "version": "7",
+      "when": 1782372062745,
+      "tag": "0309_awesome_bloodstorm",
+      "breakpoints": true
+    },
+    {
+      "idx": 310,
+      "version": "7",
+      "when": 1782372184062,
+      "tag": "0310_lame_major_mapleleaf",
+      "breakpoints": true
+    },
+    {
+      "idx": 311,
+      "version": "7",
+      "when": 1782402769987,
+      "tag": "0311_cheerful_zeigeist",
+      "breakpoints": true
+    },
+    {
+      "idx": 312,
+      "version": "7",
+      "when": 1782476198409,
+      "tag": "0312_normal_infant_terrible",
+      "breakpoints": true
+    },
+    {
+      "idx": 313,
+      "version": "7",
+      "when": 1782490045313,
+      "tag": "0313_rename-save-result-tool-to-save-file",
+      "breakpoints": true
+    },
+    {
+      "idx": 314,
+      "version": "7",
+      "when": 1782730943466,
+      "tag": "0314_recollapse-archestra-builtin-dual-prefix-dups",
+      "breakpoints": true
+    },
+    {
+      "idx": 315,
+      "version": "7",
+      "when": 1782743728188,
+      "tag": "0315_groovy_toad_men",
+      "breakpoints": true
+    },
+    {
+      "idx": 316,
+      "version": "7",
+      "when": 1782762892398,
+      "tag": "0316_famous_raider",
+      "breakpoints": true
+    },
+    {
+      "idx": 317,
+      "version": "7",
+      "when": 1782816900531,
+      "tag": "0317_legal_kitty_pryde",
+      "breakpoints": true
+    },
+    {
+      "idx": 318,
+      "version": "7",
+      "when": 1782826474394,
+      "tag": "0318_conversation-last-read-at",
+      "breakpoints": true
+    },
+    {
+      "idx": 319,
+      "version": "7",
+      "when": 1782826488968,
+      "tag": "0319_backfill-conversation-last-read-at",
+      "breakpoints": true
+    },
+    {
+      "idx": 320,
+      "version": "7",
+      "when": 1782851902992,
+      "tag": "0320_flip-default-org-theme-to-caffeine",
+      "breakpoints": true
+    },
+    {
+      "idx": 321,
+      "version": "7",
+      "when": 1782904774033,
+      "tag": "0321_backfill-claude-client-external-agent-id",
+      "breakpoints": true
+    },
+    {
+      "idx": 322,
+      "version": "7",
+      "when": 1782908617938,
+      "tag": "0322_perpetual_dreadnoughts",
+      "breakpoints": true
     }
   ]
 }

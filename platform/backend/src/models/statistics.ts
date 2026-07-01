@@ -1,4 +1,4 @@
-import type { StatisticsTimeFrame } from "@shared";
+import type { StatisticsTimeFrame } from "@archestra/shared";
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -167,41 +167,24 @@ class StatisticsModel {
   }
 
   /**
-   * Round timestamp to bucket interval
+   * Round a timestamp down to the start of its bucket.
+   *
+   * Buckets are aligned to whole multiples of the interval measured from the
+   * Unix epoch (1970-01-01T00:00:00Z) and computed entirely in UTC, so the
+   * result stays consistent with the UTC `.toISOString()` returned here and
+   * with the SQL `DATE_TRUNC` that produced the input. Working purely in epoch
+   * milliseconds also avoids the previous local-time `getFullYear()`/`setDate()`
+   * arithmetic, which mistook "days since the epoch" for "day of year" and
+   * projected multi-day buckets (e.g. the 90d view) decades into the future.
    */
   private static roundToBucket(
     timestamp: string,
     intervalMinutes: number,
   ): string {
-    const date = new Date(timestamp);
-
-    if (intervalMinutes >= 1440) {
-      // 1 day or more
-      const days = Math.floor(intervalMinutes / 1440);
-      const dayOfYear = Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
-      const roundedDay = Math.floor(dayOfYear / days) * days;
-
-      const startOfYear = new Date(date.getFullYear(), 0, 1);
-      startOfYear.setDate(startOfYear.getDate() + roundedDay);
-      startOfYear.setHours(0, 0, 0, 0);
-      return startOfYear.toISOString();
-    } else if (intervalMinutes >= 60) {
-      // 1 hour or more
-      const hours = Math.floor(intervalMinutes / 60);
-      const hourOfDay = date.getHours();
-      const roundedHour = Math.floor(hourOfDay / hours) * hours;
-
-      date.setHours(roundedHour, 0, 0, 0);
-      return date.toISOString();
-    } else {
-      // Less than 1 hour
-      const minutes = date.getMinutes();
-      const roundedMinutes =
-        Math.floor(minutes / intervalMinutes) * intervalMinutes;
-
-      date.setMinutes(roundedMinutes, 0, 0);
-      return date.toISOString();
-    }
+    const intervalMs = intervalMinutes * 60 * 1000;
+    const ms = new Date(timestamp).getTime();
+    const rounded = Math.floor(ms / intervalMs) * intervalMs;
+    return new Date(rounded).toISOString();
   }
 
   /**
@@ -227,6 +210,13 @@ class StatisticsModel {
         inputTokens: Number(row.inputTokens) || 0,
         outputTokens: Number(row.outputTokens) || 0,
         cost: Number(row.cost) || 0,
+        ...("cacheReadTokens" in row
+          ? {
+              cacheReadTokens:
+                Number((row as { cacheReadTokens: unknown }).cacheReadTokens) ||
+                0,
+            }
+          : {}),
       }));
     }
 
@@ -251,6 +241,9 @@ class StatisticsModel {
           inputTokens: 0,
           outputTokens: 0,
           cost: 0,
+          // Reset before accumulating; the `...row` spread would otherwise leave
+          // the first row's value in place and the merge would never sum it.
+          ...("cacheReadTokens" in row ? { cacheReadTokens: 0 } : {}),
         } as T);
       }
 
@@ -264,6 +257,11 @@ class StatisticsModel {
       if ("cost" in row && "cost" in existing) {
         (existing as { cost: number }).cost +=
           Number((row as { cost: number }).cost) || 0;
+      }
+      // Aggregate cache-read tokens (present only on model/agent series)
+      if ("cacheReadTokens" in row && "cacheReadTokens" in existing) {
+        (existing as { cacheReadTokens: number }).cacheReadTokens +=
+          Number((row as { cacheReadTokens: number }).cacheReadTokens) || 0;
       }
     }
 
@@ -365,32 +363,22 @@ class StatisticsModel {
 
     const rawTimeSeriesData = await query;
 
-    // Debug logging for 1h timeframe only
-    if (timeframe === "1h") {
-    }
-
     const timeSeriesData = StatisticsModel.groupTimeSeries(
       rawTimeSeriesData,
       timeframe,
       "teamId",
     );
 
-    if (timeframe === "1h") {
-    }
-
     // Get team member counts
     const teamMemberCounts = await db
       .select({
         teamId: schema.teamsTable.id,
-        memberCount: sql<number>`CAST(COUNT(DISTINCT ${schema.membersTable.userId}) AS INTEGER)`,
+        memberCount: sql<number>`CAST(COUNT(DISTINCT ${schema.teamMembersTable.userId}) AS INTEGER)`,
       })
       .from(schema.teamsTable)
       .leftJoin(
-        schema.membersTable,
-        eq(
-          schema.teamsTable.organizationId,
-          schema.membersTable.organizationId,
-        ),
+        schema.teamMembersTable,
+        eq(schema.teamsTable.id, schema.teamMembersTable.teamId),
       )
       .groupBy(schema.teamsTable.id);
 
@@ -483,6 +471,7 @@ class StatisticsModel {
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
         inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
         outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
+        cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheReadTokens}), 0) AS INTEGER)`,
         cost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cost}), 0) AS DOUBLE PRECISION)`,
       })
       .from(schema.interactionsTable)
@@ -544,18 +533,11 @@ class StatisticsModel {
 
     const rawTimeSeriesData = await query;
 
-    // Debug logging for 1h timeframe only
-    if (timeframe === "1h") {
-    }
-
     const timeSeriesData = StatisticsModel.groupTimeSeries(
       rawTimeSeriesData,
       timeframe,
       "agentId",
     );
-
-    if (timeframe === "1h") {
-    }
 
     // Aggregate data by agent
     const agentMap = new Map<string, AgentStatistics>();
@@ -573,6 +555,7 @@ class StatisticsModel {
           requests: 0,
           inputTokens: 0,
           outputTokens: 0,
+          cacheReadTokens: 0,
           cost: 0,
           timeSeries: [],
         });
@@ -583,6 +566,7 @@ class StatisticsModel {
       agent.requests += Number(row.requests);
       agent.inputTokens += Number(row.inputTokens);
       agent.outputTokens += Number(row.outputTokens);
+      agent.cacheReadTokens += Number(row.cacheReadTokens) || 0;
       agent.cost += cost;
       agent.timeSeries.push({
         timestamp: row.timeBucket,
@@ -625,6 +609,7 @@ class StatisticsModel {
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
         inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
         outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
+        cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheReadTokens}), 0) AS INTEGER)`,
         cost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cost}), 0) AS DOUBLE PRECISION)`,
       })
       .from(schema.interactionsTable)
@@ -698,6 +683,7 @@ class StatisticsModel {
           requests: 0,
           inputTokens: 0,
           outputTokens: 0,
+          cacheReadTokens: 0,
           cost: 0,
           percentage: 0,
           timeSeries: [],
@@ -709,6 +695,7 @@ class StatisticsModel {
       model.requests += Number(row.requests);
       model.inputTokens += Number(row.inputTokens);
       model.outputTokens += Number(row.outputTokens);
+      model.cacheReadTokens += Number(row.cacheReadTokens) || 0;
       model.cost += cost;
       model.timeSeries.push({
         timestamp: row.timeBucket,
@@ -781,20 +768,6 @@ class StatisticsModel {
   }
 
   /**
-   * Calculate actual cost: cost - toon_savings
-   * This represents the final cost after all optimizations
-   * - cost = cost after model optimization
-   * - toonSavings = savings from TOON compression
-   * - actual cost = cost after both model optimization and TOON
-   */
-  private static calculateActualCost(
-    cost: number,
-    toonSavings: number,
-  ): number {
-    return cost - toonSavings;
-  }
-
-  /**
    * Get cost savings statistics
    */
   static async getCostSavingsStatistics(
@@ -820,6 +793,7 @@ class StatisticsModel {
           totalSavings: 0,
           totalOptimizationSavings: 0,
           totalToonSavings: 0,
+          totalCacheSavings: 0,
           timeSeries: [],
         };
       }
@@ -831,6 +805,7 @@ class StatisticsModel {
         baselineCost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.baselineCost}), 0) AS DECIMAL)`,
         actualCost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cost}), 0) AS DECIMAL)`,
         toonSavings: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.toonCostSavings}), 0) AS DECIMAL)`,
+        cacheSavings: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheSavings}), 0) AS DECIMAL)`,
       })
       .from(schema.interactionsTable)
       .innerJoin(
@@ -885,6 +860,7 @@ class StatisticsModel {
       baselineCost: number;
       actualCost: number;
       toonSavings: number;
+      cacheSavings: number;
     }
 
     const intervalMinutes = StatisticsModel.getBucketIntervalMinutes(timeframe);
@@ -904,6 +880,7 @@ class StatisticsModel {
           baselineCost: 0,
           actualCost: 0,
           toonSavings: 0,
+          cacheSavings: 0,
         });
       }
 
@@ -913,6 +890,7 @@ class StatisticsModel {
       existing.baselineCost += Number(row.baselineCost);
       existing.actualCost += Number(row.actualCost);
       existing.toonSavings += Number(row.toonSavings);
+      existing.cacheSavings += Number(row.cacheSavings);
     }
 
     const timeSeriesData = Array.from(grouped.values()).sort(
@@ -925,19 +903,40 @@ class StatisticsModel {
     let totalActualCost = 0;
     let totalOptimizationSavings = 0;
     let totalToonSavings = 0;
+    let totalCacheSavings = 0;
 
     const timeSeries = timeSeriesData.map((row) => {
-      const baselineCost = Number(row.baselineCost);
-      const cost = Number(row.actualCost);
+      // `row.actualCost` is SUM(interactions.cost): the real spend. It already
+      // reflects every applied optimization — the cheaper model, TOON's reduced
+      // billed token count, and the prompt-cache discount — so it is the true
+      // "Actual Cost". (The previous code subtracted toonSavings from it, which
+      // double-counted savings already baked into `cost` and reported an actual
+      // cost below what was really spent.)
+      const actualCost = Number(row.actualCost);
+      // `row.baselineCost` is SUM(interactions.baseline_cost): the same usage
+      // priced at the original (pre-optimization) model.
+      const baselineModelCost = Number(row.baselineCost);
       const toonSavings = Number(row.toonSavings);
+      const cacheSavings = Number(row.cacheSavings);
 
-      const actualCost = StatisticsModel.calculateActualCost(cost, toonSavings);
-      const optimizationSavings = baselineCost - cost;
+      // Savings from optimization rules alone: identical token usage, original
+      // model vs. the model actually used.
+      const optimizationSavings = baselineModelCost - actualCost;
+
+      // "Non-optimized" cost: what the request would have cost with none of the
+      // optimizations applied (original model, uncompressed tokens, no cache).
+      // Adding each realized saving back onto the real spend keeps this line
+      // exactly `optimizationSavings + toonSavings + cacheSavings` above the
+      // actual-cost line, so the savings-breakdown chart reconciles with the
+      // gap shown in the non-optimized-vs-actual chart.
+      const baselineCost =
+        actualCost + optimizationSavings + toonSavings + cacheSavings;
 
       totalBaselineCost += baselineCost;
       totalActualCost += actualCost;
       totalOptimizationSavings += optimizationSavings;
       totalToonSavings += toonSavings;
+      totalCacheSavings += cacheSavings;
 
       return {
         timestamp: row.timeBucket,
@@ -945,6 +944,7 @@ class StatisticsModel {
         actualCost,
         optimizationSavings,
         toonSavings,
+        cacheSavings,
       };
     });
 
@@ -956,6 +956,7 @@ class StatisticsModel {
       totalSavings,
       totalOptimizationSavings,
       totalToonSavings,
+      totalCacheSavings,
       timeSeries,
     };
   }

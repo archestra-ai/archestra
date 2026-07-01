@@ -122,14 +122,14 @@ class AgentLabelModel {
 
   /**
    * Prune orphaned label keys and values that are no longer referenced
-   * by any label junction table (agent_labels or mcp_catalog_labels)
+   * by any label junction table (agent_labels, mcp_catalog_labels, or team_labels)
    */
   static async pruneKeysAndValues(): Promise<{
     deletedKeys: number;
     deletedValues: number;
   }> {
     return await withDbTransaction(async (tx) => {
-      // Find orphaned keys (not referenced in agent_labels OR mcp_catalog_labels)
+      // Find orphaned keys (not referenced in any label junction table)
       const orphanedKeys = await tx
         .select({ id: schema.labelKeysTable.id })
         .from(schema.labelKeysTable)
@@ -141,14 +141,19 @@ class AgentLabelModel {
           schema.mcpCatalogLabelsTable,
           eq(schema.labelKeysTable.id, schema.mcpCatalogLabelsTable.keyId),
         )
+        .leftJoin(
+          schema.teamLabelsTable,
+          eq(schema.labelKeysTable.id, schema.teamLabelsTable.keyId),
+        )
         .where(
           and(
             isNull(schema.agentLabelsTable.keyId),
             isNull(schema.mcpCatalogLabelsTable.keyId),
+            isNull(schema.teamLabelsTable.keyId),
           ),
         );
 
-      // Find orphaned values (not referenced in agent_labels OR mcp_catalog_labels)
+      // Find orphaned values (not referenced in any label junction table)
       const orphanedValues = await tx
         .select({ id: schema.labelValuesTable.id })
         .from(schema.labelValuesTable)
@@ -160,10 +165,15 @@ class AgentLabelModel {
           schema.mcpCatalogLabelsTable,
           eq(schema.labelValuesTable.id, schema.mcpCatalogLabelsTable.valueId),
         )
+        .leftJoin(
+          schema.teamLabelsTable,
+          eq(schema.labelValuesTable.id, schema.teamLabelsTable.valueId),
+        )
         .where(
           and(
             isNull(schema.agentLabelsTable.valueId),
             isNull(schema.mcpCatalogLabelsTable.valueId),
+            isNull(schema.teamLabelsTable.valueId),
           ),
         );
 

@@ -296,4 +296,71 @@ describe("proxy", () => {
       expect(consoleSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe("forwarded origin headers", () => {
+    it("injects X-Forwarded-Host/Proto for backend-proxied paths", () => {
+      const request = createMockRequest({
+        method: "GET",
+        url: "/.well-known/oauth-protected-resource/v1/mcp/profile-1",
+        headers: { host: "localhost:3000" },
+      });
+
+      const response = proxy(request);
+
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+      expect(
+        response.headers.get("x-middleware-request-x-forwarded-host"),
+      ).toBe("localhost:3000");
+      expect(
+        response.headers.get("x-middleware-request-x-forwarded-proto"),
+      ).toBe("http");
+    });
+
+    it("injects forwarded host for /v1 and /api paths", () => {
+      for (const url of ["/v1/mcp/profile-1", "/api/auth/jwks"]) {
+        const response = proxy(
+          createMockRequest({ url, headers: { host: "localhost:3000" } }),
+        );
+
+        expect(
+          response.headers.get("x-middleware-request-x-forwarded-host"),
+        ).toBe("localhost:3000");
+      }
+    });
+
+    it("preserves X-Forwarded-Host/Proto set by an upstream proxy", () => {
+      const request = createMockRequest({
+        method: "GET",
+        url: "/v1/mcp/profile-1",
+        headers: {
+          host: "localhost:3000",
+          "x-forwarded-host": "app.example.com",
+          "x-forwarded-proto": "https",
+        },
+      });
+
+      const response = proxy(request);
+
+      expect(
+        response.headers.get("x-middleware-request-x-forwarded-host"),
+      ).toBe("app.example.com");
+      expect(
+        response.headers.get("x-middleware-request-x-forwarded-proto"),
+      ).toBe("https");
+    });
+
+    it("does not inject forwarded headers for non-proxied paths", () => {
+      const request = createMockRequest({
+        method: "GET",
+        url: "/settings",
+        headers: { host: "localhost:3000" },
+      });
+
+      const response = proxy(request);
+
+      expect(
+        response.headers.get("x-middleware-request-x-forwarded-host"),
+      ).toBeNull();
+    });
+  });
 });

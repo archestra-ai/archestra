@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 type InstalledServer = archestraApiTypes.GetMcpServersResponses["200"][number];
 
@@ -19,8 +19,9 @@ export function makeInstalledServer(
     reinstallRequired: false,
     localInstallationStatus: "success",
     localInstallationError: null,
-    oauthRefreshError: "no_refresh_token",
-    oauthRefreshFailedAt: null,
+    oauthRefreshError: "refresh_failed",
+    oauthRefreshErrorMessage: "invalid_grant",
+    oauthRefreshFailedAt: "2026-01-01T00:00:00.000Z",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     ...overrides,

@@ -1,4 +1,4 @@
-import { RouteId } from "@shared";
+import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OrganizationRoleModel from "@/models/organization-role";
 import ServiceAccountModel from "@/models/service-account";

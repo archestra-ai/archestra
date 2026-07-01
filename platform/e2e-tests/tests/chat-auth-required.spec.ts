@@ -1,4 +1,4 @@
-import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@archestra/shared";
 import { MARKETING_TEAM_NAME, WIREMOCK_INTERNAL_URL } from "../consts";
 import { expect, test } from "../fixtures";
 import { makeApiRequest } from "../utils/mcp-gateway";

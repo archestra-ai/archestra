@@ -1,6 +1,7 @@
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { InsertMessage, Message } from "@/types";
+import { isUuid } from "@/utils/uuid";
 
 type DbExecutor =
   | typeof db
@@ -32,12 +33,15 @@ class MessageModel {
     return message;
   }
 
-  static async bulkCreate(messages: InsertMessage[]): Promise<void> {
+  static async bulkCreate(
+    messages: InsertMessage[],
+    executor: DbExecutor = db,
+  ): Promise<void> {
     if (messages.length === 0) {
       return;
     }
 
-    await db.insert(schema.messagesTable).values(messages);
+    await executor.insert(schema.messagesTable).values(messages);
 
     // Update conversation's updatedAt for all affected conversations
     const uniqueConversationIds = [
@@ -100,7 +104,7 @@ class MessageModel {
   static async findByAnyId(id: string): Promise<Message | null> {
     // Try DB UUID first (fast indexed lookup) — only if it looks like a UUID
     // to avoid PostgreSQL "invalid input syntax for type uuid" errors
-    if (UUID_REGEX.test(id)) {
+    if (isUuid(id)) {
       const byDbId = await MessageModel.findById(id);
       if (byDbId) return byDbId;
     }
@@ -177,7 +181,35 @@ class MessageModel {
       .where(eq(schema.messagesTable.id, messageId))
       .returning();
 
+    // A content change (e.g. a tool call's final output landing in an existing
+    // assistant message) is fresh activity the owner may not have seen, so it
+    // advances the conversation's recency the same way a new message does.
+    await MessageModel.touchConversation(updatedMessage.conversationId);
+
     return updatedMessage;
+  }
+
+  /**
+   * Hard-delete the given message rows by their primary keys. Accepts an
+   * optional executor so a regenerate can delete the stale trailing turn and
+   * persist its replacement in one transaction. Deletion is by identity (id),
+   * never by a timestamp window, so colliding `createdAt` values can't cause
+   * the wrong rows to be removed.
+   */
+  static async deleteByIds(
+    ids: string[],
+    executor: DbExecutor = db,
+  ): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const rows = await executor
+      .delete(schema.messagesTable)
+      .where(inArray(schema.messagesTable.id, ids))
+      .returning({ id: schema.messagesTable.id });
+
+    return rows.length;
   }
 
   static async deleteAfterMessage(
@@ -281,6 +313,3 @@ class MessageModel {
 }
 
 export default MessageModel;
-
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

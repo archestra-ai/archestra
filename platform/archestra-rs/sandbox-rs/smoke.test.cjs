@@ -14,7 +14,7 @@ const invalidInput = {
       content: "test skill",
     },
   ],
-  replayCommands: [],
+  replayEntries: [],
   limits: {
     outputBytesLimit: 1024,
     fileSizeLimitBytes: 1024,

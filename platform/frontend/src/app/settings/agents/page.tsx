@@ -1,11 +1,14 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
+import { CallPolicyToggle } from "@/components/call-policy-toggle";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
+import { QueryLoadError } from "@/components/query-load-error";
+import { ResultPolicyToggle } from "@/components/result-policy-toggle";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -30,6 +33,7 @@ import {
   useUpdateAgentSettings,
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
+import type { CallPolicyAction, ResultPolicyAction } from "@/lib/policy.utils";
 import {
   type AgentSettingsState,
   buildSavePayload,
@@ -49,7 +53,11 @@ export default function AgentSettingsPage() {
   const { getToolName } = useArchestraMcpIdentity();
   const appName = useAppName();
   const { data: organization } = useOrganization();
-  const { data: apiKeys } = useAvailableLlmProviderApiKeys();
+  const {
+    data: apiKeys,
+    isLoadingError: isApiKeysLoadError,
+    refetch: refetchApiKeys,
+  } = useAvailableLlmProviderApiKeys({ toastOnError: false });
   const { data: orgAgents } = useOrgScopedAgents();
 
   const [selectedApiKeyId, setSelectedApiKeyId] = useState<string>("");
@@ -58,6 +66,10 @@ export default function AgentSettingsPage() {
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
   const [toolPolicy, setToolPolicy] = useState<GlobalToolPolicy>("permissive");
   const [fileUploads, setFileUploads] = useState<FileUploadsEnabled>("enabled");
+  const [defaultInvocationPolicy, setDefaultInvocationPolicy] =
+    useState<CallPolicyAction>("allow_when_context_is_untrusted");
+  const [defaultResultPolicy, setDefaultResultPolicy] =
+    useState<ResultPolicyAction>("mark_as_untrusted");
   const initializedRef = useRef(false);
   const savedStateRef = useRef<AgentSettingsState>({
     selectedApiKeyId: "",
@@ -67,11 +79,21 @@ export default function AgentSettingsPage() {
   const savedSecurityStateRef = useRef({
     toolPolicy: "permissive" as GlobalToolPolicy,
     fileUploads: "enabled" as FileUploadsEnabled,
+    defaultInvocationPolicy:
+      "allow_when_context_is_untrusted" as CallPolicyAction,
+    defaultResultPolicy: "mark_as_untrusted" as ResultPolicyAction,
   });
 
-  const { data: allModels, isPending: modelsLoading } = useLlmModels({
+  const {
+    data: allModels,
+    isPending: modelsLoading,
+    isLoadingError: isModelsLoadError,
+    refetch: refetchModels,
+  } = useLlmModels({
     apiKeyId: selectedApiKeyId || undefined,
   });
+
+  const isLoadError = isApiKeysLoadError || isModelsLoadError;
 
   const updateAgentMutation = useUpdateAgentSettings(
     "Agent settings updated",
@@ -94,11 +116,23 @@ export default function AgentSettingsPage() {
     setFileUploads(
       (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled",
     );
+    setDefaultInvocationPolicy(
+      organization.defaultDiscoveredToolInvocationPolicy ??
+        "allow_when_context_is_untrusted",
+    );
+    setDefaultResultPolicy(
+      organization.defaultDiscoveredToolResultPolicy ?? "mark_as_untrusted",
+    );
     savedStateRef.current = state;
     savedSecurityStateRef.current = {
       toolPolicy: organization.globalToolPolicy ?? "permissive",
       fileUploads:
         (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled",
+      defaultInvocationPolicy:
+        organization.defaultDiscoveredToolInvocationPolicy ??
+        "allow_when_context_is_untrusted",
+      defaultResultPolicy:
+        organization.defaultDiscoveredToolResultPolicy ?? "mark_as_untrusted",
     };
     initializedRef.current = true;
   }, [organization, apiKeys]);
@@ -114,7 +148,10 @@ export default function AgentSettingsPage() {
   const changes = detectChanges(localState, savedStateRef.current);
   const securityHasChanges =
     toolPolicy !== savedSecurityStateRef.current.toolPolicy ||
-    fileUploads !== savedSecurityStateRef.current.fileUploads;
+    fileUploads !== savedSecurityStateRef.current.fileUploads ||
+    defaultInvocationPolicy !==
+      savedSecurityStateRef.current.defaultInvocationPolicy ||
+    defaultResultPolicy !== savedSecurityStateRef.current.defaultResultPolicy;
 
   const handleSave = async () => {
     if (!apiKeys) return;
@@ -129,8 +166,15 @@ export default function AgentSettingsPage() {
       await updateSecurityMutation.mutateAsync({
         globalToolPolicy: toolPolicy,
         allowChatFileUploads: fileUploads === "enabled",
+        defaultDiscoveredToolInvocationPolicy: defaultInvocationPolicy,
+        defaultDiscoveredToolResultPolicy: defaultResultPolicy,
       });
-      savedSecurityStateRef.current = { toolPolicy, fileUploads };
+      savedSecurityStateRef.current = {
+        toolPolicy,
+        fileUploads,
+        defaultInvocationPolicy,
+        defaultResultPolicy,
+      };
     }
 
     initializedRef.current = false;
@@ -143,6 +187,10 @@ export default function AgentSettingsPage() {
     setDefaultAgentId(saved.defaultAgentId);
     setToolPolicy(savedSecurityStateRef.current.toolPolicy);
     setFileUploads(savedSecurityStateRef.current.fileUploads);
+    setDefaultInvocationPolicy(
+      savedSecurityStateRef.current.defaultInvocationPolicy,
+    );
+    setDefaultResultPolicy(savedSecurityStateRef.current.defaultResultPolicy);
   };
 
   const modelItems = useMemo(() => {
@@ -179,72 +227,83 @@ export default function AgentSettingsPage() {
   return (
     <SettingsSectionStack>
       <SettingsBlock
-        title="Default model for agents and new chats"
+        title="Default Model for Agents and New Chats"
         description="Select the LLM provider API key and model that will be used by default when creating new agents and starting new chat conversations."
         control={
           <WithPermissions
             permissions={{ agentSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
-            {({ hasPermission }) => (
-              <div className="flex flex-col gap-2 w-80">
-                <LlmProviderApiKeyDropdown
-                  availableKeys={availableKeys}
-                  selectedApiKeyId={selectedApiKeyId || null}
-                  disabled={isSaving || !hasPermission}
-                  open={apiKeySelectorOpen}
-                  onOpenChange={setApiKeySelectorOpen}
-                  onSelectKey={(value) => {
-                    setSelectedApiKeyId(value);
-                    setDefaultModel("");
-                    setApiKeySelectorOpen(false);
-                  }}
-                  triggerVariant="select"
-                  triggerClassName="w-80"
-                  popoverClassName="w-80"
-                  emptyTriggerLabel="Select API key..."
-                />
-                <LlmModelSearchableSelect
-                  value={defaultModel}
-                  onValueChange={setDefaultModel}
-                  options={modelItems}
-                  freeFilterable={canFilterFreeModels}
-                  placeholder={
-                    !selectedApiKeyId
-                      ? "Select API key first..."
-                      : modelsLoading
-                        ? "Loading models..."
-                        : "Select model..."
-                  }
+            {({ hasPermission }) =>
+              isLoadError ? (
+                <QueryLoadError
+                  title="Couldn't load your LLM providers"
                   className="w-80"
-                  disabled={
-                    isSaving ||
-                    !hasPermission ||
-                    modelsLoading ||
-                    !selectedApiKeyId
-                  }
+                  onRetry={() => {
+                    refetchApiKeys();
+                    refetchModels();
+                  }}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="self-end"
-                  onClick={handleResetDefaultModel}
-                  disabled={
-                    isSaving ||
-                    !hasPermission ||
-                    (!selectedApiKeyId && !defaultModel)
-                  }
-                >
-                  Reset
-                </Button>
-              </div>
-            )}
+              ) : (
+                <div className="flex flex-col gap-2 w-80">
+                  <LlmProviderApiKeyDropdown
+                    availableKeys={availableKeys}
+                    selectedApiKeyId={selectedApiKeyId || null}
+                    disabled={isSaving || !hasPermission}
+                    open={apiKeySelectorOpen}
+                    onOpenChange={setApiKeySelectorOpen}
+                    onSelectKey={(value) => {
+                      setSelectedApiKeyId(value);
+                      setDefaultModel("");
+                      setApiKeySelectorOpen(false);
+                    }}
+                    triggerVariant="select"
+                    triggerClassName="w-80"
+                    popoverClassName="w-80"
+                    emptyTriggerLabel="Select API key..."
+                  />
+                  <LlmModelSearchableSelect
+                    value={defaultModel}
+                    onValueChange={setDefaultModel}
+                    options={modelItems}
+                    freeFilterable={canFilterFreeModels}
+                    placeholder={
+                      !selectedApiKeyId
+                        ? "Select API key first..."
+                        : modelsLoading
+                          ? "Loading models..."
+                          : "Select model..."
+                    }
+                    className="w-80"
+                    disabled={
+                      isSaving ||
+                      !hasPermission ||
+                      modelsLoading ||
+                      !selectedApiKeyId
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="self-end"
+                    onClick={handleResetDefaultModel}
+                    disabled={
+                      isSaving ||
+                      !hasPermission ||
+                      (!selectedApiKeyId && !defaultModel)
+                    }
+                  >
+                    Reset
+                  </Button>
+                </div>
+              )
+            }
           </WithPermissions>
         }
       />
       <SettingsBlock
-        title="Default agent"
+        title="Default Agent"
         description={`The default agent is preselected for all new chat conversations. To enable agent routing, assign ${getToolName("swap_agent")} to the default agent so it can swap to other agents, and ${getToolName("swap_to_default_agent")} to other agents so they can swap back automatically.`}
         control={
           <WithPermissions
@@ -316,7 +375,64 @@ export default function AgentSettingsPage() {
             </span>
           )
         }
-      />
+      >
+        <WithPermissions
+          permissions={{ agentSettings: ["update"] }}
+          noPermissionHandle="tooltip"
+        >
+          {({ hasPermission }) => (
+            <div className="flex flex-col gap-4">
+              <div>
+                <h3 className="font-semibold leading-none">
+                  Default Guardrails for Discovered Tools
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Archestra records new tools your agents call through the LLM
+                  Proxy and gives each these starting guardrails.{" "}
+                  <span className="font-medium text-foreground">
+                    Call Policy
+                  </span>{" "}
+                  controls whether a tool may run;{" "}
+                  <span className="font-medium text-foreground">
+                    Results are
+                  </span>{" "}
+                  controls how its output is treated. Existing tools keep their
+                  policies — adjust any tool policy under{" "}
+                  <Link
+                    href="/mcp/tool-guardrails"
+                    className="text-primary hover:underline"
+                  >
+                    Tool Guardrails
+                  </Link>
+                  .
+                </p>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-sm font-medium">Call Policy</p>
+                <div className="flex w-[150px] justify-start">
+                  <CallPolicyToggle
+                    size="sm"
+                    value={defaultInvocationPolicy}
+                    onChange={setDefaultInvocationPolicy}
+                    disabled={isSaving || !hasPermission}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-sm font-medium">Results are</p>
+                <div className="flex w-[150px] justify-start">
+                  <ResultPolicyToggle
+                    size="sm"
+                    value={defaultResultPolicy}
+                    onChange={setDefaultResultPolicy}
+                    disabled={isSaving || !hasPermission}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </WithPermissions>
+      </SettingsBlock>
       <SettingsBlock
         title="Chat File Uploads"
         description={`Allow users to upload files in the ${appName} chat UI.`}

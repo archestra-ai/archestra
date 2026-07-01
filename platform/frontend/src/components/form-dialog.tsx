@@ -24,10 +24,11 @@ export type FormDialogProps = {
   className?: string;
 };
 
+// Flex column + overflow-hidden come from the base DialogContent.
 const sizeClasses: Record<DialogSize, string> = {
-  small: "max-w-md max-h-[85vh] flex flex-col overflow-hidden",
-  medium: "max-w-2xl max-h-[85vh] flex flex-col overflow-hidden",
-  large: "max-w-5xl h-[90vh] flex flex-col overflow-hidden",
+  small: "max-w-md max-h-[85vh]",
+  medium: "max-w-2xl max-h-[85vh]",
+  large: "max-w-5xl h-[90vh]",
 };
 
 export function FormDialog({

@@ -1,4 +1,4 @@
-import { CONTEXT_COMPACTION_SYSTEM_PROMPT } from "@shared";
+import { CONTEXT_COMPACTION_SYSTEM_PROMPT } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import type { ConversationCompaction } from "@/types/conversation-compaction";
@@ -7,6 +7,7 @@ import {
   __testEstimateChatMessagesTokens,
   buildContextCompactionStreamData,
 } from "./context-compaction";
+import { estimateFileTokens } from "./normalization/estimate-message-tokens";
 
 const msg = (
   id: string,
@@ -548,11 +549,11 @@ describe("context compaction helpers", () => {
     });
   });
 
-  describe("estimateBinaryFileTokens", () => {
+  describe("estimateFileTokens", () => {
     test("caps image estimates at the per-image ceiling", () => {
       const fourMb = 4 * 1024 * 1024;
       expect(
-        __test.estimateBinaryFileTokens({
+        estimateFileTokens({
           mediaType: "image/png",
           byteLength: fourMb,
         }),
@@ -562,7 +563,7 @@ describe("context compaction helpers", () => {
     test("does not cap non-image binaries", () => {
       const fourMb = 4 * 1024 * 1024;
       expect(
-        __test.estimateBinaryFileTokens({
+        estimateFileTokens({
           mediaType: "application/octet-stream",
           byteLength: fourMb,
         }),
@@ -571,7 +572,7 @@ describe("context compaction helpers", () => {
 
     test("a small image estimates below the ceiling", () => {
       expect(
-        __test.estimateBinaryFileTokens({
+        estimateFileTokens({
           mediaType: "image/jpeg",
           byteLength: 2_000,
         }),

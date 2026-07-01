@@ -1,4 +1,4 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -8,7 +8,7 @@ import {
   useLlmModels,
 } from "./llm-models.query";
 
-vi.mock("@shared", () => ({
+vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
     getLlmModels: vi.fn(),
     getModelsWithApiKeys: vi.fn(),

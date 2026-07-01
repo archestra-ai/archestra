@@ -1,4 +1,4 @@
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import { MemberModel, OrganizationRoleModel } from "@/models";
 import { ApiError } from "@/types";
 

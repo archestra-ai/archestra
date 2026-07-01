@@ -1,11 +1,11 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
 import {
   E2eTestId,
   IdentityProviderFormSchema,
   type IdentityProviderFormValues,
-} from "@shared";
+} from "@archestra/shared";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -17,6 +17,7 @@ import {
   useIdentityProvider,
   useUpdateIdentityProvider,
 } from "@/lib/auth/identity-provider.query.ee";
+import { IdTokenClaimsDebugger } from "./id-token-claims-debugger.ee";
 import { getIdentityProviderDialogNavItems } from "./identity-provider-dialog-nav-items.ee";
 import {
   type IdentityProviderDialogSection,
@@ -30,12 +31,14 @@ interface EditIdentityProviderDialogProps {
   identityProviderId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialSection?: IdentityProviderDialogSection;
 }
 
 export function EditIdentityProviderDialog({
   identityProviderId,
   open,
   onOpenChange,
+  initialSection,
 }: EditIdentityProviderDialogProps) {
   const { data: provider, isLoading } = useIdentityProvider(identityProviderId);
   const updateIdentityProvider = useUpdateIdentityProvider();
@@ -133,6 +136,11 @@ export function EditIdentityProviderDialog({
     }
   }, [provider, form]);
 
+  useEffect(() => {
+    if (!open || !provider?.id) return;
+    setActiveSection(initialSection ?? "general");
+  }, [initialSection, open, provider?.id]);
+
   const onSubmit = useCallback(
     async (data: IdentityProviderFormValues) => {
       if (!provider) return;
@@ -163,7 +171,9 @@ export function EditIdentityProviderDialog({
     return null;
   }
 
-  const navItems = getIdentityProviderDialogNavItems(providerType);
+  const navItems = getIdentityProviderDialogNavItems(providerType, {
+    includeTokenDebugger: true,
+  });
   const validActiveSection = navItems.some((item) => item.id === activeSection)
     ? activeSection
     : "general";
@@ -212,14 +222,16 @@ export function EditIdentityProviderDialog({
           </>
         }
       >
-        {providerType === "saml" ? (
+        {validActiveSection === "token-debugger" ? (
+          <IdTokenClaimsDebugger identityProviderId={provider.id} />
+        ) : providerType === "saml" ? (
           <SamlConfigForm
             form={form}
             identityProviderId={provider.id}
             activeSection={
               validActiveSection as Exclude<
                 IdentityProviderDialogSection,
-                "enterprise-managed-credentials"
+                "enterprise-managed-credentials" | "token-debugger"
               >
             }
           />

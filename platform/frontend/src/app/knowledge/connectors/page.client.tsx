@@ -4,10 +4,10 @@ import {
   type archestraApiTypes,
   CONNECTOR_TYPE_LABELS,
   type ConnectorType,
-} from "@shared";
+} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Database, Pencil, Trash2, Users } from "lucide-react";
+import { Database, Pencil, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -17,6 +17,7 @@ import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/con
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { DataTable } from "@/components/ui/data-table";
@@ -27,12 +28,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
   useConnectorsPaginated,
@@ -44,22 +39,15 @@ import { formatCronSchedule } from "@/lib/utils/format-cron";
 type ConnectorItem =
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number];
 
-const AGENT_TYPE_LABELS: Record<string, string> = {
-  agent: "Agent",
-  mcp_gateway: "MCP Gateway",
-};
-
 const CONNECTOR_TYPE_OPTIONS = [
   "jira",
   "confluence",
   "github",
   "gitlab",
   "servicenow",
+  "perforce",
+  "web_crawler",
 ] as ConnectorType[];
-
-function formatAgentType(agentType: string): string {
-  return AGENT_TYPE_LABELS[agentType] ?? agentType;
-}
 
 export default function ConnectorsPage() {
   return (
@@ -89,6 +77,8 @@ function ConnectorsList() {
     data: connectors,
     isPending,
     isFetching,
+    isLoadingError: isConnectorsLoadError,
+    refetch: refetchConnectors,
   } = useConnectorsPaginated({
     limit: pageSize,
     offset,
@@ -171,13 +161,6 @@ function ConnectorsList() {
       id: "status",
       header: "Status",
       cell: ({ row }) => {
-        if (row.original.connectorType === "file_upload") {
-          return (
-            <span className="text-xs text-muted-foreground">
-              Manual uploads
-            </span>
-          );
-        }
         return (
           <div className="flex items-center gap-2">
             {row.original.lastSyncAt ? (
@@ -205,13 +188,6 @@ function ConnectorsList() {
       id: "schedule",
       header: "Schedule",
       cell: ({ row }) => {
-        if (row.original.connectorType === "file_upload") {
-          return (
-            <span className="text-xs text-muted-foreground">
-              Manual uploads
-            </span>
-          );
-        }
         return (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Database className="h-3.5 w-3.5" />
@@ -219,11 +195,6 @@ function ConnectorsList() {
           </div>
         );
       },
-    },
-    {
-      id: "assigned",
-      header: "Assigned",
-      cell: ({ row }) => <AssignedAgentsTooltip connector={row.original} />,
     },
     {
       id: "actions",
@@ -251,7 +222,7 @@ function ConnectorsList() {
   return (
     <KnowledgePageLayout
       title="Connectors"
-      description="Manage data connectors that feed into your knowledge bases."
+      description="Connectors sync content from external sources — like Confluence, Jira, GitHub, Google Drive, and websites — into knowledge bases on a schedule, so your agents can search and answer from it."
       createLabel="Create Connector"
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !connectors}
@@ -282,25 +253,32 @@ function ConnectorsList() {
           </div>
         </div>
 
-        <DataTable
-          columns={columns}
-          data={items}
-          getRowId={(row) => row.id}
-          emptyMessage="No connectors found"
-          hasActiveFilters={!!search || connectorTypeFilter !== "all"}
-          onClearFilters={clearFilters}
-          filteredEmptyMessage="No connectors match your filters. Try adjusting your search."
-          hideSelectedCount
-          manualPagination
-          pagination={{
-            pageIndex,
-            pageSize,
-            total: pagination?.total ?? 0,
-          }}
-          onPaginationChange={handlePaginationChange}
-          isLoading={isFetching || isPending}
-          onRowClick={(row) => router.push(`/knowledge/connectors/${row.id}`)}
-        />
+        {isConnectorsLoadError ? (
+          <QueryLoadError
+            title="Couldn't load your connectors"
+            onRetry={() => refetchConnectors()}
+          />
+        ) : (
+          <DataTable
+            columns={columns}
+            data={items}
+            getRowId={(row) => row.id}
+            emptyMessage="No connectors found"
+            hasActiveFilters={!!search || connectorTypeFilter !== "all"}
+            onClearFilters={clearFilters}
+            filteredEmptyMessage="No connectors match your filters. Try adjusting your search."
+            hideSelectedCount
+            manualPagination
+            pagination={{
+              pageIndex,
+              pageSize,
+              total: pagination?.total ?? 0,
+            }}
+            onPaginationChange={handlePaginationChange}
+            isLoading={isFetching || isPending}
+            onRowClick={(row) => router.push(`/knowledge/connectors/${row.id}`)}
+          />
+        )}
 
         <CreateConnectorDialog
           open={isCreateDialogOpen}
@@ -324,39 +302,6 @@ function ConnectorsList() {
         )}
       </div>
     </KnowledgePageLayout>
-  );
-}
-
-function AssignedAgentsTooltip({ connector }: { connector: ConnectorItem }) {
-  const { assignedAgents } = connector;
-
-  if (!assignedAgents || assignedAgents.length === 0) {
-    return <span className="text-xs text-muted-foreground">Not assigned</span>;
-  }
-
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5" />
-            <span>Assigned to {assignedAgents.length}</span>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">
-          <div className="space-y-1">
-            {assignedAgents.map((agent) => (
-              <div key={agent.id} className="flex items-center gap-1.5 text-xs">
-                <span className="text-muted-foreground">
-                  {formatAgentType(agent.agentType)}
-                </span>
-                <span>{agent.name}</span>
-              </div>
-            ))}
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
   );
 }
 

@@ -3,11 +3,7 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { SkillShareLinkRevisionModel } from "@/models";
-import type {
-  RevisionPayload,
-  RevisionPayloadFile,
-  SkillShareLinkRevision,
-} from "@/types/skill-share-link-revision";
+import type { RevisionPayloadFile } from "@/types/skill-share-link-revision";
 import { isUniqueConstraintError } from "@/utils/db";
 import { computeLayout, type MaterializeRequest } from "./layout";
 
@@ -46,28 +42,6 @@ interface MaterializerOptions {
   cacheDir: string;
   gitBinaryPath?: string;
   identity?: { name: string; email: string };
-  /** Override for tests; defaults to the SkillShareLinkRevisionModel. */
-  revisionStore?: RevisionStore;
-}
-
-/** @public — exported for testability */
-export interface AppendRevisionParams {
-  linkId: string;
-  contentHash: string;
-  commitSha: string;
-  parentSha: string | null;
-  createdAt: Date;
-  payload: RevisionPayload;
-}
-
-/** @public — exported for testability */
-export interface RevisionStore {
-  getLatestByLink(linkId: string): Promise<SkillShareLinkRevision | null>;
-  listByLink(linkId: string): Promise<SkillShareLinkRevision[]>;
-  append(
-    params: AppendRevisionParams,
-    sequence: number,
-  ): Promise<SkillShareLinkRevision>;
 }
 
 const DEFAULT_IDENTITY = {
@@ -79,7 +53,6 @@ export class MarketplaceMaterializer {
   private readonly cacheDir: string;
   private readonly gitBinaryPath: string;
   private readonly identity: { name: string; email: string };
-  private readonly revisionStore: RevisionStore;
   /** Per-link write serializer; subsequent callers chain behind the in-flight call. */
   private readonly locks = new Map<string, Promise<MaterializeResult>>();
 
@@ -87,7 +60,6 @@ export class MarketplaceMaterializer {
     this.cacheDir = options.cacheDir;
     this.gitBinaryPath = options.gitBinaryPath ?? "git";
     this.identity = options.identity ?? DEFAULT_IDENTITY;
-    this.revisionStore = options.revisionStore ?? defaultRevisionStore();
   }
 
   /** On-disk path for a given share link's repo, regardless of materialization state. */
@@ -166,7 +138,7 @@ export class MarketplaceMaterializer {
     const contentHash = computeContentHash(files);
     const repoPath = this.repoPathFor(req.linkId);
 
-    let latest = await this.revisionStore.getLatestByLink(req.linkId);
+    let latest = await SkillShareLinkRevisionModel.getLatestByLink(req.linkId);
 
     if (latest && latest.contentHash === contentHash) {
       await this.syncDiskToRevisions(req.linkId);
@@ -194,7 +166,7 @@ export class MarketplaceMaterializer {
       });
 
       try {
-        await this.revisionStore.append(
+        await SkillShareLinkRevisionModel.append(
           {
             linkId: req.linkId,
             contentHash,
@@ -221,7 +193,7 @@ export class MarketplaceMaterializer {
         // Another replica appended this sequence first. Re-read the latest
         // revision; if it already produced our content, reuse it, otherwise
         // retry on top of the new head.
-        latest = await this.revisionStore.getLatestByLink(req.linkId);
+        latest = await SkillShareLinkRevisionModel.getLatestByLink(req.linkId);
         if (latest && latest.contentHash === contentHash) {
           await this.syncDiskToRevisions(req.linkId);
           return {
@@ -236,7 +208,7 @@ export class MarketplaceMaterializer {
   }
 
   private async syncDiskToRevisions(linkId: string): Promise<void> {
-    const revisions = await this.revisionStore.listByLink(linkId);
+    const revisions = await SkillShareLinkRevisionModel.listByLink(linkId);
     const expectedHead = revisions.at(-1)?.commitSha ?? null;
     const repoPath = this.repoPathFor(linkId);
 
@@ -365,16 +337,6 @@ export class MarketplaceMaterializer {
 }
 
 // ===== Internal helpers =====
-
-function defaultRevisionStore(): RevisionStore {
-  return {
-    getLatestByLink: (linkId) =>
-      SkillShareLinkRevisionModel.getLatestByLink(linkId),
-    listByLink: (linkId) => SkillShareLinkRevisionModel.listByLink(linkId),
-    append: (params, sequence) =>
-      SkillShareLinkRevisionModel.append(params, sequence),
-  };
-}
 
 function computeContentHash(files: RevisionPayloadFile[]): string {
   const sorted = [...files].sort((a, b) => a.path.localeCompare(b.path));

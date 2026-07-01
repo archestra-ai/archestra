@@ -1,4 +1,14 @@
-import type { InteractionSource, PaginationQuery } from "@shared";
+import type {
+  ClientFilter,
+  InteractionSource,
+  PaginationQuery,
+} from "@archestra/shared";
+import {
+  CLAUDE_CLIENT_AGENT_IDS,
+  CLAUDE_CLIENT_FILTER,
+  isClaudeSessionSource,
+  LEGACY_CLAUDE_CODE_SESSION_SOURCE,
+} from "@archestra/shared";
 import {
   and,
   asc,
@@ -11,7 +21,6 @@ import {
   lte,
   max,
   min,
-  or,
   type SQL,
   sql,
   sum,
@@ -31,10 +40,15 @@ import type {
   SortingQuery,
   UserInfo,
 } from "@/types";
-import { InteractionAuthMethodSchema } from "@/types";
-import { escapeLikePattern } from "@/utils/sql-search";
+import {
+  InteractionAuthMethodSchema,
+  normalizeInteractionResponse,
+} from "@/types";
+import { isUuid } from "@/utils/uuid";
+import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import ConversationChatErrorModel from "./conversation-chat-error";
+import InteractionDeltaManager from "./interaction-delta-manager";
 import LimitModel from "./limit";
 
 async function findChatErrorsForSessionId(sessionId: string | null) {
@@ -64,24 +78,33 @@ function getMessageText(
 /**
  * Detects if a request is a "main" request or "subagent" request.
  *
- * Claude Code specific heuristic:
- * - Main requests have the "Task" tool available (can spawn subagents)
- * - Subagent requests don't have the "Task" tool
- * - Utility requests (single message like "count", "quota") are subagents
- * - Prompt suggestion requests (last message contains "prompt suggestion generator") are subagents
+ * Applies to the Claude agentic sources (Claude Code and Claude Desktop, both
+ * built on the Claude Agent SDK); every other source is "main".
  *
- * For other session sources, all requests are considered "main" by default.
+ * Shared heuristics:
+ * - Single short utility messages ("count", "quota") are subagents
+ * - Prompt suggestion generator requests are subagents
+ * - The Agent SDK spawns single-purpose tool sub-agents (e.g. web search) whose
+ *   system prompt is "You are an assistant for performing a <tool> tool use"
+ *
+ * Source-specific: Claude Code main requests carry the "Task" tool (they can
+ * spawn subagents) and subagents don't — so absence of "Task" means subagent.
+ * Claude Desktop main agents do NOT carry the "Task" tool, so that negative
+ * signal can't be used there; a Claude Desktop request that matched none of the
+ * subagent markers is "main".
  */
 function computeRequestType(
   request: unknown,
   sessionSource: string | null,
 ): "main" | "subagent" {
-  // Only apply detection heuristics for Claude Code sessions
-  if (sessionSource !== "claude_code") {
+  // Only apply detection heuristics for Claude sessions (claude_metadata, plus
+  // the legacy claude_code / claude_desktop values on older rows).
+  if (!isClaudeSessionSource(sessionSource)) {
     return "main";
   }
 
   const req = request as {
+    system?: string | Array<{ text?: string; type?: string }>;
     tools?: Array<{ name: string }>;
     messages?: Array<{
       content: string | Array<{ text?: string; type?: string }>;
@@ -109,18 +132,24 @@ function computeRequestType(
     }
   }
 
-  const tools = req?.tools ?? [];
-  const hasTaskTool = tools.some((tool) => tool.name === "Task");
-  return hasTaskTool ? "main" : "subagent";
-}
+  // Claude Agent SDK tool sub-agents (e.g. web search) are marked by their
+  // system prompt. This is the reliable signal for Claude Desktop, whose main
+  // agent — unlike Claude Code's — does not carry the Task tool.
+  if (getMessageText(req?.system).includes("an assistant for performing a")) {
+    return "subagent";
+  }
 
-/**
- * Check if a string is a valid UUID format
- */
-function isUuid(str: string): boolean {
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(str);
+  // Legacy rows only: newer Claude requests record session_source as
+  // claude_metadata, which can no longer be distinguished from Claude Desktop,
+  // so the Task-tool negative signal (unsafe for Desktop main agents) is not
+  // applied to them — they fall through to the default below.
+  if (sessionSource === LEGACY_CLAUDE_CODE_SESSION_SOURCE) {
+    const tools = req?.tools ?? [];
+    const hasTaskTool = tools.some((tool) => tool.name === "Task");
+    return hasTaskTool ? "main" : "subagent";
+  }
+
+  return "main";
 }
 
 /**
@@ -255,6 +284,25 @@ function stripNullBytes<T>(value: T): T {
   return value;
 }
 
+/**
+ * Join predicate linking an interaction's `session_id` (VARCHAR) to a
+ * conversation's `id` (UUID) — used for Archestra Chat sessions whose
+ * session_id IS the conversation id.
+ *
+ * The only reason a cast is needed at all is type compatibility: Postgres has no
+ * `varchar = uuid` operator. We cast the TRUSTED side (`conversations.id::text`,
+ * which can never fail) rather than the untrusted `session_id::uuid` — a non-uuid
+ * session_id (e.g. some a2a / external-agent ids) would otherwise throw
+ * "invalid input syntax for type uuid" and 500 the whole query (see utils/uuid.ts).
+ * Comparing as text, a non-conversation session_id simply matches no row, and the
+ * equality on the bare `session_id` column can use interactions_session_*_idx.
+ * Conversation ids are generated as canonical lowercase uuids, so they match the
+ * canonical lowercase form `id::text` produces.
+ */
+function sessionIdMatchesConversation(): SQL {
+  return sql`${schema.interactionsTable.sessionId} = ${schema.conversationsTable.id}::text`;
+}
+
 class InteractionModel {
   static async existsByExecutionId(executionId: string): Promise<boolean> {
     const [result] = await db
@@ -266,17 +314,37 @@ class InteractionModel {
   }
 
   static async create(data: InsertInteraction) {
+    // Snapshot the environment from the agent at creation time (single funnel
+    // for all interaction writes) so per-environment cost-limit usage stays
+    // stable under later agent reassignment. The agent is authoritative: when a
+    // profile is present its current environment wins over any caller-supplied
+    // value. Only profile-less system interactions may set it explicitly.
+    const environmentId = data.profileId
+      ? await AgentModel.findEnvironmentId(data.profileId)
+      : (data.environmentId ?? null);
+
     // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
     const sanitized = {
       ...data,
+      environmentId,
       request: stripNullBytes(data.request),
+      processedRequest: stripNullBytes(data.processedRequest),
       response: stripNullBytes(data.response),
     };
 
+    // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the
+    // whole conversation on every row (no-op for all other interactions).
+    const { values, tip } =
+      await InteractionDeltaManager.encodeOnWrite(sanitized);
+
     const [interaction] = await db
       .insert(schema.interactionsTable)
-      .values(sanitized)
+      .values(values)
       .returning();
+
+    if (tip) {
+      InteractionDeltaManager.commitTip(interaction.id, tip);
+    }
 
     // Update usage tracking after interaction is created
     // Run in background to not block the response
@@ -403,22 +471,40 @@ class InteractionModel {
     );
     const agentNamesMap = await getAgentNamesById(allAgentIds);
 
+    // Reconstruct full delta-encoded requests in a single batched query so the
+    // API returns the same data as before delta-encoding was introduced.
+    const reconstructed = await reconstructInteractionRequests(data);
+
     // Add computed requestType and externalAgentIdLabel fields to each interaction
-    const dataWithComputedFields = data.map((interaction) => ({
-      ...interaction,
-      requestType: computeRequestType(
-        interaction.request,
-        interaction.sessionSource,
-      ),
-      // Resolve externalAgentId to human-readable label (supports delegation chains)
-      externalAgentIdLabel: resolveExternalAgentIdLabel(
-        interaction.externalAgentId,
-        agentNamesMap,
-      ),
-    }));
+    const dataWithComputedFields = data.map((interaction) => {
+      const full = reconstructed.get(interaction.id);
+      return {
+        ...interaction,
+        request: full?.request ?? interaction.request,
+        processedRequest:
+          full?.processedRequest ?? interaction.processedRequest,
+        // Coerce a stored response that no longer matches its provider schema
+        // into a serializable sentinel so one bad row can't 500 the whole list.
+        response: normalizeInteractionResponse(
+          interaction.type,
+          interaction.response,
+        ),
+        // computeRequestType must run on the reconstructed (full) request — it
+        // inspects messages.length and the first/last message content.
+        requestType: computeRequestType(
+          full?.request ?? interaction.request,
+          interaction.sessionSource,
+        ),
+        // Resolve externalAgentId to human-readable label (supports delegation chains)
+        externalAgentIdLabel: resolveExternalAgentIdLabel(
+          interaction.externalAgentId,
+          agentNamesMap,
+        ),
+      };
+    });
 
     return createPaginatedResult(
-      dataWithComputedFields as (Interaction & {
+      dataWithComputedFields as unknown as (Interaction & {
         requestType: "main" | "subagent";
         externalAgentIdLabel: string | null;
       })[],
@@ -498,8 +584,25 @@ class InteractionModel {
       }
     }
 
+    const reconstructed = await InteractionDeltaManager.reconstructRow(
+      interaction as unknown as {
+        id: string;
+        threadId: string | null;
+        request: unknown;
+        processedRequest: unknown;
+      },
+    );
+
     return {
       ...interaction,
+      request: reconstructed.request,
+      processedRequest: reconstructed.processedRequest,
+      // Coerce a stored response that no longer matches its provider schema
+      // into a serializable sentinel so a bad row can't 500 the detail route.
+      response: normalizeInteractionResponse(
+        interaction.type,
+        interaction.response,
+      ),
       chatErrors: await findChatErrorsForSessionId(interaction.sessionId),
     } as Interaction;
   }
@@ -508,7 +611,7 @@ class InteractionModel {
     profileId: string,
     whereClauses?: SQL[],
   ) {
-    return db
+    const rows = await db
       .select()
       .from(schema.interactionsTable)
       .where(
@@ -518,6 +621,8 @@ class InteractionModel {
         ),
       )
       .orderBy(asc(schema.interactionsTable.createdAt));
+
+    return withReconstructedRequests(rows);
   }
 
   /**
@@ -551,7 +656,9 @@ class InteractionModel {
     ]);
 
     return createPaginatedResult(
-      data as Interaction[],
+      // `data` are raw Drizzle rows (they still carry the internal delta columns
+      // that `withReconstructedRequests` needs); the public type omits them.
+      (await withReconstructedRequests(data)) as unknown as Interaction[],
       Number(total),
       pagination,
     );
@@ -711,20 +818,17 @@ class InteractionModel {
           `Profile ${interaction.profileId} has no team assignments for interaction ${interaction.id}`,
         );
 
-        // Even if agent has no teams, we should still try to update organization limits
-        // We'll use a default organization approach - get the first organization from existing limits
+        // Even if agent has no teams, update organization limits for its own org.
         try {
-          const existingOrgLimits = await db
-            .select({ entityId: schema.limitsTable.entityId })
-            .from(schema.limitsTable)
-            .where(eq(schema.limitsTable.entityType, "organization"))
-            .limit(1);
+          const organizationId = await AgentModel.findOrganizationId(
+            interaction.profileId,
+          );
 
-          if (existingOrgLimits.length > 0) {
+          if (organizationId) {
             updatePromises.push(
               LimitModel.updateTokenLimitUsage(
                 "organization",
-                existingOrgLimits[0].entityId,
+                organizationId,
                 model,
                 inputTokens,
                 outputTokens,
@@ -806,6 +910,34 @@ class InteractionModel {
         );
       }
 
+      // A passthrough virtual key accrues usage independently from the standard
+      // virtual key (distinct limit entities), so record against both when present.
+      if (interaction.passthroughVirtualKeyId) {
+        updatePromises.push(
+          LimitModel.updateTokenLimitUsage(
+            "virtual_key",
+            interaction.passthroughVirtualKeyId,
+            model,
+            inputTokens,
+            outputTokens,
+          ),
+        );
+      }
+
+      // Update environment-level token cost limits using the environment
+      // snapshotted on the interaction at creation time.
+      if (interaction.environmentId) {
+        updatePromises.push(
+          LimitModel.updateTokenLimitUsage(
+            "environment",
+            interaction.environmentId,
+            model,
+            inputTokens,
+            outputTokens,
+          ),
+        );
+      }
+
       // Execute all updates in parallel
       await Promise.all(updatePromises);
     } catch (error) {
@@ -832,11 +964,11 @@ class InteractionModel {
       profileId?: string;
       userId?: string;
       source?: InteractionSource;
+      client?: ClientFilter;
       externalAgentId?: string;
       sessionId?: string;
       startDate?: Date;
       endDate?: Date;
-      search?: string;
     },
   ): Promise<PaginatedResult<SessionSummary>> {
     // Build where clauses for access control
@@ -874,6 +1006,20 @@ class InteractionModel {
       conditions.push(eq(schema.interactionsTable.source, filters.source));
     }
 
+    // Client-app filter — queries external_agent_id (the client-attribution
+    // column). CLAUDE_CLIENT_FILTER expands to every Claude client id, matched
+    // case-insensitively (header values, auto-discovered, and backfilled).
+    if (filters?.client === CLAUDE_CLIENT_FILTER) {
+      // Lower both sides so the match stays case-insensitive even if a
+      // mixed-case id is ever added to CLAUDE_CLIENT_AGENT_IDS.
+      conditions.push(
+        inArray(
+          sql`lower(${schema.interactionsTable.externalAgentId})`,
+          CLAUDE_CLIENT_AGENT_IDS.map((id) => id.toLowerCase()),
+        ),
+      );
+    }
+
     // External agent ID filter
     if (filters?.externalAgentId) {
       conditions.push(
@@ -896,23 +1042,6 @@ class InteractionModel {
     }
     if (filters?.endDate) {
       conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));
-    }
-
-    // Free-text search filter (case-insensitive)
-    // Searches across: request messages content, response content (for titles), and conversation titles
-    if (filters?.search) {
-      const searchPattern = `%${escapeLikePattern(filters.search)}%`;
-      const searchCondition = or(
-        // Search in request messages content (JSONB)
-        sql`${schema.interactionsTable.request}::text ILIKE ${searchPattern}`,
-        // Search in response content (for Claude Code titles)
-        sql`${schema.interactionsTable.response}::text ILIKE ${searchPattern}`,
-        // Search in conversation title (for Archestra Chat sessions)
-        sql`${schema.conversationsTable.title} ILIKE ${searchPattern}`,
-      );
-      if (searchCondition) {
-        conditions.push(searchCondition);
-      }
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -938,9 +1067,12 @@ class InteractionModel {
           requestCount: count(),
           totalInputTokens: sum(schema.interactionsTable.inputTokens),
           totalOutputTokens: sum(schema.interactionsTable.outputTokens),
+          totalCacheReadTokens: sum(schema.interactionsTable.cacheReadTokens),
+          totalCacheWriteTokens: sum(schema.interactionsTable.cacheWriteTokens),
           totalCost: sum(schema.interactionsTable.cost),
           totalBaselineCost: sum(schema.interactionsTable.baselineCost),
           totalToonCostSavings: sum(schema.interactionsTable.toonCostSavings),
+          totalCacheSavings: sum(schema.interactionsTable.cacheSavings),
           // Count interactions where TOON was applied (has savings)
           toonAppliedCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonCostSavings} IS NOT NULL AND CAST(${schema.interactionsTable.toonCostSavings} AS NUMERIC) > 0)`,
           // Count interactions by skip reason
@@ -973,13 +1105,7 @@ class InteractionModel {
           schema.usersTable,
           eq(schema.interactionsTable.userId, schema.usersTable.id),
         )
-        .leftJoin(
-          schema.conversationsTable,
-          // Only join when session_id is a valid UUID format (conversation IDs are UUIDs)
-          // Non-UUID session IDs (like "a2a-...") won't match any conversation
-          // Use CASE to safely handle the cast - only cast when length is 36 (UUID format)
-          sql`CASE WHEN LENGTH(${schema.interactionsTable.sessionId}) = 36 THEN ${schema.interactionsTable.sessionId}::uuid END = ${schema.conversationsTable.id}`,
-        )
+        .leftJoin(schema.conversationsTable, sessionIdMatchesConversation())
         .where(whereClause)
         .groupBy(
           sessionGroupExpr,
@@ -992,11 +1118,7 @@ class InteractionModel {
       db
         .select({ total: sql<number>`COUNT(DISTINCT ${sessionGroupExpr})` })
         .from(schema.interactionsTable)
-        .leftJoin(
-          schema.conversationsTable,
-          // Only join when session_id is a valid UUID format (conversation IDs are UUIDs)
-          sql`CASE WHEN LENGTH(${schema.interactionsTable.sessionId}) = 36 THEN ${schema.interactionsTable.sessionId}::uuid END = ${schema.conversationsTable.id}`,
-        )
+        .leftJoin(schema.conversationsTable, sessionIdMatchesConversation())
         .where(whereClause),
     ]);
 
@@ -1039,9 +1161,12 @@ class InteractionModel {
         requestCount: Number(s.requestCount),
         totalInputTokens: Number(s.totalInputTokens) || 0,
         totalOutputTokens: Number(s.totalOutputTokens) || 0,
+        totalCacheReadTokens: Number(s.totalCacheReadTokens) || 0,
+        totalCacheWriteTokens: Number(s.totalCacheWriteTokens) || 0,
         totalCost: s.totalCost,
         totalBaselineCost: s.totalBaselineCost,
         totalToonCostSavings: s.totalToonCostSavings,
+        totalCacheSavings: s.totalCacheSavings,
         toonSkipReasonCounts: {
           applied: Number(s.toonAppliedCount) || 0,
           notEnabled: Number(s.toonNotEnabledCount) || 0,
@@ -1129,10 +1254,12 @@ class InteractionModel {
         ? whereConditions[0]
         : sql.join(whereConditions as SQL[], sql` OR `);
 
-    // Use ROW_NUMBER() to limit interactions per session
+    // Use ROW_NUMBER() to limit interactions per session.
+    // thread_id is selected so the chosen tip can be reconstructed from deltas.
     const interactionsResult = await db.execute<{
       id: string;
       session_id: string | null;
+      thread_id: string | null;
       request: unknown;
       response: unknown;
       type: string;
@@ -1140,12 +1267,12 @@ class InteractionModel {
     }>(sql`
       WITH ranked AS (
         SELECT
-          id, session_id, request, response, type, created_at,
+          id, session_id, thread_id, request, response, type, created_at,
           ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC) as rn
         FROM interactions
         WHERE ${whereClause}
       )
-      SELECT id, session_id, request, response, type, created_at
+      SELECT id, session_id, thread_id, request, response, type, created_at
       FROM ranked
       WHERE rn <= ${INTERACTIONS_PER_SESSION}
       ORDER BY session_id, created_at DESC
@@ -1154,6 +1281,7 @@ class InteractionModel {
     const interactions = interactionsResult.rows.map((row) => ({
       id: row.id,
       sessionId: row.session_id,
+      threadId: row.thread_id,
       request: row.request,
       response: row.response,
       type: row.type,
@@ -1235,8 +1363,21 @@ class InteractionModel {
       }
 
       if (lastMainInteraction || claudeCodeTitle) {
+        // Reconstruct the chosen tip's full request from deltas (no-op for
+        // legacy/non-delta rows). Only one tip per session is reconstructed.
+        let tipRequest: unknown = lastMainInteraction?.request ?? null;
+        if (lastMainInteraction && lastMainInteraction.threadId !== null) {
+          const full = await InteractionDeltaManager.reconstructRow({
+            id: lastMainInteraction.id,
+            threadId: lastMainInteraction.threadId,
+            request: lastMainInteraction.request,
+            processedRequest: null,
+          });
+          tipRequest = full.request;
+        }
+
         result.set(sessionKey, {
-          request: lastMainInteraction?.request ?? null,
+          request: tipRequest,
           type: lastMainInteraction?.type ?? "",
           claudeCodeTitle: claudeCodeTitle ?? null,
         });
@@ -1248,6 +1389,46 @@ class InteractionModel {
 }
 
 export default InteractionModel;
+
+/**
+ * Batch-reconstruct full request/processedRequest for delta-encoded rows.
+ * Legacy / non-Claude rows pass through untouched. One bounded query per call.
+ */
+function reconstructInteractionRequests(
+  rows: {
+    id: string;
+    threadId: string | null;
+    request: unknown;
+    processedRequest?: unknown;
+  }[],
+): Promise<Map<string, { request: unknown; processedRequest: unknown }>> {
+  return InteractionDeltaManager.reconstructMany(rows);
+}
+
+/**
+ * Replace each row's delta-encoded request/processedRequest with the full
+ * reconstructed values. Legacy / non-Claude rows are returned unchanged.
+ */
+async function withReconstructedRequests<
+  T extends {
+    id: string;
+    threadId: string | null;
+    request: unknown;
+    processedRequest?: unknown;
+  },
+>(rows: T[]): Promise<T[]> {
+  const reconstructed = await reconstructInteractionRequests(rows);
+  return rows.map((row) => {
+    const full = reconstructed.get(row.id);
+    return full
+      ? {
+          ...row,
+          request: full.request,
+          processedRequest: full.processedRequest,
+        }
+      : row;
+  });
+}
 
 function parseInteractionAuthMethods(
   value: string | null,

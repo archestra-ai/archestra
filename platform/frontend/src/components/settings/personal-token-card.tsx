@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk } from "@archestra/shared";
 import { Key } from "lucide-react";
 import { useState } from "react";
 import { TokenManagerDialog } from "@/components/teams/token-manager-dialog";

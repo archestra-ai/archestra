@@ -1,6 +1,6 @@
 "use client";
 
-import { parseVaultReference } from "@shared";
+import { parseVaultReference } from "@archestra/shared";
 import { Key, Loader2, Plus, Trash2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import type {
@@ -70,6 +70,12 @@ interface EnvironmentVariablesFormFieldProps<TFieldValues extends FieldValues> {
   disablePromptOnInstallation?: boolean;
   /** Tooltip message shown when the "Prompt on each installation" checkbox is disabled */
   disablePromptOnInstallationReason?: string;
+  /**
+   * Optional validator for a static plain-text value (e.g. an environment's
+   * allowlist regex). Forwarded to the add/edit dialog to show an inline error
+   * and block confirm. Returns an error message, or null when allowed.
+   */
+  validateValue?: (value: string) => string | null;
   /** Optional envFrom field array for injecting env from K8s Secrets/ConfigMaps */
   envFrom?: {
     // biome-ignore lint/suspicious/noExplicitAny: Generic field array types require any for flexibility
@@ -110,6 +116,7 @@ export function EnvironmentVariablesFormField<
   secretKeysWithStoredValue,
   disablePromptOnInstallation = false,
   disablePromptOnInstallationReason,
+  validateValue,
   envFrom,
 }: EnvironmentVariablesFormFieldProps<TFieldValues>) {
   const [dialogOpenForEnvIndex, setDialogOpenForEnvIndex] = useState<
@@ -229,6 +236,7 @@ export function EnvironmentVariablesFormField<
         useExternalSecretsManager={useExternalSecretsManager}
         disableInstallation={disablePromptOnInstallation}
         disableInstallationReason={disablePromptOnInstallationReason}
+        validateValue={validateValue}
         onClose={() => setEnvVarDialog(null)}
         onConfirm={(draft) => {
           if (envVarDialog?.mode === "add") {
@@ -487,15 +495,10 @@ function readRowAsDraft<TFieldValues extends FieldValues>(
   const get = <T,>(name: string): T =>
     form.watch(`${prefix}.${index}.${name}` as FieldPath<TFieldValues>) as T;
   const promptOnInstallation = Boolean(get<boolean>("promptOnInstallation"));
-  const promptOnPreset = Boolean(get<boolean>("promptOnPreset"));
   return {
     key: get<string>("key") ?? "",
     type: (get<string>("type") ?? "plain_text") as EnvVarDraft["type"],
-    scope: promptOnInstallation
-      ? "installation"
-      : promptOnPreset
-        ? "preset"
-        : "static",
+    scope: promptOnInstallation ? "installation" : "static",
     required: Boolean(get<boolean>("required")),
     description: get<string>("description") ?? "",
     value: get<string>("value") ?? "",
@@ -530,7 +533,6 @@ function draftToRow(draft: EnvVarDraft) {
     type: draft.type,
     value: draft.scope === "static" ? draft.value : "",
     promptOnInstallation: draft.scope === "installation",
-    promptOnPreset: draft.scope === "preset",
     required: draft.scope === "installation" ? draft.required : false,
     description: draft.description,
   };
@@ -552,7 +554,6 @@ function applyDraftToRow<TFieldValues extends FieldValues>(
   set("type", draft.type);
   set("value", draft.scope === "static" ? draft.value : "");
   set("promptOnInstallation", draft.scope === "installation");
-  set("promptOnPreset", draft.scope === "preset");
   set("required", draft.scope === "installation" ? draft.required : false);
   set("description", draft.description);
 }
@@ -594,14 +595,9 @@ function readSecretFileRowAsDraft<TFieldValues extends FieldValues>(
   const get = <T,>(name: string): T =>
     form.watch(`${prefix}.${index}.${name}` as FieldPath<TFieldValues>) as T;
   const promptOnInstallation = Boolean(get<boolean>("promptOnInstallation"));
-  const promptOnPreset = Boolean(get<boolean>("promptOnPreset"));
   return {
     key: get<string>("key") ?? "",
-    scope: promptOnInstallation
-      ? "installation"
-      : promptOnPreset
-        ? "preset"
-        : "static",
+    scope: promptOnInstallation ? "installation" : "static",
     required: Boolean(get<boolean>("required")),
     value: get<string>("value") ?? "",
     description: get<string>("description") ?? "",
@@ -636,7 +632,6 @@ function secretFileDraftToRow(draft: SecretFileDraft) {
     type: "secret" as const,
     value: draft.scope === "static" ? draft.value : "",
     promptOnInstallation: draft.scope === "installation",
-    promptOnPreset: draft.scope === "preset",
     required: draft.scope === "installation" ? draft.required : false,
     description: draft.description,
     mounted: true,
@@ -659,7 +654,6 @@ function applySecretFileDraftToRow<TFieldValues extends FieldValues>(
   set("type", "secret");
   set("value", draft.scope === "static" ? draft.value : "");
   set("promptOnInstallation", draft.scope === "installation");
-  set("promptOnPreset", draft.scope === "preset");
   set("required", draft.scope === "installation" ? draft.required : false);
   set("description", draft.description);
   set("mounted", true);

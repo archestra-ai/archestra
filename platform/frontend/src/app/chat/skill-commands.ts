@@ -1,4 +1,4 @@
-import type { ChatSkillMetadata } from "@shared";
+import type { ChatSkillMetadata } from "@archestra/shared";
 
 /** A slash command bound to a skill, e.g. typing `/deep-research` in chat. */
 export type SkillCommand = {
@@ -7,6 +7,14 @@ export type SkillCommand = {
   description: string;
   skill: ChatSkillMetadata;
 };
+
+/** The built-in admin-only command that toggles hook debug mode. */
+export const DEBUG_COMMAND_VALUE = "/debug";
+
+/** True when `text` is exactly the `/debug` command (trimmed, case-insensitive). */
+export function isDebugCommand(text: string): boolean {
+  return text.trim().toLowerCase() === DEBUG_COMMAND_VALUE;
+}
 
 /** Turn a skill name into a slash-command token, e.g. "Deep Research" → "/deep-research". */
 export function skillCommandValue(name: string): string {

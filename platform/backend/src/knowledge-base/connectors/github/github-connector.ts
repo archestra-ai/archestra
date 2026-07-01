@@ -1,9 +1,6 @@
-import { createPrivateKey } from "node:crypto";
 import { Octokit } from "@octokit/rest";
-import { TimeInMs } from "@shared";
-import { SignJWT } from "jose";
 import type pino from "pino";
-import { LRUCacheManager } from "@/cache-manager";
+import { resolveInstallationToken } from "@/integrations/github/app-auth";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -20,11 +17,6 @@ import {
 } from "../base-connector";
 
 const BATCH_SIZE = 50;
-const GITHUB_APP_INSTALLATION_TOKEN_TTL_MS = 55 * TimeInMs.Minute;
-const githubInstallationTokenCache = new LRUCacheManager<string>({
-  maxSize: 500,
-  defaultTtl: GITHUB_APP_INSTALLATION_TOKEN_TTL_MS,
-});
 
 export class GithubConnector extends BaseConnector {
   type = "github" as const;
@@ -504,7 +496,7 @@ async function createOctokit(
   const auth = await resolveGithubAuthToken(config, credentials, nativeFetch);
   return new Octokit({
     auth,
-    baseUrl: config.githubUrl.replace(/\/+$/, ""),
+    baseUrl: resolveGithubApiUrl(config, credentials).replace(/\/+$/, ""),
     log: {
       debug: (message: string) =>
         log.debug({ sdkMessage: message }, "SDK debug"),
@@ -524,6 +516,18 @@ async function createOctokit(
   });
 }
 
+// the App config owns the host its installation token is minted against, so
+// App-auth connectors must talk to that host regardless of config.githubUrl
+function resolveGithubApiUrl(
+  config: GithubConfig,
+  credentials: ConnectorCredentials,
+): string {
+  if (config.authMethod === "github_app" && credentials.githubApp) {
+    return credentials.githubApp.githubUrl;
+  }
+  return config.githubUrl;
+}
+
 async function resolveGithubAuthToken(
   config: GithubConfig,
   credentials: ConnectorCredentials,
@@ -533,71 +537,22 @@ async function resolveGithubAuthToken(
     return credentials.apiToken;
   }
 
-  const appId = config.githubAppId;
-  const installationId = config.githubAppInstallationId;
-  const privateKey = credentials.apiToken;
-  if (!appId || !installationId || !privateKey) {
+  const app = credentials.githubApp;
+  if (!app) {
     throw new Error(
-      "GitHub App authentication requires app ID, installation ID, and private key",
+      "GitHub App credentials were not resolved for this connector",
     );
   }
 
-  const cacheKey = buildGithubAppInstallationTokenCacheKey({
-    githubUrl: config.githubUrl,
-    appId,
-    installationId,
-  });
-  const cachedToken = githubInstallationTokenCache.get(cacheKey);
-  if (cachedToken) {
-    return cachedToken;
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  const key = createPrivateKey(normalizePrivateKey(privateKey));
-  const jwt = await new SignJWT({})
-    .setProtectedHeader({ alg: "RS256" })
-    .setIssuedAt(now - 60)
-    .setExpirationTime(now + 9 * 60)
-    .setIssuer(appId)
-    .sign(key);
-
-  const response = await fetchImpl(
-    `${config.githubUrl.replace(/\/+$/, "")}/app/installations/${installationId}/access_tokens`,
+  return resolveInstallationToken(
     {
-      method: "POST",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${jwt}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      githubUrl: app.githubUrl,
+      appId: app.appId,
+      installationId: app.installationId,
+      privateKey: credentials.apiToken,
     },
+    fetchImpl,
   );
-
-  if (!response.ok) {
-    const responseMessage = await readGithubErrorResponse(response);
-    throw new Error(
-      [
-        `Failed to create GitHub App installation token: ${response.status} ${response.statusText}`,
-        responseMessage,
-      ]
-        .filter(Boolean)
-        .join(": "),
-    );
-  }
-
-  const body = (await response.json()) as { token?: string };
-  if (!body.token) {
-    throw new Error(
-      "GitHub App installation token response did not include a token",
-    );
-  }
-  githubInstallationTokenCache.set(
-    cacheKey,
-    body.token,
-    GITHUB_APP_INSTALLATION_TOKEN_TTL_MS,
-  );
-  return body.token;
 }
 
 function parseGithubConfig(
@@ -607,28 +562,13 @@ function parseGithubConfig(
   return result.success ? result.data : null;
 }
 
-function buildGithubAppInstallationTokenCacheKey(params: {
-  githubUrl: string;
-  appId: string;
-  installationId: string;
-}): string {
-  return [
-    params.githubUrl.replace(/\/+$/, ""),
-    params.appId,
-    params.installationId,
-  ].join(":");
-}
-
 function validateGithubConfig(config: GithubConfig): string | null {
   if (!/^https?:\/\/.+/.test(config.githubUrl)) {
     return "githubUrl must be a valid HTTP(S) URL";
   }
 
-  if (
-    config.authMethod === "github_app" &&
-    (!config.githubAppId || !config.githubAppInstallationId)
-  ) {
-    return "GitHub App authentication requires githubAppId and githubAppInstallationId";
+  if (config.authMethod === "github_app" && !config.githubAppConfigId) {
+    return "GitHub App authentication requires githubAppConfigId";
   }
 
   return null;
@@ -828,10 +768,6 @@ async function getFileContent(
   return Buffer.from(data.content, "base64").toString("utf-8");
 }
 
-function normalizePrivateKey(privateKey: string): string {
-  return privateKey.replace(/\\n/g, "\n");
-}
-
 function repositoryFileToDocument(
   filePath: string,
   content: string,
@@ -851,26 +787,6 @@ function repositoryFileToDocument(
       fileKind: "repository_file",
     },
   };
-}
-
-async function readGithubErrorResponse(response: Response): Promise<string> {
-  try {
-    const text = await response.text();
-    if (!text) return "";
-
-    try {
-      const parsed = JSON.parse(text) as { message?: unknown };
-      if (typeof parsed.message === "string") {
-        return parsed.message;
-      }
-    } catch {
-      // Fall back to the raw response body below.
-    }
-
-    return text.slice(0, 500);
-  } catch {
-    return "";
-  }
 }
 
 function itemToDocument(

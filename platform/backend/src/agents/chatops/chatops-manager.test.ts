@@ -1,122 +1,47 @@
+import { vi } from "vitest";
+
+// Control the one-time mute-hint claim per test (the real one hits the
+// distributed cache, which isn't started in this suite). The `mock`-prefixed
+// name is referenced lazily inside the factory so it survives vi.mock hoisting.
+const mockClaimThreadMuteHint = vi.fn();
+vi.mock("./channel-activation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./channel-activation")>();
+  return {
+    ...actual,
+    claimThreadMuteHint: (
+      ...args: Parameters<typeof actual.claimThreadMuteHint>
+    ) => mockClaimThreadMuteHint(...args),
+  };
+});
+
+import { eq } from "drizzle-orm";
+import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
+import db, { schema } from "@/database";
 import {
   AgentTeamModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsThreadAgentOverrideModel,
 } from "@/models";
-import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type {
+  ChatOpsApprovalDecision,
   ChatOpsProvider,
   ChatReplyOptions,
   IncomingChatMessage,
 } from "@/types";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
   buildChatOpsSessionId,
   ChatOpsManager,
-  findTolerantMatchLength,
   matchesAgentName,
 } from "./chatops-manager";
-
-describe("findTolerantMatchLength", () => {
-  describe("exact matches", () => {
-    test("matches exact name with same case", () => {
-      expect(findTolerantMatchLength("Agent Peter hello", "Agent Peter")).toBe(
-        11,
-      );
-    });
-
-    test("matches exact name case-insensitively", () => {
-      expect(findTolerantMatchLength("agent peter hello", "Agent Peter")).toBe(
-        11,
-      );
-    });
-
-    test("matches at end of string", () => {
-      expect(findTolerantMatchLength("Agent Peter", "Agent Peter")).toBe(11);
-    });
-
-    test("matches with newline after", () => {
-      expect(
-        findTolerantMatchLength("Agent Peter\nsome message", "Agent Peter"),
-      ).toBe(11);
-    });
-  });
-
-  describe("space-tolerant matches", () => {
-    test("matches name without spaces in text", () => {
-      expect(findTolerantMatchLength("AgentPeter hello", "Agent Peter")).toBe(
-        10,
-      );
-    });
-
-    test("matches name without spaces case-insensitively", () => {
-      expect(findTolerantMatchLength("agentpeter hello", "Agent Peter")).toBe(
-        10,
-      );
-    });
-
-    test("matches with extra spaces in text", () => {
-      expect(findTolerantMatchLength("Agent  Peter hello", "Agent Peter")).toBe(
-        12,
-      );
-    });
-
-    test("matches single word agent name", () => {
-      expect(findTolerantMatchLength("Sales hello", "Sales")).toBe(5);
-    });
-  });
-
-  describe("non-matches", () => {
-    test("returns null when name not at start", () => {
-      expect(findTolerantMatchLength("Hello Agent Peter", "Agent Peter")).toBe(
-        null,
-      );
-    });
-
-    test("returns null for partial match without word boundary", () => {
-      expect(findTolerantMatchLength("AgentPeterX hello", "Agent Peter")).toBe(
-        null,
-      );
-    });
-
-    test("returns null for completely different text", () => {
-      expect(findTolerantMatchLength("Hello World", "Agent Peter")).toBe(null);
-    });
-
-    test("returns null for partial name match", () => {
-      expect(findTolerantMatchLength("Agent hello", "Agent Peter")).toBe(null);
-    });
-
-    test("returns null when text is shorter than name", () => {
-      expect(findTolerantMatchLength("Age", "Agent Peter")).toBe(null);
-    });
-  });
-
-  describe("edge cases", () => {
-    test("handles empty text", () => {
-      expect(findTolerantMatchLength("", "Agent")).toBe(null);
-    });
-
-    test("handles single character agent name", () => {
-      expect(findTolerantMatchLength("A hello", "A")).toBe(1);
-    });
-
-    test("handles agent name with multiple spaces", () => {
-      expect(findTolerantMatchLength("John  Doe hello", "John Doe")).toBe(9);
-    });
-
-    test("handles mixed case input", () => {
-      expect(findTolerantMatchLength("AGENTPETER hello", "Agent Peter")).toBe(
-        10,
-      );
-    });
-
-    test("handles text that is exactly the agent name", () => {
-      expect(findTolerantMatchLength("Sales", "Sales")).toBe(5);
-    });
-  });
-});
+import {
+  CHATOPS_ATTACHMENT_LIMITS,
+  CHATOPS_NO_REPLY_SENTINEL,
+  THREAD_MUTE_HINT,
+} from "./constants";
 
 describe("matchesAgentName", () => {
   test("matches exact name", () => {
@@ -135,10 +60,6 @@ describe("matchesAgentName", () => {
 
   test("matches with extra spaces in input", () => {
     expect(matchesAgentName("Agent  Peter", "Agent Peter")).toBe(true);
-  });
-
-  test("matches with spaces in both", () => {
-    expect(matchesAgentName("Agent Peter", "Agent Peter")).toBe(true);
   });
 
   test("returns false for partial match", () => {
@@ -164,6 +85,10 @@ describe("ChatOpsManager security validation", () => {
       sendReply?: (options: ChatReplyOptions) => Promise<string>;
       hasMissingScopes?: () => boolean;
       notifyMissingScopes?: (message: IncomingChatMessage) => Promise<void>;
+      clearTypingStatus?: (
+        channelId: string,
+        threadTs: string,
+      ) => Promise<void>;
     } = {},
   ): ChatOpsProvider {
     return {
@@ -189,6 +114,9 @@ describe("ChatOpsManager security validation", () => {
       discoverChannels: async () => null,
       addApprovalRequestForm: async () => {},
       updateApprovalRequest: async () => {},
+      ...(overrides.clearTypingStatus && {
+        clearTypingStatus: overrides.clearTypingStatus,
+      }),
     };
   }
 
@@ -227,6 +155,134 @@ describe("ChatOpsManager security validation", () => {
       ...overrides,
     };
   }
+
+  // ===========================================================================
+  // Frictionless onboarding: a channel with no agent yet should auto-assign a
+  // clear default (org default, or the sole agent) instead of silently dropping.
+  // ===========================================================================
+
+  function makeManagerWith(provider: ChatOpsProvider): ChatOpsManager {
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = provider;
+    return manager;
+  }
+
+  async function unboundChannelBinding(organizationId: string) {
+    return ChatOpsChannelBindingModel.create({
+      organizationId,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+    });
+  }
+
+  function refetchBinding() {
+    return ChatOpsChannelBindingModel.findByChannel({
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+    });
+  }
+
+  test("auto-assigns the sole agent when a channel has no agent yet", async ({
+    makeOrganization,
+    makeInternalAgent,
+  }) => {
+    mockA2AExecutor();
+    const org = await makeOrganization();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    await unboundChannelBinding(org.id);
+
+    const provider = createMockProvider();
+    await makeManagerWith(provider).processMessage({
+      message: createMockMessage(),
+      provider,
+    });
+
+    expect((await refetchBinding())?.agentId).toBe(agent.id);
+  });
+
+  test("auto-assigns the org-wide default agent over other candidates", async ({
+    makeOrganization,
+    makeInternalAgent,
+  }) => {
+    mockA2AExecutor();
+    const org = await makeOrganization();
+    const preferred = await makeInternalAgent({ organizationId: org.id });
+    await makeInternalAgent({ organizationId: org.id }); // a second, non-default
+    await db
+      .update(schema.organizationsTable)
+      .set({ defaultAgentId: preferred.id })
+      .where(eq(schema.organizationsTable.id, org.id));
+    await unboundChannelBinding(org.id);
+
+    const provider = createMockProvider();
+    await makeManagerWith(provider).processMessage({
+      message: createMockMessage(),
+      provider,
+    });
+
+    expect((await refetchBinding())?.agentId).toBe(preferred.id);
+  });
+
+  test("prompts with the picker (no auto-assign) when multiple agents and no default", async ({
+    makeOrganization,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    await makeInternalAgent({ organizationId: org.id });
+    await makeInternalAgent({ organizationId: org.id });
+    await unboundChannelBinding(org.id);
+
+    const cardSpy = vi.fn().mockResolvedValue(undefined);
+    const provider = createMockProvider();
+    provider.sendAgentSelectionCard = cardSpy;
+
+    const result = await makeManagerWith(provider).processMessage({
+      message: createMockMessage(),
+      provider,
+    });
+
+    expect(cardSpy).toHaveBeenCalled();
+    expect((await refetchBinding())?.agentId).toBeNull();
+    // Handled via the card — not a silent drop.
+    expect(result.success).toBe(true);
+  });
+
+  test("uses the sender's lone personal agent, without pinning it to the channel", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    mockA2AExecutor();
+    const org = await makeOrganization();
+    const user = await makeUser({ email: "joey@example.com" });
+    await makeInternalAgent({
+      organizationId: org.id,
+      scope: "personal",
+      authorId: user.id,
+    });
+    await unboundChannelBinding(org.id);
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const provider = createMockProvider({
+      getUserEmail: async () => "joey@example.com",
+      sendReply: sendReplySpy,
+    });
+
+    const result = await makeManagerWith(provider).processMessage({
+      message: createMockMessage({ senderEmail: "joey@example.com" }),
+      provider,
+    });
+
+    // The sender's personal agent handled the message...
+    expect(result.success).toBe(true);
+    // ...but a personal agent must NOT be pinned as the shared channel default
+    // (other members would be denied access to it).
+    expect((await refetchBinding())?.agentId).toBeNull();
+  });
 
   test("successful authorization - user exists and has team access", async ({
     makeUser,
@@ -284,6 +340,395 @@ describe("ChatOpsManager security validation", () => {
         text: expect.stringContaining("Access Denied"),
       }),
     );
+  });
+
+  test("per-user provider not connected - replies with a connect link", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockRejectedValue(
+      new LlmProviderAuthRequiredError("github-copilot"),
+    );
+
+    const user = await makeUser({ email: "copilot@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "copilot@example.com",
+      sendReply: sendReplySpy,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage(),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(false);
+    // The reply names the provider and links the user to connect their account.
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("GitHub Copilot"),
+      }),
+    );
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("/settings"),
+      }),
+    );
+  });
+
+  // ===========================================================================
+  // One-time "you can mute me" hint: rides the bot's first reply in a channel
+  // thread (where sticky auto-reply applies), and nowhere else.
+  // ===========================================================================
+
+  // A channel whose sender is a known, authorized team member, so replies
+  // reach the agent-response path (where the hint lives) rather than an
+  // access-denied/onboarding branch.
+  async function bindAuthorizedChannel(ctx: {
+    makeOrganization: (...args: never[]) => Promise<{ id: string }>;
+    makeUser: (opts: { email: string }) => Promise<{ id: string }>;
+    makeTeam: (orgId: string, userId: string) => Promise<{ id: string }>;
+    makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
+    makeInternalAgent: (opts: {
+      organizationId: string;
+      teams: string[];
+    }) => Promise<{ id: string }>;
+  }): Promise<{ senderEmail: string }> {
+    const senderEmail = "member@example.com";
+    const org = await ctx.makeOrganization();
+    const user = await ctx.makeUser({ email: senderEmail });
+    const team = await ctx.makeTeam(org.id, user.id);
+    await ctx.makeTeamMember(team.id, user.id);
+    const agent = await ctx.makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+    return { senderEmail };
+  }
+
+  async function processChannelReply(params: {
+    message: IncomingChatMessage;
+    senderEmail: string;
+  }): Promise<ReturnType<typeof vi.fn>> {
+    mockA2AExecutor();
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const provider = createMockProvider({
+      sendReply: sendReplySpy,
+      getUserEmail: async () => params.senderEmail,
+    });
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = provider;
+    await manager.processMessage({ message: params.message, provider });
+    return sendReplySpy;
+  }
+
+  test("rides the bot's first reply in a channel thread", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const { senderEmail } = await bindAuthorizedChannel({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    });
+    mockClaimThreadMuteHint.mockReset().mockResolvedValue(true);
+
+    const sendReplySpy = await processChannelReply({
+      senderEmail,
+      message: createMockMessage({
+        threadId: "thread-1",
+        senderEmail,
+        metadata: { conversationType: "channel", botMentioned: true },
+      }),
+    });
+
+    expect(mockClaimThreadMuteHint).toHaveBeenCalledWith({
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      threadId: "thread-1",
+    });
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({ hint: THREAD_MUTE_HINT }),
+    );
+  });
+
+  test("omits the hint on later replies once the thread's slot is claimed", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const { senderEmail } = await bindAuthorizedChannel({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    });
+    // Slot already taken → claim returns false.
+    mockClaimThreadMuteHint.mockReset().mockResolvedValue(false);
+
+    const sendReplySpy = await processChannelReply({
+      senderEmail,
+      message: createMockMessage({
+        threadId: "thread-1",
+        senderEmail,
+        metadata: { conversationType: "channel", botMentioned: false },
+      }),
+    });
+
+    expect(mockClaimThreadMuteHint).toHaveBeenCalled();
+    expect(sendReplySpy.mock.calls[0][0].hint).toBeUndefined();
+  });
+
+  test("never hints outside a channel thread (DMs/group chats have no sticky auto-reply)", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const { senderEmail } = await bindAuthorizedChannel({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    });
+    mockClaimThreadMuteHint.mockReset().mockResolvedValue(true);
+
+    const sendReplySpy = await processChannelReply({
+      senderEmail,
+      message: createMockMessage({
+        threadId: "thread-1",
+        senderEmail,
+        metadata: { conversationType: "groupChat", botMentioned: true },
+      }),
+    });
+
+    // Gated out before the cache is even consulted.
+    expect(mockClaimThreadMuteHint).not.toHaveBeenCalled();
+    expect(sendReplySpy.mock.calls[0][0].hint).toBeUndefined();
+  });
+
+  test("suppresses the reply when the agent answers with the no-reply sentinel", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockResolvedValue({
+      text: CHATOPS_NO_REPLY_SENTINEL,
+      messageId: "test-message-id",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: "test-message-id",
+        role: "assistant",
+        parts: [{ type: "text", text: CHATOPS_NO_REPLY_SENTINEL }],
+      },
+    });
+
+    const user = await makeUser({ email: "silent@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const clearTypingStatusSpy = vi.fn().mockResolvedValue(undefined);
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "silent@example.com",
+      sendReply: sendReplySpy,
+      clearTypingStatus: clearTypingStatusSpy,
+    });
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage(),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    expect(sendReplySpy).not.toHaveBeenCalled();
+    // Without posting anything, the transient "thinking" indicator must be
+    // cleared explicitly or it spins forever (Slack assistant status).
+    expect(clearTypingStatusSpy).toHaveBeenCalled();
+
+    // Models often narrate the decision around the sentinel — the narration
+    // must be swallowed too, not posted as a visible reply.
+    const narrated = `This message is addressed to Matvey, not me, so I'll stay out of it.\n\n${CHATOPS_NO_REPLY_SENTINEL}`;
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockResolvedValue({
+      text: narrated,
+      messageId: "narrated-message-id",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: "narrated-message-id",
+        role: "assistant",
+        parts: [{ type: "text", text: narrated }],
+      },
+    });
+
+    const narratedResult = await manager.processMessage({
+      message: createMockMessage({ messageId: "narrated-incoming-id" }),
+      provider: mockProvider,
+    });
+
+    expect(narratedResult.success).toBe(true);
+    expect(sendReplySpy).not.toHaveBeenCalled();
+  });
+
+  test("frames group conversations with speaker, mention state, and the no-reply sentinel", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executeSpy = mockA2AExecutor();
+
+    const user = await makeUser({ email: "group@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "group@example.com",
+    });
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    await manager.processMessage({
+      message: createMockMessage({
+        metadata: { conversationType: "groupChat", botMentioned: false },
+      }),
+      provider: mockProvider,
+    });
+
+    const groupCall = JSON.stringify(executeSpy.mock.calls[0]);
+    expect(groupCall).toContain("group conversation with multiple people");
+    expect(groupCall).toContain("Test User");
+    // The platform name is a known alias — people address the bot by it
+    expect(groupCall).toContain(`address you as \\"Archestra\\"`);
+    // A missing mention is never asserted negatively — users often address
+    // the bot by name without a real @mention.
+    expect(groupCall).not.toContain("@mentions you directly");
+    expect(groupCall).toContain(CHATOPS_NO_REPLY_SENTINEL);
+
+    // A message @mentioning someone else is flagged as addressed to them
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "other-mention-message-id",
+        metadata: {
+          conversationType: "groupChat",
+          botMentioned: false,
+          mentionedOthers: ["Innokentii Konstantinov"],
+        },
+      }),
+      provider: mockProvider,
+    });
+
+    const otherMentionCall = JSON.stringify(executeSpy.mock.calls[1]);
+    expect(otherMentionCall).toContain(
+      "It @mentions Innokentii Konstantinov — another person, not you",
+    );
+
+    // A direct @mention never gets the silence option — always answer,
+    // even when the message is small talk outside the agent's specialty.
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "direct-mention-message-id",
+        metadata: { conversationType: "channel", botMentioned: true },
+      }),
+      provider: mockProvider,
+    });
+
+    const directMentionCall = JSON.stringify(executeSpy.mock.calls[2]);
+    expect(directMentionCall).toContain("It @mentions you directly");
+    expect(directMentionCall).toContain("always answer");
+    expect(directMentionCall).not.toContain(CHATOPS_NO_REPLY_SENTINEL);
+
+    // DMs get no group framing
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "dm-message-id",
+        metadata: { conversationType: "personal" },
+      }),
+      provider: mockProvider,
+    });
+
+    const dmCall = JSON.stringify(executeSpy.mock.calls[3]);
+    expect(dmCall).not.toContain("group conversation with multiple people");
+    expect(dmCall).not.toContain(CHATOPS_NO_REPLY_SENTINEL);
   });
 
   test("resolves user via senderEmail without calling getUserEmail", async ({
@@ -555,6 +1000,211 @@ describe("ChatOpsManager security validation", () => {
       }),
     );
   });
+
+  test("Teams approver mixed-case email is accepted", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const sendMessageSpy = vi
+      .spyOn(A2AManager.prototype, "sendMessage")
+      .mockResolvedValue({});
+
+    const user = await makeUser({ email: "approver@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider();
+    const manager = new ChatOpsManager();
+
+    const decision: ChatOpsApprovalDecision = {
+      taskId: "task-1",
+      approvalId: "approval-1",
+      approved: true,
+      toolName: "some_tool",
+      messageTs: "msg-ts",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      userId: "teams-aad-id",
+      userName: "Approver",
+      responseUrl: "",
+      // Teams surfaces the approver email with original casing...
+      approverEmail: "Approver@Example.com",
+      originalMessage: createMockMessage({
+        // ...while the original request stored it lowercased.
+        senderEmail: "approver@example.com",
+      }),
+    };
+
+    try {
+      await manager.handleInteractiveApprovalDecision(mockProvider, decision);
+
+      expect(sendMessageSpy).toHaveBeenCalledTimes(1);
+      expect(sendMessageSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentId: agent.id,
+          actor: expect.objectContaining({ id: user.id }),
+        }),
+      );
+    } finally {
+      sendMessageSpy.mockRestore();
+    }
+  });
+
+  // The "AgentName > message" syntax routes a single message to a different
+  // agent than the channel default. These tests pin both halves of that
+  // behavior: a real switch must still strip the prefix, while a message that
+  // merely contains ">" (no matching agent) must reach the agent intact.
+  // Regression guard for the silent-truncation bug (issue #5747).
+  describe("inline agent mention", () => {
+    /** Spy on sendMessage and return the text of the first part it received. */
+    function captureSentText(spy: ReturnType<typeof vi.spyOn>): string {
+      const call = spy.mock.calls[0]?.[0] as
+        | { request: { message: { parts: Array<{ text?: string }> } } }
+        | undefined;
+      return call?.request.message.parts[0]?.text ?? "";
+    }
+
+    test("keeps the full message when text contains '>' but no agent matches", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      const sendMessageSpy = vi
+        .spyOn(A2AManager.prototype, "sendMessage")
+        .mockResolvedValue({});
+
+      const user = await makeUser({ email: "inline@example.com" });
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+      await makeTeamMember(team.id, user.id);
+      const agent = await makeInternalAgent({
+        organizationId: org.id,
+        teams: [team.id],
+      });
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channelId: "test-channel-id",
+        workspaceId: "test-workspace-id",
+        agentId: agent.id,
+      });
+
+      const mockProvider = createMockProvider({
+        getUserEmail: async () => "inline@example.com",
+      });
+      const manager = new ChatOpsManager();
+      (
+        manager as unknown as { msTeamsProvider: ChatOpsProvider }
+      ).msTeamsProvider = mockProvider;
+
+      try {
+        await manager.processMessage({
+          message: createMockMessage({
+            text: "Remember the secret word is BANANA > what was the secret word?",
+          }),
+          provider: mockProvider,
+        });
+
+        // Routed to the channel's default agent (no switch happened)...
+        expect(sendMessageSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ agentId: agent.id }),
+        );
+        // ...and the whole message survived — nothing before ">" was dropped.
+        const sentText = captureSentText(sendMessageSpy);
+        expect(sentText).toContain(
+          "Remember the secret word is BANANA > what was the secret word?",
+        );
+      } finally {
+        sendMessageSpy.mockRestore();
+      }
+    });
+
+    test("switches agent and strips the prefix when the prefix is a real agent", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      const sendMessageSpy = vi
+        .spyOn(A2AManager.prototype, "sendMessage")
+        .mockResolvedValue({});
+
+      const user = await makeUser({ email: "switch@example.com" });
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+      await makeTeamMember(team.id, user.id);
+
+      const defaultAgent = await makeInternalAgent({
+        organizationId: org.id,
+        teams: [team.id],
+        name: "Support",
+      });
+      const salesAgent = await makeInternalAgent({
+        organizationId: org.id,
+        teams: [team.id],
+        name: "Sales",
+      });
+      await AgentTeamModel.assignTeamsToAgent(defaultAgent.id, [team.id]);
+      await AgentTeamModel.assignTeamsToAgent(salesAgent.id, [team.id]);
+
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channelId: "test-channel-id",
+        workspaceId: "test-workspace-id",
+        agentId: defaultAgent.id,
+      });
+
+      const mockProvider = createMockProvider({
+        getUserEmail: async () => "switch@example.com",
+      });
+      const manager = new ChatOpsManager();
+      (
+        manager as unknown as { msTeamsProvider: ChatOpsProvider }
+      ).msTeamsProvider = mockProvider;
+
+      try {
+        await manager.processMessage({
+          message: createMockMessage({
+            text: "Sales > what's the status?",
+          }),
+          provider: mockProvider,
+        });
+
+        // Routed to the named agent, not the channel default...
+        expect(sendMessageSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ agentId: salesAgent.id }),
+        );
+        // ...with the "Sales >" prefix stripped from what the agent sees.
+        const sentText = captureSentText(sendMessageSpy);
+        expect(sentText).toContain("what's the status?");
+        expect(sentText).not.toContain("Sales >");
+      } finally {
+        sendMessageSpy.mockRestore();
+      }
+    });
+  });
 });
 
 describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
@@ -713,38 +1363,6 @@ describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", (
     const manager = new ChatOpsManager();
     const agents = await manager.getAccessibleChatopsAgents({
       senderEmail: "channeluser@example.com",
-      isDm: false,
-    });
-
-    expect(agents.some((a) => a.id === orgAgent.id)).toBe(true);
-    expect(agents.some((a) => a.id === personalAgent.id)).toBe(false);
-  });
-
-  test("excludes personal agents when isDm is not specified", async ({
-    makeUser,
-    makeOrganization,
-    makeInternalAgent,
-    makeMember,
-  }) => {
-    const user = await makeUser({ email: "defaultuser@example.com" });
-    const org = await makeOrganization();
-    await makeMember(user.id, org.id, { role: "admin" });
-
-    const orgAgent = await makeInternalAgent({
-      organizationId: org.id,
-      name: "Org Agent",
-      scope: "org",
-    });
-    const personalAgent = await makeInternalAgent({
-      organizationId: org.id,
-      name: "Personal Agent",
-      scope: "personal",
-      authorId: user.id,
-    });
-
-    const manager = new ChatOpsManager();
-    const agents = await manager.getAccessibleChatopsAgents({
-      senderEmail: "defaultuser@example.com",
       isDm: false,
     });
 
@@ -1463,9 +2081,7 @@ describe("ChatOpsManager attachment passthrough", () => {
         name: "screenshot.png",
       },
       {
-        // Don't use PDF because A2A message executor doesn't support it right now
-        // contentType: "application/pdf",
-        contentType: "image/jpg",
+        contentType: "application/pdf",
         contentBase64: Buffer.alloc(10_000).toString("base64"),
         name: "report.pdf",
       },
@@ -1478,20 +2094,19 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     expect(result.success).toBe(true);
+    // The manager forwards the attachments to the executor via the `attachments`
+    // param (preserving mime type + filename); model-capability gating and
+    // provider normalization happen inside the executor.
     expect(executorSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        messages: expect.arrayContaining([
+        attachments: expect.arrayContaining([
           expect.objectContaining({
-            content: expect.arrayContaining([
-              expect.objectContaining({
-                type: "file",
-                mediaType: "image/png",
-              }),
-              expect.objectContaining({
-                type: "file",
-                mediaType: "image/jpg",
-              }),
-            ]),
+            contentType: "image/png",
+            name: "screenshot.png",
+          }),
+          expect.objectContaining({
+            contentType: "application/pdf",
+            name: "report.pdf",
           }),
         ]),
       }),
@@ -1549,11 +2164,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     await manager.processMessage({ message, provider: mockProvider });
 
     const callArg = executorSpy.mock.calls[0][0];
-    for (const message of callArg.messages || []) {
-      expect(message.content).not.toEqual(
-        expect.arrayContaining([expect.objectContaining({ type: "file" })]),
-      );
-    }
+    expect(callArg.attachments).toBeUndefined();
   });
 
   test("includes image attachments from thread history in follow-up messages", async ({
@@ -1651,20 +2262,245 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     expect(result.success).toBe(true);
-    // The image from thread history should be included in the A2A call
+    // The image from thread history should be forwarded to the executor via the
+    // `attachments` param.
     expect(executorSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        messages: expect.arrayContaining([
+        attachments: expect.arrayContaining([
           expect.objectContaining({
-            content: expect.arrayContaining([
-              expect.objectContaining({
-                type: "file",
-                mediaType: historyImageAttachment.contentType,
-              }),
-            ]),
+            contentType: historyImageAttachment.contentType,
           }),
         ]),
       }),
+    );
+  });
+
+  test("includes non-image attachments (PDF) from thread history within budget", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const downloadedPdf = {
+      contentType: "application/pdf",
+      contentBase64: Buffer.alloc(10_000).toString("base64"),
+      name: "history.pdf",
+    };
+
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "I read the PDF from earlier",
+        messageId: "msg-3",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "response" }],
+        },
+      });
+
+    const user = await makeUser({ email: "pdf-history@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "pdf-history@example.com",
+    });
+    mockProvider.getThreadHistory = async () => [
+      {
+        messageId: "earlier-msg",
+        senderId: "test-sender-aad-id",
+        senderName: "Test User",
+        text: "Here is the report",
+        timestamp: new Date(Date.now() - 60_000),
+        isFromBot: false,
+        files: [
+          {
+            url: "https://files.slack.com/files-pri/T123/report.pdf",
+            mimetype: "application/pdf",
+            name: "history.pdf",
+            size: 1024,
+          },
+        ],
+      },
+    ];
+    const downloadFilesSpy = vi.fn().mockResolvedValue([downloadedPdf]);
+    mockProvider.downloadFiles = downloadFilesSpy;
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const message = createMockMessage({
+      threadId: "thread-123",
+      isThreadReply: true,
+      text: "Summarize the report",
+    });
+
+    const result = await manager.processMessage({
+      message,
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    // The PDF history file must be eligible for re-download (image-only filter removed)
+    expect(downloadFilesSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          mimetype: "application/pdf",
+          name: "history.pdf",
+        }),
+      ]),
+    );
+    // And, being within budget, it must be forwarded to the executor.
+    const forwardedAttachments =
+      executorSpy.mock.calls[0]?.[0]?.attachments ?? [];
+    expect(forwardedAttachments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentType: "application/pdf",
+          name: "history.pdf",
+        }),
+      ]),
+    );
+  });
+
+  test("skips a non-image history attachment that exceeds the total budget", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    // Current message already consumes almost the entire total budget, leaving
+    // only a tiny remainder for thread-history replay.
+    const currentPdf = {
+      contentType: "application/pdf",
+      contentBase64: Buffer.alloc(
+        CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE - 2000,
+      ).toString("base64"),
+      name: "current.pdf",
+    };
+    // The downloaded history file is well within the per-file size limit but
+    // larger than the remaining total budget, so it must be trimmed.
+    const downloadedHistoryPdf = {
+      contentType: "application/pdf",
+      contentBase64: Buffer.alloc(10_000).toString("base64"),
+      name: "history.pdf",
+    };
+
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "ok",
+        messageId: "msg-3",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "response" }],
+        },
+      });
+
+    const user = await makeUser({ email: "pdf-budget@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "pdf-budget@example.com",
+    });
+    mockProvider.getThreadHistory = async () => [
+      {
+        messageId: "earlier-msg",
+        senderId: "test-sender-aad-id",
+        senderName: "Test User",
+        text: "Here is the report",
+        timestamp: new Date(Date.now() - 60_000),
+        isFromBot: false,
+        files: [
+          {
+            url: "https://files.slack.com/files-pri/T123/report.pdf",
+            mimetype: "application/pdf",
+            name: "history.pdf",
+            size: 1024,
+          },
+        ],
+      },
+    ];
+    const downloadFilesSpy = vi.fn().mockResolvedValue([downloadedHistoryPdf]);
+    mockProvider.downloadFiles = downloadFilesSpy;
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const message = createMockMessage({
+      threadId: "thread-123",
+      isThreadReply: true,
+      text: "Summarize both reports",
+      attachments: [currentPdf],
+    });
+
+    const result = await manager.processMessage({
+      message,
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    // It is still eligible (download happens before budget trimming)...
+    expect(downloadFilesSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          mimetype: "application/pdf",
+          name: "history.pdf",
+        }),
+      ]),
+    );
+    // ...but it must NOT survive the total-budget trim, while the current
+    // attachment is preserved.
+    const forwardedAttachments =
+      executorSpy.mock.calls[0]?.[0]?.attachments ?? [];
+    expect(forwardedAttachments).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "history.pdf" }),
+      ]),
+    );
+    expect(forwardedAttachments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "current.pdf" }),
+      ]),
     );
   });
 
@@ -1739,9 +2575,81 @@ describe("ChatOpsManager attachment passthrough", () => {
 
     expect(result.success).toBe(true);
     expect(getThreadHistorySpy).not.toHaveBeenCalled();
-    expect(JSON.stringify(executorSpy.mock.calls[0][0].messages)).not.toContain(
-      "Previous conversation:",
+    expect(JSON.stringify(executorSpy.mock.calls[0][0].message)).not.toContain(
+      "Conversation so far:",
     );
+  });
+
+  test("frames thread history as the agent's own, accessible memory", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "ok",
+        messageId: "m",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "m",
+          role: "assistant",
+          parts: [{ type: "text", text: "ok" }],
+        },
+      });
+
+    const user = await makeUser({ email: "thread-history@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "thread-history@example.com",
+    });
+    mockProvider.getThreadHistory = vi.fn().mockResolvedValue([
+      {
+        messageId: "old-1",
+        senderId: "u1",
+        senderName: "Joey",
+        text: "what's 2+2?",
+        timestamp: new Date(Date.now() - 60_000),
+        isFromBot: false,
+      },
+    ]);
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    await manager.processMessage({
+      message: createMockMessage({
+        threadId: "root-message-id",
+        isThreadReply: true,
+        text: "what was the math from earlier?",
+      }),
+      provider: mockProvider,
+    });
+
+    const sent = JSON.stringify(executorSpy.mock.calls[0][0].message);
+    expect(sent).toContain("Conversation so far:");
+    expect(sent).toContain("what's 2+2?");
+    // The directive that stops an empty-prompt agent denying it has context.
+    expect(sent).toContain("you DO have access to it and remember it");
   });
 
   test("hands off to swapped chatops agent in the same turn", async ({
@@ -2087,11 +2995,11 @@ describe("buildChatOpsSessionId", () => {
     expect(result.length).toBeLessThanOrEqual(58);
   });
 
-  test("produces same hash for same channel ID (deterministic)", () => {
+  test("hashes the same long channel ID to a stable session ID", () => {
     const longChannelId =
       "a:15T7kNVP8YbByYGI_Fpc-Ci4cqqlrOfJiumEhUcnvNEZtyranEbXyAUqrNC9jGpSyulMgLurq6nD51ASEEq7sXfK3zetvCvC_XYj37IVz-tFUihy9HjP6YdqWnMw0URwu";
-    const a = buildChatOpsSessionId("ms-teams", longChannelId);
-    const b = buildChatOpsSessionId("ms-teams", longChannelId);
-    expect(a).toBe(b);
+    expect(buildChatOpsSessionId("ms-teams", longChannelId)).toBe(
+      buildChatOpsSessionId("ms-teams", longChannelId),
+    );
   });
 });

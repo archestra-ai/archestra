@@ -4,16 +4,26 @@
  * Ollama exposes an OpenAI-compatible API, so these routes mirror the OpenAI routes.
  * See: https://github.com/ollama/ollama/blob/main/docs/openai.md
  */
+
+import { RouteId } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
-import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import { constructResponseSchema, Ollama, UuidIdSchema } from "@/types";
-import { ollamaAdapterFactory } from "../adapters";
+import { constructResponseSchema, Ollama, OpenAi, UuidIdSchema } from "@/types";
+import {
+  makeOpenAiCompatibleEmbeddingsAdapterFactory,
+  ollamaAdapterFactory,
+} from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
+
+const ollamaEmbeddingsAdapterFactory =
+  makeOpenAiCompatibleEmbeddingsAdapterFactory(
+    "ollama",
+    () => config.llm.ollama.baseUrl,
+  );
 
 const UUID_PATTERN =
   /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i;
@@ -54,6 +64,7 @@ export function rewriteOllamaProxyUrl(
 const ollamaProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/ollama`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
+  const EMBEDDINGS_SUFFIX = "/embeddings";
 
   logger.info("[UnifiedProxy] Registering unified Ollama routes");
 
@@ -68,7 +79,8 @@ const ollamaProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const urlPath = request.url.split("?")[0];
         if (
           request.method === "POST" &&
-          urlPath.endsWith(CHAT_COMPLETIONS_SUFFIX)
+          (urlPath.endsWith(CHAT_COMPLETIONS_SUFFIX) ||
+            urlPath.endsWith(EMBEDDINGS_SUFFIX))
         ) {
           logger.info(
             {
@@ -77,7 +89,7 @@ const ollamaProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               action: "skip-proxy",
               reason: "handled-by-custom-handler",
             },
-            "Ollama proxy preHandler: skipping chat/completions route",
+            "Ollama proxy preHandler: skipping custom-handled route",
           );
           reply.code(400).send({
             error: {
@@ -116,6 +128,81 @@ const ollamaProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "[UnifiedProxy] Ollama base URL not configured, HTTP proxy disabled",
     );
   }
+
+  fastify.post(
+    `${API_PREFIX}${EMBEDDINGS_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.OllamaEmbeddingsWithDefaultAgent,
+        description: "Create embeddings with Ollama (uses default agent)",
+        tags: ["LLM Proxy"],
+        body: OpenAi.API.EmbeddingRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      if (!config.llm.ollama.enabled) {
+        return reply.status(500).send({
+          error: {
+            message:
+              "Ollama provider is not configured. Set ARCHESTRA_OLLAMA_BASE_URL to enable.",
+            type: "api_internal_server_error",
+          },
+        });
+      }
+      logger.debug(
+        { url: request.url },
+        "[UnifiedProxy] Handling Ollama embeddings request (default agent)",
+      );
+      return handleLLMProxy(
+        request.body as OpenAi.Types.EmbeddingRequest,
+        request,
+        reply,
+        ollamaEmbeddingsAdapterFactory,
+      );
+    },
+  );
+
+  fastify.post(
+    `${API_PREFIX}/:agentId${EMBEDDINGS_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.OllamaEmbeddingsWithAgent,
+        description: "Create embeddings with Ollama for a specific agent",
+        tags: ["LLM Proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        body: OpenAi.API.EmbeddingRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      if (!config.llm.ollama.enabled) {
+        return reply.status(500).send({
+          error: {
+            message:
+              "Ollama provider is not configured. Set ARCHESTRA_OLLAMA_BASE_URL to enable.",
+            type: "api_internal_server_error",
+          },
+        });
+      }
+      logger.debug(
+        { url: request.url, agentId: request.params.agentId },
+        "[UnifiedProxy] Handling Ollama embeddings request (with agent)",
+      );
+      return handleLLMProxy(
+        request.body as OpenAi.Types.EmbeddingRequest,
+        request,
+        reply,
+        ollamaEmbeddingsAdapterFactory,
+      );
+    },
+  );
 
   fastify.post(
     `${API_PREFIX}${CHAT_COMPLETIONS_SUFFIX}`,

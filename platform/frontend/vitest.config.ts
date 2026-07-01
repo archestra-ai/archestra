@@ -6,11 +6,11 @@ export default defineConfig({
   plugins: [tsconfigPaths()],
   resolve: {
     alias: {
-      "@shared/access-control": path.resolve(
+      "@archestra/shared/access-control": path.resolve(
         __dirname,
         "../shared/access-control.ts",
       ),
-      "@shared": path.resolve(__dirname, "../shared/index.ts"),
+      "@archestra/shared": path.resolve(__dirname, "../shared/index.ts"),
     },
   },
   test: {

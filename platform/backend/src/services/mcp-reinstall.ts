@@ -1,6 +1,7 @@
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
+import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import type { InternalMcpCatalog, LocalConfig, McpServer } from "@/types";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
@@ -191,13 +192,11 @@ export function onlyForwardCompatibleEnvDiff(
   // than `JSON.stringify({...cat, …})`. Two reasons spread+stringify
   // is unsafe here:
   //   (a) The two snapshots can come from differently-enriched code
-  //       paths — the parent-cascade-to-children loop in
-  //       `routes/internal-mcp-catalog.ts` passes `originalChild`
-  //       from `Model.findChildren()` (with `attachListMetadata`
-  //       adding `toolCount`) against `updatedChild` from
-  //       `Model.update()` (which adds `authorName` but not
-  //       `toolCount`). A whole-row stringify diffs on these
-  //       bookkeeping fields and over-fires the auto cascade.
+  //       paths — e.g. a list/read snapshot carrying `toolCount`
+  //       compared against `Model.update()`'s return (which adds
+  //       `authorName` but not `toolCount`). A whole-row stringify
+  //       diffs on these bookkeeping fields and over-fires the auto
+  //       cascade.
   //   (b) JavaScript object-spread preserves the original key order,
   //       so even if every value matches after overrides, the JSON
   //       string can still differ when the two inputs spread keys in
@@ -219,13 +218,16 @@ export function onlyForwardCompatibleEnvDiff(
       authFields: cat.authFields ?? null,
       serverType: cat.serverType ?? "",
       multitenant: Boolean(cat.multitenant),
+      // Environment assignment determines the deployment namespace; a change
+      // must trigger the cascade so the pod relocates (single-tenant via the
+      // per-install restart below; multi-tenant via reinstallSharedDeployment
+      // in the catalog PUT route).
+      environmentId: cat.environmentId ?? null,
       serverUrl: cat.serverUrl ?? "",
       docsUrl: cat.docsUrl ?? "",
       icon: cat.icon ?? null,
       clientSecretId: cat.clientSecretId ?? null,
       localConfigSecretId: cat.localConfigSecretId ?? null,
-      presetSecretId: cat.presetSecretId ?? null,
-      presetFieldValues: cat.presetFieldValues ?? {},
       deploymentSpecYaml: cat.deploymentSpecYaml ?? "",
       oauthConfig: cat.oauthConfig ?? null,
       enterpriseManagedConfig: cat.enterpriseManagedConfig ?? null,
@@ -274,16 +276,14 @@ function userConfigChangedBreakingly(
     if (String(p.headerName ?? "") !== String(n.headerName ?? "")) return true; // Routing changed
     if (Boolean(p.sensitive) !== Boolean(n.sensitive)) return true; // Storage moved
     // Static header value rotation. For a static header-mapped userConfig
-    // entry (no install/preset prompt), `default` IS the runtime header
-    // value the form transform writes from the admin's input — changing it
-    // changes what installs send on the wire. For prompted entries
-    // `default` is just a placeholder/template, so we still skip those.
+    // entry (no install prompt), `default` IS the runtime header value the
+    // form transform writes from the admin's input — changing it changes
+    // what installs send on the wire. For prompted entries `default` is
+    // just a placeholder/template, so we still skip those.
     if (
       String(p.headerName ?? "") !== "" &&
       !p.promptOnInstallation &&
-      !p.promptOnPreset &&
       !n.promptOnInstallation &&
-      !n.promptOnPreset &&
       String(p.default ?? "") !== String(n.default ?? "")
     ) {
       return true;
@@ -355,6 +355,19 @@ export async function autoReinstallServer(
 
   // For local servers: restart K8s deployment
   if (catalogItem.serverType === "local") {
+    // Re-enforce the trusted-image-registry gate on redeploy. A catalog edit
+    // that swaps in an untrusted image (approval is reset on image change) must
+    // not be rolled out to the running pod until an admin approves it — mirrors
+    // the install-time gate and the env-regex policy, which is also re-checked
+    // on reinstall. Only personal local items are gated; for everything else
+    // the policy is a no-op. `organizationId` lives on the catalog row (personal
+    // catalogs always carry it); skip when absent rather than fail open loudly.
+    if (catalogItem.organizationId) {
+      await assertInstallAllowedOrBlock({
+        catalogItem,
+        organizationId: catalogItem.organizationId,
+      });
+    }
     await McpServerRuntimeManager.restartServer(server.id);
 
     // Wait for deployment to be ready

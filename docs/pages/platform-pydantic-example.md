@@ -76,7 +76,7 @@ This demonstrates the vulnerability: an agent with access to external data and c
 Now let's add the security layer:
 
 ```shell
-docker run -p 9000:9000 -p 3000:3000 archestra/platform
+docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 archestra/platform
 ```
 
 This starts Archestra Platform with:

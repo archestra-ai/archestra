@@ -1,6 +1,9 @@
 "use client";
 
-import { LABELS_ENTRY_DELIMITER, LABELS_VALUE_DELIMITER } from "@shared";
+import {
+  LABELS_ENTRY_DELIMITER,
+  LABELS_VALUE_DELIMITER,
+} from "@archestra/shared";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";

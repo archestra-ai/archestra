@@ -58,6 +58,33 @@ export function isSlackDmChannel(channelId: string): boolean {
 }
 
 /**
+ * Pretty-print a tool call's arguments for display inside an approval prompt.
+ *
+ * Returns a JSON string (truncated to keep the message within provider block
+ * limits — Slack caps a single text block at ~3,000 chars) or `null` when there
+ * is nothing meaningful to show (no args, or an empty object). Callers wrap the
+ * result in their provider's native code-block formatting.
+ */
+export function formatApprovalToolArgs(
+  args: Record<string, unknown> | undefined,
+  maxLength = 2800,
+): string | null {
+  if (!args || Object.keys(args).length === 0) {
+    return null;
+  }
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(args, null, 2);
+  } catch {
+    return null;
+  }
+  if (serialized.length > maxLength) {
+    return `${serialized.slice(0, maxLength)}\n… (truncated)`;
+  }
+  return serialized;
+}
+
+/**
  * Extract a human-readable error message from an unknown error value.
  */
 export function errorMessage(error: unknown): string {

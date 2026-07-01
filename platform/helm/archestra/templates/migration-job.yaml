@@ -2,20 +2,15 @@
 {{/*
 Database migration Job.
 
-Runs `pnpm db:migrate` as a Helm pre-upgrade hook so the target version's
-schema is applied *before* the web and worker Deployments roll. This closes the
-rolling-upgrade gap that the worker's wait-for-migrations init container cannot
-cover on its own: during an upgrade the platform Service still routes to the
-previous revision's ready web pods, so a generic reachability check passes
-before the new migrations have run.
-
-Intentionally pre-upgrade only (not pre-install): on a fresh install the bundled
-PostgreSQL subchart has not been created yet when pre-install hooks run, so the
-Job would deadlock waiting for a database that does not exist. Fresh installs
-are covered instead by the web pod running migrations on startup, gated for the
-worker by the wait-for-migrations init container (no previous pods exist, so
-Service reachability is an accurate signal).
+Runs `drizzle-kit migrate` as a Helm pre-upgrade hook so the target version's
+schema is applied before web and worker Deployments roll. Fresh installs are
+covered by the web pod running migrations on startup plus the worker
+wait-for-migrations init container.
 */}}
+{{- $migrationContext := . -}}
+{{- if and .Values.postgresql.external_database_url (ne (toString .Values.postgresql.external_database_url) "from_vault") -}}
+{{- $migrationContext = merge (dict "migrationDatabaseSecretNameOverride" (include "archestra-platform.migrationJobAuthSecretName" .)) . -}}
+{{- end }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -43,33 +38,52 @@ spec:
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
       restartPolicy: Never
       initContainers:
-        {{- include "archestra-platform.initContainers" . | nindent 8 }}
+        {{- include "archestra-platform.initContainers" $migrationContext | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}-migrate
           image: {{ include "archestra-platform.image" . }}
           imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
           workingDir: /app/backend
           {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
-          {{- include "archestra-platform.vaultSecretsCommand" "pnpm db:migrate" | nindent 10 }}
+          {{- include "archestra-platform.vaultSecretsCommand" "./node_modules/.bin/drizzle-kit migrate" | nindent 10 }}
           {{- else }}
-          command: ["pnpm", "db:migrate"]
+          command: ["./node_modules/.bin/drizzle-kit", "migrate"]
           {{- end }}
           env:
-            {{- include "archestra-platform.env" . | nindent 12 }}
-          {{- with .Values.archestra.envFrom }}
+            {{- range $key, $value := .Values.archestra.migrationJob.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- range .Values.archestra.migrationJob.envFromSecrets }}
+            - name: {{ .name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName }}
+                  key: {{ .secretKey }}
+            {{- end }}
+            {{- range .Values.archestra.migrationJob.envWithValueFrom }}
+            - name: {{ .name }}
+              valueFrom:
+                {{- toYaml .valueFrom | nindent 16 }}
+            {{- end }}
+            {{- include "archestra-platform.env" $migrationContext | nindent 12 }}
+          {{- if or .Values.archestra.envFrom .Values.archestra.migrationJob.envFrom }}
           envFrom:
+            {{- with .Values.archestra.envFrom }}
             {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- with .Values.archestra.migrationJob.envFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           {{- with (.Values.archestra.migrationJob.resources | default .Values.archestra.resources) }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- /*
-          The migration container only needs the Vault secrets volume (for the
-          DB URL). The shared volumeMounts helper also wires up the diagnostics
-          PVC, which can be ReadWriteOnce and is held by the running web/worker
-          pods during a pre-upgrade hook -- mounting it here could leave the Job
-          unschedulable. So only the Vault volume is wired up.
+          The migration container only needs the Vault secrets volume for DB URL
+          injection. Avoid mounting shared diagnostics PVCs here because the
+          hook overlaps running web/worker pods during upgrades.
           */}}
           {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
           volumeMounts:

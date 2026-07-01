@@ -33,6 +33,7 @@ import {
   getObservableGenAI,
   initializeMetrics,
   reportBlockedTools,
+  reportLLMCacheCost,
   reportLLMCost,
   reportLLMTokens,
   reportTimeToFirstToken,
@@ -113,6 +114,60 @@ describe("getObservableFetch", () => {
         type: "output",
       },
       value: 50,
+      exemplarLabels: expect.any(Object),
+    });
+  });
+
+  test("records cache tokens on a non-streaming response with cached prompt", async () => {
+    const mockResponse = {
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "application/json" }),
+      clone: () => ({
+        json: async () => ({
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            prompt_tokens_details: { cached_tokens: 30 },
+          },
+          model: "gpt-4",
+        }),
+      }),
+    } as Response;
+
+    globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    const observableFetch = getObservableFetch("openai", testAgent, "api");
+    await observableFetch("https://api.openai.com/v1/chat", { method: "POST" });
+
+    // cached_tokens (30) is a subset of prompt_tokens, so uncached input = 70
+    // and the cache counter records the 30 reads with cache_type=read.
+    expect(counterInc).toHaveBeenCalledWith({
+      labels: {
+        provider: "openai",
+        external_agent_id: "",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        agent_type: testAgent.agentType,
+        source: "api",
+        model: "gpt-4",
+        type: "input",
+      },
+      value: 70,
+      exemplarLabels: expect.any(Object),
+    });
+    expect(counterInc).toHaveBeenCalledWith({
+      labels: {
+        provider: "openai",
+        external_agent_id: "",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        agent_type: testAgent.agentType,
+        source: "api",
+        model: "gpt-4",
+        cache_type: "read",
+      },
+      value: 30,
       exemplarLabels: expect.any(Object),
     });
   });
@@ -1084,6 +1139,141 @@ describe("reportTokensPerSecond", () => {
         model: "gpt-4",
       },
       value: 50,
+      exemplarLabels: expect.any(Object),
+    });
+  });
+});
+
+describe("reportLLMTokens cache tokens", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("emits llm_cache_tokens_total with read and write cache_type", () => {
+    reportLLMTokens(
+      "anthropic",
+      testAgent,
+      { input: 5, output: 10, cacheRead: 1000, cacheWrite: 200 },
+      "claude-sonnet",
+      "api",
+    );
+
+    expect(counterInc).toHaveBeenCalledWith({
+      labels: {
+        provider: "anthropic",
+        external_agent_id: "",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        agent_type: testAgent.agentType,
+        source: "api",
+        model: "claude-sonnet",
+        cache_type: "read",
+      },
+      value: 1000,
+      exemplarLabels: expect.any(Object),
+    });
+    expect(counterInc).toHaveBeenCalledWith({
+      labels: {
+        provider: "anthropic",
+        external_agent_id: "",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        agent_type: testAgent.agentType,
+        source: "api",
+        model: "claude-sonnet",
+        cache_type: "write",
+      },
+      value: 200,
+      exemplarLabels: expect.any(Object),
+    });
+  });
+
+  test("does not emit cache tokens when there is no cache usage", () => {
+    reportLLMTokens(
+      "anthropic",
+      testAgent,
+      { input: 5, output: 10, cacheRead: 0, cacheWrite: 0 },
+      "claude-sonnet",
+      "api",
+    );
+
+    expect(counterInc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        labels: expect.objectContaining({ cache_type: expect.any(String) }),
+      }),
+    );
+  });
+});
+
+describe("reportLLMCacheCost", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("emits cache cost and gross read savings", () => {
+    reportLLMCacheCost(
+      "anthropic",
+      testAgent,
+      "claude-sonnet",
+      { cacheCost: 0.012, cacheReadSavings: 0.09 },
+      "api",
+    );
+
+    const expectedLabels = {
+      provider: "anthropic",
+      external_agent_id: "",
+      agent_id: testAgent.id,
+      agent_name: testAgent.name,
+      agent_type: testAgent.agentType,
+      source: "api",
+      model: "claude-sonnet",
+    };
+
+    expect(counterInc).toHaveBeenCalledWith({
+      labels: expectedLabels,
+      value: 0.012,
+      exemplarLabels: expect.any(Object),
+    });
+    expect(counterInc).toHaveBeenCalledWith({
+      labels: expectedLabels,
+      value: 0.09,
+      exemplarLabels: expect.any(Object),
+    });
+  });
+
+  test("does not emit when cost and savings are absent or non-positive", () => {
+    reportLLMCacheCost(
+      "openai",
+      testAgent,
+      "gpt-4",
+      { cacheCost: 0, cacheReadSavings: undefined },
+      "api",
+    );
+
+    expect(counterInc).not.toHaveBeenCalled();
+  });
+
+  test("emits only savings when there is no cache cost", () => {
+    reportLLMCacheCost(
+      "anthropic",
+      testAgent,
+      "claude-sonnet",
+      { cacheCost: undefined, cacheReadSavings: 0.05 },
+      "api",
+    );
+
+    expect(counterInc).toHaveBeenCalledTimes(1);
+    expect(counterInc).toHaveBeenCalledWith({
+      labels: expect.objectContaining({ provider: "anthropic" }),
+      value: 0.05,
       exemplarLabels: expect.any(Object),
     });
   });

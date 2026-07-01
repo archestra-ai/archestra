@@ -16,6 +16,7 @@ pnpm codegen:api-client
 pnpm type-check
 pnpm lint
 pnpm test
+pnpm knip   # flags unused exports; part of frontend check:ci
 ```
 
 ## Data fetching
@@ -31,15 +32,16 @@ pnpm test
 - Frontend `.query.ts` files should never use `fetch()` directly.
 - Run `pnpm codegen:api-client` first to ensure the generated SDK is up to date.
 - Use generated SDK methods instead of manual API calls for type safety and consistency.
-- Reuse API types from `@shared`, especially `archestraApiTypes` types such as `archestraApiTypes.CreateXxxData["body"]` and `archestraApiTypes.GetXxxResponses["200"]`.
+- Reuse API types from `@archestra/shared`, especially `archestraApiTypes` types such as `archestraApiTypes.CreateXxxData["body"]` and `archestraApiTypes.GetXxxResponses["200"]`.
 - Do not define duplicate frontend API types when generated/shared types already exist.
 
 ## Query error handling
 
 - Handle toasts in `.query.ts` files, not in components.
 - Define mutation success/error toasts in `onSuccess` and `onError` callbacks.
-- Never throw on HTTP errors in query or mutation functions.
-- Use `handleApiError(error)` for user notification and return an appropriate default such as `null`, `[]`, or `{}`.
+- Queries must fail loud: call `throwOnApiError(error)` after the SDK call so the query enters its error state, then keep the existing success return (`return data ?? []`). Swallowing an error into a default makes an outage indistinguishable from a genuinely empty result, which is how an offline app showed "Add an LLM Provider Key".
+- `throwOnApiError(error)` toasts via `handleApiError` by default. Screens that render their own error state (e.g. a `QueryLoadError` retry panel gated on `isLoadingError`) pass `{ toastOnError: false }` to avoid a redundant toast and a fresh toast on every retry. Detail endpoints where a 404 means "does not exist" rather than an outage pass `{ allowNotFound: true }` and keep returning their `null` default for that case.
+- Mutations keep `handleApiError(error)` + `throw toApiError(error)` in the `mutationFn`.
 - Components should not use `try`/`catch` for API calls; API error handling belongs in `.query.ts` files.
 
 ## UI components
@@ -63,5 +65,5 @@ pnpm test
 
 - Do not hardcode `Archestra` in frontend UI copy.
 - Use `const appName = useAppName();` and interpolate the app name so white-labeled deployments render correctly.
-- Always use `getDocsUrl(DocsPage.PageName, "optional-anchor")` from `@shared` for documentation links.
+- Always use `getDocsUrl(DocsPage.PageName, "optional-anchor")` from `@archestra/shared` for documentation links.
 - Never hardcode documentation URLs.

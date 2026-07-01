@@ -37,7 +37,6 @@ export type ResolvedInitialAgentState = {
 export type ResolvedChatModelState = {
   modelId: string;
   apiKeyId: string | null;
-  provider: SupportedProvider | undefined;
 };
 
 export type CreateConversationInput = {
@@ -45,6 +44,8 @@ export type CreateConversationInput = {
   modelId?: string;
   chatApiKeyId?: string | null;
   title?: string;
+  /** Project the chat is started in (carried from /chat?project=...). */
+  projectId?: string;
 };
 
 export function resolveInitialAgentSelection<TAgent extends AgentInfo>(params: {
@@ -109,22 +110,12 @@ export function resolveInitialAgentState(params: {
   };
 }
 
-/** Resolve the provider for a model UUID. */
-export function getProviderForModelId(params: {
-  modelId: string;
-  chatModels: LlmModel[];
-}): SupportedProvider | undefined {
-  return params.chatModels.find((model) => model.dbId === params.modelId)
-    ?.provider;
-}
-
 export function resolveChatModelState(params: {
   agent: AgentInfo | null;
   modelsByProvider: Record<string, LlmModel[]>;
   chatApiKeys: ChatApiKeyInfo[];
   organization: OrganizationInfo;
   memberDefault: MemberDefaultInfo;
-  chatModels?: LlmModel[];
 }): ResolvedChatModelState | null {
   // The resolver identifies models by their models.id UUID.
   const modelsByProvider = Object.fromEntries(
@@ -159,13 +150,6 @@ export function resolveChatModelState(params: {
   return {
     modelId: resolved.modelId,
     apiKeyId: resolved.apiKeyId,
-    provider:
-      params.chatModels && params.chatModels.length > 0
-        ? getProviderForModelId({
-            modelId: resolved.modelId,
-            chatModels: params.chatModels,
-          })
-        : undefined,
   };
 }
 
@@ -191,6 +175,7 @@ export function buildCreateConversationInput(params: {
   modelId: string;
   chatApiKeyId: string | null;
   title?: string;
+  projectId?: string | null;
 }): CreateConversationInput | null {
   if (!params.agentId) {
     return null;
@@ -201,6 +186,7 @@ export function buildCreateConversationInput(params: {
     modelId: params.modelId || undefined,
     chatApiKeyId: params.chatApiKeyId ?? undefined,
     title: params.title,
+    projectId: params.projectId ?? undefined,
   };
 }
 
@@ -209,4 +195,37 @@ export function shouldResetInitialChatState(params: {
   routeConversationId?: string;
 }): boolean {
   return !params.routeConversationId && !!params.previousRouteConversationId;
+}
+
+/**
+ * Whether `/chat` is mid-handoff: it arrived carrying a `user_prompt` (or a
+ * stashed-attachments marker whose files are still in memory) and is about to —
+ * or already is — auto-creating a conversation before navigating to
+ * `/chat/<id>`. During this window the centered New Chat splash must not render,
+ * or the empty home flashes before the conversation view mounts.
+ *
+ * Mirrors the auto-send effect's trigger conditions. `autoSendTriggered` (the
+ * effect's ref) keeps it true across the frame where `user_prompt` has been
+ * stripped from the URL but the create mutation has not yet reported pending. A
+ * files-only handoff whose stashed files were lost (e.g. a hard reload) has no
+ * prompt and no pending files, so this stays false and the composer shows.
+ */
+export function isAutoSendHandoffInProgress(params: {
+  conversationId?: string;
+  initialUserPrompt?: string;
+  hasAttachmentsMarker: boolean;
+  hasPendingHandoffFiles: boolean;
+  autoSendTriggered: boolean;
+  isCreatingConversation: boolean;
+}): boolean {
+  if (params.conversationId) {
+    return false;
+  }
+
+  return (
+    Boolean(params.initialUserPrompt) ||
+    (params.hasAttachmentsMarker && params.hasPendingHandoffFiles) ||
+    params.autoSendTriggered ||
+    params.isCreatingConversation
+  );
 }

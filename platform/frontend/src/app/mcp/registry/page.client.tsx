@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { InternalMCPCatalog } from "./_parts/InternalMCPCatalog";
 
 export default function McpRegistryClient({

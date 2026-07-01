@@ -3,7 +3,7 @@ import {
   LLM_PROXY_OAUTH_SCOPE,
   SOURCE_HEADER,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import Fastify from "fastify";
 import {
@@ -40,6 +40,7 @@ import {
   cohereAdapterFactory,
   deepseekAdapterFactory,
   geminiAdapterFactory,
+  geminiEmbeddingsAdapterFactory,
   groqAdapterFactory,
   minimaxAdapterFactory,
   mistralAdapterFactory,
@@ -700,6 +701,193 @@ describe("model router proxy routes", () => {
     });
   });
 
+  const OPENAI_COMPATIBLE_EMBEDDING_CASES: Array<{
+    provider: SupportedProvider;
+    modelId: string;
+  }> = [
+    { provider: "azure", modelId: "text-embedding-3-large" },
+    { provider: "mistral", modelId: "mistral-embed" },
+    { provider: "ollama", modelId: "nomic-embed-text" },
+    { provider: "vllm", modelId: "BAAI/bge-m3" },
+    { provider: "zhipuai", modelId: "embedding-3" },
+  ];
+
+  for (const { provider, modelId } of OPENAI_COMPATIBLE_EMBEDDING_CASES) {
+    test(`routes ${provider} embedding models through the OpenAI-compatible embeddings adapter`, async ({
+      makeAgent,
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const app = createFastifyApp();
+      await app.register(modelRouterProxyRoutes);
+      await upsertModel({ provider, modelId, embeddingDimensions: 1536 });
+      const organization = await makeOrganization();
+      const { value } = await createModelRouterVirtualKey({
+        organizationId: organization.id,
+        provider,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const agent = await makeAgent({
+        organizationId: organization.id,
+        name: `Model Router ${provider} Embedding Agent`,
+        agentType: "llm_proxy",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/embeddings`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: `${provider}:${modelId}`,
+          input: ["first", "second"],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({
+        object: "list",
+        model: modelId,
+        data: [
+          { object: "embedding", index: 0 },
+          { object: "embedding", index: 1 },
+        ],
+      });
+
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        undefined,
+        undefined,
+        undefined,
+        { profileId: agent.id },
+      );
+      expect(interactions.data[0]).toMatchObject({
+        type: "openai:embeddings",
+        source: "model_router",
+        model: modelId,
+        inputTokens: 2,
+        outputTokens: 0,
+      });
+    });
+  }
+
+  test("routes Gemini embedding models through the native Gemini embeddings adapter", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const provider = "gemini";
+    const modelId = "gemini-embedding-001";
+    await upsertModel({ provider, modelId, embeddingDimensions: 3072 });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Gemini Embedding Agent",
+      agentType: "llm_proxy",
+    });
+
+    // The Gemini embeddings adapter creates its own GenAI client (rather than
+    // delegating to the chat adapter), so mock its createClient specifically.
+    vi.spyOn(geminiEmbeddingsAdapterFactory, "createClient").mockImplementation(
+      () => createGeminiTestClient() as never,
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/embeddings`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        input: ["first", "second"],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      object: "list",
+      model: modelId,
+      data: [
+        { object: "embedding", index: 0, embedding: [0.1, 0.2, 0.3] },
+        { object: "embedding", index: 1, embedding: [0.1, 0.2, 0.3] },
+      ],
+    });
+
+    const interactions = await InteractionModel.findAllPaginated(
+      { limit: 10, offset: 0 },
+      undefined,
+      undefined,
+      undefined,
+      { profileId: agent.id },
+    );
+    expect(interactions.data[0]).toMatchObject({
+      type: "gemini:embeddings",
+      source: "model_router",
+      model: modelId,
+    });
+  });
+
+  test("rejects embedding requests for providers without an embeddings adapter", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    // Cohere is a translated (non-OpenAI-wire) provider with no embeddings
+    // adapter, so a registered embedding model must surface a clear 501.
+    const provider = "cohere";
+    const modelId = "embed-english-v3.0";
+    await upsertModel({ provider, modelId, embeddingDimensions: 1536 });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Cohere Embedding Agent",
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/embeddings`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        input: ["first"],
+      },
+    });
+
+    expect(response.statusCode).toBe(501);
+    expect(response.json().error.message).toContain("not yet available");
+  });
+
   test("lists embedding models but rejects them on chat completions", async ({
     makeAgent,
     makeOrganization,
@@ -1020,6 +1208,7 @@ describe("model router proxy routes", () => {
       redirectUris: ["http://localhost:3107/callback"],
       grantTypes: ["authorization_code"],
       responseTypes: ["code"],
+      scopes: ["mcp"],
       tokenEndpointAuthMethod: "none",
       isPublic: true,
       metadata: { demo: true },
@@ -1619,8 +1808,11 @@ describe("model router proxy routes", () => {
     expect(anthropicAdapterFactory.createClient).toHaveBeenCalledOnce();
     expect(anthropicAdapterFactory.createClient).toHaveBeenCalledWith(
       "test-anthropic-key",
+      // The proxy re-fetches the agent, so the object passed downstream carries
+      // the server-resolved LLM metadata (resolvedLlmProvider, etc.) that the
+      // freshly-created object doesn't — objectContaining tolerates those.
       expect.objectContaining({
-        agent,
+        agent: expect.objectContaining(agent),
       }),
     );
     expect(response.json()).toMatchObject({

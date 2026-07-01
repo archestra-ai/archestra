@@ -472,6 +472,78 @@ describe("CreateConnectorDialog", () => {
     });
   });
 
+  describe("Web Crawler-specific flow", () => {
+    async function renderWebCrawlerConfigureStep() {
+      const user = userEvent.setup();
+      const result = renderDialog();
+      await user.click(screen.getByText("Web Crawler"));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+      });
+      return { ...result, user };
+    }
+
+    it("shows crawl fields and hides credential fields", async () => {
+      await renderWebCrawlerConfigureStep();
+
+      expect(screen.getByLabelText(/^Start URL$/)).toBeInTheDocument();
+      expect(screen.queryByLabelText(/^Email$/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/Token/)).not.toBeInTheDocument();
+    });
+
+    it("submits crawl config without credentials", async () => {
+      mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+      const { user } = await renderWebCrawlerConfigureStep();
+
+      fireEvent.change(screen.getByLabelText(/^Name$/), {
+        target: { value: "Product Docs" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Start URL$/), {
+        target: { value: "https://docs.example.com/docs/" },
+      });
+
+      await user.click(screen.getByRole("button", { name: /Advanced/ }));
+      await waitFor(() => {
+        expect(
+          screen.getByLabelText(/Include Path Prefixes/),
+        ).toBeInTheDocument();
+      });
+      fireEvent.change(screen.getByLabelText(/Include Path Prefixes/), {
+        target: { value: "/docs/, /guides/" },
+      });
+      fireEvent.change(screen.getByLabelText(/Exclude Selectors/), {
+        target: { value: ".sidebar, .toc" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Max Pages/), {
+        target: { value: "100" },
+      });
+
+      await user.click(
+        screen.getByRole("button", { name: "Create Connector" }),
+      );
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+      });
+
+      const [call] = mockMutateAsync.mock.calls;
+      expect(call[0]).toMatchObject({
+        name: "Product Docs",
+        connectorType: "web_crawler",
+      });
+      expect(call[0]).not.toHaveProperty("credentials");
+      expect(call[0].config).toMatchObject({
+        type: "web_crawler",
+        startUrl: "https://docs.example.com/docs/",
+        includePathPrefixes: ["/docs/", "/guides/"],
+        excludeSelectors: [".sidebar", ".toc"],
+        maxPages: 100,
+        maxDepth: 3,
+        batchSize: 25,
+      });
+    });
+  });
+
   describe("Salesforce-specific flow", () => {
     async function renderSalesforceConfigureStep() {
       const user = userEvent.setup();
@@ -550,6 +622,84 @@ describe("CreateConnectorDialog", () => {
         type: "salesforce",
         loginUrl: "https://login.salesforce.com",
         objects: ["Account", "Contact", "Opportunity"],
+      });
+    });
+  });
+
+  describe("Perforce-specific flow", () => {
+    async function renderPerforceConfigureStep() {
+      const user = userEvent.setup();
+      const result = renderDialog();
+      await user.click(screen.getByText("Perforce (Helix Core)"));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+      });
+      return { ...result, user };
+    }
+
+    it("shows server address, depot paths, username, and token fields", async () => {
+      await renderPerforceConfigureStep();
+
+      expect(screen.getByLabelText(/^Server URL$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Depot Paths$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Username$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Login Ticket$/)).toBeInTheDocument();
+    });
+
+    it("submits perforce payload with transformed depot paths and file types", async () => {
+      mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+      const { user } = await renderPerforceConfigureStep();
+
+      fireEvent.change(screen.getByLabelText(/^Name$/), {
+        target: { value: "Docs Depot" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Server URL$/), {
+        target: { value: "https://perforce.example.com:8080" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Depot Paths$/), {
+        target: { value: "//depot/docs, //stream/main/specs" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Username$/), {
+        target: { value: "svc-knowledge" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Login Ticket$/), {
+        target: { value: "perforce-ticket" },
+      });
+
+      await user.click(screen.getByRole("button", { name: /Advanced/ }));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/File Types/)).toBeInTheDocument();
+      });
+      fireEvent.change(screen.getByLabelText(/File Types/), {
+        target: { value: ".md, .yaml" },
+      });
+      fireEvent.change(screen.getByLabelText(/Exclude Paths/), {
+        target: { value: "//depot/docs/generated, //depot/docs/vendor" },
+      });
+
+      await user.click(
+        screen.getByRole("button", { name: "Create Connector" }),
+      );
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+      });
+
+      const [call] = mockMutateAsync.mock.calls;
+      expect(call[0]).toMatchObject({
+        name: "Docs Depot",
+        connectorType: "perforce",
+        credentials: {
+          email: "svc-knowledge",
+          apiToken: "perforce-ticket",
+        },
+      });
+      expect(call[0].config).toMatchObject({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: ["//depot/docs", "//stream/main/specs"],
+        excludePaths: ["//depot/docs/generated", "//depot/docs/vendor"],
+        fileTypes: [".md", ".yaml"],
       });
     });
   });

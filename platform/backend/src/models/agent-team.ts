@@ -1,9 +1,10 @@
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
-import type { AgentAccessContext } from "@/types";
+import type { AgentAccessContext, AgentLabelWithDetails } from "@/types";
 import AgentModel from "./agent";
 import { findAgentAccessContextById } from "./agent-access-context";
+import TeamLabelModel from "./team-label";
 
 class AgentTeamModel {
   /**
@@ -153,6 +154,33 @@ class AgentTeamModel {
       "AgentTeamModel.getTeamsForAgent: completed",
     );
     return teamIds;
+  }
+
+  /**
+   * Get team details with labels for a specific agent, shaped for trace span
+   * attributes. Combines team id/name with each team's labels.
+   */
+  static async getTeamLabelInfoForAgent(agentId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      labels: AgentLabelWithDetails[];
+    }>
+  > {
+    const teams = await AgentTeamModel.getTeamDetailsForAgent(agentId);
+    if (teams.length === 0) {
+      return [];
+    }
+
+    const labelsByTeam = await TeamLabelModel.getLabelsForTeams(
+      teams.map((team) => team.id),
+    );
+
+    return teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      labels: labelsByTeam.get(team.id) ?? [],
+    }));
   }
 
   /**

@@ -1,6 +1,10 @@
 "use client";
 
-import { type AnyRoleName, E2eTestId, MEMBER_ROLE_NAME } from "@shared";
+import {
+  type AnyRoleName,
+  E2eTestId,
+  MEMBER_ROLE_NAME,
+} from "@archestra/shared";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { Check, Copy, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";

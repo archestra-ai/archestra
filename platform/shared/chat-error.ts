@@ -15,10 +15,10 @@ import {
  * body → the chat-error mapper, which uses it as a uniform cross-provider
  * signal.
  *
- * Providers differ in how they surface categories like "context too long":
- * some return a structured `error.code`, others only a message. Classifying
- * in the adapter and emitting a normalized code keeps the mapper a simple
- * lookup and lets each provider's idiosyncrasies stay local to its adapter.
+ * Adapters classify a category like "context too long" from the provider's
+ * structured `error.code` and emit a normalized code, which keeps the mapper a
+ * simple lookup and lets each provider's idiosyncrasies stay local to its
+ * adapter.
  */
 export const ArchestraInternalErrorCode = {
   ContextLengthExceeded: "context_length_exceeded",
@@ -264,12 +264,28 @@ export enum ChatErrorCode {
   NotFound = "not_found",
   /** Input exceeds the model's context window */
   ContextTooLong = "context_too_long",
+  /** Request payload (e.g. a large inline attachment) exceeds the provider's size limit */
+  RequestTooLarge = "request_too_large",
   /** Content blocked by safety filters */
   ContentFiltered = "content_filtered",
   /** Provider server error - retryable */
   ServerError = "server_error",
   /** Network/connection issues - retryable */
   NetworkError = "network_error",
+  /** Provider finished cleanly but produced no content - retryable */
+  EmptyResponse = "empty_response",
+  /**
+   * The model started a tool call but never completed it, so the turn produced
+   * no reply and executed nothing - retryable. Distinct from EmptyResponse: the
+   * model did begin output, it just abandoned it mid tool-call.
+   */
+  IncompleteToolCall = "incomplete_tool_call",
+  /**
+   * The provider needs a per-user credential the acting user hasn't linked yet
+   * (e.g. GitHub Copilot). Carries an `authAction` so the UI can prompt the user
+   * to link their account rather than showing a generic key error.
+   */
+  ProviderAuthRequired = "provider_auth_required",
   /** Catch-all for unrecognized errors */
   Unknown = "unknown",
 }
@@ -290,11 +306,19 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
     "The selected model is not available. Please choose a different model.",
   [ChatErrorCode.ContextTooLong]:
     "Your conversation is too long. Please start a new chat or remove some messages.",
+  [ChatErrorCode.RequestTooLarge]:
+    "This request is too large for the selected model. Compress or split large attachments — or remove some — and try again.",
   [ChatErrorCode.ContentFiltered]:
     "Your message was blocked by content filters. Please rephrase your request.",
   [ChatErrorCode.ServerError]: "The AI provider is experiencing issues.",
   [ChatErrorCode.NetworkError]:
     "Connection error. Please check your network and try again.",
+  [ChatErrorCode.EmptyResponse]:
+    "The model ended its turn without a reply. Rephrasing your message may help.",
+  [ChatErrorCode.IncompleteToolCall]:
+    "The model started a tool call but didn't finish it, so the turn ended without a reply. Retrying may help.",
+  [ChatErrorCode.ProviderAuthRequired]:
+    "Connect your account to use this model.",
   [ChatErrorCode.Unknown]: "An unexpected error occurred. Please try again.",
 };
 
@@ -305,6 +329,8 @@ export const RetryableErrorCodes: Set<ChatErrorCode> = new Set([
   ChatErrorCode.RateLimit,
   ChatErrorCode.ServerError,
   ChatErrorCode.NetworkError,
+  ChatErrorCode.EmptyResponse,
+  ChatErrorCode.IncompleteToolCall,
 ]);
 
 /**
@@ -324,6 +350,19 @@ export interface ChatErrorResponse {
   traceId?: string;
   /** OpenTelemetry span ID for correlating with backend logs */
   spanId?: string;
+  /** True when the request was blocked by a configured usage-limit budget */
+  usageLimitExceeded?: boolean;
+  /** The usage-limit entity that blocked the request, when known */
+  usageLimitEntityType?: string;
+  /**
+   * Present with code `ProviderAuthRequired`: tells the UI which per-user
+   * provider the acting user must link, so it can render a "Connect <provider>"
+   * prompt (and, where supported, open the link flow) instead of a key error.
+   */
+  authAction?: {
+    provider: SupportedProvider;
+    providerLabel: string;
+  };
   /** Original error details for debugging (provider-specific) */
   originalError?: {
     /** Provider name (anthropic, openai, gemini) */
@@ -346,6 +385,14 @@ export const ChatErrorResponseSchema: z.ZodType<ChatErrorResponse> = z.object({
   sessionId: z.string().optional(),
   traceId: z.string().optional(),
   spanId: z.string().optional(),
+  usageLimitExceeded: z.boolean().optional(),
+  usageLimitEntityType: z.string().optional(),
+  authAction: z
+    .object({
+      provider: SupportedProvidersSchema,
+      providerLabel: z.string(),
+    })
+    .optional(),
   originalError: z
     .object({
       provider: SupportedProvidersSchema.optional(),

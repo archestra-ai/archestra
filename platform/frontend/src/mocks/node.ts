@@ -1,5 +1,6 @@
 import { setupServer } from "msw/node";
 import { handlers } from "./handlers";
+import { isApiRequest } from "./match";
 
 // Pin the server to globalThis so `import("@/mocks/node")` returns the same
 // instance from any module context. Next.js dev (Turbopack) sometimes bundles
@@ -10,6 +11,8 @@ import { handlers } from "./handlers";
 declare global {
   // eslint-disable-next-line no-var
   var __archestraMswServer: ReturnType<typeof setupServer> | undefined;
+  // eslint-disable-next-line no-var
+  var __archestraMswServerListening: boolean | undefined;
 }
 
 export const server =
@@ -17,4 +20,17 @@ export const server =
 
 if (!globalThis.__archestraMswServer) {
   globalThis.__archestraMswServer = server;
+}
+
+export function ensureMswServerListening(): void {
+  if (globalThis.__archestraMswServerListening) return;
+
+  server.listen({
+    onUnhandledRequest(req) {
+      if (!isApiRequest(req.url)) return;
+      globalThis.__archestraUnhandledRequests ??= [];
+      globalThis.__archestraUnhandledRequests.push(`${req.method} ${req.url}`);
+    },
+  });
+  globalThis.__archestraMswServerListening = true;
 }

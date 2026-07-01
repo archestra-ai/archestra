@@ -1,5 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
+  APP_RUNTIME_SYSTEM_PROMPT,
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
@@ -8,15 +9,23 @@ import {
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
   PLAYWRIGHT_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_ICON,
   PLAYWRIGHT_MCP_SERVER_NAME,
   POLICY_CONFIG_SYSTEM_PROMPT,
+  PREVIOUS_POLICY_CONFIG_SYSTEM_PROMPT,
+  PROVIDERS_REQUIRING_BASE_URL,
   type PredefinedRoleName,
+  providerRequiresPerUserCredential,
   type SupportedProvider,
   SupportedProviders,
   testMcpServerCommand,
-} from "@shared";
+} from "@archestra/shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import config, { getProviderEnvApiKey } from "@/config";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config, {
+  getProviderConfiguredBaseUrl,
+  getProviderEnvApiKey,
+} from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
@@ -26,6 +35,8 @@ import {
   McpHttpSessionModel,
   MemberModel,
   OrganizationModel,
+  SkillFileModel,
+  SkillModel,
   TeamModel,
   TeamTokenModel,
   ToolModel,
@@ -33,6 +44,13 @@ import {
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
+import {
+  BUILT_IN_SKILLS,
+  builtInSkillShippedWrite,
+  builtInSkillSourceRef,
+  builtInSkillVersion,
+} from "@/skills/built-in-skills";
+import type { Organization } from "@/types";
 import {
   encryptSecretValue,
   ensureEncryptionKeyAvailable,
@@ -122,6 +140,16 @@ export async function syncBuiltInAgents(): Promise<void> {
         name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
       } as const,
     },
+    {
+      builtInAgentId: BUILT_IN_AGENT_IDS.APP_RUNTIME,
+      name: BUILT_IN_AGENT_NAMES.APP_RUNTIME,
+      description:
+        "Backs archestra.llm.complete() for MCP Apps — the proxy identity that attributes app LLM completions to org usage limits",
+      systemPrompt: APP_RUNTIME_SYSTEM_PROMPT,
+      builtInAgentConfig: {
+        name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
+      } as const,
+    },
   ];
 
   for (const organization of organizations) {
@@ -184,12 +212,139 @@ export async function syncBuiltInAgents(): Promise<void> {
 }
 
 /**
+ * Reconciles Archestra's shipped built-in skills into every organization.
+ *
+ * Insert when missing. When present and still pristine (its live content hashes
+ * to the version we last wrote), auto-upgrade it to the current shipped
+ * revision. When the user has edited it, leave it untouched — administrators
+ * reset to default explicitly. Identity is the stable `builtin:<id>` source
+ * ref, so a rename never detaches a skill from its definition.
+ *
+ * @public — exported for testability
+ */
+export async function syncBuiltInSkills(): Promise<void> {
+  const organizations = await getOrganizationsForBuiltInAgentSync();
+
+  for (const organization of organizations) {
+    const orgRecord = await OrganizationModel.getById(organization.id);
+    if (!orgRecord) continue;
+    await syncBuiltInSkillsForOrganization(orgRecord);
+  }
+}
+
+/**
+ * Reconcile the built-in skills into a single organization, branded under its
+ * white-label app name. Called per-org by {@link syncBuiltInSkills} on startup
+ * and directly when an admin changes the app name (so list_skills/load_skill
+ * reflect the new brand immediately, mirroring the built-in MCP tool re-seed).
+ *
+ * @public — invoked from the organization route on app-name change.
+ */
+export async function syncBuiltInSkillsForOrganization(
+  organization: Pick<Organization, "id" | "appName" | "iconLogo">,
+): Promise<void> {
+  // Brand the shipped built-in skills under this org's white-label identity (a
+  // no-op unless full white-labeling is active), mirroring how built-in MCP
+  // tools are seeded under the org's branded tool name. builtInSkillShippedWrite
+  // reads the synced singleton, so this must run before it.
+  archestraMcpBranding.syncFromOrganization(organization);
+
+  for (const builtInSkill of BUILT_IN_SKILLS) {
+    // Skills tied to a dark feature stay out of the catalog until it ships.
+    if (builtInSkill.requiresAppsFeature && !config.apps.enabled) continue;
+    const sourceRef = builtInSkillSourceRef(builtInSkill.builtInSkillId);
+    const shipped = builtInSkillShippedWrite(builtInSkill);
+
+    const existing = await SkillModel.findBuiltIn({
+      organizationId: organization.id,
+      sourceRef,
+    });
+
+    if (!existing) {
+      const created = await SkillModel.createWithFiles({
+        skill: {
+          organizationId: organization.id,
+          scope: "org",
+          sourceType: "built_in",
+          sourceRef,
+          ...shipped.skill,
+        },
+        files: shipped.files,
+      });
+      // createWithFiles is ON CONFLICT DO NOTHING on the per-org shared-name
+      // index, so a null means a pre-existing non-built-in skill already
+      // holds this name. Surface it instead of reporting a phantom seed — that
+      // org has no built-in copy and thus no reset path until the clash clears.
+      if (!created) {
+        logger.warn(
+          {
+            builtInSkillId: builtInSkill.builtInSkillId,
+            organizationId: organization.id,
+            name: builtInSkill.name,
+          },
+          "Skipped seeding built-in skill: a skill with this name already exists",
+        );
+        continue;
+      }
+      logger.info(
+        {
+          builtInSkillId: builtInSkill.builtInSkillId,
+          organizationId: organization.id,
+        },
+        "Seeded built-in skill",
+      );
+      continue;
+    }
+
+    if (existing.sourceCommit === shipped.skill.sourceCommit) {
+      continue;
+    }
+
+    const liveFiles = await SkillFileModel.findBySkillId(existing.id);
+    const liveVersion = builtInSkillVersion({
+      content: existing.content,
+      files: liveFiles,
+    });
+
+    // Only auto-upgrade copies that still match the revision we last wrote; a
+    // diverged copy was edited by the user and is reset explicitly instead.
+    if (liveVersion !== existing.sourceCommit) {
+      logger.info(
+        {
+          builtInSkillId: builtInSkill.builtInSkillId,
+          organizationId: organization.id,
+        },
+        "Built-in skill was edited, preserving user changes",
+      );
+      continue;
+    }
+
+    await SkillModel.updateWithFiles({
+      id: existing.id,
+      skill: shipped.skill,
+      files: shipped.files,
+    });
+    logger.info(
+      {
+        builtInSkillId: builtInSkill.builtInSkillId,
+        organizationId: organization.id,
+      },
+      "Upgraded built-in skill to current revision",
+    );
+  }
+}
+
+/**
  * Seeds Archestra MCP catalog and tools.
- * ToolModel.seedArchestraTools handles catalog creation with onConflictDoNothing().
+ * ToolModel.seedArchestraTools upserts the catalog and built-in tools idempotently.
  * Tools are NOT automatically assigned to agents - users must assign them manually.
  */
 async function seedArchestraCatalogAndTools(): Promise<void> {
-  await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+  const newlyCreatedToolNames = await ToolModel.seedArchestraTools(
+    ARCHESTRA_MCP_CATALOG_ID,
+  );
+  await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
+  await ToolModel.backfillNewAppToolsToEnabledOrgs(newlyCreatedToolNames);
   logger.info("Seeded Archestra catalog and tools");
 }
 
@@ -286,6 +441,7 @@ async function seedPlaywrightCatalog(): Promise<void> {
         "Browser automation for chat - each user gets their own isolated browser session",
       serverType: "local",
       requiresAuth: false,
+      icon: PLAYWRIGHT_MCP_ICON,
       localConfig: playwrightLocalConfig,
     })
     .onConflictDoNothing();
@@ -381,6 +537,15 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
       continue;
     }
 
+    const decision = decideEnvSeed(provider);
+    if (decision.kind === "skip") {
+      logger.warn(
+        { provider },
+        `Skipping env-seeded provider: ${decision.reason}`,
+      );
+      continue;
+    }
+
     // Check if API key already exists for this provider
     const existing = await LlmProviderApiKeyModel.findByScope(
       org.id,
@@ -390,7 +555,12 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
 
     if (existing) {
       // Sync models if not already synced
-      await syncModelsForApiKey(existing.id, provider, apiKeyValue);
+      await syncModelsForApiKey(
+        existing.id,
+        provider,
+        apiKeyValue,
+        decision.persistedBaseUrl,
+      );
       continue;
     }
 
@@ -409,6 +579,8 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
       scope: "org",
       userId: null,
       teamId: null,
+      baseUrl: decision.persistedBaseUrl,
+      isPrimary: true,
     });
 
     logger.info(
@@ -416,24 +588,74 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
       "Created chat API key from environment variable",
     );
 
-    // Sync models from provider
-    await syncModelsForApiKey(apiKey.id, provider, apiKeyValue);
+    // Sync models from provider. persistedBaseUrl carries the required endpoint for
+    // azure/vllm (so their fetchers hit the right host) and null elsewhere (the
+    // fetchers fall back to their own default — unchanged from before).
+    await syncModelsForApiKey(
+      apiKey.id,
+      provider,
+      apiKeyValue,
+      decision.persistedBaseUrl,
+    );
   }
 }
 
+type EnvSeedDecision =
+  | { kind: "skip"; reason: string }
+  | { kind: "create"; persistedBaseUrl: string | null };
+
 /**
- * Sync models for an API key.
+ * Decide how to seed a provider whose env API key is set. Pure (config-only, no IO)
+ * so the gap-handling logic is unit-testable without DB or network.
+ *
+ * @public — unit-tested in seed.test.ts
+ */
+export function decideEnvSeed(provider: SupportedProvider): EnvSeedDecision {
+  const baseUrl = getProviderConfiguredBaseUrl(provider);
+
+  // Per-user providers (GitHub Copilot) must never be seeded as an org-wide key
+  // from a shared env token — each user connects their own account.
+  if (providerRequiresPerUserCredential(provider)) {
+    return {
+      kind: "skip",
+      reason: "per-user provider; each user connects their own account",
+    };
+  }
+
+  if (PROVIDERS_REQUIRING_BASE_URL.has(provider) && baseUrl === undefined) {
+    return { kind: "skip", reason: "required base URL is not configured" };
+  }
+
+  // Persist the base URL only for providers that require one (azure/vllm): it pins
+  // the required infra endpoint on the key, same as a manual UI add. Other providers
+  // keep null so a later ARCHESTRA_*_BASE_URL change still takes effect via the
+  // runtime fallback (the per-key URL is preferred over config when set).
+  return {
+    kind: "create",
+    persistedBaseUrl: PROVIDERS_REQUIRING_BASE_URL.has(provider)
+      ? (baseUrl ?? null)
+      : null,
+  };
+}
+
+/**
+ * Sync models for an API key. Bedrock's fetcher throws without a base URL; that is
+ * caught here so a key-only/IAM Bedrock seed still creates a usable key (chat falls
+ * back to the us-east-1 region) — its model list just stays empty until a base URL
+ * is configured.
  */
 async function syncModelsForApiKey(
   apiKeyId: string,
   provider: SupportedProvider,
   apiKeyValue: string,
+  baseUrl?: string | null,
 ): Promise<void> {
   try {
     await modelSyncService.syncModelsForApiKey({
       apiKeyId,
       provider,
       apiKeyValue,
+      baseUrl,
     });
     logger.info({ provider, apiKeyId }, "Synced models for API key");
   } catch (error) {
@@ -467,6 +689,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     vllm: "vLLM",
     zhipuai: "ZhipuAI",
     deepseek: "DeepSeek",
+    "github-copilot": "GitHub Copilot",
     bedrock: "AWS Bedrock",
     minimax: "MiniMax",
     azure: "Azure AI Foundry",
@@ -602,6 +825,52 @@ async function ensureExistingUsersHavePersonalMcpGateways(): Promise<void> {
   }
 }
 
+/**
+ * Ensures every member has a personal LLM proxy. Runs on startup to backfill
+ * members created before this feature. Single LEFT JOIN + bulk INSERT.
+ */
+async function ensureExistingUsersHavePersonalLlmProxies(): Promise<void> {
+  try {
+    const created = await AgentModel.bulkBackfillPersonalLlmProxies();
+    if (created > 0) {
+      logger.info(
+        { count: created },
+        "Created personal LLM proxies for existing members",
+      );
+    }
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "Failed to backfill personal LLM proxies for existing members",
+    );
+  }
+}
+
+/**
+ * When the skills feature flag is enabled, turn on the Agent Skill tools for
+ * every organization that hasn't already opted in. This makes skills a default
+ * capability: newly created agents inherit the model-facing skill tools and the
+ * slash-command toggle unlocks without an admin first clicking "enable".
+ * Pre-existing agents are not retrofitted. No-op when the flag is off.
+ */
+async function enableSkillToolsWhenFeatureEnabled(): Promise<void> {
+  if (!config.agents.skillsEnabled) return;
+  try {
+    const enabled = await OrganizationModel.enableSkillToolsForAllOrgs();
+    if (enabled > 0) {
+      logger.info(
+        { count: enabled },
+        "Enabled Agent Skill tools by default for organizations",
+      );
+    }
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "Failed to enable Agent Skill tools by default",
+    );
+  }
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   ensureEncryptionKeyAvailable();
   await migrateSecretsToEncrypted();
@@ -609,7 +878,9 @@ export async function seedRequiredStartingData(): Promise<void> {
   // Create default agents before seeding internal agents
   await AgentModel.getLLMProxyOrCreateDefault();
   await syncBuiltInAgents();
+  await syncBuiltInSkills();
   await seedArchestraCatalogAndTools();
+  await enableSkillToolsWhenFeatureEnabled();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();
   await seedTestMcpServer();
@@ -619,6 +890,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await ensureExistingUsersHavePersonalChatAgents();
   // Ensure all existing members have a personal MCP gateway
   await ensureExistingUsersHavePersonalMcpGateways();
+  await ensureExistingUsersHavePersonalLlmProxies();
   // Clean up orphaned MCP HTTP sessions (older than 24h)
   await McpHttpSessionModel.deleteExpired();
 }
@@ -648,7 +920,7 @@ function shouldSyncBuiltInAgentSystemPrompt(params: {
 
   return (
     params.builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG &&
-    params.systemPrompt === LEGACY_POLICY_CONFIG_SYSTEM_PROMPT
+    SUPERSEDED_POLICY_CONFIG_SYSTEM_PROMPTS.includes(params.systemPrompt)
   );
 }
 
@@ -680,3 +952,12 @@ Examples:
 - File writes: invocation="block_always", result="mark_as_trusted"
 - External APIs (raw data): invocation="block_when_context_is_untrusted", result="mark_as_untrusted"
 - Code execution: invocation="block_always", result="mark_as_untrusted"`;
+
+// Shipped policy-config prompts we have since replaced. An org still on any of
+// these is pristine (never customized) and is auto-upgraded to the current
+// POLICY_CONFIG_SYSTEM_PROMPT on startup; any other stored prompt is treated as
+// admin-edited and left untouched.
+const SUPERSEDED_POLICY_CONFIG_SYSTEM_PROMPTS: readonly string[] = [
+  LEGACY_POLICY_CONFIG_SYSTEM_PROMPT,
+  PREVIOUS_POLICY_CONFIG_SYSTEM_PROMPT,
+];

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import { joinBaseUrl } from "@/utils/base-url";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import type { FetchedModelCapabilities, ModelInfo } from "./types";
 
@@ -15,6 +16,8 @@ const OpenRouterGenerationModelsResponseSchema = z.object({
         .object({
           prompt: z.string().optional(),
           completion: z.string().optional(),
+          input_cache_read: z.string().optional(),
+          input_cache_write: z.string().optional(),
         })
         .partial()
         .optional(),
@@ -48,14 +51,14 @@ export async function fetchOpenrouterModels(
   const baseUrl = baseUrlOverride || config.llm.openrouter.baseUrl;
   const [generationResult, embeddingResult] = await Promise.allSettled([
     fetchModelsWithBearerAuth({
-      url: `${baseUrl}/models`,
+      url: joinBaseUrl(baseUrl, "/models"),
       apiKey,
       errorLabel: "OpenRouter models",
       extraHeaders,
       schema: OpenRouterGenerationModelsResponseSchema,
     }),
     fetchModelsWithBearerAuth({
-      url: `${baseUrl}/embeddings/models`,
+      url: joinBaseUrl(baseUrl, "/embeddings/models"),
       apiKey,
       errorLabel: "OpenRouter embedding models",
       extraHeaders,
@@ -140,6 +143,8 @@ function toFetchedCapabilities(
       : null,
     promptPricePerToken: normalizePrice(model.pricing?.prompt),
     completionPricePerToken: normalizePrice(model.pricing?.completion),
+    cacheReadPricePerToken: normalizePrice(model.pricing?.input_cache_read),
+    cacheWritePricePerToken: normalizePrice(model.pricing?.input_cache_write),
   };
 }
 

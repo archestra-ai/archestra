@@ -1,4 +1,4 @@
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import { formatMissingPermissions, hasPermissions } from "./auth.utils";
 

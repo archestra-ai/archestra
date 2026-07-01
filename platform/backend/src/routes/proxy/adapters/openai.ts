@@ -1,4 +1,7 @@
-import { ArchestraInternalErrorCode } from "@shared";
+import {
+  ArchestraInternalErrorCode,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
@@ -80,12 +83,16 @@ type OpenAiToolResultContent = string | OpenAiToolResultContentBlock[];
 export class OpenAIEmbeddingRequestAdapter
   implements LLMRequestAdapter<OpenAiEmbeddingRequest, OpenAiMessages>
 {
-  readonly provider = "openai" as const;
+  readonly provider: SupportedProvider;
   private request: OpenAiEmbeddingRequest;
   private modifiedModel: string | null = null;
 
-  constructor(request: OpenAiEmbeddingRequest) {
+  constructor(
+    request: OpenAiEmbeddingRequest,
+    provider: SupportedProvider = "openai",
+  ) {
     this.request = request;
+    this.provider = provider;
   }
 
   getModel(): string {
@@ -169,11 +176,15 @@ export class OpenAIEmbeddingRequestAdapter
 export class OpenAIEmbeddingResponseAdapter
   implements LLMResponseAdapter<OpenAiEmbeddingResponse>
 {
-  readonly provider = "openai" as const;
+  readonly provider: SupportedProvider;
   private response: OpenAiEmbeddingResponse;
 
-  constructor(response: OpenAiEmbeddingResponse) {
+  constructor(
+    response: OpenAiEmbeddingResponse,
+    provider: SupportedProvider = "openai",
+  ) {
     this.response = response;
+    this.provider = provider;
   }
 
   getId(): string {
@@ -200,6 +211,8 @@ export class OpenAIEmbeddingResponseAdapter
     return {
       inputTokens: this.response.usage.prompt_tokens,
       outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
     };
   }
 
@@ -219,7 +232,7 @@ export class OpenAIEmbeddingResponseAdapter
 export class OpenAIEmbeddingStreamAdapter
   implements LLMStreamAdapter<never, OpenAiEmbeddingResponse>
 {
-  readonly provider = "openai" as const;
+  readonly provider: SupportedProvider;
   readonly state: StreamAccumulatorState = {
     responseId: "",
     model: "",
@@ -233,6 +246,10 @@ export class OpenAIEmbeddingStreamAdapter
       firstChunkTime: null,
     },
   };
+
+  constructor(provider: SupportedProvider = "openai") {
+    this.provider = provider;
+  }
 
   processChunk(): ChunkProcessingResult {
     throw new Error("OpenAI embeddings do not support streaming.");
@@ -271,13 +288,17 @@ export class OpenAIEmbeddingStreamAdapter
 export class OpenAIRequestAdapter
   implements LLMRequestAdapter<OpenAiRequest, OpenAiMessages>
 {
-  readonly provider = "openai" as const;
+  readonly provider: SupportedProvider;
   private request: OpenAiRequest;
   private modifiedModel: string | null = null;
   private toolResultUpdates: Record<string, string> = {};
 
-  constructor(request: OpenAiRequest) {
+  // `provider` overrides which provider this adapter attributes to (logs,
+  // metrics, interactions). OpenAI-compatible providers (DeepSeek, GitHub
+  // Copilot, …) reuse this adapter via createOpenAiCompatibleAdapterFactory.
+  constructor(request: OpenAiRequest, provider: SupportedProvider = "openai") {
     this.request = request;
+    this.provider = provider;
   }
 
   // ---------------------------------------------------------------------------
@@ -375,7 +396,11 @@ export class OpenAIRequestAdapter
 
   async applyToonCompression(model: string): Promise<ToolCompressionStats> {
     const { messages: compressedMessages, stats } =
-      await convertToolResultsToToon(this.request.messages, model);
+      await convertToolResultsToToon(
+        this.request.messages,
+        model,
+        this.provider,
+      );
     this.request = {
       ...this.request,
       messages: compressedMessages,
@@ -837,11 +862,15 @@ export function stripImageBlocksFromContent(content: unknown): string {
 export class OpenAIResponseAdapter
   implements LLMResponseAdapter<OpenAiResponse>
 {
-  readonly provider = "openai" as const;
+  readonly provider: SupportedProvider;
   private response: OpenAiResponse;
 
-  constructor(response: OpenAiResponse) {
+  constructor(
+    response: OpenAiResponse,
+    provider: SupportedProvider = "openai",
+  ) {
     this.response = response;
+    this.provider = provider;
   }
 
   getId(): string {
@@ -900,10 +929,23 @@ export class OpenAIResponseAdapter
 
   getUsage(): UsageView {
     if (!this.response.usage) {
-      return { inputTokens: 0, outputTokens: 0 };
+      return {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      };
     }
-    const { input, output } = getUsageTokens(this.response.usage);
-    return { inputTokens: input, outputTokens: output };
+    const { input, output, cacheRead, cacheWrite, reasoning } = getUsageTokens(
+      this.response.usage,
+    );
+    return {
+      inputTokens: input,
+      outputTokens: output,
+      cacheReadTokens: cacheRead,
+      cacheWriteTokens: cacheWrite,
+      reasoningTokens: reasoning,
+    };
   }
 
   getOriginalResponse(): OpenAiResponse {
@@ -911,7 +953,7 @@ export class OpenAIResponseAdapter
   }
 
   getFinishReasons(): string[] {
-    const reason = this.response.choices[0]?.finish_reason;
+    const reason = this.response.choices?.[0]?.finish_reason;
     return reason ? [reason] : [];
   }
 
@@ -944,11 +986,12 @@ export class OpenAIResponseAdapter
 export class OpenAIStreamAdapter
   implements LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse>
 {
-  readonly provider = "openai" as const;
+  readonly provider: SupportedProvider;
   readonly state: StreamAccumulatorState;
   private currentToolCallIndices = new Map<number, number>();
 
-  constructor() {
+  constructor(provider: SupportedProvider = "openai") {
+    this.provider = provider;
     this.state = {
       responseId: "",
       model: "",
@@ -979,9 +1022,27 @@ export class OpenAIStreamAdapter
     // Handle usage first - OpenAI sends usage in a final chunk with empty choices[]
     // when stream_options.include_usage is true
     if (chunk.usage) {
+      const cacheReadTokens =
+        (
+          chunk.usage.prompt_tokens_details as
+            | { cached_tokens?: number }
+            | undefined
+        )?.cached_tokens ?? 0;
+      const reasoningTokens =
+        (
+          chunk.usage.completion_tokens_details as
+            | { reasoning_tokens?: number }
+            | undefined
+        )?.reasoning_tokens ?? 0;
       this.state.usage = {
-        inputTokens: chunk.usage.prompt_tokens ?? 0,
+        inputTokens: Math.max(
+          0,
+          (chunk.usage.prompt_tokens ?? 0) - cacheReadTokens,
+        ),
         outputTokens: chunk.usage.completion_tokens ?? 0,
+        cacheReadTokens,
+        cacheWriteTokens: 0,
+        reasoningTokens,
       };
     }
 
@@ -1120,6 +1181,18 @@ export class OpenAIStreamAdapter
         },
       ],
     };
+    // Carry the usage the provider sent in its trailing chunk into the synthesized final chunk;
+    // without it, streaming clients (e.g. the chat route's AI SDK, for OpenRouter and other
+    // OpenAI-compatible models) never see token counts. Shape mirrors the non-streaming
+    // `toProviderResponse()` below — `prompt_tokens` is net of cache, with no `prompt_tokens_details`.
+    if (this.state.usage !== null) {
+      finalChunk.usage = {
+        prompt_tokens: this.state.usage.inputTokens,
+        completion_tokens: this.state.usage.outputTokens,
+        total_tokens:
+          this.state.usage.inputTokens + this.state.usage.outputTokens,
+      };
+    }
     return `data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
   }
 
@@ -1174,11 +1247,12 @@ export class OpenAIStreamAdapter
 export async function convertToolResultsToToon(
   messages: OpenAiMessages,
   model: string,
+  provider: SupportedProvider,
 ): Promise<{
   messages: OpenAiMessages;
   stats: ToolCompressionStats;
 }> {
-  const tokenizer = getTokenizer("openai");
+  const tokenizer = getTokenizer(provider);
   let toolResultCount = 0;
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
@@ -1189,7 +1263,7 @@ export async function convertToolResultsToToon(
         {
           toolCallId: message.tool_call_id,
           contentType: typeof message.content,
-          provider: "openai",
+          provider,
         },
         "convertToolResultsToToon: tool message found",
       );
@@ -1225,7 +1299,7 @@ export async function convertToolResultsToToon(
                 tokensBefore,
                 tokensAfter,
                 toonPreview: compressed.substring(0, 150),
-                provider: "openai",
+                provider,
               },
               "convertToolResultsToToon: compressed",
             );
@@ -1234,7 +1308,7 @@ export async function convertToolResultsToToon(
                 toolCallId: message.tool_call_id,
                 before: noncompressed,
                 after: compressed,
-                provider: "openai",
+                provider,
                 supposedToBeJson: parsed,
               },
               "convertToolResultsToToon: before/after",
@@ -1253,7 +1327,7 @@ export async function convertToolResultsToToon(
               toolCallId: message.tool_call_id,
               tokensBefore,
               tokensAfter,
-              provider: "openai",
+              provider,
             },
             "Skipping TOON compression - compressed output has more tokens",
           );
@@ -1289,7 +1363,7 @@ export async function convertToolResultsToToon(
     toonCostSavings = await ModelModel.calculateCostSavings(
       model,
       tokensSaved,
-      "openai",
+      provider,
     );
   }
 
@@ -1314,9 +1388,23 @@ export async function convertToolResultsToToon(
 // =============================================================================
 
 export function getUsageTokens(usage: OpenAi.Types.Usage) {
+  // OpenAI reports cached tokens as a SUBSET already inside prompt_tokens, so
+  // subtract them to get the uncached input and avoid double-counting.
+  const cacheRead =
+    (usage.prompt_tokens_details as { cached_tokens?: number } | undefined)
+      ?.cached_tokens ?? 0;
+  const reasoning =
+    (
+      usage.completion_tokens_details as
+        | { reasoning_tokens?: number }
+        | undefined
+    )?.reasoning_tokens ?? 0;
   return {
-    input: usage.prompt_tokens,
+    input: Math.max(0, usage.prompt_tokens - cacheRead),
     output: usage.completion_tokens,
+    cacheRead,
+    cacheWrite: 0,
+    reasoning,
   };
 }
 
@@ -1498,68 +1586,98 @@ export const openaiAdapterFactory: LLMProvider<
   },
 };
 
-export const openAiEmbeddingsAdapterFactory: LLMProvider<
+type OpenAiEmbeddingsProvider = LLMProvider<
   OpenAiEmbeddingRequest,
   OpenAiEmbeddingResponse,
   OpenAiMessages,
   never,
   OpenAiHeaders
-> = {
-  provider: "openai",
-  interactionType: "openai:embeddings",
+>;
 
-  createRequestAdapter(
-    request: OpenAiEmbeddingRequest,
-  ): LLMRequestAdapter<OpenAiEmbeddingRequest, OpenAiMessages> {
-    return new OpenAIEmbeddingRequestAdapter(request);
-  },
+/**
+ * Build an embeddings adapter for any provider that exposes an OpenAI-compatible
+ * `/embeddings` endpoint (OpenAI itself, Mistral, Azure, Ollama, vLLM, Zhipu AI, …).
+ *
+ * The wire format is identical to OpenAI's, so all request/response handling is
+ * shared; only the provider name (used for observability, metrics, and cost
+ * attribution) and the default base URL differ per provider. The effective base
+ * URL is still overridable per request via the mapped provider key / auth
+ * override in the LLM proxy handler.
+ */
+export function makeOpenAiCompatibleEmbeddingsAdapterFactory(
+  provider: SupportedProvider,
+  getBaseUrl: () => string | undefined,
+): OpenAiEmbeddingsProvider {
+  return {
+    provider,
+    // OpenAI-compatible embeddings share the OpenAI interaction discriminator,
+    // matching the knowledge-base embedding pipeline (getEmbeddingDiscriminator).
+    interactionType: "openai:embeddings",
 
-  createResponseAdapter(
-    response: OpenAiEmbeddingResponse,
-  ): LLMResponseAdapter<OpenAiEmbeddingResponse> {
-    return new OpenAIEmbeddingResponseAdapter(response);
-  },
+    createRequestAdapter(
+      request: OpenAiEmbeddingRequest,
+    ): LLMRequestAdapter<OpenAiEmbeddingRequest, OpenAiMessages> {
+      return new OpenAIEmbeddingRequestAdapter(request, provider);
+    },
 
-  createStreamAdapter(): LLMStreamAdapter<never, OpenAiEmbeddingResponse> {
-    return new OpenAIEmbeddingStreamAdapter();
-  },
+    createResponseAdapter(
+      response: OpenAiEmbeddingResponse,
+    ): LLMResponseAdapter<OpenAiEmbeddingResponse> {
+      return new OpenAIEmbeddingResponseAdapter(response, provider);
+    },
 
-  extractApiKey(headers: OpenAiHeaders): string | undefined {
-    return headers.authorization;
-  },
+    createStreamAdapter(): LLMStreamAdapter<never, OpenAiEmbeddingResponse> {
+      return new OpenAIEmbeddingStreamAdapter(provider);
+    },
 
-  getBaseUrl(): string | undefined {
-    return config.llm.openai.baseUrl;
-  },
+    extractApiKey(headers: OpenAiHeaders): string | undefined {
+      return headers.authorization;
+    },
 
-  spanName: "embedding",
+    getBaseUrl(): string | undefined {
+      return getBaseUrl();
+    },
 
-  createClient(
-    apiKey: string | undefined,
-    options: CreateClientOptions,
-  ): OpenAIProvider {
-    return openaiAdapterFactory.createClient(apiKey, options) as OpenAIProvider;
-  },
+    spanName: "embedding",
 
-  async execute(
-    client: unknown,
-    request: OpenAiEmbeddingRequest,
-  ): Promise<OpenAiEmbeddingResponse> {
-    const openaiClient = client as OpenAIProvider;
-    return openaiClient.embeddings.create(
-      request as Parameters<typeof openaiClient.embeddings.create>[0],
-    ) as Promise<OpenAiEmbeddingResponse>;
-  },
+    createClient(
+      apiKey: string | undefined,
+      options: CreateClientOptions,
+    ): OpenAIProvider {
+      return openaiAdapterFactory.createClient(
+        apiKey,
+        options,
+      ) as OpenAIProvider;
+    },
 
-  async executeStream(): Promise<AsyncIterable<never>> {
-    throw new Error("OpenAI embeddings do not support streaming.");
-  },
+    async execute(
+      client: unknown,
+      request: OpenAiEmbeddingRequest,
+    ): Promise<OpenAiEmbeddingResponse> {
+      const openaiClient = client as OpenAIProvider;
+      return openaiClient.embeddings.create(
+        request as Parameters<typeof openaiClient.embeddings.create>[0],
+      ) as Promise<OpenAiEmbeddingResponse>;
+    },
 
-  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
-    return openaiAdapterFactory.extractInternalCode(error);
-  },
+    async executeStream(): Promise<AsyncIterable<never>> {
+      throw new Error("OpenAI embeddings do not support streaming.");
+    },
 
-  extractErrorMessage(error: unknown): string {
-    return openaiAdapterFactory.extractErrorMessage(error);
-  },
-};
+    extractInternalCode(
+      error: unknown,
+    ): ArchestraInternalErrorCode | undefined {
+      return openaiAdapterFactory.extractInternalCode(error);
+    },
+
+    extractErrorMessage(error: unknown): string {
+      return openaiAdapterFactory.extractErrorMessage(error);
+    },
+  };
+}
+
+export const openAiEmbeddingsAdapterFactory: OpenAiEmbeddingsProvider =
+  makeOpenAiCompatibleEmbeddingsAdapterFactory(
+    "openai",
+    () => config.llm.openai.baseUrl,
+  );

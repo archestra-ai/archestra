@@ -3,6 +3,7 @@ import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import type * as originalConfigModule from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 
 // The logger is a Proxy at runtime — vi.spyOn can't intercept its properties.
 // Replace the module with a plain mock object so individual tests can assert on it.
@@ -333,6 +334,32 @@ describe("handleBeforeHook", () => {
       const result = await handleBeforeHook(ctx);
       expect(result).toBe(ctx);
     });
+
+    test("should pass when invitation ID is provided in request body", async ({
+      makeOrganization,
+      makeUser,
+      makeInvitation,
+    }) => {
+      const org = await makeOrganization();
+      const inviter = await makeUser();
+      const invitation = await makeInvitation(org.id, inviter.id, {
+        email: "body-invite@example.com",
+        status: "pending",
+      });
+
+      const ctx = createMockContext({
+        path: "/sign-up/email",
+        method: "POST",
+        body: {
+          email: "body-invite@example.com",
+          callbackURL: "/chat",
+          invitationId: invitation.id,
+        },
+      });
+
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
   });
 });
 
@@ -635,6 +662,137 @@ describe("handleAfterHook", () => {
       expect(await UserModel.findByEmail(user.email)).toBeDefined();
     });
 
+    // Providers with "Use for Single Sign-On" disabled exist only to supply
+    // linked tokens for downstream MCP auth. Their connect flow runs the same
+    // /sso/callback path as a login, and used to rewrite the user's role and
+    // teams from downstream claims (e.g. demoting an admin to member because
+    // the downstream IdP's role mapping matched).
+    test("syncs role and teams through the SSO callback when the provider is used for SSO login", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeIdentityProvider,
+      makeSession,
+      makeAccount,
+      makeTeam,
+    }) => {
+      const user = await makeUser({ email: "sso-sync-control@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const team = await makeTeam(org.id, user.id, {
+        name: "Engineering Sync Control",
+      });
+      await TeamModel.addExternalGroup(team.id, "engineering");
+
+      const provider = await makeIdentityProvider(org.id, {
+        providerId: "downstream-sync-enabled",
+        domain: "example.com",
+        roleMapping: {
+          rules: [
+            {
+              expression: '{{#equals appRole "basic"}}true{{/equals}}',
+              role: "member",
+            },
+          ],
+        },
+      });
+      await makeAccount(user.id, {
+        providerId: provider.providerId,
+        idToken: createMockIdToken({
+          email: user.email,
+          appRole: "basic",
+          groups: ["engineering"],
+        }),
+      });
+      const session = await makeSession(user.id, {
+        activeOrganizationId: org.id,
+      });
+
+      const ctx = createMockContext({
+        path: `/sso/callback/${provider.providerId}`,
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: session.id, activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await expect(handleAfterHook(ctx)).resolves.toBeUndefined();
+
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("member");
+      const teams = await TeamModel.getUserTeams(user.id);
+      expect(teams.map((t) => t.id)).toContain(team.id);
+    });
+
+    test("skips role and team sync through the SSO callback for linked-token-only providers", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeIdentityProvider,
+      makeSession,
+      makeAccount,
+      makeTeam,
+    }) => {
+      const user = await makeUser({ email: "sso-sync-linked@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const team = await makeTeam(org.id, user.id, {
+        name: "Engineering Sync Linked",
+      });
+      await TeamModel.addExternalGroup(team.id, "engineering");
+
+      // Same demote-on-match mapping as the control test above, but the
+      // provider is a linked-token-only downstream IdP.
+      const provider = await makeIdentityProvider(org.id, {
+        providerId: "downstream-sync-disabled",
+        domain: "example.com",
+        ssoLoginEnabled: false,
+        roleMapping: {
+          rules: [
+            {
+              expression: '{{#equals appRole "basic"}}true{{/equals}}',
+              role: "member",
+            },
+          ],
+        },
+      });
+      await makeAccount(user.id, {
+        providerId: provider.providerId,
+        idToken: createMockIdToken({
+          email: user.email,
+          appRole: "basic",
+          groups: ["engineering"],
+        }),
+      });
+      const session = await makeSession(user.id, {
+        activeOrganizationId: org.id,
+      });
+
+      const ctx = createMockContext({
+        path: `/sso/callback/${provider.providerId}`,
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: session.id, activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await expect(handleAfterHook(ctx)).resolves.toBeUndefined();
+
+      // Connecting a linked-token-only provider must not change role or teams.
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("admin");
+      const teams = await TeamModel.getUserTeams(user.id);
+      expect(teams.map((t) => t.id)).not.toContain(team.id);
+    });
+
     test("should clean up rows created by a rejected first-time SSO login", async ({
       makeUser,
       makeOrganization,
@@ -847,13 +1005,16 @@ describe("handleAfterHook", () => {
   describe("SSO team sync", () => {
     const originalEnterpriseValue = config.enterpriseFeatures.core;
 
-    // Helper to set enterprise license config
+    // Helper to set enterprise license config plus the user-count side of the
+    // tier service so the effective gate matches the env-only intent of these
+    // tests (small-team auto-enable would otherwise keep SSO on at userCount 0).
     function setEnterpriseLicense(value: boolean) {
       Object.defineProperty(config.enterpriseFeatures, "core", {
         value,
         writable: true,
         configurable: true,
       });
+      enterpriseTier.setUserCountForTesting(value ? 0 : 9999);
     }
 
     test("should sync teams when SSO callback path with SSO account", async ({
@@ -2173,7 +2334,8 @@ describe("auth event audit logging", () => {
       path: "/sign-up/email",
       method: "POST",
       body: {
-        callbackURL: `http://example.com?invitationId=${invitation.id}`,
+        callbackURL: "/chat",
+        invitationId: invitation.id,
       },
       context: {
         newSession: {

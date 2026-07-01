@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { IdentityProviderOidcConfig } from "@shared";
+import type { IdentityProviderOidcConfig } from "@archestra/shared";
 import { sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";

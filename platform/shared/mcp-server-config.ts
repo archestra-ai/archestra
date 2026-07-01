@@ -11,12 +11,18 @@ export const OAuthConfigSchema = z
     client_id: z.string(),
     client_secret: z.string().optional(),
     audience: z.string().optional(),
+    resource: z.string().optional(),
     redirect_uris: z.array(z.string()),
     scopes: z.array(z.string()),
     description: z.string().optional(),
     well_known_url: z.string().optional(),
     default_scopes: z.array(z.string()),
     supports_resource_metadata: z.boolean(),
+    // Extra scopes always appended to the requested scopes on the
+    // authorization_code flow, on top of configured/discovered scopes. Defaults
+    // to `["offline_access"]` when unset so the provider returns a refresh
+    // token; clear it for providers that reject `offline_access` (e.g. Google).
+    additional_scopes: z.array(z.string()).optional(),
     generic_oauth: z.boolean().optional(),
     token_endpoint: z.string().optional(),
     access_token_env_var: z
@@ -74,28 +80,16 @@ export const LocalConfigEnvironmentDefaultSchema = z
     id: "LocalConfigEnvironmentDefault",
   });
 
-export const EnvironmentVariableSchema = z
-  .object({
-    key: z.string().min(1, "Key is required"),
-    type: z.enum(["plain_text", "secret", "boolean", "number"]),
-    value: z.string().optional(),
-    promptOnInstallation: z.boolean(),
-    promptOnPreset: z.boolean().optional(),
-    required: z.boolean().optional(),
-    description: z.string().optional(),
-    default: LocalConfigEnvironmentDefaultSchema.optional(),
-    mounted: z.boolean().optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.promptOnInstallation && value.promptOnPreset) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["promptOnPreset"],
-        message:
-          "promptOnInstallation and promptOnPreset are mutually exclusive",
-      });
-    }
-  });
+export const EnvironmentVariableSchema = z.object({
+  key: z.string().min(1, "Key is required"),
+  type: z.enum(["plain_text", "secret", "boolean", "number"]),
+  value: z.string().optional(),
+  promptOnInstallation: z.boolean(),
+  required: z.boolean().optional(),
+  description: z.string().optional(),
+  default: LocalConfigEnvironmentDefaultSchema.optional(),
+  mounted: z.boolean().optional(),
+});
 
 export const ImagePullSecretExistingSchema = z.object({
   source: z.literal("existing"),

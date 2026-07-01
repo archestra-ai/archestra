@@ -4,12 +4,10 @@ import logger from "@/logging";
 import type { SkillFile } from "@/types";
 import type { RevisionPayloadFile } from "@/types/skill-share-link-revision";
 import {
-  buildClaudeMarketplaceManifest,
-  buildClaudePluginManifest,
   buildCodexMarketplaceManifest,
   buildCodexPluginManifest,
-  buildCursorMarketplaceManifest,
-  buildCursorPluginManifest,
+  buildSimpleMarketplaceManifest,
+  buildSimplePluginManifest,
   type MarketplaceSkillInput,
   resolveMarketplaceSkills,
 } from "./manifest";
@@ -32,8 +30,9 @@ export interface MaterializeSkillInput {
   content: string;
   license: string | null;
   compatibility: string | null;
+  allowedTools: string | null;
+  templated: boolean;
   metadata: Record<string, string>;
-  version?: string | null;
   updatedAt: Date;
   files: SkillFile[];
 }
@@ -51,24 +50,26 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
     id: skill.id,
     name: skill.name,
     description: skill.description,
-    version: skill.version,
     updatedAt: skill.updatedAt,
   }));
   const resolved = resolveMarketplaceSkills(manifestSkills);
 
   const files: RevisionPayloadFile[] = [];
 
+  // Claude Code and Cursor read byte-identical marketplace manifests; only
+  // the path differs.
+  const simpleMarketplaceJson = jsonStringify(
+    buildSimpleMarketplaceManifest({
+      marketplaceName: req.marketplaceName,
+      ownerName: req.ownerName,
+      skills: manifestSkills,
+    }),
+  );
   files.push(
-    textFile(
-      ".claude-plugin/marketplace.json",
-      jsonStringify(
-        buildClaudeMarketplaceManifest({
-          marketplaceName: req.marketplaceName,
-          ownerName: req.ownerName,
-          skills: manifestSkills,
-        }),
-      ),
-    ),
+    textFile(".claude-plugin/marketplace.json", simpleMarketplaceJson),
+  );
+  files.push(
+    textFile(".cursor-plugin/marketplace.json", simpleMarketplaceJson),
   );
   files.push(
     textFile(
@@ -82,31 +83,19 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
       ),
     ),
   );
-  files.push(
-    textFile(
-      ".cursor-plugin/marketplace.json",
-      jsonStringify(
-        buildCursorMarketplaceManifest({
-          marketplaceName: req.marketplaceName,
-          ownerName: req.ownerName,
-          skills: manifestSkills,
-        }),
-      ),
-    ),
-  );
-
   const pluginRoot = `plugins/${req.marketplaceName}`;
+  const simplePluginJson = jsonStringify(
+    buildSimplePluginManifest({
+      marketplaceName: req.marketplaceName,
+      ownerName: req.ownerName,
+      skills: manifestSkills,
+    }),
+  );
   files.push(
-    textFile(
-      `${pluginRoot}/.claude-plugin/plugin.json`,
-      jsonStringify(
-        buildClaudePluginManifest({
-          marketplaceName: req.marketplaceName,
-          ownerName: req.ownerName,
-          skills: manifestSkills,
-        }),
-      ),
-    ),
+    textFile(`${pluginRoot}/.claude-plugin/plugin.json`, simplePluginJson),
+  );
+  files.push(
+    textFile(`${pluginRoot}/.cursor-plugin/plugin.json`, simplePluginJson),
   );
   files.push(
     textFile(
@@ -120,19 +109,6 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
       ),
     ),
   );
-  files.push(
-    textFile(
-      `${pluginRoot}/.cursor-plugin/plugin.json`,
-      jsonStringify(
-        buildCursorPluginManifest({
-          marketplaceName: req.marketplaceName,
-          ownerName: req.ownerName,
-          skills: manifestSkills,
-        }),
-      ),
-    ),
-  );
-
   const skillById = new Map(req.skills.map((s) => [s.id, s]));
   // Guard against two files whose paths differ only in case: on a
   // case-insensitive filesystem the second write would silently overwrite the
@@ -187,6 +163,8 @@ function buildSkillMarkdown(skill: MaterializeSkillInput): string {
   };
   if (skill.license) frontmatter.license = skill.license;
   if (skill.compatibility) frontmatter.compatibility = skill.compatibility;
+  if (skill.allowedTools) frontmatter["allowed-tools"] = skill.allowedTools;
+  if (skill.templated) frontmatter.templated = true;
   if (skill.metadata && Object.keys(skill.metadata).length > 0) {
     frontmatter.metadata = skill.metadata;
   }
@@ -217,7 +195,16 @@ function resolveResourceFile(params: {
     return null;
   }
   const relPath = path.posix.normalize(file.path.replace(/^\.?\//, ""));
-  if (relPath.startsWith("..") || relPath === "..") {
+  // Reject absolute paths and any `..` traversal *segment*. A substring test
+  // (startsWith("..") / includes("../")) also drops legitimate names that merely
+  // begin with or contain dots, e.g. a "notes.." folder, silently losing the
+  // file — so match whole segments. Split on both separators so a Windows-style
+  // "..\\evil.md" (which materialize.ts later re-splits) is still rejected, not
+  // just POSIX "../"; mirrors the intent of SkillFileInputSchema in ../validation.ts.
+  if (
+    path.posix.isAbsolute(relPath) ||
+    relPath.split(/[/\\]/).some((segment) => segment === "..")
+  ) {
     logger.warn(
       { path: file.path },
       "materialize: skipping file with traversal path",
@@ -231,14 +218,6 @@ function resolveResourceFile(params: {
     logger.warn(
       { path: file.path },
       "materialize: skipping reserved resource path SKILL.md",
-    );
-    return null;
-  }
-  // additional safety: reject any absolute or root-escape after normalization
-  if (path.posix.isAbsolute(relPath) || relPath.includes("../")) {
-    logger.warn(
-      { path: file.path },
-      "materialize: skipping file outside skill root",
     );
     return null;
   }

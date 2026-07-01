@@ -86,6 +86,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
         request,
         profileId: pid,
         token: jwt,
+        identityProviderId,
       });
       expect(tools.length).toBeGreaterThan(0);
 

@@ -21,7 +21,7 @@
  *                            additionalHeaders[] in the form
  *                            (regression target: dirtyFields-as-array-
  *                            of-falses being truthy)
- *   test1RemoteOAuthBag    — remote OAuth with presetSecretId set
+ *   test1RemoteOAuthBag    — remote OAuth with a populated client secret bag
  *   multitenantLocalShared — local + multitenant=true (shared deployment
  *                            copy variant for the confirm bar)
  *   promptedEnvLocal       — local with prompted env vars
@@ -43,7 +43,6 @@ export type CatalogShapeFixture = {
   serverUrl?: string | null;
   clientSecretId: string | null;
   localConfigSecretId: string | null;
-  presetSecretId: string | null;
   localConfig: {
     command?: string;
     arguments?: string[];
@@ -52,7 +51,6 @@ export type CatalogShapeFixture = {
       type: "plain_text" | "secret" | "boolean" | "number";
       value?: string;
       promptOnInstallation: boolean;
-      promptOnPreset?: boolean;
       required?: boolean;
       sensitive?: boolean;
       description?: string;
@@ -75,8 +73,6 @@ export type CatalogShapeFixture = {
   organizationId: string | null;
   authorId: string | null;
   scope: "personal" | "team" | "org";
-  parentCatalogItemId: string | null;
-  presetFieldValues: Record<string, unknown>;
   labels?: Array<{ key: string; value: string }>;
 };
 
@@ -95,7 +91,6 @@ export const CATALOG_SHAPES = {
     serverUrl: null,
     clientSecretId: null,
     localConfigSecretId: null,
-    presetSecretId: null,
     localConfig: {
       command: "sh",
       arguments: ["-c", "echo hi"],
@@ -109,8 +104,6 @@ export const CATALOG_SHAPES = {
     organizationId: "org-1",
     authorId: "user-1",
     scope: "personal",
-    parentCatalogItemId: null,
-    presetFieldValues: {},
     labels: [],
   },
 
@@ -124,7 +117,6 @@ export const CATALOG_SHAPES = {
     serverUrl: null,
     clientSecretId: null,
     localConfigSecretId: null,
-    presetSecretId: null,
     // Note absence of `command` and `arguments` — this is the shape
     // that tripped the form's `transformFormToApiData` round-trip.
     localConfig: {
@@ -157,8 +149,6 @@ export const CATALOG_SHAPES = {
     organizationId: "org-1",
     authorId: "user-1",
     scope: "personal",
-    parentCatalogItemId: null,
-    presetFieldValues: {},
     labels: [],
   },
 
@@ -174,7 +164,6 @@ export const CATALOG_SHAPES = {
     // `localConfig.environment[*].value` and break the metadata-only
     // comparison.
     localConfigSecretId: "bag-secret-id-sql1",
-    presetSecretId: null,
     localConfig: {
       environment: [
         {
@@ -182,7 +171,6 @@ export const CATALOG_SHAPES = {
           type: "secret",
           value: "",
           promptOnInstallation: false,
-          promptOnPreset: true,
           required: false,
         },
         {
@@ -230,21 +218,18 @@ export const CATALOG_SHAPES = {
     organizationId: "org-1",
     authorId: "user-1",
     scope: "personal",
-    parentCatalogItemId: null,
-    presetFieldValues: {},
     labels: [],
   },
 
   test1RemoteOAuthBag: {
     id: "fixture-test1-remote-oauth-bag",
     name: "test1-remote-oauth-bag",
-    description: "remote OAuth catalog with populated client/preset secret bag",
+    description: "remote OAuth catalog with populated client secret bag",
     serverType: "remote",
     multitenant: false,
     serverUrl: "https://example.test/mcp",
     clientSecretId: "client-secret-id-test1",
     localConfigSecretId: null,
-    presetSecretId: "preset-secret-id-test1",
     localConfig: null,
     userConfig: {
       header_x_e: {
@@ -252,7 +237,6 @@ export const CATALOG_SHAPES = {
         title: "x-e",
         description: "Sent as x-e",
         promptOnInstallation: false,
-        promptOnPreset: true,
         required: false,
         sensitive: false,
         headerName: "x-e",
@@ -273,8 +257,6 @@ export const CATALOG_SHAPES = {
     organizationId: "org-1",
     authorId: "user-1",
     scope: "org",
-    parentCatalogItemId: null,
-    presetFieldValues: {},
     labels: [],
   },
 
@@ -287,7 +269,6 @@ export const CATALOG_SHAPES = {
     serverUrl: null,
     clientSecretId: null,
     localConfigSecretId: null,
-    presetSecretId: null,
     localConfig: {
       command: "node",
       arguments: ["server.js"],
@@ -301,8 +282,6 @@ export const CATALOG_SHAPES = {
     organizationId: "org-1",
     authorId: "user-1",
     scope: "org",
-    parentCatalogItemId: null,
-    presetFieldValues: {},
     labels: [],
   },
 
@@ -315,7 +294,6 @@ export const CATALOG_SHAPES = {
     serverUrl: null,
     clientSecretId: null,
     localConfigSecretId: null,
-    presetSecretId: null,
     localConfig: {
       command: "node",
       arguments: ["server.js"],
@@ -349,8 +327,6 @@ export const CATALOG_SHAPES = {
     organizationId: "org-1",
     authorId: "user-1",
     scope: "personal",
-    parentCatalogItemId: null,
-    presetFieldValues: {},
     labels: [],
   },
 } as const satisfies Record<string, CatalogShapeFixture>;

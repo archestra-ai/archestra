@@ -1,5 +1,9 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { generateKeyPairSync } from "node:crypto";
-import { OAUTH_CLIENT_ASSERTION_TYPE, OAUTH_TOKEN_TYPE } from "@shared";
+import {
+  OAUTH_CLIENT_ASSERTION_TYPE,
+  OAUTH_TOKEN_TYPE,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import type { ExternalIdentityProviderConfig } from "@/services/identity-providers/oidc";
 import { describe, expect, test } from "@/test";
@@ -67,6 +71,51 @@ describe("entraOboStrategy", () => {
     expect(String(requestInit?.body)).toContain(
       "client_secret=middle-tier-client-secret",
     );
+
+    fetchMock.mockRestore();
+  });
+
+  test("maps AADSTS50013 to actionable guidance about Graph-audience assertions", async () => {
+    const identityProvider = makeIdentityProvider({
+      issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+      oidcConfig: {
+        clientId: "web-client-id",
+        tokenEndpoint:
+          "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "entra_obo",
+          clientId: "middle-tier-client-id",
+          clientSecret: "middle-tier-client-secret",
+          tokenEndpoint:
+            "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+          tokenEndpointAuthentication: "client_secret_post",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+        },
+      },
+    });
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: "invalid_grant",
+          error_description:
+            "AADSTS50013: Assertion failed signature validation. [Reason - Key was found, but use of the key to verify the signature failed.]",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await expect(
+      entraOboStrategy.exchangeCredential({
+        identityProvider,
+        assertion: "graph-audience-access-token",
+        enterpriseManagedConfig: {
+          requestedCredentialType: "bearer_token",
+          scopes: ["api://downstream-app/.default"],
+          tokenInjectionMode: "authorization_bearer",
+        },
+      }),
+    ).rejects.toThrow(/issued for Microsoft Graph.*AADSTS50013/s);
 
     fetchMock.mockRestore();
   });

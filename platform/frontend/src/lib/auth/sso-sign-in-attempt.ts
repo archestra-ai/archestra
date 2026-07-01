@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 const SSO_SIGN_IN_ATTEMPT_KEY = "archestra:sso-sign-in-attempt";
 const SSO_SIGN_IN_ATTEMPT_VALUE = "pending";
 const SSO_SIGN_IN_REDIRECT_PATH_KEY = "archestra:sso-sign-in-redirect-path";

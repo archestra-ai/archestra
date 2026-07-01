@@ -1,9 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSkillCommands,
+  isDebugCommand,
   parseSkillCommand,
   skillCommandValue,
 } from "./skill-commands";
+
+describe("isDebugCommand", () => {
+  it("matches the bare /debug command, trimmed and case-insensitive", () => {
+    expect(isDebugCommand("/debug")).toBe(true);
+    expect(isDebugCommand("  /debug  ")).toBe(true);
+    expect(isDebugCommand("/DEBUG")).toBe(true);
+  });
+
+  it("does not match other text", () => {
+    expect(isDebugCommand("/debugger")).toBe(false);
+    expect(isDebugCommand("/debug hooks")).toBe(false);
+    expect(isDebugCommand("debug")).toBe(false);
+    expect(isDebugCommand("")).toBe(false);
+  });
+});
 
 describe("skillCommandValue", () => {
   it("slugifies a skill name into a slash token", () => {

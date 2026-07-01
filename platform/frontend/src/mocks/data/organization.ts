@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 type Organization = archestraApiTypes.GetOrganizationResponses["200"];
 
@@ -9,6 +9,7 @@ export function makeOrganization(
     id: "test-org",
     name: "Test Org",
     slug: "test-org",
+    analyticsInstanceId: "00000000-0000-4000-8000-000000000001",
     logo: null,
     logoDark: null,
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -21,7 +22,10 @@ export function makeOrganization(
     skillSlashCommandsEnabled: false,
     compressionScope: "organization",
     globalToolPolicy: "permissive",
+    defaultDiscoveredToolInvocationPolicy: "allow_when_context_is_untrusted",
+    defaultDiscoveredToolResultPolicy: "mark_as_untrusted",
     allowChatFileUploads: false,
+    allowToolAutoAssignment: true,
     embeddingModel: null,
     embeddingDimensions: null,
     embeddingChatApiKeyId: null,
@@ -55,10 +59,14 @@ export function makeOrganization(
     connectionShownClientIds: null,
     connectionShownProviders: null,
     connectionBaseUrls: null,
-    presetEntityName: null,
-    presetEntityNamePlural: null,
-    presetEntityDefaultLabel: null,
-    presetEntityDefaultValidationRegex: null,
+    connectionDefaultProviderKeys: null,
+    defaultEnvironmentName: null,
+    defaultEnvironmentNamespace: null,
+    defaultEnvironmentDescription: null,
+    defaultNetworkPolicy: null,
+    defaultEnvironmentRestricted: false,
+    defaultEnvironmentValidationRegex: null,
+    defaultEnvironmentTrustedImageRegistries: null,
     ...overrides,
   };
 }

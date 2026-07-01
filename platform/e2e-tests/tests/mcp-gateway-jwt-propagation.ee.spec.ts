@@ -156,6 +156,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
         profileId: pid,
         token: jwt,
         expectedToolName: getServerInfoToolName,
+        identityProviderId,
       });
       const toolNames = tools.map((t) => t.name);
       expect(toolNames).toContain(getServerInfoToolName);
@@ -505,6 +506,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
         profileId: pid,
         token: jwt,
         expectedToolName: getServerInfoToolName,
+        identityProviderId,
       });
       const toolNames = tools.map((t) => t.name);
       expect(toolNames).toContain(getServerInfoToolName);

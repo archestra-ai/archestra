@@ -25,13 +25,12 @@ export const ChatCompletionUsageSchema = z
     `https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113`,
   );
 
-export const FinishReasonSchema = z.enum([
-  "stop",
-  "length",
-  "tool_calls",
-  "content_filter",
-  "function_call",
-]);
+// Persisted interactions are re-validated on read-back, so this must tolerate any
+// finish_reason an upstream provider (e.g. OpenRouter-fronted models) actually emits;
+// one nonconforming row would otherwise 500 the entire GET /api/interactions response.
+export const FinishReasonSchema = z
+  .enum(["stop", "length", "tool_calls", "content_filter", "function_call"])
+  .or(z.string());
 
 const ChoiceSchema = z
   .object({
@@ -98,7 +97,9 @@ export const ChatCompletionResponseSchema = z
 
 const ResponsesInputItemSchema = z
   .object({
-    type: z.string(),
+    // Optional: Responses "easy input message" items carry only role/content
+    // and omit `type` (it defaults to "message"); the AI SDK emits this shape.
+    type: z.string().optional(),
   })
   .passthrough()
   .describe(

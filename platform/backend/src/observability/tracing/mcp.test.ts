@@ -118,7 +118,7 @@ describe("recordBlockedToolSpans", () => {
     const span = exporter.getFinishedSpans()[0];
     expect(span.attributes["gen_ai.conversation.id"]).toBe("session-xyz");
     expect(span.attributes["archestra.agent.type"]).toBe("agent");
-    expect(span.attributes["archestra.label.env"]).toBe("prod");
+    expect(span.attributes["archestra.agent.label.env"]).toBe("prod");
     expect(span.attributes["archestra.user.id"]).toBe("user-1");
     expect(span.attributes["archestra.user.email"]).toBe("test@test.com");
     expect(span.attributes["archestra.user.name"]).toBe("Test User");

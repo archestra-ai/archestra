@@ -1,7 +1,11 @@
 import { FinishReason, type GenerateContentResponse } from "@google/genai";
 import { describe, expect, test } from "@/test";
 import type { Gemini } from "@/types";
-import { type GeminiRequestWithModel, geminiAdapterFactory } from "./gemini";
+import {
+  type GeminiRequestWithModel,
+  geminiAdapterFactory,
+  restToSdkGenerateContentParams,
+} from "./gemini";
 
 type GeminiStreamChunk = GenerateContentResponse;
 
@@ -25,6 +29,12 @@ function createMockResponse(
       candidatesTokenCount: usage?.candidatesTokenCount ?? 50,
       totalTokenCount:
         (usage?.promptTokenCount ?? 100) + (usage?.candidatesTokenCount ?? 50),
+      ...(usage?.cachedContentTokenCount !== undefined
+        ? { cachedContentTokenCount: usage.cachedContentTokenCount }
+        : {}),
+      ...(usage?.thoughtsTokenCount !== undefined
+        ? { thoughtsTokenCount: usage.thoughtsTokenCount }
+        : {}),
     },
     modelVersion: "gemini-2.5-pro",
     responseId: "gemini-test-response",
@@ -170,7 +180,42 @@ describe("GeminiResponseAdapter", () => {
       expect(usage).toEqual({
         inputTokens: 150,
         outputTokens: 75,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
       });
+    });
+
+    test("subtracts cachedContentTokenCount from prompt to avoid double-counting", () => {
+      const response = createMockResponse([{ text: "Test" }], {
+        promptTokenCount: 150,
+        candidatesTokenCount: 75,
+        cachedContentTokenCount: 120,
+      });
+
+      const adapter = geminiAdapterFactory.createResponseAdapter(response);
+
+      // Gemini's cachedContentTokenCount is a SUBSET of promptTokenCount, so
+      // uncached input = 150 - 120 = 30 (no double-count of the cached 120).
+      expect(adapter.getUsage()).toEqual({
+        inputTokens: 30,
+        outputTokens: 75,
+        cacheReadTokens: 120,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
+      });
+    });
+
+    test("extracts thoughtsTokenCount as reasoning tokens", () => {
+      const response = createMockResponse([{ text: "Test" }], {
+        promptTokenCount: 150,
+        candidatesTokenCount: 75,
+        thoughtsTokenCount: 60,
+      });
+
+      const adapter = geminiAdapterFactory.createResponseAdapter(response);
+
+      expect(adapter.getUsage().reasoningTokens).toBe(60);
     });
   });
 
@@ -682,6 +727,9 @@ describe("GeminiStreamAdapter", () => {
       expect(adapter.state.usage).toEqual({
         inputTokens: 100,
         outputTokens: 50,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
       });
     });
 
@@ -949,5 +997,71 @@ describe("GeminiStreamAdapter", () => {
       expect(parts).toHaveLength(1);
       expect(parts[0]).toEqual({ text: "Simple response" });
     });
+  });
+});
+
+describe("restToSdkGenerateContentParams tool-schema sanitization", () => {
+  // a non-string enum nested under a property — Gemini rejects this verbatim
+  const badParamSchema = {
+    type: "object",
+    properties: { flag: { type: "boolean", enum: [true] } },
+  };
+
+  function flagEnum(schema: unknown): unknown {
+    const props = (schema as { properties?: Record<string, unknown> })
+      .properties;
+    return (props?.flag as { enum?: unknown } | undefined)?.enum;
+  }
+
+  function firstFd(params: ReturnType<typeof restToSdkGenerateContentParams>): {
+    parameters?: unknown;
+    parametersJsonSchema?: unknown;
+    response?: unknown;
+    responseJsonSchema?: unknown;
+  } {
+    const tools = params.config?.tools as
+      | Array<{ functionDeclarations: Array<Record<string, unknown>> }>
+      | undefined;
+    const fd = tools?.[0]?.functionDeclarations?.[0];
+    if (!fd) throw new Error("expected a function declaration");
+    return fd;
+  }
+
+  test("sanitizes all four schema fields of a function declaration", () => {
+    const tools: Gemini.Types.Tool[] = [
+      {
+        functionDeclarations: [
+          {
+            name: "do_thing",
+            description: "does a thing",
+            parameters: structuredClone(badParamSchema),
+            parametersJsonSchema: structuredClone(badParamSchema),
+            response: structuredClone(badParamSchema),
+            responseJsonSchema: structuredClone(badParamSchema),
+          },
+        ],
+      },
+    ];
+
+    const fd = firstFd(
+      restToSdkGenerateContentParams({ contents: [] }, "gemini-2.5-pro", tools),
+    );
+
+    expect(flagEnum(fd.parameters)).toBeUndefined();
+    expect(flagEnum(fd.parametersJsonSchema)).toBeUndefined();
+    expect(flagEnum(fd.response)).toBeUndefined();
+    expect(flagEnum(fd.responseJsonSchema)).toBeUndefined();
+  });
+
+  test("leaves a declaration without parameters untouched", () => {
+    const tools: Gemini.Types.Tool[] = [
+      { functionDeclarations: [{ name: "no_args", description: "no args" }] },
+    ];
+
+    const fd = firstFd(
+      restToSdkGenerateContentParams({ contents: [] }, "gemini-2.5-pro", tools),
+    );
+
+    expect(fd.parameters).toBeUndefined();
   });
 });

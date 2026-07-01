@@ -54,7 +54,9 @@ export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
     if (role === "user") {
       messages.push({
         role: "user",
-        content: userContentToBedrock((m as Loose).content),
+        content: ensureBedrockUserContentHasText(
+          userContentToBedrock((m as Loose).content),
+        ),
       });
       continue;
     }
@@ -441,6 +443,28 @@ function stringifyAssistantText(content: unknown): string {
   return "";
 }
 
+// MIMEs whose text content Bedrock's document block can represent as txt.
+const BEDROCK_NORMALIZE_TO_TEXT_PLAIN = new Set([
+  "application/json",
+  "application/csv",
+]);
+
+// Bedrock-supported document MIME → Converse document format.
+// Kept in sync with the AI SDK's own BEDROCK_DOCUMENT_MIME_TYPES so the proxy
+// accepts the same set the SDK can relay downstream.
+const BEDROCK_DOCUMENT_FORMATS: Record<string, string> = {
+  "application/pdf": "pdf",
+  "text/csv": "csv",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "docx",
+  "application/vnd.ms-excel": "xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "text/html": "html",
+  "text/plain": "txt",
+  "text/markdown": "md",
+};
+
 function userContentToBedrock(content: unknown): BedrockContentBlock[] {
   if (typeof content === "string") {
     return [{ text: content }];
@@ -452,10 +476,60 @@ function userContentToBedrock(content: unknown): BedrockContentBlock[] {
       out.push({ text: String(part.text ?? "") });
     } else if (part?.type === "image_url") {
       const url = String(part.image_url?.url ?? "");
-      out.push(imageFromDataUrl(url) as BedrockContentBlock);
+      const block = imageUrlToBlock(url);
+      if (block) out.push(block as BedrockContentBlock);
     }
   }
   return out;
+}
+
+// Bedrock rejects user messages that contain a document block but no text block.
+// Prepend a placeholder so document-only OpenAI messages are accepted.
+function ensureBedrockUserContentHasText(
+  content: BedrockContentBlock[],
+): BedrockContentBlock[] {
+  const hasText = content.some((b) => "text" in b);
+  const hasDocument = content.some((b) => "document" in b);
+  if (hasDocument && !hasText) {
+    return [
+      { text: "Please review the attached document." } as BedrockContentBlock,
+      ...content,
+    ];
+  }
+  return content;
+}
+
+// Routes an image_url data URL to the correct Bedrock content block.
+// Returns null for unsupported MIMEs so callers can drop the part cleanly.
+function imageUrlToBlock(url: string): unknown {
+  const m = /^data:([^;]+);base64,(.+)$/i.exec(url);
+  if (!m) return null;
+
+  const rawMime = m[1].toLowerCase();
+  const bytes = m[2];
+
+  const imageFormats: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpeg",
+    "image/jpg": "jpeg",
+    "image/gif": "gif",
+    "image/webp": "webp",
+  };
+  if (imageFormats[rawMime]) {
+    return { image: { format: imageFormats[rawMime], source: { bytes } } };
+  }
+
+  const effectiveMime = BEDROCK_NORMALIZE_TO_TEXT_PLAIN.has(rawMime)
+    ? "text/plain"
+    : rawMime;
+  const docFormat = BEDROCK_DOCUMENT_FORMATS[effectiveMime];
+  if (docFormat) {
+    return {
+      document: { format: docFormat, name: "document", source: { bytes } },
+    };
+  }
+
+  return null;
 }
 
 function imageFromDataUrl(url: string): unknown {

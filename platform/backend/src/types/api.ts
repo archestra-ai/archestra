@@ -1,4 +1,4 @@
-import { ApiError, ApiErrorTypeSchema } from "@shared";
+import { ApiError, ApiErrorTypeSchema } from "@archestra/shared";
 import { z } from "zod";
 
 export { ApiError, ApiErrorTypeSchema };

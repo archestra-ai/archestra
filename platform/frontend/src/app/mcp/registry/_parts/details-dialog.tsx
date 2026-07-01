@@ -1,7 +1,7 @@
 "use client";
 
 import "highlight.js/styles/github-dark.css";
-import type { archestraCatalogTypes } from "@shared";
+import type { archestraCatalogTypes } from "@archestra/shared";
 import {
   BookOpen,
   Calendar,

@@ -1,16 +1,18 @@
 packages:
   - "backend"
+  - "drizzle-migration-linter"
   - "frontend"
   - "shared"
   - "archestra-rs/sandbox-rs"
+  - "archestra-rs/app-runtime-rs"
   - "e2e-tests"
 
 catalog:
-  ai: ^6.0.82
-  better-auth: 1.6.5
-  "@better-auth/core": 1.6.5
-  "@better-auth/oauth-provider": 1.6.5
-  "@better-auth/sso": 1.6.5
+  ai: ^6.0.193
+  better-auth: 1.6.11
+  "@better-auth/core": 1.6.11
+  "@better-auth/oauth-provider": 1.6.11
+  "@better-auth/sso": 1.6.11
   typescript: ^6.0.2
   # TS 7 beta (Go-based `tsgo`) publishes daily dev builds. minimumReleaseAge
   # (7 days) acts as the safety net — pnpm rejects builds younger than that,
@@ -21,23 +23,34 @@ catalog:
 overrides:
   '@fastify/reply-from': '>=12.6.2'
   '@fastify/http-proxy': '>=11.4.4'
-  protobufjs: '>=8.0.2'
+  protobufjs: '>=8.6.0'
   '@protobufjs/utf8': '>=1.1.1'
-  vite: 7.3.2
-  '@hono/node-server': 1.19.11
+  vite: 7.3.5
+  shell-quote: '>=1.8.4'
+  ws@>=8: '>=8.21.0'
+  # botframework-streaming pins ws 8.20.1, which the range selector above doesn't
+  # catch; force that edge to the CVE-2026-48779 fix too.
+  botframework-streaming>ws: '>=8.21.0'
+  # form-data 3.0.5 / 4.0.6 (fix CVE-2026-12143, HIGH) were published 2026-06-12,
+  # inside the 7-day window — excluded from minimumReleaseAge below and pinned
+  # exact so a `>=` floor can't pull an unvetted release.
+  form-data@>=4: 4.0.6
+  form-data@<4: 3.0.5
+  '@hono/node-server': 1.19.14
   body-parser: 2.2.1
-  dompurify: 3.4.0
+  dompurify: 3.4.10
   glob: 11.1.0
-  esbuild: 0.27.0
+  # GHSA-gv7w-rqvm-qjhr (esbuild "Untrusted Search Path", HIGH) fixed in 0.28.1.
+  esbuild: '>=0.28.1'
   mdast-util-to-hast: 13.2.1
   express: 5.2.0
   express-rate-limit: 8.3.1
   jws: 4.0.1
-  qs: 6.14.2
+  qs: 6.15.2
   d3-path: 3.1.0
-  hono: 4.12.17
+  # CVE-2026-54290 (HIGH, permissive cross-domain policy) fixed in 4.12.25.
+  hono: 4.12.25
   kysely: 0.28.17
-  lodash: '>=4.18.0'
   lodash-es: 4.18.1
   fast-xml-parser: 5.7.2
   fast-xml-builder: '>=1.1.7'
@@ -47,7 +60,10 @@ overrides:
   axios: '>=1.15.2'
   minimatch: '>=10.2.3'
   rollup: '>=4.59.0'
-  undici: 7.24.5
+  # CVE-2026-9697 (HIGH, improper certificate validation) fixed in 7.28.0.
+  # Pinned exact (not a `>=` floor) because undici is temporarily excluded from
+  # minimumReleaseAge below, so a floor could otherwise pull an unvetted release.
+  undici: 7.28.0
   '@xmldom/xmldom': '>=0.9.10'
   mammoth>@xmldom/xmldom: 0.8.13
   samlify>@xmldom/xmldom: 0.8.13
@@ -55,17 +71,19 @@ overrides:
   picomatch@>=4: '>=4.0.4'
   picomatch@<4: '>=2.3.2'
   fastify: '>=5.8.5'
-  defu: '>=6.1.5'
   postcss: '>=8.5.10'
   uuid@^11: '>=11.1.1'
   ip-address: '>=10.1.1'
-  brace-expansion: '>=5.0.5'
+  brace-expansion: '>=5.0.6'
   smol-toml: '>=1.6.1'
-  yaml: '>=2.8.3'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
-patchedDependencies:
-  ai@6.0.90: patches/ai@6.0.90.patch
+  # CVE-2026-48068 / CVE-2026-48069 (uncaught exception) fixed in 1.14.4
+  '@grpc/grpc-js': '>=1.14.4'
+packageExtensions:
+  '@hookform/resolvers@*':
+    dependencies:
+      zod: ^4.3.4
 
 # Enforce Node.js version requirements from package.json engines field.
 engineStrict: true
@@ -82,6 +100,22 @@ verifyDepsBeforeRun: false
 # 10080 minutes = 7 days.
 # https://daniakash.com/posts/simplest-supply-chain-defense/
 minimumReleaseAge: 10080
+
+# next 16.3.0-canary.56 (and its same-versioned @next/* swc binaries) ships
+# `turbopackMemoryEviction`, which we need to test as the fix for the Turbopack
+# IOAccelerator memory leak on Apple Silicon (vercel/next.js#92055). Remove
+# once we settle on a stable next release older than the quarantine window.
+minimumReleaseAgeExclude:
+  - next
+  - "@next/*"
+  # TEMPORARY: form-data 3.0.5 / 4.0.6 (fix CVE-2026-12143, HIGH) were published
+  # 2026-06-12 and clear the 7-day window on 2026-06-19. Remove on/after that date
+  # — the lockfile stays pinned at the fixed versions regardless.
+  - form-data
+  # TEMPORARY: undici 7.28.0 (fix CVE-2026-9697, HIGH) was published 2026-06-15
+  # and clears the 7-day window on 2026-06-22. Remove on/after that date — the
+  # lockfile stays pinned at 7.28.0 regardless.
+  - undici
 
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare

@@ -161,6 +161,25 @@ tests:
           path: spec.template.spec.initContainers[0].image
           value: registry.internal.example.com/platform/busybox:1.36
 
+  - it: worker waits for migrations after postgres is reachable by default
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-migrations
+
+  - it: worker can disable the wait-for-migrations init container
+    set:
+      archestra.initContainers.waitForMigrations.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers
+          content:
+            name: wait-for-migrations
+          any: true
+
   - it: worker applies shared resources to chart-managed init containers
     set:
       archestra.initContainers.resources:
@@ -178,65 +197,3 @@ tests:
               memory: 64Mi
             limits:
               memory: 128Mi
-      - equal:
-          path: spec.template.spec.initContainers[1].resources
-          value:
-            requests:
-              cpu: 100m
-              memory: 64Mi
-            limits:
-              memory: 128Mi
-
-  - it: worker waits for migrations via the platform web server before starting
-    asserts:
-      - equal:
-          path: spec.template.spec.initContainers[1].name
-          value: wait-for-migrations
-      - equal:
-          path: spec.template.spec.initContainers[1].image
-          value: busybox:1.36
-      # Gates on the platform Service (port 9000), which only listens once the
-      # web pod has applied migrations and finished required-data seeding.
-      - matchRegex:
-          path: spec.template.spec.initContainers[1].command[2]
-          pattern: 'HOST="RELEASE-NAME-archestra-platform"'
-      - matchRegex:
-          path: spec.template.spec.initContainers[1].command[2]
-          pattern: "PORT=9000"
-      - matchRegex:
-          path: spec.template.spec.initContainers[1].command[2]
-          pattern: ".*nc -z.*"
-      - matchRegex:
-          path: spec.template.spec.initContainers[1].command[2]
-          pattern: "max_attempts=600"
-
-  - it: worker omits the wait-for-migrations init container when disabled
-    set:
-      archestra.initContainers.waitForMigrations.enabled: false
-    asserts:
-      # Only the wait-for-postgres init container remains.
-      - lengthEqual:
-          path: spec.template.spec.initContainers
-          count: 1
-      - equal:
-          path: spec.template.spec.initContainers[0].name
-          value: wait-for-postgres
-
-  - it: worker honors a custom waitForMigrations timeout
-    set:
-      archestra.initContainers.waitForMigrations.timeoutSeconds: 120
-    asserts:
-      - matchRegex:
-          path: spec.template.spec.initContainers[1].command[2]
-          pattern: "max_attempts=120"
-
-  - it: worker supports overriding the wait-for-migrations image
-    set:
-      archestra.initContainers.busyboxImage: registry.internal.example.com/platform/busybox:1.36
-    asserts:
-      - equal:
-          path: spec.template.spec.initContainers[1].name
-          value: wait-for-migrations
-      - equal:
-          path: spec.template.spec.initContainers[1].image
-          value: registry.internal.example.com/platform/busybox:1.36

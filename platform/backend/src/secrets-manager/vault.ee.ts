@@ -1,4 +1,4 @@
-import { SecretsManagerType } from "@shared";
+import { SecretsManagerType } from "@archestra/shared";
 import logger from "@/logging";
 import SecretModel from "@/models/secret";
 import {

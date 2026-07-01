@@ -1,15 +1,17 @@
-import { TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON } from "@shared";
+import { TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   extractCatalogIdFromInstallUrl,
   extractIdsFromReauthUrl,
   hasToolPartsWithAuthErrors,
   isAuthInstructionText,
+  isInstallAuthResolved,
   parseAuthRequired,
   parseExpiredAuth,
   parsePolicyDenied,
   resolveAssistantTextAuthState,
   resolveToolAuthState,
+  type ToolAuthState,
 } from "./mcp-error-ui";
 
 describe("parsePolicyDenied", () => {
@@ -372,6 +374,70 @@ describe("resolveToolAuthState", () => {
     });
   });
 
+  it("propagates a personal credential scope for structured auth-expired errors", () => {
+    expect(
+      resolveToolAuthState({
+        rawOutput: {
+          archestraError: {
+            type: "auth_expired",
+            message: "Expired",
+            catalogName: "GitHub",
+            catalogId: "cat_1",
+            serverId: "s_1",
+            reauthUrl:
+              "http://localhost:3000/mcp/registry?reauth=cat_1&server=s_1",
+            credentialScope: "personal",
+          },
+        },
+      }),
+    ).toEqual({
+      kind: "auth-expired",
+      catalogName: "GitHub",
+      reauthUrl: "http://localhost:3000/mcp/registry?reauth=cat_1&server=s_1",
+      catalogId: "cat_1",
+      serverId: "s_1",
+      credentialScope: "personal",
+    });
+  });
+
+  it("carries the owning team name for team-scoped auth-expired errors", () => {
+    expect(
+      resolveToolAuthState({
+        rawOutput: {
+          archestraError: {
+            type: "auth_expired",
+            message: "Expired",
+            catalogName: "GitHub",
+            catalogId: "cat_1",
+            serverId: "s_1",
+            reauthUrl:
+              "http://localhost:3000/mcp/registry?reauth=cat_1&server=s_1",
+            credentialScope: "team",
+            credentialTeamName: "Platform Team",
+          },
+        },
+      }),
+    ).toMatchObject({
+      kind: "auth-expired",
+      credentialScope: "team",
+      credentialTeamName: "Platform Team",
+    });
+  });
+
+  it("leaves scope undefined for text-parsed expired-auth errors", () => {
+    const authState = resolveToolAuthState({
+      errorText: [
+        'Expired or invalid authentication for "GitHub".',
+        "To re-authenticate, please visit: http://localhost:3000/mcp/registry?reauth=cat_1&server=s_1",
+      ].join("\n"),
+    });
+
+    expect(authState?.kind).toBe("auth-expired");
+    expect(
+      (authState as { credentialScope?: string }).credentialScope,
+    ).toBeUndefined();
+  });
+
   it("parses policy-denied tool errors from errorText", () => {
     const authState = resolveToolAuthState({
       errorText:
@@ -506,5 +572,81 @@ describe("extractIdsFromReauthUrl", () => {
       catalogId: null,
       serverId: null,
     });
+  });
+});
+
+describe("isInstallAuthResolved", () => {
+  const installState: ToolAuthState = {
+    kind: "auth-required",
+    catalogName: "Atlassian Cloud MCP",
+    actionUrl: "http://localhost:3000/mcp/registry?install=cat_1",
+    action: "install_mcp_credentials",
+    providerId: null,
+    catalogId: "cat_1",
+  };
+
+  it("treats an install prompt as resolved once a server for its catalog is connected", () => {
+    expect(
+      isInstallAuthResolved({
+        authState: installState,
+        connectedCatalogIds: new Set(["cat_1"]),
+      }),
+    ).toBe(true);
+  });
+
+  it("stays unresolved while no server for the catalog is connected", () => {
+    expect(
+      isInstallAuthResolved({
+        authState: installState,
+        connectedCatalogIds: new Set(["other-catalog"]),
+      }),
+    ).toBe(false);
+  });
+
+  it("ignores identity-provider connect prompts even when the catalog is connected", () => {
+    expect(
+      isInstallAuthResolved({
+        authState: {
+          ...installState,
+          action: "connect_identity_provider",
+          providerId: "EntraID",
+        },
+        connectedCatalogIds: new Set(["cat_1"]),
+      }),
+    ).toBe(false);
+  });
+
+  it("ignores expired/re-auth prompts even when the catalog is connected", () => {
+    expect(
+      isInstallAuthResolved({
+        authState: {
+          kind: "auth-expired",
+          catalogName: "Atlassian Cloud MCP",
+          reauthUrl:
+            "http://localhost:3000/mcp/registry?reauth=cat_1&server=s_1",
+          catalogId: "cat_1",
+          serverId: "s_1",
+        },
+        connectedCatalogIds: new Set(["cat_1"]),
+      }),
+    ).toBe(false);
+  });
+
+  it("stays unresolved when the prompt carries no catalog id", () => {
+    expect(
+      isInstallAuthResolved({
+        authState: { ...installState, catalogId: null },
+        connectedCatalogIds: new Set(["cat_1"]),
+      }),
+    ).toBe(false);
+  });
+
+  it("stays unresolved when there is no auth state", () => {
+    expect(
+      isInstallAuthResolved({
+        authState: null,
+        connectedCatalogIds: new Set(["cat_1"]),
+      }),
+    ).toBe(false);
   });
 });

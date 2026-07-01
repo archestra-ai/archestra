@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   buildArchestraToolRefusalMetadata,
   TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
-} from "@shared";
+} from "@archestra/shared";
 import type { InsertInteraction } from "@/types";
 import { randomBool, randomElement, randomInt } from "./utils";
 

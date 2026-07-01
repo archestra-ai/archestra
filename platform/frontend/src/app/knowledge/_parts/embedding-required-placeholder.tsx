@@ -1,6 +1,6 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@shared";
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { ArrowUpRight, Database, Settings } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";

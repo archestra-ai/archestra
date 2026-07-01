@@ -3,21 +3,22 @@ title: Authentication
 category: LLM Proxy
 order: 3
 description: Authentication methods for the LLM Proxy
-lastUpdated: 2026-05-04
+lastUpdated: 2026-07-01
 ---
 
 <!--
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-The LLM Proxy supports direct provider API keys, virtual API keys, OAuth access tokens, and JWKS via an external identity provider.
+The LLM Proxy supports direct provider API keys, virtual API keys, passthrough virtual keys, OAuth access tokens, and JWKS via an external identity provider.
 
 | Method | Best for | Model Router | Notes |
 | --- | --- | --- | --- |
 | Direct provider key | Simple provider-specific proxy calls | No | Sends the raw provider key with each request. |
 | Virtual API key | Provider-specific LLM clients, generic Model Router clients, and individual developers | Yes | Works as a provider key replacement on provider-specific proxy routes, or as the `apiKey` for Model Router clients. |
-| LLM OAuth client access token | Backend services, production apps, and external bots | Yes | Uses OAuth client credentials to issue short-lived bearer tokens. |
-| User OAuth access token | Custom apps acting for an individual user | Yes | Uses the authorization code flow with consent and the `llm:proxy` scope. |
+| Passthrough virtual key | Authenticating proxy user while passing provider credentials through (e.g. a Claude Code subscription) | N/A | Sent in the `X-Archestra-Virtual-Key` header alongside another credential; carries no provider key of its own. |
+| LLM OAuth client access token | Backend services, production apps, and external bots | Yes | OAuth `client_credentials` grant; the client brings its own provider keys. |
+| User OAuth access token | Apps acting for an individual user | Yes | Authorization code flow with the `llm:proxy` scope; the app can self-register or be pre-registered (confidential) on the OAuth Clients page. Resolves the user's own provider keys. |
 | JWKS | Enterprise IdP JWT callers | Provider routes | Resolves a user from an external IdP JWT. |
 
 ## Direct Provider API Key
@@ -84,21 +85,77 @@ curl -X POST "https://archestra.example.com/v1/model-router/{proxyId}/responses"
   -d '{"model": "anthropic:claude-haiku-4-5-20251001", "input": "Hello"}'
 ```
 
+## Passthrough Virtual Keys
+
+Passthrough virtual keys authenticates an Archestra user to LLM Proxy. They cover the case where a client passes a provider or subscription token straight through — for example, Claude Code forwarding a Claude Max subscription token. The proxy forwards that token upstream, while the passthrough key tells Archestra which user made the call.
+
+Unlike the unauthenticated `X-Archestra-User-Id` header, a passthrough key is a secret bound to a user, so the attribution is authenticated. This lets you attribute and access-control requests per user even when the provider credential is opaque.
+
+### Properties
+
+- **Personal only**: a passthrough key belongs to one user. Admins can create one on behalf of another member; non-admins only for themselves.
+- **No provider keys**: it never maps a provider API key and cannot be used as a provider credential in the `Authorization` header.
+- **Expirable**: set an optional expiration like any virtual key.
+
+### Creating Passthrough Virtual Keys
+
+1. Go to **LLM Proxies > Credentials > Virtual Keys**
+2. Create a virtual key and choose the **Passthrough** type
+3. As an admin, optionally pick the owner
+4. Copy the generated token (shown only once)
+
+### Using
+
+Send the passthrough key in the `X-Archestra-Virtual-Key` header, alongside whatever credential authenticates the upstream provider call:
+
+```bash
+curl -X POST "https://archestra.example.com/v1/anthropic/{proxyId}/v1/messages" \
+  -H "Authorization: Bearer sk-ant-your-subscription-token" \
+  -H "X-Archestra-Virtual-Key: arch_abc123def456..." \
+  -H "Content-Type: application/json" \
+  -d '{"model": "claude-haiku-4-5-20251001", "max_tokens": 64, "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+A valid passthrough key authenticates the user at the proxy, but it does not by itself satisfy the upstream provider — that still needs its own credential.
+
+### Configuring Claude Code and Claude Desktop
+
+The in-app Connection page wires this header up per platform (macOS, Linux, Windows). For Claude Code's subscription passthrough, the one-command setup provisions a passthrough key and merges it into `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://archestra.example.com/v1/anthropic/{proxyId}",
+    "ANTHROPIC_CUSTOM_HEADERS": "X-Archestra-Agent-Id: anthropic_claude_code\nX-Archestra-Virtual-Key: arch_abc123def456..."
+  }
+}
+```
+
+`ANTHROPIC_CUSTOM_HEADERS` takes `Name: Value` pairs (newline-separated for several). Leave `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_API_KEY` unset so the Claude subscription still authenticates the upstream call — the header only authenticates an Archestra user on an LLM Proxy.
+
+The setup always adds `X-Archestra-Agent-Id` too — a non-secret client identifier (`anthropic_claude_code` for Claude Code, `anthropic_claude_desktop` for Claude Desktop) that attributes each proxied request to the client app in the LLM logs. It rides alongside the passthrough key but is independent of it, so it is present even when no passthrough key is provisioned.
+
+Claude Desktop can be configured by hand: open **Developer > Configure Third-Party Inference**, fill in the API key and base URL, then add two custom headers — `X-Archestra-Agent-Id` set to `anthropic_claude_desktop`, and `X-Archestra-Virtual-Key` set to the passthrough key.
+
+The connection page also generates an importable configuration profile file for Claude Desktop. Download it, then in **Configure Third-Party Inference** open the **Default** dropdown (top right) and choose **Import configuration…** to load it. Click **Apply Changes** and restart Claude Desktop to pick up the new configuration.
+
 ## LLM OAuth Clients
 
-LLM OAuth clients are registered clients that call LLM proxy endpoints with OAuth client credentials. Use them for backend services, production apps, automation jobs, and external bots. The OAuth client receives a `client_id` and one-time `client_secret`, exchanges them for a fixed 1-hour access token, and uses that token as the proxy bearer token.
+LLM OAuth clients are clients you register to call LLM proxy endpoints. They support two grants: **client credentials** (an application acting as itself, covered here) and **authorization code** (a pre-registered app acting on behalf of a signed-in user — see [On Behalf of Users](#on-behalf-of-users-authorization-code)).
+
+With the `client_credentials` grant, use them for backend services, production apps, automation jobs, and external bots. The OAuth client receives a `client_id` and one-time `client_secret`, exchanges them for a fixed 1-hour access token, and uses that token as the proxy bearer token.
 
 Virtual keys are still the recommended path for generic LLM clients that cannot fetch OAuth tokens. LLM OAuth clients are better when you control the service code and can request a token before calling an LLM proxy. See [Model Router Client Credentials](/docs/platform-model-router-client-credentials-example) for a complete service-app example.
 
 ### Managing OAuth Clients
 
 1. Go to **LLM Proxies > Credentials > OAuth Clients**
-2. Create an OAuth client
-3. Select the LLM proxies it can access
-4. Map the provider API keys it can use
+2. Create an OAuth client and choose its grant type
+3. For an application (client credentials): select the LLM proxies it can access and map the provider API keys it can use
+4. For acting on behalf of users (authorization code): add the application's redirect URIs
 5. Copy the generated `client_id` and `client_secret` (the secret is shown only once)
 
-You can edit an OAuth client later to update its name, allowed LLM proxies, or provider key mappings. Rotate the client secret when the existing secret needs to be replaced.
+You can edit a client_credentials client later to update its name, allowed LLM proxies, or provider key mappings; edit an authorization_code client to update its redirect URIs. The grant type is fixed at creation. Rotate the client secret when the existing secret needs to be replaced.
 
 ### Getting an Access Token
 
@@ -135,11 +192,22 @@ For Model Router routes, the OAuth client must have a provider key mapping for t
 
 LLM logs and traces record the authenticated OAuth client separately from `X-Archestra-Agent-Id`. Use `X-Archestra-Agent-Id` as a caller-provided label, not as proof of client identity.
 
-### User OAuth Apps
+### On Behalf of Users (Authorization Code)
 
-Custom applications can also use the OAuth authorization code flow when they act on behalf of an individual user. The application redirects the user to the authorization endpoint with the `llm:proxy` scope, the user approves the consent screen, and the application exchanges the code for a user access token.
+An application can act on behalf of an individual **user** instead of as itself. It runs the OAuth authorization code flow with the `llm:proxy` scope, the user approves the consent screen, and the application exchanges the code for a user-bound access token used as the proxy bearer token.
 
-User OAuth tokens do not use the LLM OAuth Clients page. Provider-specific routes and Model Router resolve provider keys from the authorized user's accessible Model Provider keys: personal keys, org-wide keys, and team keys for teams the user belongs to.
+Register such an application one of two ways:
+
+- **Pre-registered (recommended for known apps)**: create an OAuth client on the **OAuth Clients** page with the "On behalf of users" grant type and add its redirect URIs. It is confidential — it gets a `client_id` and one-time `client_secret`, and PKCE is required — so only that application can complete the flow. To allow only pre-registered clients, set `ARCHESTRA_AUTH_DCR_ENABLED=false`.
+- **Self-registered**: a client registers dynamically (DCR) or via a client-ID metadata document (CIMD) and runs the same flow. These do not use the OAuth Clients page.
+
+The application redirects the user to `GET /api/auth/oauth2/authorize` (`response_type=code`, `scope=llm:proxy`, add `offline_access` for a refresh token, the registered `redirect_uri`, and a PKCE challenge), then exchanges the code at `POST /api/auth/oauth2/token` (`grant_type=authorization_code`, `client_id`, `client_secret`, PKCE verifier).
+
+Either way the token is user-bound and carries no provider keys of its own: provider-specific routes and Model Router resolve provider keys from the authorized user's accessible Model Provider keys (personal keys, org-wide keys, and team keys for teams the user belongs to), and the user's cost limits and policies apply.
+
+#### Proxy access grant
+
+A pre-registered client may optionally carry an **LLM proxy access grant** (its `allowedLlmProxyIds`). Any user who authenticates through the client may then reach those proxies **in addition to** their own role-based access — even proxies they otherwise couldn't reach. The grant is additive (it never removes access) and admin-controlled (only admins register clients and set the list). It lets you gate a restricted proxy behind a specific trusted app: assign the proxy to a team with no members (an org-wide proxy is open to all members), then grant it through the client. Each user's own provider keys, cost limits, and policies still apply.
 
 The user OAuth token lifetime is controlled by **Settings > Organization > Auth > OAuth token lifetime**. The same setting applies to newly issued user OAuth tokens for MCP and custom application authorization-code flows. It does not change the fixed 1-hour lifetime for LLM OAuth client credentials tokens.
 
@@ -193,6 +261,7 @@ When the Archestra Chat, JWKS auth, or user OAuth Model Router auth resolves a p
 Each LLM API key can have an optional **Base URL** that overrides the [environment-variable default](/docs/platform-deployment#llm-provider-configuration). This is configured when creating or editing an API key in Provider Settings.
 
 Use cases:
+
 - Self-hosted Ollama at a non-default address
 - OpenAI-compatible proxies
 - Regional endpoints

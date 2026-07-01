@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraCatalogTypes } from "@shared";
+import type { archestraCatalogTypes } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";

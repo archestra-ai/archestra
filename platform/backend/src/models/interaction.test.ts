@@ -1,11 +1,19 @@
-import { ChatErrorCode } from "@shared";
+import {
+  ChatErrorCode,
+  CLAUDE_CLIENT_FILTER,
+  CLAUDE_CLIENT_ID,
+  CLAUDE_CODE_CLIENT_ID,
+} from "@archestra/shared";
 import { beforeEach, describe, expect, test } from "@/test";
+import type { InsertInteraction } from "@/types";
 import { SelectInteractionSchema } from "@/types";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import ConversationModel from "./conversation";
 import ConversationChatErrorModel from "./conversation-chat-error";
+import EnvironmentModel from "./environment";
 import InteractionModel from "./interaction";
+import InteractionDeltaManager from "./interaction-delta-manager";
 import LimitModel from "./limit";
 import TeamModel from "./team";
 
@@ -52,6 +60,69 @@ describe("InteractionModel", () => {
       expect(interaction.profileId).toBe(profileId);
       expect(interaction.request).toBeDefined();
       expect(interaction.response).toBeDefined();
+    });
+
+    test("snapshots the agent's environment and keeps it stable across reassignment", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const envA = await EnvironmentModel.create({
+        organizationId: org.id,
+        name: "production",
+      });
+      const envB = await EnvironmentModel.create({
+        organizationId: org.id,
+        name: "staging",
+      });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        environmentId: envA.id,
+      });
+
+      const baseInteraction = {
+        request: {
+          model: "gpt-4o",
+          messages: [{ role: "user" as const, content: "Hello" }],
+        },
+        response: {
+          id: "r",
+          object: "chat.completion",
+          created: 1,
+          model: "gpt-4o",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant" as const,
+                content: "Hi",
+                refusal: null,
+              },
+              finish_reason: "stop" as const,
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions" as const,
+      };
+
+      const first = await InteractionModel.create({
+        profileId: agent.id,
+        ...baseInteraction,
+      });
+      expect(first.environmentId).toBe(envA.id);
+
+      // Reassigning the agent must not retroactively change the snapshot.
+      await AgentModel.update(agent.id, { environmentId: envB.id });
+
+      const second = await InteractionModel.create({
+        profileId: agent.id,
+        ...baseInteraction,
+      });
+      expect(second.environmentId).toBe(envB.id);
+
+      const refetchedFirst = await InteractionModel.findById(first.id);
+      expect(refetchedFirst?.environmentId).toBe(envA.id);
     });
 
     test("returns chat errors for chat conversation sessions", async ({
@@ -1279,660 +1350,6 @@ describe("InteractionModel", () => {
     });
   });
 
-  describe("getSessions search filtering", () => {
-    test("searches by request message content (case insensitive)", async ({
-      makeAdmin,
-    }) => {
-      const admin = await makeAdmin();
-      const agent = await AgentModel.create({
-        name: "Agent",
-        teams: [],
-        scope: "org",
-      });
-
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: "session-1",
-        request: {
-          model: "gpt-4",
-          messages: [
-            { role: "user", content: "Tell me about quantum computing" },
-          ],
-        },
-        response: {
-          id: "r1",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: "assistant",
-                content: "Quantum computing is...",
-                refusal: null,
-              },
-              finish_reason: "stop",
-              logprobs: null,
-            },
-          ],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: "session-2",
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "How do I make a sandwich?" }],
-        },
-        response: {
-          id: "r2",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: "assistant",
-                content: "To make a sandwich...",
-                refusal: null,
-              },
-              finish_reason: "stop",
-              logprobs: null,
-            },
-          ],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      // Search with lowercase
-      const sessions = await InteractionModel.getSessions(
-        { limit: 100, offset: 0 },
-        admin.id,
-        true,
-        { search: "quantum" },
-      );
-
-      expect(sessions.data).toHaveLength(1);
-      expect(sessions.data[0].sessionId).toBe("session-1");
-    });
-
-    test("searches by response content", async ({ makeAdmin }) => {
-      const admin = await makeAdmin();
-      const agent = await AgentModel.create({
-        name: "Agent",
-        teams: [],
-        scope: "org",
-      });
-
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: "session-with-special-response",
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Hello" }],
-        },
-        response: {
-          id: "r1",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: "assistant",
-                content:
-                  "This response contains UniqueSearchableKeyword12345 for testing",
-                refusal: null,
-              },
-              finish_reason: "stop",
-              logprobs: null,
-            },
-          ],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: "other-session",
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Test message" }],
-        },
-        response: {
-          id: "r2",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: "assistant",
-                content: "Normal response",
-                refusal: null,
-              },
-              finish_reason: "stop",
-              logprobs: null,
-            },
-          ],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      const sessions = await InteractionModel.getSessions(
-        { limit: 100, offset: 0 },
-        admin.id,
-        true,
-        { search: "UniqueSearchableKeyword12345" },
-      );
-
-      expect(sessions.data).toHaveLength(1);
-      expect(sessions.data[0].sessionId).toBe("session-with-special-response");
-    });
-
-    test("search returns multiple matching sessions", async ({ makeAdmin }) => {
-      const admin = await makeAdmin();
-      const agent = await AgentModel.create({
-        name: "Agent",
-        teams: [],
-        scope: "org",
-      });
-
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: "python-session-1",
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Help me with Python code" }],
-        },
-        response: {
-          id: "r1",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: "python-session-2",
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Python debugging question" }],
-        },
-        response: {
-          id: "r2",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: "javascript-session",
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "JavaScript question" }],
-        },
-        response: {
-          id: "r3",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      const sessions = await InteractionModel.getSessions(
-        { limit: 100, offset: 0 },
-        admin.id,
-        true,
-        { search: "python" },
-      );
-
-      expect(sessions.data).toHaveLength(2);
-    });
-
-    test("search with no matches returns empty", async ({ makeAdmin }) => {
-      const admin = await makeAdmin();
-      const agent = await AgentModel.create({
-        name: "Agent",
-        teams: [],
-        scope: "org",
-      });
-
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: "test-session",
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Hello there" }],
-        },
-        response: {
-          id: "r1",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      const sessions = await InteractionModel.getSessions(
-        { limit: 100, offset: 0 },
-        admin.id,
-        true,
-        { search: "nonexistentsearchterm987654" },
-      );
-
-      expect(sessions.data).toHaveLength(0);
-    });
-
-    test("search combined with other filters", async ({ makeAdmin }) => {
-      const admin = await makeAdmin();
-      const agent1 = await AgentModel.create({
-        name: "Agent 1",
-        teams: [],
-        scope: "org",
-      });
-      const agent2 = await AgentModel.create({
-        name: "Agent 2",
-        teams: [],
-        scope: "org",
-      });
-
-      // Agent 1 with searchable content
-      await InteractionModel.create({
-        profileId: agent1.id,
-        sessionId: "agent1-ml-session",
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Machine learning question" }],
-        },
-        response: {
-          id: "r1",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      // Agent 2 with same searchable content
-      await InteractionModel.create({
-        profileId: agent2.id,
-        sessionId: "agent2-ml-session",
-        request: {
-          model: "gpt-4",
-          messages: [
-            { role: "user", content: "Another machine learning topic" },
-          ],
-        },
-        response: {
-          id: "r2",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      // Search + profile filter
-      const sessions = await InteractionModel.getSessions(
-        { limit: 100, offset: 0 },
-        admin.id,
-        true,
-        { search: "machine learning", profileId: agent1.id },
-      );
-
-      expect(sessions.data).toHaveLength(1);
-      expect(sessions.data[0].profileId).toBe(agent1.id);
-    });
-
-    test("search combined with date filter", async ({ makeAdmin }) => {
-      const admin = await makeAdmin();
-      const agent = await AgentModel.create({
-        name: "Agent",
-        teams: [],
-        scope: "org",
-      });
-
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: "searchable-session",
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Unique search term XYZ789" }],
-        },
-        response: {
-          id: "r1",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-      const sessions = await InteractionModel.getSessions(
-        { limit: 100, offset: 0 },
-        admin.id,
-        true,
-        { search: "XYZ789", startDate, endDate },
-      );
-
-      expect(sessions.data.length).toBeGreaterThanOrEqual(1);
-      expect(sessions.data[0].sessionId).toBe("searchable-session");
-    });
-
-    test("searches by conversation title (case insensitive)", async ({
-      makeAdmin,
-      makeUser,
-      makeOrganization,
-    }) => {
-      const admin = await makeAdmin();
-      const user = await makeUser();
-      const org = await makeOrganization();
-      const agent = await AgentModel.create({
-        name: "Agent",
-        teams: [],
-        scope: "org",
-      });
-
-      // Create a conversation with a searchable title
-      const conversation = await ConversationModel.create({
-        userId: user.id,
-        organizationId: org.id,
-        agentId: agent.id,
-        title: "UniqueConversationTitle789 about quantum physics",
-      });
-
-      // Create an interaction linked to the conversation via sessionId
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: conversation.id, // Session ID = Conversation ID for chat sessions
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Tell me about atoms" }],
-        },
-        response: {
-          id: "r1",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: "assistant",
-                content: "Atoms are...",
-                refusal: null,
-              },
-              finish_reason: "stop",
-              logprobs: null,
-            },
-          ],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      // Create another conversation without the search term in title
-      const conversation2 = await ConversationModel.create({
-        userId: user.id,
-        organizationId: org.id,
-        agentId: agent.id,
-        title: "Discussion about cooking",
-      });
-
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: conversation2.id,
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "How to make pasta?" }],
-        },
-        response: {
-          id: "r2",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      // Search by conversation title (case insensitive)
-      const sessions = await InteractionModel.getSessions(
-        { limit: 100, offset: 0 },
-        admin.id,
-        true,
-        { search: "uniqueconversationtitle789" },
-      );
-
-      expect(sessions.data).toHaveLength(1);
-      expect(sessions.data[0].sessionId).toBe(conversation.id);
-      expect(sessions.data[0].conversationTitle).toBe(
-        "UniqueConversationTitle789 about quantum physics",
-      );
-    });
-
-    test("searches match conversation title OR request/response content", async ({
-      makeAdmin,
-      makeUser,
-      makeOrganization,
-    }) => {
-      const admin = await makeAdmin();
-      const user = await makeUser();
-      const org = await makeOrganization();
-      const agent = await AgentModel.create({
-        name: "Agent",
-        teams: [],
-        scope: "org",
-      });
-
-      // Conversation with "SharedSearchTerm" in title
-      const conversation1 = await ConversationModel.create({
-        userId: user.id,
-        organizationId: org.id,
-        agentId: agent.id,
-        title: "Discussion about SharedSearchTerm",
-      });
-
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: conversation1.id,
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Regular question" }],
-        },
-        response: {
-          id: "r1",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      // Conversation with "SharedSearchTerm" in request content
-      const conversation2 = await ConversationModel.create({
-        userId: user.id,
-        organizationId: org.id,
-        agentId: agent.id,
-        title: "Another discussion",
-      });
-
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: conversation2.id,
-        request: {
-          model: "gpt-4",
-          messages: [
-            { role: "user", content: "Question about SharedSearchTerm topic" },
-          ],
-        },
-        response: {
-          id: "r2",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      // Conversation without the search term
-      const conversation3 = await ConversationModel.create({
-        userId: user.id,
-        organizationId: org.id,
-        agentId: agent.id,
-        title: "Unrelated conversation",
-      });
-
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: conversation3.id,
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Different question" }],
-        },
-        response: {
-          id: "r3",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      // Search should find both conversations (title match + request content match)
-      const sessions = await InteractionModel.getSessions(
-        { limit: 100, offset: 0 },
-        admin.id,
-        true,
-        { search: "SharedSearchTerm" },
-      );
-
-      expect(sessions.data).toHaveLength(2);
-      const sessionIds = sessions.data.map((s) => s.sessionId);
-      expect(sessionIds).toContain(conversation1.id);
-      expect(sessionIds).toContain(conversation2.id);
-    });
-
-    test("conversation title search returns correct total count for pagination", async ({
-      makeAdmin,
-      makeUser,
-      makeOrganization,
-    }) => {
-      // This test verifies that the count query includes the LEFT JOIN with conversations table
-      // when searching by conversation title, ensuring pagination total is accurate
-      const admin = await makeAdmin();
-      const user = await makeUser();
-      const org = await makeOrganization();
-      const agent = await AgentModel.create({
-        name: "Agent",
-        teams: [],
-        scope: "org",
-      });
-
-      // Create multiple conversations with searchable titles
-      const searchTerm = "PaginationTestTitle";
-
-      for (let i = 0; i < 5; i++) {
-        const conversation = await ConversationModel.create({
-          userId: user.id,
-          organizationId: org.id,
-          agentId: agent.id,
-          title: `${searchTerm} conversation ${i}`,
-        });
-
-        await InteractionModel.create({
-          profileId: agent.id,
-          sessionId: conversation.id,
-          request: {
-            model: "gpt-4",
-            messages: [{ role: "user", content: `Question ${i}` }],
-          },
-          response: {
-            id: `r${i}`,
-            object: "chat.completion",
-            created: Date.now(),
-            model: "gpt-4",
-            choices: [],
-          },
-          type: "openai:chatCompletions",
-        });
-      }
-
-      // Create a conversation without the search term (should not be included)
-      const otherConversation = await ConversationModel.create({
-        userId: user.id,
-        organizationId: org.id,
-        agentId: agent.id,
-        title: "Unrelated title",
-      });
-
-      await InteractionModel.create({
-        profileId: agent.id,
-        sessionId: otherConversation.id,
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Unrelated question" }],
-        },
-        response: {
-          id: "r-other",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      // Search with pagination limit smaller than total results
-      const sessions = await InteractionModel.getSessions(
-        { limit: 2, offset: 0 },
-        admin.id,
-        true,
-        { search: searchTerm },
-      );
-
-      // Should return only 2 items due to limit, but total should be 5
-      expect(sessions.data).toHaveLength(2);
-      expect(sessions.pagination.total).toBe(5);
-
-      // Verify second page works correctly
-      const sessionsPage2 = await InteractionModel.getSessions(
-        { limit: 2, offset: 2 },
-        admin.id,
-        true,
-        { search: searchTerm },
-      );
-
-      expect(sessionsPage2.data).toHaveLength(2);
-      expect(sessionsPage2.pagination.total).toBe(5);
-    });
-  });
-
   describe("getSessions source filtering", () => {
     test("filters sessions by source", async ({ makeAdmin }) => {
       const admin = await makeAdmin();
@@ -2050,6 +1467,61 @@ describe("InteractionModel", () => {
         true,
       );
       expect(allSessions.data).toHaveLength(4);
+    });
+
+    test("filters sessions by client (external_agent_id)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      const make = (sessionId: string, externalAgentId: string | null) =>
+        InteractionModel.create({
+          profileId: agent.id,
+          sessionId,
+          source: "api",
+          externalAgentId,
+          request: { model: "gpt-4", messages: [] },
+          response: {
+            id: sessionId,
+            object: "chat.completion",
+            created: Date.now(),
+            model: "gpt-4",
+            choices: [],
+          },
+          type: "openai:chatCompletions",
+        });
+
+      // Two Claude clients (auto-discovered generic id and header-set Code id),
+      // a customer agent, and a plain session with no client.
+      await make("auto-claude-session", CLAUDE_CLIENT_ID);
+      await make("claude-code-session", CLAUDE_CODE_CLIENT_ID);
+      await make("customer-session", "my-custom-agent");
+      await make("plain-session", null);
+
+      // Filter to Claude — expands to every Claude client id.
+      const claude = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { client: CLAUDE_CLIENT_FILTER },
+      );
+      expect(claude.data).toHaveLength(2);
+      expect(claude.data.flatMap((s) => s.externalAgentIds).sort()).toEqual(
+        [CLAUDE_CLIENT_ID, CLAUDE_CODE_CLIENT_ID].sort(),
+      );
+
+      // No filter returns all four
+      const all = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+      );
+      expect(all.data).toHaveLength(4);
     });
 
     test("marks mixed-source chat sessions without promoting compaction to the session source", async ({
@@ -3864,6 +3336,249 @@ describe("InteractionModel", () => {
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(90);
       expect(usage[0].tokensOut).toBe(180);
+    });
+  });
+
+  describe("delta-encoded Claude interactions (read paths)", () => {
+    const ANTHROPIC_RESPONSE = {
+      id: "msg_test",
+      type: "message",
+      role: "assistant",
+      model: "claude-3-5-sonnet",
+      content: [{ type: "text", text: "ok" }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    };
+
+    function createClaude(
+      agentId: string,
+      messages: unknown[],
+      opts: { sessionId: string; tools?: unknown[]; createdAt?: Date },
+    ) {
+      return InteractionModel.create({
+        profileId: agentId,
+        sessionId: opts.sessionId,
+        sessionSource: "claude_code",
+        type: "anthropic:messages",
+        request: {
+          model: "claude-3-5-sonnet",
+          max_tokens: 1024,
+          messages,
+          ...(opts.tools ? { tools: opts.tools } : {}),
+        } as unknown as InsertInteraction["request"],
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+        ...(opts.createdAt ? { createdAt: opts.createdAt } : {}),
+      });
+    }
+
+    function messagesOf(request: unknown): unknown[] {
+      return (request as { messages: unknown[] }).messages;
+    }
+
+    beforeEach(() => {
+      InteractionDeltaManager.reset();
+    });
+
+    test("findAllPaginated returns full requests and classifies requestType on the reconstructed request", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+      const tools = [
+        { name: "Task", description: "spawn subagent", input_schema: {} },
+      ];
+
+      const m0 = {
+        role: "user",
+        content: "kick off a long running task please",
+      };
+      await createClaude(agent.id, [m0], {
+        sessionId: "delta-find-all",
+        tools,
+      });
+      // Continuation whose stored delta is a single short utility-looking message
+      // ("count"). On the DELTA alone computeRequestType would say "subagent";
+      // on the reconstructed full request (3 messages + Task tool) it is "main".
+      const full = [
+        m0,
+        { role: "assistant", content: "ok" },
+        { role: "user", content: "count" },
+      ];
+      const tip = await createClaude(agent.id, full, {
+        sessionId: "delta-find-all",
+        tools,
+      });
+
+      const result = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId: "delta-find-all" },
+      );
+
+      const tipRow = result.data.find((i) => i.id === tip.id);
+      expect(messagesOf(tipRow?.request)).toEqual(full);
+      expect(
+        (tipRow as { requestType?: string } | undefined)?.requestType,
+      ).toBe("main");
+    });
+
+    test("findAllPaginated classifies a Claude Desktop web-search request as a subagent", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+      const sessionId = "desktop-subagent";
+
+      const desktopRequest = (overrides: {
+        system: unknown;
+        tools: unknown[];
+        messages: unknown[];
+      }) =>
+        ({
+          model: "claude-3-5-sonnet",
+          max_tokens: 1024,
+          ...overrides,
+        }) as unknown as InsertInteraction["request"];
+
+      // Main Claude Desktop request: multi-turn, and — unlike Claude Code — its
+      // main agent carries NO Task tool. It must still classify as "main".
+      const main = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource: "claude_desktop",
+        type: "anthropic:messages",
+        request: desktopRequest({
+          system: [
+            {
+              type: "text",
+              text: "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+            },
+          ],
+          tools: [{ name: "Read", description: "read", input_schema: {} }],
+          messages: [
+            { role: "user", content: "help me research heaters" },
+            { role: "assistant", content: "sure" },
+            { role: "user", content: "find local prices" },
+          ],
+        }),
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+      });
+
+      // Web-search sub-agent: a fresh thread (new messages[0]), the Agent SDK
+      // sub-agent system prompt, a single directive, and no Task tool.
+      const sub = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource: "claude_desktop",
+        type: "anthropic:messages",
+        request: desktopRequest({
+          system: [
+            {
+              type: "text",
+              text: "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+            },
+            {
+              type: "text",
+              text: "You are an assistant for performing a web search tool use",
+            },
+          ],
+          tools: [
+            { name: "web_search", description: "search", input_schema: {} },
+          ],
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Perform a web search for the query: waste oil heater prices",
+                },
+              ],
+            },
+          ],
+        }),
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+      });
+
+      const result = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId },
+      );
+
+      const requestTypeOf = (id: string) =>
+        (
+          result.data.find((i) => i.id === id) as
+            | { requestType?: string }
+            | undefined
+        )?.requestType;
+
+      expect(requestTypeOf(sub.id)).toBe("subagent");
+      expect(requestTypeOf(main.id)).toBe("main");
+    });
+
+    test("getSessions reconstructs the last interaction request, even when the parent is outside the 20-row window", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      // 22 consecutive requests so the head/earliest rows fall outside the
+      // 20-row selection window used by getLastInteractionsForSessions.
+      // Use strictly increasing createdAt so the tip is unambiguously the most
+      // recent row (defaultNow() can tie within the same millisecond under load,
+      // which would make the "last main interaction" selection flaky).
+      const baseTime = new Date("2020-01-01T00:00:00.000Z").getTime();
+      const messages: unknown[] = [
+        { role: "user", content: "turn 0 — kick things off with enough text" },
+      ];
+      let tipId = "";
+      for (let i = 0; i < 22; i++) {
+        if (i > 0) {
+          messages.push({ role: "assistant", content: `reply ${i}` });
+          messages.push({ role: "user", content: `turn ${i}` });
+        }
+        const row = await createClaude(agent.id, [...messages], {
+          sessionId: "delta-sessions",
+          createdAt: new Date(baseTime + i * 1000),
+        });
+        tipId = row.id;
+      }
+      const expectedLength = messages.length; // 1 + 21*2 = 43
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "delta-sessions" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(messagesOf(sessions.data[0].lastInteractionRequest)).toHaveLength(
+        expectedLength,
+      );
+      // The reconstructed tip is the most recent interaction.
+      const tip = await InteractionModel.findById(tipId);
+      expect(messagesOf(tip?.request)).toHaveLength(expectedLength);
     });
   });
 });

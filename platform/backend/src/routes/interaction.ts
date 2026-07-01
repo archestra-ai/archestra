@@ -1,9 +1,10 @@
 import {
+  ClientFilterSchema,
   createPaginatedResponseSchema,
   InteractionSourceSchema,
   PaginationQuerySchema,
   RouteId,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
@@ -161,6 +162,9 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
             source: InteractionSourceSchema.optional().describe(
               "Filter by interaction source",
             ),
+            client: ClientFilterSchema.optional().describe(
+              "Filter by client app (queries external_agent_id; e.g. claude)",
+            ),
             sessionId: z.string().optional().describe("Filter by session ID"),
             startDate: z
               .string()
@@ -172,12 +176,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .datetime()
               .optional()
               .describe("Filter by end date (ISO 8601 format)"),
-            search: z
-              .string()
-              .optional()
-              .describe(
-                "Free-text search across session content (case-insensitive)",
-              ),
           })
           .merge(PaginationQuerySchema),
         response: constructResponseSchema(
@@ -191,10 +189,10 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId,
           userId,
           source,
+          client,
           sessionId,
           startDate,
           endDate,
-          search,
           limit,
           offset,
         },
@@ -218,10 +216,10 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId,
           filterUserId: userId,
           source,
+          client,
           sessionId,
           startDate,
           endDate,
-          search,
           pagination,
         },
         "GetInteractionSessions request",
@@ -235,10 +233,10 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId,
           userId,
           source,
+          client,
           sessionId,
           startDate: startDate ? new Date(startDate) : undefined,
           endDate: endDate ? new Date(endDate) : undefined,
-          search: search || undefined,
         },
       );
 

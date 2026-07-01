@@ -1,4 +1,4 @@
-import type { McpInstallationStatusMessage } from "@shared";
+import type { McpInstallationStatusMessage } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";

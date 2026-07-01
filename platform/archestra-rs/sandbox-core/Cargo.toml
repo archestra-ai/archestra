@@ -19,27 +19,38 @@ telemetry = [
 
 [dependencies]
 base64 = "0.22"
-dagger-sdk = "=0.21.0"
+dagger-sdk = "=0.21.5"
+eyre = "0.6"
 futures-util = "0.3"
 napi = { version = "3", optional = true }
 napi-derive = { version = "3", optional = true }
-opentelemetry = "0.27"
-opentelemetry_sdk = "0.27"
+opentelemetry = "0.32"
+opentelemetry_sdk = "0.32.1"
 # http/protobuf OTLP over rustls (musl-friendly, no system openssl), aimed at
 # the same collector the node SDK uses (port 4318).
-opentelemetry-otlp = { version = "0.27", default-features = false, features = [
+opentelemetry-otlp = { version = "0.32", default-features = false, features = [
     "trace",
     "logs",
     "http-proto",
-    "reqwest-client",
+    # blocking client: the OTLP batch processor exports from its own non-Tokio
+    # thread, where the async reqwest client panics ("no reactor running") and
+    # kills the export pipeline. the blocking client runs the request inline.
+    "reqwest-blocking-client",
     "reqwest-rustls-webpki-roots",
 ], optional = true }
-opentelemetry-appender-tracing = { version = "0.27", optional = true }
+opentelemetry-appender-tracing = { version = "0.32", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["sync", "rt", "macros", "time"] }
+tokio = { version = "1", features = [
+    "sync",
+    "rt",
+    "macros",
+    "time",
+    "process",
+    "io-util",
+] }
 tracing = "0.1"
-tracing-opentelemetry = "0.28"
+tracing-opentelemetry = "0.33"
 tracing-subscriber = { version = "0.3", default-features = false, features = [
     "std",
     "fmt",

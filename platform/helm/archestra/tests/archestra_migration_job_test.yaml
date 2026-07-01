@@ -4,13 +4,12 @@ templates:
 values:
   - ../ci/test-values.yaml
 tests:
-  - it: renders a Job wired as a pre-upgrade Helm hook
+  - it: creates a pre-upgrade migration job by default
     asserts:
+      - hasDocuments:
+          count: 1
       - isKind:
           of: Job
-      - equal:
-          path: metadata.name
-          value: RELEASE-NAME-archestra-platform-migrate
       - equal:
           path: metadata.annotations["helm.sh/hook"]
           value: pre-upgrade
@@ -20,114 +19,29 @@ tests:
       - equal:
           path: metadata.annotations["helm.sh/hook-delete-policy"]
           value: before-hook-creation,hook-succeeded
-
-  - it: runs pnpm db:migrate against the platform image
-    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: -archestra-platform-migrate$
       - equal:
-          path: spec.template.spec.containers[0].name
-          value: archestra-platform-migrate
+          path: spec.template.spec.restartPolicy
+          value: Never
       - equal:
           path: spec.template.spec.containers[0].workingDir
           value: /app/backend
       - equal:
           path: spec.template.spec.containers[0].command
-          value: ["pnpm", "db:migrate"]
-      - equal:
-          path: spec.template.spec.restartPolicy
-          value: Never
-      - equal:
-          path: spec.template.spec.serviceAccountName
-          value: RELEASE-NAME-archestra-platform
-
-  - it: bounds the Job with default backoffLimit and activeDeadlineSeconds
-    asserts:
-      - equal:
-          path: spec.backoffLimit
-          value: 3
-      - equal:
-          path: spec.activeDeadlineSeconds
-          value: 600
-
-  - it: honors custom backoffLimit and activeDeadlineSeconds
-    set:
-      archestra.migrationJob.backoffLimit: 1
-      archestra.migrationJob.activeDeadlineSeconds: 120
-    asserts:
-      - equal:
-          path: spec.backoffLimit
-          value: 1
-      - equal:
-          path: spec.activeDeadlineSeconds
-          value: 120
-
-  - it: omits activeDeadlineSeconds when set to null
-    set:
-      archestra.migrationJob.activeDeadlineSeconds: null
-    asserts:
-      - notExists:
-          path: spec.activeDeadlineSeconds
-
-  - it: waits for PostgreSQL via the shared init containers
-    asserts:
-      - equal:
-          path: spec.template.spec.initContainers[0].name
-          value: wait-for-postgres
-
-  - it: labels the migration pod so the platform Service never selects it
-    # The Service selects app.kubernetes.io/name=archestra-platform; the
-    # migration pod uses the -migrate suffix (same scheme as the worker).
-    asserts:
-      - equal:
-          path: spec.template.metadata.labels["app.kubernetes.io/name"]
-          value: archestra-platform-migrate
-      - equal:
-          path: spec.template.metadata.labels["app.kubernetes.io/component"]
-          value: migrate
-
-  - it: inherits resources from archestra.resources by default
-    set:
-      archestra.resources:
-        requests:
-          cpu: "1"
-          memory: 1Gi
-        limits:
-          memory: 2Gi
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].resources
           value:
-            requests:
-              cpu: "1"
-              memory: 1Gi
-            limits:
-              memory: 2Gi
+            - ./node_modules/.bin/drizzle-kit
+            - migrate
 
-  - it: allows overriding migration container resources
-    set:
-      archestra.migrationJob.resources:
-        requests:
-          cpu: 250m
-          memory: 256Mi
-        limits:
-          memory: 512Mi
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].resources
-          value:
-            requests:
-              cpu: 250m
-              memory: 256Mi
-            limits:
-              memory: 512Mi
-
-  - it: is omitted entirely when the migration Job is disabled
+  - it: does not create the migration job when disabled
     set:
       archestra.migrationJob.enabled: false
     asserts:
       - hasDocuments:
           count: 0
 
-  - it: is omitted entirely when maintenance mode is enabled
+  - it: does not create the migration job in maintenance mode
     set:
       archestra.env:
         ARCHESTRA_MAINTENANCE_MODE_MESSAGE: "Scheduled maintenance"
@@ -135,34 +49,93 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: sources the database URL from Vault when vault secret injection is enabled
+  - it: uses a complete external database URL from the hook auth secret
     set:
+      postgresql.enabled: false
+      postgresql.external_database_url: postgresql://external:pass@external-host:5432/externaldb
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-migrate-auth
+                key: database-url
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-migrate-auth
+                key: database-url
+
+  - it: prepends migration-job env before shared env for Kubernetes variable expansion
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: null
+      archestra.env:
+        ARCHESTRA_DATABASE_URL: postgresql://external:$(PGPASSWORD)@external-host:5432/externaldb
+      archestra.migrationJob.env:
+        PGPASSWORD: external-secret-password
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0]
+          value:
+            name: PGPASSWORD
+            value: external-secret-password
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_URL
+            value: postgresql://external:$(PGPASSWORD)@external-host:5432/externaldb
+
+  - it: supports migration-job secret-backed env
+    set:
+      archestra.migrationJob.envFromSecrets:
+        - name: PGPASSWORD
+          secretName: external-db-secret
+          secretKey: password
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0]
+          value:
+            name: PGPASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: external-db-secret
+                key: password
+
+  - it: supports migration-job envFrom entries
+    set:
+      archestra.migrationJob.envFrom:
+        - secretRef:
+            name: migration-job-env
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: migration-job-env
+
+  - it: uses only the vault volume mount and not shared diagnostics mounts
+    set:
+      archestra.diagnostics.enabled: true
       archestra.initContainers.vaultSecrets.enabled: true
       archestra.initContainers.vaultSecrets.secrets:
         - envVar: ARCHESTRA_DATABASE_URL
-          path: kv/archestra/config
-          key: dburl
+          path: secret/data/team/database_url
+          key: url
     asserts:
-      # The vault-secrets init container writes secrets; the migrate container
-      # sources them before exec'ing the migrate command.
-      - equal:
-          path: spec.template.spec.initContainers[0].name
-          value: vault-secrets
-      - equal:
-          path: spec.template.spec.containers[0].command
-          value: ["/bin/sh", "-c"]
-      - matchRegex:
-          path: spec.template.spec.containers[0].args[0]
-          pattern: "exec pnpm db:migrate"
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: vault-secrets
             mountPath: /vault/secrets
             readOnly: true
-      - contains:
-          path: spec.template.spec.volumes
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
           content:
-            name: vault-secrets
-            emptyDir:
-              medium: Memory
+            name: diagnostics
+          any: true

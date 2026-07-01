@@ -1,6 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
+import ToolModel from "./tool";
 
 class ConversationEnabledToolModel {
   /**
@@ -57,6 +58,30 @@ class ConversationEnabledToolModel {
     );
 
     return hasCustom;
+  }
+
+  /**
+   * Resolve the conversation's enabled-tool selection to a set of tool NAMES,
+   * or `null` when the conversation has no custom selection (meaning: no
+   * per-conversation filter — all assigned tools are allowed).
+   *
+   * search_tools/run_tool use this to apply the same per-conversation gate the
+   * visible tool list already enforces via `filterToolsByEnabledIds`
+   * (clients/chat-mcp-client.ts). An empty set means a custom selection that
+   * enabled zero tools.
+   */
+  static async getEnabledToolNameSet(
+    conversationId: string,
+  ): Promise<Set<string> | null> {
+    const hasCustom =
+      await ConversationEnabledToolModel.hasCustomSelection(conversationId);
+    if (!hasCustom) {
+      return null;
+    }
+    const toolIds =
+      await ConversationEnabledToolModel.findByConversation(conversationId);
+    const names = await ToolModel.getNamesByIds(toolIds);
+    return new Set(names);
   }
 
   /**

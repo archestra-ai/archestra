@@ -1,6 +1,76 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, test } from "vitest";
-import { restoreRenderableAssistantParts } from "./chat-session-utils";
+import {
+  pruneEmptyTrailingAssistantMessage,
+  restoreRenderableAssistantParts,
+  shouldFreezeChatMessages,
+} from "./chat-session-utils";
+
+describe("shouldFreezeChatMessages", () => {
+  const userMessage = {
+    id: "user-1",
+    role: "user",
+    parts: [{ type: "text", text: "write a story" }],
+  } as UIMessage;
+  const partialAssistant = {
+    id: "assistant-1",
+    role: "assistant",
+    parts: [{ type: "text", text: "Once upon a time" }],
+  } as UIMessage;
+  const emptyAssistant = {
+    id: "assistant-1",
+    role: "assistant",
+    parts: [],
+  } as unknown as UIMessage;
+  const frozen = [userMessage, partialAssistant];
+
+  test("freezes while recovering and the live tail has no renderable assistant content", () => {
+    // regenerate() dropped the partial answer — live list ends with the user message
+    expect(
+      shouldFreezeChatMessages({
+        isRecovering: true,
+        liveMessages: [userMessage],
+        frozenMessages: frozen,
+      }),
+    ).toBe(true);
+
+    // replay restarted the assistant message but no content has arrived yet
+    expect(
+      shouldFreezeChatMessages({
+        isRecovering: true,
+        liveMessages: [userMessage, emptyAssistant],
+        frozenMessages: frozen,
+      }),
+    ).toBe(true);
+  });
+
+  test("unfreezes once the recovered stream renders assistant content again", () => {
+    expect(
+      shouldFreezeChatMessages({
+        isRecovering: true,
+        liveMessages: [userMessage, partialAssistant],
+        frozenMessages: frozen,
+      }),
+    ).toBe(false);
+  });
+
+  test("never freezes outside recovery or without a frozen snapshot", () => {
+    expect(
+      shouldFreezeChatMessages({
+        isRecovering: false,
+        liveMessages: [userMessage],
+        frozenMessages: frozen,
+      }),
+    ).toBe(false);
+    expect(
+      shouldFreezeChatMessages({
+        isRecovering: true,
+        liveMessages: [userMessage],
+        frozenMessages: [],
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("restoreRenderableAssistantParts", () => {
   test("preserves previous assistant parts when the same assistant message becomes empty", () => {
@@ -102,6 +172,72 @@ describe("restoreRenderableAssistantParts", () => {
     expect(
       restoreRenderableAssistantParts({ previousMessages, nextMessages }),
     ).toBe(nextMessages);
+  });
+
+  test("returns the prior restored reference unchanged when re-restoring the same regression (prevents render-loop identity churn)", () => {
+    // previousMessages is the prior render's restored output. Re-running the
+    // restoration against the same persistent regression (e.g. reconnecting to
+    // an in-flight tool call) must hand back that exact reference, not a fresh
+    // structurally-equal array — a new identity each render churns the caller's
+    // stableMessages and loops the chat view (React #185, "Maximum update depth").
+    const user = {
+      id: "user-1",
+      role: "user",
+      parts: [{ type: "text", text: "call your tool" }],
+    } as UIMessage;
+    const restoredParts = [
+      { type: "text", text: "I called the tool successfully." },
+    ];
+    const previousMessages = [
+      user,
+      { id: "assistant-1", role: "assistant", parts: restoredParts },
+    ] as UIMessage[];
+
+    const nextMessages = [
+      user,
+      { id: "assistant-1", role: "assistant", parts: [] },
+    ] as unknown as UIMessage[];
+
+    expect(
+      restoreRenderableAssistantParts({ previousMessages, nextMessages }),
+    ).toBe(previousMessages);
+  });
+
+  test("does not reuse the previous reference when only metadata changed, so persisted-id updates are not dropped", () => {
+    // Same parts, but the live message gains a persistedMessageId in metadata
+    // (which edit/regeneration uses to target the right row). The stability
+    // shortcut must not swallow that update by handing back the prior reference.
+    const user = {
+      id: "user-1",
+      role: "user",
+      parts: [{ type: "text", text: "call your tool" }],
+    } as UIMessage;
+    const restoredParts = [
+      { type: "text", text: "I called the tool successfully." },
+    ];
+    const previousMessages = [
+      user,
+      { id: "assistant-1", role: "assistant", parts: restoredParts },
+    ] as UIMessage[];
+
+    const nextMessages = [
+      user,
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [],
+        metadata: { persistedMessageId: "db-123" },
+      },
+    ] as unknown as UIMessage[];
+
+    const result = restoreRenderableAssistantParts({
+      previousMessages,
+      nextMessages,
+    });
+
+    expect(result).not.toBe(previousMessages);
+    expect(result[1].metadata).toEqual({ persistedMessageId: "db-123" });
+    expect(result[1].parts).toBe(restoredParts);
   });
 
   test("restores assistant parts when a streamed assistant message is re-keyed but stays in the same position", () => {
@@ -211,5 +347,86 @@ describe("restoreRenderableAssistantParts", () => {
     expect(
       restoreRenderableAssistantParts({ previousMessages, nextMessages }),
     ).toEqual(previousMessages);
+  });
+});
+
+describe("pruneEmptyTrailingAssistantMessage", () => {
+  test("drops a trailing assistant left with only step-start/telemetry after dangling-tool stripping", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          { type: "data-token-usage", data: { totalTokens: 10 } },
+        ],
+      },
+    ] as UIMessage[];
+
+    expect(pruneEmptyTrailingAssistantMessage(messages)).toEqual([messages[0]]);
+  });
+
+  test("keeps a trailing assistant that still renders text", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "step-start" }, { type: "text", text: "done" }],
+      },
+    ] as UIMessage[];
+
+    expect(pruneEmptyTrailingAssistantMessage(messages)).toEqual(messages);
+  });
+});
+
+describe("restoreTruncatedAssistantTail renderability gating", () => {
+  test("does not restore a truncated tail that is a telemetry-only assistant", () => {
+    const previousMessages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          { type: "data-token-usage", data: { totalTokens: 10 } },
+        ],
+      },
+    ] as UIMessage[];
+
+    const nextMessages = [previousMessages[0]] as UIMessage[];
+
+    expect(
+      restoreRenderableAssistantParts({ previousMessages, nextMessages }),
+    ).toEqual(nextMessages);
+  });
+
+  test("does not restore when the live session clears to a non-renderable assistant tail", () => {
+    const previousMessages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "step-start" }],
+      },
+    ] as UIMessage[];
+
+    const nextMessages = [] as UIMessage[];
+
+    expect(
+      restoreRenderableAssistantParts({ previousMessages, nextMessages }),
+    ).toEqual(nextMessages);
   });
 });

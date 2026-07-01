@@ -4,7 +4,7 @@ import {
   BROWSER_PREVIEW_HEADER_HEIGHT,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
-} from "@shared";
+} from "@archestra/shared";
 import { ExternalLink, X } from "lucide-react";
 import { useCallback } from "react";
 import { BrowserPreviewContent } from "@/components/chat/browser-preview-content";

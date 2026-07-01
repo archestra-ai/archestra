@@ -1,4 +1,4 @@
-import type { SecretsManagerType } from "@shared";
+import type { SecretsManagerType } from "@archestra/shared";
 import type { SecretValue, SelectSecret } from "./secret";
 
 /**

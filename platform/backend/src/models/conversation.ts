@@ -1,3 +1,4 @@
+import { hasPersistableAssistantContent } from "@archestra/shared";
 import {
   and,
   desc,
@@ -11,13 +12,17 @@ import {
 import db, { schema } from "@/database";
 import type {
   Conversation,
+  ConversationOrigin,
   InsertConversation,
+  ToolExposureMode,
   UpdateConversation,
 } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationCompactionModel from "./conversation-compaction";
 import ConversationShareModel from "./conversation-share";
+import ProjectModel from "./project";
+import ProjectShareModel from "./project-share";
 
 class ConversationModel {
   static async create(data: InsertConversation): Promise<Conversation> {
@@ -120,11 +125,14 @@ class ConversationModel {
             id: schema.conversationSharesTable.id,
             visibility: schema.conversationSharesTable.visibility,
           },
+          projectName: schema.projectsTable.name,
+          projectIcon: schema.projectsTable.icon,
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
             systemPrompt: schema.agentsTable.systemPrompt,
             agentType: schema.agentsTable.agentType,
+            toolExposureMode: schema.agentsTable.toolExposureMode,
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
             deletedAt: schema.agentsTable.deletedAt,
           },
@@ -161,6 +169,10 @@ class ConversationModel {
             schema.conversationSharesTable.conversationId,
           ),
         )
+        .leftJoin(
+          schema.projectsTable,
+          eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+        )
         .where(and(...conditions))
         .orderBy(
           desc(schema.conversationsTable.lastMessageAt),
@@ -185,6 +197,9 @@ class ConversationModel {
           conversationMap.set(conversationId, {
             ...withVisibleAgent(row.conversation, row.agent),
             share: row.share?.id ? row.share : null,
+            projectName: row.projectName ?? null,
+            projectIcon: listProjectIcon(row.projectIcon),
+            unread: isConversationUnread(row.conversation),
             messages: [],
             chatErrors: [],
             compactions: [],
@@ -192,7 +207,11 @@ class ConversationModel {
         }
 
         const conversation = conversationMap.get(conversationId);
-        if (conversation && row?.message?.content) {
+        if (
+          conversation &&
+          row?.message?.content &&
+          shouldReturnPersistedMessageRow(row.message)
+        ) {
           // Limit messages per conversation for preview
           if (
             conversation.messages.length <
@@ -217,11 +236,14 @@ class ConversationModel {
             id: schema.conversationSharesTable.id,
             visibility: schema.conversationSharesTable.visibility,
           },
+          projectName: schema.projectsTable.name,
+          projectIcon: schema.projectsTable.icon,
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
             systemPrompt: schema.agentsTable.systemPrompt,
             agentType: schema.agentsTable.agentType,
+            toolExposureMode: schema.agentsTable.toolExposureMode,
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
             deletedAt: schema.agentsTable.deletedAt,
           },
@@ -238,12 +260,19 @@ class ConversationModel {
             schema.conversationSharesTable.conversationId,
           ),
         )
+        .leftJoin(
+          schema.projectsTable,
+          eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+        )
         .where(and(...conditions))
         .orderBy(desc(schema.conversationsTable.lastMessageAt));
 
       return rows.map((row) => ({
         ...withVisibleAgent(row.conversation, row.agent),
         share: row.share?.id ? row.share : null,
+        projectName: row.projectName ?? null,
+        projectIcon: listProjectIcon(row.projectIcon),
+        unread: isConversationUnread(row.conversation),
         messages: [], // Messages fetched separately via findById
         chatErrors: [],
         compactions: [],
@@ -273,6 +302,7 @@ class ConversationModel {
           name: schema.agentsTable.name,
           systemPrompt: schema.agentsTable.systemPrompt,
           agentType: schema.agentsTable.agentType,
+          toolExposureMode: schema.agentsTable.toolExposureMode,
           llmApiKeyId: schema.agentsTable.llmApiKeyId,
           deletedAt: schema.agentsTable.deletedAt,
         },
@@ -314,7 +344,10 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
-      if (row.message?.content) {
+      if (
+        row.message?.content &&
+        shouldReturnPersistedMessageRow(row.message)
+      ) {
         // Merge database UUID into message content (overrides AI SDK's temporary ID)
         messages.push(addMessagePersistenceMetadata(row.message));
       }
@@ -327,6 +360,65 @@ class ConversationModel {
       chatErrors,
       compactions,
     };
+  }
+
+  /**
+   * Cheap ownership check for mutating-route gates (e.g. deleting a chat's
+   * attachment): true only when `userId` owns the conversation in this org.
+   * Unlike `findById` it joins nothing and loads no messages.
+   */
+  static async isOwnedBy(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.conversationsTable.id })
+      .from(schema.conversationsTable)
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /**
+   * Owner-scoped metadata for eligibility checks (e.g. turning a chat into a
+   * project) without loading the conversation's messages, errors, or
+   * compactions like {@link findById} does. Null when the chat does not exist
+   * or is not owned by the caller.
+   */
+  static async getOwnedMeta(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<{
+    id: string;
+    title: string | null;
+    origin: ConversationOrigin;
+    projectId: string | null;
+  } | null> {
+    const [row] = await db
+      .select({
+        id: schema.conversationsTable.id,
+        title: schema.conversationsTable.title,
+        origin: schema.conversationsTable.origin,
+        projectId: schema.conversationsTable.projectId,
+      })
+      .from(schema.conversationsTable)
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 
   static async findAccessibleById(params: {
@@ -347,12 +439,43 @@ class ConversationModel {
         userId: params.userId,
       });
 
-    if (!accessibleShare) {
-      return null;
+    if (accessibleShare) {
+      // Shared conversations intentionally return another user's conversation
+      // once share access has been validated for this org/user pair.
+      return ConversationModel.findByIdInOrganization({
+        id: params.id,
+        organizationId: params.organizationId,
+      });
     }
 
-    // Shared conversations intentionally return another user's conversation
-    // once share access has been validated for this org/user pair.
+    // Project membership grants the same read-only view: any chat in a
+    // project the caller can read is viewable (writing stays author-only —
+    // every mutating route resolves the conversation by owner).
+    const [bare] = await db
+      .select({
+        projectId: schema.conversationsTable.projectId,
+        organizationId: schema.conversationsTable.organizationId,
+      })
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, params.id));
+    if (
+      !bare ||
+      !bare.projectId ||
+      bare.organizationId !== params.organizationId
+    ) {
+      return null;
+    }
+    const project = await ProjectModel.findById(bare.projectId);
+    if (
+      !project ||
+      !(await ProjectShareModel.userCanAccessProject({
+        project,
+        userId: params.userId,
+        organizationId: params.organizationId,
+      }))
+    ) {
+      return null;
+    }
     return ConversationModel.findByIdInOrganization({
       id: params.id,
       organizationId: params.organizationId,
@@ -376,6 +499,7 @@ class ConversationModel {
           name: schema.agentsTable.name,
           systemPrompt: schema.agentsTable.systemPrompt,
           agentType: schema.agentsTable.agentType,
+          toolExposureMode: schema.agentsTable.toolExposureMode,
           llmApiKeyId: schema.agentsTable.llmApiKeyId,
           deletedAt: schema.agentsTable.deletedAt,
         },
@@ -416,7 +540,10 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
-      if (row.message?.content) {
+      if (
+        row.message?.content &&
+        shouldReturnPersistedMessageRow(row.message)
+      ) {
         messages.push(addMessagePersistenceMetadata(row.message));
       }
     }
@@ -459,6 +586,74 @@ class ConversationModel {
     })) as Conversation;
 
     return updatedWithAgent;
+  }
+
+  /**
+   * Toggle per-conversation hook debug mode. Kept off the generic
+   * {@link UpdateConversation} path on purpose: that schema backs the
+   * member-accessible update route, whereas this flag is admin-gated at the
+   * route layer. Scoped by user + org. Returns the new value, or null if no
+   * conversation matched.
+   */
+  static async setHooksDebugEnabled(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+    enabled: boolean;
+  }): Promise<boolean | null> {
+    const [updated] = await db
+      .update(schema.conversationsTable)
+      .set({ hooksDebugEnabled: params.enabled })
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .returning({
+        hooksDebugEnabled: schema.conversationsTable.hooksDebugEnabled,
+      });
+    return updated ? updated.hooksDebugEnabled : null;
+  }
+
+  /**
+   * Mark a conversation read by its owner (clears the sidebar new-messages
+   * indicator). Owner-scoped: a shared/project viewer never matches, so they
+   * cannot move the owner's read marker. Returns whether a row matched.
+   */
+  static async markRead(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const [updated] = await db
+      .update(schema.conversationsTable)
+      .set({ lastReadAt: new Date() })
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .returning({ id: schema.conversationsTable.id });
+    return !!updated;
+  }
+
+  /** The owner's user + org, or null if the conversation does not exist. */
+  static async getOwner(
+    id: string,
+  ): Promise<{ userId: string; organizationId: string } | null> {
+    const [row] = await db
+      .select({
+        userId: schema.conversationsTable.userId,
+        organizationId: schema.conversationsTable.organizationId,
+      })
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, id))
+      .limit(1);
+    return row ?? null;
   }
 
   static async delete(
@@ -518,6 +713,38 @@ class ConversationModel {
 
 export default ConversationModel;
 
+// Read-side guard for assistant rows that were persisted before the strict
+// persist normalization (or by an older client) and would otherwise reload as
+// an empty bubble. The DB `role` column is authoritative — a `content: ""` row
+// has no role inside its content. Read-only: bad rows are hidden, never deleted.
+// A conversation is unread when a message has landed since the owner last
+// viewed it. lastReadAt is null until the first explicit read, so fall back to
+// createdAt. Strict `>` so marking read at the same instant a message persists
+// (e.g. you sent it) does not register as unread.
+function isConversationUnread(conversation: {
+  lastMessageAt: Date;
+  lastReadAt: Date | null;
+  createdAt: Date;
+}): boolean {
+  const lastRead = conversation.lastReadAt ?? conversation.createdAt;
+  return conversation.lastMessageAt.getTime() > lastRead.getTime();
+}
+
+function shouldReturnPersistedMessageRow(message: {
+  role: string;
+  content: unknown;
+}): boolean {
+  if (message.role !== "assistant") {
+    return true;
+  }
+  if (typeof message.content !== "object" || message.content === null) {
+    return false;
+  }
+  return hasPersistableAssistantContent(
+    message.content as { parts?: ReadonlyArray<{ type: string }> },
+  );
+}
+
 function addMessagePersistenceMetadata(message: {
   id: string;
   content: unknown;
@@ -549,9 +776,20 @@ type JoinedConversationAgent = {
   name: string | null;
   systemPrompt: string | null;
   agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent" | null;
+  toolExposureMode: ToolExposureMode | null;
   llmApiKeyId: string | null;
   deletedAt: Date | null;
 } | null;
+
+/**
+ * Project icon for a conversation-list row. Only emoji icons are passed through;
+ * base64 image data URLs are dropped (the pill falls back to the folder glyph)
+ * so a large icon isn't duplicated across every conversation in the list.
+ */
+function listProjectIcon(icon: string | null | undefined): string | null {
+  if (!icon || icon.startsWith("data:")) return null;
+  return icon;
+}
 
 function withVisibleAgent(
   conversation: typeof schema.conversationsTable.$inferSelect,
@@ -574,6 +812,7 @@ function withVisibleAgent(
       name: agent.name ?? "",
       systemPrompt: agent.systemPrompt,
       agentType: agent.agentType ?? "agent",
+      toolExposureMode: agent.toolExposureMode ?? "full",
       llmApiKeyId: agent.llmApiKeyId,
     },
   };

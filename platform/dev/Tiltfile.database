@@ -58,7 +58,10 @@ local_resource(
   dir='../backend',
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
-  labels=['database']
+  labels=['database'],
+  env={
+    'NODE_ENV': 'development',
+  }
 )
 
 local_resource(
@@ -112,6 +115,10 @@ exit /b 1
   dir='../backend',
   deps=['../backend/src/database/migrations'],
   resource_deps=['pnpm-install', 'postgresql'],
+  # The retry loop busy-spins for up to ~60s. Without this, a non-parallel
+  # local_resource holds Tilt's global build queue while running, which can
+  # block the postgresql re-apply that the loop is itself waiting for.
+  allow_parallel=True,
   labels=['database']
 )
 

@@ -1,0 +1,25 @@
+id = "archestra-api"
+name = "Archestra self-API"
+tasks = ["author-skill", "letter-count", "author-aec-normalizer-skill"]
+
+# Extra archestra built-in tools beyond the base sandbox set. `create_skill` lets the agent author a
+# skill and `update_skill` lets it revise one in place (the base set already covers
+# list_skills/load_skill/run_command for triggering it). Listing them here is what lets them survive
+# the strip/assert guard that otherwise forbids mutating the library.
+tools = ["create_skill", "update_skill"]
+
+# No web skills: the built-in skill catalog is part of the subject under test. Three public, no-auth
+# remote MCPs ARE seeded -- their tools get assigned to the agent, enlarging the tool surface so the
+# `letter-count` introspection is non-trivial (the verifier recomputes from the same live surface, so
+# the answer is not hardcoded). Each must list tools without auth or env setup hard-fails naming it.
+[[mcps]]
+name = "deepwiki"
+server_url = "https://mcp.deepwiki.com/mcp"
+
+[[mcps]]
+name = "microsoft-learn"
+server_url = "https://learn.microsoft.com/api/mcp"
+
+[[mcps]]
+name = "context7"
+server_url = "https://mcp.context7.com/mcp"

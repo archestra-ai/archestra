@@ -1,4 +1,4 @@
-import { testMcpServerCommand } from "@shared/test-mcp-server";
+import { testMcpServerCommand } from "@archestra/shared/test-mcp-server";
 import { waitForServerInstallation } from "../utils";
 import { expect, test } from "./api-fixtures";
 

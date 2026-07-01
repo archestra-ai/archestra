@@ -20,9 +20,9 @@ export async function initializeObservabilityMetrics(params?: {
   }
 
   metrics.rag.initializeRagMetrics();
+  metrics.sandbox.initializeSandboxMetrics();
   metrics.scheduleTrigger.initializeScheduleTriggerMetrics();
   metrics.taskQueue.initializeTaskQueueMetrics();
-  metrics.codeRuntime.initializeCodeRuntimeMetrics();
   metrics.audit.initializeAuditMetrics();
 
   return labelKeys;

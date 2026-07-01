@@ -5,7 +5,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**", "index.cjs", "index.d.ts", "*.node"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**", "*.node"],
       "env": ["VERSION"]
     },
     "dev": {
@@ -28,6 +28,9 @@
     },
     "check:ci": {
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json", "src/database/migrations/**"]
+    },
+    "@backend#check:ci": {
+      "dependsOn": ["@archestra/app-runtime-rs#build", "@archestra/sandbox-rs#build"]
     },
     "check:commit": {
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json", "src/database/migrations/**"]
@@ -65,7 +68,7 @@
     "codegen": {
       "cache": false
     },
-    "@shared#codegen": {
+    "@archestra/shared#codegen": {
       "dependsOn": ["@backend#codegen"],
       "cache": false
     },

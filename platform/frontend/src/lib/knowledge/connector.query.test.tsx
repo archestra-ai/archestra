@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockGetConnectorRuns = vi.fn();
 const mockUseQuery = vi.fn();
 
-vi.mock("@shared", () => ({
+vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
     getConnectors: vi.fn(),
     getConnector: vi.fn(),

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isSensitiveContextPolicyDeniedReason } from "./tool-invocation-policy-reasons";
 import { parseArchestraToolRefusal } from "./tool-refusal";
+import { ResourceVisibilityScopeSchema } from "./visibility";
 
 export const McpToolErrorTypeSchema = z.enum([
   "auth_required",
@@ -44,6 +45,13 @@ export const AuthExpiredMcpToolErrorSchema = z
     catalogName: z.string(),
     serverId: z.string(),
     reauthUrl: z.string().url(),
+    // Which credential the runtime resolved for this call (personal / team /
+    // org) so the chat card can tell the user whose credential expired.
+    // Optional so errors persisted in chat history before this field existed
+    // still parse and render (they fall back to generic copy).
+    credentialScope: ResourceVisibilityScopeSchema.optional(),
+    // Owning team's display name, present only for team-scoped credentials.
+    credentialTeamName: z.string().nullable().optional(),
   })
   .strict();
 

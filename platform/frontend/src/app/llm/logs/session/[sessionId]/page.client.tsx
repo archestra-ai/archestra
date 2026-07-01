@@ -1,17 +1,15 @@
 "use client";
 
-import { calculateCostSavings, DynamicInteraction } from "@shared";
 import {
-  ArrowLeft,
-  Bot,
-  ExternalLink,
-  Layers,
-  Loader2,
-  User,
-} from "lucide-react";
+  CLAUDE_CLIENT_LABEL,
+  DynamicInteraction,
+  isClaudeClientAgentId,
+} from "@archestra/shared";
+import { ArrowLeft, Bot, Layers, Loader2, User } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { use, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { use } from "react";
+import MessageThread from "@/components/message-thread";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
 import { Savings } from "@/components/savings";
 import { SourceBadge } from "@/components/source-badge";
@@ -26,8 +24,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   useInteractionSessions,
   useInteractions,
@@ -42,17 +42,14 @@ export default function SessionDetailPage({
   const rawParams = use(paramsPromise);
   const sessionId = decodeURIComponent(rawParams.sessionId);
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const pageFromUrl = searchParams.get("page");
-  const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = DEFAULT_TABLE_LIMIT;
+  const { pageIndex, pageSize, offset, setPagination } =
+    useDataTableQueryParams();
 
   const { data: interactionsResponse, isLoading: interactionsLoading } =
     useInteractions({
       sessionId: sessionId,
       limit: pageSize,
-      offset: pageIndex * pageSize,
+      offset,
       sortBy: "createdAt",
       sortDirection: "desc",
     });
@@ -63,25 +60,25 @@ export default function SessionDetailPage({
     limit: 1,
   });
 
+  // Fetch the most recent interactions for the inline "Latest Conversation"
+  // block. This is intentionally decoupled from the table's pagination: offset
+  // is always 0, and the limit is a fixed small window (not the user-selectable
+  // pageSize) so changing rows-per-page never alters this query. We fetch a
+  // window rather than a single row because the block shows the latest *main*
+  // request, and the newest interactions by createdAt may be subagent calls
+  // (see lastMainRequest find below) — requestType isn't filterable server-side.
+  const { data: latestConversationResponse } = useInteractions({
+    sessionId: sessionId,
+    limit: DEFAULT_TABLE_LIMIT,
+    offset: 0,
+    sortBy: "createdAt",
+    sortDirection: "desc",
+  });
+
   const interactions = interactionsResponse?.data ?? [];
   const paginationMeta = interactionsResponse?.pagination;
   const sessionData = sessionResponse?.data?.[0];
-
-  const handlePageChange = useCallback(
-    (newPage: number) => {
-      const newParams = new URLSearchParams(searchParams.toString());
-      if (newPage === 0) {
-        newParams.delete("page");
-      } else {
-        newParams.set("page", String(newPage + 1));
-      }
-      router.push(
-        `/llm/logs/session/${encodeURIComponent(sessionId)}?${newParams.toString()}`,
-        { scroll: false },
-      );
-    },
-    [searchParams, router, sessionId],
-  );
+  const latestInteractions = latestConversationResponse?.data ?? [];
 
   // Use session data from API for accurate totals, fall back to page data
   const totalInputTokens =
@@ -90,6 +87,12 @@ export default function SessionDetailPage({
   const totalOutputTokens =
     sessionData?.totalOutputTokens ??
     interactions.reduce((sum, i) => sum + (i.outputTokens ?? 0), 0);
+  const totalCacheReadTokens =
+    sessionData?.totalCacheReadTokens ??
+    interactions.reduce((sum, i) => sum + (i.cacheReadTokens ?? 0), 0);
+  const totalCacheWriteTokens =
+    sessionData?.totalCacheWriteTokens ??
+    interactions.reduce((sum, i) => sum + (i.cacheWriteTokens ?? 0), 0);
   const models = sessionData?.models ?? [
     ...new Set(interactions.map((i) => i.model).filter(Boolean)),
   ];
@@ -102,7 +105,13 @@ export default function SessionDetailPage({
   const totalToonCostSavings = sessionData?.totalToonCostSavings;
 
   // Session metadata from API
-  const sessionSource = sessionData?.sessionSource;
+  // Badge label for Claude clients; null for non-client agent ids. Derived from
+  // the client-attribution column (external_agent_id).
+  const claudeSourceLabel = (sessionData?.externalAgentIds ?? []).some(
+    isClaudeClientAgentId,
+  )
+    ? CLAUDE_CLIENT_LABEL
+    : null;
   const profileName = sessionData?.profileName;
   const userNames = sessionData?.userNames ?? [];
 
@@ -135,8 +144,10 @@ export default function SessionDetailPage({
 
   const sessionTitle = getSessionTitle();
 
-  // Find the last main request (requestType === "main" or first in delegation chain)
-  const lastMainRequest = interactions.find((interaction) => {
+  // Find the last main request (requestType === "main" or first in delegation
+  // chain) from the most recent interactions. This drives the inline
+  // "Latest Conversation" block.
+  const lastMainRequest = latestInteractions.find((interaction) => {
     const requestType =
       "requestType" in interaction
         ? (interaction.requestType ?? "main")
@@ -151,6 +162,17 @@ export default function SessionDetailPage({
       (externalAgentIdLabel && !externalAgentIdLabel.includes("→"))
     );
   });
+
+  // Build the conversation thread for the latest main interaction.
+  const lastMainInteraction = lastMainRequest
+    ? new DynamicInteraction(lastMainRequest)
+    : null;
+  const conversationMessages = lastMainInteraction
+    ? lastMainInteraction.mapToUiMessages(
+        lastMainRequest?.dualLlmAnalyses ?? [],
+      )
+    : [];
+  const conversationChatErrors = lastMainRequest?.chatErrors ?? [];
 
   return (
     <div className="space-y-6">
@@ -169,12 +191,12 @@ export default function SessionDetailPage({
         title={sessionTitle || "Session"}
         badges={
           <>
-            {sessionSource === "claude_code" && (
+            {claudeSourceLabel && (
               <Badge
                 variant="secondary"
                 className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
               >
-                Claude Code
+                {claudeSourceLabel}
               </Badge>
             )}
             <SourceBadge source={sessionData?.source} />
@@ -192,16 +214,6 @@ export default function SessionDetailPage({
             ))}
           </>
         }
-        action={
-          lastMainRequest ? (
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/llm/logs/${lastMainRequest.id}`}>
-                <ExternalLink className="h-4 w-4 mr-2" />
-                View
-              </Link>
-            </Button>
-          ) : undefined
-        }
       >
         <MetadataItem label="Total Requests">
           <div className="font-semibold">{totalRequests}</div>
@@ -211,6 +223,12 @@ export default function SessionDetailPage({
             {totalInputTokens.toLocaleString()} in /{" "}
             {totalOutputTokens.toLocaleString()} out
           </div>
+          {(totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) && (
+            <div className="font-mono text-xs text-muted-foreground">
+              {totalCacheReadTokens.toLocaleString()} cache read /{" "}
+              {totalCacheWriteTokens.toLocaleString()} cache write
+            </div>
+          )}
         </MetadataItem>
         <MetadataItem label="Total Cost">
           <div className="font-mono">
@@ -254,6 +272,28 @@ export default function SessionDetailPage({
           </MetadataItem>
         )}
       </MetadataCard>
+
+      {/* Latest Conversation */}
+      {lastMainRequest && conversationMessages.length > 0 && (
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Latest Conversation</h2>
+          <div className="border border-border rounded-lg bg-background overflow-hidden">
+            <div className="max-h-[600px] overflow-y-auto">
+              <MessageThread
+                messages={conversationMessages}
+                chatErrors={conversationChatErrors}
+                conversationId={lastMainRequest.sessionId ?? undefined}
+                containerClassName="h-auto"
+                hideDivider
+                profileId={lastMainRequest.profileId ?? undefined}
+                agentName={profileName ?? undefined}
+                selectedModel={lastMainInteraction?.modelName}
+                unsafeContextBoundary={lastMainRequest.unsafeContextBoundary}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Interactions Table */}
       <div className="rounded-md border overflow-x-auto">
@@ -338,29 +378,23 @@ export default function SessionDetailPage({
                       </Badge>
                     </TableCell>
                     <TableCell className="font-mono text-xs">
-                      {(() => {
-                        const savings = calculateCostSavings(interaction);
-                        return (
-                          <TooltipProvider>
-                            <Savings
-                              cost={interaction.cost || "0"}
-                              baselineCost={
-                                interaction.baselineCost ||
-                                interaction.cost ||
-                                "0"
-                              }
-                              toonCostSavings={interaction.toonCostSavings}
-                              toonTokensSaved={savings.toonTokensSaved}
-                              toonSkipReason={interaction.toonSkipReason}
-                              format="percent"
-                              tooltip="hover"
-                              variant="interaction"
-                              baselineModel={interaction.baselineModel}
-                              actualModel={interaction.model}
-                            />
-                          </TooltipProvider>
-                        );
-                      })()}
+                      <TooltipProvider>
+                        <Savings
+                          cost={interaction.cost || "0"}
+                          baselineCost={
+                            interaction.baselineCost || interaction.cost || "0"
+                          }
+                          toonCostSavings={interaction.toonCostSavings}
+                          toonTokensBefore={interaction.toonTokensBefore}
+                          toonTokensAfter={interaction.toonTokensAfter}
+                          toonSkipReason={interaction.toonSkipReason}
+                          format="percent"
+                          tooltip="hover"
+                          variant="interaction"
+                          baselineModel={interaction.baselineModel}
+                          actualModel={interaction.model}
+                        />
+                      </TooltipProvider>
                     </TableCell>
                     <TableCell className="text-xs overflow-hidden">
                       <TruncatedText
@@ -397,37 +431,21 @@ export default function SessionDetailPage({
             )}
           </TableBody>
         </Table>
-        {paginationMeta && paginationMeta.total > pageSize && (
-          <div className="flex items-center justify-between px-2 py-4">
-            <div className="text-sm text-muted-foreground">
-              Showing {pageIndex * pageSize + 1} to{" "}
-              {Math.min((pageIndex + 1) * pageSize, paginationMeta.total)} of{" "}
-              {paginationMeta.total} requests
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(pageIndex - 1)}
-                disabled={pageIndex === 0}
-              >
-                Previous
-              </Button>
-              <span className="text-sm">
-                Page {pageIndex + 1} of{" "}
-                {Math.ceil(paginationMeta.total / pageSize)}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(pageIndex + 1)}
-                disabled={
-                  pageIndex >= Math.ceil(paginationMeta.total / pageSize) - 1
-                }
-              >
-                Next
-              </Button>
-            </div>
+        {paginationMeta && paginationMeta.total > 0 && (
+          <div className="px-2 py-4">
+            <TablePagination
+              pageIndex={pageIndex}
+              pageSize={pageSize}
+              total={paginationMeta.total}
+              onPaginationChange={setPagination}
+              leftContent={
+                <>
+                  Showing {offset + 1} to{" "}
+                  {Math.min(offset + pageSize, paginationMeta.total)} of{" "}
+                  {paginationMeta.total} requests
+                </>
+              }
+            />
           </div>
         )}
       </div>

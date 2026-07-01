@@ -1,4 +1,4 @@
-import { SupportedProviders } from "@shared";
+import { SupportedProviders } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import { getSecretValueForLlmProviderApiKey } from "./index";
 

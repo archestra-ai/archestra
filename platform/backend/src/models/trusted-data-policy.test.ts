@@ -4,7 +4,7 @@ import {
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_WHOAMI_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { AgentToolModel, ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";

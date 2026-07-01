@@ -3,8 +3,8 @@ import {
   DEFAULT_ADMIN_EMAIL,
   type Permissions,
   type PredefinedRoleName,
-} from "@shared";
-import { eq, getTableColumns, inArray } from "drizzle-orm";
+} from "@archestra/shared";
+import { count, eq, getTableColumns, inArray } from "drizzle-orm";
 import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
@@ -93,6 +93,19 @@ class UserModel {
     return user;
   }
 
+  /**
+   * Email only, with no membership requirement (unlike getById's join) —
+   * used to label per-user storage folders.
+   */
+  static async getEmailById(id: string): Promise<string | null> {
+    const [row] = await db
+      .select({ email: schema.usersTable.email })
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, id))
+      .limit(1);
+    return row?.email ?? null;
+  }
+
   /** Display names for several users in one query, keyed by user id. */
   static async getNamesByIds(ids: string[]): Promise<Map<string, string>> {
     if (ids.length === 0) return new Map();
@@ -101,6 +114,15 @@ class UserModel {
       .from(schema.usersTable)
       .where(inArray(schema.usersTable.id, ids));
     return new Map(rows.map((row) => [row.id, row.name]));
+  }
+
+  /**
+   * Total number of user rows. Used by the enterprise-tier service to apply
+   * the small-team free tier (every row counts, banned or not).
+   */
+  static async countAll(): Promise<number> {
+    const [row] = await db.select({ count: count() }).from(schema.usersTable);
+    return row?.count ?? 0;
   }
 
   /**

@@ -2,7 +2,7 @@ import {
   calculatePaginationMeta,
   type PaginationMeta,
   type PaginationQuery,
-} from "@shared";
+} from "@archestra/shared";
 
 /**
  * Pagination result containing data and metadata

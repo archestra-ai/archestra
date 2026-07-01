@@ -1,5 +1,5 @@
+import { E2eTestId } from "@archestra/shared";
 import type { APIRequestContext, Page } from "@playwright/test";
-import { E2eTestId } from "@shared";
 import {
   getE2eRequestUrl,
   LLM_PROVIDER_API_KEYS_ROUTE,
@@ -9,7 +9,7 @@ import { expect, goToPage } from "../fixtures";
 import { clickButton, expandTablePagination } from "./dialogs";
 
 export async function goToLlmProviderApiKeysPage(page: Page): Promise<void> {
-  await goToPage(page, "/llm/model-providers/api-keys");
+  await goToPage(page, "/llm/model-providers");
   await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
 }
 

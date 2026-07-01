@@ -36,4 +36,4 @@ export const SUPPORTED_THEMES = [
 /**
  * Default theme ID
  */
-export const DEFAULT_THEME_ID = "cosmic-night";
+export const DEFAULT_THEME_ID = "caffeine";

@@ -1,4 +1,4 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -7,11 +7,13 @@ import {
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   createAgent,
   cloneAgent,
+  convertAgentToSkill,
+  suggestSkillDescription,
   deleteAgent,
   exportAgent,
   getAgents,
@@ -34,10 +36,11 @@ export const internalAgentsQueryKey = [
 ] as const;
 
 export async function fetchInternalAgents() {
-  const response = await getAllAgents({
+  const { data, error } = await getAllAgents({
     query: { agentType: "agent", excludeBuiltIn: true },
   });
-  return response.data ?? [];
+  throwOnApiError(error, { toastOnError: false });
+  return data ?? [];
 }
 
 // Returns all agents as an array
@@ -55,8 +58,9 @@ export function useProfiles(
   return useQuery({
     queryKey: ["agents", "all", filters],
     queryFn: async () => {
-      const response = await getAllAgents({ query: filters });
-      return response.data ?? [];
+      const { data, error } = await getAllAgents({ query: filters });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
     },
     initialData: params?.initialData,
     enabled: params?.enabled,
@@ -81,6 +85,57 @@ export function useCloneAgent() {
       if (data.id) {
         queryClient.setQueryData(["agents", data.id], data);
       }
+    },
+  });
+}
+
+type ConvertAgentToSkillArgs = {
+  id: string;
+} & archestraApiTypes.ConvertAgentToSkillData["body"];
+
+export function useConvertAgentToSkill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: ConvertAgentToSkillArgs) => {
+      const { data, error } = await convertAgentToSkill({
+        path: { id },
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      // the source agent may have been deleted, so refresh the agents list too.
+      if (data.deletedAgent) {
+        queryClient.invalidateQueries({ queryKey: ["agents"] });
+      }
+      toast.success(
+        data.deletedAgent
+          ? `Created skill "${data.skill.name}" and removed the agent`
+          : `Created skill "${data.skill.name}" from agent`,
+      );
+    },
+  });
+}
+
+/**
+ * Suggests a skill description for an agent (LLM-generated) for the
+ * convert-to-skill dialog. Read-only: it neither creates a skill nor mutates
+ * the agent, so it invalidates nothing — the caller fills the form field.
+ */
+export function useSuggestSkillDescription() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await suggestSkillDescription({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data?.description ?? null;
     },
   });
 }
@@ -145,26 +200,27 @@ export function useProfilesPaginated(
         status,
       },
     ],
-    queryFn: async () =>
-      (
-        await getAgents({
-          query: {
-            limit,
-            offset,
-            sortBy,
-            sortDirection,
-            name,
-            agentTypes,
-            scope,
-            teamIds,
-            authorIds,
-            excludeAuthorIds,
-            excludeOtherPersonalAgents,
-            labels,
-            status,
-          },
-        })
-      ).data ?? null,
+    queryFn: async () => {
+      const { data, error } = await getAgents({
+        query: {
+          limit,
+          offset,
+          sortBy,
+          sortDirection,
+          name,
+          agentTypes,
+          scope,
+          teamIds,
+          authorIds,
+          excludeAuthorIds,
+          excludeOtherPersonalAgents,
+          labels,
+          status,
+        },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
     initialData: useInitialData ? initialData : undefined,
   });
 }
@@ -174,7 +230,11 @@ export function useDefaultMcpGateway(params?: {
 }) {
   return useQuery({
     queryKey: ["mcp-gateways", "default"],
-    queryFn: async () => (await getDefaultMcpGateway()).data ?? null,
+    queryFn: async () => {
+      const { data, error } = await getDefaultMcpGateway();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
     initialData: params?.initialData,
   });
 }
@@ -185,8 +245,9 @@ export function useDefaultLlmProxy(params?: {
   return useQuery({
     queryKey: ["llm-proxy", "default"],
     queryFn: async () => {
-      const response = await getDefaultLlmProxy();
-      return response.data ?? null;
+      const { data, error } = await getDefaultLlmProxy();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
     },
     initialData: params?.initialData,
   });
@@ -197,8 +258,9 @@ export function useProfile(id: string | undefined) {
     queryKey: ["agents", id],
     queryFn: async () => {
       if (!id) return null;
-      const response = await getAgent({ path: { id } });
-      return response.data ?? null;
+      const { data, error } = await getAgent({ path: { id } });
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
+      return data ?? null;
     },
     enabled: !!id,
     staleTime: 5 * 60 * 1000,
@@ -311,7 +373,11 @@ export function useRestoreProfile() {
 export function useLabelKeys() {
   return useQuery({
     queryKey: ["agents", "labels", "keys"],
-    queryFn: async () => (await getLabelKeys()).data ?? [],
+    queryFn: async () => {
+      const { data, error } = await getLabelKeys();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
   });
 }
 
@@ -319,8 +385,13 @@ export function useLabelValues(params?: { key?: string }) {
   const { key } = params || {};
   return useQuery({
     queryKey: ["agents", "labels", "values", key],
-    queryFn: async () =>
-      (await getLabelValues({ query: key ? { key } : {} })).data ?? [],
+    queryFn: async () => {
+      const { data, error } = await getLabelValues({
+        query: key ? { key } : {},
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
     enabled: key !== undefined,
   });
 }
@@ -332,8 +403,9 @@ export function useDefaultAgentId() {
   return useQuery({
     queryKey: ["member-default-agent"],
     queryFn: async () => {
-      const response = await getMemberDefaultAgent();
-      return response.data?.defaultAgentId ?? null;
+      const { data, error } = await getMemberDefaultAgent();
+      throwOnApiError(error, { toastOnError: false });
+      return data?.defaultAgentId ?? null;
     },
   });
 }
@@ -355,10 +427,11 @@ export function useOrgScopedAgents() {
       { agentType: "agent", excludeBuiltIn: true, scope: "org" as const },
     ],
     queryFn: async () => {
-      const response = await getAllAgents({
+      const { data, error } = await getAllAgents({
         query: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
       });
-      return response.data ?? [];
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
     },
   });
 }

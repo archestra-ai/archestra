@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { usePublicIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
 import { recordSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import config from "@/lib/config/config";
+import { usePublicEnterpriseCoreActive } from "@/lib/config/config.query";
 import {
   getValidatedCallbackURLWithDefault,
   getValidatedRedirectPath,
@@ -29,6 +29,8 @@ export function IdentityProviderSelector({
   callbackURL: callbackURLOverride,
 }: IdentityProviderSelectorProps) {
   const searchParams = useSearchParams();
+  // Login screen is pre-auth, so use the public config flag.
+  const enterpriseCoreActive = usePublicEnterpriseCoreActive() === true;
   const { data: identityProviders = [], isLoading } =
     usePublicIdentityProviders();
 
@@ -65,11 +67,7 @@ export function IdentityProviderSelector({
   );
 
   // Don't show SSO options if the enterprise license is not activated
-  if (
-    !config.enterpriseFeatures.core ||
-    isLoading ||
-    identityProviders.length === 0
-  ) {
+  if (!enterpriseCoreActive || isLoading || identityProviders.length === 0) {
     return null;
   }
 

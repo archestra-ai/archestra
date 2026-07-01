@@ -5,18 +5,18 @@ import {
   IDENTITY_PROVIDER_ID,
   IDENTITY_TRUSTED_PROVIDER_IDS,
   type IdentityProviderId,
-} from "@shared";
-import { useCallback, useState } from "react";
-import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
+} from "@archestra/shared";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { IdentityProviderIcon } from "@/components/identity-provider-icons.ee";
 import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
-import config from "@/lib/config/config";
 import { CreateIdentityProviderDialog } from "./create-identity-provider-dialog.ee";
 import { EditIdentityProviderDialog } from "./edit-identity-provider-dialog.ee";
+import type { IdentityProviderDialogSection } from "./identity-provider-dialog-shell.ee";
 
 /** Configuration for a predefined identity provider card */
 interface IdpConfig {
@@ -260,6 +260,9 @@ type IdentityProvider = NonNullable<
 >[number];
 
 export function IdentityProvidersSettingsContent() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: identityProviders = [], isLoading } = useIdentityProviders();
   const [createConfig, setCreateConfig] = useState<{
     providerId: string;
@@ -267,6 +270,21 @@ export function IdentityProvidersSettingsContent() {
   } | null>(null);
   const [editingProvider, setEditingProvider] =
     useState<IdentityProvider | null>(null);
+  const [initialEditSection, setInitialEditSection] =
+    useState<IdentityProviderDialogSection>();
+
+  useEffect(() => {
+    const editProviderId = searchParams.get("edit");
+    if (!editProviderId) return;
+
+    const provider = identityProviders.find(
+      (item) => item.id === editProviderId,
+    );
+    if (!provider) return;
+
+    setEditingProvider(provider);
+    setInitialEditSection(getDeepLinkedSection(searchParams.get("section")));
+  }, [identityProviders, searchParams]);
 
   // Find existing providers by matching provider ID
   const getProviderStatus = useCallback(
@@ -302,6 +320,7 @@ export function IdentityProvidersSettingsContent() {
       if (existingProvider) {
         // Edit existing provider
         setEditingProvider(existingProvider);
+        setInitialEditSection(undefined);
       } else {
         // Create new provider
         setCreateConfig({
@@ -313,11 +332,30 @@ export function IdentityProvidersSettingsContent() {
     [getProviderStatus],
   );
 
-  // Show message if SSO feature is disabled (check before loading since query is disabled)
-  if (!config.enterpriseFeatures.core) {
-    return <EnterpriseLicenseRequired featureName="Identity Providers" />;
-  }
+  const clearEditDeepLink = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (!params.has("edit") && !params.has("section")) return;
+    params.delete("edit");
+    params.delete("section");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
+  }, [pathname, router, searchParams]);
 
+  const handleEditDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) return;
+      setEditingProvider(null);
+      setInitialEditSection(undefined);
+      clearEditDeepLink();
+    },
+    [clearEditDeepLink],
+  );
+
+  // Gating is handled by the parent (DisabledEnterpriseSection in
+  // identity-providers/page.tsx). When disabled the wrapper renders this UI
+  // dimmed and non-interactive, so we no longer short-circuit here.
   if (isLoading) return <LoadingSpinner />;
 
   return (
@@ -439,9 +477,16 @@ export function IdentityProvidersSettingsContent() {
         <EditIdentityProviderDialog
           identityProviderId={editingProvider.id}
           open={!!editingProvider}
-          onOpenChange={(open) => !open && setEditingProvider(null)}
+          onOpenChange={handleEditDialogOpenChange}
+          initialSection={initialEditSection}
         />
       )}
     </div>
   );
+}
+
+function getDeepLinkedSection(
+  section: string | null,
+): IdentityProviderDialogSection | undefined {
+  return section === "team-sync" ? "team-sync" : undefined;
 }

@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
+import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import { userHasPermission } from "@/auth/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -23,6 +25,7 @@ import type {
   ChatOpsProviderType,
   IncomingChatMessage,
 } from "@/types";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import type { InteractionSource } from "../../../../shared";
 import {
   buildApprovalDecisionSendMessageRequest,
@@ -36,15 +39,18 @@ import type {
   A2AProtocolSendMessageResponse,
 } from "../a2a/a2a-protocol";
 import {
-  autoProvisionUser,
   buildWelcomeMessage,
+  ensureProvisionedUser,
   isSsoConfigured,
 } from "./auto-provision";
+import { claimThreadMuteHint } from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_CHANNEL_DISCOVERY,
   CHATOPS_MESSAGE_RETENTION,
+  CHATOPS_NO_REPLY_SENTINEL,
   SLACK_DEFAULT_CONNECTION_MODE,
+  THREAD_MUTE_HINT,
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
@@ -367,32 +373,31 @@ export class ChatOpsManager {
       return;
     }
 
-    let user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
-    if (!user) {
+    let displayName = "";
+    const provisioned = await ensureProvisionedUser({
+      email: message.senderEmail,
       // Resolve display name from provider (e.g., Slack real_name)
-      const displayName =
-        (await provider.getUserName?.(message.senderId)) || message.senderName;
-
-      // Auto-provision: create user + member from chat platform identity
-      const { invitationId } = await autoProvisionUser({
-        email: message.senderEmail,
-        name: displayName,
-        provider: provider.providerId,
-      });
-      user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
-      if (!user) {
-        logger.error(
-          { email: message.senderEmail },
-          "[ChatOps] Auto-provisioned user not found after creation",
-        );
-        return;
-      }
-
+      resolveDisplayName: async () => {
+        displayName =
+          (await provider.getUserName?.(message.senderId)) ||
+          message.senderName;
+        return displayName;
+      },
+      provider: provider.providerId,
+    });
+    if (!provisioned) {
+      logger.error(
+        { email: message.senderEmail },
+        "[ChatOps] Auto-provisioned user not found after creation",
+      );
+      return;
+    }
+    if (provisioned.invitationId !== null) {
       // Send ephemeral welcome message (non-blocking)
       this.sendAutoProvisionWelcome({
         provider,
         message,
-        invitationId,
+        invitationId: provisioned.invitationId,
         displayName,
       }).catch(() => {});
     }
@@ -453,7 +458,7 @@ export class ChatOpsManager {
           ? `Direct Message - ${message.senderEmail}`
           : await provider.getChannelName(message.channelId);
         const organizationId = await getDefaultOrganizationId();
-        await ChatOpsChannelBindingModel.upsertByChannel({
+        binding = await ChatOpsChannelBindingModel.upsertByChannel({
           organizationId,
           provider: provider.providerId,
           channelId: message.channelId,
@@ -465,14 +470,17 @@ export class ChatOpsManager {
         });
       }
 
-      // Show agent selection
-      await this.sendAgentSelectionCard({
+      // Frictionless onboarding: auto-assign a clear default agent instead of
+      // always prompting, so the bot just replies. Falls back to the picker
+      // card only when the choice is ambiguous.
+      const agentId = await this.resolveOrPromptChannelAgent({
         provider,
         message,
-        isWelcome: true,
+        binding,
         isDm,
       });
-      return;
+      if (!agentId) return; // picker card was sent
+      binding = { ...binding, agentId };
     }
 
     // Always reply to empty Slack app mentions so users get a response even
@@ -520,24 +528,19 @@ export class ChatOpsManager {
       logger.warn("[ChatOps] Could not resolve interactive user email");
       return;
     }
-    let user = await UserModel.findByEmail(senderEmail.toLowerCase());
-    if (!user) {
-      // Auto-provision: create user + member from interactive payload
-      const displayName =
-        (await provider.getUserName?.(selection.userId)) || selection.userName;
-      await autoProvisionUser({
-        email: senderEmail,
-        name: displayName,
-        provider: provider.providerId,
-      });
-      user = await UserModel.findByEmail(senderEmail.toLowerCase());
-      if (!user) {
-        logger.error(
-          { senderEmail },
-          "[ChatOps] Auto-provisioned user not found after creation",
-        );
-        return;
-      }
+    // Auto-provision: create user + member from interactive payload
+    const provisioned = await ensureProvisionedUser({
+      email: senderEmail,
+      resolveDisplayName: async () =>
+        (await provider.getUserName?.(selection.userId)) || selection.userName,
+      provider: provider.providerId,
+    });
+    if (!provisioned) {
+      logger.error(
+        { senderEmail },
+        "[ChatOps] Auto-provisioned user not found after creation",
+      );
+      return;
     }
 
     // Verify agent exists
@@ -617,13 +620,22 @@ export class ChatOpsManager {
       return { success: true, error: "NO_BINDING" };
     }
 
-    // Check if the binding has an agent assigned
+    // Channel binding with no agent yet (e.g. Teams, which calls processMessage
+    // directly): auto-assign a clear default or prompt with the picker — never
+    // silently drop, which leaves the user with no reply and no explanation.
     if (!binding.agentId) {
-      logger.warn(
-        { bindingId: binding.id },
-        "[ChatOps] Binding has no agent assigned",
-      );
-      return { success: false, error: "NO_AGENT_ASSIGNED" };
+      const isDm = message.metadata?.conversationType === "personal";
+      const agentId = await this.resolveOrPromptChannelAgent({
+        provider,
+        message,
+        binding,
+        isDm,
+      });
+      if (!agentId) {
+        // picker card was sent (or no agents to offer)
+        return { success: true };
+      }
+      binding.agentId = agentId;
     }
 
     // Verify the agent exists and is an internal agent
@@ -738,9 +750,55 @@ export class ChatOpsManager {
       systemPrefix = contextLines.join("\n");
     }
 
+    // Group conversations: the agent receives every message, so frame the
+    // situation — it's a bot among several humans, told who is speaking —
+    // and give it a way to stay silent. The sentinel reply is swallowed in
+    // replyByMessageExecutionResult(). Note: only assert a mention positively;
+    // people often address the bot by typing its name without a real @mention,
+    // so "not mentioned" must never be presented as "not addressed".
+    const conversationType = message.metadata?.conversationType;
+    if (conversationType === "groupChat" || conversationType === "channel") {
+      const botName =
+        typeof message.metadata?.botName === "string"
+          ? message.metadata.botName
+          : null;
+      // People also address the bot by the platform name ("Archestra, create
+      // a task"), which matches neither the agent nor the chat display name.
+      const platformName =
+        (await OrganizationModel.getById(agent.organizationId))?.appName ||
+        "Archestra";
+      const botMentioned = message.metadata?.botMentioned === true;
+      const mentionedOthers = Array.isArray(message.metadata?.mentionedOthers)
+        ? (message.metadata.mentionedOthers as string[])
+        : [];
+      const mentionNote = botMentioned
+        ? " It @mentions you directly."
+        : mentionedOthers.length > 0
+          ? ` It @mentions ${mentionedOthers.join(", ")} — another person, not you — so it is most likely addressed to them.`
+          : "";
+      // A direct @mention always deserves a reply — agents with narrow system
+      // prompts otherwise use the silence option to ignore greetings and
+      // small talk, which reads as the bot being broken. Only offer the
+      // sentinel when the bot was NOT directly mentioned.
+      const silenceOption = botMentioned
+        ? [
+            `The sender explicitly addressed you, so always answer — even if the message is small talk or outside your specialty.`,
+          ]
+        : [
+            `Stay silent only when the message is clearly not your business: it is addressed to another person, or people are plainly talking to each other about something that doesn't involve you. In that case respond with exactly ${CHATOPS_NO_REPLY_SENTINEL} and nothing else — nothing visible will be posted.`,
+            `Never post commentary about whether a message is addressed to you or why you are staying silent — either answer the message itself or respond with the sentinel.`,
+          ];
+      systemPrefix += [
+        `\n\nYou are "${agentToUse.name}"${botName ? ` (appearing in this chat as "${botName}")` : ""} — a bot participating in a group conversation with multiple people. People sometimes also address you as "${platformName}".`,
+        `The latest message is from ${message.senderName}.${mentionNote}`,
+        `Default to replying — when in doubt, reply. Messages addressing you by any of those names (with or without an @mention) are your business.`,
+        ...silenceOption,
+      ].join("\n");
+    }
+
     let fullMessage = `${systemPrefix}\n\n${cleanedMessageText}`;
     if (contextMessages.length > 0) {
-      fullMessage = `${systemPrefix}\n\nPrevious conversation:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
+      fullMessage = `${systemPrefix}\n\nThe earlier messages in this thread are below — this is your shared history in this conversation, so you DO have access to it and remember it. Use it to answer follow-up questions and references to "earlier", "before", or "what I just asked".\n\nConversation so far:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
     }
 
     // Merge history attachments with current message attachments
@@ -784,7 +842,7 @@ export class ChatOpsManager {
       // Skip welcome message when SSO is enabled — users just sign in via their IdP
       if (await isSsoConfigured()) return;
 
-      const welcome = buildWelcomeMessage({
+      const welcome = await buildWelcomeMessage({
         invitationId,
         email: message.senderEmail || "",
         name: displayName,
@@ -838,6 +896,85 @@ export class ChatOpsManager {
         "[ChatOps] Failed to send auto-provision welcome message",
       );
     }
+  }
+
+  /**
+   * Pick a default agent for a channel that has none yet so onboarding "just
+   * works": the org-wide default agent if set, else the sole agent available to
+   * the sender — INCLUDING their personal "My Assistant" — so a fresh per-user
+   * setup just works. Returns whether the agent should be pinned as the shared
+   * channel default (true for the org default / a shared agent; false for a
+   * personal agent, which is per-user). Returns null when the choice is
+   * ambiguous (0 or 2+ candidates) so the caller prompts with the picker card.
+   */
+  private async autoResolveChannelAgentId(params: {
+    organizationId: string;
+    senderEmail?: string;
+  }): Promise<{ agentId: string; persist: boolean } | null> {
+    // 1. Org-wide default — an explicit, shared choice; pin it to the channel.
+    const org = await OrganizationModel.getById(params.organizationId);
+    if (org?.defaultAgentId) {
+      const agent = await AgentModel.findById(org.defaultAgentId);
+      if (agent?.agentType === "agent") {
+        return { agentId: org.defaultAgentId, persist: true };
+      }
+    }
+    // 2. The sole agent available to this sender (incl. their personal agent).
+    //    A personal agent is per-user, so use it for this reply but DON'T pin
+    //    it as the shared default (other members would be denied access to it).
+    const accessible = await this.getAccessibleChatopsAgents({
+      senderEmail: params.senderEmail,
+      isDm: true,
+    });
+    if (accessible.length === 1) {
+      const agent = await AgentModel.findById(accessible[0].id);
+      return {
+        agentId: accessible[0].id,
+        persist: agent?.scope !== "personal",
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Resolve a channel's default agent (pinning shared ones), or prompt with the
+   * picker card. Returns the agent id to use for this message, or null when the
+   * picker was sent (the caller should stop processing this message).
+   */
+  private async resolveOrPromptChannelAgent(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    binding: { id: string; organizationId: string };
+    isDm: boolean;
+  }): Promise<string | null> {
+    const { provider, message, binding, isDm } = params;
+    const resolved = await this.autoResolveChannelAgentId({
+      organizationId: binding.organizationId,
+      senderEmail: message.senderEmail,
+    });
+    if (resolved) {
+      if (resolved.persist) {
+        await ChatOpsChannelBindingModel.update(binding.id, {
+          agentId: resolved.agentId,
+        });
+      }
+      logger.info(
+        {
+          bindingId: binding.id,
+          agentId: resolved.agentId,
+          pinned: resolved.persist,
+        },
+        "[ChatOps] Resolved a default agent for an unassigned channel",
+      );
+      return resolved.agentId;
+    }
+    await this.sendAgentSelectionCard({
+      provider,
+      message,
+      isWelcome: true,
+      isDm,
+    });
+    return null;
   }
 
   private async sendAgentSelectionCard({
@@ -937,10 +1074,13 @@ export class ChatOpsManager {
       }
     }
 
-    // No known agent matched - return fallback with the message after delimiter
+    // The text contained ">" but the prefix is not a known agent name, so this
+    // was never an agent switch — it's ordinary message text that happens to
+    // contain ">". Return the full original message so nothing before the ">"
+    // is dropped (e.g. "compare A > B" must reach the agent intact).
     return {
       agentToUse: defaultAgent,
-      cleanedMessageText: messageAfterDelimiter || messageText,
+      cleanedMessageText: messageText,
     };
   }
 
@@ -988,11 +1128,10 @@ export class ChatOpsManager {
         return `${sender}: ${text}`;
       });
 
-      // Collect image files from non-bot user messages in history
+      // Collect files from non-bot user messages in history
       const historyFiles = history
         .filter((msg) => !msg.isFromBot && msg.files && msg.files.length > 0)
-        .flatMap((msg) => msg.files ?? [])
-        .filter((f) => f.mimetype.startsWith("image/"));
+        .flatMap((msg) => msg.files ?? []);
 
       const historyAttachments: Array<{
         contentType: string;
@@ -1035,7 +1174,7 @@ export class ChatOpsManager {
                   downloadedCount: historyAttachments.length,
                   totalHistoryFiles: historyFiles.length,
                 },
-                "[ChatOps] Downloaded image attachments from thread history",
+                "[ChatOps] Downloaded attachments from thread history",
               );
             }
           } catch (error) {
@@ -1106,33 +1245,34 @@ export class ChatOpsManager {
     }
 
     // Look up Archestra user by email — auto-provision if not found
-    let user = await UserModel.findByEmail(userEmail.toLowerCase());
-
-    if (!user) {
-      const displayName =
-        (await provider.getUserName?.(message.senderId)) || message.senderName;
-      const { invitationId } = await autoProvisionUser({
-        email: userEmail,
-        name: displayName,
-        provider: provider.providerId,
-      });
-      user = await UserModel.findByEmail(userEmail.toLowerCase());
-      if (!user) {
-        logger.error(
-          { senderEmail: userEmail },
-          "[ChatOps] Auto-provisioned user not found after creation",
-        );
-        return {
-          success: false,
-          error: "Failed to auto-provision user",
-        };
-      }
-
+    let displayName = "";
+    const provisioned = await ensureProvisionedUser({
+      email: userEmail,
+      resolveDisplayName: async () => {
+        displayName =
+          (await provider.getUserName?.(message.senderId)) ||
+          message.senderName;
+        return displayName;
+      },
+      provider: provider.providerId,
+    });
+    if (!provisioned) {
+      logger.error(
+        { senderEmail: userEmail },
+        "[ChatOps] Auto-provisioned user not found after creation",
+      );
+      return {
+        success: false,
+        error: "Failed to auto-provision user",
+      };
+    }
+    const user = provisioned.user;
+    if (provisioned.invitationId !== null) {
       // Send welcome message (non-blocking)
       this.sendAutoProvisionWelcome({
         provider,
         message,
-        invitationId,
+        invitationId: provisioned.invitationId,
         displayName,
       }).catch(() => {});
     }
@@ -1311,6 +1451,13 @@ export class ChatOpsManager {
       userId,
     } = params;
 
+    // Stamp the start time so a deliberate no-reply can report how long the
+    // agent thought before deciding (shown in the Teams channel placeholder).
+    message.metadata = {
+      ...message.metadata,
+      processingStartedAt: Date.now(),
+    };
+
     // Send typing indicator before execution starts (non-fatal).
     // Slack always has threadId (falls back to event.ts); Teams may not
     // (only set for thread replies) but doesn't need it (uses conversationReference).
@@ -1348,6 +1495,16 @@ export class ChatOpsManager {
       );
 
       if (sendReply) {
+        // A per-user provider the user hasn't linked yet → a friendly prompt
+        // with a link to connect (chatops can't render the interactive flow).
+        if (error instanceof LlmProviderAuthRequiredError) {
+          await provider.sendReply({
+            originalMessage: message,
+            text: `This agent uses ${error.providerLabel}, which is per-user. Connect your own ${error.providerLabel} account, then try again: ${config.frontendBaseUrl}/settings`,
+            conversationReference: message.metadata?.conversationReference,
+          });
+          return { success: false, error: errorMessage(error) };
+        }
         const errMsg = errorMessage(error);
         // Show truncated error details as a subtle footer (max 500 chars)
         const errorDetail =
@@ -1393,13 +1550,33 @@ export class ChatOpsManager {
     const text = (resultMessage.parts || [])
       .map((part) => part.text)
       .join("\n");
-    const agentResponse = stripThinkingBlocks(text);
+    let agentResponse = stripThinkingBlocks(text);
+
+    // The agent's way to stay silent in group conversations — post nothing.
+    // The sentinel ANYWHERE in the response means silence: models often
+    // narrate the decision ("this is addressed to Matvey... [NO_REPLY]"),
+    // and that narration must never be posted. A genuine answer has no
+    // reason to contain the sentinel.
+    let agentChoseSilence = false;
+    if (agentResponse.includes(CHATOPS_NO_REPLY_SENTINEL)) {
+      logger.info(
+        { messageId: message.messageId, agentId: agent.id },
+        "[ChatOps] Agent chose not to reply",
+      );
+      agentChoseSilence = true;
+      agentResponse = "";
+    }
 
     if (sendReply && agentResponse) {
       await provider.sendReply({
         originalMessage: message,
         text: agentResponse,
         footer: `🤖 ${agent.name}`,
+        // Teach the off switch once per channel thread: sticky auto-reply only
+        // applies in channels, so the hint rides the bot's first reply there.
+        ...((await this.shouldHintThreadMute(provider, message)) && {
+          hint: THREAD_MUTE_HINT,
+        }),
         conversationReference: message.metadata?.conversationReference,
       });
     } else if (
@@ -1407,13 +1584,30 @@ export class ChatOpsManager {
       !agentResponse &&
       message.metadata?.placeholderActivityId
     ) {
-      // Agent returned no visible content but a placeholder "Thinking..."
-      // message was sent (Teams channels) — update it so it doesn't linger.
+      // A placeholder "Thinking..." message was posted (Teams channels) —
+      // update it so it doesn't linger. Deliberate silence gets a subtle
+      // note; an unexpectedly empty result keeps the "(No response)" marker.
+      const startedAt = message.metadata?.processingStartedAt;
+      const seconds =
+        typeof startedAt === "number"
+          ? Math.max(1, Math.round((Date.now() - startedAt) / 1000))
+          : null;
       await provider.sendReply({
         originalMessage: message,
-        text: "_(No response)_",
+        text: agentChoseSilence
+          ? seconds
+            ? `_Thought for ${seconds}s — no reply needed_`
+            : "_No reply needed_"
+          : "_(No response)_",
         conversationReference: message.metadata?.conversationReference,
       });
+    } else if (sendReply && !agentResponse) {
+      // Nothing was (or will be) posted to the thread — clear the transient
+      // "thinking" indicator so it doesn't spin forever (Slack only
+      // auto-clears it when a message is posted).
+      await provider
+        .clearTypingStatus?.(message.channelId, message.threadId ?? "")
+        ?.catch(() => {});
     }
 
     return {
@@ -1421,6 +1615,27 @@ export class ChatOpsManager {
       agentResponse,
       interactionId: resultMessage.messageId,
     };
+  }
+
+  /**
+   * Whether this reply should carry the one-time "you can mute me" hint.
+   *
+   * True only on the bot's FIRST reply in a channel thread — sticky auto-reply
+   * (and thus muting) exists only in channels, and claimThreadMuteHint ensures
+   * the hint rides a single reply per thread rather than every one.
+   */
+  private async shouldHintThreadMute(
+    provider: ChatOpsProvider,
+    message: IncomingChatMessage,
+  ): Promise<boolean> {
+    if (message.metadata?.conversationType !== "channel" || !message.threadId) {
+      return false;
+    }
+    return await claimThreadMuteHint({
+      provider: provider.providerId,
+      channelId: message.channelId,
+      threadId: message.threadId,
+    });
   }
 
   private async replyWithApprovalForm(params: {
@@ -1486,12 +1701,19 @@ export class ChatOpsManager {
       });
 
       for (const approvalRequest of approvalRequests) {
+        // `run_tool` is a meta wrapper; show the user the underlying tool and
+        // its arguments rather than the opaque wrapper name.
+        const { toolName, toolInput } = resolveRunToolTarget(
+          approvalRequest.toolName,
+          approvalRequest.toolInput,
+        );
         await provider.addApprovalRequestForm({
           approvalId: approvalRequest.approvalId,
           taskId: task.id,
           channelId: message.channelId,
           threadId: message.threadId,
-          toolName: approvalRequest.toolName,
+          toolName,
+          toolArgs: toolInput,
           originalMessage: message,
         });
       }
@@ -1639,7 +1861,10 @@ export class ChatOpsManager {
         return;
       }
 
-      if (email !== decision.originalMessage.senderEmail) {
+      if (
+        email?.toLowerCase() !==
+        decision.originalMessage.senderEmail?.toLowerCase()
+      ) {
         // Only initial requester can approve/decline
         return;
       }
@@ -1841,55 +2066,4 @@ export function matchesAgentName(input: string, agentName: string): boolean {
   const normalizedInput = input.toLowerCase().replace(/\s+/g, "");
   const normalizedName = agentName.toLowerCase().replace(/\s+/g, "");
   return normalizedInput === normalizedName;
-}
-
-/**
- * Find length of agent name match at start of text.
- * Handles "AgentPeter", "Agent Peter", "agent peter" for "Agent Peter".
- * Returns matched length or null if no match.
- *
- * @public — exported for testability
- */
-export function findTolerantMatchLength(
-  text: string,
-  agentName: string,
-): number | null {
-  const lowerText = text.toLowerCase();
-  const lowerName = agentName.toLowerCase();
-
-  // Strategy 1: Exact match (with spaces)
-  if (lowerText.startsWith(lowerName)) {
-    const charAfter = text[agentName.length];
-    if (!charAfter || charAfter === " " || charAfter === "\n") {
-      return agentName.length;
-    }
-  }
-
-  // Strategy 2: Match without spaces (e.g., "agentpeter" matches "Agent Peter")
-  const nameWithoutSpaces = lowerName.replace(/\s+/g, "");
-  let textIdx = 0;
-  let nameIdx = 0;
-
-  while (nameIdx < nameWithoutSpaces.length && textIdx < text.length) {
-    const textChar = lowerText[textIdx];
-    const nameChar = nameWithoutSpaces[nameIdx];
-
-    if (textChar === nameChar) {
-      textIdx++;
-      nameIdx++;
-    } else if (textChar === " ") {
-      textIdx++;
-    } else {
-      return null;
-    }
-  }
-
-  if (nameIdx === nameWithoutSpaces.length) {
-    const charAfter = text[textIdx];
-    if (!charAfter || charAfter === " " || charAfter === "\n") {
-      return textIdx;
-    }
-  }
-
-  return null;
 }

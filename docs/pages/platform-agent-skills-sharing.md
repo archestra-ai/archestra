@@ -2,19 +2,19 @@
 title: Sharing Skills
 category: Agents
 order: 4
-description: Share Archestra skills into Claude Code and Codex CLI through native plugin marketplaces
-lastUpdated: 2026-05-27
+description: Share Archestra skills into Claude Code, Codex CLI, Copilot CLI, and Cursor through native plugin marketplaces
+lastUpdated: 2026-06-10
 ---
 
 <!--
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-Archestra skills can be installed into your local Claude Code, Codex CLI, or Cursor IDE through each tool's native plugin marketplace. A signed share link points the client at an Archestra-hosted git repository that serves all three marketplaces in parallel — Claude reads `.claude-plugin/marketplace.json`, Codex reads `.agents/plugins/marketplace.json`, Cursor reads `.cursor-plugin/marketplace.json`, and the underlying `SKILL.md` files are identical.
+Archestra skills can be installed into your local Claude Code, Codex CLI, Copilot CLI, or Cursor IDE through each tool's native plugin marketplace. A signed share link points the client at an Archestra-hosted git repository that serves the marketplaces in parallel — Claude reads `.claude-plugin/marketplace.json`, Codex and Copilot read `.agents/plugins/marketplace.json`, Cursor reads `.cursor-plugin/marketplace.json`, and the underlying `SKILL.md` files are identical.
 
 Every shared skill is bundled into a single plugin so the user installs one thing instead of one-per-skill. The plugin name is the marketplace name (e.g. `archestra-acme-corp-skills`), and each skill lives under `skills/<slug>/` inside that plugin. Anthropic's official marketplaces follow the same one-plugin-per-toolkit convention.
 
-The marketplace lives at `/connection` alongside the MCP Gateway and LLM Proxy connection flows. Picking a client (or "Any client") expands an "Install shared skills" step that snapshots every current skill into one link.
+The marketplace lives at `/connection` alongside the MCP Gateway and LLM Proxy connection flows. For Claude Code, Codex, Copilot CLI, and Cursor the skills install is part of the one-command setup by default: the generated `curl | bash` command registers the marketplace automatically (a fresh share link is created when the script is fetched), with an opt-out under the command's options. Picking "Any client" keeps the manual "Install shared skills" step that snapshots every current skill into one link.
 
 ## Marketplace name
 
@@ -30,13 +30,13 @@ Creating, refreshing, and revoking the marketplace link requires the `skill: adm
 
 The marketplace link is organization-private. There is no public listing — a link only resolves while its token is valid, and the token is bound to a single share-link row in the database. The clone URL embeds the token; anyone who holds the URL can clone the marketplace until you revoke it.
 
-The same clone URL works for both Claude Code and Codex; only the install command differs:
+The same clone URL works for Claude Code, Codex, Copilot, and Cursor; only the install command differs:
 
 **Claude Code**
 
 ```
 claude plugin marketplace add <clone-url>
-/plugin marketplace browse <marketplace-name>
+claude plugin install <marketplace-name>@<marketplace-name>
 ```
 
 **Codex**
@@ -46,13 +46,20 @@ codex plugin marketplace add <clone-url>
 /plugins  # then select "Install Plugin"
 ```
 
+**Copilot CLI**
+
+```
+copilot plugin marketplace add <clone-url>
+copilot plugin marketplace browse <marketplace-name>
+```
+
 **Cursor**
 
 ```
 /add-plugin <clone-url>
 ```
 
-The `/connection` step generates the right snippet for the selected client and lets you copy it with one click. Picking "Any client" shows all three.
+For the script-capable clients these commands run inside the generated setup script; picking "Any client" shows the snippets above plus a generic clone-path guide.
 
 ## Snapshot semantics
 

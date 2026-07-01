@@ -1,3 +1,4 @@
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import {
   Behavior,
   type Candidate,
@@ -9,7 +10,6 @@ import {
   type HarmProbability,
   type Part,
 } from "@google/genai";
-import { ArchestraInternalErrorCode } from "@shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import { createGoogleGenAIClient } from "@/clients/gemini-client";
@@ -41,6 +41,7 @@ import {
   isMcpImageBlock,
 } from "../utils/mcp-image";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import { sanitizeGeminiToolSchema } from "./gemini-schema";
 
 // =============================================================================
 // TYPE ALIASES
@@ -503,10 +504,23 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
 
   getUsage(): UsageView {
     if (!this.response.usageMetadata) {
-      return { inputTokens: 0, outputTokens: 0 };
+      return {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      };
     }
-    const { input, output } = getUsageTokens(this.response.usageMetadata);
-    return { inputTokens: input ?? 0, outputTokens: output ?? 0 };
+    const { input, output, cacheRead, cacheWrite, reasoning } = getUsageTokens(
+      this.response.usageMetadata,
+    );
+    return {
+      inputTokens: input,
+      outputTokens: output,
+      cacheReadTokens: cacheRead,
+      cacheWriteTokens: cacheWrite,
+      reasoningTokens: reasoning,
+    };
   }
 
   getOriginalResponse(): GeminiResponse {
@@ -595,9 +609,16 @@ class GeminiStreamAdapter
 
     // Handle usage metadata
     if (chunk.usageMetadata) {
+      const cacheReadTokens = chunk.usageMetadata.cachedContentTokenCount ?? 0;
       this.state.usage = {
-        inputTokens: chunk.usageMetadata.promptTokenCount ?? 0,
+        inputTokens: Math.max(
+          0,
+          (chunk.usageMetadata.promptTokenCount ?? 0) - cacheReadTokens,
+        ),
         outputTokens: chunk.usageMetadata.candidatesTokenCount ?? 0,
+        cacheReadTokens,
+        cacheWriteTokens: 0,
+        reasoningTokens: chunk.usageMetadata.thoughtsTokenCount ?? 0,
       };
     }
 
@@ -993,10 +1014,18 @@ async function convertToolResultsToToon(
 export function getUsageTokens(usage: {
   promptTokenCount?: number;
   candidatesTokenCount?: number;
+  cachedContentTokenCount?: number;
+  thoughtsTokenCount?: number;
 }) {
+  // Gemini's cachedContentTokenCount is a SUBSET already inside promptTokenCount,
+  // so subtract it to get the uncached input and avoid double-counting.
+  const cacheRead = usage.cachedContentTokenCount ?? 0;
   return {
-    input: usage.promptTokenCount,
-    output: usage.candidatesTokenCount,
+    input: Math.max(0, (usage.promptTokenCount ?? 0) - cacheRead),
+    output: usage.candidatesTokenCount ?? 0,
+    cacheRead,
+    cacheWrite: 0,
+    reasoning: usage.thoughtsTokenCount ?? 0,
   };
 }
 
@@ -1203,6 +1232,14 @@ function sdkResponseToRestResponse(
   } as Gemini.Types.GenerateContentResponse;
 }
 
+// Strip Gemini-incompatible JSON-schema constructs (non-string enums) from a
+// function declaration schema field before handing it to the SDK. Returns the
+// input untouched when absent.
+function sanitizeFdSchema<T>(schema: T): T {
+  if (schema === undefined || schema === null) return schema;
+  return sanitizeGeminiToolSchema(schema) as T;
+}
+
 /**
  * Convert a Gemini REST-style GenerateContentRequest body into the SDK's
  * GenerateContentParameters shape. The SDK and REST shapes differ significantly:
@@ -1212,8 +1249,11 @@ function sdkResponseToRestResponse(
  *
  * Note: Gemini SDK and REST API have different schemas. See:
  * https://ai.google.dev/api/generate-content
+ *
+ * @public — exercised by gemini.test.ts to verify tool-schema sanitization on
+ * the outbound path.
  */
-function restToSdkGenerateContentParams(
+export function restToSdkGenerateContentParams(
   body: Partial<Gemini.Types.GenerateContentRequest>,
   model: string,
   mergedTools?: Gemini.Types.Tool[] | undefined,
@@ -1266,10 +1306,10 @@ function restToSdkGenerateContentParams(
           name: fd.name,
           description: fd.description,
           behavior: mappedBehavior,
-          parameters: fd.parameters,
-          parametersJsonSchema: fd.parametersJsonSchema,
-          response: fd.response,
-          responseJsonSchema: fd.responseJsonSchema,
+          parameters: sanitizeFdSchema(fd.parameters),
+          parametersJsonSchema: sanitizeFdSchema(fd.parametersJsonSchema),
+          response: sanitizeFdSchema(fd.response),
+          responseJsonSchema: sanitizeFdSchema(fd.responseJsonSchema),
         };
       });
 

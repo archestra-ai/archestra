@@ -1,5 +1,34 @@
-import { Fingerprint, Sparkles, Star } from "lucide-react";
+import { Clock, Fingerprint, Github, Sparkles, Star, User } from "lucide-react";
 import { InlineTag } from "@/components/ui/inline-tag";
+
+/**
+ * Marks a model from a per-user provider (e.g. GitHub Copilot): the same model
+ * is available to everyone, but each member runs it on their own connected
+ * account, so there's no single shared key behind it.
+ */
+export function PerUserModelBadge() {
+  return (
+    <InlineTag icon={<User />} className="text-muted-foreground bg-muted">
+      per-user
+    </InlineTag>
+  );
+}
+
+/**
+ * Shown on a per-user provider model (e.g. GitHub Copilot) the viewer hasn't
+ * connected yet: the model is selectable, but using it prompts them to link
+ * their own account first.
+ */
+export function ConnectAccountBadge() {
+  return (
+    <InlineTag
+      icon={<Github />}
+      className="text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950"
+    >
+      connect your account
+    </InlineTag>
+  );
+}
 
 export function FreeModelBadge() {
   return (
@@ -15,6 +44,18 @@ export function FreeModelBadge() {
 export function LatestModelBadge() {
   return (
     <InlineTag className="text-muted-foreground bg-muted">latest</InlineTag>
+  );
+}
+
+/**
+ * Marks an older-generation model that is still selectable but superseded by a
+ * newer generation from the same provider.
+ */
+export function OldModelBadge() {
+  return (
+    <InlineTag icon={<Clock />} className="text-muted-foreground bg-muted">
+      old
+    </InlineTag>
   );
 }
 

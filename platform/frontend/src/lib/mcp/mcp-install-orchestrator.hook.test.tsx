@@ -44,6 +44,10 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
   }),
 }));
 
+vi.mock("@/lib/auth/auth.query", () => ({
+  useSession: () => ({ data: { user: { id: "test-user" } } }),
+}));
+
 vi.mock("@/lib/auth/oauth.query", () => ({
   useInitiateOAuth: () => ({
     mutateAsync: mutateAsyncMock,
@@ -109,6 +113,38 @@ describe("useMcpInstallOrchestrator", () => {
     expect(setOAuthTeamIdMock).toHaveBeenCalledWith(null);
     expect(setOAuthMcpServerIdMock).toHaveBeenCalledWith("server-123");
     expect(setOAuthReturnUrlMock).toHaveBeenCalledWith(window.location.href);
+    expect(redirectBrowserToUrlMock).toHaveBeenCalledWith(
+      "https://posthog.example.com/oauth/authorize",
+    );
+  });
+
+  it("captures the return URL when starting OAuth for a first-time install", async () => {
+    const { result } = renderHook(() => useMcpInstallOrchestrator());
+
+    // Opening the OAuth confirmation dialog should not start OAuth yet.
+    act(() => {
+      result.current.triggerInstallByCatalogId("catalog-posthog");
+    });
+    expect(redirectBrowserToUrlMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.handleOAuthConfirm({
+        scope: "personal",
+        teamId: null,
+      });
+    });
+
+    await waitFor(() => {
+      expect(mutateAsyncMock).toHaveBeenCalledWith({
+        catalogId: "catalog-posthog",
+      });
+    });
+
+    // New behavior: first-time installs remember where they started so the
+    // callback can return the user there (e.g. a chat conversation) instead of
+    // the registry. This is not a re-auth flow.
+    expect(setOAuthReturnUrlMock).toHaveBeenCalledWith(window.location.href);
+    expect(setOAuthMcpServerIdMock).not.toHaveBeenCalled();
     expect(redirectBrowserToUrlMock).toHaveBeenCalledWith(
       "https://posthog.example.com/oauth/authorize",
     );

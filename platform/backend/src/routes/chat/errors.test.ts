@@ -7,7 +7,7 @@ import {
   GeminiErrorReasons,
   OpenAIErrorTypes,
   ZhipuaiErrorTypes,
-} from "@shared";
+} from "@archestra/shared";
 import { vi } from "vitest";
 import { beforeEach, describe, expect, it } from "@/test";
 
@@ -17,14 +17,74 @@ vi.mock("@sentry/node", () => ({
   captureException: mockSentryCaptureException,
 }));
 
+import { NoSuchToolError, UnsupportedFunctionalityError } from "ai";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
+  EmptyModelResponseError,
+  formatUnavailableToolErrorDetails,
+  getUnavailableToolErrorDetails,
   mapProviderError,
   ProviderError,
   sanitizeChatErrorForFrontend,
 } from "./errors";
+import { ContextWindowExceededError } from "./normalization/enforce-context-window-limit";
+import { RequestTooLargeError } from "./normalization/enforce-request-size-limit";
 
 beforeEach(() => {
   mockSentryCaptureException.mockClear();
+});
+
+describe("mapProviderError - per-user provider auth required", () => {
+  it("maps LlmProviderAuthRequiredError to a ProviderAuthRequired card with authAction", () => {
+    const result = mapProviderError(
+      new LlmProviderAuthRequiredError("github-copilot"),
+      "github-copilot",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.ProviderAuthRequired);
+    expect(result.isRetryable).toBe(false);
+    expect(result.authAction).toEqual({
+      provider: "github-copilot",
+      providerLabel: "GitHub Copilot",
+    });
+  });
+});
+
+describe("mapProviderError - request too large", () => {
+  it("maps RequestTooLargeError to a non-retryable RequestTooLarge card naming the decoded file size", () => {
+    const result = mapProviderError(
+      new RequestTooLargeError({
+        provider: "bedrock",
+        fileBytes: 49 * 1024 * 1024,
+        limitBytes: 20 * 1024 * 1024,
+        fileCount: 1,
+      }),
+      "bedrock",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.RequestTooLarge);
+    expect(result.isRetryable).toBe(false);
+    // The user-facing size is the real file size, not the inflated wire size.
+    expect(result.message).toMatch(/\bThis file is 49 MB\b/);
+    expect(result.message).toContain("AWS Bedrock");
+    expect(result.message).toContain("20 MB");
+  });
+});
+
+describe("mapProviderError - context window exceeded", () => {
+  it("maps ContextWindowExceededError to a non-retryable ContextTooLong card", () => {
+    const result = mapProviderError(
+      new ContextWindowExceededError({
+        model: "claude-test",
+        estimatedTokens: 566_084,
+        contextLength: 262_144,
+      }),
+      "anthropic",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+    expect(result.isRetryable).toBe(false);
+  });
 });
 
 // =============================================================================
@@ -41,6 +101,7 @@ describe("mapProviderError - OpenAI", () => {
     message: string,
     code?: string,
     internalCode?: string,
+    usageLimit?: { entity_type: string; limit_type: string },
   ) {
     return {
       name: "AI_APICallError",
@@ -51,6 +112,7 @@ describe("mapProviderError - OpenAI", () => {
           message,
           code,
           internal_code: internalCode,
+          usage_limit: usageLimit,
         },
       }),
       isRetryable: statusCode >= 500 || statusCode === 429,
@@ -181,6 +243,28 @@ describe("mapProviderError - OpenAI", () => {
 
       expect(result.code).toBe(ChatErrorCode.RateLimit);
       expect(result.isRetryable).toBe(true);
+    });
+
+    it("marks usage-limit budget overages from the proxy", () => {
+      const error = createOpenAIError(
+        429,
+        OpenAIErrorTypes.RATE_LIMIT,
+        "I cannot process this request because the organization-level token cost limit has been exceeded.",
+        "token_cost_limit_exceeded",
+        undefined,
+        {
+          entity_type: "organization",
+          limit_type: "token_cost",
+        },
+      );
+      const result = mapProviderError(error, "openai");
+
+      expect(result.code).toBe(ChatErrorCode.RateLimit);
+      expect(result.usageLimitExceeded).toBe(true);
+      expect(result.usageLimitEntityType).toBe("organization");
+      expect(result.message).toBe(
+        "The organization usage limit budget has been exceeded.",
+      );
     });
   });
 
@@ -1455,6 +1539,55 @@ describe("mapProviderError - Fallback behavior", () => {
     expect(mockSentryCaptureException).not.toHaveBeenCalled();
   });
 
+  it("should map OpenRouter upstream idle timeouts to retryable network errors", () => {
+    // Faithful to the real shape: the mid-stream SSE idle timeout reaches the
+    // mapper as a bare Error (no statusCode/responseBody), whose non-enumerable
+    // message serializes to `{}` in the raw-error field.
+    const error = new Error("Upstream idle timeout exceeded");
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.NetworkError);
+    expect(result.isRetryable).toBe(true);
+    expect(result.message).toBe(ChatErrorMessages[ChatErrorCode.NetworkError]);
+    // The real upstream message is preserved for debugging, unlike the bare
+    // termination case which is rewritten to a generic close message.
+    expect(result.originalError?.message).toBe(
+      "Upstream idle timeout exceeded",
+    );
+  });
+
+  it("should map an idle timeout delivered as an HTTP 408 with a body too", () => {
+    // The other delivery shape: when the timeout fires before the stream opens,
+    // OpenRouter returns HTTP 408 with a body. 408 falls through to Unknown, so
+    // the same message-text reclassification must apply.
+    const error = {
+      statusCode: 408,
+      responseBody: JSON.stringify({
+        error: { code: 408, message: "Upstream idle timeout exceeded" },
+      }),
+    };
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.NetworkError);
+    expect(result.isRetryable).toBe(true);
+  });
+
+  it("should not reclassify a recognized error that mentions idle timeout", () => {
+    const error = {
+      statusCode: 401,
+      responseBody: JSON.stringify({
+        error: {
+          type: OpenAIErrorTypes.AUTHENTICATION,
+          message: "Auth failed while waiting on upstream idle timeout",
+        },
+      }),
+    };
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.Authentication);
+    expect(result.isRetryable).toBe(false);
+  });
+
   it("should handle string errors", () => {
     const result = mapProviderError("Simple string error", "openai");
 
@@ -1665,5 +1798,192 @@ describe("ProviderError", () => {
       traceId: "trace-123",
       spanId: "span-123",
     });
+  });
+
+  it("preserves usage-limit metadata in the frontend error payload", () => {
+    expect(
+      sanitizeChatErrorForFrontend({
+        code: ChatErrorCode.RateLimit,
+        message: "The organization usage limit budget has been exceeded.",
+        isRetryable: true,
+        usageLimitExceeded: true,
+        usageLimitEntityType: "organization",
+        originalError: {
+          provider: "openai",
+          status: 429,
+          message: "Internal limit detail",
+        },
+      }),
+    ).toEqual({
+      code: ChatErrorCode.RateLimit,
+      message: "The organization usage limit budget has been exceeded.",
+      isRetryable: true,
+      usageLimitExceeded: true,
+      usageLimitEntityType: "organization",
+    });
+  });
+
+  it("preserves authAction so the connect card renders in slim chat mode", () => {
+    expect(
+      sanitizeChatErrorForFrontend({
+        code: ChatErrorCode.ProviderAuthRequired,
+        message: "Connect your GitHub Copilot account to use this model.",
+        isRetryable: false,
+        authAction: {
+          provider: "github-copilot",
+          providerLabel: "GitHub Copilot",
+        },
+      }),
+    ).toEqual({
+      code: ChatErrorCode.ProviderAuthRequired,
+      message: "Connect your GitHub Copilot account to use this model.",
+      isRetryable: false,
+      authAction: {
+        provider: "github-copilot",
+        providerLabel: "GitHub Copilot",
+      },
+    });
+  });
+});
+
+describe("mapProviderError - EmptyModelResponseError", () => {
+  it("maps a content-filter finish to the non-retryable ContentFiltered card", () => {
+    const result = mapProviderError(
+      new EmptyModelResponseError({
+        finishReason: "content-filter",
+        attempts: 1,
+      }),
+      "openai",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.ContentFiltered);
+    expect(result.isRetryable).toBe(false);
+  });
+
+  it("maps an exhausted stop finish to the retryable EmptyResponse card", () => {
+    const result = mapProviderError(
+      new EmptyModelResponseError({ finishReason: "stop", attempts: 3 }),
+      "openai",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.EmptyResponse);
+    expect(result.isRetryable).toBe(true);
+  });
+
+  it("maps an exhausted error finish to the retryable EmptyResponse card, preserving the raw finish reason", () => {
+    const result = mapProviderError(
+      new EmptyModelResponseError({
+        finishReason: "error",
+        rawFinishReason: "MALFORMED_FUNCTION_CALL",
+        attempts: 3,
+      }),
+      "gemini",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.EmptyResponse);
+    expect(result.isRetryable).toBe(true);
+    expect(result.originalError?.raw).toEqual({
+      finishReason: "error",
+      rawFinishReason: "MALFORMED_FUNCTION_CALL",
+      attempts: 3,
+    });
+  });
+});
+
+describe("mapProviderError - UnsupportedFunctionalityError", () => {
+  it("maps a provider-rejected attachment to a non-retryable InvalidRequest card naming the functionality", () => {
+    const functionality = "file part media type text/csv";
+    const result = mapProviderError(
+      new UnsupportedFunctionalityError({ functionality }),
+      "openai",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+    expect(result.isRetryable).toBe(false);
+    expect(result.message).toContain(functionality);
+    expect(result.originalError?.raw).toEqual({ functionality });
+  });
+});
+
+describe("getUnavailableToolErrorDetails", () => {
+  it("recognizes a NoSuchToolError instance", () => {
+    const details = getUnavailableToolErrorDetails(
+      new NoSuchToolError({
+        toolName: "ghost_tool",
+        availableTools: ["real_tool", "other_tool"],
+      }),
+    );
+
+    expect(details).not.toBeNull();
+    expect(details?.requestedToolName).toBe("ghost_tool");
+    expect(details?.availableToolNames).toEqual(["real_tool", "other_tool"]);
+  });
+
+  it("recognizes the stringified message the SDK emits for the duplicate tool-error part", () => {
+    // runToolsTransformation stringifies the error before onError sees it,
+    // so only the message text is available — no NoSuchToolError identity
+    const details = getUnavailableToolErrorDetails(
+      "Model tried to call unavailable tool 'ghost_tool'. Available tools: real_tool, other_tool.",
+    );
+
+    expect(details).not.toBeNull();
+    expect(details?.requestedToolName).toBe("ghost_tool");
+    expect(details?.availableToolNames).toEqual(["real_tool", "other_tool"]);
+  });
+
+  it("recognizes the message wrapped in a plain Error", () => {
+    const details = getUnavailableToolErrorDetails(
+      new Error(
+        "Model tried to call unavailable tool 'ghost_tool'. Available tools: real_tool.",
+      ),
+    );
+
+    expect(details?.requestedToolName).toBe("ghost_tool");
+    expect(details?.availableToolNames).toEqual(["real_tool"]);
+  });
+
+  it("recognizes the no-tools-available variant", () => {
+    const details = getUnavailableToolErrorDetails(
+      "Model tried to call unavailable tool 'ghost_tool'. No tools are available.",
+    );
+
+    expect(details?.requestedToolName).toBe("ghost_tool");
+    expect(details?.availableToolNames).toEqual([]);
+  });
+
+  it("produces identical formatted payloads for the instance and its stringified duplicate", () => {
+    const instance = new NoSuchToolError({
+      toolName: "ghost_tool",
+      availableTools: ["real_tool"],
+    });
+
+    const fromInstance = getUnavailableToolErrorDetails(instance);
+    const fromString = getUnavailableToolErrorDetails(instance.message);
+
+    expect(fromInstance).not.toBeNull();
+    expect(fromString).not.toBeNull();
+    if (!fromInstance || !fromString) return;
+    expect(formatUnavailableToolErrorDetails(fromString)).toBe(
+      formatUnavailableToolErrorDetails(fromInstance),
+    );
+  });
+
+  it("does not match its own formatted recovery payload", () => {
+    const details = getUnavailableToolErrorDetails(
+      "Model tried to call unavailable tool 'ghost_tool'. Available tools: real_tool.",
+    );
+    expect(details).not.toBeNull();
+    if (!details) return;
+
+    const formatted = formatUnavailableToolErrorDetails(details);
+    expect(getUnavailableToolErrorDetails(formatted)).toBeNull();
+    expect(getUnavailableToolErrorDetails(new Error(formatted))).toBeNull();
+  });
+
+  it("returns null for unrelated errors and non-string values", () => {
+    expect(getUnavailableToolErrorDetails(new Error("boom"))).toBeNull();
+    expect(getUnavailableToolErrorDetails("some other failure")).toBeNull();
+    expect(getUnavailableToolErrorDetails(undefined)).toBeNull();
+    expect(getUnavailableToolErrorDetails({ code: -32601 })).toBeNull();
   });
 });

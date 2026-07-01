@@ -67,6 +67,9 @@ export function CopyableCode({
         ) : (
           <Copy className="h-3 w-3" />
         )}
+        <span className="sr-only">
+          {copied ? "Copied!" : "Copy to clipboard"}
+        </span>
       </Button>
     </div>
   );

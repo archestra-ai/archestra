@@ -1,6 +1,9 @@
 "use client";
 
-import type { ResourceVisibilityScope, SupportedProvider } from "@shared";
+import type {
+  ResourceVisibilityScope,
+  SupportedProvider,
+} from "@archestra/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { useUpdateConversation } from "@/lib/chat/chat.query";

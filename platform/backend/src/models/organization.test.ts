@@ -1,4 +1,4 @@
-import { DEFAULT_THEME_ID } from "@shared";
+import { DEFAULT_THEME_ID } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
@@ -679,6 +679,36 @@ describe("OrganizationModel", () => {
       const fetched = await OrganizationModel.getById(org.id);
       expect(fetched).not.toBeNull();
       expect(fetched?.defaultAgentId).toBe(agent.id);
+    });
+  });
+
+  describe("enableSkillToolsForAllOrgs", () => {
+    test("flips orgs that haven't opted in and leaves enabled ones untouched", async ({
+      makeOrganization,
+    }) => {
+      const offOrg = await makeOrganization();
+      const onOrg = await makeOrganization();
+      await OrganizationModel.patch(onOrg.id, { skillToolsEnabled: true });
+
+      const flipped = await OrganizationModel.enableSkillToolsForAllOrgs();
+
+      // Only the org that was off counts as flipped.
+      expect(flipped).toBe(1);
+      expect(
+        (await OrganizationModel.getById(offOrg.id))?.skillToolsEnabled,
+      ).toBe(true);
+      expect(
+        (await OrganizationModel.getById(onOrg.id))?.skillToolsEnabled,
+      ).toBe(true);
+    });
+
+    test("is idempotent — a second run flips nothing", async ({
+      makeOrganization,
+    }) => {
+      await makeOrganization();
+
+      expect(await OrganizationModel.enableSkillToolsForAllOrgs()).toBe(1);
+      expect(await OrganizationModel.enableSkillToolsForAllOrgs()).toBe(0);
     });
   });
 });

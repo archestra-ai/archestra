@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { type Mock, type MockInstance, vi } from "vitest";
 import db, { schema } from "@/database";
-import { McpPresetEntryModel, McpServerModel } from "@/models";
+import { McpServerModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -157,73 +157,6 @@ describe("PUT /api/internal_mcp_catalog/:id — metadata-only edit cascade", () 
         (patch as { reinstallRequired?: boolean }).reinstallRequired === true,
     );
     expect(flaggedForManual).toBe(true);
-  });
-
-  test("description-only PUT does not cascade-reinstall children installs (authorName asymmetry regression)", async ({
-    makeMcpServer,
-  }) => {
-    // Regression: parent cascade compares `originalChild` (list shape,
-    // no `authorName`) against `Model.update`'s return (has `authorName`).
-    // Without `authorName` in IGNORED, every child with an author would
-    // auto-reinstall on a description-only parent edit.
-    const parent = await createCatalog({
-      name: "child-cascade-authorname-regression",
-      serverType: "local",
-      description: "original",
-      localConfig: {
-        command: "node",
-        arguments: ["server.js"],
-        environment: [],
-      },
-    });
-    const entry = await McpPresetEntryModel.create({
-      organizationId,
-      name: "child-cascade-prod",
-    });
-    const childCreate = await app.inject({
-      method: "POST",
-      url: `/api/internal_mcp_catalog/${parent.id}/children`,
-      payload: { presetEntryId: entry.id, presetFieldValues: {} },
-    });
-    if (childCreate.statusCode !== 200) {
-      throw new Error(
-        `child create failed: ${childCreate.statusCode} ${childCreate.body}`,
-      );
-    }
-    const child = childCreate.json();
-    const installedOnChild = await makeMcpServer({
-      catalogId: child.id,
-      ownerId: user.id,
-      scope: "personal",
-    });
-
-    const updateSpy = vi.spyOn(McpServerModel, "update");
-
-    const putResponse = await app.inject({
-      method: "PUT",
-      url: `/api/internal_mcp_catalog/${parent.id}`,
-      payload: {
-        name: "child-cascade-authorname-regression",
-        serverType: "local",
-        description: "rewritten",
-        localConfig: {
-          command: "node",
-          arguments: ["server.js"],
-          environment: [],
-        },
-      },
-    });
-
-    expect(putResponse.statusCode).toBe(200);
-
-    await assertCascadeDidNotFire(updateSpy);
-
-    const [childInstallRow] = await db
-      .select()
-      .from(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.id, installedOnChild.id));
-    expect(childInstallRow.localInstallationStatus).toBe("idle");
-    expect(childInstallRow.reinstallRequired).toBe(false);
   });
 
   test("description-only PUT on a secret-bag catalog does not cascade (expandSecrets asymmetry regression)", async ({

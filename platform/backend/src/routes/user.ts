@@ -1,4 +1,4 @@
-import { PermissionsSchema, RouteId } from "@shared";
+import { PermissionsSchema, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getUserPermissions, listImpersonableUsers } from "@/services/user";

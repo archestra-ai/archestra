@@ -1,5 +1,5 @@
-import { archestraApiSdk, type Permissions } from "@shared";
-import { requiredPagePermissionsMap } from "@shared/access-control";
+import { archestraApiSdk, type Permissions } from "@archestra/shared";
+import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { hasPermissions } from "@/lib/auth/auth.utils";
 import { getServerApiHeaders } from "@/lib/utils/server";
 

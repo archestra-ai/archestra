@@ -1,4 +1,4 @@
-import { E2eTestId, MEMBER_ROLE_NAME } from "@shared";
+import { E2eTestId, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { expect, test } from "../fixtures";
 
 test("admin can impersonate a member and return to admin via banner", async ({

@@ -73,6 +73,7 @@ prev-static-assets/*
 tsconfig.tsbuildinfo
 benchmark-config.env
 archestra-rs/sandbox-rs/index.js
+archestra-rs/app-runtime-rs/index.js
 
 # Playwright
 /playwright/
@@ -89,3 +90,6 @@ specs/
 
 # project-local binaries bootstrapped by dev scripts (e.g., dagger CLI)
 dev/bin/
+
+# local kubeconfigs (may embed live ServiceAccount tokens) — never commit
+*.kubeconfig

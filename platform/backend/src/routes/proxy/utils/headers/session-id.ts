@@ -1,14 +1,26 @@
-import { SESSION_ID_HEADER } from "@shared";
+import {
+  CLAUDE_METADATA_SESSION_SOURCE,
+  SESSION_ID_HEADER,
+} from "@archestra/shared";
 import { getHeaderValue, parseMetaHeader } from "./meta-header";
 
 const OPENWEBUI_CHAT_ID_HEADER = "x-openwebui-chat-id";
 
 /**
- * Session source indicates where the session ID was extracted from.
- * This is stored in the database and displayed in the UI.
+ * Session source indicates where the session ID was extracted from. This is
+ * stored in the database and is purely about *provenance of the session id* —
+ * it does NOT identify the client app. Client-app attribution lives in the
+ * `external_agent_id` column (see {@link ./client-app}).
+ *
+ * `claude_metadata` covers every Claude/Anthropic `metadata.user_id` shape
+ * (the unified `{…,"session_id":…}` JSON and the legacy
+ * `user_…_session_<uuid>` string), which Anthropic no longer differentiates by
+ * client. Legacy rows may still carry `claude_code` / `claude_desktop`; read
+ * paths treat those as equivalent via `isClaudeSessionSource`
+ * (`@archestra/shared`).
  */
 export type SessionSource =
-  | "claude_code"
+  | typeof CLAUDE_METADATA_SESSION_SOURCE
   | "header"
   | "meta_header"
   | "openwebui_chat"
@@ -28,7 +40,7 @@ export interface SessionInfo {
  * 1. Explicit X-Archestra-Session-Id header (source: 'header')
  * 2. X-Archestra-Meta third segment (source: 'meta_header')
  * 3. Open WebUI X-OpenWebUI-Chat-Id header (source: 'openwebui_chat')
- * 4. Claude Code metadata.user_id field containing session UUID (source: 'claude_code')
+ * 4. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
  * 5. OpenAI user field (source: 'openai_user')
  *
  * @param headers - The request headers object
@@ -60,14 +72,13 @@ export function extractSessionInfo(
     return { sessionId: openwebuiChatId, sessionSource: "openwebui_chat" };
   }
 
-  // Priority 4: Claude Code metadata format
-  // Format: user_{hash}_account_{account_id}_session_{session_uuid}
-  const metadataUserId = body?.metadata?.user_id;
-  if (metadataUserId) {
-    const match = metadataUserId.match(/session_([a-f0-9-]+)/i);
-    if (match) {
-      return { sessionId: match[1], sessionSource: "claude_code" };
-    }
+  // Priority 4: Claude/Anthropic metadata.user_id (any known format)
+  const claudeSessionId = parseClaudeMetadataSessionId(body?.metadata?.user_id);
+  if (claudeSessionId) {
+    return {
+      sessionId: claudeSessionId,
+      sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+    };
   }
 
   // Priority 5: OpenAI user field (some clients use this for session tracking)
@@ -77,4 +88,56 @@ export function extractSessionInfo(
   }
 
   return { sessionId: null, sessionSource: null };
+}
+
+/**
+ * Extract a session id from a Claude/Anthropic `metadata.user_id` value,
+ * trying every known format (newest first):
+ *
+ * - Unified JSON string carrying the session id, e.g.
+ *   `{"device_id":"…","account_uuid":"…","session_id":"<uuid>"}` — sent by all
+ *   current Claude clients (Claude Code, Cowork/Desktop, VSCode).
+ * - Legacy plain string `user_<hash>_account_<id>_session_<uuid>` — older
+ *   Claude Code versions still in the wild.
+ *
+ * Returns the trimmed session id, or `null` when the value is absent or matches
+ * no known Claude format. Kept format-exhaustive for backward compatibility.
+ */
+function parseClaudeMetadataSessionId(
+  userId: string | null | undefined,
+): string | null {
+  if (!userId) {
+    return null;
+  }
+
+  // Unified JSON format.
+  if (userId.trimStart().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(userId) as { session_id?: unknown };
+      if (typeof parsed.session_id === "string" && parsed.session_id.trim()) {
+        return parsed.session_id.trim();
+      }
+    } catch {
+      // Not JSON — fall through to the legacy string format.
+    }
+  }
+
+  // Legacy `..._session_<uuid>` string format.
+  const match = userId.match(/session_([a-f0-9-]+)/i);
+  if (match) {
+    return match[1];
+  }
+
+  return null;
+}
+
+/**
+ * Whether a `metadata.user_id` value matches any known Claude/Anthropic format.
+ * Used by client-app auto-discovery to attribute a request to the generic
+ * Claude client id.
+ */
+export function isClaudeMetadataUserId(
+  userId: string | null | undefined,
+): boolean {
+  return parseClaudeMetadataSessionId(userId) !== null;
 }

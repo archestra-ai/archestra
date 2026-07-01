@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ModelInputModality } from "@shared";
+import type { ModelInputModality } from "@archestra/shared";
 import type pino from "pino";
 import defaultLogger from "@/logging";
 import {
@@ -9,15 +9,14 @@ import {
   KnowledgeBaseConnectorModel,
 } from "@/models";
 import * as metrics from "@/observability/metrics";
-import { secretManager } from "@/secrets-manager";
 import { taskQueueService } from "@/task-queue";
 import type {
   AclEntry,
-  ConnectorCredentials,
   ConnectorDocument,
   KnowledgeBaseConnector,
 } from "@/types";
 import { chunkDocument } from "./chunker";
+import { resolveConnectorCredentials } from "./connector-credentials";
 import {
   BaseConnector,
   extractErrorMessage,
@@ -51,7 +50,7 @@ class ConnectorSyncService {
 
     // Load credentials from secrets manager
     const [credentials, documentAcl] = await Promise.all([
-      this.loadCredentials(connector.secretId, log),
+      resolveConnectorCredentials(connector),
       this.buildDocumentAccessControlList(connector),
     ]);
 
@@ -594,28 +593,6 @@ class ConnectorSyncService {
       { documentId, chunkCount: chunks.length },
       "Document chunked and stored",
     );
-  }
-
-  private async loadCredentials(
-    secretId: string | null,
-    log: pino.Logger,
-  ): Promise<ConnectorCredentials> {
-    if (!secretId) {
-      throw new Error("Connector has no associated secret");
-    }
-
-    const secret = await secretManager().getSecret(secretId);
-    if (!secret) {
-      throw new Error(`Secret not found: ${secretId}`);
-    }
-
-    log.debug({ secretId }, "Credentials loaded");
-
-    const data = secret.secret as Record<string, unknown>;
-    return {
-      email: (data.email as string) || "",
-      apiToken: (data.apiToken as string) || "",
-    };
   }
 
   private buildDocumentAccessControlList(

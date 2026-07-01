@@ -9,17 +9,20 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "@shared/access-control": path.resolve(
+      "@archestra/shared/access-control": path.resolve(
         __dirname,
         "../shared/access-control.ts",
       ),
-      "@shared": path.resolve(__dirname, "../shared/index.ts"),
+      "@archestra/shared": path.resolve(__dirname, "../shared/index.ts"),
     },
   },
   test: {
     globals: true,
     include: ["./src/**/*.test.ts"],
     environment: "node",
+    // Build the migrated schema once and snapshot it (see global-setup.ts); each test
+    // file's beforeAll then loads the snapshot instead of replaying all migrations.
+    globalSetup: ["./src/test/global-setup.ts"],
     setupFiles: ["./src/test/setup.ts"],
 
     /**

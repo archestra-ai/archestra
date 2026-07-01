@@ -3,10 +3,11 @@
  * When these proxies return a 400 with "maximum input length of N tokens",
  * we parse the limit, trim messages, and retry the request.
  */
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
 import { APICallError, type ModelMessage } from "ai";
+import { TOKEN_ESTIMATE } from "./normalization/estimate-message-tokens";
 
-const CHARS_PER_TOKEN = 4;
+const CHARS_PER_TOKEN = TOKEN_ESTIMATE.charsPerToken;
 
 /**
  * Gemini can emit tool-call chunks before any text. Probing textStream to detect

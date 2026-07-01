@@ -1,14 +1,16 @@
+import { type RouteId, SupportedProviders } from "@archestra/shared";
+import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import * as Sentry from "@sentry/node";
-import { type RouteId, SupportedProviders } from "@shared";
-import { requiredEndpointPermissionsMap } from "@shared/access-control";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import { ServiceAccountModel, UserModel } from "@/models";
 import { MODEL_ROUTER_PREFIX } from "@/routes/proxy/common";
+import { getPublicRequestOrigin } from "@/routes/request-origin";
 import {
   ARCHESTRA_CATALOG_PROXY_PREFIX,
+  CONNECTION_SETUP_SCRIPT_PREFIX,
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
   METRICS_PATH,
@@ -19,10 +21,14 @@ import {
   WELL_KNOWN_ACME_PREFIX,
   WELL_KNOWN_OAUTH_PREFIX,
 } from "@/routes/route-paths";
+import {
+  appIdFromConnectorPath,
+  connectorWwwAuthenticate,
+} from "@/services/apps/app-connector-resource";
 import { ApiError } from "@/types";
 
 export class Authnz {
-  public handle = async (request: FastifyRequest, _reply: FastifyReply) => {
+  public handle = async (request: FastifyRequest, reply: FastifyReply) => {
     const requestId = request.id;
 
     // custom logic to skip auth check
@@ -36,6 +42,10 @@ export class Authnz {
         { requestId, url: request.url },
         "[Authnz] Authentication failed",
       );
+      // A credential-less request to an MCP App connector gets the RFC 9728
+      // challenge here (it has no Bearer header, so it was not skipped above and
+      // never reaches the route); an invalid Bearer token is challenged in-route.
+      this.maybeSetConnectorChallenge(request, reply);
       throw new ApiError(401, "Unauthenticated");
     }
 
@@ -45,7 +55,7 @@ export class Authnz {
     );
 
     // Populate request.user and request.organizationId after successful authentication
-    await this.populateUserInfo(request);
+    await this.populateUserInfo(request, reply);
 
     // Guard: if populateUserInfo silently failed, user info is missing
     if (!request.user || !request.organizationId) {
@@ -92,13 +102,17 @@ export class Authnz {
   private shouldSkipAuthCheck = async ({
     url,
     method,
+    headers,
   }: FastifyRequest): Promise<boolean> => {
     // Skip CORS preflight and HEAD requests globally
     if (method === "OPTIONS" || method === "HEAD") {
-      // marketplace URLs embed a raw share token — omit from trace to avoid leaking it
-      const safeUrl = url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`)
-        ? undefined
-        : url;
+      // marketplace and connection-setup URLs embed a raw token — omit from
+      // trace to avoid leaking it
+      const safeUrl =
+        url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`) ||
+        url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)
+          ? undefined
+          : url;
       logger.trace(
         { url: safeUrl, method },
         "[Authnz] Skipping auth for preflight/HEAD request",
@@ -124,9 +138,20 @@ export class Authnz {
       url === METRICS_PATH ||
       url === "/test" ||
       url.startsWith(config.mcpGateway.endpoint) ||
+      // MCP App connector: a Bearer request (a personal token or the native
+      // OAuth flow's audience-bound token) is validated in-route, so it stands
+      // down here. A session request carries no Bearer and falls through to the
+      // normal session auth below (unchanged); a credential-less request also
+      // falls through and is answered with the RFC 9728 challenge in handle().
+      (appIdFromConnectorPath(url) !== null &&
+        typeof headers.authorization === "string" &&
+        /^Bearer\s+/i.test(headers.authorization)) ||
       // Public skill marketplace git endpoint: token in URL, no session
       url === config.skillMarketplace.endpoint ||
       url.startsWith(`${config.skillMarketplace.endpoint}/`) ||
+      // Public connection-setup script endpoint: one-time token in URL, no session
+      (method === "GET" &&
+        url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway
       url.startsWith(config.a2aGateway.endpoint) ||
       url.startsWith(config.a2aV2Gateway.endpoint) ||
@@ -160,14 +185,35 @@ export class Authnz {
     return false;
   };
 
+  private maybeSetConnectorChallenge = (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): void => {
+    // Dark when the feature is off: no OAuth challenge that would advertise the
+    // connector mechanism exists.
+    if (!config.apps.enabled) {
+      return;
+    }
+    const appId = appIdFromConnectorPath(request.url);
+    if (!appId) {
+      return;
+    }
+    reply.header(
+      "WWW-Authenticate",
+      connectorWwwAuthenticate(getPublicRequestOrigin(request), appId),
+    );
+  };
+
   private isAuthenticated = async (request: FastifyRequest) => {
     const headers = new Headers(request.headers as HeadersInit);
 
     try {
       logger.trace("[Authnz] Attempting session-based authentication");
-      const session = await betterAuth.api.getSession({
+      // Reads the short-lived cookie cache when present (see session.cookieCache
+      // in better-auth config), falling back to the session table on a miss.
+      const { response: session } = await betterAuth.api.getSession({
         headers,
-        query: { disableCookieCache: true },
+        returnHeaders: true,
       });
 
       if (session) {
@@ -203,12 +249,19 @@ export class Authnz {
         );
       }
 
-      const serviceAccountResult =
-        await ServiceAccountModel.verifyToken(authHeader);
-      if (serviceAccountResult) {
-        request.serviceAccountAuthResult = serviceAccountResult;
-        logger.trace("[Authnz] Service account token verification succeeded");
-        return true;
+      try {
+        const serviceAccountResult =
+          await ServiceAccountModel.verifyToken(authHeader);
+        if (serviceAccountResult) {
+          request.serviceAccountAuthResult = serviceAccountResult;
+          logger.trace("[Authnz] Service account token verification succeeded");
+          return true;
+        }
+      } catch (error) {
+        logger.warn(
+          { error: error instanceof Error ? error.message : "unknown" },
+          "[Authnz] Service account token verification errored, treating as unauthenticated",
+        );
       }
     }
 
@@ -277,17 +330,24 @@ export class Authnz {
     return result;
   };
 
-  private populateUserInfo = async (request: FastifyRequest): Promise<void> => {
+  private populateUserInfo = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
     try {
       const headers = new Headers(request.headers as HeadersInit);
 
       // Try session-based authentication first
       try {
         logger.trace("[Authnz] populateUserInfo: trying session-based lookup");
-        const session = await betterAuth.api.getSession({
-          headers,
-          query: { disableCookieCache: true },
-        });
+        // returnHeaders so we can forward better-auth's refreshed cookie-cache
+        // Set-Cookie back to the client. Without this the cache would only be
+        // rewritten by the dedicated /api/auth/get-session endpoint, so the
+        // short TTL would lapse between those calls and most API requests would
+        // still hit the session table.
+        const { response: session, headers: authHeaders } =
+          await betterAuth.api.getSession({ headers, returnHeaders: true });
+        this.forwardSessionCookies(reply, authHeaders);
 
         if (session?.user?.id) {
           logger.trace(
@@ -370,6 +430,22 @@ export class Authnz {
         { error: error instanceof Error ? error.message : "unknown" },
         "[Authnz] populateUserInfo: failed to populate user info",
       );
+    }
+  };
+
+  /**
+   * Forward any Set-Cookie headers better-auth produced (the refreshed
+   * cookie-cache cookie) onto the Fastify reply, so the next request can
+   * validate the session from the cookie instead of the database. Only
+   * Set-Cookie is copied to avoid clobbering other response headers.
+   */
+  private forwardSessionCookies = (
+    reply: FastifyReply,
+    authHeaders: Headers,
+  ): void => {
+    const setCookies = authHeaders.getSetCookie();
+    if (setCookies.length > 0) {
+      reply.header("set-cookie", setCookies);
     }
   };
 

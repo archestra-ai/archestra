@@ -1,9 +1,12 @@
+import { ChatErrorCode } from "@archestra/shared";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
+import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import MessageModel from "@/models/message";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -101,6 +104,56 @@ describe("chat conversation and message routes", () => {
     expect(unpinResponse.json().pinnedAt).toBeNull();
   });
 
+  test("marking a conversation read clears its unread flag in the list", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant", parts: [{ type: "text", text: "hi" }] },
+    });
+
+    const before = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations",
+    });
+    expect(before.json()[0].unread).toBe(true);
+    // The owner's private read marker must never reach the client (a shared
+    // viewer would otherwise see when the owner last read the chat).
+    expect(before.json()[0]).not.toHaveProperty("lastReadAt");
+
+    const readResponse = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/read`,
+    });
+    expect(readResponse.statusCode).toBe(200);
+    expect(readResponse.json()).toEqual({ success: true });
+
+    const after = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations",
+    });
+    expect(after.json()[0].unread).toBe(false);
+  });
+
+  test("marking an unknown conversation read returns 404", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations/00000000-0000-4000-8000-000000000000/read",
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
   test("rejects a conversation update that sets a model without an API key", async ({
     makeAgent,
   }) => {
@@ -182,6 +235,38 @@ describe("chat conversation and message routes", () => {
         }),
       ],
     });
+  });
+
+  test("keeps the project link when forking own conversation in a project", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const project = await projectService.create({
+      organizationId,
+      userId: currentUser.id,
+      name: "own-project",
+      description: null,
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      projectId: project.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/fork`,
+      payload: { agentId: agent.id },
+    });
+
+    expect(response.statusCode).toBe(200);
+    // The owner can always access their own project, so the fork stays in it.
+    expect(response.json().projectId).toBe(project.id);
   });
 
   test("forks an accessible scheduled run conversation for the current user", async ({
@@ -674,5 +759,345 @@ describe("chat conversation and message routes", () => {
       id: firstMessage.id,
       parts: [{ type: "text", text: "Updated text" }],
     });
+  });
+});
+
+describe("chat conversation creation in projects", () => {
+  let app: FastifyInstanceWithZod;
+  let currentUser: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    currentUser = await makeUser();
+    organizationId = (await makeOrganization()).id;
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: User }).user = currentUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+    const { default: chatRoutes } = await import("./routes");
+    await app.register(chatRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("a chat created with projectId belongs to the project", async ({
+    makeAgent,
+  }) => {
+    const { projectService } = await import("@/services/project");
+    const project = await projectService.create({
+      organizationId,
+      userId: currentUser.id,
+      name: "chat-home",
+      description: null,
+    });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations",
+      payload: { agentId: agent.id, projectId: project.id },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ projectId: project.id });
+  });
+
+  test("an inaccessible or unknown project 404s", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const stranger = await makeUser({ email: "proj-chat-stranger@test.com" });
+    const { projectService } = await import("@/services/project");
+    const theirProject = await projectService.create({
+      organizationId,
+      userId: stranger.id,
+      name: "not-yours",
+      description: null,
+    });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+
+    const denied = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations",
+      payload: { agentId: agent.id, projectId: theirProject.id },
+    });
+    expect(denied.statusCode).toBe(404);
+
+    const unknown = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations",
+      payload: {
+        agentId: agent.id,
+        projectId: "00000000-0000-0000-0000-000000000000",
+      },
+    });
+    expect(unknown.statusCode).toBe(404);
+  });
+});
+
+describe("project chats: read-only access for project members", () => {
+  let app: FastifyInstanceWithZod;
+  let author: User;
+  let actingUser: User;
+  let organizationId: string;
+  let agentId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember, makeAgent }) => {
+    author = await makeUser();
+    organizationId = (await makeOrganization()).id;
+    await makeMember(author.id, organizationId, { role: "admin" });
+    actingUser = author;
+    agentId = (
+      await makeAgent({
+        organizationId,
+        authorId: author.id,
+        scope: "personal",
+      })
+    ).id;
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: User }).user = actingUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+    const { default: chatRoutes } = await import("./routes");
+    await app.register(chatRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  async function seedProjectChat(params: { shared: boolean }) {
+    const { projectService } = await import("@/services/project");
+    const { ProjectShareModel } = await import("@/models");
+    const project = await projectService.create({
+      organizationId,
+      userId: author.id,
+      name: `ro-${params.shared ? "shared" : "private"}`,
+      description: null,
+    });
+    if (params.shared) {
+      await ProjectShareModel.upsert({
+        projectId: project.id,
+        organizationId,
+        createdByUserId: author.id,
+        visibility: "organization",
+        teamIds: [],
+      });
+    }
+    const conversation = await ConversationModel.create({
+      userId: author.id,
+      organizationId,
+      agentId,
+      projectId: project.id,
+    });
+    return { project, conversation };
+  }
+
+  test("a member of a shared project can read the chat but not mutate it", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const { conversation } = await seedProjectChat({ shared: true });
+    const member = await makeUser({ email: "ro-member@test.com" });
+    await makeMember(member.id, organizationId, {});
+    actingUser = member;
+
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(read.statusCode).toBe(200);
+    expect(read.json()).toMatchObject({ id: conversation.id });
+
+    const rename = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/conversations/${conversation.id}`,
+      payload: { title: "hijacked" },
+    });
+    expect([403, 404]).toContain(rename.statusCode);
+
+    // the delete model call is owner-scoped, so a member's DELETE is a no-op
+    // (the route's 200 is pre-existing "idempotent delete" semantics).
+    await app.inject({
+      method: "DELETE",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    const stillThere = await ConversationModel.findById({
+      id: conversation.id,
+      userId: author.id,
+      organizationId,
+    });
+    expect(stillThere).not.toBeNull();
+  });
+
+  test("chats in unshared projects stay invisible to others", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const { conversation } = await seedProjectChat({ shared: false });
+    const outsider = await makeUser({ email: "ro-outsider@test.com" });
+    await makeMember(outsider.id, organizationId, {});
+    actingUser = outsider;
+
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(read.statusCode).toBe(404);
+  });
+});
+
+describe("conversation list projectName", () => {
+  let app: FastifyInstanceWithZod;
+  let currentUser: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    currentUser = await makeUser();
+    organizationId = (await makeOrganization()).id;
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: User }).user = currentUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+    const { default: chatRoutes } = await import("./routes");
+    await app.register(chatRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("project chats carry projectName; plain chats carry null", async ({
+    makeAgent,
+  }) => {
+    const { projectService } = await import("@/services/project");
+    const project = await projectService.create({
+      organizationId,
+      userId: currentUser.id,
+      name: "chip-source",
+      description: null,
+    });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      projectId: project.id,
+      title: "in project",
+    });
+    await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "plain",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations",
+    });
+    expect(response.statusCode).toBe(200);
+    const body =
+      response.json<
+        Array<{ title: string | null; projectName: string | null }>
+      >();
+    const byTitle = Object.fromEntries(body.map((c) => [c.title, c]));
+    expect(byTitle["in project"].projectName).toBe("chip-source");
+    expect(byTitle.plain.projectName).toBeNull();
+  });
+
+  test("clears a conversation's recorded chat errors", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    await ConversationChatErrorModel.create({
+      conversationId: conversation.id,
+      error: {
+        code: ChatErrorCode.ServerError,
+        message: "boom",
+        isRetryable: true,
+      },
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/chat/conversations/${conversation.id}/chat-errors`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
+    expect(
+      await ConversationChatErrorModel.findByConversation(conversation.id),
+    ).toHaveLength(0);
+  });
+
+  test("returns 404 when clearing chat errors on another user's conversation", async ({
+    makeUser,
+    makeAgent,
+  }) => {
+    const otherUser = await makeUser();
+    const agent = await makeAgent({
+      organizationId,
+      authorId: otherUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: otherUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    await ConversationChatErrorModel.create({
+      conversationId: conversation.id,
+      error: {
+        code: ChatErrorCode.ServerError,
+        message: "boom",
+        isRetryable: true,
+      },
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/chat/conversations/${conversation.id}/chat-errors`,
+    });
+
+    // Owner-scoped lookup: the current user doesn't own it, so it's 404 and the
+    // other user's error is left intact.
+    expect(response.statusCode).toBe(404);
+    expect(
+      await ConversationChatErrorModel.findByConversation(conversation.id),
+    ).toHaveLength(1);
   });
 });

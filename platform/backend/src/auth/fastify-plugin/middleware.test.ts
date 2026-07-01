@@ -1,7 +1,8 @@
+import { SupportedProviders } from "@archestra/shared";
 import * as Sentry from "@sentry/node";
-import { SupportedProviders } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { vi } from "vitest";
+import config from "@/config";
 import { afterEach, describe, expect, test } from "@/test";
 import { Authnz } from "./middleware";
 
@@ -491,16 +492,19 @@ describe("Authnz", () => {
       const { betterAuth } = await import("@/auth");
       const { UserModel } = await import("@/models");
       const { requiredEndpointPermissionsMap } = await import(
-        "@shared/access-control"
+        "@archestra/shared/access-control"
       );
 
       const fakeOrgId = "org-session-test";
       const fakeUserId = "user-session-test";
 
       vi.spyOn(betterAuth.api, "getSession").mockResolvedValue({
-        user: { id: fakeUserId },
-        session: { id: "session-abc" },
-      } as Awaited<ReturnType<typeof betterAuth.api.getSession>>);
+        response: {
+          user: { id: fakeUserId },
+          session: { id: "session-abc" },
+        },
+        headers: new Headers(),
+      } as unknown as Awaited<ReturnType<typeof betterAuth.api.getSession>>);
 
       vi.spyOn(UserModel, "getById").mockResolvedValue({
         id: fakeUserId,
@@ -546,7 +550,7 @@ describe("Authnz", () => {
       const { betterAuth } = await import("@/auth");
       const { UserModel } = await import("@/models");
       const { requiredEndpointPermissionsMap } = await import(
-        "@shared/access-control"
+        "@archestra/shared/access-control"
       );
 
       const fakeOrgId = "org-apikey-test";
@@ -683,6 +687,75 @@ describe("Authnz", () => {
       expect(() => {
         authnz.setSentryUserContext(mockUser, mockRequest);
       }).not.toThrow();
+    });
+  });
+
+  describe("MCP App connector auth", () => {
+    const CONNECTOR_URL = "/api/mcp/app/11111111-1111-1111-1111-111111111111";
+    const makeReply = () =>
+      ({
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+        header: vi.fn().mockReturnThis(),
+      }) as unknown as FastifyReply;
+
+    test("stands down for a Bearer connector request (validated in-route)", async () => {
+      const mockRequest = {
+        url: CONNECTOR_URL,
+        method: "POST",
+        headers: { authorization: "Bearer connector-token" },
+      } as FastifyRequest;
+      const mockReply = makeReply();
+
+      await authnz.handle(mockRequest, mockReply);
+
+      // Skipped here so the route validates the token; no auth failure, no challenge.
+      expect(mockReply.status).not.toHaveBeenCalled();
+      expect(mockReply.send).not.toHaveBeenCalled();
+      expect(mockReply.header).not.toHaveBeenCalled();
+    });
+
+    test("challenges a credential-less connector request (RFC 9728) when apps are enabled", async () => {
+      const original = config.apps.enabled;
+      (config.apps as { enabled: boolean }).enabled = true;
+      try {
+        const mockRequest = {
+          url: CONNECTOR_URL,
+          method: "POST",
+          headers: { host: "localhost:9000" },
+        } as FastifyRequest;
+        const mockReply = makeReply();
+
+        await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+          "Unauthenticated",
+        );
+        expect(mockReply.header).toHaveBeenCalledWith(
+          "WWW-Authenticate",
+          expect.stringContaining("resource_metadata"),
+        );
+      } finally {
+        (config.apps as { enabled: boolean }).enabled = original;
+      }
+    });
+
+    test("does not challenge a connector request when apps are disabled (dark)", async () => {
+      const original = config.apps.enabled;
+      (config.apps as { enabled: boolean }).enabled = false;
+      try {
+        const mockRequest = {
+          url: CONNECTOR_URL,
+          method: "POST",
+          headers: { host: "localhost:9000" },
+        } as FastifyRequest;
+        const mockReply = makeReply();
+
+        await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+          "Unauthenticated",
+        );
+        expect(mockReply.header).not.toHaveBeenCalled();
+      } finally {
+        (config.apps as { enabled: boolean }).enabled = original;
+      }
     });
   });
 });

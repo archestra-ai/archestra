@@ -21,7 +21,7 @@ The fact that you're reading this means that you're willing to give it a try. Fi
 
 ```bash
 docker pull archestra/platform:latest;
-docker run -p 9000:9000 -p 3000:3000 \
+docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
    -e ARCHESTRA_QUICKSTART=true \
    -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
@@ -33,13 +33,15 @@ docker run -p 9000:9000 -p 3000:3000 \
 
 ```powershell
 docker pull archestra/platform:latest;
-docker run -p 9000:9000 -p 3000:3000 `
+docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 `
    -e ARCHESTRA_QUICKSTART=true `
    -v /var/run/docker.sock:/var/run/docker.sock `
    -v archestra-postgres-data:/var/lib/postgresql/data `
    -v archestra-app-data:/app/data `
    archestra/platform;
 ```
+
+The UI and API are bound to `127.0.0.1`, so you can open them locally at http://localhost:3000 and http://localhost:9000.
 
 Once it's up, follow http://localhost:3000
 

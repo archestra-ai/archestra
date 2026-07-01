@@ -27,11 +27,17 @@ Keep `dagger-sdk` in `Cargo.toml` in sync with `DAGGER_VERSION` in the platform
 `Dockerfile` and the managed Dagger Helm charts;
 `scripts/check-dagger-version-sync.sh` enforces this in CI.
 
-## Tracing
+## Tracing & telemetry
 
 Public async functions open `tracing` spans with `skip_all` and attach the
-incoming W3C `traceparent` as a remote parent in the shared `with_dagger`
-entrypoint. The host process must install a `tracing-opentelemetry` subscriber
-before calling the core — in the N-API host this happens once during backend
-observability startup, and in a daemon it belongs in server bootstrap before
-routes are registered.
+caller's W3C `traceparent` as a remote parent, so these spans nest under the
+originating trace instead of starting new roots.
+
+The crate owns its telemetry pipeline rather than borrowing the host's.
+`telemetry::init()` — gated by the `telemetry` feature and idempotent — installs
+a process-global OTLP exporter for traces and logs under
+`service.name=archestra-sandbox-rs`, aimed at the same collector the Node SDK
+uses. The N-API binding calls `init()` on every entry point, so the host
+forwards a `traceparent` but registers no subscriber for this crate. Call
+`flushTelemetry` (`telemetry::flush()`) on graceful shutdown to drain the final
+export batch.

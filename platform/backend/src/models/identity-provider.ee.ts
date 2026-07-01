@@ -1,10 +1,13 @@
-import type { SSOOptions } from "@better-auth/sso";
-import type { IdentityProviderOidcConfig, IdpRoleMappingConfig } from "@shared";
+import type {
+  IdentityProviderOidcConfig,
+  IdpRoleMappingConfig,
+} from "@archestra/shared";
 import {
   IDENTITY_PROVIDER_ID,
   IDENTITY_TRUSTED_PROVIDER_IDS,
   MEMBER_ROLE_NAME,
-} from "@shared";
+} from "@archestra/shared";
+import type { SSOOptions } from "@better-auth/sso";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";

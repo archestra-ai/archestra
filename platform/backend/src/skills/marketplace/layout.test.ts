@@ -22,6 +22,8 @@ function makeSkill(files: SkillFile[]): MaterializeSkillInput {
     content: "# PDF Helper",
     license: null,
     compatibility: null,
+    allowedTools: null,
+    templated: false,
     metadata: {},
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     files,
@@ -53,5 +55,56 @@ describe("computeLayout", () => {
     // no two files in the tree share a case-insensitive path
     const lowered = files.map((f) => f.path.toLowerCase());
     expect(new Set(lowered).size).toBe(lowered.length);
+  });
+
+  test("keeps files whose names merely contain dots but are not `..` segments", () => {
+    const files = computeLayout({
+      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+      marketplaceName: "org-abcd1234-skills",
+      ownerName: "Acme Corp",
+      displayName: "Acme Skills",
+      skills: [
+        makeSkill([
+          makeResourceFile("notes../file.md"),
+          makeResourceFile("..foo/bar.md"),
+        ]),
+      ],
+    });
+
+    // a "notes.." / "..foo" folder is a legitimate segment, not a traversal
+    expect(files.some((f) => /\/notes\.\.\/file\.md$/.test(f.path))).toBe(true);
+    expect(files.some((f) => /\/\.\.foo\/bar\.md$/.test(f.path))).toBe(true);
+  });
+
+  test("drops resource files that traverse out of the skill root", () => {
+    const files = computeLayout({
+      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+      marketplaceName: "org-abcd1234-skills",
+      ownerName: "Acme Corp",
+      displayName: "Acme Skills",
+      skills: [
+        makeSkill([
+          makeResourceFile("../evil.md"),
+          makeResourceFile("a/../../etc.md"),
+        ]),
+      ],
+    });
+
+    expect(files.some((f) => /evil\.md$/.test(f.path))).toBe(false);
+    expect(files.some((f) => /etc\.md$/.test(f.path))).toBe(false);
+  });
+
+  test("drops Windows-style backslash traversal segments", () => {
+    const files = computeLayout({
+      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+      marketplaceName: "org-abcd1234-skills",
+      ownerName: "Acme Corp",
+      displayName: "Acme Skills",
+      skills: [makeSkill([makeResourceFile("..\\evil.md")])],
+    });
+
+    // materialize.ts re-splits stored paths, so a backslash ".." segment must
+    // be rejected too, not just POSIX "../".
+    expect(files.some((f) => /evil\.md$/.test(f.path))).toBe(false);
   });
 });

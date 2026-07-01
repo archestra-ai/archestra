@@ -2,7 +2,8 @@ import {
   getArchestraToolFullName,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
   TOOL_LIST_AGENTS_SHORT_NAME,
-} from "@shared";
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+} from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { AgentTeamModel, OrganizationModel } from "@/models";
 import { describe, expect, test } from "@/test";
@@ -115,6 +116,11 @@ describe("evaluatePolicies", () => {
     expect(result?.allToolCallNames).toEqual(["disabled_tool"]);
     expect(result?.contentMessage).toContain("disabled_tool");
     expect(result?.contentMessage).toContain("not enabled");
+    // non-first-person and steered at the discovery path (see PR #5395)
+    expect(result?.contentMessage).not.toContain("I attempted");
+    expect(result?.contentMessage).toContain(
+      archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME),
+    );
   });
 
   test("white-labeled built-in tools bypass enabledToolNames filtering", async ({

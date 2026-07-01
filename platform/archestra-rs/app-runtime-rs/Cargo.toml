@@ -1,0 +1,18 @@
+[package]
+name = "app_runtime_rs"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+app_runtime_core = { path = "../app-runtime-core" }
+napi = "3"
+napi-derive = "3"
+serde_json = "1"
+
+[build-dependencies]
+napi-build = "2"

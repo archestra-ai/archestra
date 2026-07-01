@@ -180,6 +180,7 @@ beforeEach(() => {
     defaultAgentId: null,
     globalToolPolicy: "permissive",
     allowChatFileUploads: true,
+    allowToolAutoAssignment: true,
   };
   mockApiKeys = [
     {

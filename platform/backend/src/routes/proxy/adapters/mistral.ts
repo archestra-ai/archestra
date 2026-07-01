@@ -9,7 +9,7 @@
  *
  * @see https://docs.mistral.ai/api
  */
-import { ArchestraInternalErrorCode } from "@shared";
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {

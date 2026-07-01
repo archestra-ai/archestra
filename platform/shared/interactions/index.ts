@@ -1,3 +1,4 @@
+export * from "./client";
 export type {
   CostSavingsInput,
   CostSavingsResult,
@@ -9,6 +10,7 @@ export type {
   Interaction,
   InteractionUtils,
 } from "./llmProviders/common";
+export * from "./session-source";
 export type {
   BlockedToolPart,
   DualLlmPart,

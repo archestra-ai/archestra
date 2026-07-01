@@ -20,7 +20,7 @@ vi.mock("@/lib/config/config.query", () => ({
   useDisableBasicAuth: (...args: unknown[]) => mockUseDisableBasicAuth(...args),
 }));
 
-vi.mock("@shared", () => ({
+vi.mock("@archestra/shared", () => ({
   DEFAULT_ADMIN_EMAIL: "admin@example.com",
   DEFAULT_ADMIN_PASSWORD: "admin",
 }));

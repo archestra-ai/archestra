@@ -1,4 +1,4 @@
-import { ArchestraInternalErrorCode } from "@shared";
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -352,6 +352,12 @@ class OpenAiResponsesResponseAdapter
     return {
       inputTokens: this.response.usage?.input_tokens ?? 0,
       outputTokens: this.response.usage?.output_tokens ?? 0,
+      reasoningTokens:
+        (
+          this.response.usage?.output_tokens_details as
+            | { reasoning_tokens?: number }
+            | undefined
+        )?.reasoning_tokens ?? 0,
     };
   }
 
@@ -425,6 +431,12 @@ class OpenAiResponsesStreamAdapter
         this.state.usage = {
           inputTokens: chunk.response.usage.input_tokens ?? 0,
           outputTokens: chunk.response.usage.output_tokens ?? 0,
+          reasoningTokens:
+            (
+              chunk.response.usage.output_tokens_details as
+                | { reasoning_tokens?: number }
+                | undefined
+            )?.reasoning_tokens ?? 0,
         };
       }
     }
@@ -733,7 +745,11 @@ function createEmptyToolCompressionStats(): ToolCompressionStats {
 }
 
 function toCommonMessages(item: ResponseInputItem): CommonMessage[] {
-  if (item.type === "message") {
+  // "easy input message" items carry role/content and omit `type` (it defaults
+  // to "message"); the AI SDK emits this shape. Without handling it here,
+  // getMessages() drops the user's prompt and trusted-data / Dual LLM policy
+  // evaluation (llm-proxy-handler) silently sees an empty conversation.
+  if ((item.type === "message" || item.type === undefined) && "role" in item) {
     return [
       {
         role: normalizeResponseMessageRole(item.role),

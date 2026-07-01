@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
+  ipMatchesAnyCidr,
+  isIpLiteralHost,
   isLoopbackAddress,
   isLoopbackRedirectUri,
   isPrivateOrLoopbackHostname,
@@ -216,5 +218,36 @@ describe("isPrivateOrLoopbackHostname", () => {
   test("returns false for invalid hostname input", () => {
     expect(isPrivateOrLoopbackHostname("")).toBe(false);
     expect(isPrivateOrLoopbackHostname("not a host")).toBe(false);
+  });
+});
+
+describe("isIpLiteralHost", () => {
+  test("true for IPv4 and (bracketed) IPv6 literals", () => {
+    expect(isIpLiteralHost("203.0.113.5")).toBe(true);
+    expect(isIpLiteralHost("2001:db8::1")).toBe(true);
+    expect(isIpLiteralHost("[2001:db8::1]")).toBe(true);
+  });
+
+  test("false for domain names", () => {
+    expect(isIpLiteralHost("api.example.com")).toBe(false);
+    expect(isIpLiteralHost("")).toBe(false);
+  });
+});
+
+describe("ipMatchesAnyCidr", () => {
+  test("matches an IPv4 host inside a CIDR", () => {
+    expect(ipMatchesAnyCidr("203.0.113.5", ["203.0.113.0/24"])).toBe(true);
+    expect(ipMatchesAnyCidr("198.51.100.7", ["203.0.113.0/24"])).toBe(false);
+  });
+
+  test("matches a bracketed IPv6 host inside a CIDR", () => {
+    expect(ipMatchesAnyCidr("[2001:db8::1]", ["2001:db8::/32"])).toBe(true);
+    expect(ipMatchesAnyCidr("[2001:db9::1]", ["2001:db8::/32"])).toBe(false);
+  });
+
+  test("does not throw on IPv4/IPv6 kind mismatch or malformed input", () => {
+    expect(ipMatchesAnyCidr("203.0.113.5", ["2001:db8::/32"])).toBe(false);
+    expect(ipMatchesAnyCidr("not-an-ip", ["203.0.113.0/24"])).toBe(false);
+    expect(ipMatchesAnyCidr("203.0.113.5", ["garbage"])).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import { SecretsManagerType, TimeInMs } from "@shared";
+import { SecretsManagerType, TimeInMs } from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
 import SecretModel from "@/models/secret";
 import {

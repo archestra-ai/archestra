@@ -20,6 +20,11 @@ on:
         description: "Whether to push the image to Docker Hub"
         required: true
         type: boolean
+      checkout_ref:
+        description: "Optional ref to checkout when building the image"
+        required: false
+        type: string
+        default: ""
     secrets:
       DOCKER_USERNAME:
         required: false
@@ -54,6 +59,7 @@ jobs:
       auth_provider: dockerhub
       include_latest_tag: ${{ inputs.version != 'dev' }}
       checkout_fetch_depth: 0
+      checkout_ref: ${{ inputs.checkout_ref }}
       # supply-chain-policy: allow-latest internal release channel
       previous_image: docker.io/archestra/${{ inputs.image_name }}:latest
     secrets:

@@ -1,4 +1,4 @@
-import { AUTO_PROVISIONED_INVITATION_STATUS, RouteId } from "@shared";
+import { AUTO_PROVISIONED_INVITATION_STATUS, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { InvitationModel, UserModel } from "@/models";

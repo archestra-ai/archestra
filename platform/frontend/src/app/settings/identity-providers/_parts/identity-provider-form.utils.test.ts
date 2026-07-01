@@ -1,4 +1,8 @@
-import { type IdentityProviderFormValues, OAUTH_TOKEN_TYPE } from "@shared";
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import {
+  type IdentityProviderFormValues,
+  OAUTH_TOKEN_TYPE,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import { normalizeIdentityProviderFormValues } from "./identity-provider-form.utils";
 

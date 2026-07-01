@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { normalizeByteaField } from "@/utils/normalize-bytea";
 
 type ConversationAttachment =
   typeof schema.conversationAttachmentsTable.$inferSelect;
@@ -63,7 +64,7 @@ class ConversationAttachmentModel {
           isNull(schema.conversationAttachmentsTable.deletedAt),
         ),
       );
-    return result ? normalizeFileData(result) : null;
+    return result ? normalizeByteaField(result, "fileData") : null;
   }
 
   static async findByIdsWithData(
@@ -79,7 +80,7 @@ class ConversationAttachmentModel {
           isNull(schema.conversationAttachmentsTable.deletedAt),
         ),
       );
-    return rows.map(normalizeFileData);
+    return rows.map((row) => normalizeByteaField(row, "fileData"));
   }
 
   static async findByConversationAndContentHash(
@@ -105,18 +106,26 @@ class ConversationAttachmentModel {
   static async findByConversationIdWithoutData(
     conversationId: string,
   ): Promise<Omit<ConversationAttachment, "fileData">[]> {
-    return db
-      .select(metadataColumns)
-      .from(schema.conversationAttachmentsTable)
-      .where(
-        and(
-          eq(
-            schema.conversationAttachmentsTable.conversationId,
-            conversationId,
+    return (
+      db
+        .select(metadataColumns)
+        .from(schema.conversationAttachmentsTable)
+        .where(
+          and(
+            eq(
+              schema.conversationAttachmentsTable.conversationId,
+              conversationId,
+            ),
+            isNull(schema.conversationAttachmentsTable.deletedAt),
           ),
-          isNull(schema.conversationAttachmentsTable.deletedAt),
-        ),
-      );
+        )
+        // stable order so downstream consumers (e.g. sandbox auto-staging, which
+        // suffixes duplicate filenames in this order) are deterministic.
+        .orderBy(
+          asc(schema.conversationAttachmentsTable.createdAt),
+          asc(schema.conversationAttachmentsTable.id),
+        )
+    );
   }
 
   static async updateTextPreview(
@@ -145,15 +154,6 @@ class ConversationAttachmentModel {
   static computeContentHash(buffer: Buffer): string {
     return createHash("sha256").update(buffer).digest("hex");
   }
-}
-
-function normalizeFileData(
-  row: ConversationAttachment,
-): ConversationAttachment {
-  // pg returns Buffer; PGlite returns Uint8Array. Callers rely on Buffer
-  // methods (.toString("base64"), .equals()) — normalize at the read boundary.
-  if (Buffer.isBuffer(row.fileData)) return row;
-  return { ...row, fileData: Buffer.from(row.fileData as Uint8Array) };
 }
 
 export default ConversationAttachmentModel;

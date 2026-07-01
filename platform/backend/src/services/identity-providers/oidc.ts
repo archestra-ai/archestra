@@ -1,4 +1,4 @@
-import type { IdentityProviderOidcConfig } from "@shared";
+import type { IdentityProviderOidcConfig } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
 import db, { schema as dbSchema } from "@/database";

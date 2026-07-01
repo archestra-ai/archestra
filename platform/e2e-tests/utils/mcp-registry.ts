@@ -1,9 +1,9 @@
-import type { Page } from "@playwright/test";
 import {
   E2eTestId,
   getManageCredentialsAddToTeamOptionTestId,
   getManageCredentialsButtonTestId,
-} from "@shared";
+} from "@archestra/shared";
+import type { Page } from "@playwright/test";
 import { UI_BASE_URL } from "../consts";
 import { expect, goToPage } from "../fixtures";
 import { clickButton, closeOpenDialogs } from "./dialogs";

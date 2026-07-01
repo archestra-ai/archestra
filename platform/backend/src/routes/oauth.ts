@@ -1,11 +1,16 @@
 import { createHash, randomBytes } from "node:crypto";
+import {
+  DEFAULT_APP_NAME,
+  OFFLINE_ACCESS_OAUTH_SCOPE,
+  RouteId,
+} from "@archestra/shared";
 import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
-import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
-import { InternalMcpCatalogModel } from "@/models";
+import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
@@ -37,6 +42,7 @@ interface OAuthScopeConfig {
   auth_server_url?: string;
   resource_metadata_url?: string;
   well_known_url?: string;
+  additional_scopes?: string[];
 }
 
 /**
@@ -138,12 +144,30 @@ export async function resolveOAuthScopesForAuthorization(params: {
   discoveredScopes: string[];
   scopesToUse: string[];
 }> {
+  // Append the catalog item's additional scopes on top of the configured or
+  // discovered scopes, deduped. Defaults to `["offline_access"]` when unset so
+  // the provider issues a refresh token (`offline_access` is a behavioral scope
+  // that providers like Microsoft Entra omit from metadata and require to be
+  // requested). Clear it for providers that reject it (e.g. Google).
+  const additionalScopes = params.oauthConfig.additional_scopes ?? [
+    OFFLINE_ACCESS_OAUTH_SCOPE,
+  ];
+  const withAdditionalScopes = (scopes: string[]): string[] => {
+    const merged = [...scopes];
+    for (const scope of additionalScopes) {
+      if (!merged.includes(scope)) {
+        merged.push(scope);
+      }
+    }
+    return merged;
+  };
+
   const configuredScopes = params.oauthConfig.scopes ?? [];
   if (configuredScopes.length > 0) {
     return {
       configuredScopes,
       discoveredScopes: [],
-      scopesToUse: configuredScopes,
+      scopesToUse: withAdditionalScopes(configuredScopes),
     };
   }
 
@@ -163,7 +187,7 @@ export async function resolveOAuthScopesForAuthorization(params: {
   return {
     configuredScopes,
     discoveredScopes,
-    scopesToUse: discoveredScopes,
+    scopesToUse: withAdditionalScopes(discoveredScopes),
   };
 }
 
@@ -490,22 +514,146 @@ async function getAndDeleteOAuthState(
 }
 
 /**
- * Refresh an OAuth access token using the stored refresh token.
- * This function is called when an access token is expired or about to expire.
+ * Outcome of an OAuth refresh attempt. A `terminal` failure means the grant is
+ * dead (re-authentication required); a `transient` failure is a recoverable
+ * transport/infrastructure blip that must not change persisted connection
+ * health and is re-attempted on next use.
+ */
+export type OAuthRefreshOutcome =
+  | { ok: true }
+  | {
+      ok: false;
+      kind: "terminal";
+      category: "refresh_failed" | "no_refresh_token";
+      message: string;
+    }
+  | {
+      ok: false;
+      kind: "transient";
+      reason:
+        | "network"
+        | "timeout"
+        | "server_error"
+        | "rate_limited"
+        | "unexpected_response";
+    };
+
+const OAUTH_TOKEN_REFRESH_TIMEOUT_MS = 30_000;
+
+// An OAuth `error` code is a restricted ASCII token (RFC 6749 §5.2). Anything
+// outside this shape (URLs, free text, token material) is dropped.
+const OAUTH_ERROR_CODE_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
+
+export function sanitizeOAuthErrorCode(error?: string | null): string {
+  if (typeof error === "string" && OAUTH_ERROR_CODE_PATTERN.test(error)) {
+    return error;
+  }
+  return "refresh_failed";
+}
+
+// OAuth error codes that signal a temporary server condition, not a dead grant
+// (RFC 6749 §4.1.2.1). Some authorization servers return these on a 400.
+const TRANSIENT_OAUTH_ERRORS = new Set([
+  "temporarily_unavailable",
+  "server_error",
+]);
+
+/**
+ * Classify a token-endpoint response. A genuine grant rejection is a structured
+ * OAuth `error` body, which is terminal — but infrastructure failures
+ * (5xx, 429, or a transient OAuth error code) take precedence over the body so
+ * a temporary outage is not mistaken for a revoked grant. A proxy/WAF 4xx or a
+ * captive-portal 200 with no token are likewise transient, not "re-authenticate".
+ */
+export function classifyRefreshResponse(params: {
+  status: number;
+  body: {
+    access_token?: string;
+    error?: string;
+    error_description?: string;
+  } | null;
+}): OAuthRefreshOutcome {
+  const { status, body } = params;
+
+  if (status >= 200 && status < 300 && body?.access_token) {
+    return { ok: true };
+  }
+
+  if (status >= 500) {
+    return { ok: false, kind: "transient", reason: "server_error" };
+  }
+  if (status === 429) {
+    return { ok: false, kind: "transient", reason: "rate_limited" };
+  }
+  if (body?.error && TRANSIENT_OAUTH_ERRORS.has(body.error)) {
+    return { ok: false, kind: "transient", reason: "server_error" };
+  }
+
+  if (body?.error) {
+    return {
+      ok: false,
+      kind: "terminal",
+      category: "refresh_failed",
+      message: sanitizeOAuthErrorCode(body.error),
+    };
+  }
+
+  return { ok: false, kind: "transient", reason: "unexpected_response" };
+}
+
+export function classifyThrownRefreshError(
+  error: unknown,
+): Extract<OAuthRefreshOutcome, { kind: "transient" }> {
+  const isTimeout =
+    error instanceof Error &&
+    (error.name === "TimeoutError" || error.name === "AbortError");
+  return {
+    ok: false,
+    kind: "transient",
+    reason: isTimeout ? "timeout" : "network",
+  };
+}
+
+/**
+ * Map a refresh outcome to the `mcp_server` fields to persist. Returns `null`
+ * for success and for transient failures (which must persist nothing).
+ */
+export function refreshFailureToServerFields(outcome: OAuthRefreshOutcome): {
+  oauthRefreshError: "refresh_failed" | "no_refresh_token";
+  oauthRefreshErrorMessage: string;
+  oauthRefreshFailedAt: Date;
+} | null {
+  if (outcome.ok || outcome.kind !== "terminal") {
+    return null;
+  }
+  return {
+    oauthRefreshError: outcome.category,
+    oauthRefreshErrorMessage: outcome.message,
+    oauthRefreshFailedAt: new Date(),
+  };
+}
+
+/**
+ * Refresh an OAuth access token using the stored refresh token, called when an
+ * access token is expired or about to expire.
  *
  * @param secretId - The ID of the secret containing the OAuth tokens
  * @param catalogId - The ID of the catalog item (MCP server) for OAuth config
- * @returns true if refresh was successful, false otherwise
  */
 export async function refreshOAuthToken(
   secretId: string,
   catalogId: string,
-): Promise<boolean> {
+): Promise<OAuthRefreshOutcome> {
   try {
     const secret = await secretManager().getSecret(secretId);
     if (!secret?.secret) {
       logger.warn({ secretId }, "refreshOAuthToken: Secret not found");
-      return false;
+      return {
+        ok: false,
+        kind: "terminal",
+        category: "refresh_failed",
+        message: "refresh_failed",
+      };
     }
 
     const currentTokens = secret.secret as {
@@ -525,7 +673,12 @@ export async function refreshOAuthToken(
         { secretId },
         "refreshOAuthToken: No refresh token available",
       );
-      return false;
+      return {
+        ok: false,
+        kind: "terminal",
+        category: "no_refresh_token",
+        message: "no_refresh_token",
+      };
     }
 
     // Get catalog item with OAuth configuration
@@ -536,7 +689,12 @@ export async function refreshOAuthToken(
         { catalogId },
         "refreshOAuthToken: Catalog item or OAuth config not found",
       );
-      return false;
+      return {
+        ok: false,
+        kind: "terminal",
+        category: "refresh_failed",
+        message: "refresh_failed",
+      };
     }
 
     const oauthConfig = catalogItem.oauthConfig;
@@ -563,9 +721,15 @@ export async function refreshOAuthToken(
         { secretId, catalogId },
         "refreshOAuthToken: No client_id available for token refresh",
       );
-      return false;
+      return {
+        ok: false,
+        kind: "terminal",
+        category: "refresh_failed",
+        message: "refresh_failed",
+      };
     }
 
+    const oauthResource = getOAuthTokenResource(oauthConfig);
     logger.info(
       {
         secretId,
@@ -592,37 +756,56 @@ export async function refreshOAuthToken(
         ...(clientSecret && {
           client_secret: clientSecret,
         }),
+        ...(oauthResource && {
+          resource: oauthResource,
+        }),
       }),
+      signal: AbortSignal.timeout(OAUTH_TOKEN_REFRESH_TIMEOUT_MS),
     });
 
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      logger.error(
-        { secretId, status: tokenResponse.status, error: errorText },
-        "refreshOAuthToken: Token refresh request failed",
-      );
-      return false;
-    }
-
-    const tokenData = (await tokenResponse.json()) as {
+    // Parse the body once. A non-JSON body (proxy/WAF/captive-portal HTML)
+    // leaves `body` null, which classifyRefreshResponse treats as transient.
+    const rawBody = await tokenResponse.text();
+    let body: {
       access_token?: string;
       refresh_token?: string;
       expires_in?: number;
       error?: string;
       error_description?: string;
-    };
+    } | null = null;
+    try {
+      body = rawBody ? JSON.parse(rawBody) : null;
+    } catch {
+      body = null;
+    }
 
-    if (!tokenData.access_token) {
+    const outcome = classifyRefreshResponse({
+      status: tokenResponse.status,
+      body,
+    });
+
+    if (!outcome.ok) {
+      // Never log the raw body — it may carry token material.
       logger.error(
         {
           secretId,
-          error: tokenData.error,
-          errorDescription: tokenData.error_description,
+          catalogId,
+          status: tokenResponse.status,
+          classification: outcome.kind,
+          reason:
+            outcome.kind === "terminal" ? outcome.message : outcome.reason,
         },
-        "refreshOAuthToken: No access token in refresh response",
+        "refreshOAuthToken: Token refresh did not succeed",
       );
-      return false;
+      return outcome;
     }
+
+    // classifyRefreshResponse only returns ok for a 2xx body with an access token.
+    const tokenData = body as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in?: number;
+    };
 
     // Store entire OAuth response to preserve provider-specific fields (scope, id_token, etc.)
     const updatedSecretPayload = {
@@ -639,8 +822,31 @@ export async function refreshOAuthToken(
       ...(clientSecret && { client_secret: clientSecret }),
     };
 
-    // Update the secret in storage
-    await secretManager().updateSecret(secretId, updatedSecretPayload);
+    // Persist the refreshed tokens. The grant already succeeded and a rotating
+    // server has now spent the old refresh token, so a persistence failure is
+    // terminal — re-authentication is the only recovery, and treating it as a
+    // transient retry would silently lose the only valid refresh token.
+    try {
+      await secretManager().updateSecret(secretId, updatedSecretPayload);
+    } catch (persistError) {
+      logger.error(
+        {
+          secretId,
+          catalogId,
+          error:
+            persistError instanceof Error
+              ? persistError.message
+              : String(persistError),
+        },
+        "refreshOAuthToken: refreshed token could not be persisted",
+      );
+      return {
+        ok: false,
+        kind: "terminal",
+        category: "refresh_failed",
+        message: "refresh_failed",
+      };
+    }
 
     logger.info(
       {
@@ -652,17 +858,20 @@ export async function refreshOAuthToken(
       "refreshOAuthToken: Token refresh successful",
     );
 
-    return true;
+    return { ok: true };
   } catch (error) {
+    const outcome = classifyThrownRefreshError(error);
     logger.error(
       {
         secretId,
         catalogId,
+        classification: outcome.kind,
+        reason: outcome.kind === "transient" ? outcome.reason : undefined,
         error: error instanceof Error ? error.message : String(error),
       },
       "refreshOAuthToken: Unexpected error during token refresh",
     );
-    return false;
+    return outcome;
   }
 }
 
@@ -690,7 +899,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body: { catalogId } }, reply) => {
+    async ({ body: { catalogId }, organizationId }, reply) => {
       // Get catalog item to retrieve OAuth configuration (with resolved secrets for runtime)
       const catalogItem =
         await InternalMcpCatalogModel.findByIdWithResolvedSecrets(catalogId);
@@ -708,6 +917,12 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Use the redirect URI stored in the catalog (set by frontend based on window.location.origin)
       // This ensures the redirect URI matches where the user initiated the OAuth flow from
       const redirectUri = oauthConfig.redirect_uris[0];
+      if (isSsoCallbackRedirectUri(redirectUri)) {
+        throw new ApiError(
+          400,
+          "MCP OAuth redirect URI must use /oauth-callback, not the SSO callback URL.",
+        );
+      }
 
       let clientId = oauthConfig.client_id;
       let clientSecret = oauthConfig.client_secret;
@@ -779,7 +994,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Attempting dynamic client registration",
           );
           registrationResult = await registerOAuthClient(registrationEndpoint, {
-            client_name: `Archestra Platform - ${catalogItem.name}`,
+            client_name: `${await resolveOAuthClientBrandName(organizationId)} - ${catalogItem.name}`,
             redirect_uris: [redirectUri],
             grant_types: ["authorization_code", "refresh_token"],
             response_types: ["code"],
@@ -842,8 +1057,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // RFC 8707: Include resource parameter for audience binding
       // Required by MCP servers like Windmill that need to know which
       // protected resource the token is intended for
-      if (oauthConfig.server_url) {
-        authUrl.searchParams.set("resource", oauthConfig.server_url);
+      const oauthResource = getOAuthResource(oauthConfig);
+      if (oauthResource) {
+        authUrl.searchParams.set("resource", oauthResource);
       }
 
       return reply.send({
@@ -922,6 +1138,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         try {
           // Use MCP SDK's exchangeAuthorization - it handles all discovery and authentication
+          const oauthResourceUrl = getOAuthResourceUrl(oauthConfig);
           const tokens = await exchangeAuthorization(oauthConfig.server_url, {
             clientInformation: {
               client_id: clientId,
@@ -930,8 +1147,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             authorizationCode: code,
             codeVerifier: oauthState.codeVerifier,
             redirectUri,
-            // For GitHub Copilot, pass the MCP server URL as resource
-            resource: new URL(oauthConfig.server_url),
+            resource: oauthResourceUrl,
           });
 
           fastify.log.info("MCP SDK token exchange successful");
@@ -963,6 +1179,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             oauthConfig.token_endpoint || `${oauthConfig.server_url}/token`;
         }
 
+        const oauthResource = getOAuthTokenResource(oauthConfig);
         const tokenResponse = await fetch(tokenEndpoint, {
           method: "POST",
           headers: {
@@ -977,6 +1194,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             code_verifier: oauthState.codeVerifier,
             ...(clientSecret && {
               client_secret: clientSecret,
+            }),
+            ...(oauthResource && {
+              resource: oauthResource,
             }),
           }),
         });
@@ -1083,6 +1303,101 @@ function getExplicitOAuthEndpoints(oauthConfig: {
     authorizationEndpoint: oauthConfig.authorization_endpoint,
     tokenEndpoint: oauthConfig.token_endpoint,
   };
+}
+
+function isSsoCallbackRedirectUri(redirectUri: string | undefined): boolean {
+  if (!redirectUri) {
+    return false;
+  }
+
+  try {
+    return new URL(redirectUri).pathname.startsWith("/api/auth/sso/callback");
+  } catch {
+    return redirectUri.includes("/api/auth/sso/callback");
+  }
+}
+
+export function getOAuthResource(oauthConfig: {
+  audience?: string;
+  resource?: string;
+  server_url?: string;
+}): string | undefined {
+  // Prefer the explicit RFC 8707 resource, then legacy audience configs.
+  // Do not fall back to server_url for authorization-code flows: some providers
+  // reject unexpected resource indicators when exchanging the authorization code.
+  return oauthConfig.resource || oauthConfig.audience;
+}
+
+export function getOAuthTokenResource(oauthConfig: {
+  audience?: string;
+  resource?: string;
+}): string | undefined {
+  return getOAuthResource(oauthConfig);
+}
+
+export function getOAuthResourceUrl(oauthConfig: {
+  audience?: string;
+  resource?: string;
+  server_url?: string;
+}): URL {
+  if (oauthConfig.resource) {
+    return parseOAuthResourceUrl(oauthConfig.resource);
+  }
+
+  if (oauthConfig.audience) {
+    const audienceUrl = tryParseOAuthResourceUrl(oauthConfig.audience);
+    if (audienceUrl) {
+      return audienceUrl;
+    }
+  }
+
+  if (oauthConfig.server_url) {
+    return parseOAuthResourceUrl(oauthConfig.server_url);
+  }
+
+  throw new ApiError(400, "OAuth resource is not configured");
+}
+
+function parseOAuthResourceUrl(oauthResource: string): URL {
+  const resourceUrl = tryParseOAuthResourceUrl(oauthResource);
+  if (!resourceUrl) {
+    throw new ApiError(
+      400,
+      `Invalid OAuth resource URL: ${oauthResource}. Use a full URI such as https://api.example.com or api://client-id.`,
+    );
+  }
+
+  return resourceUrl;
+}
+
+function tryParseOAuthResourceUrl(oauthResource: string): URL | null {
+  try {
+    return new URL(oauthResource);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the brand name used as the OAuth client name during dynamic client
+ * registration. This is the name remote MCP servers surface in their consent
+ * screens (e.g. "Archestra Platform - Atlassian Cloud MCP"). When enterprise
+ * full white-labeling is active and the organization has configured an app
+ * name, that name is used instead so the consent flow reflects the deployment's
+ * own branding. Falls back to the default product name otherwise.
+ */
+async function resolveOAuthClientBrandName(
+  organizationId: string,
+): Promise<string> {
+  const defaultBrandName = `${DEFAULT_APP_NAME} Platform`;
+
+  if (!config.enterpriseFeatures.fullWhiteLabeling) {
+    return defaultBrandName;
+  }
+
+  const organization = await OrganizationModel.getById(organizationId);
+  const appName = organization?.appName?.trim();
+  return appName || defaultBrandName;
 }
 
 export default oauthRoutes;

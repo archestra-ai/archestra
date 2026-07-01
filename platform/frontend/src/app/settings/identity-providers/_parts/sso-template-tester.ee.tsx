@@ -5,7 +5,7 @@ import {
   extractSsoGroupsFromRenderedTemplate,
   isTruthyTemplateOutput,
   registerSsoTemplateHelpers,
-} from "@shared";
+} from "@archestra/shared";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";

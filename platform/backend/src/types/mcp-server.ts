@@ -1,4 +1,4 @@
-import { LOCAL_MCP_INSTALLATION_STATES } from "@shared";
+import { LOCAL_MCP_INSTALLATION_STATES } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,

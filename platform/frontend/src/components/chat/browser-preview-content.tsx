@@ -3,7 +3,7 @@
 import {
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
-} from "@shared";
+} from "@archestra/shared";
 import {
   ArrowLeft,
   ChevronDown,

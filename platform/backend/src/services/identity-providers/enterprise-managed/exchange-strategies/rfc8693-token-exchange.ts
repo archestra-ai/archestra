@@ -1,4 +1,5 @@
-import { OAUTH_GRANT_TYPE, OAUTH_TOKEN_TYPE } from "@shared";
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { OAUTH_GRANT_TYPE, OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
 import {

@@ -107,6 +107,32 @@ export const getWebSocketUrl = (): string => {
 };
 
 /**
+ * Hostnames that posthog-js should decorate with `X-POSTHOG-SESSION-ID` /
+ * `X-POSTHOG-DISTINCT-ID` tracing headers (its `__add_tracing_headers` config).
+ *
+ * These let the backend link errors and logs it captures during a request back
+ * to the originating session replay. We cover both the page's own origin
+ * (API calls go through Next.js rewrites, so they hit the frontend host) and
+ * the configured backend host (for any direct calls). Hostnames only — no
+ * protocol, port, or path, per the posthog-js contract.
+ */
+export const getTracingHeaderHosts = (): string[] => {
+  const hosts = new Set<string>();
+
+  if (typeof window !== "undefined") {
+    hosts.add(window.location.hostname);
+  }
+
+  try {
+    hosts.add(new URL(getBackendBaseUrl()).hostname);
+  } catch {
+    // Ignore an unparseable backend URL — the page origin still covers rewrites.
+  }
+
+  return [...hosts].filter((host) => host.length > 0);
+};
+
+/**
  * Compute a short hash of a string using djb2 (synchronous, no crypto dependency).
  * Used to derive per-server sandbox subdomains from the server prefix.
  */
@@ -164,11 +190,13 @@ export const getMcpSandboxBaseUrl = (
   if (typeof window !== "undefined") {
     const browserHost = window.location.hostname;
 
-    // Mode 2: localhost ↔ 127.0.0.1 swap (dev/quickstart, zero-config cross-origin)
-    // Only when the user is actually on localhost — not in production where the
-    // internal backend URL happens to be localhost but the browser isn't.
+    // Mode 2: localhost ↔ 127.0.0.1 swap (dev/quickstart, zero-config cross-origin).
+    // Swap the page's OWN origin, not the backend URL, so the sandbox stays on the
+    // port the browser actually reached us on — otherwise it points at the backend
+    // port (e.g. :9000), which is dead behind a tunnel that only forwards the
+    // frontend port (e.g. ssh -L 13000:localhost:3000 → browse localhost:13000).
     if (browserHost === "localhost" || browserHost === "127.0.0.1") {
-      const swapped = swapLocalhostOrigin(getBackendBaseUrl());
+      const swapped = swapLocalhostOrigin(window.location.origin);
       if (swapped) {
         return { baseUrl: swapped, hasCrossOrigin: true };
       }

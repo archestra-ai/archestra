@@ -1,0 +1,1 @@
+ALTER TABLE "mcp_server" ADD COLUMN "oauth_refresh_error_message" text;

@@ -4,7 +4,8 @@ import {
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
-} from "@shared";
+  type ResourceVisibilityScope,
+} from "@archestra/shared";
 import type { PolicyDeniedPart } from "@/components/message-thread";
 
 export interface AuthRequiredResult {
@@ -44,6 +45,12 @@ export type ToolAuthState =
       reauthUrl: string;
       catalogId: string | null;
       serverId: string | null;
+      // Which credential expired (personal / team / org) and, for team
+      // credentials, the owning team's name. Absent for text-parsed errors and
+      // for chat history predating the structured field, in which case the card
+      // falls back to generic "Your credentials …" copy.
+      credentialScope?: ResourceVisibilityScope;
+      credentialTeamName?: string | null;
     };
 
 export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
@@ -155,6 +162,8 @@ export function resolveToolAuthState(params: {
       reauthUrl: structuredError.reauthUrl,
       catalogId: structuredError.catalogId,
       serverId: structuredError.serverId,
+      credentialScope: structuredError.credentialScope,
+      credentialTeamName: structuredError.credentialTeamName,
     };
   }
 
@@ -259,6 +268,27 @@ export function resolveAssistantTextAuthState(
   }
 
   return null;
+}
+
+/**
+ * An "Authentication Required" install prompt is resolved once a server for its
+ * catalog has been connected — at that point the card should read as connected
+ * rather than as an outstanding error. Scoped deliberately to the install case
+ * (`install_mcp_credentials`): identity-provider connect, expired/re-auth, and
+ * assigned-credential-unavailable cards are NOT covered, since "a server exists"
+ * is not a valid resolution signal for those.
+ */
+export function isInstallAuthResolved(params: {
+  authState: ToolAuthState | null;
+  connectedCatalogIds: ReadonlySet<string>;
+}): boolean {
+  const { authState, connectedCatalogIds } = params;
+  return (
+    authState?.kind === "auth-required" &&
+    authState.action === "install_mcp_credentials" &&
+    authState.catalogId !== null &&
+    connectedCatalogIds.has(authState.catalogId)
+  );
 }
 
 export function hasToolPartsWithAuthErrors(

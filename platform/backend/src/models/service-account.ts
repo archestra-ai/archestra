@@ -3,7 +3,7 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   MEMBER_ROLE_NAME,
   type Permissions,
-} from "@shared";
+} from "@archestra/shared";
 import {
   and,
   count,

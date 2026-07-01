@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@shared";
+import type { ChatMessage } from "@archestra/shared";
 import { SkillModel } from "@/models";
 import { expect, test } from "@/test";
 import { injectSkillActivation } from "./inject-skill-activation";
@@ -53,6 +53,7 @@ test("prepends the skill activation block to the last user message", async ({
     organizationId: org.id,
     userId: user.id,
     agentId: undefined,
+    conversationId: undefined,
   });
 
   const text = result[0].parts?.[0]?.text ?? "";
@@ -85,6 +86,7 @@ test("ignores a skill that belongs to another organization", async ({
     organizationId: org.id,
     userId: user.id,
     agentId: undefined,
+    conversationId: undefined,
   });
 
   expect(result[0].parts?.[0]?.text).toBe("hello");
@@ -115,6 +117,7 @@ test("ignores a skill the user cannot access under its scope", async ({
     organizationId: org.id,
     userId: otherUser.id,
     agentId: undefined,
+    conversationId: undefined,
   });
 
   expect(result[0].parts?.[0]?.text).toBe("hello");
@@ -149,6 +152,7 @@ test("ignores a slash-command skill when the user lacks skill:read", async ({
     organizationId: org.id,
     userId: user.id,
     agentId: undefined,
+    conversationId: undefined,
   });
 
   expect(result[0].parts?.[0]?.text).toBe("hello");
@@ -170,6 +174,7 @@ test("returns the messages unchanged when no skill metadata is present", async (
     organizationId: org.id,
     userId: user.id,
     agentId: undefined,
+    conversationId: undefined,
   });
 
   expect(result).toBe(messages);

@@ -4,6 +4,12 @@ import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentDialog } from "./agent-dialog";
 
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as typeof ResizeObserver;
+
 const {
   pendingSaveChanges,
   useAvailableLlmProviderApiKeysMock,
@@ -81,6 +87,8 @@ vi.mock("@/lib/chat/chat.query", () => ({
 
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
+  useEnterpriseFeature: () => false,
+  useSmallTeamTier: () => undefined,
 }));
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
@@ -89,6 +97,7 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
 
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBases: () => ({ data: [] }),
+  useIsKnowledgeBaseConfigured: () => true,
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
@@ -336,9 +345,11 @@ const baseAgent = {
   systemPrompt: null,
   agentType: "agent" as const,
   toolExposureMode: "full" as const,
+  accessAllTools: false,
   scope: "personal" as const,
   isDefault: false,
   isPersonalGateway: false,
+  isPersonalProxy: false,
   teams: [],
   tools: [],
   labels: [],
@@ -355,9 +366,9 @@ const baseAgent = {
   modelId: null,
   considerContextUntrusted: false,
   identityProviderId: null,
+  environmentId: null,
   builtInAgentConfig: null,
   passthroughHeaders: null,
-  toolAssignmentMode: "manual" as const,
   incomingEmailEnabled: false,
   incomingEmailSecurityMode: "public" as const,
   incomingEmailAllowedDomain: null,
@@ -457,9 +468,11 @@ describe.skip("AgentDialog", () => {
           systemPrompt: null,
           agentType: "agent",
           toolExposureMode: "full",
+          accessAllTools: false,
           scope: "personal",
           isDefault: false,
           isPersonalGateway: false,
+          isPersonalProxy: false,
           teams: [],
           tools: [],
           labels: [],
@@ -476,9 +489,9 @@ describe.skip("AgentDialog", () => {
           modelId: null,
           considerContextUntrusted: false,
           identityProviderId: null,
+          environmentId: null,
           builtInAgentConfig: null,
           passthroughHeaders: null,
-          toolAssignmentMode: "manual",
           incomingEmailEnabled: false,
           incomingEmailSecurityMode: "public",
           incomingEmailAllowedDomain: null,

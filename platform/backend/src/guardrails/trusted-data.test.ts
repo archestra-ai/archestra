@@ -1,4 +1,4 @@
-import { ARCHESTRA_MCP_CATALOG_ID } from "@shared";
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { vi } from "vitest";
 import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
 import { AgentToolModel, ToolModel, TrustedDataPolicyModel } from "@/models";

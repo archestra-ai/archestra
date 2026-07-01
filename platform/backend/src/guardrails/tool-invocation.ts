@@ -1,14 +1,18 @@
 import {
   buildArchestraToolRefusalMetadata,
+  isAgentTool,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
-} from "@shared";
+} from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { disabledToolsNotRunMessage } from "@/archestra-mcp-server/tool-recovery-messages";
 import logger from "@/logging";
 import {
   AgentTeamModel,
   OrganizationModel,
   TeamModel,
   ToolInvocationPolicyModel,
+  ToolModel,
 } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import type { GlobalToolPolicy } from "@/types";
@@ -25,6 +29,83 @@ export interface PolicyBlockResult {
   blockedToolName: string;
   /** All tool call names in the batch (all are blocked when any one is) */
   allToolCallNames: string[];
+}
+
+export async function evaluateSingleMcpToolInvocationPolicy(params: {
+  agentId: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  organizationId?: string;
+  contextIsTrusted: boolean;
+  externalAgentId?: string;
+  enforceApprovalRequired?: boolean;
+  /**
+   * Pre-fetched set of the agent's assigned tool names. When supplied (e.g. the
+   * run_tool dispatch already computed it for its existence pre-check), it is
+   * reused instead of re-querying ToolModel.getAssignedToolNames here.
+   */
+  enabledToolNames?: Set<string>;
+}): Promise<PolicyBlockResult | null> {
+  if (
+    archestraMcpBranding.isToolName(params.toolName) ||
+    isAgentTool(params.toolName)
+  ) {
+    return null;
+  }
+
+  const [teamIds, organizationPolicy, enabledToolNames] = await Promise.all([
+    AgentTeamModel.getTeamsForAgent(params.agentId),
+    params.organizationId
+      ? OrganizationModel.getById(params.organizationId).then(
+          (organization) => organization?.globalToolPolicy,
+        )
+      : Promise.resolve(undefined),
+    params.enabledToolNames ?? ToolModel.getAssignedToolNames(params.agentId),
+  ]);
+  const globalToolPolicy =
+    organizationPolicy ?? (await getGlobalToolPolicy(params.agentId));
+  const policyContext = {
+    teamIds,
+    externalAgentId: params.externalAgentId,
+  };
+
+  const policyBlock = await evaluatePolicies(
+    [
+      {
+        toolCallName: params.toolName,
+        toolCallArgs: JSON.stringify(params.toolInput),
+      },
+    ],
+    params.agentId,
+    policyContext,
+    params.contextIsTrusted,
+    enabledToolNames,
+    globalToolPolicy,
+  );
+  if (policyBlock) {
+    return policyBlock;
+  }
+
+  if (params.enforceApprovalRequired === false) {
+    return null;
+  }
+
+  const requiresApproval =
+    await ToolInvocationPolicyModel.checkApprovalRequired(
+      params.toolName,
+      params.toolInput,
+      policyContext,
+      globalToolPolicy,
+    );
+  if (!requiresApproval) {
+    return null;
+  }
+
+  return buildToolInvocationPolicyBlockResult({
+    toolName: params.toolName,
+    toolInput: params.toolInput,
+    reason: TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+  });
 }
 
 /**
@@ -90,8 +171,7 @@ export const evaluatePolicies = async (
 
   // If any tools were disabled, return distinct message about them
   if (disabledToolNames.length > 0) {
-    const toolList = disabledToolNames.join(", ");
-    const message = `I attempted to use the tools "${toolList}", but they are not enabled for this conversation.`;
+    const message = disabledToolsNotRunMessage(disabledToolNames);
     const reason = TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON;
     return {
       refusalMessage: message,
@@ -141,37 +221,20 @@ export const evaluatePolicies = async (
   );
 
   if (!isAllowed && toolCallName) {
-    const toolInput = parsedToolCalls.find(
-      (tc) => tc.toolCallName === toolCallName,
-    )?.toolInput;
-
-    const archestraMetadata = buildArchestraToolRefusalMetadata({
-      toolName: toolCallName,
-      toolArguments: JSON.stringify(toolInput),
-      reason,
-    });
-
-    const contentMessage = `
-I tried to invoke the ${toolCallName} tool with the following arguments: ${JSON.stringify(toolInput)}.
-
-However, I was denied by a tool invocation policy:
-
-${reason}`;
-
-    const refusalMessage = `${archestraMetadata}
-${contentMessage}`;
+    const toolInput =
+      parsedToolCalls.find((tc) => tc.toolCallName === toolCallName)
+        ?.toolInput ?? {};
 
     logger.debug(
       { agentId, toolCallName, reason },
       "[toolInvocation] evaluatePolicies: tool invocation blocked",
     );
-    return {
-      refusalMessage,
-      contentMessage,
+    return buildToolInvocationPolicyBlockResult({
+      toolName: toolCallName,
+      toolInput,
       reason,
-      blockedToolName: toolCallName,
       allToolCallNames: filteredToolCalls.map((tc) => tc.toolCallName),
-    };
+    });
   }
 
   logger.debug(
@@ -242,4 +305,34 @@ export async function getGlobalToolPolicy(
   );
 
   return firstOrg.globalToolPolicy;
+}
+
+function buildToolInvocationPolicyBlockResult(params: {
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  reason: string;
+  allToolCallNames?: string[];
+}): PolicyBlockResult {
+  const toolArguments = JSON.stringify(params.toolInput);
+  const archestraMetadata = buildArchestraToolRefusalMetadata({
+    toolName: params.toolName,
+    toolArguments,
+    reason: params.reason,
+  });
+
+  const contentMessage = `
+I tried to invoke the ${params.toolName} tool with the following arguments: ${toolArguments}.
+
+However, I was denied by a tool invocation policy:
+
+${params.reason}`;
+
+  return {
+    refusalMessage: `${archestraMetadata}
+${contentMessage}`,
+    contentMessage,
+    reason: params.reason,
+    blockedToolName: params.toolName,
+    allToolCallNames: params.allToolCallNames ?? [params.toolName],
+  };
 }

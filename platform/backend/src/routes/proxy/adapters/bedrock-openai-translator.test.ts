@@ -267,6 +267,136 @@ describe("openaiToConverse — messages", () => {
   });
 });
 
+describe("openaiToConverse — image_url content blocks", () => {
+  test("image/png data URL → image block", () => {
+    const { converseBody } = openaiToConverse(
+      req({
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "look at this" },
+              {
+                type: "image_url",
+                image_url: { url: "data:image/png;base64,iVBOR==" },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(converseBody.messages?.[0].content).toEqual([
+      { text: "look at this" },
+      { image: { format: "png", source: { bytes: "iVBOR==" } } },
+    ]);
+  });
+
+  test("image_url with application/json data URL → document block (not an error)", () => {
+    const { converseBody } = openaiToConverse(
+      req({
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "review this file" },
+              {
+                type: "image_url",
+                image_url: { url: "data:application/json;base64,eyJhIjoxfQ==" },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const blocks = converseBody.messages?.[0].content;
+    expect(blocks).toHaveLength(2);
+    expect(blocks?.[1]).toMatchObject({
+      document: { format: "txt", source: { bytes: "eyJhIjoxfQ==" } },
+    });
+  });
+
+  test("image_url with unsupported mime type is silently dropped", () => {
+    const { converseBody } = openaiToConverse(
+      req({
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "hello" },
+              {
+                type: "image_url",
+                image_url: {
+                  url: "data:application/octet-stream;base64,AAAA==",
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(converseBody.messages?.[0].content).toEqual([{ text: "hello" }]);
+  });
+
+  test("text + valid image + json file → text, image, document blocks in order", () => {
+    const { converseBody } = openaiToConverse(
+      req({
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "here are files" },
+              {
+                type: "image_url",
+                image_url: { url: "data:image/png;base64,iVBOR==" },
+              },
+              {
+                type: "image_url",
+                image_url: { url: "data:application/json;base64,eyJhIjoxfQ==" },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(converseBody.messages?.[0].content).toEqual([
+      { text: "here are files" },
+      { image: { format: "png", source: { bytes: "iVBOR==" } } },
+      {
+        document: {
+          format: "txt",
+          name: "document",
+          source: { bytes: "eyJhIjoxfQ==" },
+        },
+      },
+    ]);
+  });
+
+  test("document-only user message → placeholder text prepended", () => {
+    const { converseBody } = openaiToConverse(
+      req({
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: {
+                  url: "data:application/pdf;base64,JVBERi0=",
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const blocks = converseBody.messages?.[0].content ?? [];
+    expect(blocks[0]).toMatchObject({ text: expect.stringMatching(/\S/) });
+    expect(blocks[1]).toMatchObject({
+      document: { format: "pdf", source: { bytes: "JVBERi0=" } },
+    });
+  });
+});
+
 describe("openaiToConverse — tools + tool_choice", () => {
   const tools = [
     {
@@ -401,24 +531,23 @@ describe("openaiToConverse — images", () => {
     });
   });
 
-  test("non-data-URL image throws (with helpful message)", () => {
-    expect(() =>
-      openaiToConverse(
-        req({
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "image_url",
-                  image_url: { url: "https://example.com/cat.png" },
-                },
-              ],
-            },
-          ],
-        }),
-      ),
-    ).toThrow(/data[- ]?url/i);
+  test("non-data-URL image_url is silently dropped", () => {
+    const { converseBody } = openaiToConverse(
+      req({
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: { url: "https://example.com/cat.png" },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(converseBody.messages?.[0].content).toEqual([]);
   });
 });
 

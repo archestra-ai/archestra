@@ -1,4 +1,7 @@
-import { OPENROUTER_AUTO_MODEL_ID, OPENROUTER_FREE_MODEL_ID } from "@shared";
+import {
+  OPENROUTER_AUTO_MODEL_ID,
+  OPENROUTER_FREE_MODEL_ID,
+} from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";

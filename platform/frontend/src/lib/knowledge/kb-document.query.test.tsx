@@ -8,7 +8,7 @@ const mockDeleteConnectorDocument = vi.fn();
 const mockHandleApiError = vi.fn();
 const mockToastSuccess = vi.fn();
 
-vi.mock("@shared", () => ({
+vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
     getConnectorDocuments: (...args: unknown[]) =>
       mockGetConnectorDocuments(...args),

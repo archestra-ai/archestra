@@ -1,9 +1,9 @@
-import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 import {
   E2eTestId,
   getChatApiKeySelectorOptionTestId,
   getChatApiKeySelectorProviderGroupTestId,
-} from "@shared";
+} from "@archestra/shared";
+import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 import {
   LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE,
   LLM_PROVIDER_API_KEYS_ROUTE,

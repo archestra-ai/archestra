@@ -94,6 +94,11 @@ export interface ChatReplyOptions {
   replyInThread?: boolean;
   /** Optional: Footer text to append (e.g. agent name) */
   footer?: string;
+  /**
+   * Optional: an even-more-subtle hint rendered on its own line below the
+   * footer (e.g. the one-time "you can mute me" tip on a thread's first reply).
+   */
+  hint?: string;
   /** Provider-specific conversation reference for reply routing */
   conversationReference?: unknown;
 }
@@ -103,7 +108,16 @@ export interface AddApprovalRequestFormOptions {
   threadId?: string;
   approvalId: string;
   taskId: string;
+  /**
+   * The tool the user is approving. For a `run_tool` dispatch this is the
+   * underlying target tool, not the `run_tool` wrapper.
+   */
   toolName: string;
+  /**
+   * The arguments the tool will be invoked with, rendered as a code block in
+   * the approval prompt. Undefined/empty when there is nothing to show.
+   */
+  toolArgs?: Record<string, unknown>;
   originalMessage: IncomingChatMessage;
 }
 
@@ -348,6 +362,13 @@ export interface ChatOpsProvider {
   ): Promise<void>;
 
   /**
+   * Clear a transient "thinking" indicator without posting a message.
+   * Needed when the agent deliberately stays silent: providers like Slack
+   * only auto-clear the status once a message is posted to the thread.
+   */
+  clearTypingStatus?(channelId: string, threadTs: string): Promise<void>;
+
+  /**
    * Get thread/conversation history for context
    * @param params - Parameters including channel, thread ID, and limit
    * @returns Array of previous messages, oldest first
@@ -530,4 +551,17 @@ export interface SlackDbConfig {
   appId: string;
   connectionMode?: ChatOpsConnectionMode;
   appLevelToken?: string;
+}
+
+/** ngrok tunnel config stored as a DB secret */
+export interface NgrokDbConfig {
+  authToken: string;
+  /** Optional reserved domain for a stable public URL across restarts. */
+  domain: string;
+  /**
+   * False when the user explicitly stopped the tunnel — credentials are kept
+   * for reconnecting, but the tunnel must not come back up on restart.
+   * Missing (older rows) means enabled.
+   */
+  enabled?: boolean;
 }

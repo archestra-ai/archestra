@@ -47,7 +47,7 @@ import { writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import * as readline from "node:readline/promises";
 import { pathToFileURL } from "node:url";
-import { SecretsManagerType } from "@shared";
+import { SecretsManagerType } from "@archestra/shared";
 import { eq, inArray, sql } from "drizzle-orm";
 import config from "@/config";
 import db, { initializeDatabase, schema, withDbTransaction } from "@/database";

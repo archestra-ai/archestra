@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@shared";
+import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -20,6 +20,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +43,7 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useTeams } from "@/lib/teams/team.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
 type McpGatewaysInitialData = {
@@ -140,7 +141,12 @@ function McpGateways({
       : ["mcp_gateway", "profile"]
     : ["mcp_gateway"];
 
-  const { data: agentsResponse, isPending } = useProfilesPaginated({
+  const {
+    data: agentsResponse,
+    isPending,
+    isLoadingError: isGatewaysLoadError,
+    refetch: refetchGateways,
+  } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
     limit: pageSize,
     offset,
@@ -165,8 +171,7 @@ function McpGateways({
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
-  const { data: userTeams } = useTeams({
-    initialData: initialData?.teams,
+  const { data: userTeams } = useMyTeams({
     enabled: !!canReadTeams,
   });
 
@@ -424,6 +429,37 @@ function McpGateways({
     },
   ];
 
+  if (isGatewaysLoadError) {
+    return (
+      <PageLayout
+        title="MCP Gateways"
+        description={
+          <p className="text-sm text-muted-foreground">
+            MCP Gateways provide a unified MCP endpoint for your AI agents to
+            access tools and subagents.
+            {docsUrl && (
+              <>
+                {" "}
+                <ExternalDocsLink
+                  href={docsUrl}
+                  className="underline hover:text-foreground"
+                  showIcon={false}
+                >
+                  Read more in the docs
+                </ExternalDocsLink>
+              </>
+            )}
+          </p>
+        }
+      >
+        <QueryLoadError
+          title="Couldn't load your MCP gateways"
+          onRetry={() => refetchGateways()}
+        />
+      </PageLayout>
+    );
+  }
+
   return (
     <LoadingWrapper
       isPending={showLoading}
@@ -469,7 +505,10 @@ function McpGateways({
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter ownerLabelPlural="MCP gateways" />
+                <AgentScopeFilter
+                  ownerLabelPlural="MCP gateways"
+                  adminPermission={{ mcpGateway: ["admin"] }}
+                />
                 <AgentDeletedStatusFilter
                   deletePermission={{ mcpGateway: ["delete"] }}
                 />
@@ -480,7 +519,7 @@ function McpGateways({
                   permissions={[{ resource: "team", action: "read" }]}
                 />
               )}
-              <ActiveFilterBadges />
+              <ActiveFilterBadges adminPermission={{ mcpGateway: ["admin"] }} />
             </div>
 
             <div data-testid={E2eTestId.AgentsTable}>

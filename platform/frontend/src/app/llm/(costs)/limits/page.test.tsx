@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LimitsPage, { getLimitModels } from "./page";
 
 const mockSetCostsAction = vi.fn();
@@ -32,6 +32,16 @@ vi.mock("@/lib/limits.query", () => ({
   useCreateLimit: () => ({ mutateAsync: vi.fn() }),
   useUpdateLimit: () => ({ mutateAsync: vi.fn() }),
   useDeleteLimit: () => ({ mutateAsync: vi.fn() }),
+}));
+
+// A configured default user limit drives the settings notice; the page reads the
+// unified list from this hook.
+vi.mock("@/lib/default-user-limit.query", () => ({
+  useDefaultUserLimits: () => ({ data: [{ id: "dul-1" }] }),
+}));
+
+vi.mock("@/lib/environment.query", () => ({
+  useEnvironments: () => ({ data: { environments: [] } }),
 }));
 
 vi.mock("@/lib/teams/team.query", () => ({
@@ -148,9 +158,16 @@ vi.mock("@/components/ui/select", () => ({
   SelectContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
+  SelectGroup: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   SelectItem: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
+  SelectLabel: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SelectSeparator: () => <hr />,
 }));
 
 vi.mock("@/components/ui/searchable-select", () => ({
@@ -310,6 +327,10 @@ describe("LimitsPage", () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("shows a settings notice when a default user limit is configured", () => {
     render(<LimitsPage />);
 
@@ -366,6 +387,66 @@ describe("LimitsPage", () => {
     render(<LimitsPage />);
     const modelsBadge = screen.getByTestId("limits-table-models-badge");
     expect(modelsBadge).toHaveTextContent("All models");
+  });
+
+  it("shows the next reset date for rolling monthly limits", () => {
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-1",
+          entityType: "organization",
+          entityId: "org-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          cleanupInterval: "1m",
+          lastCleanup: "2026-01-15T12:00:00.000Z",
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    const row = screen.getByTestId("data-table-row-limit-1");
+    expect(row).toHaveTextContent("Rolling month");
+    expect(row).toHaveTextContent("Resets Feb 15");
+  });
+
+  it("shows the next reset date for calendar monthly limits", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-15T12:00:00.000Z"));
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-1",
+          entityType: "organization",
+          entityId: "org-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          cleanupInterval: "calendar_month",
+          lastCleanup: "2026-01-02T12:00:00.000Z",
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    const row = screen.getByTestId("data-table-row-limit-1");
+    expect(row).toHaveTextContent("Calendar month");
+    expect(row).toHaveTextContent("Resets Feb 1");
   });
 
   it("shows multiple model badges for limits with multiple models", () => {

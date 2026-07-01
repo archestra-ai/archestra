@@ -1,7 +1,47 @@
 import { describe, expect, test } from "@/test";
 import AgentTeamModel from "./agent-team";
+import TeamLabelModel from "./team-label";
 
 describe("AgentTeamModel", () => {
+  describe("getTeamLabelInfoForAgent", () => {
+    test("returns each team's id, name and labels", async ({
+      makeAgent,
+      makeTeam,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team1 = await makeTeam(org.id, user.id, { name: "Platform" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Security" });
+      const agent = await makeAgent();
+
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team1.id, team2.id]);
+      await TeamLabelModel.syncTeamLabels(team1.id, [
+        { key: "env", value: "prod", keyId: "", valueId: "" },
+      ]);
+
+      const info = await AgentTeamModel.getTeamLabelInfoForAgent(agent.id);
+
+      expect(info).toHaveLength(2);
+      const platform = info.find((t) => t.id === team1.id);
+      const security = info.find((t) => t.id === team2.id);
+      expect(platform?.name).toBe("Platform");
+      expect(platform?.labels).toEqual([
+        expect.objectContaining({ key: "env", value: "prod" }),
+      ]);
+      expect(security?.labels).toEqual([]);
+    });
+
+    test("returns empty array when agent has no teams", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent();
+      const info = await AgentTeamModel.getTeamLabelInfoForAgent(agent.id);
+      expect(info).toEqual([]);
+    });
+  });
+
   describe("getTeamsForAgent", () => {
     test("returns team IDs for a single agent", async ({
       makeAgent,

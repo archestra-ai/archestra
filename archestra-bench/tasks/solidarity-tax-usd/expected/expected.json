@@ -1,0 +1,8 @@
+{
+  "_source": "Poland solidarity levy (danina solidarnościowa): 4% on the part of annual income exceeding 1,000,000 PLN. For a 2023 income of 1,750,000 PLN the levy is 0.04 * (1,750,000 - 1,000,000) = 30,000 PLN. Converted at the NBP table A USD mid rate for the last banking day of 2023: 2023-12-31 is Sunday and 2023-12-30 is Saturday (no NBP table), so the last published table is 251/A/NBP/2023 dated 2023-12-29. tax_owed_usd = floor(tax_pln / usd_pln_mid), derived in the verifier.",
+  "income_pln": 1750000,
+  "threshold_pln": 1000000,
+  "rate_pct": 4.0,
+  "usd_pln_mid": 3.9350,
+  "effective_date": "2023-12-29"
+}

@@ -1,6 +1,9 @@
 "use client";
 
-import { DEFAULT_APP_DESCRIPTION, DEFAULT_APP_FULL_NAME } from "@shared";
+import {
+  DEFAULT_APP_DESCRIPTION,
+  DEFAULT_APP_FULL_NAME,
+} from "@archestra/shared";
 import { useEffect } from "react";
 import { useAppearanceSettings } from "@/lib/organization.query";
 

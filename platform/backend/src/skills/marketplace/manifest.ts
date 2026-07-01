@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { urlSlugify } from "@shared";
+import { urlSlugify } from "@archestra/shared";
 
 /**
  * Pure builders for the on-disk manifests served by the shared skill
@@ -23,12 +23,6 @@ export interface MarketplaceSkillInput {
   id: string;
   name: string;
   description: string;
-  /**
-   * Set when the skill row carries an explicit version. The schema doesn't
-   * have a `version` column today; the parameter is kept so the day it lands
-   * we don't have to revisit every builder.
-   */
-  version?: string | null;
   updatedAt: Date;
 }
 
@@ -41,17 +35,23 @@ interface ResolvedMarketplaceSkill {
   updatedAt: Date;
 }
 
-interface ClaudeMarketplacePluginEntry {
+/**
+ * Marketplace + plugin shape shared by Claude Code and Cursor. Cursor's docs
+ * describe `.cursor-plugin/marketplace.json` / `.cursor-plugin/plugin.json`
+ * with a field set that is intentionally a strict subset of Claude's, so both
+ * clients see the same name/description/version triple from one builder.
+ */
+interface SimpleMarketplacePluginEntry {
   name: string;
   source: string;
   description: string;
   version: string;
 }
 
-interface ClaudeMarketplaceManifest {
+interface SimpleMarketplaceManifest {
   name: string;
   owner: { name: string };
-  plugins: ClaudeMarketplacePluginEntry[];
+  plugins: SimpleMarketplacePluginEntry[];
 }
 
 interface CodexMarketplacePluginEntry {
@@ -69,7 +69,7 @@ interface CodexMarketplaceManifest {
   plugins: CodexMarketplacePluginEntry[];
 }
 
-interface ClaudePluginManifest {
+interface SimplePluginManifest {
   name: string;
   description: string;
   version: string;
@@ -81,32 +81,6 @@ interface CodexPluginManifest {
   description: string;
   skills: string;
   interface: { displayName: string };
-}
-
-/**
- * Cursor's marketplace + plugin shape mirrors Claude's. The Cursor docs
- * describe `.cursor-plugin/marketplace.json` as the index and
- * `.cursor-plugin/plugin.json` per plugin; the field set we emit is
- * intentionally a strict subset of Claude's so users on either client see
- * the same name/description/version triple.
- */
-interface CursorMarketplacePluginEntry {
-  name: string;
-  source: string;
-  description: string;
-  version: string;
-}
-
-interface CursorMarketplaceManifest {
-  name: string;
-  owner: { name: string };
-  plugins: CursorMarketplacePluginEntry[];
-}
-
-interface CursorPluginManifest {
-  name: string;
-  description: string;
-  version: string;
 }
 
 /**
@@ -174,11 +148,9 @@ export function resolveBundleVersion(skills: MarketplaceSkillInput[]): string {
   return `0.0.0+${h.digest("hex").slice(0, 12)}`;
 }
 
-export function buildClaudeMarketplaceManifest(params: {
-  marketplaceName: string;
-  ownerName: string;
-  skills: MarketplaceSkillInput[];
-}): ClaudeMarketplaceManifest {
+export function buildSimpleMarketplaceManifest(
+  params: SimpleManifestParams,
+): SimpleMarketplaceManifest {
   return {
     name: params.marketplaceName,
     owner: { name: params.ownerName },
@@ -190,6 +162,16 @@ export function buildClaudeMarketplaceManifest(params: {
         version: resolveBundleVersion(params.skills),
       },
     ],
+  };
+}
+
+export function buildSimplePluginManifest(
+  params: SimpleManifestParams,
+): SimplePluginManifest {
+  return {
+    name: params.marketplaceName,
+    description: bundleDescription(params.skills.length, params.ownerName),
+    version: resolveBundleVersion(params.skills),
   };
 }
 
@@ -220,18 +202,6 @@ export function buildCodexMarketplaceManifest(params: {
   };
 }
 
-export function buildClaudePluginManifest(params: {
-  marketplaceName: string;
-  ownerName: string;
-  skills: MarketplaceSkillInput[];
-}): ClaudePluginManifest {
-  return {
-    name: params.marketplaceName,
-    description: bundleDescription(params.skills.length, params.ownerName),
-    version: resolveBundleVersion(params.skills),
-  };
-}
-
 export function buildCodexPluginManifest(params: {
   marketplaceName: string;
   displayName: string;
@@ -246,38 +216,13 @@ export function buildCodexPluginManifest(params: {
   };
 }
 
-export function buildCursorMarketplaceManifest(params: {
-  marketplaceName: string;
-  ownerName: string;
-  skills: MarketplaceSkillInput[];
-}): CursorMarketplaceManifest {
-  return {
-    name: params.marketplaceName,
-    owner: { name: params.ownerName },
-    plugins: [
-      {
-        name: params.marketplaceName,
-        source: `./plugins/${params.marketplaceName}`,
-        description: bundleDescription(params.skills.length, params.ownerName),
-        version: resolveBundleVersion(params.skills),
-      },
-    ],
-  };
-}
-
-export function buildCursorPluginManifest(params: {
-  marketplaceName: string;
-  ownerName: string;
-  skills: MarketplaceSkillInput[];
-}): CursorPluginManifest {
-  return {
-    name: params.marketplaceName,
-    description: bundleDescription(params.skills.length, params.ownerName),
-    version: resolveBundleVersion(params.skills),
-  };
-}
-
 // ===== Internal helpers =====
+
+interface SimpleManifestParams {
+  marketplaceName: string;
+  ownerName: string;
+  skills: MarketplaceSkillInput[];
+}
 
 function baseSlug(skill: MarketplaceSkillInput): string {
   const slugged = urlSlugify(skill.name);

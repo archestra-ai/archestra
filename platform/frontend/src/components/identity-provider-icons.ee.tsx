@@ -1,6 +1,6 @@
 "use client";
 
-import { IDENTITY_PROVIDER_ID } from "@shared";
+import { IDENTITY_PROVIDER_ID } from "@archestra/shared";
 import { Globe } from "lucide-react";
 import Image from "next/image";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import { Plus } from "lucide-react";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";

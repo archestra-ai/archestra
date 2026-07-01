@@ -99,8 +99,8 @@ export async function importAgentFromPayload(
       icon: data.agent.icon,
       scope: "personal", // Always personal on import
       considerContextUntrusted: data.agent.considerContextUntrusted,
-      toolAssignmentMode: data.agent.toolAssignmentMode,
       toolExposureMode: data.agent.toolExposureMode,
+      accessAllTools: data.agent.accessAllTools,
       llmApiKeyId: null,
       identityProviderId: null,
       incomingEmailEnabled: data.agent.incomingEmailEnabled,

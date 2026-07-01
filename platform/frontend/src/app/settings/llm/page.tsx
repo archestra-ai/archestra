@@ -1,16 +1,11 @@
 "use client";
 
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { DefaultUserLimitsSection } from "@/app/settings/llm/_parts/default-user-limits-section";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import {
-  DEFAULT_LIMIT_CLEANUP_INTERVAL,
-  type LimitCleanupInterval,
-  LimitCleanupIntervalSelect,
-} from "@/components/limit-cleanup-interval-select";
-import { LlmModelPicker } from "@/components/llm-model-picker";
 import { LoadingSpinner } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
@@ -18,10 +13,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import { Button } from "@/components/ui/button";
 import { CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Select,
@@ -31,7 +23,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
-import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import {
   useOrganization,
   useUpdateLlmSettings,
@@ -54,16 +45,10 @@ const COMPRESSION_MODE_LABELS: Record<CompressionMode, string> = {
   team: "Team level",
 };
 
-function formatNumericInput(value: string) {
-  if (!value) return "";
-  return Number(value).toLocaleString("en-US");
-}
-
 export default function LlmSettingsPage() {
   const { data: organization, isPending: isOrganizationPending } =
     useOrganization();
   const { data: teams, isPending: areTeamsPending } = useTeams();
-  const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
   const queryClient = useQueryClient();
 
   const [compressionMode, setCompressionMode] =
@@ -71,14 +56,6 @@ export default function LlmSettingsPage() {
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [hasSyncedInitialSettings, setHasSyncedInitialSettings] =
     useState(false);
-  const [defaultUserLimitValue, setDefaultUserLimitValue] = useState("");
-  const [defaultUserLimitModels, setDefaultUserLimitModels] = useState<
-    string[]
-  >([]);
-  const [isDefaultUserLimitAllModels, setIsDefaultUserLimitAllModels] =
-    useState(true);
-  const [defaultUserLimitCleanupInterval, setDefaultUserLimitCleanupInterval] =
-    useState<LimitCleanupInterval>(DEFAULT_LIMIT_CLEANUP_INTERVAL);
   const toonDocsUrl = getFrontendDocsUrl(
     "platform-costs-and-limits",
     "toon-compression",
@@ -88,16 +65,6 @@ export default function LlmSettingsPage() {
     "LLM settings updated",
     "Failed to update LLM settings",
   );
-
-  const modelOptions = modelsWithApiKeys.map((model) => ({
-    value: model.modelId,
-    model: model.modelId,
-    provider: model.provider,
-    pricePerMillionInput: model.pricePerMillionInput ?? "0",
-    pricePerMillionOutput: model.pricePerMillionOutput ?? "0",
-    isFree: model.isFree,
-    isBest: model.isBest,
-  }));
 
   // Sync state when both organization and teams data are loaded
   useEffect(() => {
@@ -110,22 +77,6 @@ export default function LlmSettingsPage() {
       // Fall back to "disabled" if scope is "team" but no teams exist
       setCompressionMode(teams.length > 0 ? "team" : "disabled");
     }
-    setDefaultUserLimitValue(
-      organization.defaultUserLimitValue
-        ? String(organization.defaultUserLimitValue)
-        : "",
-    );
-    const defaultModels = Array.isArray(organization.defaultUserLimitModel)
-      ? organization.defaultUserLimitModel.filter(
-          (model): model is string => typeof model === "string",
-        )
-      : [];
-    setDefaultUserLimitModels(defaultModels);
-    setIsDefaultUserLimitAllModels(defaultModels.length === 0);
-    setDefaultUserLimitCleanupInterval(
-      (organization.defaultUserLimitCleanupInterval as LimitCleanupInterval) ||
-        DEFAULT_LIMIT_CLEANUP_INTERVAL,
-    );
     const enabledTeams = teams
       .filter((team) => team.convertToolResultsToToon)
       .map((team) => team.id);
@@ -145,20 +96,6 @@ export default function LlmSettingsPage() {
         ? "team"
         : "disabled";
 
-  const serverDefaultUserLimitValue = organization?.defaultUserLimitValue
-    ? String(organization.defaultUserLimitValue)
-    : "";
-  const serverDefaultUserLimitModels = Array.isArray(
-    organization?.defaultUserLimitModel,
-  )
-    ? organization.defaultUserLimitModel
-        .filter((model): model is string => typeof model === "string")
-        .sort()
-    : [];
-  const serverDefaultUserLimitCleanupInterval =
-    (organization?.defaultUserLimitCleanupInterval as LimitCleanupInterval) ||
-    DEFAULT_LIMIT_CLEANUP_INTERVAL;
-
   const serverTeamIds = loadedTeams
     .filter((team) => team.convertToolResultsToToon)
     .map((team) => team.id)
@@ -170,116 +107,63 @@ export default function LlmSettingsPage() {
       JSON.stringify([...selectedTeamIds].sort()) !==
         JSON.stringify(serverTeamIds));
 
-  const hasDefaultUserLimitChanges =
-    defaultUserLimitValue !== serverDefaultUserLimitValue ||
-    JSON.stringify([...defaultUserLimitModels].sort()) !==
-      JSON.stringify(serverDefaultUserLimitModels) ||
-    defaultUserLimitCleanupInterval !== serverDefaultUserLimitCleanupInterval;
-
   const isInitialLoading =
     isOrganizationPending || areTeamsPending || !hasSyncedInitialSettings;
-  const hasChanges =
-    !isInitialLoading && (hasCompressionChanges || hasDefaultUserLimitChanges);
+  const hasChanges = !isInitialLoading && hasCompressionChanges;
 
   const handleSave = async () => {
-    const mutations: Promise<unknown>[] = [];
+    if (!hasCompressionChanges) return;
+
     const llmSettingsBody: UpdateLlmSettingsBody = {};
-    let shouldUpdateLlmSettings = false;
     let shouldUpdateTeams = false;
 
-    if (hasCompressionChanges) {
-      if (compressionMode === "disabled") {
-        Object.assign(llmSettingsBody, {
-          compressionScope: "organization",
-          convertToolResultsToToon: false,
-        });
-      } else if (compressionMode === "organization") {
-        Object.assign(llmSettingsBody, {
-          compressionScope: "organization",
-          convertToolResultsToToon: true,
-        });
-      } else {
-        Object.assign(llmSettingsBody, {
-          compressionScope: "team",
-          convertToolResultsToToon: false,
-        });
-        shouldUpdateTeams = true;
-      }
-      shouldUpdateLlmSettings = true;
-    }
-
-    if (hasDefaultUserLimitChanges) {
+    if (compressionMode === "disabled") {
       Object.assign(llmSettingsBody, {
-        defaultUserLimitValue: defaultUserLimitValue
-          ? Number(defaultUserLimitValue)
-          : null,
-        defaultUserLimitModel:
-          defaultUserLimitValue && !isDefaultUserLimitAllModels
-            ? defaultUserLimitModels
-            : null,
-        defaultUserLimitCleanupInterval: defaultUserLimitValue
-          ? defaultUserLimitCleanupInterval
-          : null,
+        compressionScope: "organization",
+        convertToolResultsToToon: false,
       });
-      shouldUpdateLlmSettings = true;
+    } else if (compressionMode === "organization") {
+      Object.assign(llmSettingsBody, {
+        compressionScope: "organization",
+        convertToolResultsToToon: true,
+      });
+    } else {
+      Object.assign(llmSettingsBody, {
+        compressionScope: "team",
+        convertToolResultsToToon: false,
+      });
+      shouldUpdateTeams = true;
     }
 
-    if (shouldUpdateLlmSettings) {
-      const updateLlmSettings =
-        updateLlmSettingsMutation.mutateAsync(llmSettingsBody);
-      mutations.push(
-        shouldUpdateTeams
-          ? updateLlmSettings
-              .then(() =>
-                Promise.all(
-                  loadedTeams.map((team) =>
-                    archestraApiSdk.updateTeam({
-                      path: { id: team.id },
-                      body: {
-                        name: team.name,
-                        description: team.description ?? undefined,
-                        convertToolResultsToToon: selectedTeamIds.includes(
-                          team.id,
-                        ),
-                      },
-                    }),
-                  ),
-                ),
-              )
-              .then(() =>
-                queryClient.invalidateQueries({ queryKey: ["teams"] }),
-              )
-          : updateLlmSettings,
-      );
-    }
-
-    const results = await Promise.allSettled(mutations);
-    const failures = results.filter((r) => r.status === "rejected");
-    if (failures.length > 0 && failures.length < results.length) {
-      toast.error("Some settings failed to save. Please try again.");
-    } else if (failures.length === results.length && failures.length > 0) {
+    try {
+      await updateLlmSettingsMutation.mutateAsync(llmSettingsBody);
+      if (shouldUpdateTeams) {
+        await Promise.all(
+          loadedTeams.map((team) =>
+            archestraApiSdk.updateTeam({
+              path: { id: team.id },
+              body: {
+                name: team.name,
+                description: team.description ?? undefined,
+                convertToolResultsToToon: selectedTeamIds.includes(team.id),
+              },
+            }),
+          ),
+        );
+        await queryClient.invalidateQueries({ queryKey: ["teams"] });
+      }
+    } catch {
       toast.error("Failed to save settings.");
     }
   };
 
   const handleCancel = () => {
     setCompressionMode(serverCompressionMode);
-    setDefaultUserLimitValue(serverDefaultUserLimitValue);
-    setDefaultUserLimitModels(serverDefaultUserLimitModels);
-    setIsDefaultUserLimitAllModels(serverDefaultUserLimitModels.length === 0);
-    setDefaultUserLimitCleanupInterval(serverDefaultUserLimitCleanupInterval);
     setSelectedTeamIds(
       loadedTeams
         .filter((team) => team.convertToolResultsToToon)
         .map((team) => team.id),
     );
-  };
-
-  const handleUnsetDefaultUserLimit = () => {
-    setDefaultUserLimitValue("");
-    setDefaultUserLimitModels([]);
-    setIsDefaultUserLimitAllModels(true);
-    setDefaultUserLimitCleanupInterval(DEFAULT_LIMIT_CLEANUP_INTERVAL);
   };
 
   if (isInitialLoading) {
@@ -363,90 +247,6 @@ export default function LlmSettingsPage() {
           </div>
         )}
       </SettingsBlock>
-      <SettingsBlock
-        title="Default user limit"
-        description="Apply the same token-cost limit to every existing and future user."
-        control={
-          serverDefaultUserLimitValue ? (
-            <WithPermissions
-              permissions={{ llmSettings: ["update"] }}
-              noPermissionHandle="tooltip"
-            >
-              {({ hasPermission }) => (
-                <Button
-                  variant="outline"
-                  onClick={handleUnsetDefaultUserLimit}
-                  disabled={
-                    updateLlmSettingsMutation.isPending || !hasPermission
-                  }
-                >
-                  Unset
-                </Button>
-              )}
-            </WithPermissions>
-          ) : null
-        }
-      >
-        <WithPermissions
-          permissions={{ llmSettings: ["update"] }}
-          noPermissionHandle="tooltip"
-        >
-          {({ hasPermission }) => (
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_12rem_12rem]">
-              <div className="space-y-2">
-                <Label>Models</Label>
-                <LlmModelPicker
-                  multiple
-                  sortDirection="desc"
-                  value={
-                    isDefaultUserLimitAllModels
-                      ? ["all"]
-                      : defaultUserLimitModels
-                  }
-                  onValueChange={(values) => {
-                    const isAllModels = values.includes("all");
-                    setDefaultUserLimitModels(isAllModels ? [] : values);
-                    setIsDefaultUserLimitAllModels(isAllModels);
-                  }}
-                  models={modelOptions}
-                  editable={
-                    hasPermission && !updateLlmSettingsMutation.isPending
-                  }
-                  includeAllOption
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Limit value ($)</Label>
-                <Input
-                  value={formatNumericInput(defaultUserLimitValue)}
-                  onChange={(event) =>
-                    setDefaultUserLimitValue(
-                      event.target.value.replace(/[^0-9]/g, ""),
-                    )
-                  }
-                  placeholder="Disabled"
-                  inputMode="numeric"
-                  disabled={
-                    updateLlmSettingsMutation.isPending || !hasPermission
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Cleanup interval</Label>
-                <LimitCleanupIntervalSelect
-                  value={defaultUserLimitCleanupInterval}
-                  onValueChange={setDefaultUserLimitCleanupInterval}
-                  disabled={
-                    updateLlmSettingsMutation.isPending ||
-                    !hasPermission ||
-                    !defaultUserLimitValue
-                  }
-                />
-              </div>
-            </div>
-          )}
-        </WithPermissions>
-      </SettingsBlock>
       <SettingsSaveBar
         hasChanges={hasChanges}
         isSaving={updateLlmSettingsMutation.isPending}
@@ -454,6 +254,12 @@ export default function LlmSettingsPage() {
         onSave={handleSave}
         onCancel={handleCancel}
       />
+      <WithPermissions
+        permissions={{ llmLimit: ["read"] }}
+        noPermissionHandle="hide"
+      >
+        <DefaultUserLimitsSection />
+      </WithPermissions>
     </SettingsSectionStack>
   );
 }

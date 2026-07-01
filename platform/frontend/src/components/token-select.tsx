@@ -1,6 +1,6 @@
 "use client";
 
-import { type AgentScope, E2eTestId } from "@shared";
+import { type AgentScope, E2eTestId } from "@archestra/shared";
 import { Zap } from "lucide-react";
 import { useEffect } from "react";
 import {

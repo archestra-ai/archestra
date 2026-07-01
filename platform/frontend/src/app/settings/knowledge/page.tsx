@@ -1,6 +1,6 @@
 "use client";
 
-import { isProviderApiKeyOptional } from "@shared";
+import { isProviderApiKeyOptional } from "@archestra/shared";
 import {
   ArrowUpRight,
   Info,
@@ -24,11 +24,13 @@ import {
   type LlmProviderApiKeyFormValues,
 } from "@/components/llm-provider-api-key-form";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -87,6 +89,10 @@ const KNOWLEDGE_MODEL_POPOVER_CLASS =
   "w-max min-w-[var(--radix-popover-trigger-width)] max-w-[min(32rem,calc(100vw-2rem))]";
 const KNOWLEDGE_MODEL_POPOVER_LIST_CLASS =
   "max-h-[min(220px,calc(var(--radix-popover-content-available-height)-3rem))]";
+
+// Static highlight for the next incomplete setup step. A still ring guides the
+// eye without the constant blinking of `animate-pulse`.
+const SETUP_HIGHLIGHT_CLASS = "ring-2 ring-primary/50";
 
 function CardRow({
   label,
@@ -209,6 +215,7 @@ function AddApiKeyDialog({
             bedrockIamAuthEnabled={bedrockIamAuthEnabled}
             geminiVertexAiEnabled={geminiVertexAiEnabled}
             hideScopeAndPrimary
+            forEmbedding={forEmbedding}
           />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
@@ -283,7 +290,7 @@ function ApiKeySelector({
               type="button"
               variant="outline"
               size="sm"
-              className={cn(pulse && "animate-pulse ring-2 ring-primary/40")}
+              className={cn(pulse && SETUP_HIGHLIGHT_CLASS)}
               onClick={() => setShowAddDialog(true)}
             >
               <Plus className="h-3 w-3 mr-1" />
@@ -312,10 +319,7 @@ function ApiKeySelector({
         setApiKeySelectorOpen(false);
       }}
       triggerVariant="select"
-      triggerClassName={cn(
-        "w-full",
-        pulse && "animate-pulse ring-2 ring-primary/40",
-      )}
+      triggerClassName={cn("w-full", pulse && SETUP_HIGHLIGHT_CLASS)}
       popoverClassName="w-[var(--radix-popover-trigger-width)]"
       emptyTriggerLabel={`Select ${label}...`}
     />
@@ -377,7 +381,7 @@ function RerankerModelSelector({
       onValueChange={(v) => onChange(v || null)}
       options={rerankerItems}
       placeholder="Select reranking model..."
-      className={cn("w-full", pulse && "animate-pulse ring-2 ring-primary/40")}
+      className={cn("w-full", pulse && SETUP_HIGHLIGHT_CLASS)}
       popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
       popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
       popoverSide="bottom"
@@ -437,8 +441,12 @@ function DropEmbeddingConfigDialog({
 
 function KnowledgeSettingsContent() {
   const { data: organization, isPending } = useOrganization();
-  const { data: apiKeys, isPending: areApiKeysPending } =
-    useAvailableLlmProviderApiKeys();
+  const {
+    data: apiKeys,
+    isPending: areApiKeysPending,
+    isLoadingError: isApiKeysLoadError,
+    refetch: refetchApiKeys,
+  } = useAvailableLlmProviderApiKeys({ toastOnError: false });
   const updateKnowledgeSettings = useUpdateKnowledgeSettings(
     "Knowledge settings updated",
     "Failed to update knowledge settings",
@@ -456,7 +464,11 @@ function KnowledgeSettingsContent() {
   const [rerankerModel, setRerankerModel] = useState<string | null>(null);
 
   const { data: embeddingModels } = useEmbeddingModels(embeddingChatApiKeyId);
-  const { data: modelsWithApiKeys } = useModelsWithApiKeys();
+  const {
+    data: modelsWithApiKeys,
+    isLoadingError: isModelsWithApiKeysLoadError,
+    refetch: refetchModelsWithApiKeys,
+  } = useModelsWithApiKeys({ toastOnError: false });
   const embeddingCapableKeyIds = useMemo(() => {
     const ids = new Set<string>();
     for (const model of modelsWithApiKeys ?? []) {
@@ -558,6 +570,20 @@ function KnowledgeSettingsContent() {
     }
   };
 
+  const isLoadError = isApiKeysLoadError || isModelsWithApiKeysLoadError;
+
+  if (!isInitialLoading && isLoadError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load your knowledge settings"
+        onRetry={() => {
+          refetchApiKeys();
+          refetchModelsWithApiKeys();
+        }}
+      />
+    );
+  }
+
   return (
     <LoadingWrapper
       isPending={isInitialLoading}
@@ -613,7 +639,7 @@ function KnowledgeSettingsContent() {
                       className={cn(
                         "w-full",
                         embeddingSetupStep === "select-model" &&
-                          "animate-pulse ring-2 ring-primary/40",
+                          SETUP_HIGHLIGHT_CLASS,
                       )}
                       popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
                       popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
@@ -630,7 +656,7 @@ function KnowledgeSettingsContent() {
                   <p className="text-sm text-muted-foreground sm:pl-28">
                     Don't see your model?{" "}
                     <Link
-                      href="/llm/model-providers/models"
+                      href="/llm/models"
                       className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
                     >
                       Sync models and configure embedding dimensions
@@ -792,6 +818,7 @@ function KnowledgeSettingsContent() {
 export default function KnowledgeSettingsPage() {
   return (
     <ErrorBoundary>
+      <SmallTeamTierBanner featureName="Knowledge Base with access control" />
       <KnowledgeSettingsContent />
     </ErrorBoundary>
   );

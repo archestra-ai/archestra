@@ -341,8 +341,8 @@ runs:
         echo "Platform pods are ready"
 
         echo "Verifying services are accessible..."
-        curl --retry 5 --retry-delay 1 --retry-connrefused http://localhost:3000/ || (echo "Frontend not accessible" && exit 1)
-        curl --retry 5 --retry-delay 1 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
+        curl --retry 5 --retry-delay 1 --retry-connrefused http://127.0.0.1:3000/ || (echo "Frontend not accessible" && exit 1)
+        curl --retry 5 --retry-delay 1 --retry-connrefused http://127.0.0.1:9000/health || (echo "Backend not accessible" && exit 1)
         echo "Platform services are ready"
 
         if [ "$DEPLOY_E2E_DEPS" = "true" ]; then
@@ -423,8 +423,8 @@ runs:
       id: urls
       shell: bash
       run: |
-        echo "backend-url=http://localhost:9000" >> $GITHUB_OUTPUT
-        echo "frontend-url=http://localhost:3000" >> $GITHUB_OUTPUT
+        echo "backend-url=http://127.0.0.1:9000" >> $GITHUB_OUTPUT
+        echo "frontend-url=http://127.0.0.1:3000" >> $GITHUB_OUTPUT
 
     - name: Show logs on failure
       if: failure()

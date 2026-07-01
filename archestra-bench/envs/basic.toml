@@ -1,0 +1,66 @@
+id = "basic"
+name = "Basic"
+tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "github-stars", "lena-png-size", "sqlite-orders", "cv-shortlist", "invoice-approval", "ai-sre-fk-drain", "ai-sre-cache-treadmill", "decode-cipher", "xlsx-live-formulas", "purchase-ledger", "aec-material-json-takeoff", "renewal-churn-risk", "pcap-soc-triage", "xlsx-comment-injection", "it-license-rollup", "it-audit-resist-injection", "access-request-intake", "review-run-command-persistence", "review-file-upload-persistence", "solidarity-tax-usd", "ib-deck-qc", "expense-report-continue"]
+
+# Starts the harness-owned `acme_it` synthetic MCP (fixed, controlled content) and registers it to every
+# lane's agent. It serves stateless data, so one shared instance is safe across concurrent lanes -- the
+# it-license-rollup / it-audit-resist-injection / access-request-intake tasks grade its tool calls.
+fixture_mcp = true
+
+# These tasks don't mutate shared backend state (the skill/tool catalog), and the skill surface is
+# large + web-pinned -- so seed one backend once and let concurrent lanes share it. Sandbox workspaces
+# are per-conversation and persistent files are per-lane project-scoped, so lanes don't clash even
+# though purchase-ledger writes and re-reads a persistent file across conversations.
+share_backend = true
+
+# Platform feature flags applied when creating this env's agents. Optional; defaults shown.
+# `tool_exposure_mode`: "search_and_run_only" (model discovers tools via search_tools/run_tool) or
+# "full" (model gets the whole assigned tool list up front). To A/B a flag, flip it and run twice --
+# task ids are globally unique across envs, so the same tasks can't sit in two envs in one run.
+# [platform]
+# tool_exposure_mode = "search_and_run_only"
+
+# All skills from the two public skill libraries, pinned. A broad, realistic skill surface; the agent
+# picks whatever helps (e.g. the document skills for the xlsx task). `cap` unset = import all.
+[[skills]]
+repo = "github.com/anthropics/skills"
+path = "skills"
+ref = "57546260929473d4e0d1c1bb75297be2fdfa1949"
+
+[[skills]]
+repo = "github.com/openai/skills"
+path = "skills"
+ref = "a8924c2a35cfa290458852c4fad17c9133054c2e"
+
+# Benchmark-owned skills that gate decode-cipher, xlsx-live-formulas, and access-request-intake,
+# imported from GitHub by commit SHA. cipher-decoder is pinned to its latest change on this branch;
+# sales-ledger to PR #5672.
+[[skills]]
+repo = "github.com/archestra-ai/archestra"
+path = "archestra-bench/skills/cipher-decoder"
+ref = "981571f262a68965152f24f1fa7e28f042774e9e"
+
+[[skills]]
+repo = "github.com/archestra-ai/archestra"
+path = "archestra-bench/skills/sales-ledger"
+ref = "08f9b3033d20597fb3ea85d35223772300bb90dc"
+
+# Drives the access-request-intake elicitation flow. Pinned to its latest change on main.
+[[skills]]
+repo = "github.com/archestra-ai/archestra"
+path = "archestra-bench/skills/access-request-intake"
+ref = "6fab157c0716377d4df459bb7ba959918277ac94"
+
+# Three public, no-auth remote MCP servers, registered as part of the surface (distractors; no task
+# requires them). Each must list tools without auth or env setup hard-fails naming it.
+[[mcps]]
+name = "deepwiki"
+server_url = "https://mcp.deepwiki.com/mcp"
+
+[[mcps]]
+name = "microsoft-learn"
+server_url = "https://learn.microsoft.com/api/mcp"
+
+[[mcps]]
+name = "context7"
+server_url = "https://mcp.context7.com/mcp"

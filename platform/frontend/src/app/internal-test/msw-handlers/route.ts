@@ -48,11 +48,13 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  const [msw, { server }, { buildHandler }] = await Promise.all([
-    import("msw"),
-    import("@/mocks/node"),
-    import("@/mocks/build-handler"),
-  ]);
+  const [msw, { ensureMswServerListening, server }, { buildHandler }] =
+    await Promise.all([
+      import("msw"),
+      import("@/mocks/node"),
+      import("@/mocks/build-handler"),
+    ]);
+  ensureMswServerListening();
 
   const urls = override.url.startsWith("/")
     ? [override.url, `${BACKEND_ORIGIN}${override.url}`]
@@ -67,6 +69,8 @@ export async function POST(req: Request): Promise<Response> {
 
 export async function GET(): Promise<Response> {
   if (!ENABLED) return notFound();
+  const { ensureMswServerListening } = await import("@/mocks/node");
+  ensureMswServerListening();
   return Response.json({
     overrides: registry(),
     unhandledRequests: globalThis.__archestraUnhandledRequests ?? [],
@@ -75,7 +79,8 @@ export async function GET(): Promise<Response> {
 
 export async function DELETE(): Promise<Response> {
   if (!ENABLED) return notFound();
-  const { server } = await import("@/mocks/node");
+  const { ensureMswServerListening, server } = await import("@/mocks/node");
+  ensureMswServerListening();
   server.resetHandlers();
   globalThis.__archestraMswOverrides = [];
   globalThis.__archestraUnhandledRequests = [];

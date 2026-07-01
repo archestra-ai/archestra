@@ -17,6 +17,14 @@ export const MCP_GATEWAY_PREFIX = "/v1/mcp";
  */
 export const SKILL_MARKETPLACE_PREFIX = "/skills/m";
 
+/**
+ * Public unauthenticated endpoint serving rendered connection-setup scripts.
+ * The one-time setup token is embedded in the URL path; routes under this
+ * prefix are allowlisted in the auth middleware and excluded from request
+ * logging, in the same shape as SKILL_MARKETPLACE_PREFIX.
+ */
+export const CONNECTION_SETUP_SCRIPT_PREFIX = "/api/connection-setups/script";
+
 export const ORGANIZATION_APPEARANCE_SETTINGS_PATH =
   "/api/organization/appearance-settings";
 export const PUBLIC_CONFIG_PATH = "/api/config/public";

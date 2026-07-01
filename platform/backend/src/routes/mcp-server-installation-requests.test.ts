@@ -1,4 +1,5 @@
 import { type Mock, vi } from "vitest";
+import { McpServerInstallationRequestModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -14,7 +15,7 @@ import { hasPermission } from "@/auth";
 const mockHasPermission = hasPermission as Mock;
 
 // Mock archestraCatalogSdk to prevent external catalog calls during approve
-vi.mock("@shared", async (importOriginal) => {
+vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
@@ -568,5 +569,138 @@ describe("MCP server installation request routes", () => {
       expect(approved.status).toBe("approved");
       expect(approved.customServerConfig.serverType).toBe("remote");
     });
+  });
+});
+
+describe("MCP server installation request authorization & state transitions", () => {
+  let app: FastifyInstanceWithZod;
+  let user: User;
+  let organizationId: string;
+
+  const UNKNOWN_ID = "00000000-0000-4000-8000-0000000000bb";
+
+  beforeEach(async ({ makeOrganization, makeUser }) => {
+    vi.clearAllMocks();
+    grantAdminPermissions();
+
+    user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = user;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+
+    const { default: routes } = await import(
+      "./mcp-server-installation-requests"
+    );
+    await app.register(routes);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  function denyAdminPermissions() {
+    mockHasPermission.mockResolvedValue({ success: false, error: null });
+  }
+
+  async function makeRequestOwnedBy(ownerId: string) {
+    return McpServerInstallationRequestModel.create(ownerId, {
+      externalCatalogId: `auth-test-${Date.now()}-${Math.random()}`,
+      customServerConfig: null,
+    });
+  }
+
+  test("GET /:id forbids a non-admin from viewing another member's request (403)", async ({
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    const request = await makeRequestOwnedBy(owner.id);
+    denyAdminPermissions();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/mcp_server_installation_requests/${request.id}`,
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toBe("Forbidden");
+  });
+
+  test("PATCH /:id forbids a non-admin from setting status (403)", async () => {
+    const request = await makeRequestOwnedBy(user.id);
+    denyAdminPermissions();
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server_installation_requests/${request.id}`,
+      payload: { status: "approved" },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toBe(
+      "Only admins can approve or decline requests",
+    );
+  });
+
+  test("PATCH /:id returns 404 for an unknown request", async () => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server_installation_requests/${UNKNOWN_ID}`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toBe(
+      "Installation request not found",
+    );
+  });
+
+  test("POST /:id/notes forbids a non-admin from noting another member's request (403)", async ({
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    const request = await makeRequestOwnedBy(owner.id);
+    denyAdminPermissions();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server_installation_requests/${request.id}/notes`,
+      payload: { content: "please reconsider" },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toBe("Forbidden");
+  });
+
+  test("POST /:id/approve is idempotent for an already-approved request", async () => {
+    const created = await makeRequestOwnedBy(user.id);
+
+    const first = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server_installation_requests/${created.id}/approve`,
+      payload: { adminResponse: "ok" },
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json().status).toBe("approved");
+
+    const second = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server_installation_requests/${created.id}/approve`,
+      payload: { adminResponse: "second attempt" },
+    });
+
+    expect(second.statusCode).toBe(200);
+    const body = second.json();
+    expect(body.id).toBe(created.id);
+    expect(body.status).toBe("approved");
+    // The short-circuit returns the already-approved row unchanged, so the
+    // second admin response is not applied.
+    expect(body.adminResponse).toBe("ok");
   });
 });

@@ -1,4 +1,4 @@
-import type { ChatErrorResponse } from "@shared";
+import type { ChatErrorResponse } from "@archestra/shared";
 import { index, jsonb, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
 import conversationsTable from "./conversation";
 

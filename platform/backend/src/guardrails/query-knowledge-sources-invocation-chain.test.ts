@@ -1,7 +1,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
-} from "@shared";
+} from "@archestra/shared";
 import {
   ToolInvocationPolicyModel,
   ToolModel,

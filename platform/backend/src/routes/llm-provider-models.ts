@@ -4,11 +4,13 @@ import {
   isProviderApiKeyOptional,
   LAZY_MODEL_SYNC_STATUS_HEADER,
   LAZY_MODEL_SYNC_STATUS_PENDING,
+  providerRequiresPerUserCredential,
   RouteId,
   type SupportedProvider,
+  SupportedProviders,
   SupportedProvidersSchema,
   TimeInMs,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { LRUCacheManager } from "@/cache-manager";
@@ -30,7 +32,9 @@ import { systemKeyManager } from "@/services/system-key-manager";
 import {
   ApiError,
   constructResponseSchema,
+  type LinkedApiKey,
   type LlmProviderApiKeyWithScopeInfo,
+  type Model,
   ModelCapabilitiesSchema,
   ModelWithApiKeysSchema,
   PatchModelBodySchema,
@@ -73,6 +77,19 @@ const LlmModelSchema = z.object({
   /** True when the provider charges nothing for this model (both prices are zero). */
   isFree: z.boolean(),
   embeddingDimensions: EmbeddingDimensionsSchema.nullable().optional(),
+  /**
+   * True for models from a per-user provider (e.g. GitHub Copilot), whose
+   * credential each member supplies via their own account. The model is
+   * selectable by anyone, but using it requires the acting user to have
+   * connected — see `isConnected`.
+   */
+  requiresUserConnection: z.boolean().optional(),
+  /**
+   * For `requiresUserConnection` models: whether the requesting user has linked
+   * their own account. When false, the model is offered but the UI should prompt
+   * the user to connect (and a send surfaces the connect flow).
+   */
+  isConnected: z.boolean().optional(),
 });
 
 const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -175,9 +192,18 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Models fetched from database",
       );
 
-      let filteredModels = provider
-        ? dbModels.filter(({ model }) => model.provider === provider)
-        : dbModels;
+      // Per-user providers (e.g. GitHub Copilot) are catalogued org-wide and
+      // resolved per-user at request time, so they're sourced separately below
+      // (visible to everyone, flagged) — keep them out of the per-key path so a
+      // member's own connected copy isn't listed twice or shown unflagged.
+      let filteredModels = dbModels.filter(
+        ({ model }) => !providerRequiresPerUserCredential(model.provider),
+      );
+      if (provider) {
+        filteredModels = filteredModels.filter(
+          ({ model }) => model.provider === provider,
+        );
+      }
 
       // Filter by embedding status if requested
       if (isEmbedding !== undefined) {
@@ -188,7 +214,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const models = filteredModels
+      const keyLinkedModels = filteredModels
         .filter(({ model }) =>
           isEmbedding ? true : ModelModel.supportsTextChat(model),
         )
@@ -202,6 +228,19 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           isFree: isFreeModel(model),
           embeddingDimensions: model.embeddingDimensions,
         }));
+
+      const perUserModels = await getPerUserProviderModels({
+        organizationId,
+        provider,
+        isEmbedding,
+        connectedProviders: new Set(
+          apiKeys
+            .filter((key) => providerRequiresPerUserCredential(key.provider))
+            .map((key) => key.provider),
+        ),
+      });
+
+      const models = [...keyLinkedModels, ...perUserModels];
 
       logger.info(
         { organizationId, provider, totalModels: models.length },
@@ -256,32 +295,12 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       const response = [
-        ...modelsWithApiKeys.map(({ model, isBest, apiKeys }) => {
-          const pricing = ModelModel.toCapabilities(model);
-          return {
-            ...model,
-            isBest,
-            apiKeys,
-            pricePerMillionInput: pricing.pricePerMillionInput,
-            pricePerMillionOutput: pricing.pricePerMillionOutput,
-            isCustomPrice: pricing.isCustomPrice,
-            priceSource: pricing.priceSource,
-            isFree: isFreeModel(model),
-          };
-        }),
-        ...unlinkedLlmProxyModels.map((model) => {
-          const pricing = ModelModel.toCapabilities(model);
-          return {
-            ...model,
-            isBest: false,
-            apiKeys: [],
-            pricePerMillionInput: pricing.pricePerMillionInput,
-            pricePerMillionOutput: pricing.pricePerMillionOutput,
-            isCustomPrice: pricing.isCustomPrice,
-            priceSource: pricing.priceSource,
-            isFree: isFreeModel(model),
-          };
-        }),
+        ...modelsWithApiKeys.map(({ model, isBest, apiKeys }) =>
+          toModelWithApiKeysResponse({ model, isBest, apiKeys }),
+        ),
+        ...unlinkedLlmProxyModels.map((model) =>
+          toModelWithApiKeysResponse({ model, isBest: false, apiKeys: [] }),
+        ),
       ];
 
       logger.debug(
@@ -531,4 +550,91 @@ function shouldHandleWithSystemKeySync(apiKey: {
   }
 
   return false;
+}
+
+/**
+ * Build the flagged per-user-provider model entries for the available-models
+ * response. Per-user providers (GitHub Copilot) are advertised to every member
+ * — connected or not — because the credential is resolved per-user at request
+ * time; the `requiresUserConnection`/`isConnected` flags let the UI prompt a
+ * member to connect instead of hiding the model or showing it as unavailable.
+ */
+async function getPerUserProviderModels(params: {
+  organizationId: string;
+  provider?: SupportedProvider;
+  isEmbedding?: boolean;
+  connectedProviders: Set<SupportedProvider>;
+}): Promise<Array<z.infer<typeof LlmModelSchema>>> {
+  const { organizationId, provider, isEmbedding, connectedProviders } = params;
+
+  // Per-user providers don't expose embeddings, so never inject for embeddings.
+  if (isEmbedding) {
+    return [];
+  }
+
+  // Per-user providers are org-wide and resolved per-user at request time, so
+  // they're always offered (regardless of any single-key `apiKeyId` scoping) —
+  // the picker should let any member pick a Copilot model and connect on send.
+  const providers = provider
+    ? providerRequiresPerUserCredential(provider)
+      ? [provider]
+      : []
+    : SupportedProviders.filter(providerRequiresPerUserCredential);
+
+  if (providers.length === 0) {
+    return [];
+  }
+
+  const perProvider = await Promise.all(
+    providers.map(async (perUserProvider) => {
+      const orgModels =
+        await LlmProviderApiKeyModelLinkModel.getOrgModelsForPerUserProvider(
+          organizationId,
+          perUserProvider,
+        );
+      const isConnected = connectedProviders.has(perUserProvider);
+      return orgModels
+        .filter(({ model }) => ModelModel.supportsTextChat(model))
+        .map(({ model, isBest }) => ({
+          id: model.modelId,
+          dbId: model.id,
+          displayName: model.description || model.modelId,
+          provider: model.provider,
+          capabilities: ModelModel.toCapabilities(model),
+          isBest,
+          isFree: isFreeModel(model),
+          embeddingDimensions: model.embeddingDimensions,
+          requiresUserConnection: true,
+          isConnected,
+        }));
+    }),
+  );
+
+  return perProvider.flat();
+}
+
+/**
+ * Shape a model row into the models-with-API-keys response, attaching the
+ * computed effective pricing (input/output + cache) and price sources.
+ */
+function toModelWithApiKeysResponse(params: {
+  model: Model;
+  isBest: boolean;
+  apiKeys: LinkedApiKey[];
+}) {
+  const { model, isBest, apiKeys } = params;
+  const pricing = ModelModel.toCapabilities(model);
+  return {
+    ...model,
+    isBest,
+    apiKeys,
+    pricePerMillionInput: pricing.pricePerMillionInput,
+    pricePerMillionOutput: pricing.pricePerMillionOutput,
+    isCustomPrice: pricing.isCustomPrice,
+    priceSource: pricing.priceSource,
+    pricePerMillionCacheRead: pricing.pricePerMillionCacheRead,
+    pricePerMillionCacheWrite: pricing.pricePerMillionCacheWrite,
+    cachePriceSource: pricing.cachePriceSource,
+    isFree: isFreeModel(model),
+  };
 }

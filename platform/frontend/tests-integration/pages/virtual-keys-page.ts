@@ -1,9 +1,9 @@
-import type { Locator, Page } from "@playwright/test";
 import {
   E2eTestId,
   getDeleteVirtualKeyButtonTestId,
   getVirtualKeyRowTestId,
-} from "@shared/e2e-test-ids";
+} from "@archestra/shared/e2e-test-ids";
+import type { Locator, Page } from "@playwright/test";
 
 export class VirtualKeysPage {
   readonly page: Page;

@@ -1,0 +1,19 @@
+[[stages]]
+text = """I've attached our orders database -- it's a SQLite file. Can you find the customer with the highest total order amount across all of their orders? If two customers are tied on total, go with whichever sorts first alphabetically. Send it back with submit_result as result = {"top_customer": "<that customer name>"}."""
+
+  [[stages.files]]
+  src = "orders.sqlite"
+  dest = "/home/sandbox/attachments/orders.sqlite"
+  mime_type = "application/octet-stream"
+
+[result_schema]
+type = "object"
+required = ["top_customer"]
+additionalProperties = false
+
+  [result_schema.properties.top_customer]
+  type = "string"
+  minLength = 1
+
+[verifier]
+deps = []

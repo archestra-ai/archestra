@@ -1,6 +1,6 @@
 "use client";
 
-import type { AgentType, DocsPage } from "@shared";
+import type { AgentType, DocsPage } from "@archestra/shared";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight, Bot, ExternalLink, Network, Route } from "lucide-react";
 import type { ReactNode } from "react";

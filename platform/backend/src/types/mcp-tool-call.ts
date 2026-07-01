@@ -2,6 +2,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { CommonToolCallSchema } from "./common-llm-format";
+import { ToolOwnerTypeSchema } from "./tool-owner";
 
 /**
  * Auth method types for MCP tool call logging.
@@ -37,9 +38,11 @@ export const SelectMcpToolCallSchema = createSelectSchema(
 });
 
 /**
- * Insert schema for MCP tool calls
- * Note: agentId is required when creating new tool calls
- * (it's nullable in the DB schema to preserve calls when agents are deleted)
+ * Insert schema for MCP tool calls. `ownerType` is optional and the DB column
+ * defaults to "agent", so existing agent call sites are unchanged; the refine
+ * then requires the matching owner id (agentId for agent calls, appId for app
+ * calls). Both id columns stay nullable in the DB so audit rows survive owner
+ * deletion.
  */
 export const InsertMcpToolCallSchema = createInsertSchema(
   schema.mcpToolCallsTable,
@@ -49,10 +52,43 @@ export const InsertMcpToolCallSchema = createInsertSchema(
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable().optional(),
   },
-).extend({
-  // Override agentId to be required for creating tool calls
-  agentId: z.string().uuid(),
-});
+)
+  .extend({
+    ownerType: ToolOwnerTypeSchema.optional(),
+    agentId: z.string().uuid().nullable().optional(),
+    appId: z.string().uuid().nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    // Exactly the matching owner id must be set and the other must be absent, so
+    // a row can never be authorized through the wrong owner path.
+    if ((value.ownerType ?? "agent") === "agent") {
+      if (!value.agentId) {
+        ctx.addIssue({
+          code: "custom",
+          message: "agent-owned tool calls require agentId",
+        });
+      }
+      if (value.appId) {
+        ctx.addIssue({
+          code: "custom",
+          message: "agent-owned tool calls must not set appId",
+        });
+      }
+    } else {
+      if (!value.appId) {
+        ctx.addIssue({
+          code: "custom",
+          message: "app-owned tool calls require appId",
+        });
+      }
+      if (value.agentId) {
+        ctx.addIssue({
+          code: "custom",
+          message: "app-owned tool calls must not set agentId",
+        });
+      }
+    }
+  });
 
 export type McpToolCall = z.infer<typeof SelectMcpToolCallSchema>;
 export type InsertMcpToolCall = z.infer<typeof InsertMcpToolCallSchema>;

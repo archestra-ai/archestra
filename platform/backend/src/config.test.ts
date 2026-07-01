@@ -8,6 +8,7 @@ import {
   test,
 } from "@/test";
 import config, {
+  betaFeatureEnabled,
   getAnalyticsConfig,
   getCorsOrigins,
   getDatabaseUrl,
@@ -18,17 +19,19 @@ import config, {
   getTrustedOrigins,
   parseActiveChatRunPollIntervalMs,
   parseAuditLogRetentionDays,
-  parseBlobStorageProvider,
   parseBodyLimit,
   parseCodeRuntimeDaggerRunnerHost,
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
   parseDatabasePoolMax,
+  parseDatabaseStatementTimeoutMillis,
+  parseFileStorageFilesystemRoot,
+  parseFileStorageProvider,
+  parseFileStorageS3Config,
+  parseLogFormat,
   parseMetricsPort,
   parseProcessType,
-  parseS3BlobStorageAuthMethod,
-  parseS3BlobStorageBucket,
   parseSampleRate,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
@@ -309,6 +312,13 @@ describe("getConfiguredOrigins (tested via getCorsOrigins/getTrustedOrigins)", (
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    // A local .env may set ARCHESTRA_NGROK_DOMAIN (a tunnel domain), which
+    // getConfiguredOrigins folds into the trusted/CORS origins. Pin it empty so
+    // these tests are independent of the developer's .env. Set to "" rather than
+    // deleted: the re-import tests below reload config (and thus dotenv, which
+    // defaults to override:false), so a deleted var would be repopulated from
+    // .env while an already-set empty value is left untouched.
+    process.env.ARCHESTRA_NGROK_DOMAIN = "";
     vi.clearAllMocks();
   });
 
@@ -351,6 +361,9 @@ describe("getTrustedOrigins", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    // See note in getConfiguredOrigins: keep these origin tests independent of
+    // a local .env that sets a tunnel domain.
+    process.env.ARCHESTRA_NGROK_DOMAIN = "";
   });
 
   afterEach(() => {
@@ -851,6 +864,46 @@ describe("parseDatabasePoolMax", () => {
   });
 });
 
+describe("parseDatabaseStatementTimeoutMillis", () => {
+  test("should return default 30000 when no value provided", () => {
+    expect(parseDatabaseStatementTimeoutMillis(undefined)).toBe(30000);
+  });
+
+  test("should return default when empty string provided", () => {
+    expect(parseDatabaseStatementTimeoutMillis("")).toBe(30000);
+  });
+
+  test("should return default when whitespace-only string provided", () => {
+    expect(parseDatabaseStatementTimeoutMillis("   ")).toBe(30000);
+  });
+
+  test("should parse valid value", () => {
+    expect(parseDatabaseStatementTimeoutMillis("60000")).toBe(60000);
+  });
+
+  test("should trim whitespace and parse value", () => {
+    expect(parseDatabaseStatementTimeoutMillis("  45000  ")).toBe(45000);
+  });
+
+  test("should allow 0 to disable the timeout", () => {
+    expect(parseDatabaseStatementTimeoutMillis("0")).toBe(0);
+  });
+
+  test("should return default and warn for non-numeric value", () => {
+    expect(parseDatabaseStatementTimeoutMillis("abc")).toBe(30000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS value "abc", using default 30000',
+    );
+  });
+
+  test("should return default and warn for negative value", () => {
+    expect(parseDatabaseStatementTimeoutMillis("-1")).toBe(30000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS value "-1", using default 30000',
+    );
+  });
+});
+
 describe("parseMetricsPort", () => {
   test("should return default 9050 when no value provided", () => {
     expect(parseMetricsPort(undefined)).toBe(9050);
@@ -1050,6 +1103,9 @@ describe("getCorsOrigins", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    // See note in getConfiguredOrigins: keep these origin tests independent of
+    // a local .env that sets a tunnel domain.
+    process.env.ARCHESTRA_NGROK_DOMAIN = "";
   });
 
   afterEach(() => {
@@ -1196,63 +1252,159 @@ describe("parseConnectorSyncMaxDuration", () => {
   });
 });
 
-describe("parseBlobStorageProvider", () => {
-  test("defaults to database storage", () => {
-    expect(parseBlobStorageProvider(undefined)).toBe("db");
-    expect(parseBlobStorageProvider("")).toBe("db");
+describe("parseFileStorageProvider", () => {
+  test("defaults to db when unset", () => {
+    expect(parseFileStorageProvider(undefined)).toBe("db");
   });
 
-  test("accepts s3 case-insensitively", () => {
-    expect(parseBlobStorageProvider("s3")).toBe("s3");
-    expect(parseBlobStorageProvider(" S3 ")).toBe("s3");
+  test("returns filesystem (case/space-insensitive)", () => {
+    expect(parseFileStorageProvider(" FileSystem ")).toBe("filesystem");
   });
 
-  test("falls back to database storage for unsupported values", () => {
-    expect(parseBlobStorageProvider("gcs")).toBe("db");
-    expect(parseBlobStorageProvider("local")).toBe("db");
+  test("falls back to db for any unknown value", () => {
+    expect(parseFileStorageProvider("nope")).toBe("db");
   });
 });
 
-describe("parseS3BlobStorageAuthMethod", () => {
-  test("defaults to IRSA", () => {
-    expect(parseS3BlobStorageAuthMethod(undefined)).toBe("irsa");
-    expect(parseS3BlobStorageAuthMethod("")).toBe("irsa");
+describe("parseFileStorageProvider (s3)", () => {
+  test("recognizes s3 (case-insensitive)", () => {
+    expect(parseFileStorageProvider("s3")).toBe("s3");
+    expect(parseFileStorageProvider("S3")).toBe("s3");
   });
-
-  test("accepts static access key auth case-insensitively", () => {
-    expect(parseS3BlobStorageAuthMethod("static")).toBe("static");
-    expect(parseS3BlobStorageAuthMethod(" STATIC ")).toBe("static");
-  });
-
-  test("falls back to IRSA for unsupported values", () => {
-    expect(parseS3BlobStorageAuthMethod("iam-user")).toBe("irsa");
-    expect(parseS3BlobStorageAuthMethod("profile")).toBe("irsa");
+  test("keeps filesystem and defaults unknown to db", () => {
+    expect(parseFileStorageProvider("filesystem")).toBe("filesystem");
+    expect(parseFileStorageProvider(undefined)).toBe("db");
+    expect(parseFileStorageProvider("nope")).toBe("db");
   });
 });
 
-describe("parseS3BlobStorageBucket", () => {
-  test("allows empty bucket when database storage is enabled", () => {
-    expect(parseS3BlobStorageBucket({ provider: "db", value: "" })).toBe("");
+describe("parseFileStorageS3Config", () => {
+  const env = {
+    bucket: "my-bucket",
+    region: "eu-west-1",
+    endpoint: "https://minio.local:9000",
+    forcePathStyle: "true",
+    accessKeyId: "AKIA",
+    secretAccessKey: "secret",
+    keyPrefix: "/inst-a/",
+  };
+  test("parses a full s3 config", () => {
+    const cfg = parseFileStorageS3Config({ provider: "s3", env });
+    expect(cfg).toEqual({
+      bucket: "my-bucket",
+      region: "eu-west-1",
+      endpoint: "https://minio.local:9000",
+      forcePathStyle: true,
+      accessKeyId: "AKIA",
+      secretAccessKey: "secret",
+      keyPrefix: "inst-a",
+    });
   });
-
-  test("trims configured S3 bucket", () => {
-    expect(
-      parseS3BlobStorageBucket({
-        provider: "s3",
-        value: " archestra-files ",
-      }),
-    ).toBe("archestra-files");
+  test("defaults region, forcePathStyle, and keyPrefix", () => {
+    const cfg = parseFileStorageS3Config({
+      provider: "s3",
+      env: {
+        ...env,
+        region: undefined,
+        forcePathStyle: undefined,
+        keyPrefix: undefined,
+      },
+    });
+    expect(cfg.region).toBe("us-east-1");
+    expect(cfg.forcePathStyle).toBe(false);
+    expect(cfg.keyPrefix).toBe("");
   });
-
-  test("requires bucket when S3 storage is enabled", () => {
+  test("throws when bucket is missing under the s3 provider", () => {
     expect(() =>
-      parseS3BlobStorageBucket({ provider: "s3", value: "" }),
+      parseFileStorageS3Config({
+        provider: "s3",
+        env: { ...env, bucket: undefined },
+      }),
+    ).toThrow(/ARCHESTRA_FILE_STORAGE_S3_BUCKET/);
+  });
+  test("does not validate when the provider is not s3", () => {
+    expect(
+      parseFileStorageS3Config({
+        provider: "db",
+        env: { ...env, bucket: undefined },
+      }).bucket,
+    ).toBe("");
+  });
+  test("throws when only one of the credential pair is set under s3", () => {
+    expect(() =>
+      parseFileStorageS3Config({
+        provider: "s3",
+        env: { ...env, secretAccessKey: undefined },
+      }),
+    ).toThrow(/must be set together/);
+    expect(() =>
+      parseFileStorageS3Config({
+        provider: "s3",
+        env: { ...env, accessKeyId: undefined },
+      }),
+    ).toThrow(/must be set together/);
+  });
+  test("treats a whitespace-only credential as unset under s3", () => {
+    expect(() =>
+      parseFileStorageS3Config({
+        provider: "s3",
+        env: { ...env, secretAccessKey: "   " },
+      }),
+    ).toThrow(/must be set together/);
+  });
+  test("allows both credentials omitted under s3 (AWS default chain)", () => {
+    const cfg = parseFileStorageS3Config({
+      provider: "s3",
+      env: { ...env, accessKeyId: undefined, secretAccessKey: undefined },
+    });
+    expect(cfg.accessKeyId).toBeUndefined();
+    expect(cfg.secretAccessKey).toBeUndefined();
+  });
+  test("does not reject a partial credential pair when the provider is not s3", () => {
+    expect(
+      parseFileStorageS3Config({
+        provider: "db",
+        env: { ...env, secretAccessKey: undefined },
+      }).accessKeyId,
+    ).toBe("AKIA");
+  });
+});
+
+describe("parseFileStorageFilesystemRoot", () => {
+  test("ignores the root when provider is db", () => {
+    expect(parseFileStorageFilesystemRoot({ provider: "db", value: "" })).toBe(
+      "",
+    );
+  });
+
+  test("trims a configured absolute root for the filesystem provider", () => {
+    expect(
+      parseFileStorageFilesystemRoot({
+        provider: "filesystem",
+        value: "  /data/archestra_results  ",
+      }),
+    ).toBe("/data/archestra_results");
+  });
+
+  test("requires a root when provider is filesystem", () => {
+    expect(() =>
+      parseFileStorageFilesystemRoot({ provider: "filesystem", value: " " }),
     ).toThrow(
-      "ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET is required when S3 blob storage is enabled",
+      "ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT is required when ARCHESTRA_FILE_STORAGE_PROVIDER=filesystem",
+    );
+  });
+
+  test("rejects a relative root for the filesystem provider", () => {
+    expect(() =>
+      parseFileStorageFilesystemRoot({
+        provider: "filesystem",
+        value: "relative/dir",
+      }),
+    ).toThrow(
+      "ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT must be an absolute path",
     );
   });
 });
-
 describe("parseProcessType", () => {
   test("should return 'all' when undefined", () => {
     expect(parseProcessType(undefined)).toBe("all");
@@ -1503,9 +1655,14 @@ describe("getMCPGatewayOauthAllowedPublicHosts", () => {
     );
   });
 
-  test("returns only the frontend host when ARCHESTRA_API_BASE_URL is unset", () => {
+  test("includes the frontend host plus local dev origins when ARCHESTRA_API_BASE_URL is unset", () => {
     const expected = new URL(config.frontendBaseUrl).host.toLowerCase();
-    expect(getMCPGatewayOauthAllowedPublicHosts()).toEqual(new Set([expected]));
+    const hosts = getMCPGatewayOauthAllowedPublicHosts();
+    expect(hosts.has(expected)).toBe(true);
+    // Local dev origins are always allow-listed in development so a configured
+    // tunnel (ARCHESTRA_FRONTEND_URL) can't break localhost MCP connections.
+    expect(hosts.has("localhost:3000")).toBe(true);
+    expect(hosts.has("127.0.0.1:3000")).toBe(true);
   });
 
   test("includes a single ARCHESTRA_API_BASE_URL host", () => {
@@ -1600,5 +1757,109 @@ describe("parseAuditLogRetentionDays", () => {
   test("returns default and warns on negative value", () => {
     expect(parseAuditLogRetentionDays("-1")).toBe(0);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("-1"));
+  });
+});
+
+describe("betaFeatureEnabled", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.ARCHESTRA_BETA;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  describe("with ARCHESTRA_BETA unset", () => {
+    test("an unset flag stays off", () => {
+      expect(betaFeatureEnabled(undefined)).toBe(false);
+    });
+
+    test("a blank flag stays off", () => {
+      expect(betaFeatureEnabled("")).toBe(false);
+    });
+
+    test('an explicit "true" enables the flag', () => {
+      expect(betaFeatureEnabled("true")).toBe(true);
+    });
+
+    test('an explicit "false" disables the flag', () => {
+      expect(betaFeatureEnabled("false")).toBe(false);
+    });
+  });
+
+  describe("with ARCHESTRA_BETA=true", () => {
+    beforeEach(() => {
+      process.env.ARCHESTRA_BETA = "true";
+    });
+
+    test("an unset flag falls back to beta (on)", () => {
+      expect(betaFeatureEnabled(undefined)).toBe(true);
+    });
+
+    test("a blank flag falls back to beta (on)", () => {
+      expect(betaFeatureEnabled("")).toBe(true);
+    });
+
+    test('an explicit "false" still wins over beta', () => {
+      expect(betaFeatureEnabled("false")).toBe(false);
+    });
+
+    test('an explicit "true" stays on', () => {
+      expect(betaFeatureEnabled("true")).toBe(true);
+    });
+  });
+
+  describe("with ARCHESTRA_BETA set to a non-true value", () => {
+    test('"false" does not trigger the fallback', () => {
+      process.env.ARCHESTRA_BETA = "false";
+      expect(betaFeatureEnabled(undefined)).toBe(false);
+    });
+
+    test("any other value is treated as off", () => {
+      process.env.ARCHESTRA_BETA = "1";
+      expect(betaFeatureEnabled(undefined)).toBe(false);
+    });
+  });
+
+  test('only the exact string "true" enables a flag', () => {
+    expect(betaFeatureEnabled("TRUE")).toBe(false);
+    expect(betaFeatureEnabled("yes")).toBe(false);
+    expect(betaFeatureEnabled("1")).toBe(false);
+  });
+});
+
+describe("parseLogFormat", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('accepts "pretty"', () => {
+    expect(parseLogFormat("pretty")).toBe("pretty");
+  });
+
+  test('accepts "json"', () => {
+    expect(parseLogFormat("json")).toBe("json");
+  });
+
+  test("is case-insensitive and trims whitespace", () => {
+    expect(parseLogFormat("  PRETTY  ")).toBe("pretty");
+    expect(parseLogFormat("Json")).toBe("json");
+  });
+
+  test('defaults to "json" when undefined or empty without warning', () => {
+    expect(parseLogFormat(undefined)).toBe("json");
+    expect(parseLogFormat("")).toBe("json");
+    expect(parseLogFormat("   ")).toBe("json");
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test('warns and falls back to "json" on unknown values', () => {
+    expect(parseLogFormat("xml")).toBe("json");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid ARCHESTRA_LOGGING_FORMAT value "xml"'),
+    );
   });
 });

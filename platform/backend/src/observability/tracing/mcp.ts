@@ -1,5 +1,5 @@
+import { parseFullToolName } from "@archestra/shared";
 import { context, type Span, SpanStatusCode, trace } from "@opentelemetry/api";
-import { parseFullToolName } from "@shared";
 import config from "@/config";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { AgentType } from "@/types";
@@ -21,10 +21,12 @@ import {
   EVENT_GENAI_CONTENT_OUTPUT,
   RouteCategory,
   type SpanAgentInfo,
+  type SpanTeamInfo,
   type SpanUserInfo,
   setAgentAttributes,
   setSessionId,
   setSpanError,
+  setTeamAttributes,
   setUserAttributes,
   truncateContent,
 } from "./attributes";
@@ -52,6 +54,8 @@ export async function startActiveMcpSpan<T>(params: {
   toolName: string;
   mcpServerName: string;
   agent: SpanAgentInfo;
+  teams?: SpanTeamInfo[];
+  userTeams?: SpanTeamInfo[];
   sessionId?: string | null;
   agentType?: AgentType;
   toolCallId?: string;
@@ -83,6 +87,8 @@ export async function startActiveMcpSpan<T>(params: {
     ctx,
     async (span) => {
       setAgentAttributes(span, params.agent);
+      setTeamAttributes(span, params.teams, "agent");
+      setTeamAttributes(span, params.userTeams, "user");
       setSessionId(span, params.sessionId);
 
       if (params.agentType) {
@@ -132,6 +138,8 @@ export function recordBlockedToolSpans(params: {
   toolCallNames: string[];
   blockedReason: string;
   agent: SpanAgentInfo;
+  teams?: SpanTeamInfo[];
+  userTeams?: SpanTeamInfo[];
   sessionId?: string | null;
   agentType?: AgentType;
   user?: SpanUserInfo | null;
@@ -165,6 +173,8 @@ export function recordBlockedToolSpans(params: {
     );
 
     setAgentAttributes(span, params.agent);
+    setTeamAttributes(span, params.teams, "agent");
+    setTeamAttributes(span, params.userTeams, "user");
     setSessionId(span, params.sessionId);
 
     if (params.agentType) {

@@ -33,7 +33,7 @@ pub fn attach_parent(span: &Span, traceparent: Option<&str>) {
         return;
     };
     let context = TraceContextPropagator::new().extract(&TraceparentCarrier(traceparent));
-    span.set_parent(context);
+    let _ = span.set_parent(context);
 }
 
 /// serialise this span's own trace context into a W3C `traceparent`. forwarded

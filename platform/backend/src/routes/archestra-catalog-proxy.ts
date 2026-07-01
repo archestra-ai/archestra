@@ -1,5 +1,5 @@
+import { MCP_CATALOG_API_BASE_URL } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
-import { MCP_CATALOG_API_BASE_URL } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import logger from "@/logging";
 import { ARCHESTRA_CATALOG_PROXY_PREFIX } from "./route-paths";

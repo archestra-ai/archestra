@@ -14,12 +14,6 @@ import type { User } from "@/types";
 const VALID_PNG_BASE64 =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==";
 
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    enterpriseFeatures: { fullWhiteLabeling: true },
-  }),
-);
-
 describe("organization routes", () => {
   let app: FastifyInstanceWithZod;
   let user: User;

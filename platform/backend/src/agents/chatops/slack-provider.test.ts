@@ -5,30 +5,12 @@ import {
 } from "@archestra/shared";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-// In-memory stand-in for the distributed cache so the sticky-thread activation
-// gate (channel-activation.ts) works without starting the real cache manager.
-// The `mock`-prefixed name is referenced lazily inside the factory so it
-// survives vi.mock hoisting. Tests that need specific cache behavior still
-// vi.spyOn(cacheManager, ...) and restore afterwards.
-const mockCacheStore = new Map<string, unknown>();
-vi.mock("@/cache-manager", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/cache-manager")>();
-  return {
-    ...actual,
-    cacheManager: {
-      async get(key: string) {
-        return mockCacheStore.get(key);
-      },
-      async set(key: string, value: unknown) {
-        mockCacheStore.set(key, value);
-        return true;
-      },
-      async delete(key: string) {
-        return mockCacheStore.delete(key);
-      },
-    },
-  };
-});
+// The canonical Map-backed fake from src/__mocks__/cache-manager.ts stands in
+// for the distributed cache so the sticky-thread activation gate
+// (channel-activation.ts) works without starting the real cache manager; the
+// store resets before every test. Tests that need specific cache behavior still
+// vi.spyOn(cacheManager, ...).
+vi.mock("@/cache-manager");
 
 import { CacheKey, cacheManager } from "@/cache-manager";
 import { markChannelThreadActive } from "./channel-activation";
@@ -845,8 +827,8 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
   const ROOT = "7777777777.000001";
   const BOT_REPLY_TS = "7777777777.000002";
 
-  // These tests reuse one channel/thread, so reset the shared cache each time.
-  beforeEach(() => mockCacheStore.clear());
+  // These tests reuse one channel/thread; the fake cache resets before each
+  // test automatically, so no manual clearing is needed here.
 
   // Client with a postMessage spy and a conversations.replies that resolves the
   // thread root (messages[0].ts) for the reacted message.

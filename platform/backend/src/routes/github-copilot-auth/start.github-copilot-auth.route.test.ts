@@ -5,23 +5,9 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 // cacheManager (used by the rate limiter) needs a live PostgreSQL connection
-// that PGlite tests don't have; back it with a Map (same convention as
-// script.connection-setup.route.test.ts).
-const mockCache = new Map<string, unknown>();
-vi.mock("@/cache-manager", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/cache-manager")>();
-  return {
-    ...original,
-    cacheManager: {
-      get: vi.fn(async (key: string) => mockCache.get(key)),
-      set: vi.fn(async (key: string, value: unknown) => {
-        mockCache.set(key, value);
-        return true;
-      }),
-      delete: vi.fn(async (key: string) => mockCache.delete(key)),
-    },
-  };
-});
+// that PGlite tests don't have; back it with the canonical Map-backed fake from
+// src/__mocks__/cache-manager.ts (reset before every test).
+vi.mock("@/cache-manager");
 
 describe("POST /api/github-copilot-auth/device/start", () => {
   let app: FastifyInstanceWithZod;

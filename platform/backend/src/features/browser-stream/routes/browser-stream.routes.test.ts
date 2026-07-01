@@ -7,18 +7,10 @@ import {
 import { vi } from "vitest";
 import { BrowserStreamService } from "@/features/browser-stream/services/browser-stream.service";
 import AgentModel from "@/models/agent";
+import chatRoutes from "@/routes/chat/routes";
 import { beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
-
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock(),
-);
-
-// Import routes AFTER mocking config (dynamic import needed because of the mock)
-const { default: browserStreamRoutes } = await import(
-  "./browser-stream.routes"
-);
-const { default: chatRoutes } = await import("@/routes/chat/routes");
+import browserStreamRoutes from "./browser-stream.routes";
 
 const buildAppWithUser = async (user: User, organizationId: string) => {
   const app = Fastify({ logger: false })

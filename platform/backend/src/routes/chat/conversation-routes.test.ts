@@ -733,6 +733,10 @@ describe("chat conversation and message routes", () => {
         parts: [{ type: "text", text: "Original text" }],
       },
     });
+    // "Subsequent" is a strict createdAt comparison; back-to-back creates can
+    // land on the same timestamp and make the follow-up invisible to the
+    // delete. Force a measurable gap so the test pins intent, not timing.
+    await new Promise((resolve) => setTimeout(resolve, 5));
     await MessageModel.create({
       conversationId: conversation.id,
       role: "assistant",

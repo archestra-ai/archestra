@@ -18,23 +18,10 @@ import type { User } from "@/types";
 vi.mock("@/auth");
 
 // cacheManager needs a live PostgreSQL connection that PGlite tests don't
-// have; back it with a Map (same convention as src/agents/utils.test.ts) so
-// the rate limiter runs for real against an in-memory store.
-const mockCache = new Map<string, unknown>();
-vi.mock("@/cache-manager", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/cache-manager")>();
-  return {
-    ...original,
-    cacheManager: {
-      get: vi.fn(async (key: string) => mockCache.get(key)),
-      set: vi.fn(async (key: string, value: unknown) => {
-        mockCache.set(key, value);
-        return true;
-      }),
-      delete: vi.fn(async (key: string) => mockCache.delete(key)),
-    },
-  };
-});
+// have; back it with the canonical Map-backed fake from
+// src/__mocks__/cache-manager.ts so the rate limiter runs for real against an
+// in-memory store (reset before every test).
+vi.mock("@/cache-manager");
 
 import { userHasPermission } from "@/auth";
 

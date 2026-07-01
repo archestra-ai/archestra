@@ -54,24 +54,9 @@ import { type ArchestraContext, executeArchestraTool } from ".";
 
 // The elicitation bridge polls cacheManager for the user's answer; cacheManager
 // is the Postgres-backed singleton (not started in PGlite tests), so back it
-// with an in-memory map. The bridge and refine_app (the SUT) are real.
-const elicitationStore = vi.hoisted(() => new Map<string, unknown>());
-vi.mock("@/cache-manager", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/cache-manager")>();
-  return {
-    ...actual,
-    cacheManager: {
-      set: async (key: string, value: unknown) => {
-        elicitationStore.set(key, value);
-      },
-      getAndDelete: async (key: string) => {
-        const value = elicitationStore.get(key);
-        elicitationStore.delete(key);
-        return value;
-      },
-    },
-  };
-});
+// with the canonical Map-backed fake from src/__mocks__/cache-manager.ts. The
+// bridge and refine_app (the SUT) are real.
+vi.mock("@/cache-manager");
 
 // App tools are only dispatchable when the feature is enabled.
 const originalAppsEnabled = config.apps.enabled;

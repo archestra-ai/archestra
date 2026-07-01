@@ -166,6 +166,7 @@
     "@typescript/native-preview": "catalog:",
     "esbuild": "^0.28.1",
     "knip": "^5.85.0",
+    "msw": "^2.14.6",
     "tsdown": "^0.21.0",
     "tsx": "^4.21.0",
     "typescript": "catalog:",

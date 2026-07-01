@@ -78,6 +78,7 @@ import {
   tools as searchToolTools,
 } from "./search-tools";
 import { toolEntries as skillToolEntries, tools as skillTools } from "./skills";
+import { toolEntries as teamToolEntries, tools as teamTools } from "./teams";
 import {
   toolEntries as toolAssignmentToolEntries,
   tools as toolAssignmentTools,
@@ -98,6 +99,7 @@ const toolEntries: Partial<
   ...llmProxyToolEntries,
   ...mcpGatewayToolEntries,
   ...mcpServerToolEntries,
+  ...teamToolEntries,
   ...limitToolEntries,
   ...policyToolEntries,
   ...toolAssignmentToolEntries,
@@ -144,6 +146,7 @@ export function getArchestraMcpTools() {
     ...llmProxyTools,
     ...mcpGatewayTools,
     ...mcpServerTools,
+    ...teamTools,
     ...limitTools,
     ...policyTools,
     ...toolAssignmentTools,

@@ -52,6 +52,19 @@ export const TOOL_PERMISSIONS: Record<
     action: "create",
   },
 
+  // Teams
+  create_team: { resource: "team", action: "create" },
+  get_team: { resource: "team", action: "read" },
+  list_teams: { resource: "team", action: "read" },
+  edit_team: { resource: "team", action: "update" },
+  delete_team: { resource: "team", action: "delete" },
+  list_team_members: { resource: "team", action: "read" },
+  // Membership mutations modify a team's composition; gate them on team:update
+  // (held by org admins/managers), mirroring the REST route's manage-team gate.
+  add_team_member: { resource: "team", action: "update" },
+  update_team_member_role: { resource: "team", action: "update" },
+  remove_team_member: { resource: "team", action: "update" },
+
   // Limits
   create_limit: { resource: "llmLimit", action: "create" },
   get_limits: { resource: "llmLimit", action: "read" },

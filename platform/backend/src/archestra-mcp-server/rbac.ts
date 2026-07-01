@@ -52,6 +52,22 @@ export const TOOL_PERMISSIONS: Record<
     action: "create",
   },
 
+  // Teams
+  create_team: { resource: "team", action: "create" },
+  get_team: { resource: "team", action: "read" },
+  list_teams: { resource: "team", action: "read" },
+  edit_team: { resource: "team", action: "update" },
+  delete_team: { resource: "team", action: "delete" },
+  list_team_members: { resource: "team", action: "read" },
+  // Membership mutations use team:read as the coarse gate and then enforce a
+  // finer check in the handler (org-level team manager OR admin of that
+  // specific team), mirroring the REST route's `assertCanManageTeam`. Gating
+  // these on team:update here would lock out team admins who are only org
+  // members (they hold team:read, not team:update).
+  add_team_member: { resource: "team", action: "read" },
+  update_team_member_role: { resource: "team", action: "read" },
+  remove_team_member: { resource: "team", action: "read" },
+
   // Limits
   create_limit: { resource: "llmLimit", action: "create" },
   get_limits: { resource: "llmLimit", action: "read" },

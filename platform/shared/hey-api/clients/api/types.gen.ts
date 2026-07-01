@@ -26109,7 +26109,6 @@ export type GetConfigResponses = {
             bedrockIamAuthEnabled: boolean;
             geminiVertexAiEnabled: boolean;
             globalToolPolicy: 'permissive' | 'restrictive';
-            discoveredToolPolicy: 'relaxed' | 'apply_policies';
             incomingEmail: {
                 enabled: boolean;
                 provider?: 'outlook';
@@ -37704,6 +37703,7 @@ export type GetInternalMcpCatalogResponses = {
             well_known_url?: string;
             default_scopes: Array<string>;
             supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
             generic_oauth?: boolean;
             token_endpoint?: string;
             access_token_env_var?: string;
@@ -37844,6 +37844,7 @@ export type CreateInternalMcpCatalogItemData = {
             well_known_url?: string;
             default_scopes: Array<string>;
             supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
             generic_oauth?: boolean;
             token_endpoint?: string;
             access_token_env_var?: string;
@@ -38041,6 +38042,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             well_known_url?: string;
             default_scopes: Array<string>;
             supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
             generic_oauth?: boolean;
             token_endpoint?: string;
             access_token_env_var?: string;
@@ -38339,6 +38341,7 @@ export type GetInternalMcpCatalogItemResponses = {
             well_known_url?: string;
             default_scopes: Array<string>;
             supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
             generic_oauth?: boolean;
             token_endpoint?: string;
             access_token_env_var?: string;
@@ -38473,6 +38476,7 @@ export type UpdateInternalMcpCatalogItemData = {
             well_known_url?: string;
             default_scopes: Array<string>;
             supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
             generic_oauth?: boolean;
             token_endpoint?: string;
             access_token_env_var?: string;
@@ -38671,6 +38675,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             well_known_url?: string;
             default_scopes: Array<string>;
             supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
             generic_oauth?: boolean;
             token_endpoint?: string;
             access_token_env_var?: string;
@@ -39148,6 +39153,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
             well_known_url?: string;
             default_scopes: Array<string>;
             supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
             generic_oauth?: boolean;
             token_endpoint?: string;
             access_token_env_var?: string;
@@ -39361,6 +39367,7 @@ export type ApproveCatalogItemImageResponses = {
             well_known_url?: string;
             default_scopes: Array<string>;
             supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
             generic_oauth?: boolean;
             token_endpoint?: string;
             access_token_env_var?: string;
@@ -45904,6 +45911,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -46004,6 +46012,7 @@ export type CreateMcpServerInstallationRequestData = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -46164,6 +46173,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -46429,6 +46439,7 @@ export type GetMcpServerInstallationRequestResponses = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -46529,6 +46540,7 @@ export type UpdateMcpServerInstallationRequestData = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -46701,6 +46713,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -46883,6 +46896,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -47065,6 +47079,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -47247,6 +47262,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -52554,7 +52570,8 @@ export type GetOrganizationResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
-        discoveredToolPolicy: 'relaxed' | 'apply_policies';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -52849,7 +52866,8 @@ export type UpdateAppearanceSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
-        discoveredToolPolicy: 'relaxed' | 'apply_policies';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -52924,7 +52942,8 @@ export type UpdateAppearanceSettingsResponse = UpdateAppearanceSettingsResponses
 export type UpdateSecuritySettingsData = {
     body: {
         globalToolPolicy?: 'permissive' | 'restrictive';
-        discoveredToolPolicy?: 'relaxed' | 'apply_policies';
+        defaultDiscoveredToolInvocationPolicy?: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy?: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads?: boolean;
         allowToolAutoAssignment?: boolean;
     };
@@ -53017,7 +53036,8 @@ export type UpdateSecuritySettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
-        discoveredToolPolicy: 'relaxed' | 'apply_policies';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -53183,7 +53203,8 @@ export type UpdateLlmSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
-        discoveredToolPolicy: 'relaxed' | 'apply_policies';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -53351,7 +53372,8 @@ export type UpdateAgentSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
-        discoveredToolPolicy: 'relaxed' | 'apply_policies';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -53529,7 +53551,8 @@ export type UpdateConnectionSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
-        discoveredToolPolicy: 'relaxed' | 'apply_policies';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -53705,7 +53728,8 @@ export type UpdateDefaultEnvironmentResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
-        discoveredToolPolicy: 'relaxed' | 'apply_policies';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -53871,7 +53895,8 @@ export type UpdateAuthSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
-        discoveredToolPolicy: 'relaxed' | 'apply_policies';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -54039,7 +54064,8 @@ export type UpdateKnowledgeSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
-        discoveredToolPolicy: 'relaxed' | 'apply_policies';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -54202,7 +54228,8 @@ export type DropEmbeddingConfigResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
-        discoveredToolPolicy: 'relaxed' | 'apply_policies';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -54454,7 +54481,8 @@ export type CompleteOnboardingResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
-        discoveredToolPolicy: 'relaxed' | 'apply_policies';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;

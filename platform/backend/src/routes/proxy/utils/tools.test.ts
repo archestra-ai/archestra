@@ -1,5 +1,7 @@
+import { eq } from "drizzle-orm";
 import { afterEach } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import db, { schema } from "@/database";
 import { AgentToolModel, ToolModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { persistTools } from "./tools";
@@ -53,6 +55,41 @@ describe("persistTools", () => {
     for (const id of proxyToolIds) {
       expect(toolIds).not.toContain(id);
     }
+  });
+
+  test("threads the configured invocation and result defaults onto discovered tools' policies", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    await persistTools(
+      [
+        {
+          toolName: "discovered-with-default",
+          toolParameters: { type: "object", properties: {} },
+          toolDescription: "Discovered tool",
+        },
+      ],
+      agent.id,
+      { invocationAction: "require_approval", resultAction: "mark_as_trusted" },
+    );
+
+    const tool = await ToolModel.findByName("discovered-with-default");
+    if (!tool) throw new Error("expected discovered tool to be persisted");
+
+    const inv = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+    expect(inv).toHaveLength(1);
+    expect(inv[0].action).toBe("require_approval");
+
+    const trusted = await db
+      .select()
+      .from(schema.trustedDataPoliciesTable)
+      .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
+    expect(trusted).toHaveLength(1);
+    expect(trusted[0].action).toBe("mark_as_trusted");
   });
 
   test("handles empty tools array without errors", async ({ makeAgent }) => {

@@ -93013,13 +93013,6 @@
                             "restrictive"
                           ]
                         },
-                        "discoveredToolPolicy": {
-                          "type": "string",
-                          "enum": [
-                            "relaxed",
-                            "apply_policies"
-                          ]
-                        },
                         "incomingEmail": {
                           "type": "object",
                           "properties": {
@@ -93095,7 +93088,6 @@
                         "bedrockIamAuthEnabled",
                         "geminiVertexAiEnabled",
                         "globalToolPolicy",
-                        "discoveredToolPolicy",
                         "incomingEmail",
                         "mcpServerBaseImage",
                         "orchestratorK8sNamespace",
@@ -144182,6 +144174,12 @@
                           "supports_resource_metadata": {
                             "type": "boolean"
                           },
+                          "additional_scopes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "generic_oauth": {
                             "type": "boolean"
                           },
@@ -145077,6 +145075,12 @@
                       "supports_resource_metadata": {
                         "type": "boolean"
                       },
+                      "additional_scopes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "generic_oauth": {
                         "type": "boolean"
                       },
@@ -145642,6 +145646,12 @@
                         },
                         "supports_resource_metadata": {
                           "type": "boolean"
+                        },
+                        "additional_scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
                         },
                         "generic_oauth": {
                           "type": "boolean"
@@ -146544,6 +146554,12 @@
                         "supports_resource_metadata": {
                           "type": "boolean"
                         },
+                        "additional_scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
                         "generic_oauth": {
                           "type": "boolean"
                         },
@@ -147413,6 +147429,12 @@
                       "supports_resource_metadata": {
                         "type": "boolean"
                       },
+                      "additional_scopes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "generic_oauth": {
                         "type": "boolean"
                       },
@@ -147980,6 +148002,12 @@
                         },
                         "supports_resource_metadata": {
                           "type": "boolean"
+                        },
+                        "additional_scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
                         },
                         "generic_oauth": {
                           "type": "boolean"
@@ -150020,6 +150048,12 @@
                           "supports_resource_metadata": {
                             "type": "boolean"
                           },
+                          "additional_scopes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "generic_oauth": {
                             "type": "boolean"
                           },
@@ -150921,6 +150955,12 @@
                         },
                         "supports_resource_metadata": {
                           "type": "boolean"
+                        },
+                        "additional_scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
                         },
                         "generic_oauth": {
                           "type": "boolean"
@@ -176757,6 +176797,12 @@
                                   "supports_resource_metadata": {
                                     "type": "boolean"
                                   },
+                                  "additional_scopes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
                                   "generic_oauth": {
                                     "type": "boolean"
                                   },
@@ -177439,6 +177485,12 @@
                               "supports_resource_metadata": {
                                 "type": "boolean"
                               },
+                              "additional_scopes": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
                               "generic_oauth": {
                                 "type": "boolean"
                               },
@@ -177821,6 +177873,12 @@
                                 },
                                 "supports_resource_metadata": {
                                   "type": "boolean"
+                                },
+                                "additional_scopes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
                                 },
                                 "generic_oauth": {
                                   "type": "boolean"
@@ -178534,6 +178592,12 @@
                                 "supports_resource_metadata": {
                                   "type": "boolean"
                                 },
+                                "additional_scopes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
                                 "generic_oauth": {
                                   "type": "boolean"
                                 },
@@ -179219,6 +179283,12 @@
                               "supports_resource_metadata": {
                                 "type": "boolean"
                               },
+                              "additional_scopes": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
                               "generic_oauth": {
                                 "type": "boolean"
                               },
@@ -179652,6 +179722,12 @@
                                 },
                                 "supports_resource_metadata": {
                                   "type": "boolean"
+                                },
+                                "additional_scopes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
                                 },
                                 "generic_oauth": {
                                   "type": "boolean"
@@ -180654,6 +180730,12 @@
                                 "supports_resource_metadata": {
                                   "type": "boolean"
                                 },
+                                "additional_scopes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
                                 "generic_oauth": {
                                   "type": "boolean"
                                 },
@@ -181380,6 +181462,12 @@
                                 },
                                 "supports_resource_metadata": {
                                   "type": "boolean"
+                                },
+                                "additional_scopes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
                                 },
                                 "generic_oauth": {
                                   "type": "boolean"
@@ -182111,6 +182199,12 @@
                                 },
                                 "supports_resource_metadata": {
                                   "type": "boolean"
+                                },
+                                "additional_scopes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
                                 },
                                 "generic_oauth": {
                                   "type": "boolean"
@@ -200699,11 +200793,22 @@
                         "restrictive"
                       ]
                     },
-                    "discoveredToolPolicy": {
+                    "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
-                        "relaxed",
-                        "apply_policies"
+                        "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
+                        "block_always",
+                        "require_approval"
+                      ]
+                    },
+                    "defaultDiscoveredToolResultPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "block_always",
+                        "mark_as_trusted",
+                        "mark_as_untrusted",
+                        "sanitize_with_dual_llm"
                       ]
                     },
                     "allowChatFileUploads": {
@@ -201089,7 +201194,8 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
-                    "discoveredToolPolicy",
+                    "defaultDiscoveredToolInvocationPolicy",
+                    "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -201647,11 +201753,22 @@
                         "restrictive"
                       ]
                     },
-                    "discoveredToolPolicy": {
+                    "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
-                        "relaxed",
-                        "apply_policies"
+                        "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
+                        "block_always",
+                        "require_approval"
+                      ]
+                    },
+                    "defaultDiscoveredToolResultPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "block_always",
+                        "mark_as_trusted",
+                        "mark_as_untrusted",
+                        "sanitize_with_dual_llm"
                       ]
                     },
                     "allowChatFileUploads": {
@@ -202037,7 +202154,8 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
-                    "discoveredToolPolicy",
+                    "defaultDiscoveredToolInvocationPolicy",
+                    "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -202761,11 +202879,22 @@
                       "restrictive"
                     ]
                   },
-                  "discoveredToolPolicy": {
+                  "defaultDiscoveredToolInvocationPolicy": {
                     "type": "string",
                     "enum": [
-                      "relaxed",
-                      "apply_policies"
+                      "allow_when_context_is_untrusted",
+                      "block_when_context_is_untrusted",
+                      "block_always",
+                      "require_approval"
+                    ]
+                  },
+                  "defaultDiscoveredToolResultPolicy": {
+                    "type": "string",
+                    "enum": [
+                      "block_always",
+                      "mark_as_trusted",
+                      "mark_as_untrusted",
+                      "sanitize_with_dual_llm"
                     ]
                   },
                   "allowChatFileUploads": {
@@ -202877,11 +203006,22 @@
                         "restrictive"
                       ]
                     },
-                    "discoveredToolPolicy": {
+                    "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
-                        "relaxed",
-                        "apply_policies"
+                        "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
+                        "block_always",
+                        "require_approval"
+                      ]
+                    },
+                    "defaultDiscoveredToolResultPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "block_always",
+                        "mark_as_trusted",
+                        "mark_as_untrusted",
+                        "sanitize_with_dual_llm"
                       ]
                     },
                     "allowChatFileUploads": {
@@ -203267,7 +203407,8 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
-                    "discoveredToolPolicy",
+                    "defaultDiscoveredToolInvocationPolicy",
+                    "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -203683,11 +203824,22 @@
                         "restrictive"
                       ]
                     },
-                    "discoveredToolPolicy": {
+                    "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
-                        "relaxed",
-                        "apply_policies"
+                        "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
+                        "block_always",
+                        "require_approval"
+                      ]
+                    },
+                    "defaultDiscoveredToolResultPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "block_always",
+                        "mark_as_trusted",
+                        "mark_as_untrusted",
+                        "sanitize_with_dual_llm"
                       ]
                     },
                     "allowChatFileUploads": {
@@ -204073,7 +204225,8 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
-                    "discoveredToolPolicy",
+                    "defaultDiscoveredToolInvocationPolicy",
+                    "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -204500,11 +204653,22 @@
                         "restrictive"
                       ]
                     },
-                    "discoveredToolPolicy": {
+                    "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
-                        "relaxed",
-                        "apply_policies"
+                        "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
+                        "block_always",
+                        "require_approval"
+                      ]
+                    },
+                    "defaultDiscoveredToolResultPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "block_always",
+                        "mark_as_trusted",
+                        "mark_as_untrusted",
+                        "sanitize_with_dual_llm"
                       ]
                     },
                     "allowChatFileUploads": {
@@ -204890,7 +205054,8 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
-                    "discoveredToolPolicy",
+                    "defaultDiscoveredToolInvocationPolicy",
+                    "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -205389,11 +205554,22 @@
                         "restrictive"
                       ]
                     },
-                    "discoveredToolPolicy": {
+                    "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
-                        "relaxed",
-                        "apply_policies"
+                        "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
+                        "block_always",
+                        "require_approval"
+                      ]
+                    },
+                    "defaultDiscoveredToolResultPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "block_always",
+                        "mark_as_trusted",
+                        "mark_as_untrusted",
+                        "sanitize_with_dual_llm"
                       ]
                     },
                     "allowChatFileUploads": {
@@ -205779,7 +205955,8 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
-                    "discoveredToolPolicy",
+                    "defaultDiscoveredToolInvocationPolicy",
+                    "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -206259,11 +206436,22 @@
                         "restrictive"
                       ]
                     },
-                    "discoveredToolPolicy": {
+                    "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
-                        "relaxed",
-                        "apply_policies"
+                        "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
+                        "block_always",
+                        "require_approval"
+                      ]
+                    },
+                    "defaultDiscoveredToolResultPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "block_always",
+                        "mark_as_trusted",
+                        "mark_as_untrusted",
+                        "sanitize_with_dual_llm"
                       ]
                     },
                     "allowChatFileUploads": {
@@ -206649,7 +206837,8 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
-                    "discoveredToolPolicy",
+                    "defaultDiscoveredToolInvocationPolicy",
+                    "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -207063,11 +207252,22 @@
                         "restrictive"
                       ]
                     },
-                    "discoveredToolPolicy": {
+                    "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
-                        "relaxed",
-                        "apply_policies"
+                        "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
+                        "block_always",
+                        "require_approval"
+                      ]
+                    },
+                    "defaultDiscoveredToolResultPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "block_always",
+                        "mark_as_trusted",
+                        "mark_as_untrusted",
+                        "sanitize_with_dual_llm"
                       ]
                     },
                     "allowChatFileUploads": {
@@ -207453,7 +207653,8 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
-                    "discoveredToolPolicy",
+                    "defaultDiscoveredToolInvocationPolicy",
+                    "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -207880,11 +208081,22 @@
                         "restrictive"
                       ]
                     },
-                    "discoveredToolPolicy": {
+                    "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
-                        "relaxed",
-                        "apply_policies"
+                        "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
+                        "block_always",
+                        "require_approval"
+                      ]
+                    },
+                    "defaultDiscoveredToolResultPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "block_always",
+                        "mark_as_trusted",
+                        "mark_as_untrusted",
+                        "sanitize_with_dual_llm"
                       ]
                     },
                     "allowChatFileUploads": {
@@ -208270,7 +208482,8 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
-                    "discoveredToolPolicy",
+                    "defaultDiscoveredToolInvocationPolicy",
+                    "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -208664,11 +208877,22 @@
                         "restrictive"
                       ]
                     },
-                    "discoveredToolPolicy": {
+                    "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
-                        "relaxed",
-                        "apply_policies"
+                        "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
+                        "block_always",
+                        "require_approval"
+                      ]
+                    },
+                    "defaultDiscoveredToolResultPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "block_always",
+                        "mark_as_trusted",
+                        "mark_as_untrusted",
+                        "sanitize_with_dual_llm"
                       ]
                     },
                     "allowChatFileUploads": {
@@ -209054,7 +209278,8 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
-                    "discoveredToolPolicy",
+                    "defaultDiscoveredToolInvocationPolicy",
+                    "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",
@@ -209761,11 +209986,22 @@
                         "restrictive"
                       ]
                     },
-                    "discoveredToolPolicy": {
+                    "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
-                        "relaxed",
-                        "apply_policies"
+                        "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
+                        "block_always",
+                        "require_approval"
+                      ]
+                    },
+                    "defaultDiscoveredToolResultPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "block_always",
+                        "mark_as_trusted",
+                        "mark_as_untrusted",
+                        "sanitize_with_dual_llm"
                       ]
                     },
                     "allowChatFileUploads": {
@@ -210151,7 +210387,8 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
-                    "discoveredToolPolicy",
+                    "defaultDiscoveredToolInvocationPolicy",
+                    "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
                     "allowToolAutoAssignment",
                     "embeddingModel",

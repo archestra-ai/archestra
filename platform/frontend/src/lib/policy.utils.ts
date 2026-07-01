@@ -6,6 +6,22 @@ export type CallPolicyAction =
 export type ResultPolicyAction =
   archestraApiTypes.GetTrustedDataPoliciesResponses["200"][number]["action"];
 
+export const REQUIRE_APPROVAL_DESCRIPTION =
+  "Requires user confirmation before executing in chat. In autonomous agent sessions (A2A, API, MS Teams, subagents), the tool call is blocked.";
+
+export const CALL_POLICY_ACTION_OPTIONS: {
+  value: CallPolicyAction;
+  label: string;
+}[] = [
+  { value: "allow_when_context_is_untrusted", label: "Allow always" },
+  {
+    value: "block_when_context_is_untrusted",
+    label: "Block in sensitive context",
+  },
+  { value: "require_approval", label: "Require approval" },
+  { value: "block_always", label: "Block always" },
+];
+
 export const RESULT_POLICY_ACTION_OPTIONS: {
   value: ResultPolicyAction;
   label: string;

@@ -42,6 +42,7 @@ interface OAuthScopeConfig {
   auth_server_url?: string;
   resource_metadata_url?: string;
   well_known_url?: string;
+  additional_scopes?: string[];
 }
 
 /**
@@ -143,12 +144,30 @@ export async function resolveOAuthScopesForAuthorization(params: {
   discoveredScopes: string[];
   scopesToUse: string[];
 }> {
+  // Append the catalog item's additional scopes on top of the configured or
+  // discovered scopes, deduped. Defaults to `["offline_access"]` when unset so
+  // the provider issues a refresh token (`offline_access` is a behavioral scope
+  // that providers like Microsoft Entra omit from metadata and require to be
+  // requested). Clear it for providers that reject it (e.g. Google).
+  const additionalScopes = params.oauthConfig.additional_scopes ?? [
+    OFFLINE_ACCESS_OAUTH_SCOPE,
+  ];
+  const withAdditionalScopes = (scopes: string[]): string[] => {
+    const merged = [...scopes];
+    for (const scope of additionalScopes) {
+      if (!merged.includes(scope)) {
+        merged.push(scope);
+      }
+    }
+    return merged;
+  };
+
   const configuredScopes = params.oauthConfig.scopes ?? [];
   if (configuredScopes.length > 0) {
     return {
       configuredScopes,
       discoveredScopes: [],
-      scopesToUse: withOfflineAccess(configuredScopes),
+      scopesToUse: withAdditionalScopes(configuredScopes),
     };
   }
 
@@ -168,25 +187,8 @@ export async function resolveOAuthScopesForAuthorization(params: {
   return {
     configuredScopes,
     discoveredScopes,
-    scopesToUse: withOfflineAccess(discoveredScopes),
+    scopesToUse: withAdditionalScopes(discoveredScopes),
   };
-}
-
-/**
- * Ensure `offline_access` is in the requested scopes so the token endpoint
- * issues a refresh token. It's a behavioral OIDC scope rather than a resource
- * scope, so providers like Microsoft Entra omit it from `scopes_supported` and
- * only return a refresh token when it's explicitly requested. Without it, a
- * server's access token silently expires with no way to refresh, surfacing
- * later as a `no_refresh_token` error. Requested for every authorization_code
- * flow, mirroring the inbound OAuth provider side (see `mcp-oauth-client.ts`).
- * The configured/discovered scopes are reported unchanged; only the set we
- * actually request is augmented.
- */
-function withOfflineAccess(scopes: string[]): string[] {
-  return scopes.includes(OFFLINE_ACCESS_OAUTH_SCOPE)
-    ? scopes
-    : [...scopes, OFFLINE_ACCESS_OAUTH_SCOPE];
 }
 
 /**

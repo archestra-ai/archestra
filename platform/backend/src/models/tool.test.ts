@@ -1615,6 +1615,72 @@ describe("ToolModel", () => {
         "Has description but no parameters",
       );
     });
+
+    test("applies the configured invocation and result defaults to new proxy tools", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      const [tool] = await ToolModel.bulkCreateProxyToolsIfNotExists(
+        [
+          {
+            name: "proxy-tool-with-default",
+            description: "Discovered tool",
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+        agent.id,
+        {
+          invocationAction: "allow_when_context_is_untrusted",
+          resultAction: "mark_as_trusted",
+        },
+      );
+
+      const inv = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+      expect(inv).toHaveLength(1);
+      expect(inv[0].action).toBe("allow_when_context_is_untrusted");
+
+      const trusted = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
+      expect(trusted).toHaveLength(1);
+      expect(trusted[0].action).toBe("mark_as_trusted");
+    });
+
+    test("falls back to the original hardcoded defaults when no override is provided", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      const [tool] = await ToolModel.bulkCreateProxyToolsIfNotExists(
+        [
+          {
+            name: "proxy-tool-no-override",
+            description: "Discovered tool",
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+        agent.id,
+      );
+
+      const inv = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+      expect(inv).toHaveLength(1);
+      expect(inv[0].action).toBe("block_when_context_is_untrusted");
+
+      const trusted = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
+      expect(trusted).toHaveLength(1);
+      expect(trusted[0].action).toBe("mark_as_untrusted");
+    });
   });
 
   describe("assignDefaultArchestraToolsToAgent", () => {

@@ -2255,6 +2255,13 @@
       "when": 1782904774033,
       "tag": "0321_backfill-claude-client-external-agent-id",
       "breakpoints": true
+    },
+    {
+      "idx": 322,
+      "version": "7",
+      "when": 1782908617938,
+      "tag": "0322_perpetual_dreadnoughts",
+      "breakpoints": true
     }
   ]
 }

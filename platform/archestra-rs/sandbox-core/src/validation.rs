@@ -118,7 +118,15 @@ pub(crate) fn validate_cwd(cwd: &str) -> Result<()> {
 }
 
 pub(crate) fn skill_root_path(skill_name: &str) -> Result<String> {
-    if skill_name.contains('/') || skill_name.contains("..") {
+    // reject `""`/`"."` too: both collapse `/skills/{name}` onto the shared
+    // `/skills` root (`/skills/` and `/skills/.`), which would scope the per-mount
+    // root `chown -R` and PYTHONPATH to the whole tree instead of one skill,
+    // corrupting isolation between skills in the same sandbox.
+    if skill_name.is_empty()
+        || skill_name == "."
+        || skill_name.contains('/')
+        || skill_name.contains("..")
+    {
         return Err(SandboxError::InvalidInput(format!(
             "invalid skill name: {skill_name:?}"
         )));
@@ -263,5 +271,15 @@ mod tests {
         assert!(validate_cwd("/proc/self").is_err());
         assert!(validate_cwd("relative/path").is_err());
         assert!(validate_cwd("/skills/../etc").is_err());
+    }
+
+    #[test]
+    fn skill_root_path_rejects_empty_dot_and_traversal() {
+        assert_eq!(skill_root_path("alpha").unwrap(), "/skills/alpha");
+        // "" -> "/skills/" and "." -> "/skills/." both collapse onto the shared
+        // root; reject them alongside the existing "/" and ".." cases.
+        for bad in ["", ".", "..", "a/b", "../x", "a/../b"] {
+            assert!(skill_root_path(bad).is_err(), "should reject {bad:?}");
+        }
     }
 }

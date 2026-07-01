@@ -8,6 +8,7 @@ import {
 import { ArrowRightIcon, Plus } from "lucide-react";
 import { CodeText } from "@/components/code-text";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { ResultPolicyToggle } from "@/components/result-policy-toggle";
 import {
   Accordion,
   AccordionContent,
@@ -39,7 +40,6 @@ import {
 import {
   getResultPolicyActionFromPolicies,
   RESULT_POLICY_ACTION_OPTIONS_LONG,
-  type ResultPolicyAction,
 } from "@/lib/policy.utils";
 import { useTeams } from "@/lib/teams/team.query";
 import { PolicyCard } from "./policy-card";
@@ -268,28 +268,18 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
           <div className="text-xs font-medium text-muted-foreground">
             DEFAULT
           </div>
-          <Select
+          <ResultPolicyToggle
+            size="lg"
             value={resultPolicyAction}
             disabled={resultPolicyMutation.isPending}
-            onValueChange={(value) => {
-              if (value === resultPolicyAction) return;
+            onChange={(action) => {
+              if (action === resultPolicyAction) return;
               resultPolicyMutation.mutate({
                 toolId: tool.id,
-                action: value as ResultPolicyAction,
+                action,
               });
             }}
-          >
-            <SelectTrigger className="w-[220px]">
-              <SelectValue placeholder="Select action" />
-            </SelectTrigger>
-            <SelectContent>
-              {RESULT_POLICY_ACTION_OPTIONS_LONG.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
       </div>
       {policies.map((policy: (typeof allPolicies)[number]) => (

@@ -476,30 +476,50 @@ describe("OAuth helper functions", () => {
       globalThis.fetch = originalFetch;
     });
 
-    test("requests offline_access so the provider issues a refresh token", async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          authorization_endpoint: "https://example.com/authorize",
-          token_endpoint: "https://example.com/token",
-          scopes_supported: ["api://server/access_as_user"],
-        }),
-      }) as Mock;
+    test("omits offline_access when additional_scopes is empty", async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
+      globalThis.fetch = fetchMock;
+
+      const result = await resolveOAuthScopesForAuthorization({
+        oauthConfig: {
+          server_url: "https://accounts.google.com",
+          supports_resource_metadata: false,
+          scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+          additional_scopes: [],
+        },
+      });
+
+      expect(result.scopesToUse).toEqual([
+        "https://www.googleapis.com/auth/gmail.readonly",
+      ]);
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      globalThis.fetch = originalFetch;
+    });
+
+    test("appends configured additional_scopes verbatim", async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
+      globalThis.fetch = fetchMock;
 
       const result = await resolveOAuthScopesForAuthorization({
         oauthConfig: {
           server_url: "https://example.com",
           supports_resource_metadata: false,
-          scopes: [],
+          scopes: ["read"],
+          additional_scopes: ["offline_access", "custom:scope"],
         },
       });
 
-      expect(result.scopesToUse).toContain("offline_access");
+      expect(result.scopesToUse).toEqual([
+        "read",
+        "offline_access",
+        "custom:scope",
+      ]);
 
       globalThis.fetch = originalFetch;
     });
 
-    test("does not duplicate offline_access when it is already configured", async () => {
+    test("does not duplicate a scope already present", async () => {
       const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
       globalThis.fetch = fetchMock;
 
@@ -512,7 +532,6 @@ describe("OAuth helper functions", () => {
       });
 
       expect(result.scopesToUse).toEqual(["read", "offline_access"]);
-      expect(fetchMock).not.toHaveBeenCalled();
 
       globalThis.fetch = originalFetch;
     });

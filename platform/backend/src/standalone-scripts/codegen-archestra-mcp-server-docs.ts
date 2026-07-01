@@ -24,6 +24,7 @@ enum ToolGroup {
   LLMProxies = "LLM Proxies",
   MCPGateways = "MCP Gateways",
   MCPServers = "MCP Servers",
+  Teams = "Teams",
   Limits = "Limits",
   Policies = "Policies",
   ToolAssignment = "Tool Assignment",
@@ -42,16 +43,17 @@ const groupOrder: Record<ToolGroup, number> = {
   [ToolGroup.LLMProxies]: 2,
   [ToolGroup.MCPGateways]: 3,
   [ToolGroup.MCPServers]: 4,
-  [ToolGroup.Limits]: 5,
-  [ToolGroup.Policies]: 6,
-  [ToolGroup.ToolAssignment]: 7,
-  [ToolGroup.KnowledgeManagement]: 8,
-  [ToolGroup.Chat]: 9,
-  [ToolGroup.Meta]: 10,
-  [ToolGroup.CodeExecution]: 11,
-  [ToolGroup.Skills]: 12,
-  [ToolGroup.SkillSandbox]: 13,
-  [ToolGroup.Apps]: 14,
+  [ToolGroup.Teams]: 5,
+  [ToolGroup.Limits]: 6,
+  [ToolGroup.Policies]: 7,
+  [ToolGroup.ToolAssignment]: 8,
+  [ToolGroup.KnowledgeManagement]: 9,
+  [ToolGroup.Chat]: 10,
+  [ToolGroup.Meta]: 11,
+  [ToolGroup.CodeExecution]: 12,
+  [ToolGroup.Skills]: 13,
+  [ToolGroup.SkillSandbox]: 14,
+  [ToolGroup.Apps]: 15,
 };
 
 /**
@@ -85,6 +87,16 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   list_mcp_server_deployments: ToolGroup.MCPServers,
   get_mcp_server_logs: ToolGroup.MCPServers,
   create_mcp_server_installation_request: ToolGroup.MCPServers,
+
+  create_team: ToolGroup.Teams,
+  get_team: ToolGroup.Teams,
+  list_teams: ToolGroup.Teams,
+  edit_team: ToolGroup.Teams,
+  delete_team: ToolGroup.Teams,
+  list_team_members: ToolGroup.Teams,
+  add_team_member: ToolGroup.Teams,
+  update_team_member_role: ToolGroup.Teams,
+  remove_team_member: ToolGroup.Teams,
 
   create_limit: ToolGroup.Limits,
   get_limits: ToolGroup.Limits,
@@ -169,6 +181,33 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   llm_complete: ToolGroup.Apps,
 };
 
+/**
+ * Extra access requirements for tools whose real authorization is finer-grained
+ * than the coarse RBAC permission in `TOOL_PERMISSIONS` — for example a team
+ * tool that gates on `team:read` but then enforces a team-member-role check in
+ * its handler. Rendered in the docs beside the RBAC permission so these
+ * handler-level rules are not silently lost. Keyed by tool short name; a tool
+ * with no entry has no requirement beyond its RBAC permission.
+ */
+const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
+  // Membership mutations gate on `team:read`, then require the caller to be an
+  // organization-level team manager (holds `team:create`) OR an admin
+  // (team-member role) of the target team.
+  add_team_member:
+    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
+  update_team_member_role:
+    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
+  remove_team_member:
+    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
+  // Reads are scoped: non-managers only see teams they belong to.
+  get_team:
+    "Callers without organization-level team management (`team:create`) can only read teams they are a member of.",
+  list_team_members:
+    "Callers without organization-level team management (`team:create`) can only read members of teams they are a member of.",
+  list_teams:
+    "Callers without organization-level team management (`team:create`) only see teams they are a member of.",
+};
+
 // === Script entry point ===
 
 async function main() {
@@ -241,6 +280,7 @@ function generateMarkdownBody(): string {
       shortName: ArchestraToolShortName;
       description: string;
       requiredPermission: ToolPermissionDisplay;
+      accessNote?: string;
       inputSchema: JsonSchema;
       outputSchema?: JsonSchema;
     }[]
@@ -265,6 +305,7 @@ function generateMarkdownBody(): string {
       shortName: typedShortName,
       description: truncateDescription(tool.description ?? ""),
       requiredPermission: formatToolPermission(typedShortName),
+      accessNote: toolAccessNotes[typedShortName],
       inputSchema: tool.inputSchema as JsonSchema,
       outputSchema: tool.outputSchema as JsonSchema | undefined,
     });
@@ -283,7 +324,17 @@ function generateMarkdownBody(): string {
     section += "|------|-------------|--------------------------|\n";
 
     for (const tool of groupTools) {
-      section += `| \`${tool.shortName}\` | ${escapeTableCell(tool.description)} | ${escapeTableCell(tool.requiredPermission)} |\n`;
+      // A trailing dagger flags tools whose real requirement is finer than the
+      // RBAC permission; the full note lives in the tool's detail section.
+      const permissionCell = tool.accessNote
+        ? `${tool.requiredPermission} †`
+        : tool.requiredPermission;
+      section += `| \`${tool.shortName}\` | ${escapeTableCell(tool.description)} | ${escapeTableCell(permissionCell)} |\n`;
+    }
+
+    if (groupTools.some((tool) => tool.accessNote)) {
+      section +=
+        "\n† This tool enforces an additional access requirement beyond its RBAC permission — see its details below.\n";
     }
 
     // Add detailed input schemas for each tool in this group
@@ -293,6 +344,7 @@ function generateMarkdownBody(): string {
         tool.requiredPermission,
         tool.inputSchema,
         tool.outputSchema,
+        tool.accessNote,
       );
       if (schemaMarkdown) {
         section += `\n${schemaMarkdown}`;
@@ -328,6 +380,8 @@ All Archestra tools are prefixed with \`archestra__\` and are always trusted —
 Archestra tools are **trusted**, meaning they bypass [tool invocation policies](/platform-tool-invocation-policies) and [trusted data policies](/platform-trusted-data-policies) — the tool will always execute without policy evaluation.
 
 However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without \`knowledgeSource:create\` permission will not see ${formatToolLink("create_knowledge_base")} in their tool list and cannot execute it.
+
+Some tools enforce an **additional access requirement** in their handler beyond this RBAC permission — for example, the team membership tools gate on \`team:read\` but then require the caller to be an organization-level team manager or an admin (team-member role) of the specific team. These tools are marked with a † in the tables below, and the requirement is spelled out in each tool's details.
 
 ## Tools Reference
 
@@ -424,9 +478,13 @@ function renderToolSchemas(
   requiredPermission: ToolPermissionDisplay,
   inputSchema: JsonSchema,
   outputSchema?: JsonSchema,
+  accessNote?: string,
 ): string | null {
   let md = `#### ${toolName}\n\n`;
   md += `Required RBAC permission: ${requiredPermission}\n\n`;
+  if (accessNote) {
+    md += `Additional access requirement: ${accessNote}\n\n`;
+  }
 
   const inputRows = renderSchemaRows(inputSchema);
   if (inputRows.length === 0) {

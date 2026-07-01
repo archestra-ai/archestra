@@ -30,8 +30,9 @@ use crate::supervisor::{
     ARCHESTRA_RUN_PY, SUPERVISOR_PATH, parse_supervisor_output, supervised_argv,
 };
 use crate::validation::{
-    SKILL_SANDBOX_HOME, SKILL_SANDBOX_ROOT, SKILL_SANDBOX_USER, format_artifact_error, shell_quote,
-    skill_root_path, validate_artifact_path, validate_cwd, validate_snapshot_file_path,
+    SANDBOX_ROOTS, SKILL_SANDBOX_HOME, SKILL_SANDBOX_ROOT, SKILL_SANDBOX_USER,
+    format_artifact_error, shell_quote, skill_root_path, symlink_guard_helpers,
+    validate_artifact_path, validate_cwd, validate_snapshot_file_path, within_roots,
 };
 use crate::{
     ArtifactBytes, CommandExecution, EngineFault, ReplayInputFile, ReplayStep, Result,
@@ -89,6 +90,10 @@ const SESSION_ATTACHABLES_WAIT_ERROR: &str = "waiting for client session attacha
 
 const ARTIFACT_TOO_LARGE_EXIT_CODE: isize = 65;
 const ARTIFACT_NOT_FOUND_EXIT_CODE: isize = 66;
+/// the artifact path canonicalised (through symlinks) to a target outside the
+/// sandbox roots — a symlink-escape attempt. surfaced as `InvalidInput`, like a
+/// lexically out-of-roots path.
+const ARTIFACT_ESCAPE_EXIT_CODE: isize = 67;
 
 /// shell snippet baked into the warm base: writes a `pip` shim that redirects
 /// to uv and aliases `pip3`/`pip3.12` to the same shim. we `rm -f` first
@@ -198,13 +203,7 @@ impl SandboxBackend for DaggerBackend {
         };
         let materialized = materialize(&self.client, warm, &run).await?;
         let bytes_limit = u64::from(req.limits.file_size_limit_bytes);
-        let command = format!(
-            "[ -e {path} ] || {{ echo 'artifact not found: {path}' >&2; exit {not_found}; }}; _s=$(stat -c '%s' {path}) && [ \"$_s\" -le {limit} ] || {{ echo 'artifact is too large' >&2; exit {too_large}; }}; base64 -w0 {path}",
-            path = shell_quote(&req.path),
-            limit = bytes_limit,
-            not_found = ARTIFACT_NOT_FOUND_EXIT_CODE,
-            too_large = ARTIFACT_TOO_LARGE_EXIT_CODE,
-        );
+        let command = read_artifact_command(&req.path, bytes_limit, SANDBOX_ROOTS);
         let encoder = materialized.with_exec_opts(
             vec!["bash".to_string(), "-c".to_string(), command],
             any_exit_opts(),
@@ -229,6 +228,13 @@ impl SandboxBackend for DaggerBackend {
                     path: req.path,
                     message,
                 });
+            }
+            ARTIFACT_ESCAPE_EXIT_CODE => {
+                return Err(SandboxError::InvalidInput(format_artifact_error(
+                    "artifact path escapes the sandbox roots",
+                    &req.path,
+                    &stderr,
+                )));
             }
             other => {
                 return Err(SandboxError::Internal(format!(
@@ -878,13 +884,20 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
                         container = checkpoint(client, container).await?;
                     }
                 }
-                // chown this skill's tree; with_new_file writes as root.
+                // chown this skill's tree; with_new_file writes as root. guard the
+                // resolved root first: a prior command (uid 1000, owns `/skills`)
+                // could replace `/skills/<name>` with a symlink, and a root
+                // `chown -R` through it would escape the roots.
                 container = container
                     .with_user("root")
                     .with_exec(vec![
                         "sh".to_string(),
                         "-c".to_string(),
-                        format!("chown -R {SKILL_SANDBOX_USER} {}", shell_quote(&root)),
+                        format!(
+                            "{helpers}; _guard {root} || {{ echo 'skill root escapes the sandbox roots' >&2; exit 1; }}; chown -R {SKILL_SANDBOX_USER} {root}",
+                            helpers = symlink_guard_helpers(SANDBOX_ROOTS),
+                            root = shell_quote(&root),
+                        ),
                     ])
                     .with_user(SKILL_SANDBOX_USER);
                 let mut links = SKILL_MOUNT_CHOWN_CHAIN_LINKS;
@@ -905,6 +918,74 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
     }
 
     Ok(container)
+}
+
+/// the artifact-read shell command: canonicalise the requested path with
+/// `realpath -e` (rejecting a symlink that resolves outside the roots — the
+/// lexical [`validate_artifact_path`] can't see through symlinks) and enforce the
+/// size limit on the *resolved* file, not the symlink (a bare `stat` reports the
+/// link's size, so following it at `base64` would also bypass the cap). `roots`
+/// is injected so a behavioural test can point it at a tmp tree. requires
+/// [`symlink_guard_helpers`]'s `_within_roots`.
+fn read_artifact_command(path: &str, size_limit: u64, roots: &[&str]) -> String {
+    format!(
+        "{helpers}; \
+         __real=$(realpath -e -- {path}) || {{ echo 'artifact not found' >&2; exit {not_found}; }}; \
+         _within_roots \"$__real\" || {{ echo 'artifact path escapes the sandbox roots' >&2; exit {escape}; }}; \
+         __s=$(stat -c '%s' \"$__real\") && [ \"$__s\" -le {limit} ] || {{ echo 'artifact is too large' >&2; exit {too_large}; }}; \
+         base64 -w0 \"$__real\"",
+        helpers = symlink_guard_helpers(roots),
+        path = shell_quote(path),
+        limit = size_limit,
+        not_found = ARTIFACT_NOT_FOUND_EXIT_CODE,
+        escape = ARTIFACT_ESCAPE_EXIT_CODE,
+        too_large = ARTIFACT_TOO_LARGE_EXIT_CODE,
+    )
+}
+
+/// shell snippet that safely creates the ancestor directories of `target`,
+/// shallowest-first. A directory *inside* the roots must resolve within them
+/// (catches a prior command's symlink escape) before it is trusted; a missing one
+/// is created only under its already-verified parent, so a `mkdir` never follows a
+/// symlink out of the roots. Ancestors *above* the roots (`/home`, the `/skills`
+/// parent) are root-owned and untamperable by uid 1000, so they are only checked
+/// to exist. `chown_created` hands newly-made dirs to the sandbox user (uploads);
+/// skill mounts pass `false` and rely on the per-mount `chown -R`. Each statement
+/// aborts the script on failure. Requires [`symlink_guard_helpers`].
+fn guarded_parent_creation(target: &str, roots: &[&str], chown_created: bool) -> String {
+    let mut out = String::new();
+    for dir in ancestor_dirs(target) {
+        let q = shell_quote(&dir);
+        if within_roots(&dir, roots) {
+            let chown = if chown_created {
+                format!(" && chown {SKILL_SANDBOX_USER} {q}")
+            } else {
+                String::new()
+            };
+            out.push_str(&format!(
+                "if [ -d {q} ]; then _guard {q} || {{ echo 'replay write path escapes the sandbox roots' >&2; exit 1; }}; \
+                 elif [ -e {q} ] || [ -L {q} ]; then echo 'replay write path component is not a directory' >&2; exit 1; \
+                 else mkdir {q}{chown} || exit 1; fi; "
+            ));
+        } else {
+            out.push_str(&format!(
+                "[ -d {q} ] || {{ echo 'sandbox root parent missing: '{q} >&2; exit 1; }}; "
+            ));
+        }
+    }
+    out
+}
+
+/// shell snippet that rejects a write when the final path component is a symlink
+/// resolving outside the roots — parent guarding alone can't cover a symlink *at*
+/// the target (a redirect there, or a dangling link whose referent the write
+/// would create, escapes the roots). A non-symlink target, or a symlink resolving
+/// within the roots, is allowed. Requires [`symlink_guard_helpers`].
+fn guarded_target_symlink(target: &str) -> String {
+    let q = shell_quote(target);
+    format!(
+        "if [ -L {q} ]; then _guard {q} || {{ echo 'replay write path escapes the sandbox roots' >&2; exit 1; }}; fi; "
+    )
 }
 
 /// write an uploaded file at its absolute path. runs as root so it works even
@@ -934,18 +1015,11 @@ fn apply_upload_file(
             )));
         }
     };
-    // create each missing parent dir shallowest-first and chown only the ones
-    // we create, so commands running as the sandbox user can write siblings in
-    // a fresh upload dir. pre-existing dirs (the sandbox roots) are untouched.
-    let mut create_parents = String::new();
-    for dir in ancestor_dirs(&file.path) {
-        let quoted = shell_quote(&dir);
-        create_parents.push_str(&format!(
-            "[ -d {quoted} ] || {{ mkdir {quoted} && chown {SKILL_SANDBOX_USER} {quoted}; }} && "
-        ));
-    }
     let script = format!(
-        "{create_parents}{decode} && chown {user} {target} && rm -f {temp}",
+        "{helpers}; {parents}{target_guard}{decode} && chown {user} {target} && rm -f {temp}",
+        helpers = symlink_guard_helpers(SANDBOX_ROOTS),
+        parents = guarded_parent_creation(&file.path, SANDBOX_ROOTS, true),
+        target_guard = guarded_target_symlink(&file.path),
         user = SKILL_SANDBOX_USER,
         target = shell_quote(&file.path),
         temp = shell_quote(&temp_path),
@@ -982,28 +1056,25 @@ fn apply_snapshot_file(container: Container, root: &str, file: &SnapshotFile) ->
         "utf8" => Ok(container.with_new_file(target, &file.content)),
         "base64" => {
             let temp_path = format!("{target}.b64");
-            let parent_dir = target
-                .rsplit_once('/')
-                .map(|(parent, _)| parent)
-                .unwrap_or(root);
             // decode as root: `with_new_file` stages the temp bytes root-owned
             // (and creates the skill dir tree root-owned), so the redirect must
             // run as root too. the per-mount `chown -R` below hands the tree back
-            // to the sandbox user once every file in the mount is written.
+            // to the sandbox user once every file in the mount is written. guard
+            // the parents and target the same way uploads do: a prior command can
+            // plant a symlink under `/skills/<name>` that would redirect this root
+            // write outside the roots.
+            let script = format!(
+                "{helpers}; {parents}{target_guard}base64 -d {temp} > {tgt} && rm {temp}",
+                helpers = symlink_guard_helpers(SANDBOX_ROOTS),
+                parents = guarded_parent_creation(&target, SANDBOX_ROOTS, false),
+                target_guard = guarded_target_symlink(&target),
+                temp = shell_quote(&temp_path),
+                tgt = shell_quote(&target),
+            );
             Ok(container
                 .with_user("root")
                 .with_new_file(&temp_path, &file.content)
-                .with_exec(vec![
-                    "bash".to_string(),
-                    "-c".to_string(),
-                    format!(
-                        "mkdir -p {} && base64 -d {} > {} && rm {}",
-                        shell_quote(parent_dir),
-                        shell_quote(&temp_path),
-                        shell_quote(&target),
-                        shell_quote(&temp_path),
-                    ),
-                ])
+                .with_exec(vec!["bash".to_string(), "-c".to_string(), script])
                 .with_user(SKILL_SANDBOX_USER))
         }
         other => Err(SandboxError::InvalidInput(format!(
@@ -1774,5 +1845,147 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    // ---- symlink-escape guard behaviour ----
+    // These run the generated shell against a real tmp tree with real symlinks —
+    // the actual defense, not a string match. GNU `realpath -e` is Linux-only, so
+    // they self-skip on BSD/macOS (still type-checked there) and run on CI.
+
+    fn gnu_realpath_available() -> bool {
+        std::process::Command::new("realpath")
+            .args(["-e", "/"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
+    fn make_tmp_root() -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path =
+            std::env::temp_dir().join(format!("archestra-dagger-guard-{}-{n}", std::process::id()));
+        std::fs::create_dir_all(&path).unwrap();
+        std::fs::canonicalize(&path).unwrap()
+    }
+
+    fn run_script(script: String) -> std::process::Output {
+        std::process::Command::new("bash")
+            .arg("-c")
+            .arg(script)
+            .output()
+            .unwrap()
+    }
+
+    #[test]
+    fn read_artifact_command_resolves_symlinks_and_enforces_roots() {
+        if !gnu_realpath_available() {
+            return;
+        }
+        use std::os::unix::fs::symlink;
+        let root = make_tmp_root();
+        std::fs::write(root.join("small.txt"), b"hello").unwrap();
+        symlink("/etc/passwd", root.join("escape")).unwrap();
+        let root_str = root.to_str().unwrap();
+
+        let run = |name: &str, limit: u64| -> std::process::Output {
+            let path = root.join(name);
+            run_script(read_artifact_command(
+                path.to_str().unwrap(),
+                limit,
+                &[root_str],
+            ))
+        };
+
+        let ok = run("small.txt", 100);
+        assert_eq!(ok.status.code(), Some(0));
+        assert_eq!(
+            String::from_utf8_lossy(&ok.stdout).trim(),
+            base64::engine::general_purpose::STANDARD.encode("hello")
+        );
+        // a symlink resolving outside the roots is refused, not followed.
+        assert_eq!(
+            run("escape", 1_000_000).status.code(),
+            Some(ARTIFACT_ESCAPE_EXIT_CODE as i32)
+        );
+        assert_eq!(
+            run("missing.txt", 100).status.code(),
+            Some(ARTIFACT_NOT_FOUND_EXIT_CODE as i32)
+        );
+        // the size cap is enforced on the resolved file (5 bytes > 2).
+        assert_eq!(
+            run("small.txt", 2).status.code(),
+            Some(ARTIFACT_TOO_LARGE_EXIT_CODE as i32)
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn guarded_parent_creation_blocks_symlinked_ancestor_but_creates_normal_dirs() {
+        if !gnu_realpath_available() {
+            return;
+        }
+        use std::os::unix::fs::symlink;
+        let root = make_tmp_root();
+        std::fs::create_dir_all(root.join("home")).unwrap();
+        let outside = root.join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, root.join("home/link")).unwrap();
+        let root_str = root.to_str().unwrap();
+        let helpers = symlink_guard_helpers(&[root_str]);
+
+        // a symlinked intermediate dir aborts before any mkdir walks through it.
+        let escaping = format!("{root_str}/home/link/sub/file");
+        let parents = guarded_parent_creation(&escaping, &[root_str], false);
+        let out = run_script(format!(
+            "{helpers}; {parents} touch {}",
+            shell_quote(&escaping)
+        ));
+        assert_ne!(out.status.code(), Some(0), "escaping ancestor must abort");
+        assert!(
+            std::fs::read_dir(&outside).unwrap().next().is_none(),
+            "nothing may be created outside the roots"
+        );
+
+        // a normal nested path creates its parents and the file.
+        let good = format!("{root_str}/home/a/b/file");
+        let parents = guarded_parent_creation(&good, &[root_str], false);
+        let out = run_script(format!("{helpers}; {parents} touch {}", shell_quote(&good)));
+        assert_eq!(out.status.code(), Some(0));
+        assert!(std::path::Path::new(&good).exists());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn guarded_target_symlink_rejects_a_symlink_escaping_the_roots() {
+        if !gnu_realpath_available() {
+            return;
+        }
+        use std::os::unix::fs::symlink;
+        let root = make_tmp_root();
+        let home = root.join("home");
+        std::fs::create_dir_all(&home).unwrap();
+        // `secret` sits outside the declared root (`{root}/home`).
+        let secret = root.join("secret");
+        std::fs::write(&secret, b"orig").unwrap();
+        symlink(&secret, home.join("evil")).unwrap();
+        let root_str = home.to_str().unwrap();
+        let helpers = symlink_guard_helpers(&[root_str]);
+
+        let target = home.join("evil");
+        let target = target.to_str().unwrap();
+        let guard = guarded_target_symlink(target);
+        let out = run_script(format!(
+            "{helpers}; {guard} echo x > {}",
+            shell_quote(target)
+        ));
+        assert_ne!(out.status.code(), Some(0), "escaping target must abort");
+        assert_eq!(
+            std::fs::read(&secret).unwrap(),
+            b"orig",
+            "the write must not follow the escaping symlink"
+        );
+        std::fs::remove_dir_all(&root).ok();
     }
 }

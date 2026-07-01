@@ -118,7 +118,14 @@ pub(crate) fn validate_cwd(cwd: &str) -> Result<()> {
 }
 
 pub(crate) fn skill_root_path(skill_name: &str) -> Result<String> {
-    if skill_name.contains('/') || skill_name.contains("..") {
+    // reject `""`/`"."` too: both collapse `/skills/{name}` onto the shared
+    // `/skills` root (`/skills/` and `/skills/.`), which would point the per-mount
+    // root `chown -R` and PYTHONPATH at the whole tree instead of one skill.
+    if skill_name.is_empty()
+        || skill_name == "."
+        || skill_name.contains('/')
+        || skill_name.contains("..")
+    {
         return Err(SandboxError::InvalidInput(format!(
             "invalid skill name: {skill_name:?}"
         )));
@@ -140,9 +147,43 @@ pub(crate) fn shell_quote(value: &str) -> String {
 /// true when `path` is exactly one of the sandbox roots or nested beneath it.
 /// the single source of truth for the artifact/cwd/pythonpath allowlist checks.
 fn within_sandbox_roots(path: &str) -> bool {
-    [SKILL_SANDBOX_ROOT, SKILL_SANDBOX_HOME]
+    within_roots(path, SANDBOX_ROOTS)
+}
+
+/// the sandbox roots, in one place so the lexical check and the shell-side guard
+/// ([`symlink_guard_helpers`]) can't drift.
+pub(crate) const SANDBOX_ROOTS: &[&str] = &[SKILL_SANDBOX_ROOT, SKILL_SANDBOX_HOME];
+
+/// [`within_sandbox_roots`] generalised over the root set. The Dagger backend
+/// uses it to decide, per ancestor directory, whether a replay-write path segment
+/// sits inside the roots (guard it against symlink escape) or is a trusted,
+/// root-owned parent above them (e.g. `/home`); tests inject a tmp root.
+pub(crate) fn within_roots(path: &str, roots: &[&str]) -> bool {
+    roots
         .iter()
         .any(|root| path == *root || path.strip_prefix(root).is_some_and(|r| r.starts_with('/')))
+}
+
+/// POSIX shell helpers, prepended to every root/artifact script that runs a
+/// symlink-following filesystem op. `_within_roots` mirrors [`within_roots`] as a
+/// `case`; `_guard` canonicalises a path with `realpath -e` and succeeds only
+/// when the resolved target stays inside the roots. Together they stop a prior
+/// command (uid 1000) from planting a symlink under an allowed lexical path that
+/// redirects a later read (sandbox user) or write (root) outside the roots — the
+/// boundary validators are lexical and can't see through symlinks. `realpath`
+/// ships in `coreutils` (a `DEFAULT_APT_PACKAGES` entry). Kept POSIX (no `local`)
+/// so it also runs under the `sh -c` skill-mount chown. `roots` is injected so a
+/// behavioural test can point the guard at a tmp tree.
+pub(crate) fn symlink_guard_helpers(roots: &[&str]) -> String {
+    let cases = roots
+        .iter()
+        .flat_map(|root| [(*root).to_string(), format!("{root}/*")])
+        .collect::<Vec<_>>()
+        .join("|");
+    format!(
+        "_within_roots() {{ case \"$1\" in {cases}) return 0;; *) return 1;; esac; }}; \
+         _guard() {{ __r=$(realpath -e -- \"$1\") || return 1; _within_roots \"$__r\"; }}"
+    )
 }
 
 #[cfg(test)]
@@ -263,5 +304,70 @@ mod tests {
         assert!(validate_cwd("/proc/self").is_err());
         assert!(validate_cwd("relative/path").is_err());
         assert!(validate_cwd("/skills/../etc").is_err());
+    }
+
+    #[test]
+    fn skill_root_path_rejects_empty_dot_and_traversal() {
+        assert_eq!(skill_root_path("alpha").unwrap(), "/skills/alpha");
+        // "" -> "/skills/" and "." -> "/skills/." both collapse onto the shared
+        // root; reject them alongside the existing "/" and ".." cases.
+        for bad in ["", ".", "..", "a/b", "../x", "a/../b"] {
+            assert!(skill_root_path(bad).is_err(), "should reject {bad:?}");
+        }
+    }
+
+    /// GNU `realpath -e` (used by the shell guard) — absent on BSD/macOS, so the
+    /// behavioural tests below self-skip there and run on the Linux runtime/CI.
+    fn gnu_realpath_available() -> bool {
+        std::process::Command::new("realpath")
+            .args(["-e", "/"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
+    fn make_tmp_root() -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("archestra-guard-{}-{n}", std::process::id()));
+        std::fs::create_dir_all(&path).unwrap();
+        // canonicalize so the shell `case` (which matches the resolved path)
+        // isn't defeated by a symlinked temp dir (e.g. macOS `/var`->`/private/var`).
+        std::fs::canonicalize(&path).unwrap()
+    }
+
+    #[test]
+    fn symlink_guard_allows_in_root_paths_and_denies_escapes() {
+        if !gnu_realpath_available() {
+            return;
+        }
+        use std::os::unix::fs::symlink;
+        let root = make_tmp_root();
+        let inside = root.join("home");
+        std::fs::create_dir_all(&inside).unwrap();
+        std::fs::write(inside.join("file.txt"), b"data").unwrap();
+        symlink("/etc/passwd", inside.join("escape")).unwrap();
+        symlink(inside.join("file.txt"), inside.join("in_root_link")).unwrap();
+        symlink(inside.join("does_not_exist"), inside.join("dangling")).unwrap();
+
+        let root_str = root.to_str().unwrap();
+        let helpers = symlink_guard_helpers(&[root_str]);
+        let guard = |p: std::path::PathBuf| -> i32 {
+            let script = format!("{helpers}; _guard {}", shell_quote(p.to_str().unwrap()));
+            std::process::Command::new("bash")
+                .arg("-c")
+                .arg(script)
+                .status()
+                .unwrap()
+                .code()
+                .unwrap()
+        };
+        assert_eq!(guard(inside.join("file.txt")), 0, "in-root file");
+        assert_eq!(guard(inside.join("in_root_link")), 0, "in-root symlink");
+        assert_ne!(guard(inside.join("escape")), 0, "escaping symlink");
+        assert_ne!(guard(inside.join("dangling")), 0, "dangling symlink");
+        assert_ne!(guard(inside.join("missing")), 0, "nonexistent path");
+        std::fs::remove_dir_all(&root).ok();
     }
 }

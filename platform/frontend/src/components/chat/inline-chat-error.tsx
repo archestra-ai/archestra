@@ -107,7 +107,7 @@ export function InlineChatError({
   if (chatError.spanId)
     refEntries.push({ label: "Span", value: chatError.spanId });
 
-  const copyDebugInfo = () => {
+  const copyDebugInfo = async () => {
     const lines: string[] = [];
 
     lines.push(supportMessage?.trim() || chatError.message);
@@ -130,10 +130,14 @@ export function InlineChatError({
       lines.push(`${entry.label}: ${entry.value}`);
     }
 
-    navigator.clipboard.writeText(lines.join("\n"));
-    toast.success(
-      slimChatErrorUi ? "Error details copied" : "Debug info copied",
-    );
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      toast.success(
+        slimChatErrorUi ? "Error details copied" : "Debug info copied",
+      );
+    } catch {
+      toast.error("Couldn't copy to clipboard");
+    }
   };
 
   const retryButton = onRetry ? (

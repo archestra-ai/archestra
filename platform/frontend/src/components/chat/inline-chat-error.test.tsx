@@ -1,10 +1,12 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("sonner", () => ({
   toast: {
     success: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
@@ -257,6 +259,42 @@ describe("InlineChatError", () => {
     expect(
       screen.getByRole("button", { name: /Sign in with GitHub/i }),
     ).toBeInTheDocument();
+  });
+
+  it("does not claim success when the clipboard write fails", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+    });
+    render(
+      <InlineChatError error={new Error("Failed to fetch")} slimChatErrorUi />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Copy error details" }),
+    );
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("toasts success once the clipboard write resolves", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    render(
+      <InlineChatError error={new Error("Failed to fetch")} slimChatErrorUi />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Copy error details" }),
+    );
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it("auto-resends the original prompt after connecting the provider", async () => {

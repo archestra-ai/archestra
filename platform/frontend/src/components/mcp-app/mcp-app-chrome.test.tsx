@@ -36,16 +36,25 @@ describe("address-pill action buttons", () => {
 });
 
 describe("McpAppMarkerCircle", () => {
-  it("labels the marker with the app name without mounting an iframe", () => {
-    const { container } = render(<McpAppMarkerCircle label="Dashboard" />);
+  it("labels the pill with the app name without mounting an iframe", () => {
+    const { container } = render(
+      <McpAppMarkerCircle label="Dashboard" onClick={() => {}} />,
+    );
 
-    expect(screen.getByLabelText("Dashboard")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Dashboard" }),
+    ).toBeInTheDocument();
     expect(container.querySelector("iframe")).not.toBeInTheDocument();
   });
 
-  it("is a non-interactive indicator (no button role)", () => {
-    render(<McpAppMarkerCircle label="Dashboard" />);
+  it("toggles on click and reflects its pressed state", async () => {
+    const onClick = vi.fn();
+    render(<McpAppMarkerCircle label="Dashboard" pressed onClick={onClick} />);
 
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Dashboard" });
+    expect(button).toHaveAttribute("aria-pressed", "true");
+
+    await userEvent.click(button);
+    expect(onClick).toHaveBeenCalledOnce();
   });
 });

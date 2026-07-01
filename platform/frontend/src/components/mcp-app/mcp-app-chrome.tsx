@@ -256,29 +256,48 @@ export function McpAppStandaloneButton({
 }
 
 /**
- * Compact, non-interactive app-icon marker shown next to a tool-call circle in
- * the chat. Visually matches the tool-call circles (`size-8` bordered circle)
- * but carries the app icon; no tool-status dot. It's a pure indicator —
- * opening/closing the right panel is handled by the app's "Open in right panel"
- * button and the panel's own collapse control.
+ * Interactive app-icon pill shown next to a tool-call circle in the chat, and
+ * the toggle for the app's inline render — like a tool-call pill toggles its
+ * content. `pressed` means the app is visible inline (its content is expanded
+ * under the pill). It reads unpressed while the app is hosted in the right panel
+ * (you're looking at the panel copy). `hasError` shows a red status dot for a
+ * runtime error, matching the tool-call circles.
  */
 export function McpAppMarkerCircle({
   label,
+  pressed = false,
+  hasError = false,
+  onClick,
 }: {
   /** Tooltip text — the app name (plus optional context like "Shown in right panel"). */
   label: string;
+  /** Pressed = the app's inline render is expanded under the pill. */
+  pressed?: boolean;
+  /** Show a red status dot for an app runtime error. */
+  hasError?: boolean;
+  onClick: () => void;
 }) {
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span
-            role="img"
+          <button
+            type="button"
+            onClick={onClick}
             aria-label={label}
-            className="relative inline-flex size-8 items-center justify-center rounded-full border bg-background text-muted-foreground"
+            aria-pressed={pressed}
+            className={cn(
+              "relative inline-flex size-8 items-center justify-center rounded-full border transition-all hover:border-accent-foreground/20 hover:bg-accent hover:text-foreground",
+              pressed
+                ? "border-accent-foreground/20 bg-accent text-foreground ring-2 ring-primary/20"
+                : "bg-background text-muted-foreground",
+            )}
           >
             <AppWindow className="h-4 w-4" />
-          </span>
+            {hasError ? (
+              <span className="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-background bg-destructive" />
+            ) : null}
+          </button>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
           {label}

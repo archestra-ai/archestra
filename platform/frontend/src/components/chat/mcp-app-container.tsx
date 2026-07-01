@@ -1,7 +1,14 @@
 import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
 import { AppWindow, MoreVertical, PanelRight, Trash2 } from "lucide-react";
 import type React from "react";
-import { Component, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Component,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { createPortal } from "react-dom";
 import { AppDeleteDialog } from "@/app/apps/_parts/app-delete-dialog";
 import { AppDiagnosticsPanel } from "@/components/chat/app-diagnostics-panel";
@@ -39,6 +46,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useApp } from "@/lib/app.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  getAppDiagnosticCounts,
+  subscribeAppDiagnostics,
+} from "@/lib/chat/app-diagnostics-store";
+import { cn } from "@/lib/utils";
 
 /**
  * Shape of MCP tool output stored by the backend in the AI SDK's tool result.
@@ -172,6 +184,9 @@ export function McpAppSection({
     null,
   );
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // Inline app visibility (the pill toggles it). Expanded/pressed by default so
+  // the app shows inline as soon as it renders.
+  const [expanded, setExpanded] = useState(true);
   const [resourceState, setResourceState] = useState<{
     key: string;
     state: "unknown" | "renderable" | "empty";
@@ -236,6 +251,27 @@ export function McpAppSection({
     showInPanel(toolCallId);
   };
 
+  // The pill toggles the inline app: press it to show the app inline (closing the
+  // right panel if that's where it currently lives), press again to collapse.
+  const handleTogglePill = () => {
+    if (renderInPanel) {
+      closePanel();
+      setExpanded(true);
+    } else {
+      setExpanded((e) => !e);
+    }
+  };
+
+  // Runtime-error count for the pill's status dot (owned apps only).
+  const diagnosticCounts = useSyncExternalStore(
+    subscribeAppDiagnostics,
+    getAppDiagnosticCounts,
+    getAppDiagnosticCounts,
+  );
+  const hasRuntimeError = appId
+    ? (diagnosticCounts.get(appId)?.errors ?? 0) > 0
+    : false;
+
   // Whether this owned app's latest render is the one currently displayed in the
   // right panel (drives the superseded marker's pressed state and toggle-to-close).
   const latestToolCallId = apps.find((a) => a.appId === appId)?.toolCallId;
@@ -254,10 +290,10 @@ export function McpAppSection({
   }
 
   // A superseded render (a newer render of the same owned app exists in the
-  // conversation) collapses to a compact app-icon marker instead of mounting the
-  // live runtime, so only the latest render stays live. The marker mirrors the
-  // right panel: pressed + click-to-close when its app is shown there, otherwise
-  // click opens the latest render in the right panel.
+  // conversation) collapses to a compact app-icon pill instead of mounting the
+  // live runtime, so only the latest render stays live. This older render is
+  // never shown inline (never pressed); clicking it jumps to the latest render
+  // in the right panel.
   if (isSupersededRender({ apps, toolCallId, appId })) {
     return (
       <>
@@ -267,6 +303,10 @@ export function McpAppSection({
               ? `${headerName} · Shown in right panel`
               : headerName
           }
+          pressed={false}
+          onClick={() => {
+            if (latestToolCallId) showInPanel(latestToolCallId);
+          }}
         />
         {toolDetails ? <div className="w-full">{toolDetails}</div> : null}
       </>
@@ -412,25 +452,37 @@ export function McpAppSection({
   const diagnostics = appId ? <AppDiagnosticsPanel appId={appId} /> : null;
 
   // The app marker is always a top-level flex item, so it sits on the same row
-  // as the host tool-call circle. It's pressed while the app is shown in the
-  // right panel (click closes it); otherwise clicking opens it there.
+  // as the host tool-call circle. Pressed = the app is expanded inline; it reads
+  // unpressed while the app lives in the right panel. A red dot flags a runtime
+  // error. Clicking toggles the inline app (and closes the panel if the app is
+  // there — see handleTogglePill).
+  const pressed = !renderInPanel && expanded;
   const marker = (
     <McpAppMarkerCircle
       label={
         renderInPanel ? `${headerName} · Shown in right panel` : headerName
       }
+      pressed={pressed}
+      hasError={hasRuntimeError}
+      onClick={handleTogglePill}
     />
   );
 
   // Everything under the circle+marker row stacks in one full-width column:
   // tool-call details (above the app), then the inline app card + its
-  // "Open in right panel" button (inline only — in the panel the app is
-  // portaled away), then the diagnostics summary.
+  // "Open in right panel" button, then the diagnostics summary. The inline app
+  // is CSS-hidden (not unmounted) when collapsed so its iframe keeps its state;
+  // it's absent entirely while the app is portaled into the panel.
   const belowColumn = (
     <div className="flex w-full flex-col items-start gap-2">
       {toolDetails ? <div className="w-full">{toolDetails}</div> : null}
       {!renderInPanel ? (
-        <>
+        <div
+          className={cn(
+            "flex w-full flex-col items-start gap-2",
+            !expanded && "hidden",
+          )}
+        >
           {liveSurface}
           {toolCallId && displayMode !== "fullscreen" ? (
             // Match the card's 80% width and right-justify so the button lines
@@ -448,7 +500,7 @@ export function McpAppSection({
               </Button>
             </div>
           ) : null}
-        </>
+        </div>
       ) : null}
       {diagnostics}
     </div>

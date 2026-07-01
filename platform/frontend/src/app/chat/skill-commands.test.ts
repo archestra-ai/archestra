@@ -87,6 +87,9 @@ describe("parseSkillCommand", () => {
 
 describe("resolveUrlSkillAction", () => {
   const skill = { id: "s1", name: "Deep Research" };
+  const skillCommands = buildSkillCommands([
+    { id: "s1", name: "Deep Research", description: "" },
+  ]);
 
   it("prefills the slash command (with a trailing space) when slash commands are enabled", () => {
     expect(
@@ -94,8 +97,38 @@ describe("resolveUrlSkillAction", () => {
         skill,
         isError: false,
         slashCommandsEnabled: true,
+        skillCommands,
       }),
     ).toEqual({ kind: "prefill", text: "/deep-research " });
+  });
+
+  it("prefills the collision-disambiguated token, not the raw slug, for a colliding skill", () => {
+    const colliding = buildSkillCommands([
+      { id: "s1", name: "PDF Tools", description: "" },
+      { id: "s2", name: "pdf-tools", description: "" },
+    ]);
+    expect(
+      resolveUrlSkillAction({
+        skill: { id: "s2", name: "pdf-tools" },
+        isError: false,
+        slashCommandsEnabled: true,
+        skillCommands: colliding,
+      }),
+    ).toEqual({ kind: "prefill", text: "/pdf-tools-2 " });
+  });
+
+  it("falls back to the silent stage when the skill is missing from the command table", () => {
+    expect(
+      resolveUrlSkillAction({
+        skill: { id: "s-not-listed", name: "Hidden Skill" },
+        isError: false,
+        slashCommandsEnabled: true,
+        skillCommands,
+      }),
+    ).toEqual({
+      kind: "stage",
+      skill: { id: "s-not-listed", name: "Hidden Skill" },
+    });
   });
 
   it("stages the skill silently when slash commands are disabled", () => {
@@ -104,6 +137,7 @@ describe("resolveUrlSkillAction", () => {
         skill,
         isError: false,
         slashCommandsEnabled: false,
+        skillCommands,
       }),
     ).toEqual({ kind: "stage", skill: { id: "s1", name: "Deep Research" } });
   });
@@ -115,6 +149,7 @@ describe("resolveUrlSkillAction", () => {
           skill: null,
           isError: false,
           slashCommandsEnabled,
+          skillCommands,
         }),
       ).toEqual({ kind: "none" });
     }
@@ -127,6 +162,7 @@ describe("resolveUrlSkillAction", () => {
           skill: null,
           isError: true,
           slashCommandsEnabled,
+          skillCommands,
         }),
       ).toEqual({ kind: "none" });
     }

@@ -60,18 +60,29 @@ export type UrlSkillAction =
  * slash command (the visible text is the single source of truth — deleting it
  * detaches the skill); otherwise the skill is held silently and attached to
  * the first message. A missing skill (404) or fetch error stages nothing.
+ *
+ * The prefill token is looked up in `skillCommands` — the same
+ * collision-disambiguated table submit parsing uses — never re-derived from
+ * the name: "PDF Tools" and "pdf-tools" both slugify to `/pdf-tools`, so a
+ * re-derived token could activate the wrong skill. A skill absent from the
+ * table (e.g. beyond the command list's page size) falls back to the silent
+ * stage, which attaches by id and cannot mis-resolve.
  */
 export function resolveUrlSkillAction(params: {
   skill: { id: string; name: string } | null;
   isError: boolean;
   slashCommandsEnabled: boolean;
+  skillCommands: SkillCommand[];
 }): UrlSkillAction {
-  const { skill, isError, slashCommandsEnabled } = params;
+  const { skill, isError, slashCommandsEnabled, skillCommands } = params;
   if (isError || !skill) {
     return { kind: "none" };
   }
   if (slashCommandsEnabled) {
-    return { kind: "prefill", text: `${skillCommandValue(skill.name)} ` };
+    const command = skillCommands.find((c) => c.skill.id === skill.id);
+    if (command) {
+      return { kind: "prefill", text: `${command.value} ` };
+    }
   }
   return { kind: "stage", skill: { id: skill.id, name: skill.name } };
 }

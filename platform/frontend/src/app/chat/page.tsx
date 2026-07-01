@@ -151,7 +151,7 @@ import { useOrganization } from "@/lib/organization.query";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { useProjectFiles } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
-import { useSkill } from "@/lib/skills/skill.query";
+import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
@@ -164,7 +164,7 @@ import ArchestraPromptInput, {
   type ArchestraPromptInputProps,
 } from "./prompt-input";
 import { resolveSharedConversationForkState } from "./shared-conversation-fork";
-import { resolveUrlSkillAction } from "./skill-commands";
+import { buildSkillCommands, resolveUrlSkillAction } from "./skill-commands";
 
 const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
   "runs",
@@ -484,6 +484,14 @@ export function ChatPageContent({
   const urlSkillQuery = useSkill(urlSkillId);
   const skillSlashCommandsEnabled =
     organization?.skillSlashCommandsEnabled ?? false;
+  // Same query the composer's slash-command table is built from (identical
+  // input → shared TanStack cache entry). The prefill token must come from
+  // that table, not be re-derived from the skill name, so slug collisions
+  // resolve to the right skill.
+  const urlSkillCommandsQuery = useSkillsPaginated(
+    { limit: 100 },
+    { enabled: skillSlashCommandsEnabled && !!urlSkillId },
+  );
   useEffect(() => {
     if (urlSkillProcessedRef.current || !urlSkillId) return;
     // Wait for both the skill fetch and the org flag that picks the mechanism.
@@ -491,6 +499,15 @@ export function ChatPageContent({
     // non-404 lands the query in its error state — both settle this effect.
     if (isOrgLoading) return;
     if (!urlSkillQuery.isSuccess && !urlSkillQuery.isError) return;
+    // The prefill path additionally needs the command table; an errored list
+    // query settles with no commands, which falls back to the silent stage.
+    if (
+      skillSlashCommandsEnabled &&
+      !urlSkillCommandsQuery.isSuccess &&
+      !urlSkillCommandsQuery.isError
+    ) {
+      return;
+    }
 
     urlSkillProcessedRef.current = true;
     clearSkillIdQueryParam({ pathname, router, searchParams });
@@ -499,6 +516,9 @@ export function ChatPageContent({
       skill: urlSkillQuery.data ?? null,
       isError: urlSkillQuery.isError,
       slashCommandsEnabled: skillSlashCommandsEnabled,
+      skillCommands: urlSkillCommandsQuery.data?.data
+        ? buildSkillCommands(urlSkillCommandsQuery.data.data)
+        : [],
     });
     if (action.kind === "prefill") {
       setComposerPrefill(action.text);
@@ -510,6 +530,9 @@ export function ChatPageContent({
     urlSkillQuery.isSuccess,
     urlSkillQuery.isError,
     urlSkillQuery.data,
+    urlSkillCommandsQuery.isSuccess,
+    urlSkillCommandsQuery.isError,
+    urlSkillCommandsQuery.data,
     isOrgLoading,
     skillSlashCommandsEnabled,
     pathname,

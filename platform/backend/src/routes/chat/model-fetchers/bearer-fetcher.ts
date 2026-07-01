@@ -6,7 +6,9 @@ import { type ModelInfo, PLACEHOLDER_API_KEY, type StaticModel } from "./types";
 
 interface BearerRawModel {
   id: string;
-  created: number;
+  // Provider responses don't always include `created`, so treat it as optional
+  // untrusted input rather than trusting the OpenAI-compatible schema.
+  created?: number;
 }
 
 interface BearerFetcherDescriptor<
@@ -30,7 +32,9 @@ function defaultMapModel(
     id: model.id,
     displayName: model.id,
     provider,
-    createdAt: new Date(model.created * 1000).toISOString(),
+    createdAt: model.created
+      ? new Date(model.created * 1000).toISOString()
+      : undefined,
   };
 }
 

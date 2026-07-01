@@ -33,6 +33,7 @@ class ConnectorPruneService {
         `Connector type does not support pruning: ${connector.connectorType}`,
       );
     }
+    const listAllSourceIds = connectorImpl.listAllSourceIds.bind(connectorImpl);
 
     const credentials = await resolveConnectorCredentials(connector);
     const run = await ConnectorRunModel.create({
@@ -61,7 +62,7 @@ class ConnectorPruneService {
     let prunedDocuments = 0;
 
     try {
-      for await (const sourceIds of connectorImpl.listAllSourceIds({
+      for await (const sourceIds of listAllSourceIds({
         config: connector.config as Record<string, unknown>,
         credentials,
       })) {

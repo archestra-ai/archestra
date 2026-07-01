@@ -6,6 +6,7 @@ import {
   BookOpen,
   Braces,
   Info,
+  MessageSquare,
   Pencil,
   Plus,
   RotateCcw,
@@ -56,6 +57,11 @@ import {
   useSkillSourceRepos,
   useSkillsPaginated,
 } from "@/lib/skills/skill.query";
+import {
+  withEditorClosed,
+  withEditorOpen,
+  withOpenEditRewritten,
+} from "./_parts/editor-url";
 import { SkillEditorDialog } from "./_parts/skill-editor-dialog";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
@@ -113,7 +119,12 @@ function SkillsList() {
     [pathname, router, searchParams],
   );
 
-  const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
+  // The open editor is driven by the `edit=<skillId>` search param. It stays
+  // in the URL while the dialog is open so the link is copyable at any moment
+  // (deliberate divergence from pages that strip it after opening). The dialog
+  // fetches the skill by id itself, so deep links work regardless of the
+  // current page/search of the table.
+  const editingSkillId = searchParams.get("edit");
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
   const [resettingSkill, setResettingSkill] = useState<SkillItem | null>(null);
   const { data: session } = useSession();
@@ -121,18 +132,37 @@ function SkillsList() {
 
   const items = skills?.data ?? [];
 
+  const openEditor = useCallback(
+    (skillId: string) => {
+      const params = withEditorOpen(
+        new URLSearchParams(searchParams.toString()),
+        skillId,
+      );
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  const closeEditor = useCallback(() => {
+    const params = withEditorClosed(
+      new URLSearchParams(searchParams.toString()),
+    );
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [pathname, router, searchParams]);
+
   // Deep-link support: /skills?openEdit=<name> auto-opens the skill editor for
-  // the matching skill (e.g. from the chat SkillPill). The query param is
-  // stripped after we open the dialog so the URL doesn't keep re-triggering
-  // on refresh or back-navigation.
+  // the matching skill (e.g. from the chat SkillPill). Once the name resolves
+  // to an id from the loaded items, the URL is rewritten to the durable
+  // `edit=<skillId>` form so it keeps working on refresh and stays copyable.
   const openEdit = searchParams.get("openEdit");
   useEffect(() => {
     if (!openEdit || items.length === 0) return;
     const match = items.find((s) => s.name === openEdit);
     if (!match) return;
-    setEditingSkillId(match.id);
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("openEdit");
+    const params = withOpenEditRewritten(
+      new URLSearchParams(searchParams.toString()),
+      match.id,
+    );
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [openEdit, items, searchParams, pathname, router]);
   const pagination = skills?.pagination;
@@ -244,7 +274,13 @@ function SkillsList() {
             icon: <Pencil className="h-4 w-4" />,
             label: "Edit",
             permissions: { skill: ["update"] },
-            onClick: () => setEditingSkillId(skill.id),
+            onClick: () => openEditor(skill.id),
+          },
+          {
+            icon: <MessageSquare className="h-4 w-4" />,
+            label: "Chat",
+            permissions: { chat: ["read", "create"] },
+            href: `/chat/new?skill_id=${skill.id}`,
           },
           ...(isBuiltIn
             ? [
@@ -353,7 +389,7 @@ function SkillsList() {
                   scroll: false,
                 });
               }}
-              onRowClick={(row) => setEditingSkillId(row.id)}
+              onRowClick={(row) => openEditor(row.id)}
               isLoading={isFetching}
             />
           </>
@@ -364,7 +400,7 @@ function SkillsList() {
         <SkillEditorDialog
           skillId={editingSkillId}
           open={!!editingSkillId}
-          onOpenChange={(open) => !open && setEditingSkillId(null)}
+          onOpenChange={(open) => !open && closeEditor()}
         />
       )}
 

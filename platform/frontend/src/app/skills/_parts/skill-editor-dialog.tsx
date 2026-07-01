@@ -7,17 +7,20 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  MessageSquare,
   Plus,
   RotateCcw,
   Trash2,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -337,28 +340,44 @@ export function SkillEditorDialog({
       size="large"
       bodyClassName="flex flex-col overflow-hidden"
       footer={
-        isPreview ? (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Close
-          </Button>
-        ) : (
-          <>
+        <>
+          {/* Existing skills only (edit/preview with an id) — a skill being
+              created has no id to start a chat with yet. */}
+          {skillId !== null && (
+            <PermissionButton
+              permissions={{ chat: ["read", "create"] }}
+              variant="outline"
+              asChild
+            >
+              <Link href={`/chat/new?skill_id=${skillId}`}>
+                <MessageSquare className="h-4 w-4" />
+                Chat
+              </Link>
+            </PermissionButton>
+          )}
+          {isPreview ? (
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              Close
             </Button>
-            <Button type="button" disabled={!canSave} onClick={handleSave}>
-              {isSaving ? "Saving..." : "Save skill"}
-            </Button>
-          </>
-        )
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="button" disabled={!canSave} onClick={handleSave}>
+                {isSaving ? "Saving..." : "Save skill"}
+              </Button>
+            </>
+          )}
+        </>
       }
     >
       {(isPreview && isPreviewLoading) || (isEdit && isLoading) ? (

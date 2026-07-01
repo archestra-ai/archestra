@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-05-31
+lastUpdated: 2026-07-01
 ---
 
 <!--
@@ -25,9 +25,9 @@ The model router exposes one OpenAI-compatible interface for models across confi
 - **Responses API** (`/responses`) for text requests across model-router-compatible providers
 - **Chat Completions API** (`/chat/completions`) for text chat requests across model-router-compatible providers
 - **Models API** (`/models`) for provider-qualified chat and embedding model IDs
-- **Embeddings API** (`/embeddings`) for OpenAI embedding models only
+- **Embeddings API** (`/embeddings`) for embedding models across supported providers
 
-> ⚠️ Embeddings support for other providers is tracked in [GitHub Issue #5174](https://github.com/archestra-ai/archestra/issues/5174).
+Embeddings routing accepts any provider-qualified embedding model ID (for example `openai:text-embedding-3-small`, `mistral:mistral-embed`, or `gemini:gemini-embedding-001`) that is registered and mapped to the request's virtual key or LLM OAuth client. OpenAI-compatible providers (OpenAI, Azure, Mistral, Ollama, vLLM, Zhipu AI, and other OpenAI-wire providers) are served through a shared OpenAI-compatible embeddings adapter; Gemini is translated to its native `embedContent` API. The response is always returned in the OpenAI embeddings shape. Providers without a compatible embeddings API, including Anthropic, Bedrock, and Cohere, return `501 Not Implemented`.
 
 ### Model Router Connection Details
 
@@ -96,6 +96,7 @@ Archestra supports both the [Google AI Studio](https://ai.google.dev/) (Gemini D
 
 - **Generate Content API** (`:generateContent`)
 - **Stream Generate Content API** (`:streamGenerateContent`)
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible request/response, translated to Gemini's native `embedContent`
 
 ### Gemini Connection Details
 
@@ -295,6 +296,7 @@ Dynamic-pricing routers (`openrouter/auto`) report no fixed per-token price, so 
 ### Supported Mistral APIs
 
 - **Chat Completions API** (`/chat/completions`)
+- **Embeddings API** (`/embeddings`)
 
 ### Mistral Connection Details
 
@@ -342,6 +344,7 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 ### Supported vLLM APIs
 
 - **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible
 
 ### vLLM Connection Details
 
@@ -376,6 +379,7 @@ The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environm
 ### Supported Ollama APIs
 
 - **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible
 
 ### Ollama Connection Details
 
@@ -411,6 +415,7 @@ The default base URL is `http://localhost:11434/v1`. Override it per-key in the 
 ### Supported Zhipu AI APIs
 
 - **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible
 
 ### Zhipu AI Connection Details
 
@@ -715,6 +720,7 @@ Known region prefixes: `us`, `eu`, `ap`, `global`.
 
 - Chat Completions (streaming and non-streaming)
 - Responses API (streaming and non-streaming)
+- Embeddings API (`/embeddings`) - OpenAI-compatible
 
 ### Azure AI Foundry Connection Details
 

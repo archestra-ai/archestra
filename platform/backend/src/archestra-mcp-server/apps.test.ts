@@ -1753,6 +1753,22 @@ describe("validate_app", () => {
     });
   });
 
+  test("warns on a non-existent SDK member call but still passes", async ({
+    makeApp,
+  }) => {
+    const app = await makeApp({
+      organizationId,
+      scope: "org",
+      html: '<html><head><script>const v = await archestra.storage.get("k");</script></head><body/></html>',
+    });
+    const result = await validate(app.id);
+    expect(structured(result).ok).toBe(true);
+    expect(structured(result).findings).toContainEqual({
+      severity: "warning",
+      message: expect.stringContaining("archestra.storage.get"),
+    });
+  });
+
   test("errors on an unknown app id", async () => {
     const result = await validate(crypto.randomUUID());
     expect(result.isError).toBe(true);

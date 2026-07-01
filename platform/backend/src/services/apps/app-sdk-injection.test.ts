@@ -10,7 +10,7 @@ import {
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import { buildPlatformCspContent } from "./app-sdk-injection";
-import { APP_PLATFORM_CSP } from "./app-ui-policy";
+import { APP_PLATFORM_CSP, ARCHESTRA_APP_SDK_SURFACE } from "./app-ui-policy";
 
 // The injectAppSdk envelope logic moved to the app_runtime_core Rust crate; its
 // behavior (anchor selection, escaping, injection order) is covered by that
@@ -35,21 +35,21 @@ describe("the Apps SDK static file", () => {
     }
   });
 
-  test("exposes the documented window.archestra namespace", () => {
-    for (const member of [
+  // Drives the assertion from ARCHESTRA_APP_SDK_SURFACE — the allowlist the
+  // validateAppHtmlStatic SDK-usage lint trusts — so if the real SDK gains or
+  // renames a member without the const following, this fails and the lint is
+  // caught before it goes stale.
+  test("exposes every member the SDK-usage allowlist claims (drift guard)", () => {
+    const members = [
       "window.archestra",
-      "ready",
-      "user:",
-      "storage:",
-      "llm:",
-      "tools:",
-      "ui:",
-      "context:",
-      "openLink",
-      "requestDisplayMode",
-      "complete:",
-      "prompt:",
-    ]) {
+      ...ARCHESTRA_APP_SDK_SURFACE.topLevel,
+      ...ARCHESTRA_APP_SDK_SURFACE.storage.partitions,
+      ...ARCHESTRA_APP_SDK_SURFACE.storage.methods,
+      ...ARCHESTRA_APP_SDK_SURFACE.tools,
+      ...ARCHESTRA_APP_SDK_SURFACE.llm,
+      ...ARCHESTRA_APP_SDK_SURFACE.ui,
+    ];
+    for (const member of members) {
       expect(sdk).toContain(member);
     }
   });

@@ -895,7 +895,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_PUBLISH_APP_SHORT_NAME,
     title: "Publish App",
     description:
-      "Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, with teamIds) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Returns the app's standalone run page. Validate the app first; publishing does not change its HTML.",
+      "Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, with teamIds) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Publishing changes only the app's sharing scope: it does not modify the HTML or re-run validation, so confirm the current version is sound with validate_app (or get_app_diagnostics) beforehand if you need to. Returns the app's standalone run page.",
     schema: PublishAppSchema,
     outputSchema: PublishAppOutputSchema,
     async handler({ args, context }) {

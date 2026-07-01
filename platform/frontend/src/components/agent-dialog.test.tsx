@@ -240,6 +240,9 @@ vi.mock("@/components/ui/dialog", () => ({
   DialogContent: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
+  DialogDescription: ({ children }: { children?: React.ReactNode }) => (
+    <p>{children}</p>
+  ),
   DialogForm: ({
     children,
     onSubmit,

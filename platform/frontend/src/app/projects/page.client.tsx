@@ -436,6 +436,7 @@ function CreateProjectDialog({
       title="New project"
       description="Files the agent saves in this project are kept together and show up in your files."
       size="small"
+      isDirty={form.formState.isDirty}
       onSubmit={onSubmit}
       footer={
         <>
@@ -460,7 +461,9 @@ function CreateProjectDialog({
       <div className="flex items-start gap-3">
         <AgentIconPicker
           value={icon}
-          onChange={(next) => form.setValue("icon", next)}
+          onChange={(next) =>
+            form.setValue("icon", next, { shouldDirty: true })
+          }
           fallbackType="project"
         />
         <div className="flex-1 space-y-3 min-w-0">

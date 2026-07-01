@@ -30,6 +30,11 @@ export function MermaidDiagram({
 
           mermaid.initialize({
             startOnLoad: false,
+            // On a parse/draw failure, mermaid otherwise appends an error
+            // "bomb" diagram to document.body and throws before removing it,
+            // orphaning that node outside React's tree. Suppressing it makes
+            // render() clean up its scratch element before throwing.
+            suppressErrorRendering: true,
             theme: isDark ? "dark" : "neutral",
             themeVariables: isDark
               ? {
@@ -72,10 +77,45 @@ export function MermaidDiagram({
           }
         } catch (error) {
           console.error("Error rendering mermaid diagram:", error);
-          if (ref.current) {
+          // Match the success path's guard: a stale rejected render (from an
+          // older chart/theme) must not overwrite a newer render's output.
+          if (ref.current && !isCancelled) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+
+            const box = document.createElement("div");
+            box.setAttribute("role", "alert");
+            box.className =
+              "w-full rounded-md border border-destructive/30 bg-destructive/10 p-3 text-left text-sm text-destructive";
+
+            const title = document.createElement("p");
+            title.className = "font-medium";
+            title.textContent = "Couldn't render the diagram";
+            box.appendChild(title);
+
+            // The catch also covers non-syntax failures (e.g. the dynamic
+            // mermaid import), so only claim invalid syntax on a parse error.
+            if (/parse error/i.test(message)) {
+              const hint = document.createElement("p");
+              hint.className = "mt-1 text-xs text-muted-foreground";
+              hint.textContent = "The mermaid syntax is invalid.";
+              box.appendChild(hint);
+            }
+
+            // Keep the parse error and the source available, but out of the way.
+            const details = document.createElement("details");
+            details.className = "mt-2";
+            const summary = document.createElement("summary");
+            summary.className = "cursor-pointer text-xs text-muted-foreground";
+            summary.textContent = "Show details";
+            details.appendChild(summary);
             const pre = document.createElement("pre");
-            pre.textContent = chart;
-            ref.current.replaceChildren(pre);
+            pre.className = "mt-1 overflow-x-auto whitespace-pre-wrap text-xs";
+            pre.textContent = `${message}\n\n${chart}`;
+            details.appendChild(pre);
+            box.appendChild(details);
+
+            ref.current.replaceChildren(box);
             setIsLoaded(true);
           }
         }

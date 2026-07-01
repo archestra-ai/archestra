@@ -1,3 +1,4 @@
+import { ARCHESTRA_APP_SDK_SUMMARY } from "@/archestra-mcp-server/app-authoring-guidance";
 import { getUnassignedDiscoverableTools } from "@/archestra-mcp-server/dynamic-tools";
 import { filterToolNamesByPermission } from "@/archestra-mcp-server/rbac";
 import { AgentModel, ToolModel } from "@/models";
@@ -14,20 +15,6 @@ interface AppCapabilityContext {
   /** Compact human-readable summary of the window.archestra SDK surface. */
   sdkSummary: string;
 }
-
-/**
- * Compact, accurate description of the `window.archestra` SDK an app's HTML is
- * authored against. A prompt ingredient for the authoring model — kept terse so
- * it can be fed alongside the (potentially long) capability tool list without
- * crowding it out. Mirrors the runtime surface injected by app-sdk-injection.
- */
-const ARCHESTRA_APP_SDK_SUMMARY = `window.archestra is injected at render time (await archestra.ready before the first call; every method is async). Surface:
-- archestra.user — the authenticated viewer {id, name}, readable after ready.
-- archestra.storage.user.{get,set,list,delete} — per-viewer JSON key/value store; archestra.storage.shared.* is one store all viewers share.
-- archestra.tools.call(name, args) — invoke an assigned MCP tool as the viewer with their credentials; archestra.tools.list() returns the assigned tools.
-- archestra.llm.complete(prompt, {system, jsonMode}) — one host LLM completion over data the app already has (not a data source).
-- archestra.ui.openLink(url) and archestra.ui.requestDisplayMode(mode) — reach the host; archestra.context is the running app's {appId, version}.
-All external data must come through assigned MCP tools (the sandbox blocks network access).`;
 
 /**
  * Assemble the real capabilities an MCP App can be grounded in: the MCP tools

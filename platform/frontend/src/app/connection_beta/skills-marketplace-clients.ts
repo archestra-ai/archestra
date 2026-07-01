@@ -32,9 +32,9 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
         language: "bash",
       },
       {
-        label: "Browse and install the skill bundle",
-        body: "Run /plugin inside Claude Code; the shared skills are bundled into a single installable plugin.",
-        code: `/plugin marketplace browse ${marketplaceName}`,
+        label: "Install the skill bundle",
+        body: "Installs the shared skills as a single plugin; they load next time you start Claude Code.",
+        code: `claude plugin install ${marketplaceName}@${marketplaceName}`,
         language: "bash",
       },
     ],

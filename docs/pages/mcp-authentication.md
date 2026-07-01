@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-06-18
+lastUpdated: 2026-06-30
 ---
 
 <!--
@@ -282,6 +282,10 @@ This is a shared connection pattern, not a per-user identity pattern:
 #### Auto-Refresh
 
 For upstream servers that use OAuth, Archestra handles the token lifecycle automatically. When the upstream server returns a 401, Archestra uses the stored refresh token to obtain a new access token and retries the request without any user intervention. Refresh failures are tracked per server and are visible in the MCP server status page.
+
+#### Troubleshooting refresh failures
+
+`no_refresh_token` means the provider issued no refresh token, so the connection breaks once the access token expires. Refresh tokens require the `offline_access` scope; Archestra requests it automatically (Microsoft Entra omits it from its metadata and returns none otherwise). Reconnect to re-authorize — if it persists, grant `offline_access` for the app, which some tenants gate behind admin consent.
 
 ### Enterprise Identity Credential Resolution
 

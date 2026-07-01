@@ -455,13 +455,6 @@ fn sort_json_value(value: JsonValue) -> JsonValue {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_mcp_server_starts() {
-        let mcp = BenchmarkMcp::start("benchmark-test").await.unwrap();
-        assert!(mcp.base_url().starts_with("http://127.0.0.1:"));
-        mcp.stop().await;
-    }
-
     #[test]
     fn test_schema_errors_type_mismatch() {
         let schema = serde_json::json!({

@@ -1,0 +1,31 @@
+[[stages]]
+text = """I'd like a personal standup notepad app, `standup-notes-app-{{cell}}` -- three little sections, yesterday / today / blockers, that I can jot into. The thing that matters most: it has to remember what I typed when I close it and come back later, so nothing's lost on a refresh. Let's start there."""
+
+[[stages]]
+text = """Actually, let's make this the whole team's board, not just mine -- everyone should see and edit the same yesterday / today / blockers, and two people typing at the same time shouldn't clobber each other's work."""
+
+[[stages]]
+text = """Hmm, one shared note loses the history. Instead, keep a dated entry for each day and let me scroll back through previous days."""
+
+[[stages]]
+text = """Two finishing touches: a button to clear just today's section -- but make me confirm first, and let me undo it -- and show me when it was last saved. Then call submit_result with result = {"app_id": "<the app's id>", "app_name": "<the app's name>", "version": <the version it's on now>}."""
+
+[result_schema]
+type = "object"
+required = ["app_id", "app_name", "version"]
+additionalProperties = false
+
+  [result_schema.properties.app_id]
+  type = "string"
+  minLength = 1
+
+  [result_schema.properties.app_name]
+  type = "string"
+  minLength = 1
+
+  [result_schema.properties.version]
+  type = "integer"
+  minimum = 1
+
+[state]
+rest = ["/api/apps?search=standup-notes-app-{{cell}}&limit=100"]

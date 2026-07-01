@@ -1,6 +1,6 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import { DEFAULT_APP_NAME, MCP_SERVER_TOOL_NAME_SEPARATOR } from "./consts";
-import { slugify } from "./utils";
+import { parseFullToolName, slugify } from "./utils";
 
 export const ARCHESTRA_MCP_SERVER_NAME = "archestra";
 
@@ -427,6 +427,22 @@ export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_CREATE_SKILL_SHORT_NAME,
   TOOL_UPDATE_SKILL_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
+
+const SKILL_RUNTIME_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set(
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+);
+
+/**
+ * True for an Archestra skill-runtime/plumbing tool (list, load, create,
+ * update), regardless of its server prefix. Every skill-enabled agent carries
+ * the whole set once its org opts in, so recommending them inside a generated
+ * skill is circular noise. Matched by short name (prefix stripped) so
+ * white-labeled tool prefixes are caught too.
+ */
+export function isSkillRuntimeTool(toolName: string): boolean {
+  const { toolName: shortName } = parseFullToolName(toolName);
+  return SKILL_RUNTIME_TOOL_SHORT_NAMES.has(shortName);
+}
 
 /**
  * MCP App management tools — assigned to new agents by default when the apps

@@ -341,41 +341,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      // admin-view load bypasses access filtering; the read + scope checks
-      // below re-impose it before we reveal anything about the resource.
-      const agent = await AgentModel.findById(id, user.id, true);
-      if (!agent || agent.organizationId !== organizationId) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // caller must be able to read this resource (type-level, then instance
-      // scope) BEFORE we reveal its type — otherwise a user with only
-      // agent:read could distinguish an inaccessible profile/MCP-gateway/
-      // LLM-proxy from a nonexistent id via the "not an internal agent" 400.
-      const agentChecker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-      try {
-        agentChecker.require(agent.agentType, "read");
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-      if (!agentChecker.isAdmin(agent.agentType)) {
-        const accessible = await AgentModel.findById(id, user.id, false);
-        if (!accessible) {
-          throw new ApiError(404, "Agent not found");
-        }
-      }
-
-      // only now that the caller is allowed to read it do we disclose that it
-      // is the wrong kind of resource for conversion.
-      if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
-        throw new ApiError(
-          400,
-          "Only internal agents can be converted to skills.",
-        );
-      }
+      const { agent, agentChecker } =
+        await authorizeInternalAgentForSkillConversion({
+          id,
+          userId: user.id,
+          organizationId,
+        });
 
       // If the caller wants the source agent gone, prove they may delete it
       // BEFORE creating the skill, so a permission failure doesn't leave an
@@ -497,34 +468,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Mirror the convert route's read-authorization so the suggestion endpoint
-      // can't be used to probe agents the caller may not see. admin-view load
-      // first, then re-impose access filtering before disclosing anything.
-      const agent = await AgentModel.findById(id, user.id, true);
-      if (!agent || agent.organizationId !== organizationId) {
-        throw new ApiError(404, "Agent not found");
-      }
-      const agentChecker = await getAgentTypePermissionChecker({
+      const { agent } = await authorizeInternalAgentForSkillConversion({
+        id,
         userId: user.id,
         organizationId,
       });
-      try {
-        agentChecker.require(agent.agentType, "read");
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-      if (!agentChecker.isAdmin(agent.agentType)) {
-        const accessible = await AgentModel.findById(id, user.id, false);
-        if (!accessible) {
-          throw new ApiError(404, "Agent not found");
-        }
-      }
-      if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
-        throw new ApiError(
-          400,
-          "Only internal agents can be converted to skills.",
-        );
-      }
 
       const description = await suggestSkillDescription({
         agent,
@@ -588,32 +536,14 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const existing = await findSkillOrThrow(id, organizationId);
       const parsed = parseManifestOrThrow(body.content);
 
-      const checker = await getSkillPermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(user.id);
-      const existingTeamIds = await SkillTeamModel.getTeamsForSkill(id);
-
-      // 404 if the user cannot even see the skill; 403 if visible but not theirs to modify.
-      const hasAccess = await SkillTeamModel.userHasSkillAccess({
-        organizationId,
-        userId: user.id,
-        skill: existing,
-        isSkillAdmin: checker.isAdmin,
-      });
-      if (!hasAccess) {
-        throw new ApiError(404, "Skill not found");
-      }
-      requireSkillModifyPermission({
+      const {
         checker,
-        scope: existing.scope,
-        authorId: existing.authorId,
-        skillTeamIds: existingTeamIds,
         userTeamIds,
+        skillTeamIds: existingTeamIds,
+      } = await authorizeSkillModify({
+        skill: existing,
         userId: user.id,
+        organizationId,
       });
 
       // Re-authorize and re-sync teams only when scope or team assignments
@@ -725,32 +655,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, organizationId, user }, reply) => {
       const skill = await findSkillOrThrow(id, organizationId);
 
-      const checker = await getSkillPermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(user.id);
-      const teamIds = await SkillTeamModel.getTeamsForSkill(id);
-
-      const hasAccess = await SkillTeamModel.userHasSkillAccess({
-        organizationId,
-        userId: user.id,
-        skill,
-        isSkillAdmin: checker.isAdmin,
-      });
-      if (!hasAccess) {
-        throw new ApiError(404, "Skill not found");
-      }
-      requireSkillModifyPermission({
-        checker,
-        scope: skill.scope,
-        authorId: skill.authorId,
-        skillTeamIds: teamIds,
-        userTeamIds,
-        userId: user.id,
-      });
+      await authorizeSkillModify({ skill, userId: user.id, organizationId });
 
       const success = await SkillModel.delete(id);
       if (!success) {
@@ -785,32 +690,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "No shipped default exists for this skill");
       }
 
-      const checker = await getSkillPermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(user.id);
-      const teamIds = await SkillTeamModel.getTeamsForSkill(id);
-
-      const hasAccess = await SkillTeamModel.userHasSkillAccess({
-        organizationId,
-        userId: user.id,
-        skill,
-        isSkillAdmin: checker.isAdmin,
-      });
-      if (!hasAccess) {
-        throw new ApiError(404, "Skill not found");
-      }
-      requireSkillModifyPermission({
-        checker,
-        scope: skill.scope,
-        authorId: skill.authorId,
-        skillTeamIds: teamIds,
-        userTeamIds,
-        userId: user.id,
-      });
+      await authorizeSkillModify({ skill, userId: user.id, organizationId });
 
       // brand the shipped default under this org's white-label identity before
       // writing it, matching syncBuiltInSkills (no-op unless full white-labeling
@@ -1354,6 +1234,102 @@ async function authorizeSkillCreate(params: {
     teamIds: params.teamIds,
     organizationId: params.organizationId,
   });
+}
+
+/**
+ * Read-authorize an internal agent for the convert-to-skill flow, shared by the
+ * convert and suggest-description routes.
+ *
+ * admin-view load bypasses access filtering; the read + scope checks below
+ * re-impose it BEFORE we reveal anything about the resource — otherwise a user
+ * with only agent:read could distinguish an inaccessible
+ * profile/MCP-gateway/LLM-proxy from a nonexistent id via the "not an internal
+ * agent" 400. Only once the caller is allowed to read it do we disclose that it
+ * is the wrong kind of resource for conversion.
+ *
+ * Returns the loaded agent and its permission checker so callers can run
+ * follow-up checks (e.g. delete) without reloading.
+ */
+async function authorizeInternalAgentForSkillConversion(params: {
+  id: string;
+  userId: string;
+  organizationId: string;
+}) {
+  const { id, userId, organizationId } = params;
+
+  const agent = await AgentModel.findById(id, userId, true);
+  if (!agent || agent.organizationId !== organizationId) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  const agentChecker = await getAgentTypePermissionChecker({
+    userId,
+    organizationId,
+  });
+  try {
+    agentChecker.require(agent.agentType, "read");
+  } catch {
+    throw new ApiError(404, "Agent not found");
+  }
+  if (!agentChecker.isAdmin(agent.agentType)) {
+    const accessible = await AgentModel.findById(id, userId, false);
+    if (!accessible) {
+      throw new ApiError(404, "Agent not found");
+    }
+  }
+
+  if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
+    throw new ApiError(400, "Only internal agents can be converted to skills.");
+  }
+
+  return { agent, agentChecker };
+}
+
+/**
+ * Authorize a modify (update/delete/reset) on an existing skill: the caller
+ * must be able to see it — else 404, not 403, so scope is not leaked to users
+ * who cannot see the skill — and hold the scope-appropriate modify permission.
+ *
+ * Returns the skill's permission checker, the caller's team ids, and the
+ * skill's current team ids so callers can run follow-up scope/team
+ * re-authorization (e.g. on update) without reloading.
+ */
+async function authorizeSkillModify(params: {
+  skill: Skill;
+  userId: string;
+  organizationId: string;
+}): Promise<{
+  checker: SkillPermissionChecker;
+  userTeamIds: string[];
+  skillTeamIds: string[];
+}> {
+  const { skill, userId, organizationId } = params;
+
+  const checker = await getSkillPermissionChecker({ userId, organizationId });
+  const userTeamIds = checker.isAdmin
+    ? []
+    : await TeamModel.getUserTeamIds(userId);
+  const skillTeamIds = await SkillTeamModel.getTeamsForSkill(skill.id);
+
+  const hasAccess = await SkillTeamModel.userHasSkillAccess({
+    organizationId,
+    userId,
+    skill,
+    isSkillAdmin: checker.isAdmin,
+  });
+  if (!hasAccess) {
+    throw new ApiError(404, "Skill not found");
+  }
+  requireSkillModifyPermission({
+    checker,
+    scope: skill.scope,
+    authorId: skill.authorId,
+    skillTeamIds,
+    userTeamIds,
+    userId,
+  });
+
+  return { checker, userTeamIds, skillTeamIds };
 }
 
 /** Explicit `allowedTools` wins over the SKILL.md frontmatter when provided. */

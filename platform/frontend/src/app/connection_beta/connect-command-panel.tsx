@@ -205,6 +205,13 @@ export function ConnectCommandPanel({
   const proxyActive = !!(proxy && provider);
   const hasAnything = Boolean(gateway || proxyActive || includeSkills);
 
+  // The setup command only registers the MCP gateway (`claude mcp add`); the
+  // gateway authenticates over OAuth, so the user still finishes the handshake
+  // in their client. Surface that as an explicit final step — mirrors the
+  // Claude Desktop panel's "Finish the OAuth flow" step. The gateway is the
+  // thing being authorized, so the step is gateway-gated.
+  const showOAuthStep = client.id === "claude-code" && !!gateway;
+
   // Claude Code's Anthropic subscription passthrough also gets a personal
   // passthrough key wired into the command (best-effort: only when the user can
   // mint one). Used purely to tailor the passthrough description copy — the
@@ -587,7 +594,7 @@ export function ConnectCommandPanel({
         </ul>
       </WizardStep>
 
-      <WizardStep n={3} title="Run this command" last>
+      <WizardStep n={3} title="Run this command" last={!showOAuthStep}>
         <div className="flex flex-col gap-3">
           <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
             {providers.length > 1 && proxyActive && (
@@ -660,6 +667,27 @@ export function ConnectCommandPanel({
           </div>
         </div>
       </WizardStep>
+
+      {showOAuthStep && (
+        <WizardStep n={4} title="Finish the OAuth flow" last>
+          <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+            <li>
+              Run{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+                claude
+              </code>{" "}
+              and use{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+                /mcp
+              </code>{" "}
+              to start the OAuth flow for the gateway you just added.
+            </li>
+            <li>
+              Claude Code opens your browser. Sign in and approve the gateway.
+            </li>
+          </ol>
+        </WizardStep>
+      )}
 
       <CreateLlmProviderApiKeyDialog
         open={showAddProviderKey}

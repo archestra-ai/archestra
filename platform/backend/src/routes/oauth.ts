@@ -1,5 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
-import { DEFAULT_APP_NAME, RouteId } from "@archestra/shared";
+import {
+  DEFAULT_APP_NAME,
+  OFFLINE_ACCESS_OAUTH_SCOPE,
+  RouteId,
+} from "@archestra/shared";
 import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -144,7 +148,7 @@ export async function resolveOAuthScopesForAuthorization(params: {
     return {
       configuredScopes,
       discoveredScopes: [],
-      scopesToUse: configuredScopes,
+      scopesToUse: withOfflineAccess(configuredScopes),
     };
   }
 
@@ -164,8 +168,25 @@ export async function resolveOAuthScopesForAuthorization(params: {
   return {
     configuredScopes,
     discoveredScopes,
-    scopesToUse: discoveredScopes,
+    scopesToUse: withOfflineAccess(discoveredScopes),
   };
+}
+
+/**
+ * Ensure `offline_access` is in the requested scopes so the token endpoint
+ * issues a refresh token. It's a behavioral OIDC scope rather than a resource
+ * scope, so providers like Microsoft Entra omit it from `scopes_supported` and
+ * only return a refresh token when it's explicitly requested. Without it, a
+ * server's access token silently expires with no way to refresh, surfacing
+ * later as a `no_refresh_token` error. Requested for every authorization_code
+ * flow, mirroring the inbound OAuth provider side (see `mcp-oauth-client.ts`).
+ * The configured/discovered scopes are reported unchanged; only the set we
+ * actually request is augmented.
+ */
+function withOfflineAccess(scopes: string[]): string[] {
+  return scopes.includes(OFFLINE_ACCESS_OAUTH_SCOPE)
+    ? scopes
+    : [...scopes, OFFLINE_ACCESS_OAUTH_SCOPE];
 }
 
 /**

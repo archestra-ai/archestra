@@ -17,11 +17,11 @@ function clientById(id: SkillMarketplaceClient["id"]): SkillMarketplaceClient {
 }
 
 describe("SKILL_MARKETPLACE_CLIENTS install steps", () => {
-  test("claude-code registers the clone URL then browses the marketplace by name", () => {
+  test("claude-code registers the clone URL then installs the bundle by name", () => {
     const steps = clientById("claude-code").getInstallSteps(params);
     expect(steps.map((s) => s.code)).toEqual([
       `claude plugin marketplace add ${params.cloneUrl}`,
-      `/plugin marketplace browse ${params.marketplaceName}`,
+      `claude plugin install ${params.marketplaceName}@${params.marketplaceName}`,
     ]);
   });
 

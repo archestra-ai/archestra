@@ -2,8 +2,6 @@
 
 Turn an existing agentic PoC into an [Archestra](https://github.com/archestra-ai/archestra) pilot.
 
-> **Experimental.** The migration kit is new and still evolving.
-
 The migration kit turns an existing agentic setup into an Archestra setup. Typical sources are the
 unsorted configs left by tools like Claude Code, OpenClaw, or Hermes: project instruction files, MCP
 configs, hooks, local scripts, and whatever else accumulated during evaluation.

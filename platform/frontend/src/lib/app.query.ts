@@ -15,6 +15,7 @@ const {
   assignToolToApp,
   unassignToolFromApp,
   openAppInChat,
+  openExternalAppInChat,
 } = archestraApiSdk;
 
 type AppsQuery = NonNullable<archestraApiTypes.GetAppsData["query"]>;
@@ -125,6 +126,28 @@ export function useOpenAppInChat() {
   return useMutation({
     mutationFn: async (appId: string) => {
       const { data, error } = await openAppInChat({ path: { appId } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+  });
+}
+
+// Opens an external (MCP-server) app in chat against a concrete install: the
+// backend seeds a conversation with the UI rendered inline and returns its id.
+// The caller navigates to `/chat/<conversationId>` on success.
+export function useOpenExternalAppInChat() {
+  return useMutation({
+    mutationFn: async (params: {
+      mcpServerId: string;
+      resourceUri: string;
+    }) => {
+      const { data, error } = await openExternalAppInChat({
+        path: { mcpServerId: params.mcpServerId },
+        body: { resourceUri: params.resourceUri },
+      });
       if (error) {
         handleApiError(error);
         return null;

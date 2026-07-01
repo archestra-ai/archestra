@@ -88,6 +88,61 @@ describe("GET /api/apps/external/:catalogId", () => {
         (i: { mcpServerId: string }) => i.mcpServerId === server.id,
       ),
     ).toBe(true);
+    // Single UI tool → one resource, labelled "<server> / <tool>".
+    expect(body.resources).toEqual([
+      {
+        resourceUri: "ui://gt/app.html",
+        toolName: "get-time",
+        name: "Get Time / get-time",
+      },
+    ]);
+  });
+
+  test("lists every ui:// resource of a multi-tool server, each with a composed label", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Archestra PM",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_board",
+      meta: { _meta: { ui: { resourceUri: "ui://pm/board.html" } } },
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_backlog",
+      meta: { _meta: { ui: { resourceUri: "ui://pm/backlog.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/apps/external/${catalog.id}`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    // Sorted by tool name: show_backlog before show_board.
+    expect(body.resources).toEqual([
+      {
+        resourceUri: "ui://pm/backlog.html",
+        toolName: "show_backlog",
+        name: "Archestra PM / show_backlog",
+      },
+      {
+        resourceUri: "ui://pm/board.html",
+        toolName: "show_board",
+        name: "Archestra PM / show_board",
+      },
+    ]);
+    // Default resource is the first (lowest-named) tool.
+    expect(body.resourceUri).toBe("ui://pm/backlog.html");
   });
 
   test("orders installs by scope precedence (personal first) and defaults to the personal install", async ({

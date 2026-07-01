@@ -1,9 +1,13 @@
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+use regex::Regex;
 
 use super::toml_util::{self, TomlTable};
 use super::types::{Stage, StagedFile, Task, Verifier};
 
-const FILE_PLACEHOLDER_RE: &str = r"\{\{file:([^}]+)\}\}";
+static FILE_PLACEHOLDER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\{\{file:([^}]+)\}\}").expect("valid regex"));
 const DEFAULT_MAX_FORMAT_ATTEMPTS: i64 = 3;
 
 #[derive(Debug, thiserror::Error)]
@@ -101,9 +105,8 @@ fn load_stage(row: &TomlTable, ctx: &str, task_dir: &Path) -> Result<Stage, Task
 
 fn expand_files(text: &str, task_dir: &Path, ctx: &str) -> Result<String, TaskConfigError> {
     let base = task_dir;
-    let re = regex::Regex::new(FILE_PLACEHOLDER_RE).expect("valid regex");
     let mut errors = Vec::new();
-    let result = re.replace_all(text, |caps: &regex::Captures| {
+    let result = FILE_PLACEHOLDER.replace_all(text, |caps: &regex::Captures| {
         let rel = caps[1].trim();
         let target = match resolve_under(base, rel) {
             Ok(t) => t,

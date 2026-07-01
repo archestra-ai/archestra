@@ -161,6 +161,7 @@ fn test_load_real_envs() {
     let envs = load_envs(&dst.join("envs")).expect("should load envs");
     assert!(envs.contains_key("basic"));
     assert!(envs.contains_key("archestra-api"));
+    assert!(envs.contains_key("apps"));
     for env in envs.values() {
         assert!(!env.id.is_empty());
         assert!(!env.tasks.is_empty());

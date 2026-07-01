@@ -845,10 +845,12 @@ export function ChatPageContent({
   const stop = chatSession?.stop;
 
   // Re-send the most recent user message by regenerating its turn. Shared by the
-  // provider-connect auto-rerun and the scheduled-run "Try again". Returns whether
-  // a resend was actually started (false while a turn is in flight or there's no
-  // user message), so callers can skip side effects when nothing is resent.
-  const resendLastUserMessage = useCallback((): boolean => {
+  // provider-connect auto-rerun and the "Try again" affordance. Resolves to whether
+  // a resend was actually issued (false while a turn is in flight or there's no user
+  // message); awaiting regenerateUserMessage means it only resolves true once the
+  // turn is genuinely being re-run, so callers can safely gate side effects (e.g.
+  // clearing the persisted error) on the result.
+  const resendLastUserMessage = useCallback(async (): Promise<boolean> => {
     if (status === "submitted" || status === "streaming") return false;
     if (!regenerateUserMessage) return false;
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -858,7 +860,7 @@ export function ChatPageContent({
       if (partIndex < 0) return false;
       const part = message.parts[partIndex];
       const text = "text" in part ? part.text : "";
-      void regenerateUserMessage({ messageId: message.id, partIndex, text });
+      await regenerateUserMessage({ messageId: message.id, partIndex, text });
       return true;
     }
     return false;
@@ -866,18 +868,29 @@ export function ChatPageContent({
 
   // After the user connects a per-user provider (e.g. GitHub Copilot) via the
   // inline auth card, re-run their original prompt automatically. The connect
-  // mutation already invalidated the model/key caches.
-  const handleProviderConnected = resendLastUserMessage;
+  // mutation already invalidated the model/key caches. Fire-and-forget: the
+  // provider-auth card owns its own feedback.
+  const handleProviderConnected = useCallback(() => {
+    void resendLastUserMessage();
+  }, [resendLastUserMessage]);
 
-  // Scheduled-run "Try again": resend the scheduled prompt, and only once that's
-  // underway clear the persisted error so the card disappears. Ordering matters —
-  // clearing first would wipe the error card even if the resend couldn't start.
-  // Only wired for scheduled-run chats (and the chat is owner-editable here, since
-  // read-only viewers render MessageThread instead of this).
+  // "Try again" on a retryable chat error: resend the last user turn, and only
+  // once the resend is genuinely issued clear the persisted error so the card
+  // disappears. Ordering matters — clearing first would wipe the error card even
+  // if the resend never started. If the resend itself fails, keep the card so the
+  // user still sees the error. Owner-editable chats only (read-only viewers render
+  // MessageThread instead of this).
   const clearChatErrors = useClearChatErrors();
-  const handleScheduledRunRetry = useCallback(async () => {
+  const handleChatErrorRetry = useCallback(async () => {
     if (!conversationId) return;
-    if (!resendLastUserMessage()) return;
+    let resent: boolean;
+    try {
+      resent = await resendLastUserMessage();
+    } catch (error) {
+      console.error("[Chat] Retry failed to resend the last message", error);
+      return;
+    }
+    if (!resent) return;
     await clearChatErrors.mutateAsync({ id: conversationId });
   }, [conversationId, clearChatErrors, resendLastUserMessage]);
   // Hide the error while the session is auto-recovering (retry scheduled or
@@ -2102,9 +2115,7 @@ export function ChatPageContent({
                       compactions={conversation?.compactions ?? []}
                       onRegenerateUserMessage={regenerateUserMessage}
                       onProviderConnected={handleProviderConnected}
-                      onChatErrorRetry={
-                        scheduledRun ? handleScheduledRunRetry : undefined
-                      }
+                      onChatErrorRetry={handleChatErrorRetry}
                       error={error}
                       onToolApprovalResponse={
                         addToolApprovalResponse

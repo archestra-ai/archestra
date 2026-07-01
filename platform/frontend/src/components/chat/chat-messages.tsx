@@ -1331,6 +1331,7 @@ export function ChatMessages({
               selectedModel={selectedModel}
               modelSource={modelSource}
               onProviderConnected={onProviderConnected}
+              onRetry={onChatErrorRetry}
             />
           )}
           {pendingToolCalls.map((toolCall) => (

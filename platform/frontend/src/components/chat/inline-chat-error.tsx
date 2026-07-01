@@ -39,9 +39,8 @@ interface InlineChatErrorProps {
   /** Re-run the original prompt after the user connects a per-user provider. */
   onProviderConnected?: () => void;
   /**
-   * When set, render a "Try again" button that clears this error and resends the
-   * prompt. Wired only for scheduled-run chats — other chats omit it and keep
-   * their existing edit-the-message retry flow.
+   * When set and the error is retryable, render a "Try again" button that resends
+   * the last user turn and clears this error. Read-only viewers omit it.
    */
   onRetry?: () => void | Promise<void>;
 }
@@ -58,6 +57,7 @@ export function InlineChatError({
   onRetry,
 }: InlineChatErrorProps) {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const { data: isAdmin } = useHasPermissions({
     organizationSettings: ["read"],
   });
@@ -136,19 +136,32 @@ export function InlineChatError({
     );
   };
 
-  const retryButton = onRetry ? (
-    <Button
-      variant="outline"
-      size="sm"
-      className="h-7 gap-1.5"
-      onClick={() => {
-        void onRetry();
-      }}
-    >
-      <RefreshCw className="h-3.5 w-3.5" />
-      Try again
-    </Button>
-  ) : null;
+  const retryButton =
+    chatError.isRetryable && onRetry ? (
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 gap-1.5"
+        disabled={isRetrying}
+        onClick={() => {
+          setIsRetrying(true);
+          void (async () => {
+            try {
+              await onRetry();
+            } catch (error) {
+              console.error("[InlineChatError] Retry failed", error);
+            } finally {
+              setIsRetrying(false);
+            }
+          })();
+        }}
+      >
+        <RefreshCw
+          className={`h-3.5 w-3.5 ${isRetrying ? "animate-spin" : ""}`}
+        />
+        Try again
+      </Button>
+    ) : null;
 
   if (slimChatErrorUi) {
     return (

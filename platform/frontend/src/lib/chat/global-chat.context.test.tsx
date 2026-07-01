@@ -63,6 +63,9 @@ vi.mock("@/lib/chat/chat.query", () => ({
     isPending: false,
     mutateAsync: mocks.mutateAsync,
   }),
+  useClearChatErrors: () => ({
+    mutateAsync: mocks.mutateAsync,
+  }),
   useConversation: () => ({ data: conversationMock.data }),
   useConversationUpdatedCacheSync: () => {},
 }));

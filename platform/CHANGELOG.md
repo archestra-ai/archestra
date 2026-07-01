@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.78](https://github.com/archestra-ai/archestra/compare/platform-v1.2.77...platform-v1.2.78) (2026-07-01)
+
+
+### Features
+
+* **knowledge-base:** per-connector toggle for crawling private networks ([#6129](https://github.com/archestra-ai/archestra/issues/6129)) ([8c9a8e0](https://github.com/archestra-ai/archestra/commit/8c9a8e0f51c269282c1bddfa8e07281dfdc5dd5f))
+
+
+### Bug Fixes
+
+* only allow search session logs by session id ([#6131](https://github.com/archestra-ai/archestra/issues/6131)) ([773ff38](https://github.com/archestra-ai/archestra/commit/773ff38156a42f658ab1e3700269e037d991a4da))
+
+
+### Performance Improvements
+
+* **tokenizers:** cache tokenizer instances instead of allocating per call ([#6130](https://github.com/archestra-ai/archestra/issues/6130)) ([b66ba2f](https://github.com/archestra-ai/archestra/commit/b66ba2f14e387ff21cc9ca6679b9aa8828508ecf))
+* **tokenizers:** memoize per-message token counts ([#6137](https://github.com/archestra-ai/archestra/issues/6137)) ([320dd1b](https://github.com/archestra-ai/archestra/commit/320dd1b72b317dcdcdfc97b2364f3ed612ddece4))
+
 ## [1.2.77](https://github.com/archestra-ai/archestra/compare/platform-v1.2.76...platform-v1.2.77) (2026-07-01)
 
 

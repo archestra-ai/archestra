@@ -724,6 +724,9 @@ const UPLOAD_CHAIN_LINKS: usize = 4;
 /// chained calls appended by a skill mount's chown step:
 /// `with_user` + `with_exec` + `with_user`.
 const SKILL_MOUNT_CHOWN_CHAIN_LINKS: usize = 3;
+/// chained calls appended by a skill mount's fresh-root reset step:
+/// `with_user` + `with_exec` + `with_user`.
+const SKILL_MOUNT_RESET_CHAIN_LINKS: usize = 3;
 
 /// chained calls appended per skill snapshot file in [`apply_snapshot_file`].
 fn snapshot_chain_links(encoding: &str) -> usize {
@@ -792,14 +795,15 @@ fn replay_step_fs_layers(step: &ReplayStep) -> usize {
         ReplayStep::Command(_) => 1,
         // with_new_file + with_exec
         ReplayStep::File(_) => 2,
-        // with_new_file per file (base64 also runs a decode exec) + one chown exec
+        // one reset exec + with_new_file per file (base64 also runs a decode exec)
+        // + one chown exec
         ReplayStep::SkillMount(mount) => {
             mount
                 .files
                 .iter()
                 .map(|file| if file.encoding == "utf8" { 1 } else { 2 })
                 .sum::<usize>()
-                + 1
+                + 2
         }
     }
 }
@@ -876,6 +880,25 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
             }
             ReplayStep::SkillMount(mount) => {
                 let root = skill_root_path(&mount.skill_name)?;
+                // reset the skill root to a fresh, real directory before writing
+                // any files. `/skills` is owned by uid 1000, so a prior command
+                // could plant `/skills/<name>` (or a subpath) as a symlink, and
+                // Dagger resolves `with_new_file` targets *through* symlinks
+                // (scoped only to the container root), so a root file write would
+                // escape the sandbox roots. `rm -rf` unlinks any such symlink
+                // without following it; the fresh `mkdir` guarantees every
+                // subsequent write lands inside a tree we just created.
+                container = container
+                    .with_user("root")
+                    .with_exec(vec![
+                        "sh".to_string(),
+                        "-c".to_string(),
+                        skill_root_reset_command(&root),
+                    ])
+                    .with_user(SKILL_SANDBOX_USER);
+                if budget.charge(SKILL_MOUNT_RESET_CHAIN_LINKS) {
+                    container = checkpoint(client, container).await?;
+                }
                 for file in &mount.files {
                     container = apply_snapshot_file(container, &root, file)?;
                     // charged per file: a many-file mount must not exceed the
@@ -884,20 +907,16 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
                         container = checkpoint(client, container).await?;
                     }
                 }
-                // chown this skill's tree; with_new_file writes as root. guard the
-                // resolved root first: a prior command (uid 1000, owns `/skills`)
-                // could replace `/skills/<name>` with a symlink, and a root
-                // `chown -R` through it would escape the roots.
+                // hand the freshly written tree to the sandbox user. safe without a
+                // symlink guard: the reset above guarantees `root` is a real dir
+                // and every descendant was created by this mount (no attacker
+                // symlinks), and `chown -R` does not traverse symlinks.
                 container = container
                     .with_user("root")
                     .with_exec(vec![
                         "sh".to_string(),
                         "-c".to_string(),
-                        format!(
-                            "{helpers}; _guard {root} || {{ echo 'skill root escapes the sandbox roots' >&2; exit 1; }}; chown -R {SKILL_SANDBOX_USER} {root}",
-                            helpers = symlink_guard_helpers(SANDBOX_ROOTS),
-                            root = shell_quote(&root),
-                        ),
+                        format!("chown -R {SKILL_SANDBOX_USER} {}", shell_quote(&root)),
                     ])
                     .with_user(SKILL_SANDBOX_USER);
                 let mut links = SKILL_MOUNT_CHOWN_CHAIN_LINKS;
@@ -988,20 +1007,33 @@ fn guarded_target_symlink(target: &str) -> String {
     )
 }
 
+/// reset a skill root to a fresh, empty, real directory before its files are
+/// written. `rm -rf` unlinks the entry itself — including a symlink an earlier
+/// command may have planted in the uid-1000-owned `/skills` — without following
+/// it, and the `mkdir` recreates it as a real directory, so subsequent
+/// `with_new_file`/decode writes into the tree can't be redirected out of the
+/// roots. `root` is [`skill_root_path`]-validated (no `..`, `/`, `""`, `"."`).
+fn skill_root_reset_command(root: &str) -> String {
+    let q = shell_quote(root);
+    format!("rm -rf {q} && mkdir -p {q}")
+}
+
 /// write an uploaded file at its absolute path. runs as root so it works even
 /// when parent dirs must be created, then hands the file (and every parent dir
 /// it created) to the sandbox user and removes the staged bytes.
 ///
 /// `index` is the upload's position in the replay step list; it keys a reserved
-/// `/tmp` staging path so the raw bytes never land under the user-visible
-/// sandbox roots — replaying an upload can't clobber a file an earlier command
-/// created next to the target. each step removes its own staged file.
+/// staging path directly under `/` — a root-owned directory uid 1000 cannot write
+/// to, so a prior command can't pre-plant a symlink at the staging path and
+/// redirect the root `with_new_file` write (Dagger resolves `with_new_file`
+/// targets through symlinks). `/tmp` would be uid-1000-writable and the index is
+/// predictable, so it is not safe to stage there. each step removes its own file.
 fn apply_upload_file(
     container: Container,
     index: usize,
     file: &ReplayInputFile,
 ) -> Result<Container> {
-    let temp_path = format!("/tmp/.archestra-upload-{index}");
+    let temp_path = format!("/.archestra-upload-{index}");
     let decode = match file.encoding.as_str() {
         "base64" => format!(
             "base64 -d {} > {}",
@@ -1056,25 +1088,30 @@ fn apply_snapshot_file(container: Container, root: &str, file: &SnapshotFile) ->
         "utf8" => Ok(container.with_new_file(target, &file.content)),
         "base64" => {
             let temp_path = format!("{target}.b64");
+            let parent_dir = target
+                .rsplit_once('/')
+                .map(|(parent, _)| parent)
+                .unwrap_or(root);
             // decode as root: `with_new_file` stages the temp bytes root-owned
             // (and creates the skill dir tree root-owned), so the redirect must
             // run as root too. the per-mount `chown -R` below hands the tree back
-            // to the sandbox user once every file in the mount is written. guard
-            // the parents and target the same way uploads do: a prior command can
-            // plant a symlink under `/skills/<name>` that would redirect this root
-            // write outside the roots.
-            let script = format!(
-                "{helpers}; {parents}{target_guard}base64 -d {temp} > {tgt} && rm {temp}",
-                helpers = symlink_guard_helpers(SANDBOX_ROOTS),
-                parents = guarded_parent_creation(&target, SANDBOX_ROOTS, false),
-                target_guard = guarded_target_symlink(&target),
-                temp = shell_quote(&temp_path),
-                tgt = shell_quote(&target),
-            );
+            // to the sandbox user once every file in the mount is written. no
+            // symlink guard is needed: the per-mount reset created `root` fresh,
+            // so nothing under it can be an attacker-planted symlink.
             Ok(container
                 .with_user("root")
                 .with_new_file(&temp_path, &file.content)
-                .with_exec(vec!["bash".to_string(), "-c".to_string(), script])
+                .with_exec(vec![
+                    "bash".to_string(),
+                    "-c".to_string(),
+                    format!(
+                        "mkdir -p {} && base64 -d {} > {} && rm {}",
+                        shell_quote(parent_dir),
+                        shell_quote(&temp_path),
+                        shell_quote(&target),
+                        shell_quote(&temp_path),
+                    ),
+                ])
                 .with_user(SKILL_SANDBOX_USER))
         }
         other => Err(SandboxError::InvalidInput(format!(
@@ -1766,8 +1803,8 @@ mod tests {
                 files: vec![utf8_file, base64_file],
             }),
         ];
-        // command(1) + file(2) + mount(utf8 1 + base64 2 + chown 1 = 4)
-        assert_eq!(replay_fs_layers(&steps), 7);
+        // command(1) + file(2) + mount(reset 1 + utf8 1 + base64 2 + chown 1 = 5)
+        assert_eq!(replay_fs_layers(&steps), 8);
     }
 
     #[test]
@@ -1954,6 +1991,39 @@ mod tests {
         let out = run_script(format!("{helpers}; {parents} touch {}", shell_quote(&good)));
         assert_eq!(out.status.code(), Some(0));
         assert!(std::path::Path::new(&good).exists());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn skill_root_reset_unlinks_an_escaping_symlink_without_following_it() {
+        if !gnu_realpath_available() {
+            return;
+        }
+        use std::os::unix::fs::symlink;
+        let root = make_tmp_root();
+        // stand-in for /skills/<name>: a symlink an earlier command planted,
+        // pointing at a populated dir outside the skill root.
+        let outside = root.join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("keep.txt"), b"important").unwrap();
+        let skill_root = root.join("skills/alpha");
+        std::fs::create_dir_all(root.join("skills")).unwrap();
+        symlink(&outside, &skill_root).unwrap();
+
+        let out = run_script(skill_root_reset_command(skill_root.to_str().unwrap()));
+        assert_eq!(out.status.code(), Some(0));
+        // the symlink target's contents survive (rm -rf did not follow the link)...
+        assert!(outside.join("keep.txt").exists());
+        // ...and the skill root is now a real, empty directory.
+        assert!(skill_root.is_dir());
+        assert!(
+            !skill_root
+                .symlink_metadata()
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert!(std::fs::read_dir(&skill_root).unwrap().next().is_none());
         std::fs::remove_dir_all(&root).ok();
     }
 

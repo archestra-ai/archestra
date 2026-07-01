@@ -298,10 +298,17 @@ jobs:
 
   notify-release-failure:
     name: Notify release failure
-    # Pages #alerting whenever any job in the release pipeline fails, so a broken release
-    # (e.g. an image or chart that never published) is surfaced immediately instead of
-    # failing silently. Skipped jobs are not failures, so ordinary non-release pushes and
-    # dispatch-time opt-outs do not trigger an alert.
+    # Pages #alerting when a release that was ACTUALLY being published fails, so a broken
+    # release (e.g. an image or chart that never published) is surfaced immediately
+    # instead of failing silently.
+    #
+    # The release-please job runs in two contexts: on every push to main it just rebuilds
+    # the release PR (should_publish=false), and only when a release PR is merged does it
+    # actually cut a release (should_publish=true). We gate on platform_should_publish so
+    # transient flakes in the former context (e.g. release-please's "other side closed"
+    # API blips, which self-heal on the next commit) don't page anyone. Real publish
+    # failures set should_publish=true before any downstream step can fail, so they still
+    # alert.
     needs:
       - release-please
       - build-and-push-mcp-server-docker-image
@@ -309,7 +316,7 @@ jobs:
       - build-and-push-platform-docker-image-to-dockerhub
       - publish-platform-helm-chart
       - publish-github-release
-    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && contains(needs.*.result, 'failure') }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions: {}
     steps:

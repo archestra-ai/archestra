@@ -357,10 +357,14 @@ export function useUpdateConversation() {
             c.id === variables.id ? { ...c, title: data.title } : c,
           ),
         );
-        // The renamed conversation may belong to a project, whose chat list the
-        // optimistic patch above doesn't reach. Refresh just the project chat
-        // views so the new title shows without a manual refresh.
-        invalidateProjectConversationViews(queryClient);
+        // A renamed conversation that belongs to a project has its title shown
+        // in that project's chat list, which the optimistic patch above doesn't
+        // reach. Refresh just the project chat views, and only when the update
+        // response says it's a project chat — a standalone rename must not
+        // refetch the always-mounted sidebar project list.
+        if (data.projectId) {
+          invalidateProjectConversationViews(queryClient);
+        }
       }
       // Only invalidate the conversations list for sidebar-relevant changes
       // (pin status, agent). Model/key updates don't affect the sidebar
@@ -518,6 +522,20 @@ export function useDeleteConversation() {
         queryKey: ["conversations"],
       });
 
+      // Capture the deleted chat's project before we drop it from the caches:
+      // the delete response only reports success, so this is the only chance to
+      // tell onSettled whether a project refresh is even needed. `undefined`
+      // means the chat wasn't in any cached list (settle falls back to
+      // refreshing); `null` means it's a standalone chat (settle skips).
+      let projectId: string | null | undefined;
+      for (const [, list] of previousQueries) {
+        const match = list?.find((c) => c.id === deletedId);
+        if (match) {
+          projectId = match.projectId;
+          break;
+        }
+      }
+
       // Optimistically remove the conversation from every cached list
       queryClient.setQueriesData<
         archestraApiTypes.GetChatConversationsResponses["200"]
@@ -525,7 +543,7 @@ export function useDeleteConversation() {
         old ? old.filter((c) => c.id !== deletedId) : old,
       );
 
-      return { previousQueries };
+      return { previousQueries, projectId };
     },
     onError: (_error, _deletedId, context) => {
       // Roll back optimistic removal on failure
@@ -548,12 +566,16 @@ export function useDeleteConversation() {
 
       toast.success("Conversation deleted");
     },
-    onSettled: () => {
+    onSettled: (_data, _error, _deletedId, context) => {
       // Always refetch to ensure server state is in sync
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      // A deleted conversation may belong to a project; refresh just the project
-      // chat views so the project page drops it without a manual refresh.
-      invalidateProjectConversationViews(queryClient);
+      // Refresh the project chat views only when the deleted chat belonged to a
+      // project (`onMutate` captured its project id). A known-standalone delete
+      // (`null`) skips it, so it never refetches the always-mounted sidebar
+      // project list; an unknown chat (`undefined`) still refreshes to be safe.
+      if (context?.projectId !== null) {
+        invalidateProjectConversationViews(queryClient);
+      }
     },
   });
 }

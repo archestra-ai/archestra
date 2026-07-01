@@ -333,6 +333,12 @@ describe("useDeleteConversation", () => {
       defaultOptions: { queries: { retry: false } },
     });
     const project = seedProjectCaches(queryClient);
+    // The delete response only reports success, so the project id is recovered
+    // from the sidebar conversation list — seed it as a project chat.
+    queryClient.setQueryData(
+      ["conversations"],
+      [makeConversation({ projectId: "project-1" })],
+    );
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -347,6 +353,31 @@ describe("useDeleteConversation", () => {
     expect(project.isStale("list")).toBe(true);
     expect(project.isStale("files")).toBe(false);
     expect(project.isStale("instructions")).toBe(false);
+  });
+
+  // Deleting a standalone chat (cached as `projectId: null`) must not refetch
+  // the always-mounted sidebar project list.
+  it("does not touch project caches when the deleted chat has no project", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const project = seedProjectCaches(queryClient);
+    queryClient.setQueryData(
+      ["conversations"],
+      [makeConversation({ projectId: null })],
+    );
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useDeleteConversation(), { wrapper });
+
+    result.current.mutate("conversation-1");
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(project.isStale("conversations")).toBe(false);
+    expect(project.isStale("list")).toBe(false);
   });
 });
 
@@ -410,10 +441,15 @@ describe("useUpdateConversation", () => {
     } as Awaited<ReturnType<typeof archestraApiSdk.updateChatConversation>>);
   });
 
-  it("refreshes the project chat lists/cards (not files/instructions) when the title changes", async () => {
+  it("refreshes the project chat lists/cards (not files/instructions) when a project chat's title changes", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
+    // The update response tells us whether the renamed chat is in a project.
+    vi.mocked(archestraApiSdk.updateChatConversation).mockResolvedValue({
+      data: makeConversation({ projectId: "project-1" }),
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.updateChatConversation>>);
     const project = seedProjectCaches(queryClient);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -429,6 +465,27 @@ describe("useUpdateConversation", () => {
     expect(project.isStale("list")).toBe(true);
     expect(project.isStale("files")).toBe(false);
     expect(project.isStale("instructions")).toBe(false);
+  });
+
+  // Renaming a standalone chat (the update response reports `projectId: null`)
+  // must not refetch the always-mounted sidebar project list.
+  it("does not touch project caches when a standalone chat's title changes", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const project = seedProjectCaches(queryClient);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useUpdateConversation(), { wrapper });
+
+    result.current.mutate({ id: "conversation-1", title: "Renamed" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(project.isStale("conversations")).toBe(false);
+    expect(project.isStale("list")).toBe(false);
   });
 
   // A model/key-only update isn't project-relevant and must not touch project
@@ -493,7 +550,9 @@ describe("invalidateConversationFileQueries", () => {
   });
 });
 
-function makeConversation(): archestraApiTypes.GetChatConversationResponses["200"] {
+function makeConversation(
+  overrides?: Partial<archestraApiTypes.GetChatConversationResponses["200"]>,
+): archestraApiTypes.GetChatConversationResponses["200"] {
   return {
     id: "conversation-1",
     userId: "user-1",
@@ -526,5 +585,6 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     messages: [],
     chatErrors: [],
     compactions: [],
+    ...overrides,
   };
 }

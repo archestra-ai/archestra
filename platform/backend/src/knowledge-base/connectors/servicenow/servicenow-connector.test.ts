@@ -562,6 +562,35 @@ describe("ServiceNowConnector", () => {
     });
   });
 
+  describe("listAllSourceIds", () => {
+    test("yields sys_id batches from the API", async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            result: [
+              { sys_id: { display_value: "001", value: "001" } },
+              { sys_id: { display_value: "002", value: "002" } },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ result: [] }), { status: 200 }),
+      );
+
+      const batches: string[][] = [];
+      for await (const batch of connector.listAllSourceIds!({
+        config: validConfig,
+        credentials,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches).toEqual([["001", "002"]]);
+    });
+  });
+
   describe("sync - change requests", () => {
     function makeChangeRequest(sysId: string, title: string) {
       return {

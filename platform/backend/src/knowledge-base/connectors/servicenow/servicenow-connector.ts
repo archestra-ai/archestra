@@ -125,6 +125,62 @@ export class ServiceNowConnector extends BaseConnector {
     }
   }
 
+  async *listAllSourceIds(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+  }): AsyncGenerator<string[]> {
+    const parsed = parseConfig(params.config);
+    if (!parsed) {
+      throw new Error("Invalid ServiceNow configuration");
+    }
+
+    const headers = buildHeaders(params.credentials);
+    const entities = getEnabledEntities(parsed);
+    const batchSize = parsed.batchSize ?? DEFAULT_BATCH_SIZE;
+
+    for (const entity of entities) {
+      const query = buildQuery({
+        config: parsed,
+        checkpoint: { type: "servicenow" },
+        useStatesAndGroups: entity.useStatesAndGroups,
+      });
+
+      let offset = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        await this.rateLimit();
+
+        const url = this.joinUrl(
+          parsed.instanceUrl,
+          `/api/now/table/${entity.table}?sysparm_query=${encodeURIComponent(query)}&sysparm_fields=sys_id&sysparm_limit=${batchSize}&sysparm_offset=${offset}`,
+        );
+        const response = await this.fetchWithRetry(url, { headers });
+
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(
+            `ServiceNow API error: HTTP ${response.status} - ${body.slice(0, 500)}`,
+          );
+        }
+
+        const data = (await response.json()) as {
+          result: Array<{ sys_id?: ServiceNowDisplayValue }>;
+        };
+        const sourceIds = (data.result ?? [])
+          .map((record) => record.sys_id?.value ?? "")
+          .filter((value) => value.length > 0);
+
+        if (sourceIds.length > 0) {
+          yield sourceIds;
+        }
+
+        offset += sourceIds.length;
+        hasMore = sourceIds.length >= batchSize;
+      }
+    }
+  }
+
   async *sync(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;

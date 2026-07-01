@@ -33,6 +33,9 @@ const kbDocumentsTable = pgTable(
       .notNull()
       .default("pending"),
     chunkCount: integer("chunk_count").notNull().default(0),
+    lastSeenAt: timestamp("last_seen_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

@@ -72,6 +72,14 @@ export function ConnectorRunDetailsDialog({
                   <span className="text-muted-foreground">Ingested:</span>{" "}
                   {run.documentsIngested ?? 0}
                 </div>
+                {((run as Record<string, unknown>).prunedDocuments as number | null) !==
+                  null && (
+                  <div>
+                    <span className="text-muted-foreground">Pruned:</span>{" "}
+                    {((run as Record<string, unknown>).prunedDocuments as number | null) ??
+                      0}
+                  </div>
+                )}
                 {(run.itemErrors ?? 0) > 0 && (
                   <div>
                     <span className="text-muted-foreground">Item errors:</span>{" "}

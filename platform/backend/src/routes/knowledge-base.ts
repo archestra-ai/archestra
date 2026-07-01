@@ -1011,7 +1011,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const hasPendingOrProcessing = await TaskModel.hasPendingOrProcessing(
-        "connector_sync",
+        ["connector_sync", "connector_prune"],
         id,
       );
       if (hasPendingOrProcessing) {
@@ -1060,7 +1060,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const hasPendingOrProcessing = await TaskModel.hasPendingOrProcessing(
-        "connector_sync",
+        ["connector_sync", "connector_prune"],
         id,
       );
       if (hasPendingOrProcessing) {

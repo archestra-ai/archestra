@@ -18,6 +18,7 @@ export type TaskStatus = z.infer<typeof TaskStatusSchema>;
 
 export const TaskTypeSchema = z.enum([
   "connector_sync",
+  "connector_prune",
   "batch_embedding",
   "check_due_connectors",
   "check_due_schedule_triggers",
@@ -29,6 +30,9 @@ export type TaskType = z.infer<typeof TaskTypeSchema>;
 export type ConnectorSyncPayload = {
   connectorId: string;
   continuationCount?: number;
+};
+export type ConnectorPrunePayload = {
+  connectorId: string;
 };
 export type BatchEmbeddingPayload = {
   documentIds: string[];

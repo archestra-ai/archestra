@@ -157,6 +157,29 @@ describe("DropboxConnector", () => {
     });
   });
 
+  describe("listAllSourceIds", () => {
+    it("yields source ids for supported files", async () => {
+      mockFilesListFolder.mockResolvedValueOnce(
+        makeListFolderResult([
+          makeFile("id:aaa", "readme.md"),
+          makeFile("id:bbb", "notes.txt"),
+        ]),
+      );
+      mockFilesListFolder.mockResolvedValueOnce(makeListFolderResult([]));
+
+      const connector = new DropboxConnector();
+      const batches: string[][] = [];
+      for await (const batch of connector.listAllSourceIds!({
+        config: {},
+        credentials,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches).toEqual([["id:aaa", "id:bbb"]]);
+    });
+  });
+
   describe("sync — full sync (no cursor checkpoint)", () => {
     it("yields a batch of documents from list_folder results", async () => {
       const files = [

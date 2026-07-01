@@ -655,6 +655,11 @@ export interface Connector {
     embeddingInputModalities?: ModelInputModality[];
   }): Promise<number | null>;
 
+  listAllSourceIds?(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+  }): AsyncGenerator<string[]>;
+
   sync(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;

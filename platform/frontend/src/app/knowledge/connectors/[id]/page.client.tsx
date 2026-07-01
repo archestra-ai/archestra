@@ -205,6 +205,15 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       cell: ({ row }) => <div>{row.original.documentsIngested ?? 0}</div>,
     },
     {
+      id: "prunedDocuments",
+      header: "Pruned",
+      cell: ({ row }) => {
+        const pruned = (row.original as Record<string, unknown>)
+          .prunedDocuments as number | null;
+        return <div>{pruned ?? 0}</div>;
+      },
+    },
+    {
       id: "logs",
       header: "Logs",
       cell: ({ row }) => {

@@ -1,3 +1,5 @@
+import config from "@/config";
+import { getConnector } from "@/knowledge-base/connectors/registry";
 import { Cron } from "croner";
 import logger from "@/logging";
 import {
@@ -11,20 +13,48 @@ export async function handleCheckDueConnectors(): Promise<void> {
   const connectors = await KnowledgeBaseConnectorModel.findAllEnabled();
 
   for (const connector of connectors) {
-    if (!connector.schedule) continue;
-
     try {
-      const cron = new Cron(connector.schedule);
-      const nextRun = cron.nextRun(connector.lastSyncAt ?? new Date(0));
+      if (connector.schedule) {
+        const cron = new Cron(connector.schedule);
+        const nextRun = cron.nextRun(connector.lastSyncAt ?? new Date(0));
 
-      if (nextRun && nextRun <= new Date()) {
-        const exists = await TaskModel.hasPendingOrProcessing(
-          "connector_sync",
+        if (nextRun && nextRun <= new Date()) {
+          const exists = await TaskModel.hasPendingOrProcessing(
+            ["connector_sync", "connector_prune"],
+            connector.id,
+          );
+          if (!exists) {
+            await taskQueueService.enqueue({
+              taskType: "connector_sync",
+              payload: { connectorId: connector.id },
+            });
+            logger.info(
+              {
+                connectorId: connector.id,
+                connectorName: connector.name,
+                connectorType: connector.connectorType,
+              },
+              "Enqueued scheduled connector sync",
+            );
+          }
+        }
+      }
+
+      const connectorImpl = getConnector(connector.connectorType);
+      const pruneSupported = typeof connectorImpl.listAllSourceIds === "function";
+      const pruneDueAt = new Date(
+        (connector.lastPruneAt ?? new Date(0)).getTime() +
+          config.kb.connectorPruneIntervalSeconds * 1000,
+      );
+
+      if (pruneSupported && pruneDueAt <= new Date()) {
+        const pruneExists = await TaskModel.hasPendingOrProcessing(
+          ["connector_sync", "connector_prune"],
           connector.id,
         );
-        if (!exists) {
+        if (!pruneExists) {
           await taskQueueService.enqueue({
-            taskType: "connector_sync",
+            taskType: "connector_prune",
             payload: { connectorId: connector.id },
           });
           logger.info(
@@ -33,7 +63,7 @@ export async function handleCheckDueConnectors(): Promise<void> {
               connectorName: connector.name,
               connectorType: connector.connectorType,
             },
-            "Enqueued scheduled connector sync",
+            "Enqueued scheduled connector prune",
           );
         }
       }
@@ -61,7 +91,7 @@ async function cleanupOrphanedRunningStatuses(): Promise<void> {
   for (const connector of stuckConnectors) {
     try {
       const hasPendingTask = await TaskModel.hasPendingOrProcessing(
-        "connector_sync",
+        ["connector_sync", "connector_prune"],
         connector.id,
       );
       if (hasPendingTask) continue;

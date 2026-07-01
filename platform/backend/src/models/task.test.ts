@@ -241,6 +241,19 @@ describe("TaskModel", () => {
       );
       expect(result).toBe(false);
     });
+
+    test("accepts multiple task types", async () => {
+      await TaskModel.create({
+        taskType: "connector_prune",
+        payload: { connectorId: "conn-123" },
+      });
+
+      const result = await TaskModel.hasPendingOrProcessing(
+        ["connector_sync", "connector_prune"],
+        "conn-123",
+      );
+      expect(result).toBe(true);
+    });
   });
 
   describe("hasPendingOrProcessingByType", () => {

@@ -1,6 +1,6 @@
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertTask, Task } from "@/types";
+import type { InsertTask, Task, TaskType } from "@/types";
 
 class TaskModel {
   static async create(data: InsertTask): Promise<Task> {
@@ -138,13 +138,21 @@ class TaskModel {
   }
 
   static async hasPendingOrProcessing(
-    taskType: string,
+    taskTypes: TaskType | TaskType[],
     connectorId: string,
   ): Promise<boolean> {
+    const normalizedTaskTypes = Array.isArray(taskTypes)
+      ? taskTypes
+      : [taskTypes];
+    const taskTypeList = sql.join(
+      normalizedTaskTypes.map((taskType) => sql`${taskType}`),
+      sql`, `,
+    );
+
     const { rows } = await db.execute<{ exists: boolean }>(sql`
       SELECT EXISTS (
         SELECT 1 FROM tasks
-        WHERE task_type = ${taskType}
+        WHERE task_type IN (${taskTypeList})
           AND status IN ('pending', 'processing')
           AND payload->>'connectorId' = ${connectorId}
       ) AS exists

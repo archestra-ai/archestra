@@ -51,6 +51,7 @@ describe("ConnectorRunDetailsDialog", () => {
         completedAt: "2026-04-06T00:01:00.000Z",
         documentsProcessed: 1,
         documentsIngested: 0,
+        prunedDocuments: 2,
         totalItems: 1,
         itemErrors: 1,
         error: "Something failed",
@@ -67,6 +68,7 @@ describe("ConnectorRunDetailsDialog", () => {
     );
 
     expect(screen.getByText("Logs")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText(/value \}\{ inside string/)).toBeInTheDocument();
     const logBlock = screen.getByText(/next record/).closest("pre");
     expect(logBlock?.textContent).toContain(

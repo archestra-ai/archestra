@@ -47,6 +47,7 @@ const knowledgeBaseConnectorsTable = pgTable(
     schedule: text("schedule").notNull().default("0 */6 * * *"),
     enabled: boolean("enabled").notNull().default(true),
     lastSyncAt: timestamp("last_sync_at", { mode: "date" }),
+    lastPruneAt: timestamp("last_prune_at", { mode: "date" }),
     lastSyncStatus: text("last_sync_status").$type<ConnectorSyncStatus>(),
     lastSyncError: text("last_sync_error"),
     checkpoint: jsonb("checkpoint").$type<ConnectorCheckpoint>(),

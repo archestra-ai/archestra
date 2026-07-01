@@ -772,6 +772,16 @@ export function parseConnectorSyncMaxDuration(
 }
 
 /** @public — exported for testability */
+export function parseConnectorPruneInterval(
+  value: string | undefined,
+): number {
+  const DEFAULT = 30 * 24 * 60 * 60;
+  const seconds = Number.parseInt(value || String(DEFAULT), 10);
+  if (Number.isNaN(seconds) || seconds <= 0) return DEFAULT;
+  return seconds;
+}
+
+/** @public — exported for testability */
 export function parseProcessType(value: string | undefined): ProcessType {
   const normalized = value?.toLowerCase();
   if (normalized === "web" || normalized === "worker") return normalized;
@@ -1509,6 +1519,9 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
+    ),
+    connectorPruneIntervalSeconds: parseConnectorPruneInterval(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_PRUNE_INTERVAL_SECONDS,
     ),
     taskWorkerPollIntervalSeconds: Number.parseInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS ||

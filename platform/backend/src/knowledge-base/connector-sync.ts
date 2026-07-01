@@ -424,6 +424,10 @@ class ConnectorSyncService {
     if (existing) {
       // Same content hash → skip (unchanged)
       if (existing.contentHash === contentHash) {
+        await KbDocumentModel.update(existing.id, {
+          lastSeenAt: new Date(),
+        });
+
         const existingChunkCount = await KbChunkModel.countByDocument(
           existing.id,
         );
@@ -473,6 +477,7 @@ class ConnectorSyncService {
         acl,
         metadata: doc.metadata,
         embeddingStatus: "pending",
+        lastSeenAt: new Date(),
       });
 
       // Re-chunk: content changed, so replace stale chunks

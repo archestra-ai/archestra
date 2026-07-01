@@ -72,6 +72,70 @@ export class DropboxConnector extends BaseConnector {
     });
   }
 
+  async *listAllSourceIds(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+  }): AsyncGenerator<string[]> {
+    const parsed = parseDropboxConfig(params.config);
+    if (!parsed) {
+      throw new Error("Invalid Dropbox configuration");
+    }
+
+    const rootPath = parsed.rootPath
+      ? parsed.rootPath.startsWith("/")
+        ? parsed.rootPath
+        : `/${parsed.rootPath}`
+      : "";
+    const fileTypes = parsed.fileTypes ?? [];
+    const recursive = parsed.recursive ?? true;
+    const maxDepth = parsed.maxDepth ?? DEFAULT_MAX_DEPTH;
+    const dbx = getDropboxClient(params.credentials);
+
+    const adapter: FolderTraversalAdapter = {
+      listDirectSubfolders: (parentPath: string) =>
+        this.listSubfolderPaths(dbx, parentPath),
+    };
+
+    for await (const folderPath of traverseFolders(
+      adapter,
+      { rootFolderId: rootPath, recursive, maxDepth },
+      this.log,
+    )) {
+      let cursor: string | undefined;
+
+      do {
+        await this.rateLimit();
+
+        let entries: DropboxEntry[];
+        let nextCursor: string;
+        let hasMore: boolean;
+
+        if (!cursor) {
+          const result = await dbx.filesListFolder({
+            path: folderPath,
+            recursive: false,
+            include_deleted: false,
+            include_has_explicit_shared_members: false,
+          });
+          entries = result.result.entries;
+          nextCursor = result.result.cursor;
+          hasMore = result.result.has_more;
+        } else {
+          const result = await dbx.filesListFolderContinue({ cursor });
+          entries = result.result.entries;
+          nextCursor = result.result.cursor;
+          hasMore = result.result.has_more;
+        }
+
+        cursor = hasMore ? nextCursor : undefined;
+        const sourceIds = filterFiles(entries, fileTypes).map((file) => file.id);
+        if (sourceIds.length > 0) {
+          yield sourceIds;
+        }
+      } while (cursor);
+    }
+  }
+
   async *sync(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;

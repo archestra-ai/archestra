@@ -7,6 +7,13 @@ const mockHasPendingOrProcessing = vi.hoisted(() =>
   vi.fn().mockResolvedValue(false),
 );
 const mockHasActiveRun = vi.hoisted(() => vi.fn().mockResolvedValue(false));
+const mockGetConnector = vi.hoisted(() => vi.fn().mockReturnValue({}));
+vi.mock("@/config", () => ({
+  default: { kb: { connectorPruneIntervalSeconds: 30 * 24 * 60 * 60 } },
+}));
+vi.mock("@/knowledge-base/connectors/registry", () => ({
+  getConnector: mockGetConnector,
+}));
 vi.mock("@/models", () => ({
   KnowledgeBaseConnectorModel: {
     findAllEnabled: mockFindAllEnabled,
@@ -36,6 +43,7 @@ import { handleCheckDueConnectors } from "./check-due-connectors-handler";
 describe("handleCheckDueConnectors", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetConnector.mockReturnValue({});
   });
 
   test("does nothing when no connectors are enabled", async () => {
@@ -113,6 +121,26 @@ describe("handleCheckDueConnectors", () => {
     expect(mockEnqueue).toHaveBeenCalledWith({
       taskType: "connector_sync",
       payload: { connectorId: "conn-good" },
+    });
+  });
+
+  test("enqueues connector prune when supported and overdue", async () => {
+    mockGetConnector.mockReturnValue({ listAllSourceIds: vi.fn() });
+    mockFindAllEnabled.mockResolvedValue([
+      {
+        id: "conn-prune",
+        name: "Dropbox",
+        connectorType: "dropbox",
+        schedule: null,
+        lastPruneAt: new Date(0),
+      },
+    ]);
+
+    await handleCheckDueConnectors();
+
+    expect(mockEnqueue).toHaveBeenCalledWith({
+      taskType: "connector_prune",
+      payload: { connectorId: "conn-prune" },
     });
   });
 

@@ -1,4 +1,15 @@
-import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   AclEntry,
@@ -54,6 +65,7 @@ class KbDocumentModel {
         metadata: schema.kbDocumentsTable.metadata,
         embeddingStatus: schema.kbDocumentsTable.embeddingStatus,
         chunkCount: schema.kbDocumentsTable.chunkCount,
+        lastSeenAt: schema.kbDocumentsTable.lastSeenAt,
         createdAt: schema.kbDocumentsTable.createdAt,
         updatedAt: schema.kbDocumentsTable.updatedAt,
       })
@@ -111,6 +123,7 @@ class KbDocumentModel {
         metadata: schema.kbDocumentsTable.metadata,
         embeddingStatus: schema.kbDocumentsTable.embeddingStatus,
         chunkCount: schema.kbDocumentsTable.chunkCount,
+        lastSeenAt: schema.kbDocumentsTable.lastSeenAt,
         createdAt: schema.kbDocumentsTable.createdAt,
         updatedAt: schema.kbDocumentsTable.updatedAt,
       })
@@ -231,6 +244,47 @@ class KbDocumentModel {
 
     return result.rowCount !== null && result.rowCount > 0;
   }
+  
+  static async markSeenBySourceIds(params: {
+    connectorId: string;
+    sourceIds: string[];
+    seenAt: Date;
+  }): Promise<number> {
+    if (params.sourceIds.length === 0) return 0;
+
+    const result = await db
+      .update(schema.kbDocumentsTable)
+      .set({ lastSeenAt: params.seenAt })
+      .where(
+        and(
+          eq(schema.kbDocumentsTable.connectorId, params.connectorId),
+          inArray(schema.kbDocumentsTable.sourceId, params.sourceIds),
+        ),
+      )
+      .returning({ id: schema.kbDocumentsTable.id });
+
+    return result.length;
+  }
+  
+  static async deleteStaleByConnector(params: {
+    connectorId: string;
+    staleBefore: Date;
+  }): Promise<number> {
+    const result = await db
+      .delete(schema.kbDocumentsTable)
+      .where(
+        and(
+          eq(schema.kbDocumentsTable.connectorId, params.connectorId),
+          or(
+            lt(schema.kbDocumentsTable.lastSeenAt, params.staleBefore),
+            isNull(schema.kbDocumentsTable.lastSeenAt),
+          ),
+        ),
+      )
+      .returning({ id: schema.kbDocumentsTable.id });
+
+    return result.length;
+  }
 
   static async countByConnector(connectorId: string): Promise<number> {
     const [result] = await db
@@ -294,6 +348,7 @@ class KbDocumentModel {
         metadata: schema.kbDocumentsTable.metadata,
         embeddingStatus: schema.kbDocumentsTable.embeddingStatus,
         chunkCount: schema.kbDocumentsTable.chunkCount,
+        lastSeenAt: schema.kbDocumentsTable.lastSeenAt,
         createdAt: schema.kbDocumentsTable.createdAt,
         updatedAt: schema.kbDocumentsTable.updatedAt,
       })

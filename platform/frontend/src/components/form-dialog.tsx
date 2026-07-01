@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DialogDismissProvider,
   UnsavedChangesDialog,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
@@ -66,13 +67,15 @@ export function FormDialog({
               : undefined
           }
         >
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-            {description && (
-              <DialogDescription>{description}</DialogDescription>
-            )}
-          </DialogHeader>
-          {children}
+          <DialogDismissProvider requestClose={guard.requestClose}>
+            <DialogHeader>
+              <DialogTitle>{title}</DialogTitle>
+              {description && (
+                <DialogDescription>{description}</DialogDescription>
+              )}
+            </DialogHeader>
+            {children}
+          </DialogDismissProvider>
         </DialogContent>
       </Dialog>
       <UnsavedChangesDialog

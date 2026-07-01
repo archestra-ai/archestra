@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import {
   type VisibilityOption,
@@ -168,14 +169,7 @@ function EditProjectDialogForm({
       bodyClassName="space-y-4"
       footer={
         <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isPending}
-          >
-            Cancel
-          </Button>
+          <DialogCancelButton disabled={isPending}>Cancel</DialogCancelButton>
           <Button
             type="submit"
             disabled={

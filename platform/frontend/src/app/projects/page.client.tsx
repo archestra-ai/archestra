@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -440,13 +441,7 @@ function CreateProjectDialog({
       onSubmit={onSubmit}
       footer={
         <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
+          <DialogCancelButton>Cancel</DialogCancelButton>
           <Button
             type="submit"
             disabled={

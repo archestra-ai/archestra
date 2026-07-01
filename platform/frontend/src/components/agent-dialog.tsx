@@ -1211,14 +1211,10 @@ export function AgentDialog({
     supportsEnvironment,
   ]);
 
-  const handleClose = useCallback(() => {
-    onOpenChange(false);
-  }, [onOpenChange]);
-
-  // Detect unsaved edits so an accidental dismissal (Esc, backdrop, or the X
-  // button) prompts before discarding. Covers every form field held here plus
-  // delegations; per-tool selections live in the tools editor child and are
-  // not part of this check (the All-tools/Custom switch below is, though).
+  // Detect unsaved edits so any close path (Esc, backdrop, the X button, or the
+  // Cancel button) prompts before discarding. Covers every form field held here
+  // plus delegations; per-tool selections live in the tools editor child and
+  // are not part of this check (the All-tools/Custom switch below is, though).
   const currentSnapshot = buildAgentFormSnapshot({
     name,
     icon,
@@ -1250,6 +1246,8 @@ export function AgentDialog({
         [...selectedDelegationTargetIds].sort(),
       ));
   const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
+
+  const handleClose = guard.requestClose;
 
   return (
     <>

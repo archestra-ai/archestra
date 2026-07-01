@@ -53,6 +53,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import {
   type VisibilityOption,
@@ -672,13 +673,9 @@ function CreateVirtualKeyDialog({
           )}
         </DialogBody>
         <DialogStickyFooter className="mt-0">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
+          <DialogCancelButton>
             {createdKeyValue ? "Close" : "Cancel"}
-          </Button>
+          </DialogCancelButton>
           {!createdKeyValue && (
             <Button type="submit" disabled={!canSubmit}>
               {createMutation.isPending && (
@@ -889,13 +886,7 @@ function EditVirtualKeyDialog({
           )}
         </DialogBody>
         <DialogStickyFooter className="mt-0">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
+          <DialogCancelButton>Cancel</DialogCancelButton>
           <Button type="submit" disabled={!canSubmit}>
             {updateMutation.isPending && (
               <Loader2 className="h-4 w-4 animate-spin" />

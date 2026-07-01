@@ -1,7 +1,14 @@
 "use client";
 
 import { AlertCircle } from "lucide-react";
-import { useCallback, useState } from "react";
+import {
+  type ComponentProps,
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useState,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +22,54 @@ import {
 } from "@/components/ui/dialog";
 
 import { resolveCloseAttempt } from "./unsaved-changes-guard-utils";
+
+// Lets footer buttons rendered inside a guarded dialog (e.g. Cancel) close it
+// through the same dirty check as Esc/backdrop/X. FormDialog provides this;
+// DialogCancelButton consumes it.
+const DialogDismissContext = createContext<(() => void) | null>(null);
+
+export function DialogDismissProvider({
+  requestClose,
+  children,
+}: {
+  requestClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <DialogDismissContext.Provider value={requestClose}>
+      {children}
+    </DialogDismissContext.Provider>
+  );
+}
+
+/**
+ * A Cancel/Close button for use inside a guarded FormDialog. Routes its close
+ * through the dialog's unsaved-changes guard, so clicking it on a dirty form
+ * shows the same confirmation as Esc/backdrop/X (and closes immediately when
+ * the form is clean or unguarded).
+ */
+export function DialogCancelButton({
+  children = "Cancel",
+  onClick,
+  ...props
+}: ComponentProps<typeof Button>) {
+  const requestClose = useContext(DialogDismissContext);
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      {...props}
+      onClick={(e) => {
+        onClick?.(e);
+        if (!e.defaultPrevented) {
+          requestClose?.();
+        }
+      }}
+    >
+      {children}
+    </Button>
+  );
+}
 
 /**
  * Guards a dialog against discarding unsaved form data. Funnels every close

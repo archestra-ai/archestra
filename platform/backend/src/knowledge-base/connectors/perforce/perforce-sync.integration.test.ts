@@ -11,16 +11,20 @@ const fetchState: {
   handler: undefined | ((url: URL) => Response);
 } = { handler: undefined };
 
-vi.stubGlobal(
-  "fetch",
-  vi.fn(async (input: string | URL) => {
-    const url = input instanceof URL ? input : new URL(String(input));
-    if (!fetchState.handler) {
-      throw new Error("fetchState.handler not configured in test");
-    }
-    return fetchState.handler(url);
-  }),
-);
+const fetchMock = vi.fn(async (input: string | URL) => {
+  const url = input instanceof URL ? input : new URL(String(input));
+  if (!fetchState.handler) {
+    throw new Error("fetchState.handler not configured in test");
+  }
+  return fetchState.handler(url);
+});
+
+// The config's `unstubGlobals` removes stubs after every test, so re-apply
+// before each one; the top-level stub covers import time.
+vi.stubGlobal("fetch", fetchMock);
+beforeEach(() => {
+  vi.stubGlobal("fetch", fetchMock);
+});
 
 const mockEmbeddingsCreate = vi.hoisted(() => vi.fn());
 vi.mock("openai", () => {

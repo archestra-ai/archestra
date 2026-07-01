@@ -96,6 +96,12 @@ beforeAll(async () => {
     }
   }
 
+  // Finish PGlite's async WASM init (incl. its browser-vs-node environment
+  // detection) before any test code runs: tests that fake browser globals
+  // (e.g. a `window` for the app SDK) would otherwise race the detection and
+  // send PGlite down the browser path mid-init.
+  await pgliteClient.waitReady;
+
   // Set the test database via the internal setter (for getDb() and proxy)
   const dbModule = await import("../database/index.js");
   dbModule.__setTestDb(

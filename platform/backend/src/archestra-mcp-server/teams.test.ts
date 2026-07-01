@@ -474,6 +474,269 @@ describe("team tool execution", () => {
     expect((result.content[0] as any).text).toContain("do not have permission");
   });
 
+  // === Team-admin management (org member who is admin of a specific team) ===
+
+  /**
+   * Builds a context for an org "member" (holds team:read, not team:update /
+   * team:create) who is a team admin of `teamId`. This is the scenario the REST
+   * `assertCanManageTeam` allows and which org-level RBAC alone would block.
+   */
+  async function makeTeamAdminContext(params: {
+    teamId: string;
+    email: string;
+    makeUser: any;
+    makeMember: any;
+    makeTeamMember: any;
+  }): Promise<{ context: ArchestraContext; userId: string }> {
+    const user = await params.makeUser({ email: params.email });
+    await params.makeMember(user.id, organizationId, { role: "member" });
+    await params.makeTeamMember(params.teamId, user.id, { role: "admin" });
+    return {
+      userId: user.id,
+      context: {
+        agent: { id: testAgent.id, name: testAgent.name },
+        userId: user.id,
+        organizationId,
+      },
+    };
+  }
+
+  test("a team admin (org member) can add a member to their own team", async ({
+    makeTeam,
+    makeUser,
+    makeMember,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId);
+    const { context } = await makeTeamAdminContext({
+      teamId: team.id,
+      email: "teamadmin-add@test.com",
+      makeUser,
+      makeMember,
+      makeTeamMember,
+    });
+
+    const target = await makeUser({ email: "added-by-teamadmin@test.com" });
+    await makeMember(target.id, organizationId, { role: "member" });
+
+    const result = await executeArchestraTool(
+      toolName("add_team_member"),
+      { team_id: team.id, user: target.id },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(await TeamModel.isUserInTeam(team.id, target.id)).toBe(true);
+  });
+
+  test("a team admin (org member) can update a member's role in their team", async ({
+    makeTeam,
+    makeUser,
+    makeMember,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId);
+    const { context } = await makeTeamAdminContext({
+      teamId: team.id,
+      email: "teamadmin-update@test.com",
+      makeUser,
+      makeMember,
+      makeTeamMember,
+    });
+
+    const target = await makeUser({ email: "role-target@test.com" });
+    await makeMember(target.id, organizationId, { role: "member" });
+    await makeTeamMember(team.id, target.id, { role: "member" });
+
+    const result = await executeArchestraTool(
+      toolName("update_team_member_role"),
+      { team_id: team.id, user_id: target.id, role: "admin" },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.structuredContent as any).member.role).toBe("admin");
+  });
+
+  test("a team admin (org member) can remove a member from their team", async ({
+    makeTeam,
+    makeUser,
+    makeMember,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId);
+    const { context } = await makeTeamAdminContext({
+      teamId: team.id,
+      email: "teamadmin-remove@test.com",
+      makeUser,
+      makeMember,
+      makeTeamMember,
+    });
+
+    const target = await makeUser({ email: "remove-target@test.com" });
+    await makeMember(target.id, organizationId, { role: "member" });
+    await makeTeamMember(team.id, target.id, { role: "member" });
+
+    const result = await executeArchestraTool(
+      toolName("remove_team_member"),
+      { team_id: team.id, user_id: target.id },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(await TeamModel.isUserInTeam(team.id, target.id)).toBe(false);
+  });
+
+  test("a plain team member (not admin) cannot manage team members", async ({
+    makeTeam,
+    makeUser,
+    makeMember,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId);
+    const member = await makeUser({ email: "plainmember@test.com" });
+    await makeMember(member.id, organizationId, { role: "member" });
+    await makeTeamMember(team.id, member.id, { role: "member" });
+    const memberContext: ArchestraContext = {
+      agent: { id: testAgent.id, name: testAgent.name },
+      userId: member.id,
+      organizationId,
+    };
+
+    const target = await makeUser({ email: "wont-be-added@test.com" });
+    await makeMember(target.id, organizationId, { role: "member" });
+
+    const result = await executeArchestraTool(
+      toolName("add_team_member"),
+      { team_id: team.id, user: target.id },
+      memberContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("must be a team admin");
+    expect(await TeamModel.isUserInTeam(team.id, target.id)).toBe(false);
+  });
+
+  test("a team admin cannot manage a team they are not an admin of", async ({
+    makeTeam,
+    makeUser,
+    makeMember,
+    makeTeamMember,
+  }) => {
+    const teamA = await makeTeam(organizationId, adminUserId, { name: "A" });
+    const teamB = await makeTeam(organizationId, adminUserId, { name: "B" });
+    // Admin of team A only.
+    const { context } = await makeTeamAdminContext({
+      teamId: teamA.id,
+      email: "admin-of-a@test.com",
+      makeUser,
+      makeMember,
+      makeTeamMember,
+    });
+
+    const target = await makeUser({ email: "cross-team-target@test.com" });
+    await makeMember(target.id, organizationId, { role: "member" });
+
+    const result = await executeArchestraTool(
+      toolName("add_team_member"),
+      { team_id: teamB.id, user: target.id },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("must be a team admin");
+  });
+
+  // === Read scoping for non-managers ===
+
+  test("a team member (org member) can read their own team", async ({
+    makeTeam,
+    makeUser,
+    makeMember,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId, { name: "Mine" });
+    const member = await makeUser({ email: "reader-member@test.com" });
+    await makeMember(member.id, organizationId, { role: "member" });
+    await makeTeamMember(team.id, member.id, { role: "member" });
+    const memberContext: ArchestraContext = {
+      agent: { id: testAgent.id, name: testAgent.name },
+      userId: member.id,
+      organizationId,
+    };
+
+    const getResult = await executeArchestraTool(
+      toolName("get_team"),
+      { id: team.id },
+      memberContext,
+    );
+    expect(getResult.isError).toBe(false);
+    expect((getResult.structuredContent as any).team.name).toBe("Mine");
+
+    const membersResult = await executeArchestraTool(
+      toolName("list_team_members"),
+      { team_id: team.id },
+      memberContext,
+    );
+    expect(membersResult.isError).toBe(false);
+  });
+
+  test("a non-manager org member cannot read a team they don't belong to", async ({
+    makeTeam,
+    makeUser,
+    makeMember,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId);
+    const outsider = await makeUser({ email: "org-outsider@test.com" });
+    await makeMember(outsider.id, organizationId, { role: "member" });
+    const outsiderContext: ArchestraContext = {
+      agent: { id: testAgent.id, name: testAgent.name },
+      userId: outsider.id,
+      organizationId,
+    };
+
+    const getResult = await executeArchestraTool(
+      toolName("get_team"),
+      { id: team.id },
+      outsiderContext,
+    );
+    expect(getResult.isError).toBe(true);
+    expect((getResult.content[0] as any).text).toContain("not found");
+
+    const membersResult = await executeArchestraTool(
+      toolName("list_team_members"),
+      { team_id: team.id },
+      outsiderContext,
+    );
+    expect(membersResult.isError).toBe(true);
+    expect((membersResult.content[0] as any).text).toContain("not found");
+  });
+
+  test("list_teams returns only the caller's teams for a non-manager", async ({
+    makeTeam,
+    makeUser,
+    makeMember,
+    makeTeamMember,
+  }) => {
+    const myTeam = await makeTeam(organizationId, adminUserId, {
+      name: "Belongs",
+    });
+    await makeTeam(organizationId, adminUserId, { name: "NotMine" });
+    const member = await makeUser({ email: "scoped-list@test.com" });
+    await makeMember(member.id, organizationId, { role: "member" });
+    await makeTeamMember(myTeam.id, member.id, { role: "member" });
+    const memberContext: ArchestraContext = {
+      agent: { id: testAgent.id, name: testAgent.name },
+      userId: member.id,
+      organizationId,
+    };
+
+    const result = await executeArchestraTool(
+      toolName("list_teams"),
+      {},
+      memberContext,
+    );
+    expect(result.isError).toBe(false);
+    const teams = (result.structuredContent as any).teams;
+    expect(teams).toHaveLength(1);
+    expect(teams[0].name).toBe("Belongs");
+  });
+
   // === full lifecycle ===
 
   test("full team CRUD + membership lifecycle", async ({

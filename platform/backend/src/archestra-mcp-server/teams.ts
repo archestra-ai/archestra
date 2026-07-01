@@ -13,6 +13,7 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission } from "@/auth/agent-type-permissions";
+import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import { AgentToolModel, MemberModel, TeamModel } from "@/models";
 import type { Team, TeamMember, TeamMemberListItem } from "@/types";
@@ -301,6 +302,69 @@ async function findTeamInOrg(
   return team;
 }
 
+/**
+ * Whether the caller can manage every team in the org. Mirrors the REST route:
+ * the org-level `team:create` permission is the "team manager" signal (held by
+ * admins and custom roles granted it).
+ */
+async function isOrgTeamManager(context: ArchestraContext): Promise<boolean> {
+  if (!context.userId || !context.organizationId) {
+    return false;
+  }
+  return userHasPermission(
+    context.userId,
+    context.organizationId,
+    "team",
+    "create",
+  );
+}
+
+/**
+ * Read access to a specific team: an org-level team manager sees every team; a
+ * regular user only teams they belong to. Returns null when allowed, or a
+ * not-found error (never disclosing the team's existence) when denied — the
+ * same shape the REST route returns.
+ */
+async function assertCanReadTeam(
+  context: ArchestraContext,
+  teamId: string,
+): Promise<CallToolResult | null> {
+  if (await isOrgTeamManager(context)) {
+    return null;
+  }
+  if (
+    context.userId &&
+    (await TeamModel.isUserInTeam(teamId, context.userId))
+  ) {
+    return null;
+  }
+  return errorResult(`Team with ID ${teamId} not found.`);
+}
+
+/**
+ * Membership-management access: an org-level team manager may manage any team's
+ * members; otherwise the caller must be an admin of that specific team. Mirrors
+ * the REST route's `assertCanManageTeam`. Returns null when allowed, or a
+ * permission error when denied.
+ */
+async function assertCanManageTeamMembers(
+  context: ArchestraContext,
+  teamId: string,
+): Promise<CallToolResult | null> {
+  if (await isOrgTeamManager(context)) {
+    return null;
+  }
+  if (
+    context.userId &&
+    (await TeamModel.isUserTeamAdmin(teamId, context.userId))
+  ) {
+    return null;
+  }
+  return errorResult(
+    "You must be a team admin or have organization-level team management permission to manage this team's members.",
+  );
+}
+
 function serializeTeam(team: Team, memberCount: number) {
   return {
     id: team.id,
@@ -390,6 +454,11 @@ async function handleGetTeam(params: {
       );
     }
 
+    const readDenied = await assertCanReadTeam(context, team.id);
+    if (readDenied) {
+      return readDenied;
+    }
+
     // findByName does not hydrate members; count them explicitly.
     const members = await TeamModel.getTeamMembers(team.id);
     const serialized = serializeTeam(team, members.length);
@@ -420,10 +489,19 @@ async function handleListTeams(params: {
 
   try {
     const teams = await TeamModel.findByOrganization(context.organizationId);
+    // Org-level team managers see every team; everyone else only the teams
+    // they belong to (mirrors the REST GET /api/teams behavior).
+    const isManager = await isOrgTeamManager(context);
+    const visible = isManager
+      ? teams
+      : teams.filter((team) =>
+          team.members?.some((member) => member.userId === context.userId),
+        );
+
     const nameFilter = args.name?.toLowerCase();
     const filtered = nameFilter
-      ? teams.filter((team) => team.name.toLowerCase().includes(nameFilter))
-      : teams;
+      ? visible.filter((team) => team.name.toLowerCase().includes(nameFilter))
+      : visible;
 
     const serialized = filtered.map((team) =>
       serializeTeam(team, team.members?.length ?? 0),
@@ -555,6 +633,11 @@ async function handleListTeamMembers(params: {
       return errorResult(`Team with ID ${args.team_id} not found.`);
     }
 
+    const readDenied = await assertCanReadTeam(context, team.id);
+    if (readDenied) {
+      return readDenied;
+    }
+
     const members = await TeamModel.getTeamMembersWithUsers(args.team_id);
     const serialized = members.map(serializeMember);
 
@@ -599,6 +682,11 @@ async function handleAddTeamMember(params: {
     const team = await findTeamInOrg(args.team_id, context.organizationId);
     if (!team) {
       return errorResult(`Team with ID ${args.team_id} not found.`);
+    }
+
+    const manageDenied = await assertCanManageTeamMembers(context, team.id);
+    if (manageDenied) {
+      return manageDenied;
     }
 
     // Resolve the user by ID or email, scoped to the caller's org. This both
@@ -657,6 +745,11 @@ async function handleUpdateTeamMemberRole(params: {
       return errorResult(`Team with ID ${args.team_id} not found.`);
     }
 
+    const manageDenied = await assertCanManageTeamMembers(context, team.id);
+    if (manageDenied) {
+      return manageDenied;
+    }
+
     const lastAdminError = await checkNotRemovingLastAdmin({
       teamId: args.team_id,
       userId: args.user_id,
@@ -704,6 +797,11 @@ async function handleRemoveTeamMember(params: {
     const team = await findTeamInOrg(args.team_id, context.organizationId);
     if (!team) {
       return errorResult(`Team with ID ${args.team_id} not found.`);
+    }
+
+    const manageDenied = await assertCanManageTeamMembers(context, team.id);
+    if (manageDenied) {
+      return manageDenied;
     }
 
     const lastAdminError = await checkNotRemovingLastAdmin({

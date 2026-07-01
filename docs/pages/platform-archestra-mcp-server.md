@@ -632,9 +632,9 @@ This tool takes no arguments.
 | `edit_team` | Update a team's name and/or description. | `team:update` |
 | `delete_team` | Delete a team by ID. | `team:delete` |
 | `list_team_members` | List all members of a team along with their roles. | `team:read` |
-| `add_team_member` | Add an organization user to a team by user ID or email, optionally as an admin. | `team:update` |
-| `update_team_member_role` | Change a team member's role between admin and member. | `team:update` |
-| `remove_team_member` | Remove a member from a team. | `team:update` |
+| `add_team_member` | Add an organization user to a team by user ID or email, optionally as an admin. | `team:read` |
+| `update_team_member_role` | Change a team member's role between admin and member. | `team:read` |
+| `remove_team_member` | Remove a member from a team. | `team:read` |
 
 #### create_team
 
@@ -779,7 +779,7 @@ Required RBAC permission: `team:read`
 
 #### add_team_member
 
-Required RBAC permission: `team:update`
+Required RBAC permission: `team:read`
 
 ##### Input
 
@@ -805,7 +805,7 @@ Required RBAC permission: `team:update`
 
 #### update_team_member_role
 
-Required RBAC permission: `team:update`
+Required RBAC permission: `team:read`
 
 ##### Input
 
@@ -831,7 +831,7 @@ Required RBAC permission: `team:update`
 
 #### remove_team_member
 
-Required RBAC permission: `team:update`
+Required RBAC permission: `team:read`
 
 ##### Input
 

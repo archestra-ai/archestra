@@ -482,7 +482,7 @@ describe("Bedrock system content validation (issue #3406)", () => {
   // must not 400 the whole request — AWS is the authoritative validator, so we
   // accept it and forward it untouched instead of rejecting future block types.
   test("accepts and passes through an unknown system block shape", () => {
-    const futureBlock = { reasoningContent: { text: "scratchpad" } };
+    const futureBlock = { somethingBedrockAddsLater: { foo: "bar" } };
     const request = createConverseRequest({
       system: [{ text: "sys" }, futureBlock] as never,
     });
@@ -492,5 +492,67 @@ describe("Bedrock system content validation (issue #3406)", () => {
 
     const commandInput = getCommandInput(request);
     expect(commandInput.system).toEqual([{ text: "sys" }, futureBlock]);
+  });
+});
+
+describe("Bedrock reasoningContent message blocks (issue #3406)", () => {
+  // With Claude extended thinking, @ai-sdk/amazon-bedrock echoes the prior
+  // assistant reasoning back on the next turn as a reasoningContent block in the
+  // assistant message content. Older validation had no case for it and 400'd
+  // with "body/messages/N/content/M Invalid input"; it must now validate and
+  // pass through to Bedrock unchanged.
+  const reasoningBlock = {
+    reasoningContent: {
+      reasoningText: { text: "2 + 2 is 4.", signature: "ErUBCk...sig==" },
+    },
+  };
+
+  test("accepts a reasoningText block in an assistant message", () => {
+    const result = Bedrock.API.ConverseRequestSchema.safeParse({
+      modelId: "anthropic.claude-haiku-4-5-20251001-v1:0",
+      messages: [
+        { role: "user", content: [{ text: "What is 2+2?" }] },
+        { role: "assistant", content: [reasoningBlock, { text: "4" }] },
+        { role: "user", content: [{ text: "And 3+3?" }] },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("accepts a redactedReasoning block in an assistant message", () => {
+    const result = Bedrock.API.ConverseRequestSchema.safeParse({
+      modelId: "anthropic.claude-haiku-4-5-20251001-v1:0",
+      messages: [
+        { role: "user", content: [{ text: "hi" }] },
+        {
+          role: "assistant",
+          content: [
+            { reasoningContent: { redactedReasoning: { data: "abc123==" } } },
+            { text: "hello" },
+          ],
+        },
+        { role: "user", content: [{ text: "again" }] },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("forwards the reasoningContent block to Bedrock unchanged", () => {
+    const request = createConverseRequest({
+      messages: [
+        { role: "user", content: [{ text: "What is 2+2?" }] },
+        {
+          role: "assistant",
+          content: [reasoningBlock, { text: "4" }],
+        } as never,
+        { role: "user", content: [{ text: "And 3+3?" }] },
+      ],
+    });
+
+    const commandInput = getCommandInput(request);
+
+    expect(commandInput.messages?.[1]?.content?.[0]).toEqual(reasoningBlock);
   });
 });

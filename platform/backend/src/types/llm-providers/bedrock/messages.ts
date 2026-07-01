@@ -137,6 +137,30 @@ const CachePointContentBlockSchema = z.object({
   }),
 });
 
+// Reasoning content block — Claude extended-thinking output. On a multi-turn
+// request @ai-sdk/amazon-bedrock echoes the prior assistant reasoning back as a
+// `{ reasoningContent: ... }` block in the assistant message content, so the
+// proxy must accept it or the whole request 400s with
+// "body/messages/N/content/M Invalid input" (the same failure class as the
+// system cachePoint block). Two variants per the Bedrock Converse API: plain
+// reasoning text with a signature, or redacted reasoning bytes. `signature` is
+// optional so a text variant without one still validates and passes through.
+const ReasoningContentBlockSchema = z.object({
+  reasoningContent: z.union([
+    z.object({
+      reasoningText: z.object({
+        text: z.string(),
+        signature: z.string().optional(),
+      }),
+    }),
+    z.object({
+      redactedReasoning: z.object({
+        data: z.string(),
+      }),
+    }),
+  ]),
+});
+
 // =============================================================================
 // EXPORTED CONTENT BLOCK UNIONS
 // =============================================================================
@@ -156,6 +180,7 @@ export const AssistantContentBlockSchema = z.union([
   TextContentBlockSchema,
   ToolUseContentBlockSchema,
   CachePointContentBlockSchema,
+  ReasoningContentBlockSchema,
 ]);
 
 // Content block union for all messages
@@ -167,6 +192,7 @@ export const ContentBlockSchema = z.union([
   ToolUseContentBlockSchema,
   ToolResultContentBlockSchema,
   CachePointContentBlockSchema,
+  ReasoningContentBlockSchema,
 ]);
 
 // =============================================================================

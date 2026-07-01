@@ -1,33 +1,23 @@
 import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
-import { AppWindow } from "lucide-react";
+import { AppWindow, MoreVertical, PanelRight, Trash2 } from "lucide-react";
 import type React from "react";
-import {
-  Component,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { Component, useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { AppDeleteDialog } from "@/app/apps/_parts/app-delete-dialog";
+import { AppDiagnosticsPanel } from "@/components/chat/app-diagnostics-panel";
 import { useApps } from "@/components/chat/apps-context";
 import {
-  getAppRenderVerb,
   isSupersededRender,
   mcpToolLabel,
 } from "@/components/chat/chat-messages.utils";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
-import { AppSettingsForm } from "@/components/mcp-app/app-settings-form";
+import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
   McpAppAddressPill,
-  McpAppBackButton,
-  McpAppChangelogPill,
   McpAppFullscreenExitButton,
-  McpAppPanelButton,
+  McpAppMarkerCircle,
   McpAppRefreshButton,
-  McpAppSaveButton,
   McpAppSettingsButton,
   McpAppStandaloneButton,
   McpAppSwitcher,
@@ -40,16 +30,15 @@ import {
   type McpCallToolResult,
 } from "@/components/mcp-app/mcp-app-view";
 import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
-import { useApp } from "@/lib/app.query";
+import { Button } from "@/components/ui/button";
 import {
-  getAppDiagnosticCounts,
-  subscribeAppDiagnostics,
-} from "@/lib/chat/app-diagnostics-store";
-
-// Ties the settings form to its top-bar save button via the HTML `form` attr.
-// Only the selected panel app shows settings (one at a time), so a single id is
-// safe.
-const APP_SETTINGS_FORM_ID = "app-settings-form";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useApp } from "@/lib/app.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 
 /**
  * Shape of MCP tool output stored by the backend in the AI SDK's tool result.
@@ -176,12 +165,7 @@ export function McpAppSection({
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
   );
-  // Mirrors the settings form's save state so the top bar's save button (which
-  // lives outside that form) can disable / show a spinner.
-  const [settingsSaveStatus, setSettingsSaveStatus] = useState({
-    saving: false,
-    disabled: false,
-  });
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [resourceState, setResourceState] = useState<{
     key: string;
     state: "unknown" | "renderable" | "empty";
@@ -203,35 +187,28 @@ export function McpAppSection({
     showInPanel,
     closePanel,
     portalTarget,
+    panelToolCallId,
     settingsOpen,
     setSettingsOpen,
   } = useApps();
 
-  // Owned apps can be renamed/re-described from the address bar. Read the live
-  // app so the title stays in sync after an edit (the appName prop is captured
-  // at render time) and to seed the edit dialog.
+  // Owned apps can be renamed/re-described from settings. Read the live app so
+  // the title stays in sync after an edit (the appName prop is captured at
+  // render time) and to seed the settings dialog.
   const inlineHeightCap = useInlineHeightCap();
   const { data: ownedApp, isSuccess: ownedAppResolved } = useApp(appId ?? null);
+  const { data: canDelete } = useHasPermissions({ app: ["delete"] });
   // A deleted (or no-longer-accessible) owned app: the fetch settled but
   // `allowNotFound` turned the 404 into a successful `null`. Render a graceful
   // placeholder instead of mounting the runtime, which would 404 again.
   const ownedAppUnavailable = !!appId && ownedAppResolved && ownedApp === null;
 
   const headerName = ownedApp?.name || appName || mcpToolLabel(toolName);
-  const isSelected = !!toolCallId && selectedToolCallId === toolCallId;
-  const panelHostingActive = portalTarget !== null;
-  // Only the *selected* app moves to the panel: its iframe is portaled into
-  // the panel and its inline spot becomes a placeholder. Every other inline app
-  // keeps rendering live in the chat.
-  const renderInPanel = panelHostingActive && isSelected;
-
-  // Track the last inline body height while the app shows inline; once it moves
-  // to the panel we stop updating, so the chat placeholder keeps that frozen
-  // footprint and messages below it don't reflow.
-  const lastInlineHeightRef = useRef(INITIAL_INLINE_HEIGHT);
-  if (!renderInPanel) {
-    lastInlineHeightRef.current = size?.height ?? INITIAL_INLINE_HEIGHT;
-  }
+  // This render is the one hosted in the right panel: its iframe is portaled
+  // there and its inline spot becomes a compact marker circle. Every other
+  // inline app keeps rendering live in the chat. Driven by the shared
+  // `panelToolCallId` so chat and panel agree on which app is open.
+  const renderInPanel = !!toolCallId && panelToolCallId === toolCallId;
 
   // Reconstruct McpCallToolResult for AppFrame. Owned apps get none — the
   // management tool's result is not app data.
@@ -253,6 +230,12 @@ export function McpAppSection({
     showInPanel(toolCallId);
   };
 
+  // Whether this owned app's latest render is the one currently displayed in the
+  // right panel (drives the superseded marker's pressed state and toggle-to-close).
+  const latestToolCallId = apps.find((a) => a.appId === appId)?.toolCallId;
+  const shownInRightPanel =
+    latestToolCallId !== undefined && panelToolCallId === latestToolCallId;
+
   const handleResourceStateChange = useCallback(
     (state: "renderable" | "empty") => {
       setResourceState({ key: resourceKey, state });
@@ -260,32 +243,28 @@ export function McpAppSection({
     [resourceKey],
   );
 
-  // Error badge: runtime errors / CSP violations captured from this app's
-  // sandboxed render (owned apps only).
-  const diagnosticCounts = useSyncExternalStore(
-    subscribeAppDiagnostics,
-    getAppDiagnosticCounts,
-    getAppDiagnosticCounts,
-  );
-  const appDiagnosticCounts = appId ? diagnosticCounts.get(appId) : undefined;
-  const errorCount = appDiagnosticCounts?.errors ?? 0;
-  const logCount = appDiagnosticCounts?.logs ?? 0;
-
   if (effectiveResourceState === "empty") {
     return null;
   }
 
-  // A superseded render (a newer render of the same app — keyed by
-  // uiResourceUri — exists in the conversation) collapses to a static changelog
-  // pill instead of mounting the live runtime, so only the latest render of each
-  // app stays live. Applies to both owned apps and external MCP-UI calls; the
-  // pill degrades to just the label for non-owned renders (no version/verb).
+  // A superseded render (a newer render of the same owned app exists in the
+  // conversation) collapses to a compact app-icon marker instead of mounting the
+  // live runtime, so only the latest render stays live. The marker mirrors the
+  // right panel: pressed + click-to-close when its app is shown there, otherwise
+  // click opens the latest render in the right panel.
   if (isSupersededRender({ apps, toolCallId, appId })) {
     return (
-      <McpAppChangelogPill
-        appName={appName ?? mcpToolLabel(toolName)}
-        version={appVersion ?? null}
-        verb={getAppRenderVerb(toolName)}
+      <McpAppMarkerCircle
+        label={
+          shownInRightPanel
+            ? `${headerName} · Shown in right panel`
+            : headerName
+        }
+        active={shownInRightPanel}
+        onClick={() => {
+          if (shownInRightPanel) closePanel();
+          else if (latestToolCallId) showInPanel(latestToolCallId);
+        }}
       />
     );
   }
@@ -301,53 +280,6 @@ export function McpAppSection({
       </div>
     );
   }
-
-  const diagnosticsBadge =
-    errorCount > 0 || logCount > 0 ? (
-      <div className="mb-2 flex w-fit flex-wrap items-center gap-1.5">
-        {errorCount > 0 && (
-          <div className="rounded-md border border-destructive/50 bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
-            {errorCount === 1
-              ? "1 runtime error"
-              : `${errorCount} runtime errors`}{" "}
-            in this app
-          </div>
-        )}
-        {logCount > 0 && (
-          <div className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground">
-            {logCount === 1 ? "1 log" : `${logCount} logs`} from this app
-          </div>
-        )}
-      </div>
-    ) : null;
-
-  // The address bar every surface shares: refresh as the leading icon and
-  // open-in-new-tab as the trailing in-pill action (matching the side panel).
-  // The switcher only applies in the single panel slot; inline renders are each
-  // their own card, so they always get the static pill.
-  const refreshLeading = <McpAppRefreshButton onClick={reload} />;
-  const standaloneAction = appId ? (
-    <McpAppStandaloneButton appId={appId} />
-  ) : null;
-  const addressBar =
-    renderInPanel && apps.length > 1 ? (
-      <McpAppSwitcher
-        value={selectedToolCallId}
-        options={apps.map((app) => ({
-          value: app.toolCallId,
-          label: app.label,
-        }))}
-        onChange={select}
-        leading={refreshLeading}
-        actions={standaloneAction}
-      />
-    ) : (
-      <McpAppAddressPill
-        label={headerName}
-        leading={refreshLeading}
-        actions={standaloneAction}
-      />
-    );
 
   const runtimeNode = (
     <McpAppRuntime
@@ -391,94 +323,147 @@ export function McpAppSection({
     />
   );
 
-  // Every surface shows the same centered address bar. The owned-app side panel
-  // adds a single settings gear on the right that swaps the body for the inline
-  // settings form; in settings mode the bar becomes cancel/save — a back arrow
-  // (left, discards edits) and a save action (right, submits the form). The
-  // inline chat surface adds the fullscreen-exit (only while fullscreen) and
-  // show-in-panel controls.
-  let topBar: React.ReactNode;
-  let body: React.ReactNode;
-  if (renderInPanel && appId && ownedApp && settingsOpen) {
-    topBar = (
-      <McpAppTopBar
-        left={<McpAppBackButton onClick={() => setSettingsOpen(false)} />}
-        right={
-          <McpAppSaveButton
-            formId={APP_SETTINGS_FORM_ID}
-            disabled={settingsSaveStatus.disabled}
-            saving={settingsSaveStatus.saving}
-          />
-        }
-      >
-        <span className="px-1 text-xs font-medium text-muted-foreground">
-          Settings
-        </span>
-      </McpAppTopBar>
-    );
-    body = (
-      <AppSettingsForm
-        app={ownedApp}
-        onBack={() => setSettingsOpen(false)}
-        formId={APP_SETTINGS_FORM_ID}
-        onStatusChange={setSettingsSaveStatus}
-        onDeleted={closePanel}
+  // Side-panel header (item 5): full-size buttons — refresh, open-standalone,
+  // settings (owned apps) and a kebab with delete (owned apps). Center is the
+  // app name, or an app switcher when the panel hosts several apps.
+  const isOwnedInPanel = renderInPanel && !!appId && !!ownedApp;
+  const panelCenter =
+    renderInPanel && apps.length > 1 ? (
+      <McpAppSwitcher
+        value={selectedToolCallId}
+        options={apps.map((app) => ({
+          value: app.toolCallId,
+          label: app.label,
+        }))}
+        onChange={select}
       />
+    ) : (
+      <McpAppAddressPill label={headerName} />
     );
-  } else {
-    const right =
-      renderInPanel && appId && ownedApp ? (
-        <McpAppSettingsButton onClick={() => setSettingsOpen(true)} />
-      ) : (
+  const panelTopBar = (
+    <McpAppTopBar
+      right={
         <>
-          {displayMode === "fullscreen" && (
-            <McpAppFullscreenExitButton onClick={toggleFullscreen} />
-          )}
-          {toolCallId && !renderInPanel && (
-            <McpAppPanelButton onClick={handleShowInPanel} />
-          )}
+          <McpAppRefreshButton onClick={reload} size="bar" />
+          {appId ? <McpAppStandaloneButton appId={appId} size="bar" /> : null}
+          {isOwnedInPanel ? (
+            <McpAppSettingsButton onClick={() => setSettingsOpen(true)} />
+          ) : null}
+          {isOwnedInPanel && canDelete ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground"
+                  aria-label="More actions"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={() => setDeleteOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete app
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
         </>
-      );
-    topBar = <McpAppTopBar right={right}>{addressBar}</McpAppTopBar>;
-    body = runtimeNode;
-  }
+      }
+    >
+      {panelCenter}
+    </McpAppTopBar>
+  );
+
+  // Frameless inline (item 4): no top bar — chat context identifies the app.
+  // Only fullscreen-exit floats as a hover overlay (while fullscreen). The
+  // open-in-right-panel control is a labeled button below the app instead.
+  const inlineOverlay =
+    displayMode === "fullscreen" ? (
+      <McpAppFullscreenExitButton onClick={toggleFullscreen} />
+    ) : null;
 
   const liveSurface = (
     <McpAppErrorBoundary>
       <McpAppCard
         displayMode={displayMode}
         onToggleFullscreen={toggleFullscreen}
-        diagnostics={diagnosticsBadge}
         fillContainer={renderInPanel}
         capInlineHeight
-        topBar={topBar}
+        topBar={renderInPanel ? panelTopBar : undefined}
+        overlay={renderInPanel ? undefined : inlineOverlay}
       >
-        {body}
+        {runtimeNode}
       </McpAppCard>
     </McpAppErrorBoundary>
   );
 
-  const surface = renderInPanel ? (
-    <>
-      <McpAppCard
-        displayMode="inline"
-        onToggleFullscreen={toggleFullscreen}
-        frozenHeight={lastInlineHeightRef.current}
-        capInlineHeight
-        topBar={
-          <McpAppTopBar>
-            <McpAppAddressPill label={headerName} />
-          </McpAppTopBar>
-        }
-        placeholder={
-          <span className="text-muted-foreground">Showing in panel</span>
-        }
-      />
-      {portalTarget && createPortal(liveSurface, portalTarget)}
-    </>
-  ) : (
-    liveSurface
-  );
+  // Runtime-error / log summary lives below the app in the chat stream, never
+  // inside the height-constrained panel (item 3).
+  const diagnostics = appId ? <AppDiagnosticsPanel appId={appId} /> : null;
 
-  return surface;
+  // When hosted in the right panel the chat shows a compact, pressed app marker
+  // (item 1). The wrapper stays auto-width so it sits on the same row as the
+  // tool-call circle above it.
+  if (renderInPanel) {
+    return (
+      <div className="flex flex-col items-start gap-2">
+        <McpAppMarkerCircle
+          label={`${headerName} · Shown in right panel`}
+          active
+          onClick={closePanel}
+        />
+        {portalTarget && createPortal(liveSurface, portalTarget)}
+        {diagnostics}
+        {/* Settings + delete for the panel-hosted owned app. Both are modals
+            (portal to body), so their position here is irrelevant (items 6, 7). */}
+        {isOwnedInPanel && ownedApp ? (
+          <>
+            <AppSettingsDialog
+              appId={appId}
+              open={settingsOpen}
+              onOpenChange={setSettingsOpen}
+            />
+            <AppDeleteDialog
+              app={{ id: ownedApp.id, name: ownedApp.name }}
+              open={deleteOpen}
+              onOpenChange={setDeleteOpen}
+              onDeleted={closePanel}
+            />
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
+  // Frameless inline: the app, an "Open in right panel" button below it (item
+  // 2), then diagnostics. `w-full` makes this wrap to its own row under the
+  // tool-call circle.
+  return (
+    <div className="flex w-full flex-col items-start gap-2">
+      {liveSurface}
+      {toolCallId && displayMode !== "fullscreen" ? (
+        // Match the card's 80% width and right-justify so the button lines up
+        // with the app's right edge, not the full chat width.
+        <div className="flex w-full max-w-[80%] justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-auto gap-1.5 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+            onClick={handleShowInPanel}
+          >
+            <PanelRight className="h-3.5 w-3.5" />
+            Open in right panel
+          </Button>
+        </div>
+      ) : null}
+      {diagnostics}
+    </div>
+  );
 }

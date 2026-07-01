@@ -1,11 +1,9 @@
 import * as SelectPrimitive from "@radix-ui/react-select";
 import {
   AppWindow,
-  ArrowLeft,
   ChevronDown,
   type LucideIcon,
   Minimize2,
-  PanelRight,
   RefreshCw,
   Settings,
   SquareArrowOutUpRight,
@@ -14,6 +12,12 @@ import Link from "next/link";
 import type React from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const PILL_CLASS =
@@ -150,99 +154,26 @@ export function McpAppSwitcher({
   );
 }
 
-const ICON_BUTTON_PROPS = {
-  variant: "ghost",
-  size: "icon",
-  className: "h-6 w-6 text-muted-foreground",
-} as const;
+// Two sizes: "sm" (h-6 w-6) for the frameless-inline hover overlay's compact
+// icons, "bar" (h-8 w-8) for the side-panel header where buttons line up with the
+// panel's collapse button.
+type McpAppButtonSize = "sm" | "bar";
+
+const sizeClasses = (size: McpAppButtonSize) =>
+  size === "bar" ? "h-8 w-8" : "h-6 w-6";
+const iconClasses = (size: McpAppButtonSize) =>
+  size === "bar" ? "h-4 w-4" : "h-3.5 w-3.5";
 
 function McpAppIconButton({
   icon: Icon,
   label,
   onClick,
+  size = "sm",
 }: {
   icon: LucideIcon;
   label: string;
   onClick: () => void;
-}) {
-  return (
-    <Button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      {...ICON_BUTTON_PROPS}
-    >
-      <Icon className="h-3.5 w-3.5" />
-    </Button>
-  );
-}
-
-export function McpAppPanelButton({ onClick }: { onClick: () => void }) {
-  return (
-    <McpAppIconButton
-      icon={PanelRight}
-      label="Show in panel"
-      onClick={onClick}
-    />
-  );
-}
-
-export function McpAppRefreshButton({ onClick }: { onClick: () => void }) {
-  return (
-    <McpAppIconButton icon={RefreshCw} label="Reload app" onClick={onClick} />
-  );
-}
-
-// Sized to match the panel header's collapse button (h-8 w-8 / h-4 w-4) rather
-// than the smaller in-pill icons, so the gear's center lines up vertically with
-// the collapse button directly above it.
-export function McpAppSettingsButton({ onClick }: { onClick: () => void }) {
-  return (
-    <SettingsBarButton icon={Settings} label="App settings" onClick={onClick} />
-  );
-}
-
-// Settings mode's left control: cancel and return to the live app.
-export function McpAppBackButton({ onClick }: { onClick: () => void }) {
-  return (
-    <SettingsBarButton icon={ArrowLeft} label="Back to app" onClick={onClick} />
-  );
-}
-
-// Settings mode's right control: submits the settings form (associated by id, so
-// it can live in the top bar outside the form).
-export function McpAppSaveButton({
-  formId,
-  disabled,
-  saving,
-}: {
-  formId: string;
-  disabled?: boolean;
-  saving?: boolean;
-}) {
-  return (
-    <Button
-      type="submit"
-      form={formId}
-      disabled={disabled}
-      aria-label="Save settings"
-      size="sm"
-      className="h-7 px-3 text-xs font-medium"
-    >
-      {saving ? "Saving…" : "Save"}
-    </Button>
-  );
-}
-
-function SettingsBarButton({
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  icon: LucideIcon;
-  label: string;
-  onClick: () => void;
+  size?: McpAppButtonSize;
 }) {
   return (
     <Button
@@ -252,10 +183,38 @@ function SettingsBarButton({
       title={label}
       variant="ghost"
       size="icon"
-      className="h-8 w-8 text-muted-foreground"
+      className={cn("text-muted-foreground", sizeClasses(size))}
     >
-      <Icon className="h-4 w-4" />
+      <Icon className={iconClasses(size)} />
     </Button>
+  );
+}
+
+export function McpAppRefreshButton({
+  onClick,
+  size = "sm",
+}: {
+  onClick: () => void;
+  size?: McpAppButtonSize;
+}) {
+  return (
+    <McpAppIconButton
+      icon={RefreshCw}
+      label="Reload app"
+      onClick={onClick}
+      size={size}
+    />
+  );
+}
+
+export function McpAppSettingsButton({ onClick }: { onClick: () => void }) {
+  return (
+    <McpAppIconButton
+      icon={Settings}
+      label="App settings"
+      onClick={onClick}
+      size="bar"
+    />
   );
 }
 
@@ -273,45 +232,71 @@ export function McpAppFullscreenExitButton({
   );
 }
 
-export function McpAppStandaloneButton({ appId }: { appId: string }) {
+export function McpAppStandaloneButton({
+  appId,
+  size = "sm",
+}: {
+  appId: string;
+  size?: McpAppButtonSize;
+}) {
   return (
     <Button
       asChild
       aria-label="Open in new tab"
       title="Open in new tab"
-      {...ICON_BUTTON_PROPS}
+      variant="ghost"
+      size="icon"
+      className={cn("text-muted-foreground", sizeClasses(size))}
     >
       <Link href={`/a/${appId}`} target="_blank" rel="noreferrer">
-        <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+        <SquareArrowOutUpRight className={iconClasses(size)} />
       </Link>
     </Button>
   );
 }
 
 /**
- * Compact, non-interactive changelog row for a superseded owned-app render — an
- * earlier render the conversation has since replaced with a newer one. Reuses
- * the address-pill look but is static: it marks the version this render produced
- * ("Dashboard · v2 · Updated") without mounting a live iframe. Only the latest
- * render of an app stays live.
+ * Compact app-icon circle that stands in for an app render kept out of the chat
+ * stream — a superseded (older) render, or the live render while it's hosted in
+ * the right panel. Visually matches the chat's tool-call circles (`size-8`
+ * bordered circle) but carries the app icon; no tool-status dot. When `active`
+ * (the app is the one currently shown in the right panel) it takes a pressed
+ * look and clicking it closes the panel; otherwise clicking opens the app there.
  */
-export function McpAppChangelogPill({
-  appName,
-  version,
-  verb,
+export function McpAppMarkerCircle({
+  label,
+  active = false,
+  onClick,
 }: {
-  appName: string | null;
-  version: number | null;
-  verb: string | null;
+  /** Tooltip text — the app name (plus optional context like "Shown in right panel"). */
+  label: string;
+  /** Pressed state: this app is currently displayed in the right panel. */
+  active?: boolean;
+  onClick: () => void;
 }) {
   return (
-    <div className={cn(PILL_CLASS, "text-xs text-muted-foreground")}>
-      <AppWindow className="mx-1 h-3.5 w-3.5 shrink-0" />
-      <span className="min-w-0 flex-1 truncate px-1">
-        {appName ?? "App"}
-        {version != null && ` · v${version}`}
-        {verb && ` · ${verb}`}
-      </span>
-    </div>
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onClick}
+            aria-label={label}
+            aria-pressed={active}
+            className={cn(
+              "relative inline-flex size-8 items-center justify-center rounded-full border transition-all hover:border-accent-foreground/20 hover:bg-accent hover:text-foreground",
+              active
+                ? "border-accent-foreground/20 bg-accent text-foreground ring-2 ring-primary/20"
+                : "bg-background text-muted-foreground",
+            )}
+          >
+            <AppWindow className="h-4 w-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {label}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }

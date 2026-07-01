@@ -40,6 +40,13 @@ interface AppsContextValue {
   apps: PanelApp[];
   /** toolCallId of the app currently displayed in the panel (session-only). */
   selectedToolCallId: string | null;
+  /**
+   * toolCallId of the app actually rendered in the right panel right now, or
+   * null when the panel isn't hosting an app. Single source of truth shared by
+   * the chat stream (marker pressed state) and the panel — it folds together
+   * "panel is on the Apps tab" (`portalTarget`) and `selectedToolCallId`.
+   */
+  panelToolCallId: string | null;
   /** Update which app the panel displays. */
   select: (toolCallId: string) => void;
   /** DOM node where the selected app should portal its content; null when the panel is not on the Apps tab. */
@@ -63,6 +70,7 @@ const AppsContext = createContext<AppsContextValue | null>(null);
 const NOOP_VALUE: AppsContextValue = {
   apps: [],
   selectedToolCallId: null,
+  panelToolCallId: null,
   select: () => {},
   portalTarget: null,
   setPortalTarget: () => {},
@@ -137,6 +145,9 @@ export function AppsProvider({
     () => ({
       apps,
       selectedToolCallId,
+      // The panel only hosts an app while it's mounted on the Apps tab
+      // (`portalTarget` set); otherwise nothing is shown there.
+      panelToolCallId: portalTarget ? selectedToolCallId : null,
       select,
       portalTarget,
       setPortalTarget,

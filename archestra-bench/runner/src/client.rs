@@ -13,6 +13,7 @@ use tokio::time::{Duration, sleep, timeout};
 
 use crate::chat_stream;
 use crate::config::types::ToolExposureMode;
+use crate::elicitation::ElicitationAnswer;
 
 const DEFAULT_CHAT_TIMEOUT_S: f64 = 1800.0;
 
@@ -591,6 +592,31 @@ impl EvalClient {
         self.request(Method::GET, path, None, None)
             .await
             .map_err(ClientError::Api)
+    }
+
+    /// Answer a pending MCP elicitation so the blocked tool call unblocks. The backend caches the
+    /// response for its 10-minute poll window, so a very early POST is still consumed.
+    pub async fn resolve_elicitation(
+        &self,
+        id: &str,
+        conversation_id: &str,
+        answer: &ElicitationAnswer,
+    ) -> Result<(), ClientError> {
+        let mut body = serde_json::json!({
+            "conversationId": conversation_id,
+            "action": answer.action,
+        });
+        if let Some(content) = &answer.content {
+            body["content"] = JsonValue::Object(content.clone());
+        }
+        self.request(
+            Method::POST,
+            &format!("/api/chat/elicitation/{id}"),
+            None,
+            Some(&body),
+        )
+        .await?;
+        Ok(())
     }
 
     pub async fn create_conversation(

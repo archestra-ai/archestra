@@ -1562,6 +1562,136 @@ describe("createAgentServer tools/list", () => {
     }
   });
 
+  test("keeps a UI-providing tool top-level in search_and_run_only, hides a non-UI sibling", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      toolExposureMode: "search_and_run_only",
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "bug-tracker",
+    });
+    const uiResourceUri = "ui://archestra-app/bug-tracker";
+    const uiTool = await makeTool({
+      catalogId: catalog.id,
+      name: "bug_tracker__open",
+      parameters: { type: "object", properties: {} },
+      meta: { _meta: { ui: { resourceUri: uiResourceUri } } },
+    });
+    const plainTool = await makeTool({
+      catalogId: catalog.id,
+      name: "bug_tracker__list",
+      parameters: { type: "object", properties: {} },
+    });
+    await makeAgentTool(agent.id, uiTool.id);
+    await makeAgentTool(agent.id, plainTool.id);
+
+    const { server } = await createAgentServer(agent.id, {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      isUserToken: true,
+      userId: user.id,
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+
+    expect(listToolsHandler).toBeDefined();
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const byName = new Map(response.tools.map((tool) => [tool.name, tool]));
+
+    // The UI tool must stay directly listed so an MCP Apps host can render it,
+    // carrying its ui:// resource; the non-UI sibling stays behind search/run.
+    expect(byName.has("bug_tracker__open")).toBe(true);
+    expect(
+      (
+        byName.get("bug_tracker__open")?._meta as
+          | { ui?: { resourceUri?: string } }
+          | undefined
+      )?.ui?.resourceUri,
+    ).toBe(uiResourceUri);
+    expect(byName.has("bug_tracker__list")).toBe(false);
+  });
+
+  test("full mode lists a UI-providing tool with its resource", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "bug-tracker",
+    });
+    const uiResourceUri = "ui://archestra-app/bug-tracker";
+    const uiTool = await makeTool({
+      catalogId: catalog.id,
+      name: "bug_tracker__open",
+      parameters: { type: "object", properties: {} },
+      meta: { _meta: { ui: { resourceUri: uiResourceUri } } },
+    });
+    await makeAgentTool(agent.id, uiTool.id);
+
+    const { server } = await createAgentServer(agent.id, {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      isUserToken: true,
+      userId: user.id,
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const openTool = response.tools.find(
+      (tool) => tool.name === "bug_tracker__open",
+    );
+    expect(openTool).toBeDefined();
+    expect(
+      (openTool?._meta as { ui?: { resourceUri?: string } } | undefined)?.ui
+        ?.resourceUri,
+    ).toBe(uiResourceUri);
+  });
+
   test("adds assigned MCP server context to search_tools description", async ({
     makeAgent,
     makeAgentTool,

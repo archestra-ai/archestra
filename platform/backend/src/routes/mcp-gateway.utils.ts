@@ -1615,9 +1615,14 @@ function filterExposedTools(params: {
   return tools.filter((tool) => {
     // `search_and_run_only` normally hides every tool behind search_tools/run_tool,
     // but the meta tools themselves and the always-exposed skill path must stay
-    // top-level. `full` mode hides only the meta tools.
+    // top-level. UI-providing tools (app launch tools, external ext-apps tools)
+    // must too: an MCP Apps host renders a UI only from a tool DEFINITION listed
+    // at discovery time, so a tool hidden behind search/run can never render its
+    // `ui://` resource. `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
-      ? isArchestraMetaTool(tool.name) || isAlwaysExposedTool(tool.name)
+      ? isArchestraMetaTool(tool.name) ||
+          isAlwaysExposedTool(tool.name) ||
+          providesUiResource(tool)
       : !isArchestraMetaTool(tool.name);
   });
 }
@@ -1760,4 +1765,22 @@ function isArchestraMetaTool(toolName: string) {
 function isAlwaysExposedTool(toolName: string) {
   const shortName = archestraMcpBranding.getToolShortName(toolName);
   return shortName !== null && isAlwaysExposedArchestraToolShortName(shortName);
+}
+
+/**
+ * True when the tool carries an MCP App `ui://` resource in its definition —
+ * canonical `_meta.ui.resourceUri` or the legacy flat `ui/resourceUri` key.
+ * Mirrors {@link toolUiResourceUriSql} (models/tool.ts) so the in-memory gate and
+ * the DB-side `providesUi` predicate never drift.
+ */
+function providesUiResource(tool: McpListToolCandidate): boolean {
+  const meta = tool.meta?._meta as
+    | { ui?: { resourceUri?: unknown }; "ui/resourceUri"?: unknown }
+    | undefined;
+  // Scheme-check each key independently before falling back, matching the SQL's
+  // per-key `like 'ui://%'` inside coalesce — so a non-ui:// canonical value
+  // doesn't mask a valid legacy one.
+  const isUiUri = (value: unknown): boolean =>
+    typeof value === "string" && value.startsWith("ui://");
+  return isUiUri(meta?.ui?.resourceUri) || isUiUri(meta?.["ui/resourceUri"]);
 }

@@ -441,7 +441,8 @@ class TrustedDataPolicyModel {
     // Get all tool calls subject to policy evaluation: non-built-ins plus
     // policy-evaluated built-ins like `query_knowledge_sources`.
     const nonArchestraToolCalls = toolCalls.filter(
-      ({ toolName }) => !archestraMcpBranding.isPolicyBypassedToolName(toolName),
+      ({ toolName }) =>
+        !archestraMcpBranding.isPolicyBypassedToolName(toolName),
     );
 
     if (nonArchestraToolCalls.length === 0) {

@@ -55,6 +55,11 @@ const TOKEN_COUNT_CACHE_MAX_ENTRIES = 10_000;
 export abstract class BaseTokenizer implements Tokenizer {
   private readonly tokenCountCache = new LRUCacheManager<number>({
     maxSize: TOKEN_COUNT_CACHE_MAX_ENTRIES,
+    // Token counts are a pure function of the input, so they never go stale.
+    // Disable the manager's default (1h) TTL and rely solely on LRU eviction —
+    // otherwise a long-running conversation re-encodes every message once an
+    // hour, the exact cost this memo exists to avoid.
+    defaultTtl: 0,
   });
 
   countTokens(messages: ProviderMessage[] | ProviderMessage): number {

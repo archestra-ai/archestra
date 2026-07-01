@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test, vi } from "@/test";
 import { AnthropicTokenizer } from "./anthropic";
 import { BaseTokenizer, type ProviderMessage } from "./base";
 import { getTokenizer } from "./index";
@@ -198,6 +198,27 @@ describe("Tokenizers", () => {
 
       // Only the two unique (role, content) pairs are encoded.
       expect(tokenizer.computeCalls).toBe(2);
+    });
+
+    test("does not expire cached counts over time (deterministic)", () => {
+      // Token counts are pure, so the memo must not use the cache manager's
+      // default 1h TTL — otherwise long conversations re-encode every hour.
+      vi.useFakeTimers();
+      try {
+        const tokenizer = new CountingTokenizer();
+        const message: ProviderMessage = { role: "user", content: "hello" };
+
+        tokenizer.countTokens(message);
+        expect(tokenizer.computeCalls).toBe(1);
+
+        // Advance well past the manager's 1h default TTL.
+        vi.advanceTimersByTime(2 * 60 * 60 * 1000);
+
+        tokenizer.countTokens(message);
+        expect(tokenizer.computeCalls).toBe(1); // still served from the memo
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

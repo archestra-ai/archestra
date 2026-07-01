@@ -102,18 +102,18 @@ beforeAll(async () => {
   // send PGlite down the browser path mid-init.
   await pgliteClient.waitReady;
 
-  // Set the test database via the internal setter (for getDb() and proxy)
+  // Set the test database via the internal setter. The module's default
+  // export is a forwarding Proxy over getDb(), so consumers — including
+  // singletons constructed at import time, like better-auth's drizzle
+  // adapter — always reach the CURRENT file's database. Do not replace the
+  // default export with the concrete instance: in a shared worker
+  // (isolate: false) that would pin import-time consumers to whichever
+  // file's PGlite happened to be live, which is closed by the time later
+  // files run ("PGlite is closed").
   const dbModule = await import("../database/index.js");
   dbModule.__setTestDb(
     testDb as unknown as Parameters<typeof dbModule.__setTestDb>[0],
   );
-
-  // Also replace the default export for compatibility
-  Object.defineProperty(dbModule, "default", {
-    value: testDb,
-    writable: true,
-    configurable: true,
-  });
 });
 
 /**
@@ -147,9 +147,17 @@ beforeEach(async () => {
 });
 
 /**
- * Clear mocks after each test
+ * Clear mocks after each test, and restore the real fetch.
+ *
+ * Several tests replace `globalThis.fetch` directly (not via vi.stubGlobal,
+ * which `unstubGlobals` already handles). A mock left behind — e.g. when an
+ * assertion throws before an inline restore — poisons every later file in
+ * the worker. This hook is registered before any test-file hooks, so Vitest
+ * runs it LAST in the afterEach sequence: it always gets the final word.
  */
+const realFetch = globalThis.fetch;
 afterEach(() => {
+  globalThis.fetch = realFetch;
   vi.clearAllMocks();
 });
 

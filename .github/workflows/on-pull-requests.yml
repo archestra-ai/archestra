@@ -417,6 +417,9 @@ jobs:
     defaults:
       run:
         working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     strategy:
       # A failing shard must not cancel its siblings; we want the full
       # failure picture in one pass.
@@ -434,6 +437,13 @@ jobs:
         uses: ./.github/actions/setup-env
         with:
           working-directory: ./platform
+
+      # Tests load the Rust NAPI bindings (@archestra/app-runtime-rs etc.),
+      # which `turbo check:ci` builds implicitly via the task graph. Running
+      # vitest directly skips that, so build backend's workspace deps here —
+      # turbo remote caching makes this seconds on a cache hit.
+      - name: Build backend workspace dependencies
+        run: pnpm exec turbo build --filter="@backend^..."
 
       - name: Run backend unit tests (shard ${{ matrix.shard }} of 4)
         working-directory: ./platform/backend

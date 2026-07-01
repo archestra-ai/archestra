@@ -1090,6 +1090,64 @@ describe("McpClient", () => {
         );
       });
 
+      test("still offers the install link for a team-token caller (fail-open: no user identity to check accessibility against)", async ({
+        makeMember,
+        makeOrganization,
+        makeTeam,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const owner = await makeUser();
+        await makeMember(owner.id, org.id, { role: "member" });
+        const team = await makeTeam(org.id, owner.id);
+
+        // A personal-scope catalog item owned by `owner`. A team token has no
+        // user identity, so accessibility cannot be evaluated for it; the
+        // fail-open MUST keep offering the install link (the caller behind the
+        // token may still be able to act on it). If accessibility were ever
+        // computed for team tokens, this personal item would be inaccessible
+        // and the link would be dropped — so this pin guards the fail-open.
+        const catalogItem = await InternalMcpCatalogModel.create(
+          {
+            name: `personal-${randomUUID().slice(0, 8)}`,
+            serverType: "remote",
+            serverUrl: "https://example.com/mcp",
+            scope: "personal",
+          },
+          { organizationId: org.id, authorId: owner.id },
+        );
+        const tool = await ToolModel.createToolIfNotExists({
+          name: `${catalogItem.name}__do_thing`,
+          description: "Personal-server tool",
+          parameters: {},
+          catalogId: catalogItem.id,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "dynamic",
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_teamtoken", name: tool.name, arguments: {} },
+          agentOwner(agentId),
+          {
+            tokenId: "tok-team",
+            teamId: team.id,
+            isOrganizationToken: false,
+            organizationId: org.id,
+          },
+        );
+
+        expect(result.isError).toBe(true);
+        const archestraError = result?._meta?.archestraError as
+          | { type?: string; action?: string; actionUrl?: string }
+          | undefined;
+        expect(archestraError?.type).toBe("auth_required");
+        expect(archestraError?.action).toBe("install_mcp_credentials");
+        expect(archestraError?.actionUrl).toContain(
+          `/mcp/registry?install=${catalogItem.id}`,
+        );
+      });
+
       test("All-tools mode ignores a static assignment pin and uses the server's connection policy", async ({
         makeAgent,
         makeMember,

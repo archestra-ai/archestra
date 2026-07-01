@@ -195,19 +195,25 @@ pub struct PrepareManifest {
     pub rollouts: Vec<PreparedRollout>,
 }
 
+/// Persist each rollout's full rendered trajectory as `trajectory.md` next to its source jsonl, so
+/// the complete, untruncated trajectory is inspectable after the fact. `trajectory.md` is never
+/// re-discovered (the glob wants jsonl).
+fn persist_trajectories(rollouts: &[Rollout]) -> Result<()> {
+    for rollout in rollouts {
+        let md_path = rollout.dir.join("trajectory.md");
+        std::fs::write(&md_path, &rollout.markdown)
+            .wrap_err_with(|| format!("writing rendered trajectory to {}", md_path.display()))?;
+    }
+    Ok(())
+}
+
 /// Render every rollout's `trajectory.md` and build the deterministic manifest, reusing the exact
 /// discovery, rendering, metrics, and ordering of [`analyze`] — no LLM, no network. Lets a
 /// different reducer (e.g. Claude subagents) run the map-reduce over identical inputs.
 pub fn prepare_run_dir(run_dir: &Path) -> Result<PrepareManifest> {
     let mut rollouts = discover_rollouts(run_dir)?;
 
-    // Persist the full rendered trajectory next to its source jsonl (same side effect as `analyze`),
-    // so external tooling reads the complete, untruncated trajectory.
-    for rollout in &rollouts {
-        let md_path = rollout.dir.join("trajectory.md");
-        std::fs::write(&md_path, &rollout.markdown)
-            .wrap_err_with(|| format!("writing rendered trajectory to {}", md_path.display()))?;
-    }
+    persist_trajectories(&rollouts)?;
 
     rollouts.sort_by(|a, b| rollout_order(a.meta.is_pass(), &a.id, b.meta.is_pass(), &b.id));
 
@@ -266,13 +272,7 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
         format!("● {total} rollouts in {}", cfg.run_dir.display()),
     );
 
-    // Persist the full rendered trajectory next to its source jsonl, so the rollout is inspectable
-    // after the fact in full. `trajectory.md` is never re-discovered (glob wants jsonl).
-    for rollout in &rollouts {
-        let md_path = rollout.dir.join("trajectory.md");
-        std::fs::write(&md_path, &rollout.markdown)
-            .wrap_err_with(|| format!("writing rendered trajectory to {}", md_path.display()))?;
-    }
+    persist_trajectories(&rollouts)?;
 
     let map_client = nitpicker_agent::client_from_env(to_provider(
         map_lane.provider,

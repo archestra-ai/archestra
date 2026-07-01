@@ -159,8 +159,7 @@ const registry = defineArchestraTools([
       "Call list_skills first to discover what is available. Call load_skill " +
       "with just a name to load the skill's instructions and its bundled-file " +
       "list; load it before attempting the task it covers. Call it with a name " +
-      "and a path from that list to read one bundled file. To run a bundled " +
-      "script, use run_command (loaded skills are available under /skills).",
+      "and a path from that list to read one bundled file.",
     schema: LoadSkillSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);

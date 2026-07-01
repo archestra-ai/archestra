@@ -72,8 +72,19 @@ vi.mock("@/components/chat/editable-user-message", () => ({
 }));
 
 vi.mock("@/components/chat/inline-chat-error", () => ({
-  InlineChatError: ({ error }: { error: Error }) => (
-    <div data-testid="inline-chat-error">{error.message}</div>
+  InlineChatError: ({
+    error,
+    onRetry,
+  }: {
+    error: Error;
+    onRetry?: () => void;
+  }) => (
+    <div
+      data-testid="inline-chat-error"
+      data-has-retry={onRetry ? "true" : "false"}
+    >
+      {error.message}
+    </div>
   ),
 }));
 
@@ -417,6 +428,67 @@ describe("ChatMessages", () => {
     expect(error.compareDocumentPosition(retry)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
+    // A retry resends the last user turn, but this error precedes a later
+    // message — offering retry here would rerun the wrong turn.
+    expect(error.getAttribute("data-has-retry")).toBe("false");
+  });
+
+  it("offers retry only on the trailing persisted error, not an older one", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        metadata: { createdAt: "2026-04-22T12:00:00.000Z" },
+        parts: [{ type: "text", text: "first try" }],
+      },
+      {
+        id: "user-2",
+        role: "user",
+        metadata: { createdAt: "2026-04-22T12:02:00.000Z" },
+        parts: [{ type: "text", text: "second try" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        onChatErrorRetry={vi.fn()}
+        chatErrors={[
+          {
+            id: "error-old",
+            conversationId: "conv-1",
+            createdAt: "2026-04-22T12:01:00.000Z",
+            error: {
+              code: "network_error",
+              message: "Older failure",
+              isRetryable: true,
+            },
+          },
+          {
+            id: "error-latest",
+            conversationId: "conv-1",
+            createdAt: "2026-04-22T12:05:00.000Z",
+            error: {
+              code: "network_error",
+              message: "Latest failure",
+              isRetryable: true,
+            },
+          },
+        ]}
+      />,
+    );
+
+    const errors = screen.getAllByTestId("inline-chat-error");
+    const older = errors.find((el) =>
+      el.textContent?.includes("Older failure"),
+    );
+    const latest = errors.find((el) =>
+      el.textContent?.includes("Latest failure"),
+    );
+    expect(older?.getAttribute("data-has-retry")).toBe("false");
+    expect(latest?.getAttribute("data-has-retry")).toBe("true");
   });
 
   it("renders unavailable tool failures as tool rows without global chat errors", () => {

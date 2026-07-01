@@ -14,7 +14,7 @@ import {
 } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const { getLlmModels, getModelsWithApiKeys, updateModel, syncLlmModels } =
   archestraApiSdk;
@@ -53,10 +53,7 @@ export function useLlmModels(params?: LlmModelsParams) {
       const { data, error, response } = await getLlmModels({
         query: apiKeyId ? { apiKeyId } : undefined,
       });
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error);
       scheduleRefetchAfterLazyModelSync({ queryClient, queryKey, response });
       return data ?? [];
     },
@@ -81,10 +78,7 @@ export function useEmbeddingModels(apiKeyId: string | null) {
       const { data, error, response } = await getLlmModels({
         query: { apiKeyId, isEmbedding: "true" },
       });
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error);
       scheduleRefetchAfterLazyModelSync({ queryClient, queryKey, response });
       return data ?? [];
     },
@@ -123,15 +117,13 @@ export function useLlmModelsByProvider(params?: LlmModelsParams) {
   };
 }
 
-export function useModelsWithApiKeys() {
+export function useModelsWithApiKeys(options?: { toastOnError?: boolean }) {
+  const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: ["models-with-api-keys"],
     queryFn: async (): Promise<ModelWithApiKeys[]> => {
       const { data, error } = await getModelsWithApiKeys();
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error, { toastOnError });
       return data ?? [];
     },
   });

@@ -30,6 +30,14 @@ class OrganizationModel {
   }
 
   /**
+   * The deployment's display name for user-facing copy, honoring enterprise
+   * white-labeling. Falls back to "Archestra" when unset.
+   */
+  static async getAppName(): Promise<string> {
+    return (await OrganizationModel.getFirst())?.appName || "Archestra";
+  }
+
+  /**
    * Get or create the default organization
    */
   static async getOrCreateDefaultOrganization(): Promise<Organization> {

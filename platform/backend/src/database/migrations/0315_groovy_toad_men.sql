@@ -1,0 +1,1 @@
+ALTER TABLE "interactions" ADD COLUMN "input_tokens_estimated" boolean DEFAULT false NOT NULL;

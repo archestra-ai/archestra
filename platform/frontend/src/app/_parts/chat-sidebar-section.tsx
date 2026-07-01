@@ -1,8 +1,13 @@
 "use client";
 
 import {
+  getChatItemGeneratingIndicatorTestId,
+  getChatItemUnreadIndicatorTestId,
+} from "@archestra/shared";
+import {
   Folder,
   FolderPlus,
+  Loader2,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -142,8 +147,9 @@ export function ChatSidebarSection({
     title: string;
   } | null>(null);
 
-  // Conversations whose title should play the typing animation (shared via chat context)
-  const { animatingTitleIds, markTitleAnimating } = useGlobalChat();
+  // Conversations whose title should play the typing animation (shared via chat
+  // context); getSession drives the live "generating" spinner.
+  const { animatingTitleIds, markTitleAnimating, getSession } = useGlobalChat();
 
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -263,6 +269,14 @@ export function ChatSidebarSection({
 
   const renderConversationItem = (conv: (typeof conversations)[number]) => {
     const isCurrentConversation = currentConversationId === conv.id;
+    const sessionStatus = getSession(conv.id)?.status;
+    const isGenerating =
+      sessionStatus === "submitted" || sessionStatus === "streaming";
+    // `unread` is server-derived (lastMessageAt > lastReadAt). Suppressed on the
+    // chat you're viewing (its read marker is being updated) and while it is
+    // actively generating (the spinner wins).
+    const isUnread =
+      !isGenerating && !isCurrentConversation && conv.unread === true;
     const displayTitle = getConversationDisplayTitle(conv.title, conv.messages);
     const hasRecentlyGeneratedTitle = animatingTitleIds.has(conv.id);
     const isRegenerating =
@@ -373,6 +387,20 @@ export function ChatSidebarSection({
                   />
                 )}
               </span>
+              {isGenerating ? (
+                <Loader2
+                  aria-label="Generating"
+                  data-testid={getChatItemGeneratingIndicatorTestId(conv.id)}
+                  className="ml-1 h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground"
+                />
+              ) : isUnread ? (
+                <span
+                  role="img"
+                  aria-label="New messages"
+                  data-testid={getChatItemUnreadIndicatorTestId(conv.id)}
+                  className="ml-1 h-2 w-2 shrink-0 rounded-full bg-primary"
+                />
+              ) : null}
               {conv.projectName && (
                 <span className="ml-1 flex max-w-24 shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
                   {conv.projectIcon ? (

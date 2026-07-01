@@ -33,6 +33,7 @@ import {
   LimitValidationService,
   LlmProviderApiKeyModel,
   ModelModel,
+  OrganizationModel,
   TeamModel,
   ToolInvocationPolicyModel,
   UserModel,
@@ -60,7 +61,6 @@ import {
   type DualLlmAnalysis,
   type InteractionAuthMethod,
   type InteractionRequest,
-  type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
@@ -80,6 +80,7 @@ import {
   virtualKeyRateLimiter,
 } from "./llm-proxy-auth";
 import {
+  applyInputTokenFallback,
   buildInteractionRecord,
   calculateInteractionCosts,
   handleError,
@@ -178,6 +179,20 @@ function getProviderMessagesCount(messages: unknown): number | null {
 }
 
 /**
+ * The subset of a proxied request body we read for session-id and client-app
+ * extraction. Each consumer only touches its own fields (`detectClaudeClientId`
+ * → `system`/`metadata`; `extractSessionInfo` → `metadata`/`user`), so one
+ * shared view keeps the cast in a single place.
+ */
+type RequestBodyForExtraction =
+  | {
+      system?: unknown;
+      metadata?: { user_id?: string | null };
+      user?: string | null;
+    }
+  | undefined;
+
+/**
  * Generic LLM proxy handler that works with any provider through adapters
  */
 export async function handleLLMProxy<
@@ -201,8 +216,13 @@ export async function handleLLMProxy<
     string,
     string | string[] | undefined
   >;
+  const bodyForExtraction = body as RequestBodyForExtraction;
+  // Client-app attribution: the caller-supplied X-Archestra-Agent-Id header (or
+  // X-Archestra-Meta segment 0) wins; otherwise auto-discover a known client
+  // app from the request and record it (Claude clients → "anthropic_claude").
   const externalAgentId =
-    utils.headers.externalAgentId.getExternalAgentId(headersForExtraction);
+    utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
+    utils.headers.clientApp.detectClaudeClientId(bodyForExtraction);
   const executionId =
     utils.headers.executionId.getExecutionId(headersForExtraction);
   const authOverride = (
@@ -228,12 +248,7 @@ export async function handleLLMProxy<
   const { sessionId, sessionSource } =
     utils.headers.sessionId.extractSessionInfo(
       headersForExtraction,
-      body as
-        | {
-            metadata?: { user_id?: string | null };
-            user?: string | null;
-          }
-        | undefined,
+      bodyForExtraction,
     );
 
   // Extract interaction source (chat, chatops, email, etc.)
@@ -621,6 +636,13 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Limit check passed`,
     );
 
+    // Resolve the agent's organization once. Reused below for the discovered-tool
+    // persist defaults and further down for the global tool policy, so a proxied
+    // request that includes tools no longer reads the organization twice.
+    const organization = await OrganizationModel.getById(
+      resolvedAgent.organizationId,
+    );
+
     // Persist tools declared by client (only for llm_proxy agents)
     if (resolvedAgent.agentType === "llm_proxy") {
       const tools = requestAdapter.getTools();
@@ -629,6 +651,8 @@ export async function handleLLMProxy<
           { toolCount: tools.length },
           `[${providerName}Proxy] Processing tools from request`,
         );
+        // Apply the org's configured default policies to every newly
+        // discovered tool persisted below.
         await utils.tools.persistTools(
           tools.map((t) => ({
             toolName: t.name,
@@ -636,6 +660,13 @@ export async function handleLLMProxy<
             toolDescription: t.description,
           })),
           resolvedAgentId,
+          organization
+            ? {
+                invocationAction:
+                  organization.defaultDiscoveredToolInvocationPolicy,
+                resultAction: organization.defaultDiscoveredToolResultPolicy,
+              }
+            : undefined,
         );
       }
     }
@@ -702,9 +733,10 @@ export async function handleLLMProxy<
       }
     };
 
-    // Get global tool policy from organization (with fallback) - needed for both trusted data and tool invocation
-    const globalToolPolicy =
-      await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
+    // Global tool policy is an org-level setting; read it from the organization
+    // resolved above (defaults to "permissive" if the org is missing). Needed for
+    // both trusted data and tool invocation enforcement.
+    const globalToolPolicy = organization?.globalToolPolicy ?? "permissive";
 
     // Fetch the agent's teams (with labels) once. Used both for policy
     // evaluation context (trusted data) and for trace span team attributes.
@@ -997,7 +1029,7 @@ export async function handleLLMProxy<
         type: provider.interactionType,
         request: requestAdapter.getOriginalRequest() as InteractionRequest,
         processedRequest: null,
-        response: { error: errorMessage } as unknown as InteractionResponse,
+        response: { error: errorMessage },
         model: requestAdapter.getModel(),
         baselineModel: requestAdapter.getModel(),
         inputTokens: 0,
@@ -1194,6 +1226,19 @@ async function handleStreaming<
 
         // Set response attributes on span per OTEL GenAI semconv
         const { state } = streamAdapter;
+        // Correct zero-input usage before any consumer (span cost, metrics, the
+        // finally-block cost/persistence) reads it — they all share state.usage.
+        if (state.usage) {
+          const fallbackAdapter =
+            provider.createRequestAdapter(originalRequest);
+          state.usage = applyInputTokenFallback({
+            usage: state.usage,
+            provider: providerName,
+            providerMessages: fallbackAdapter.getProviderMessages(),
+            tools: fallbackAdapter.getTools(),
+            model: actualModel,
+          });
+        }
         if (state.model) {
           llmSpan.setAttribute(ATTR_GENAI_RESPONSE_MODEL, state.model);
         }
@@ -1525,7 +1570,7 @@ async function handleNonStreaming<
   );
 
   // Execute request with tracing
-  const { responseAdapter } = await utils.tracing.startActiveLlmSpan({
+  const { responseAdapter, usage } = await utils.tracing.startActiveLlmSpan({
     operationName: provider.spanName,
     provider: providerName,
     model: actualModel,
@@ -1549,8 +1594,17 @@ async function handleNonStreaming<
       const result = await provider.execute(client, request);
       const adapter = provider.createResponseAdapter(result);
 
-      // Set response attributes on span per OTEL GenAI semconv
-      const usage = adapter.getUsage();
+      // Set response attributes on span per OTEL GenAI semconv. Correct zero-input
+      // usage here so the span cost and the downstream cost/persistence (which
+      // reuse this usage) all see the estimate.
+      const fallbackAdapter = provider.createRequestAdapter(originalRequest);
+      const usage = applyInputTokenFallback({
+        usage: adapter.getUsage(),
+        provider: providerName,
+        providerMessages: fallbackAdapter.getProviderMessages(),
+        tools: fallbackAdapter.getTools(),
+        model: actualModel,
+      });
       llmSpan.setAttribute(ATTR_GENAI_RESPONSE_MODEL, adapter.getModel());
       llmSpan.setAttribute(ATTR_GENAI_RESPONSE_ID, adapter.getId());
       // Per the GenAI semconv, gen_ai.usage.input_tokens includes cached tokens.
@@ -1621,7 +1675,7 @@ async function handleNonStreaming<
         }
       }
 
-      return { response: result, responseAdapter: adapter };
+      return { response: result, responseAdapter: adapter, usage };
     },
   });
 
@@ -1673,8 +1727,7 @@ async function handleNonStreaming<
         externalAgentId,
       });
 
-      // Record interaction with refusal
-      const usage = responseAdapter.getUsage();
+      // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
         baselineModel,
         actualModel,
@@ -1736,8 +1789,8 @@ async function handleNonStreaming<
     }
   }
 
-  // Tool calls allowed (or no tool calls) - return response
-  const usage = responseAdapter.getUsage();
+  // Tool calls allowed (or no tool calls) - return response.
+  // `usage` (corrected for zero-input above) is reused here.
 
   // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
   // for non-streaming requests. We only report cost here to avoid double counting.

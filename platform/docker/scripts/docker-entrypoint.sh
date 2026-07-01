@@ -71,6 +71,40 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     echo "ARCHESTRA_QUICKSTART=true detected"
     echo "Quickstart mode enabled - initializing embedded KinD cluster..."
 
+    # Quickstart is meant for humans tailing `docker logs`, so default the
+    # backend log format to pretty. User-set values win.
+    export ARCHESTRA_LOGGING_FORMAT="${ARCHESTRA_LOGGING_FORMAT:-pretty}"
+
+    # Explain to the human reading docker logs why we're about to spin up
+    # a Kubernetes cluster. The box and the body are sized to the live TTY
+    # width so the banner doesn't wrap mid-bar on narrow windows.
+    BANNER_COLS=$(stty size 2>/dev/null | awk '{print $2}')
+    [ -z "$BANNER_COLS" ] && BANNER_COLS="${COLUMNS:-80}"
+    case "$BANNER_COLS" in ''|*[!0-9]*) BANNER_COLS=80 ;; esac
+    [ "$BANNER_COLS" -lt 40 ] && BANNER_COLS=40
+    BANNER_BAR=$(printf '═%.0s' $(seq 1 "$BANNER_COLS"))
+    # 2-space left indent + 2-space safety margin so wrapped lines never
+    # bump the right edge of the bar.
+    BANNER_WRAP=$((BANNER_COLS - 4))
+    CYAN='\033[1;36m'
+    NC='\033[0m'
+
+    echo ""
+    printf "${CYAN}%s${NC}\n" "$BANNER_BAR"
+    echo ""
+    echo "Archestra's MCP Orchestrator is also a Kubernetes operator." \
+        | fold -s -w "$BANNER_WRAP" \
+        | while IFS= read -r line; do
+            printf "${CYAN}  %s${NC}\n" "$line"
+        done
+    echo ""
+    echo "For demo purposes we're running a small Kubernetes (KinD) cluster to spin up your MCP servers." \
+        | fold -s -w "$BANNER_WRAP" \
+        | sed 's/^/  /'
+    echo ""
+    printf "${CYAN}%s${NC}\n" "$BANNER_BAR"
+    echo ""
+
     if [ ! -S /var/run/docker.sock ]; then
         echo "Quickstart mode is on but Docker socket is not mounted"
         echo "Add: -v /var/run/docker.sock:/var/run/docker.sock to your docker run command"

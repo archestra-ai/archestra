@@ -1,0 +1,14 @@
+[[stages]]
+text = """Jacek Kowalski's total income for 2023 was 1,750,000 in his local currency. How much solidarity tax did he owe for that year? Give the amount in US dollars, converted at the exchange rate from the last banking day of that year and rounded down. Submit your answer with result = {"tax_owed_usd": <integer>}."""
+
+[result_schema]
+type = "object"
+required = ["tax_owed_usd"]
+additionalProperties = false
+
+  [result_schema.properties.tax_owed_usd]
+  type = "integer"
+  minimum = 1
+
+[verifier]
+deps = []

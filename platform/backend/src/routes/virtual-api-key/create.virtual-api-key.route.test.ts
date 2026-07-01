@@ -634,7 +634,7 @@ describe("POST /api/llm-virtual-keys", () => {
     );
   });
 
-  test("passthrough: creates a personal key with an empty proxy list", async () => {
+  test("passthrough: creates a personal key", async () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/llm-virtual-keys",
@@ -647,7 +647,7 @@ describe("POST /api/llm-virtual-keys", () => {
     expect(body.scope).toBe("personal");
     expect(body.authorId).toBe(user.id);
     expect(body.providerApiKeys).toEqual([]);
-    expect(body.allowedLlmProxies).toEqual([]);
+    expect(body.allowedLlmProxies).toBeUndefined();
     expect(hasArchestraTokenPrefix(body.value)).toBe(true);
   });
 
@@ -671,56 +671,6 @@ describe("POST /api/llm-virtual-keys", () => {
     });
 
     expect(response.statusCode).toBe(400);
-  });
-
-  test("passthrough: creates with an accessible org-scoped proxy", async ({
-    makeAgent,
-  }) => {
-    const proxy = await makeAgent({
-      organizationId,
-      agentType: "llm_proxy",
-      scope: "org",
-    });
-
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/llm-virtual-keys",
-      payload: {
-        name: "PT scoped",
-        keyType: "passthrough",
-        allowedLlmProxyIds: [proxy.id],
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json().allowedLlmProxies).toEqual([
-      { id: proxy.id, name: proxy.name },
-    ]);
-  });
-
-  test("passthrough: non-admin cannot select an inaccessible proxy", async ({
-    makeAgent,
-    makeUser,
-  }) => {
-    const otherUser = await makeUser();
-    const personalProxy = await makeAgent({
-      organizationId,
-      agentType: "llm_proxy",
-      scope: "personal",
-      authorId: otherUser.id,
-    });
-
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/llm-virtual-keys",
-      payload: {
-        name: "PT no access",
-        keyType: "passthrough",
-        allowedLlmProxyIds: [personalProxy.id],
-      },
-    });
-
-    expect(response.statusCode).toBe(404);
   });
 
   test("passthrough: admin can create on behalf of another user", async ({

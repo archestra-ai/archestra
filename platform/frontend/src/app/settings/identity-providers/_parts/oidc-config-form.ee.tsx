@@ -292,6 +292,7 @@ export function OidcConfigForm({
                 <FormControl>
                   <Input
                     type="password"
+                    autoComplete="new-password"
                     placeholder="your-client-secret"
                     {...field}
                   />
@@ -655,7 +656,12 @@ function EnterpriseManagedCredentialsForm(props: {
             <FormItem>
               <FormLabel>Exchange Client Secret</FormLabel>
               <FormControl>
-                <Input type="password" placeholder="Optional" {...field} />
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Optional"
+                  {...field}
+                />
               </FormControl>
               <FormDescription>
                 Only used when the exchange endpoint authenticates with a client

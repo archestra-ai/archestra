@@ -1,5 +1,7 @@
 import {
+  CLAUDE_CODE_CLIENT_ID,
   DEFAULT_APP_NAME,
+  EXTERNAL_AGENT_ID_HEADER,
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
@@ -326,7 +328,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       }
       if (ctx.skills) {
         steps.push(
-          `Run /plugin marketplace browse ${ctx.skills.marketplaceName} inside Claude Code to install the shared skills.`,
+          "The shared skills are installed for Claude Code — start `claude` and they load automatically.",
         );
       }
       break;
@@ -453,9 +455,13 @@ claude mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
   }
 
   if (ctx.skills) {
-    sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
+    const pluginRef = `${ctx.skills.marketplaceName}@${ctx.skills.marketplaceName}`;
+    sections.push(`say ${sh(`Installing the "${ctx.skills.marketplaceName}" skills bundle`)}
 if ! claude plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
-  warn "Marketplace may already be registered — run /plugin inside Claude Code to inspect."
+  warn "Marketplace may already be registered — continuing."
+fi
+if ! claude plugin install ${sh(pluginRef)}; then
+  warn ${sh(`Could not install the skills automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)}
 fi`);
   }
 
@@ -473,18 +479,21 @@ env = settings.setdefault("env", {})
 for key in os.environ:
     if key.startswith("ARCHESTRA_SET_ENV_"):
         env[key.removeprefix("ARCHESTRA_SET_ENV_")] = os.environ[key]
-# Append-merge a single custom header into ANTHROPIC_CUSTOM_HEADERS: keep the
-# user's other headers, replace only our line (matched case-insensitively by
-# header name) so re-runs and key rotation never duplicate or leave a stale one.
-append_header = os.environ.get("ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS")
-if append_header:
-    name = append_header.split(":", 1)[0].strip().lower()
+# Append-merge our custom headers into ANTHROPIC_CUSTOM_HEADERS: keep the user's
+# other headers, replace only our lines (matched case-insensitively by header
+# name) so re-runs and key rotation never duplicate or leave a stale one. The
+# append var carries one "Name: Value" per line (e.g. the agent-id attribution
+# header and the passthrough key header).
+append_headers = os.environ.get("ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS")
+if append_headers:
+    new_lines = [ln for ln in append_headers.splitlines() if ln.strip()]
+    new_names = {ln.split(":", 1)[0].strip().lower() for ln in new_lines}
     existing = env.get("ANTHROPIC_CUSTOM_HEADERS", "") or ""
     lines = [
         ln for ln in existing.splitlines()
-        if ln.strip() and ln.split(":", 1)[0].strip().lower() != name
+        if ln.strip() and ln.split(":", 1)[0].strip().lower() not in new_names
     ]
-    lines.append(append_header)
+    lines.extend(new_lines)
     env["ANTHROPIC_CUSTOM_HEADERS"] = "\\n".join(lines)
 path.write_text(json.dumps(settings, indent=2) + "\\n")
 print(f"Updated {path}")`;
@@ -498,14 +507,17 @@ function claudeAnthropicProxySection(proxy: SetupScriptProxySection): string {
     env.ARCHESTRA_SET_ENV_ANTHROPIC_AUTH_TOKEN = proxy.virtualKey;
     manualEnv.ANTHROPIC_AUTH_TOKEN = proxy.virtualKey;
   }
-  // Passthrough attribution: add the X-Archestra-Virtual-Key header so the
-  // proxy attributes the request to the user, without clobbering any custom
-  // headers they already set (the merge appends/replaces only our line).
+  // Custom headers, one "Name: Value" per line (the merge appends/replaces only
+  // our lines, never clobbering headers the user already set):
+  //  - X-Archestra-Agent-Id attributes the request to the Claude Code client.
+  //  - X-Archestra-Virtual-Key (passthrough) attributes it to the user.
+  const headerLines = [`${EXTERNAL_AGENT_ID_HEADER}: ${CLAUDE_CODE_CLIENT_ID}`];
   if (proxy.passthroughVirtualKey) {
-    const headerLine = `${VIRTUAL_KEY_HEADER}: ${proxy.passthroughVirtualKey}`;
-    env.ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS = headerLine;
-    manualEnv.ANTHROPIC_CUSTOM_HEADERS = headerLine;
+    headerLines.push(`${VIRTUAL_KEY_HEADER}: ${proxy.passthroughVirtualKey}`);
   }
+  const customHeaders = headerLines.join("\n");
+  env.ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS = customHeaders;
+  manualEnv.ANTHROPIC_CUSTOM_HEADERS = customHeaders;
   const passthroughNote = proxy.virtualKey
     ? ""
     : `

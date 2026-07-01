@@ -21,22 +21,22 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
+import { getScheduledRunChatState } from "@/app/scheduled-tasks/schedule-trigger.utils";
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
+import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { AppsProvider } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import {
-  collectBrowserToolCallIds,
-  deriveAppsFromMessages,
-} from "@/components/chat/chat-messages.utils";
+import { collectBrowserToolCallIds } from "@/components/chat/chat-messages.utils";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
@@ -51,11 +51,13 @@ import {
 } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
+import { useChatApps } from "@/components/chat/use-chat-apps";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread, {
   type PartialUIMessage,
 } from "@/components/message-thread";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
+import { ScheduledRunInProgress } from "@/components/scheduled-tasks/scheduled-run-in-progress";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -90,12 +92,14 @@ import {
 } from "@/lib/chat/app-diagnostics-store";
 import {
   fetchConversationEnabledTools,
+  invalidateConversationFileQueries,
   useClearChatErrors,
   useCompactConversation,
   useConversation,
   useConversationFiles,
   useCreateConversation,
   useHasPlaywrightMcpTools,
+  useKeepViewedConversationRead,
   useMemberDefaultModel,
   useStopChatStream,
   useUpdateConversation,
@@ -117,6 +121,11 @@ import {
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
+  drainPendingChatHandoffFiles,
+  hasPendingChatHandoffFiles,
+} from "@/lib/chat/pending-chat-handoff-files";
+import { takePendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
+import {
   applyPendingActions,
   clearPendingActions,
   getPendingActions,
@@ -127,6 +136,10 @@ import {
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useConfig, useFeature } from "@/lib/config/config.query";
+import {
+  type ConnectivityState,
+  useConnectivity,
+} from "@/lib/config/connectivity";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
@@ -134,14 +147,15 @@ import {
   type SupportedProvider,
   useLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
-import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useOrganization } from "@/lib/organization.query";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { useProjectFiles } from "@/lib/projects/projects.query";
+import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
   buildCreateConversationInput,
+  isAutoSendHandoffInProgress,
   resolveChatModelState,
   resolvePreferredModelForProvider,
 } from "./chat-initial-state";
@@ -161,6 +175,19 @@ function parseRightPanelTab(value: string | null): RightPanelTab | null {
   return RIGHT_PANEL_TABS.includes(value as RightPanelTab)
     ? (value as RightPanelTab)
     : null;
+}
+
+// Copy for the chat-send guard, picked per failure mode so the message matches
+// reality (browser offline vs backend down, which is not "you're offline").
+function offlineSubmitMessage(
+  kind: Exclude<ConnectivityState["kind"], "online">,
+): string {
+  switch (kind) {
+    case "browser-offline":
+      return "You're offline — your message wasn't sent. Try again once you're back online.";
+    case "backend-unreachable":
+      return "Can't reach the server — your message wasn't sent. Try again in a moment.";
+  }
 }
 
 export function ChatPageContent({
@@ -293,6 +320,43 @@ export function ChatPageContent({
   const scheduledRun = scheduledRunContext(searchParams);
   const scheduledRunTriggerId = scheduledRun?.triggerId ?? null;
 
+  // Poll the pinned scheduled run while it's still running. A project-scoped
+  // run's transcript is only persisted at completion, so the chat shows an
+  // in-progress placeholder (and hides the composer) until then, and reveals the
+  // transcript the moment the run finishes. Polling stops once the run is
+  // terminal so a completed run's chat isn't polled forever.
+  const { data: scheduledRunData } = useScheduleTriggerRun(
+    scheduledRunTriggerId,
+    scheduledRun?.runId ?? null,
+    {
+      refetchInterval: (query) =>
+        query.state.data?.status === "running" ? 3_000 : false,
+    },
+  );
+  const { isRunInProgress: isScheduledRunInProgress } =
+    getScheduledRunChatState({
+      context: scheduledRun,
+      runStatus: scheduledRunData?.status,
+    });
+  // When the run flips from running to done, refetch the conversation so its
+  // just-persisted transcript (or error card) loads without a manual refresh.
+  const prevScheduledRunStatusRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const previous = prevScheduledRunStatusRef.current;
+    const current = scheduledRunData?.status;
+    prevScheduledRunStatusRef.current = current;
+    if (
+      previous === "running" &&
+      current != null &&
+      current !== "running" &&
+      conversationId
+    ) {
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", conversationId],
+      });
+    }
+  }, [scheduledRunData?.status, conversationId, queryClient]);
+
   const hasChatAccess = canReadAgent !== false;
   const canUseProviderSettings =
     canReadLlmProvider === true && canReadLlmModels === true;
@@ -305,8 +369,15 @@ export function ChatPageContent({
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
     useLlmModelsByProvider({ enabled: canUseProviderSettings });
-  const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
-    useLlmProviderApiKeys({ enabled: hasChatAccess && canUseProviderSettings });
+  const {
+    data: chatApiKeys = [],
+    isLoading: isLoadingApiKeys,
+    isLoadingError: isApiKeysLoadError,
+    refetch: refetchApiKeys,
+  } = useLlmProviderApiKeys({
+    enabled: hasChatAccess && canUseProviderSettings,
+    toastOnError: false,
+  });
   const { data: organization, isPending: isOrgLoading } = useOrganization();
   // The user's saved default (model, key) pair — top of the resolution chain
   // for a new chat ("member" level).
@@ -378,6 +449,20 @@ export function ChatPageContent({
     return searchParams.get("user_prompt") || undefined;
   }, [searchParams]);
 
+  // A chat started from a project is created up front by the project composer,
+  // which stashes its opening prompt and navigates straight here. Drain that
+  // prompt (and any attachments the composer stashed) into the
+  // pending-initial-message refs so the shared send effect delivers them as the
+  // conversation's first message. Gated on the conversation id, so an ordinary
+  // /chat/<id> open never consumes it.
+  useEffect(() => {
+    if (!conversationId) return;
+    const handoff = takePendingProjectChatHandoff(conversationId);
+    if (!handoff) return;
+    pendingPromptRef.current = handoff.prompt || undefined;
+    pendingFilesRef.current = drainPendingChatHandoffFiles();
+  }, [conversationId]);
+
   // Update URL when conversation changes
   const selectConversation = useCallback(
     (id: string | undefined) => {
@@ -435,6 +520,7 @@ export function ChatPageContent({
     initialMessages: persistedConversationMessages,
     enabled: shouldEnableChatSession,
   });
+  const connectivity = useConnectivity();
   const sharedConversationMessages = useMemo(
     () => (conversation?.messages ?? []) as PartialUIMessage[],
     [conversation?.messages],
@@ -465,6 +551,10 @@ export function ChatPageContent({
 
   // Conversations whose title should play the typing animation (shared via chat context)
   const { animatingTitleIds: headerAnimatingTitles } = useGlobalChat();
+
+  // Viewing a conversation marks it read (clears the sidebar new-messages dot).
+  // Reads the viewed id from the URL internally.
+  useKeepViewedConversationRead();
 
   // Restore the right-side panel (open state + selected tab) when a conversation
   // loads. Both are remembered per-conversation in localStorage.
@@ -799,32 +889,48 @@ export function ChatPageContent({
         : persistedConversationMessages,
     [chatSession?.messages, persistedConversationMessages],
   );
-  // Derive the MCP App list from the conversation itself so the panel selector
-  // is deterministic and survives transient section unmounts (the previous
-  // mount-effect registry could empty when a single app's section briefly
-  // unmounted).
-  const { getToolShortName: getArchestraToolShortName } =
-    useArchestraMcpIdentity();
-  const mcpApps = useMemo(
-    () =>
-      deriveAppsFromMessages(
-        messages,
-        chatSession?.earlyToolUiStarts ?? {},
-        getArchestraToolShortName,
-      ),
-    [messages, chatSession?.earlyToolUiStarts, getArchestraToolShortName],
-  );
+  const mcpApps = useChatApps({
+    messages,
+    earlyToolUiStarts: chatSession?.earlyToolUiStarts ?? {},
+    filterDeleted: true,
+  });
   const sendMessage = chatSession?.sendMessage;
   const regenerateUserMessage = chatSession?.regenerateUserMessage;
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
 
+  // A scheduled run's transcript is persisted only when it completes, so a run
+  // opened while still running seeds the live chat session empty. When the run
+  // finishes, the completion effect refetches the conversation; hydrate the
+  // (still-empty) session with the arrived transcript so the chat renders without
+  // a manual refresh. Gated to the empty-session case, so it never clobbers an
+  // ordinary conversation (seeded via initialMessages) or a live turn.
+  useEffect(() => {
+    if (!scheduledRunTriggerId || isScheduledRunInProgress || !setMessages) {
+      return;
+    }
+    if (
+      persistedConversationMessages.length > 0 &&
+      chatSession?.messages?.length === 0
+    ) {
+      setMessages(persistedConversationMessages);
+    }
+  }, [
+    scheduledRunTriggerId,
+    isScheduledRunInProgress,
+    persistedConversationMessages,
+    chatSession?.messages?.length,
+    setMessages,
+  ]);
+
   // Re-send the most recent user message by regenerating its turn. Shared by the
-  // provider-connect auto-rerun and the scheduled-run "Try again". Returns whether
-  // a resend was actually started (false while a turn is in flight or there's no
-  // user message), so callers can skip side effects when nothing is resent.
-  const resendLastUserMessage = useCallback((): boolean => {
+  // provider-connect auto-rerun and the "Try again" affordance. Resolves to whether
+  // a resend was actually issued (false while a turn is in flight or there's no user
+  // message); awaiting regenerateUserMessage means it only resolves true once the
+  // turn is genuinely being re-run, so callers can safely gate side effects (e.g.
+  // clearing the persisted error) on the result.
+  const resendLastUserMessage = useCallback(async (): Promise<boolean> => {
     if (status === "submitted" || status === "streaming") return false;
     if (!regenerateUserMessage) return false;
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -834,7 +940,7 @@ export function ChatPageContent({
       if (partIndex < 0) return false;
       const part = message.parts[partIndex];
       const text = "text" in part ? part.text : "";
-      void regenerateUserMessage({ messageId: message.id, partIndex, text });
+      await regenerateUserMessage({ messageId: message.id, partIndex, text });
       return true;
     }
     return false;
@@ -842,18 +948,31 @@ export function ChatPageContent({
 
   // After the user connects a per-user provider (e.g. GitHub Copilot) via the
   // inline auth card, re-run their original prompt automatically. The connect
-  // mutation already invalidated the model/key caches.
-  const handleProviderConnected = resendLastUserMessage;
+  // mutation already invalidated the model/key caches. Fire-and-forget: the
+  // provider-auth card owns its own feedback.
+  const handleProviderConnected = useCallback(() => {
+    void resendLastUserMessage().catch((error) => {
+      console.error("[Chat] Failed to re-run after provider connect", error);
+    });
+  }, [resendLastUserMessage]);
 
-  // Scheduled-run "Try again": resend the scheduled prompt, and only once that's
-  // underway clear the persisted error so the card disappears. Ordering matters —
-  // clearing first would wipe the error card even if the resend couldn't start.
-  // Only wired for scheduled-run chats (and the chat is owner-editable here, since
-  // read-only viewers render MessageThread instead of this).
+  // "Try again" on a retryable chat error: resend the last user turn, and only
+  // once the resend is genuinely issued clear the persisted error so the card
+  // disappears. Ordering matters — clearing first would wipe the error card even
+  // if the resend never started. If the resend itself fails, keep the card so the
+  // user still sees the error. Owner-editable chats only (read-only viewers render
+  // MessageThread instead of this).
   const clearChatErrors = useClearChatErrors();
-  const handleScheduledRunRetry = useCallback(async () => {
+  const handleChatErrorRetry = useCallback(async () => {
     if (!conversationId) return;
-    if (!resendLastUserMessage()) return;
+    let resent: boolean;
+    try {
+      resent = await resendLastUserMessage();
+    } catch (error) {
+      console.error("[Chat] Retry failed to resend the last message", error);
+      return;
+    }
+    if (!resent) return;
     await clearChatErrors.mutateAsync({ id: conversationId });
   }, [conversationId, clearChatErrors, resendLastUserMessage]);
   // Hide the error while the session is auto-recovering (retry scheduled or
@@ -1225,11 +1344,9 @@ export function ChatPageContent({
     if (!isWaitingForAssistant) return;
 
     const interval = setInterval(() => {
-      queryClient.invalidateQueries({
-        queryKey: ["conversation", conversationId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["conversation-files", conversationId],
+      invalidateConversationFileQueries(queryClient, {
+        conversationId,
+        projectId: conversation?.projectId,
       });
     }, 3000);
 
@@ -1237,6 +1354,7 @@ export function ChatPageContent({
   }, [
     conversationId,
     conversation?.messages,
+    conversation?.projectId,
     messages.length,
     status,
     queryClient,
@@ -1248,13 +1366,11 @@ export function ChatPageContent({
   // Files panel can follow the latest output.
   useEffect(() => {
     if (!conversationId || status !== "ready") return;
-    queryClient.invalidateQueries({
-      queryKey: ["conversation-files", conversationId],
+    invalidateConversationFileQueries(queryClient, {
+      conversationId,
+      projectId: conversation?.projectId,
     });
-    queryClient.invalidateQueries({
-      queryKey: ["conversation", conversationId],
-    });
-  }, [status, conversationId, queryClient]);
+  }, [status, conversationId, conversation?.projectId, queryClient]);
 
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
   // or when conversation loads (e.g., new chat created, hard refresh)
@@ -1293,6 +1409,14 @@ export function ChatPageContent({
       // streaming; treating that click as an accepted submit would clear any
       // follow-up the user had already started typing.
       throw new Error("stop-not-submit");
+    }
+
+    const { kind: connectivityKind } = connectivity.state;
+    if (connectivityKind !== "online") {
+      toast.error(offlineSubmitMessage(connectivityKind));
+      // Throw to keep the textarea and draft intact (onSubmit contract): the
+      // user keeps their message instead of losing it to a silent failure.
+      throw new Error("offline-not-submit");
     }
 
     const hasText = message.text?.trim();
@@ -1423,6 +1547,32 @@ export function ChatPageContent({
     autoOpenedRunsRef.current = conversationId;
     openRightPanelTab("runs");
   }, [scheduledRunTriggerId, conversationId, openRightPanelTab]);
+
+  // When a conversation has an app but no saved right-panel preference yet (the
+  // user hasn't manually opened/closed it in this chat), open the Apps tab once
+  // so the app shows immediately — e.g. landing on a freshly-seeded "open app"
+  // chat. A manual override is respected; once opened, openRightPanelTab persists
+  // the preference, so this never fights the restore effect.
+  const autoOpenedAppsRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!conversationId || isLoadingConversation) return;
+    if (mcpApps.length === 0) return;
+    if (autoOpenedAppsRef.current === conversationId) return;
+    autoOpenedAppsRef.current = conversationId;
+    if (
+      localStorage.getItem(
+        conversationStorageKeys(conversationId).rightPanelOpen,
+      ) !== null
+    ) {
+      return;
+    }
+    openRightPanelTab("apps");
+  }, [
+    conversationId,
+    isLoadingConversation,
+    mcpApps.length,
+    openRightPanelTab,
+  ]);
 
   const toggleRightPanel = useCallback(() => {
     if (isRightPanelOpen) {
@@ -1672,9 +1822,15 @@ export function ChatPageContent({
     useCallback(
       (message, e, options) => {
         e.preventDefault();
+        const { kind: connectivityKind } = connectivity.state;
+        if (connectivityKind !== "online") {
+          toast.error(offlineSubmitMessage(connectivityKind));
+          // Throw to keep the textarea and draft intact (onSubmit contract).
+          throw new Error("offline-not-submit");
+        }
         submitInitialMessage(message, options?.skill);
       },
-      [submitInitialMessage],
+      [submitInitialMessage, connectivity.state],
     );
 
   // A chat started from a project page keeps the Files panel open when the
@@ -1694,8 +1850,16 @@ export function ChatPageContent({
 
   // Auto-send message from URL when conditions are met (deep link support)
   useEffect(() => {
-    // Skip if already triggered or no user_prompt in URL
-    if (autoSendTriggeredRef.current || !initialUserPrompt) return;
+    if (autoSendTriggeredRef.current) return;
+
+    // A handoff that stashed attachments stamps `attachments=1` and may carry no
+    // prompt (files-only), so it triggers the send too — but only when the files
+    // are actually still in memory, else a reloaded handoff URL (store cleared)
+    // would create an empty conversation.
+    const handoffHasAttachments = searchParams.get("attachments") === "1";
+    const handoffFilesReady =
+      handoffHasAttachments && hasPendingChatHandoffFiles();
+    if (!initialUserPrompt && !handoffFilesReady) return;
 
     // Skip if conversation already exists
     if (conversationId) return;
@@ -1713,8 +1877,13 @@ export function ChatPageContent({
       searchParams,
     });
 
-    // Store the message to send after conversation is created
+    // Store the message to send after conversation is created. Draining is
+    // gated on the URL marker so the shared auto-send path never pulls stashed
+    // files into an unrelated handoff (app / SSO / a2a / deep link).
     pendingPromptRef.current = initialUserPrompt;
+    pendingFilesRef.current = handoffHasAttachments
+      ? drainPendingChatHandoffFiles()
+      : [];
 
     createInitialConversation((newConversation) => {
       // the init effect on the /chat/<id> mount reads this preference and
@@ -1829,6 +1998,15 @@ export function ChatPageContent({
     );
   }
 
+  // The first keys fetch failed with no cached list (e.g. offline cold start).
+  // Show a retry state rather than the setup prompt, which would wrongly imply
+  // the user has no keys configured. `isLoadingError` is scoped to the
+  // first-fetch failure: a failed background refetch keeps the last successful
+  // result, so we don't flip a working or known-empty screen to this one.
+  if (isApiKeysLoadError) {
+    return <ApiKeyLoadError onRetry={() => refetchApiKeys()} />;
+  }
+
   // If API key is not configured, show setup prompt with inline creation dialog
   if (!hasAnyApiKey) {
     // Reset to a clean /chat URL after a key is added so no stale conversation
@@ -1901,10 +2079,25 @@ export function ChatPageContent({
     );
   }
 
+  // A chat opened via a handoff (project composer, app, SSO, a2a, deep link)
+  // lands on /chat carrying a `user_prompt` (or a stashed-attachments marker),
+  // auto-creates a conversation, then navigates to /chat/<id>. Rendering the
+  // centered New Chat splash during that brief window flashes the empty home
+  // before the conversation view mounts, so suppress it while the handoff runs.
+  const isAutoSendHandoffPending = isAutoSendHandoffInProgress({
+    conversationId,
+    initialUserPrompt,
+    hasAttachmentsMarker: searchParams.get("attachments") === "1",
+    hasPendingHandoffFiles: hasPendingChatHandoffFiles(),
+    autoSendTriggered: autoSendTriggeredRef.current,
+    isCreatingConversation: createConversationMutation.isPending,
+  });
+
   return (
     <AppsProvider
       apps={mcpApps}
       onShowInPanel={() => openRightPanelTab("apps" as RightPanelTab)}
+      onClosePanel={closeRightPanel}
     >
       <div className="flex h-full w-full min-h-0">
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
@@ -1921,6 +2114,7 @@ export function ChatPageContent({
               canManageShare={canManageShare}
               isShared={isShared}
               canCreateProject={canCreateProjectFromThisChat}
+              scheduleTriggerId={scheduledRunTriggerId}
               onShare={() => setIsShareDialogOpen(true)}
               onExportMarkdown={handleExportMarkdown}
               onCreateProject={() => setIsCreateProjectOpen(true)}
@@ -1980,7 +2174,9 @@ export function ChatPageContent({
                     isRightPanelOpen && "hidden md:block",
                   )}
                 >
-                  {isReadOnlyConversation ? (
+                  {isScheduledRunInProgress ? (
+                    <ScheduledRunInProgress />
+                  ) : isReadOnlyConversation ? (
                     <MessageThread
                       messages={sharedConversationMessages}
                       chatErrors={conversation?.chatErrors ?? []}
@@ -2018,9 +2214,7 @@ export function ChatPageContent({
                       compactions={conversation?.compactions ?? []}
                       onRegenerateUserMessage={regenerateUserMessage}
                       onProviderConnected={handleProviderConnected}
-                      onChatErrorRetry={
-                        scheduledRun ? handleScheduledRunRetry : undefined
-                      }
+                      onChatErrorRetry={handleChatErrorRetry}
                       error={error}
                       onToolApprovalResponse={
                         addToolApprovalResponse
@@ -2033,7 +2227,7 @@ export function ChatPageContent({
                   )}
                 </div>
 
-                {isReadOnlyConversation ? (
+                {isScheduledRunInProgress ? null : isReadOnlyConversation ? (
                   <div className="sticky bottom-0 bg-background border-t p-4">
                     <div className="max-w-4xl mx-auto space-y-3">
                       <div className="relative">
@@ -2156,6 +2350,11 @@ export function ChatPageContent({
                   )
                 )}
               </>
+            ) : isAutoSendHandoffPending ? (
+              /* Handoff auto-send in progress: render an empty pane instead of
+                 the centered New Chat splash, so the empty home never flashes
+                 before we navigate to /chat/<id>. */
+              <div className="flex-1 min-h-0" />
             ) : (
               /* No active chat: centered prompt input */
               newChatAgentId && (
@@ -2396,6 +2595,9 @@ function clearUserPromptQueryParam(params: {
 }) {
   const nextSearchParams = new URLSearchParams(params.searchParams.toString());
   nextSearchParams.delete("user_prompt");
+  // The attachments marker is one-shot too: drop it once consumed so a remount
+  // can't re-trigger a drain (which would now find an empty store).
+  nextSearchParams.delete("attachments");
   const nextUrl = nextSearchParams.toString()
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;

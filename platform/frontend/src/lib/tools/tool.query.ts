@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
+import { throwOnApiError } from "@/lib/utils";
 
 const { getTools, getToolsWithAssignments } = archestraApiSdk;
 
@@ -19,7 +20,11 @@ export function useTools({
 }) {
   return useQuery({
     queryKey: ["tools"],
-    queryFn: async () => (await getTools()).data ?? null,
+    queryFn: async () => {
+      const { data, error } = await getTools();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
     initialData,
   });
 }
@@ -72,6 +77,7 @@ export function useToolsWithAssignments({
           excludeArchestraTools: filters?.excludeArchestraTools,
         },
       });
+      throwOnApiError(result.error, { toastOnError: false });
       return (
         result.data ?? {
           data: [],

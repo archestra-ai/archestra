@@ -3,7 +3,7 @@ title: Authentication
 category: LLM Proxy
 order: 3
 description: Authentication methods for the LLM Proxy
-lastUpdated: 2026-06-18
+lastUpdated: 2026-07-01
 ---
 
 <!--
@@ -95,14 +95,13 @@ Unlike the unauthenticated `X-Archestra-User-Id` header, a passthrough key is a 
 
 - **Personal only**: a passthrough key belongs to one user. Admins can create one on behalf of another member; non-admins only for themselves.
 - **No provider keys**: it never maps a provider API key and cannot be used as a provider credential in the `Authorization` header.
-- **Proxy access**: select the LLM proxies the key may use. Leave the selection empty to allow any LLM proxy the owner can already access.
 - **Expirable**: set an optional expiration like any virtual key.
 
 ### Creating Passthrough Virtual Keys
 
 1. Go to **LLM Proxies > Credentials > Virtual Keys**
 2. Create a virtual key and choose the **Passthrough** type
-3. As an admin, optionally pick the owner, then optionally select the allowed LLM proxies
+3. As an admin, optionally pick the owner
 4. Copy the generated token (shown only once)
 
 ### Using
@@ -117,7 +116,7 @@ curl -X POST "https://archestra.example.com/v1/anthropic/{proxyId}/v1/messages" 
   -d '{"model": "claude-haiku-4-5-20251001", "max_tokens": 64, "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
-The interaction is attributed to the key's owner. A valid passthrough key authorizes the request at the proxy, but it does not by itself satisfy the upstream provider — that still needs its own credential. If the key does not grant access to the target proxy, the request is rejected with `403`.
+A valid passthrough key authenticates the user at the proxy, but it does not by itself satisfy the upstream provider — that still needs its own credential.
 
 ### Configuring Claude Code and Claude Desktop
 
@@ -127,16 +126,18 @@ The in-app Connection page wires this header up per platform (macOS, Linux, Wind
 {
   "env": {
     "ANTHROPIC_BASE_URL": "https://archestra.example.com/v1/anthropic/{proxyId}",
-    "ANTHROPIC_CUSTOM_HEADERS": "X-Archestra-Virtual-Key: arch_abc123def456..."
+    "ANTHROPIC_CUSTOM_HEADERS": "X-Archestra-Agent-Id: anthropic_claude_code\nX-Archestra-Virtual-Key: arch_abc123def456..."
   }
 }
 ```
 
 `ANTHROPIC_CUSTOM_HEADERS` takes `Name: Value` pairs (newline-separated for several). Leave `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_API_KEY` unset so the Claude subscription still authenticates the upstream call — the header only authenticates an Archestra user on an LLM Proxy.
 
-Claude Desktop can be configured by hand: open **Developer > Configure Third-Party Inference**, fill in the API key and base URL, then add a custom header named `X-Archestra-Virtual-Key` with the passthrough key as its value.
+The setup always adds `X-Archestra-Agent-Id` too — a non-secret client identifier (`anthropic_claude_code` for Claude Code, `anthropic_claude_desktop` for Claude Desktop) that attributes each proxied request to the client app in the LLM logs. It rides alongside the passthrough key but is independent of it, so it is present even when no passthrough key is provisioned.
 
-The connection page also generates an importable configuration profile file for Claude Desktop. Download it, then in **Configure Third-Party Inference** open the **Default** dropdown (top right) and choose **Import configuration…** to load it.
+Claude Desktop can be configured by hand: open **Developer > Configure Third-Party Inference**, fill in the API key and base URL, then add two custom headers — `X-Archestra-Agent-Id` set to `anthropic_claude_desktop`, and `X-Archestra-Virtual-Key` set to the passthrough key.
+
+The connection page also generates an importable configuration profile file for Claude Desktop. Download it, then in **Configure Third-Party Inference** open the **Default** dropdown (top right) and choose **Import configuration…** to load it. Click **Apply Changes** and restart Claude Desktop to pick up the new configuration.
 
 ## LLM OAuth Clients
 

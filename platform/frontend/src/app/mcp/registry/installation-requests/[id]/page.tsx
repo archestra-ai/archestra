@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle, Loader2, Send, XCircle } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useState } from "react";
 import Divider from "@/components/divider";
+import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +28,12 @@ export default function InstallationRequestDetailPage({
 }) {
   const { id } = use(params);
 
-  const { data: request, isLoading } = useMcpServerInstallationRequest(id);
+  const {
+    data: request,
+    isLoading,
+    isLoadingError,
+    refetch,
+  } = useMcpServerInstallationRequest(id);
   const approveMutation = useApproveMcpServerInstallationRequest();
   const declineMutation = useDeclineMcpServerInstallationRequest();
   const addNoteMutation = useAddMcpServerInstallationRequestNote();
@@ -87,6 +93,17 @@ export default function InstallationRequestDetailPage({
             </Card>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (isLoadingError) {
+    return (
+      <div>
+        <QueryLoadError
+          title="Couldn't load this request"
+          onRetry={() => refetch()}
+        />
       </div>
     );
   }

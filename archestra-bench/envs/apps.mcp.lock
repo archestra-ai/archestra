@@ -1,0 +1,7 @@
+{
+  "deepwiki": [
+    "deepwiki__ask_question",
+    "deepwiki__read_wiki_contents",
+    "deepwiki__read_wiki_structure"
+  ]
+}

@@ -47,6 +47,10 @@ interface AutoSelectableModel {
   /** The models.id UUID. */
   id: string;
   isBest?: boolean;
+  /** A per-user provider (e.g. GitHub Copilot) catalogued for all members. */
+  requiresUserConnection?: boolean;
+  /** Whether the viewer has connected the per-user provider. */
+  isConnected?: boolean;
 }
 
 /**
@@ -55,6 +59,12 @@ interface AutoSelectableModel {
  *
  * Auto-selection only triggers when the selected model is genuinely
  * unavailable (e.g. the API key changed and the model is no longer offered).
+ *
+ * Prefers a ready-to-use model over a per-user-provider model the viewer hasn't
+ * connected: the latter is catalogued org-wide and flagged "best", so without
+ * this it would win the fallback over the viewer's own keyed models (mirrors the
+ * ready-to-use fallback in `resolveInitialModel`). Falls back to the full list
+ * when nothing is ready, so a connect-only org still gets a selection.
  */
 export function resolveAutoSelectedModel(params: {
   selectedModel: string;
@@ -65,7 +75,10 @@ export function resolveAutoSelectedModel(params: {
   if (isLoading || availableModels.length === 0) return null;
   if (!selectedModel) return null;
   if (availableModels.some((m) => m.id === selectedModel)) return null;
-  const fallback = pickBestModel(availableModels);
+  const ready = availableModels.filter(
+    (m) => !(m.requiresUserConnection && !m.isConnected),
+  );
+  const fallback = pickBestModel(ready.length > 0 ? ready : availableModels);
   return fallback && fallback.id !== selectedModel ? fallback.id : null;
 }
 

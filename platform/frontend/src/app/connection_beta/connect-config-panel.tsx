@@ -36,7 +36,6 @@ import {
   platformLabels,
   toPlatformOption,
 } from "./platform.utils";
-import { TestSetupStep } from "./test-setup-link";
 import { WizardStep } from "./wizard-step";
 
 /** Clients whose setup is delivered as a downloadable Archestra config profile. */
@@ -241,7 +240,11 @@ export function ConnectConfigPanel({
         />
       </WizardStep>
 
-      <WizardStep n={4} title="Import the profile into Claude Desktop">
+      <WizardStep
+        n={4}
+        title="Import the profile into Claude Desktop"
+        last={!gateway}
+      >
         <div className="space-y-4 text-sm text-muted-foreground">
           <ol className="list-decimal space-y-2 pl-5">
             <li>
@@ -268,12 +271,19 @@ export function ConnectConfigPanel({
               .
             </li>
             <li>Select the configuration file you downloaded above.</li>
+            <li>
+              Click{" "}
+              <strong className="font-medium text-foreground">
+                Apply Changes
+              </strong>{" "}
+              and restart Claude Desktop.
+            </li>
           </ol>
         </div>
       </WizardStep>
 
       {gateway && (
-        <WizardStep n={5} title="Finish the OAuth flow">
+        <WizardStep n={5} title="Finish the OAuth flow" last>
           <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
             <li>
               Go to{" "}
@@ -297,20 +307,6 @@ export function ConnectConfigPanel({
           </ol>
         </WizardStep>
       )}
-
-      <WizardStep
-        n={gateway ? 6 : 5}
-        title="Restart Claude Desktop and send a test message"
-        last
-      >
-        <div className="space-y-4 text-sm text-muted-foreground">
-          <p>
-            Restart Claude Desktop, start a new conversation, and send the
-            message below. Requests appear in the LLM proxy logs.
-          </p>
-          <TestSetupStep />
-        </div>
-      </WizardStep>
     </>
   );
 }

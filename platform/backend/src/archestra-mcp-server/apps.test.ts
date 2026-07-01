@@ -30,10 +30,10 @@ import {
 } from "@/clients/chat-mcp-elicitation";
 import config from "@/config";
 import {
+  AppAccessModel,
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
-  AppTeamModel,
   AppToolModel,
   AppVersionModel,
   EnvironmentModel,
@@ -289,18 +289,30 @@ describe("app tool execution", () => {
     expect(head?.uiPermissions).toEqual({ camera: {} });
   });
 
-  test("scaffold seeds the default template and returns its HTML", async () => {
+  test("scaffold seeds the default template with the app name and returns its HTML", async () => {
     const created = await scaffold({ name: "From Template" });
     expect(created.isError).toBe(false);
     const appId = structured(created).id as string;
 
     const head = await AppVersionModel.findByAppAndVersion(appId, 1);
-    expect(head?.html).toContain("window.archestra.storage.user.set");
+    expect(head?.html).toContain("<h1>From Template</h1>");
+    expect(head?.html).not.toContain("{{APP_NAME}}");
     // Scaffold-then-edit: the seeded html rides the result text so the model
     // can edit_app without a read-back.
     expect((created.content[0] as any).text).toContain(
-      "window.archestra.storage.user.set",
+      "<h1>From Template</h1>",
     );
+  });
+
+  test("scaffold result carries the condensed window.archestra SDK surface", async () => {
+    const created = await scaffold({ name: "Counter" });
+    expect(created.isError).toBe(false);
+    // The create flow's first edit_app has the SDK contract — and the storage
+    // return shapes — in context without loading the full skill.
+    const text = (created.content[0] as any).text as string;
+    expect(text).toContain("archestra.storage.user.{get,set,list,delete}");
+    expect(text).toContain("{value, revision, owner}");
+    expect(text).toContain("Build App");
   });
 
   test("edit rejects SDK self-bootstrap html and surfaces fragment warnings", async () => {
@@ -576,6 +588,21 @@ describe("read_app / edit_app", () => {
     expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 
+  test("a self-overlapping old_str is rejected as ambiguous, not silently replaced", async () => {
+    // "aa" matches at indices 5 and 6 in "aaa" (overlapping). The uniqueness
+    // guard must see both and reject, never collapse to one and edit the first.
+    const { appId, version } = await scaffoldWithHtml("<pre>aaa</pre>");
+    const result = await editApp(appId, version, [
+      { old_str: "aa", new_str: "bb" },
+    ]);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("matched 2 times");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version))?.html,
+    ).toBe("<pre>aaa</pre>");
+  });
+
   test("a no-op edit (old_str === new_str) is rejected", async () => {
     const { appId, version } = await scaffoldWithHtml("<h1>same</h1>");
     const result = await editApp(appId, version, [
@@ -610,6 +637,177 @@ describe("read_app / edit_app", () => {
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("byte limit");
     expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+  });
+
+  test("a 0-match edit whose old_str differs only in whitespace is applied to the real span", async () => {
+    // The stored html has a triple space; the model's old_str has one. Exact
+    // match fails, but the collapsed-whitespace match is unique, so the edit
+    // lands on the real current span rather than erroring.
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body><p>Hello   World</p></body></html>",
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "Hello World", new_str: "Hi" },
+    ]);
+    expect(result.isError).toBe(false);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version + 1))?.html,
+    ).toBe("<html><head></head><body><p>Hi</p></body></html>");
+  });
+
+  test("a whitespace near-miss at the very end of the document applies over the full span", async () => {
+    // Exercises the end-boundary case (afterIdx maps to the trailing run). The
+    // matched span is the last thing in the document.
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body></body></html>\n\n<!-- TAIL    MARKER -->",
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "TAIL MARKER", new_str: "x" },
+    ]);
+    expect(result.isError).toBe(false);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version + 1))?.html,
+    ).toBe("<html><head></head><body></body></html>\n\n<!-- x -->");
+  });
+
+  test("an edit whose old_str drifted in indentation lands on the real source", async () => {
+    // The model reconstructs a block with different leading whitespace than the
+    // stored source; collapsed-whitespace matching applies it uniquely.
+    const stored = [
+      "<html><head></head><body>",
+      "  <ul>",
+      "    <li>one</li>",
+      "  </ul>",
+      "</body></html>",
+    ].join("\n");
+    const { appId, version } = await scaffoldWithHtml(stored);
+    const result = await editApp(appId, version, [
+      {
+        old_str: "<ul>\n<li>one</li>\n</ul>",
+        new_str: "<ol><li>one</li></ol>",
+      },
+    ]);
+    expect(result.isError).toBe(false);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version + 1))?.html,
+    ).toBe(
+      [
+        "<html><head></head><body>",
+        "  <ol><li>one</li></ol>",
+        "</body></html>",
+      ].join("\n"),
+    );
+  });
+
+  test("a genuine (non-whitespace) content drift still errors, not silently mis-applied", async () => {
+    // old_str differs from the source by a real character (43 vs 42), not just
+    // whitespace, so it must not auto-apply — it stays a 0-match error.
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body><span>42</span></body></html>",
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "<span>43</span>", new_str: "<span>99</span>" },
+    ]);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("0 matches");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+  });
+
+  test("a whitespace-only old_str with no near-miss falls back to read_app guidance", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body>nogapshere</body></html>",
+    );
+    // "\t" matches nothing exactly and normalizes to empty, so no hint applies.
+    const result = await editApp(appId, version, [
+      { old_str: "\t", new_str: "x" },
+    ]);
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("0 matches");
+    expect(text).toContain("read_app");
+  });
+
+  test("a 0-match edit with a one-char drift surfaces the current text via a unique anchor", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      [
+        "<html><head><title>Dash</title></head><body>",
+        '<div class="metrics-container-unique-anchor">',
+        "<span>42</span>",
+        "</div>",
+        "</body></html>",
+      ].join("\n"),
+    );
+    // old_str reconstructs the block from memory with 42 -> 43 on the span line.
+    const result = await editApp(appId, version, [
+      {
+        old_str:
+          '<div class="metrics-container-unique-anchor">\n<span>43</span>',
+        new_str: "<span>99</span>",
+      },
+    ]);
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("0 matches");
+    // the window around the unique anchor shows the real current value (42)
+    expect(text).toContain("<span>42</span>");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+  });
+
+  test("a partial edit that strips the document root is rejected atomically", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body><main>keep</main></body></html>",
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "<html><head></head><body>", new_str: "" },
+    ]);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("document root");
+    // nothing saved: still the same head version with its html
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version))?.html,
+    ).toBe("<html><head></head><body><main>keep</main></body></html>");
+  });
+
+  test("a multi-edit array that together strips the document root is rejected atomically", async () => {
+    const html = "<html><head></head><body><main>keep</main></body></html>";
+    const { appId, version } = await scaffoldWithHtml(html);
+    // Two edits (so it is not a whole-document replacement) that between them
+    // remove the <html> and <head> roots.
+    const result = await editApp(appId, version, [
+      { old_str: "<html>", new_str: "" },
+      { old_str: "<head></head>", new_str: "" },
+    ]);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("document root");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version))?.html,
+    ).toBe(html);
+  });
+
+  test("a whole-document rewrite to a fragment is allowed", async () => {
+    const html = "<html><head></head><body><p>full</p></body></html>";
+    const { appId, version } = await scaffoldWithHtml(html);
+    // single edit replacing the entire document — the deliberate "full rewrite"
+    const result = await editApp(appId, version, [
+      { old_str: html, new_str: "<p>just a fragment</p>" },
+    ]);
+    expect(result.isError).toBe(false);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version + 1))?.html,
+    ).toBe("<p>just a fragment</p>");
+  });
+
+  test("a partial edit on an app that was already a fragment is unaffected", async () => {
+    const { appId, version } = await scaffoldWithHtml("<p>frag</p>");
+    const result = await editApp(appId, version, [
+      { old_str: "frag", new_str: "fragment" },
+    ]);
+    expect(result.isError).toBe(false);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version + 1))?.html,
+    ).toBe("<p>fragment</p>");
   });
 
   test("edits that net back to the head create no new version and say so", async () => {
@@ -1678,7 +1876,7 @@ describe("publish_app", () => {
     );
     expect(result.isError).toBe(false);
     expect(structured(result).scope).toBe("team");
-    expect(await AppTeamModel.getTeamsForApp(app.id)).toEqual([team.id]);
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
   });
 
   // The source-scope gate: a team admin (editor) can see every org app but must
@@ -1711,7 +1909,7 @@ describe("publish_app", () => {
     expect(result.isError).toBe(true);
     // the org app is untouched — neither demoted nor reassigned
     expect((await AppModel.findById(app.id))?.scope).toBe("org");
-    expect(await AppTeamModel.getTeamsForApp(app.id)).toEqual([]);
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([]);
   });
 
   test("rejects teamIds when publishing to org scope", async ({

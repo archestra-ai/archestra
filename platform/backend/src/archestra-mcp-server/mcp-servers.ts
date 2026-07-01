@@ -31,7 +31,9 @@ import {
   ToolModel,
 } from "@/models";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import {
+  ApiError,
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
   PartialUpdateInternalMcpCatalogSchema,
@@ -1233,6 +1235,19 @@ async function handleDeployMcpServer(
           "This organization already has an installation of this MCP server.",
         );
       }
+    }
+
+    // Trusted-image-registry gate: identical to the install route. A personal
+    // local catalog item whose custom image is not in the target environment's
+    // trusted registries is blocked pending admin approval, before any
+    // deployment work.
+    try {
+      await assertInstallAllowedOrBlock({ catalogItem, organizationId });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return errorResult(error.message);
+      }
+      throw error;
     }
 
     const mcpServer = await McpServerModel.create({

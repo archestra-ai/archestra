@@ -34,6 +34,18 @@ Every organization has an implicit **Default** environment. Any resource whose e
 
 An environment can be marked **restricted**. Only members with the `environment:deploy-to-restricted` permission (or `environment:admin`, which implies it) can assign resources to a restricted environment. Unrestricted environments and Default stay open to anyone who can create the resource. The Default environment can be restricted the same way via organization settings.
 
+## Trusted image registries
+
+An environment can list the image registries it trusts. If an MCP server's image is not from a trusted registry, it is not deployed until an admin approves it. With no list set, any image is allowed.
+
+![MCP server held pending admin approval of its image](/docs/automated_screenshots/platform-environments_image-pending-approval.webp)
+
+### Use case
+
+Acme wants engineers to install MCP servers only from its own image registry. An admin sets the environment's trusted list to `registry.acme.com`. Servers built from `registry.acme.com/slack-mcp` or `registry.acme.com/jira-mcp` deploy automatically, but one from `ghcr.io/community/notion-mcp` waits for admin approval.
+
+![Trusted image registries editor in Settings > Environments](/docs/automated_screenshots/platform-environments_trusted-image-registries.webp)
+
 ## Tool and knowledge isolation
 
 An agent, MCP gateway, or LLM proxy assigned to **Production** can only see and use:

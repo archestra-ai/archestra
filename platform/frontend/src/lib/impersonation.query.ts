@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { handleApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils";
 
 // better-auth's admin plugin gates impersonateUser on `users.role === "admin"`
 // (the system-level role, not the org membership role). Org-admins whose
@@ -27,10 +27,7 @@ export function useImpersonationCandidates() {
     queryKey: impersonationKeys.candidates(),
     queryFn: async () => {
       const response = await archestraApiSdk.getImpersonableUsers();
-      if (response.error) {
-        handleApiError(response.error);
-        return [];
-      }
+      throwOnApiError(response.error);
       return response.data ?? [];
     },
     enabled: isAuthenticated && !!canManage,

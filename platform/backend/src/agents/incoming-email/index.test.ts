@@ -14,6 +14,7 @@ vi.mock("@/auth", () => ({
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth";
 import db, { schema } from "@/database";
+import ProcessedEmailModel from "@/models/processed-email";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { IncomingEmail } from "@/types";
 import { MAX_EMAIL_BODY_SIZE } from "./constants";
@@ -557,6 +558,111 @@ describe("processIncomingEmail", () => {
     // Second call with same messageId should be skipped (deduplication)
     await processIncomingEmail(email, mockProvider);
     expect(vi.mocked(executeA2AMessage)).not.toHaveBeenCalled();
+  });
+
+  test("releases the processed marker when the agent run fails so a redelivery retries", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+
+    const internalAgent = await createTestInternalAgent(org.id, {
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: "public",
+    });
+    const agentId = internalAgent.id;
+
+    await db
+      .insert(schema.agentTeamsTable)
+      .values({ agentId, teamId: team.id });
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => agentId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: "test-transient-failure-msg-1",
+      toAddress: `agents+agent-${agentId}@test.com`,
+      fromAddress: "sender@example.com",
+      subject: "Test Subject",
+      body: "Hello, agent!",
+      receivedAt: new Date(),
+    };
+
+    // First delivery: the agent run fails transiently (e.g. provider 429/5xx).
+    vi.mocked(executeA2AMessage).mockRejectedValueOnce(
+      new Error("transient provider failure"),
+    );
+
+    await expect(processIncomingEmail(email, mockProvider)).rejects.toThrow(
+      "transient provider failure",
+    );
+
+    // The claim must have been released so the email is not stuck as processed.
+    expect(await ProcessedEmailModel.isProcessed(email.messageId)).toBe(false);
+
+    // Redelivery of the same email should be reprocessed, not deduplicated away.
+    vi.mocked(executeA2AMessage).mockClear();
+    await processIncomingEmail(email, mockProvider);
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledTimes(1);
+    expect(await ProcessedEmailModel.isProcessed(email.messageId)).toBe(true);
+  });
+
+  test("keeps the email marked when validation fails (agent disabled), since retrying won't help", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+
+    const internalAgent = await createTestInternalAgent(org.id, {
+      incomingEmailEnabled: false,
+    });
+    const agentId = internalAgent.id;
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => agentId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: "test-validation-failure-msg-1",
+      toAddress: `agents+agent-${agentId}@test.com`,
+      fromAddress: "sender@example.com",
+      subject: "Test Subject",
+      body: "Hello, agent!",
+      receivedAt: new Date(),
+    };
+
+    vi.mocked(executeA2AMessage).mockClear();
+
+    await expect(processIncomingEmail(email, mockProvider)).rejects.toThrow(
+      /not enabled/,
+    );
+
+    // Agent never ran, and the marker stays so redelivery is deduplicated away.
+    expect(vi.mocked(executeA2AMessage)).not.toHaveBeenCalled();
+    expect(await ProcessedEmailModel.isProcessed(email.messageId)).toBe(true);
   });
 });
 

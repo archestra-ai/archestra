@@ -3,12 +3,16 @@ import {
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   CONTEXT_WINDOW_CATEGORIES,
   ContextWindowBreakdownSchema,
+  chatUploadRejectionReason,
   getAcceptedFileTypes,
   getMediaType,
+  getModelReadableMimeTypes,
   getSupportedFileTypesDescription,
   hasPersistableAssistantContent,
   hasRenderableAssistantContent,
+  INLINE_TEXT_MAX_BYTES,
   INPUT_MODALITY_OPTIONS,
+  isInlineableTextMimeType,
   OUTPUT_MODALITY_OPTIONS,
   supportsFileUploads,
 } from "./chat";
@@ -148,34 +152,34 @@ describe("CONTEXT_WINDOW_CATEGORIES", () => {
 });
 
 describe("chat file upload helpers", () => {
-  test("treats text modality as supporting txt, md, csv, and json uploads", () => {
+  const TEXT_MODALITY_MIME_TYPES = [
+    "text/plain",
+    "text/markdown",
+    "text/csv",
+    "text/tab-separated-values",
+    "application/json",
+    "text/xml",
+    "application/xml",
+    "application/x-yaml",
+    "application/yaml",
+    "text/yaml",
+    "application/toml",
+    "text/x-toml",
+    "application/csv",
+    "application/vnd.ms-excel",
+  ];
+
+  test("treats text modality as supporting the inlineable text document types", () => {
     expect(getAcceptedFileTypes(["text"])).toBe(
-      [
-        "text/plain",
-        "text/markdown",
-        "text/csv",
-        "application/csv",
-        "application/vnd.ms-excel",
-        "application/json",
-      ].join(","),
+      TEXT_MODALITY_MIME_TYPES.join(","),
     );
     expect(supportsFileUploads(["text"])).toBe(true);
-    expect(getSupportedFileTypesDescription(["text"])).toBe(
-      "chat prompts, .txt, .csv, .md, and .json uploads",
-    );
+    expect(getSupportedFileTypesDescription(["text"])).not.toBeNull();
   });
 
   test("deduplicates mime types across modalities", () => {
     expect(getAcceptedFileTypes(["text", "text", "pdf"])).toBe(
-      [
-        "text/plain",
-        "text/markdown",
-        "text/csv",
-        "application/csv",
-        "application/vnd.ms-excel",
-        "application/json",
-        "application/pdf",
-      ].join(","),
+      [...TEXT_MODALITY_MIME_TYPES, "application/pdf"].join(","),
     );
   });
 
@@ -187,11 +191,9 @@ describe("chat file upload helpers", () => {
     expect(getSupportedFileTypesDescription(undefined)).toBeNull();
   });
 
-  test("builds a readable description for multiple upload modalities", () => {
-    expect(
-      getSupportedFileTypesDescription(["text", "image", "pdf", "audio"]),
-    ).toBe(
-      "chat prompts, .txt, .csv, .md, and .json uploads, images, PDFs, audio",
+  test("joins per-modality descriptions for multiple upload modalities", () => {
+    expect(getSupportedFileTypesDescription(["image", "pdf", "audio"])).toBe(
+      "images, PDFs, audio",
     );
   });
 
@@ -206,8 +208,43 @@ describe("chat file upload helpers", () => {
       "application/pdf",
     );
     expect(getMediaType({ name: "table.csv", type: "" })).toBe("text/csv");
+    expect(getMediaType({ name: "data.tsv", type: "" })).toBe(
+      "text/tab-separated-values",
+    );
     expect(getMediaType({ name: "README.md", type: "" })).toBe("text/markdown");
     expect(getMediaType({ name: "readme.txt", type: "" })).toBe("text/plain");
+    expect(getMediaType({ name: "config.yaml", type: "" })).toBe(
+      "application/x-yaml",
+    );
+    expect(getMediaType({ name: "config.yml", type: "" })).toBe(
+      "application/x-yaml",
+    );
+    expect(getMediaType({ name: "Cargo.toml", type: "" })).toBe(
+      "application/toml",
+    );
+  });
+
+  test("recognizes inlineable text document mime types", () => {
+    for (const mimeType of [
+      "text/plain",
+      "text/markdown",
+      "text/csv",
+      "text/tab-separated-values",
+      "application/json",
+      "text/xml",
+      "application/xml",
+      "application/x-yaml",
+      "application/toml",
+    ]) {
+      expect(isInlineableTextMimeType(mimeType)).toBe(true);
+    }
+    for (const mimeType of [
+      "application/pdf",
+      "image/png",
+      "application/octet-stream",
+    ]) {
+      expect(isInlineableTextMimeType(mimeType)).toBe(false);
+    }
   });
 
   test("defaults unknown extensions to application/octet-stream", () => {
@@ -232,6 +269,105 @@ describe("chat file upload helpers", () => {
       "image",
       "audio",
     ]);
+  });
+});
+
+describe("chatUploadRejectionReason", () => {
+  const base = {
+    ingestibleMimeTypes: new Set(["image/png", "application/pdf"]),
+    sandboxAvailable: false,
+    sandboxByteLimit: 16 * 1024 * 1024,
+  };
+
+  test("accepts a model-ingestible type at any size", () => {
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        mimeType: "image/png",
+        byteLength: 8_000_000,
+      }),
+    ).toBeNull();
+  });
+
+  test("accepts a small inlineable text file without a sandbox", () => {
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        mimeType: "application/toml",
+        byteLength: INLINE_TEXT_MAX_BYTES,
+      }),
+    ).toBeNull();
+  });
+
+  test("rejects oversized text without a sandbox, accepts it with one", () => {
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        mimeType: "text/csv",
+        byteLength: INLINE_TEXT_MAX_BYTES + 1,
+      }),
+    ).toBe("text_too_large");
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        sandboxAvailable: true,
+        mimeType: "text/csv",
+        byteLength: INLINE_TEXT_MAX_BYTES + 1,
+      }),
+    ).toBeNull();
+  });
+
+  test("rejects an unsupported type without a sandbox, accepts within the limit with one", () => {
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        mimeType: "application/zip",
+        byteLength: 1_000,
+      }),
+    ).toBe("unsupported_type");
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        sandboxAvailable: true,
+        mimeType: "application/zip",
+        byteLength: 1_000,
+      }),
+    ).toBeNull();
+  });
+
+  test("rejects a file over the sandbox limit even when available", () => {
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        sandboxAvailable: true,
+        mimeType: "application/zip",
+        byteLength: base.sandboxByteLimit + 1,
+      }),
+    ).toBe("too_large_for_sandbox");
+  });
+
+  test("size-gates inlineable text even when the model lists it as ingestible", () => {
+    // A text-capable model's readable set includes text MIMEs, so the generic
+    // ingestible check would otherwise accept an arbitrarily large text file.
+    const ingestibleMimeTypes = getModelReadableMimeTypes(["text"]);
+    expect(ingestibleMimeTypes.has("text/csv")).toBe(true);
+
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        ingestibleMimeTypes,
+        mimeType: "text/csv",
+        byteLength: INLINE_TEXT_MAX_BYTES,
+      }),
+    ).toBeNull();
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        ingestibleMimeTypes,
+        mimeType: "text/csv",
+        byteLength: INLINE_TEXT_MAX_BYTES + 1,
+      }),
+    ).toBe("text_too_large");
   });
 });
 

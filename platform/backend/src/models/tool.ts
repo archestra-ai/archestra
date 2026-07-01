@@ -33,7 +33,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -57,8 +57,10 @@ import type {
   SortDirection,
   Tool,
   ToolFilters,
+  ToolInvocation,
   ToolSortBy,
   ToolWithAssignments,
+  TrustedData,
   UpdateTool,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -259,13 +261,24 @@ class ToolModel {
    * Create default policies for a newly created tool:
    * - Default invocation policy: block_when_context_is_untrusted (empty conditions)
    * - Default result policy: mark_as_untrusted (empty conditions)
+   *
+   * `options.invocationAction` / `options.resultAction` override those defaults —
+   * used by the LLM proxy discovery path to honor the org's configured defaults.
+   * When omitted, the original hardcoded defaults are used (MCP/catalog tools are
+   * unaffected).
    */
-  static async createDefaultPolicies(toolId: string): Promise<void> {
+  static async createDefaultPolicies(
+    toolId: string,
+    options?: {
+      invocationAction?: ToolInvocation.ToolInvocationPolicyAction;
+      resultAction?: TrustedData.TrustedDataPolicyAction;
+    },
+  ): Promise<void> {
     // Create default invocation policy
     await ToolInvocationPolicyModel.create({
       toolId,
       conditions: [],
-      action: "block_when_context_is_untrusted",
+      action: options?.invocationAction ?? "block_when_context_is_untrusted",
       reason: null,
     });
 
@@ -273,7 +286,7 @@ class ToolModel {
     await TrustedDataPolicyModel.create({
       toolId,
       conditions: [],
-      action: "mark_as_untrusted",
+      action: options?.resultAction ?? "mark_as_untrusted",
       description: null,
     });
   }
@@ -567,8 +580,15 @@ class ToolModel {
     const tools =
       assignedToolIds.length > 0
         ? await db
-            .select()
+            .select(getTableColumns(schema.toolsTable))
             .from(schema.toolsTable)
+            .leftJoin(
+              schema.agentToolsTable,
+              and(
+                eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+                eq(schema.agentToolsTable.agentId, agentId),
+              ),
+            )
             .where(
               and(
                 inArray(schema.toolsTable.id, assignedToolIds),
@@ -579,7 +599,14 @@ class ToolModel {
                 toolInEnvironmentPredicate(agentEnvironmentId),
               ),
             )
-            .orderBy(desc(schema.toolsTable.createdAt))
+            .orderBy(
+              desc(
+                ToolModel.hasHealthyMcpServerInstall(
+                  schema.agentToolsTable.mcpServerId,
+                ),
+              ),
+              desc(schema.toolsTable.createdAt),
+            )
         : [];
 
     // Auto-inject query_knowledge_sources when the agent has knowledge sources
@@ -1022,23 +1049,30 @@ class ToolModel {
     });
 
     if (discoveredArchestraTools.length > 0) {
-      // Promote only names not already present in the catalog, and at most one
-      // discovered row per name. Promoting a colliding/duplicate name would violate
-      // the (catalog_id, name) unique index. Redundant discovered rows are left as-is
-      // (catalog_id = NULL, not surfaced as catalog tools) rather than deleted, to avoid
-      // cascading their agent assignments.
-      const claimedNames = new Set(
+      // Promote at most one discovered row per built-in SHORT name, and only when
+      // that short name isn't already in the catalog. Deduping by short name (not by
+      // full name) is what stops a default-prefixed `archestra__X` discovery from
+      // being adopted alongside an already-branded `archestra_staging__X` — the
+      // dual-prefix duplicate that 0285 had to collapse. Promoting a colliding full
+      // name would also violate the (catalog_id, name) unique index. Redundant
+      // discovered rows are left as-is (catalog_id = NULL, not surfaced as catalog
+      // tools) rather than deleted, to avoid cascading their agent assignments.
+      const claimedShortNames = new Set(
         (
           await db
             .select({ name: schema.toolsTable.name })
             .from(schema.toolsTable)
             .where(eq(schema.toolsTable.catalogId, catalogId))
-        ).map((tool) => tool.name),
+        )
+          .map((tool) => extractArchestraBuiltInShortName(tool.name))
+          .filter((shortName): shortName is string => shortName !== null),
       );
       const idsToPromote: string[] = [];
       for (const tool of discoveredArchestraTools) {
-        if (!claimedNames.has(tool.name)) {
-          claimedNames.add(tool.name);
+        // discoveredArchestraTools is pre-filtered to rows with a built-in short name.
+        const shortName = extractArchestraBuiltInShortName(tool.name);
+        if (shortName !== null && !claimedShortNames.has(shortName)) {
+          claimedShortNames.add(shortName);
           idsToPromote.push(tool.id);
         }
       }
@@ -1360,7 +1394,7 @@ class ToolModel {
    *
    * - Runtime tools (run_command/upload_file/download_file): assigned when the
    *   skills-sandbox runtime is on (`config.skillsSandbox.enabled`).
-   * - Persistent-files (Projects) tools (search_files/read_file/save_result/
+   * - Persistent-files (Projects) tools (search_files/read_file/save_file/
    *   edit_file/delete_file): also require the Projects flag
    *   (`config.projects.enabled`) — they need the runtime to run AND Projects to
    *   be exposed (see `isSandboxToolEnabled`), so gating assignment on both
@@ -1569,6 +1603,14 @@ class ToolModel {
           isNotNull(schema.toolsTable.catalogId), // Only MCP tools (have catalogId)
           toolInEnvironmentPredicate(agentEnvironmentId),
         ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.agentToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
       );
 
     return mcpTools;
@@ -1618,6 +1660,14 @@ class ToolModel {
           isNotNull(schema.toolsTable.catalogId),
           toolInEnvironmentPredicate(agentEnvironmentId),
         ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.agentToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
       )
       .limit(1);
 
@@ -1781,6 +1831,14 @@ class ToolModel {
           inArray(schema.toolsTable.name, toolNames),
           isNotNull(schema.toolsTable.catalogId),
         ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.appToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
       );
   }
 
@@ -1816,6 +1874,14 @@ class ToolModel {
           sql`RIGHT(${schema.toolsTable.name}, ${suffix.length}) = ${suffix}`,
           isNotNull(schema.toolsTable.catalogId),
         ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.appToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
       )
       .limit(1);
   }
@@ -2349,6 +2415,11 @@ class ToolModel {
     }>,
     /** @deprecated No longer used. Proxy tools are shared (agentId=NULL). Kept for call-site compatibility. */
     _agentId: string,
+    /** Org-configured defaults applied to each newly discovered tool's policies. */
+    defaults?: {
+      invocationAction?: ToolInvocation.ToolInvocationPolicyAction;
+      resultAction?: TrustedData.TrustedDataPolicyAction;
+    },
   ): Promise<Tool[]> {
     if (tools.length === 0) {
       return [];
@@ -2396,7 +2467,7 @@ class ToolModel {
 
       // Create default policies for newly inserted tools
       for (const tool of insertedTools) {
-        await ToolModel.createDefaultPolicies(tool.id);
+        await ToolModel.createDefaultPolicies(tool.id, defaults);
       }
 
       // If some tools weren't inserted due to conflict, fetch them
@@ -3023,6 +3094,36 @@ class ToolModel {
           "Failed to trigger auto-configure for discovered tools",
         );
       });
+  }
+
+  /**
+   * True when the connection a tool call would actually reach is connected
+   * and authenticated: the assignment's pinned server when it has one (a
+   * static credential pin), otherwise any healthy install of the tool's
+   * catalog item — dynamic resolution defers to the connection policy,
+   * which could reach any of them. Checking catalog-wide health alone would
+   * misrank a static pin to a broken server as healthy whenever the same
+   * catalog item has an unrelated working install elsewhere. Two different
+   * catalog items can produce tool rows with an identical name; ordering by
+   * this expression lets every caller that picks "the" match among
+   * same-named candidates prefer a working connection over one that needs
+   * re-authentication, was never installed, or is pinned to a broken one.
+   */
+  private static hasHealthyMcpServerInstall(
+    assignmentMcpServerId: AnyPgColumn,
+  ) {
+    return sql<boolean>`COALESCE(
+      (SELECT ${schema.mcpServersTable.localInstallationStatus} = 'success'
+         AND ${schema.mcpServersTable.oauthRefreshError} IS NULL
+       FROM ${schema.mcpServersTable}
+       WHERE ${schema.mcpServersTable.id} = ${assignmentMcpServerId}),
+      EXISTS (
+        SELECT 1 FROM ${schema.mcpServersTable}
+        WHERE ${schema.mcpServersTable.catalogId} = ${schema.toolsTable.catalogId}
+          AND ${schema.mcpServersTable.localInstallationStatus} = 'success'
+          AND ${schema.mcpServersTable.oauthRefreshError} IS NULL
+      )
+    )`;
   }
 }
 

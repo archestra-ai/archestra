@@ -13,6 +13,7 @@ import {
 import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
 import {
+  type CatalogItemApprovalStatus,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   type InsertInternalMcpCatalog,
   type InternalMcpCatalog,
@@ -489,12 +490,34 @@ class InternalMcpCatalogModel {
       }
     }
 
+    const setValues: Partial<
+      typeof schema.internalMcpCatalogTable.$inferInsert
+    > = { ...dbValues };
+
+    // Reset a stale image-approval decision when the custom image changes: the
+    // new image must be re-vetted by the install-time gate, otherwise a one-time
+    // approval would silently carry over to any swapped image.
+    if ("localConfig" in dbValues) {
+      const [existing] = await db
+        .select({ localConfig: schema.internalMcpCatalogTable.localConfig })
+        .from(schema.internalMcpCatalogTable)
+        .where(eq(schema.internalMcpCatalogTable.id, id));
+      const oldImage = existing?.localConfig?.dockerImage ?? null;
+      const newImage = dbValues.localConfig?.dockerImage ?? null;
+      if (oldImage !== newImage) {
+        setValues.catalogItemApprovalStatus = null;
+        setValues.catalogItemApprovalReason = null;
+        setValues.catalogItemApprovalReviewedBy = null;
+        setValues.catalogItemApprovalReviewedAt = null;
+      }
+    }
+
     let dbItem: typeof schema.internalMcpCatalogTable.$inferSelect | undefined;
 
-    if (Object.keys(dbValues).length > 0) {
+    if (Object.keys(setValues).length > 0) {
       [dbItem] = await db
         .update(schema.internalMcpCatalogTable)
-        .set(dbValues)
+        .set(setValues)
         .where(eq(schema.internalMcpCatalogTable.id, id))
         .returning();
     } else {
@@ -529,6 +552,113 @@ class InternalMcpCatalogModel {
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
   }
+
+  /**
+   * Record the catalog item's image as `pending` admin approval. Compare-and-set:
+   * only writes when no admin decision exists yet (status NULL or already
+   * `pending`), so a concurrent admin approval is never clobbered. Returns the
+   * winning status so the caller can re-decide after a race.
+   */
+  static async markImageApprovalPending(
+    id: string,
+  ): Promise<{ status: CatalogItemApprovalStatus | null }> {
+    const [updated] = await db
+      .update(schema.internalMcpCatalogTable)
+      .set({ catalogItemApprovalStatus: "pending" })
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, id),
+          or(
+            isNull(schema.internalMcpCatalogTable.catalogItemApprovalStatus),
+            eq(
+              schema.internalMcpCatalogTable.catalogItemApprovalStatus,
+              "pending",
+            ),
+          ),
+        ),
+      )
+      .returning({
+        status: schema.internalMcpCatalogTable.catalogItemApprovalStatus,
+      });
+    if (updated) return updated;
+
+    // Lost the CAS to a concurrent admin approval — read the winning decision.
+    const [row] = await db
+      .select({
+        status: schema.internalMcpCatalogTable.catalogItemApprovalStatus,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, id));
+    return row ?? { status: null };
+  }
+
+  /**
+   * Clear a stale `pending` flag (e.g. the registry was later added to the
+   * trusted list, so the item is no longer gated). Only touches `pending` rows —
+   * an explicit `approved` decision is preserved.
+   */
+  static async clearImageApprovalPending(id: string): Promise<void> {
+    await db
+      .update(schema.internalMcpCatalogTable)
+      .set({
+        catalogItemApprovalStatus: null,
+        catalogItemApprovalReviewedBy: null,
+        catalogItemApprovalReviewedAt: null,
+      })
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, id),
+          eq(
+            schema.internalMcpCatalogTable.catalogItemApprovalStatus,
+            "pending",
+          ),
+        ),
+      );
+  }
+
+  /** Mark a catalog item's image approved; future installs proceed. */
+  static async approveImage(params: {
+    id: string;
+    reviewedBy: string;
+  }): Promise<InternalMcpCatalog | null> {
+    const { id, reviewedBy } = params;
+    await db
+      .update(schema.internalMcpCatalogTable)
+      .set({
+        catalogItemApprovalStatus: "approved",
+        catalogItemApprovalReviewedBy: reviewedBy,
+        catalogItemApprovalReviewedAt: new Date(),
+      })
+      .where(eq(schema.internalMcpCatalogTable.id, id));
+    return InternalMcpCatalogModel.findById(id, { expandSecrets: false });
+  }
+
+  /** Catalog items in this org awaiting image approval, newest first. */
+  static async listPendingImageApproval(
+    organizationId: string,
+  ): Promise<InternalMcpCatalog[]> {
+    const rows = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+          eq(
+            schema.internalMcpCatalogTable.catalogItemApprovalStatus,
+            "pending",
+          ),
+        ),
+      )
+      .orderBy(desc(schema.internalMcpCatalogTable.updatedAt));
+    const items: InternalMcpCatalog[] = rows.map((dbItem) => ({
+      ...dbItem,
+      labels: [],
+      teams: [],
+    }));
+    await InternalMcpCatalogModel.populateAuthorNames(items);
+    return items;
+  }
+
   /**
    * Secret ownership when deleting a row:
    *   - clientSecretId / localConfigSecretId / presetSecretId are owned by the

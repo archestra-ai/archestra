@@ -68,6 +68,23 @@ describe("descriptor-table fetchers", () => {
     ]);
   });
 
+  test("tolerates a model missing created without crashing (createdAt undefined)", async () => {
+    // A provider response omitting `created` used to reach
+    // `new Date(NaN).toISOString()`, which throws and fails the whole fetch.
+    mockModelsResponse({ data: [{ id: "groq-a" }] });
+
+    const models = await modelFetchers.groq("k");
+
+    expect(models).toEqual([
+      {
+        id: "groq-a",
+        displayName: "groq-a",
+        provider: "groq",
+        createdAt: undefined,
+      },
+    ]);
+  });
+
   test("deepseek tolerates missing data and falls back createdAt to epoch", async () => {
     mockModelsResponse({ data: [{ id: "deepseek-chat" }] });
 

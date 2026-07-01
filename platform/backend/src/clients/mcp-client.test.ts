@@ -209,6 +209,101 @@ describe("McpClient", () => {
     expect(mockConnect).toHaveBeenCalledTimes(1);
   });
 
+  test("forwards the abort signal to client.callTool and listTools", async () => {
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "github-mcp-server__list_repos",
+      description: "List repos",
+      parameters: {},
+      catalogId,
+    });
+    await AgentToolModel.create(agentId, tool.id, { mcpServerId });
+
+    mockCallTool.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    const controller = new AbortController();
+    await mcpClient.executeToolCallForOwner(
+      {
+        id: "call_abort_forward",
+        name: "github-mcp-server__list_repos",
+        arguments: { owner: "octocat" },
+      },
+      agentOwner(agentId),
+      undefined,
+      { abortSignal: controller.signal },
+    );
+
+    expect(mockCallTool).toHaveBeenCalledWith(
+      { name: "list_repos", arguments: { owner: "octocat" } },
+      undefined,
+      { signal: controller.signal },
+    );
+    // Name resolution (listTools) is on the same cancellable path.
+    expect(mockListTools).toHaveBeenCalledWith(undefined, {
+      signal: controller.signal,
+    });
+  });
+
+  test("rethrows an aborted call instead of retrying it", async () => {
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "github-mcp-server__list_repos",
+      description: "List repos",
+      parameters: {},
+      catalogId,
+    });
+    await AgentToolModel.create(agentId, tool.id, { mcpServerId });
+
+    // A stale-session error normally triggers a fresh-session retry. With the
+    // signal aborted it must short-circuit instead — no second callTool, no
+    // session teardown, and the error propagates rather than becoming a result.
+    mockCallTool.mockRejectedValue(new Error("Session not found"));
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      mcpClient.executeToolCallForOwner(
+        {
+          id: "call_abort_no_retry",
+          name: "github-mcp-server__list_repos",
+          arguments: {},
+        },
+        agentOwner(agentId),
+        undefined,
+        { abortSignal: controller.signal },
+      ),
+    ).rejects.toThrow();
+
+    expect(mockCallTool).toHaveBeenCalledTimes(1);
+    expect(mockClose).not.toHaveBeenCalled();
+  });
+
+  test("returns an error result (does not throw) for a non-abort failure", async () => {
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "github-mcp-server__list_repos",
+      description: "List repos",
+      parameters: {},
+      catalogId,
+    });
+    await AgentToolModel.create(agentId, tool.id, { mcpServerId });
+
+    mockCallTool.mockRejectedValue(new Error("upstream exploded"));
+
+    const result = await mcpClient.executeToolCallForOwner(
+      {
+        id: "call_non_abort_failure",
+        name: "github-mcp-server__list_repos",
+        arguments: {},
+      },
+      agentOwner(agentId),
+    );
+
+    expect(result.isError).toBe(true);
+    expect(mockCallTool).toHaveBeenCalledTimes(1);
+  });
+
   test("connectAndGetTools synthesizes read-resource tools when upstream has no tools/list", async () => {
     mockListTools.mockRejectedValueOnce(new Error("Method not found"));
     mockListResources.mockResolvedValueOnce({
@@ -379,19 +474,19 @@ describe("McpClient", () => {
         serverType: "app",
       });
       const uri = "ui://archestra-app/clock-app";
-      const showApp = await ToolModel.create({
+      const openTool = await ToolModel.create({
         name: "clock_app__open",
         description: "Open the Clock App.",
         parameters: { type: "object", properties: {} },
         catalogId: appCatalog.id,
         meta: { _meta: { ui: { resourceUri: uri } } },
       });
-      await AgentToolModel.create(agentId, showApp.id, {
+      await AgentToolModel.create(agentId, openTool.id, {
         mcpServerId: appServer.id,
       });
 
       const result = await mcpClient.executeToolCallForOwner(
-        { id: "call_open", name: showApp.name, arguments: {} },
+        { id: "call_open", name: openTool.name, arguments: {} },
         agentOwner(agentId),
       );
 
@@ -411,7 +506,7 @@ describe("McpClient", () => {
       expect(row?.ownerType).toBe("agent");
       expect(row?.mcpServerName).toBe("Clock App");
       expect((row?.toolCall as { name?: string } | null)?.name).toBe(
-        showApp.name,
+        openTool.name,
       );
     });
   });
@@ -895,6 +990,164 @@ describe("McpClient", () => {
         expect(mockCallTool).toHaveBeenCalledTimes(1);
       });
 
+      test("no self-service install link when the tool's catalog item is another user's personal server", async ({
+        makeMember,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const owner = await makeUser();
+        await makeMember(owner.id, org.id, { role: "member" });
+        const caller = await makeUser();
+        await makeMember(caller.id, org.id, { role: "member" });
+
+        // A personal-scope catalog item owned by `owner`, invisible to `caller`.
+        const catalogItem = await InternalMcpCatalogModel.create(
+          {
+            name: `personal-${randomUUID().slice(0, 8)}`,
+            serverType: "remote",
+            serverUrl: "https://example.com/mcp",
+            scope: "personal",
+          },
+          { organizationId: org.id, authorId: owner.id },
+        );
+        const tool = await ToolModel.createToolIfNotExists({
+          name: `${catalogItem.name}__do_thing`,
+          description: "Personal-server tool",
+          parameters: {},
+          catalogId: catalogItem.id,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "dynamic",
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_deadend", name: tool.name, arguments: {} },
+          agentOwner(agentId),
+          userToken(caller.id, org.id),
+        );
+
+        expect(result.isError).toBe(true);
+        const archestraError = result?._meta?.archestraError as
+          | { type?: string; action?: string; actionUrl?: string }
+          | undefined;
+        expect(archestraError?.type).toBe("auth_required");
+        // The caller cannot install another user's personal item, so no
+        // self-service install link is offered.
+        expect(archestraError?.actionUrl).toBeUndefined();
+        expect(archestraError?.action).toBeUndefined();
+        expect(result?.error).not.toContain("/mcp/registry?install=");
+        expect(result?.error).not.toMatch(/visit[^.]*https?:\/\//i);
+        // ...and it names a remediation the caller can actually pursue.
+        expect(result?.error).toMatch(/owner|administrator|share/i);
+      });
+
+      test("still offers the install link when the caller can access the catalog (org-scoped, no install yet)", async ({
+        makeMember,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const caller = await makeUser();
+        await makeMember(caller.id, org.id, { role: "member" });
+
+        // An org-scoped catalog item the caller CAN see and install; with no
+        // install yet, the self-service install link is legitimate and MUST be
+        // preserved even though the caller-access check runs (orgId present).
+        const catalogItem = await InternalMcpCatalogModel.create(
+          {
+            name: `org-${randomUUID().slice(0, 8)}`,
+            serverType: "remote",
+            serverUrl: "https://example.com/mcp",
+            scope: "org",
+          },
+          { organizationId: org.id },
+        );
+        const tool = await ToolModel.createToolIfNotExists({
+          name: `${catalogItem.name}__do_thing`,
+          description: "Org-server tool",
+          parameters: {},
+          catalogId: catalogItem.id,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "dynamic",
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_install", name: tool.name, arguments: {} },
+          agentOwner(agentId),
+          userToken(caller.id, org.id),
+        );
+
+        expect(result.isError).toBe(true);
+        const archestraError = result?._meta?.archestraError as
+          | { type?: string; action?: string; actionUrl?: string }
+          | undefined;
+        expect(archestraError?.type).toBe("auth_required");
+        expect(archestraError?.action).toBe("install_mcp_credentials");
+        expect(archestraError?.actionUrl).toContain(
+          `/mcp/registry?install=${catalogItem.id}`,
+        );
+      });
+
+      test("still offers the install link for a team-token caller (fail-open: no user identity to check accessibility against)", async ({
+        makeMember,
+        makeOrganization,
+        makeTeam,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const owner = await makeUser();
+        await makeMember(owner.id, org.id, { role: "member" });
+        const team = await makeTeam(org.id, owner.id);
+
+        // A personal-scope catalog item owned by `owner`. A team token has no
+        // user identity, so accessibility cannot be evaluated for it; the
+        // fail-open MUST keep offering the install link (the caller behind the
+        // token may still be able to act on it). If accessibility were ever
+        // computed for team tokens, this personal item would be inaccessible
+        // and the link would be dropped — so this pin guards the fail-open.
+        const catalogItem = await InternalMcpCatalogModel.create(
+          {
+            name: `personal-${randomUUID().slice(0, 8)}`,
+            serverType: "remote",
+            serverUrl: "https://example.com/mcp",
+            scope: "personal",
+          },
+          { organizationId: org.id, authorId: owner.id },
+        );
+        const tool = await ToolModel.createToolIfNotExists({
+          name: `${catalogItem.name}__do_thing`,
+          description: "Personal-server tool",
+          parameters: {},
+          catalogId: catalogItem.id,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "dynamic",
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_teamtoken", name: tool.name, arguments: {} },
+          agentOwner(agentId),
+          {
+            tokenId: "tok-team",
+            teamId: team.id,
+            isOrganizationToken: false,
+            organizationId: org.id,
+          },
+        );
+
+        expect(result.isError).toBe(true);
+        const archestraError = result?._meta?.archestraError as
+          | { type?: string; action?: string; actionUrl?: string }
+          | undefined;
+        expect(archestraError?.type).toBe("auth_required");
+        expect(archestraError?.action).toBe("install_mcp_credentials");
+        expect(archestraError?.actionUrl).toContain(
+          `/mcp/registry?install=${catalogItem.id}`,
+        );
+      });
+
       test("All-tools mode ignores a static assignment pin and uses the server's connection policy", async ({
         makeAgent,
         makeMember,
@@ -1320,10 +1573,14 @@ describe("McpClient", () => {
         expect(mockGetHttpEndpointUrl).toHaveBeenCalledWith(localMcpServerId);
 
         // Verify tool was called via HTTP client
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "test_tool", // Server prefix stripped
-          arguments: { input: "test" },
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "test_tool", // Server prefix stripped
+            arguments: { input: "test" },
+          },
+          undefined,
+          { signal: undefined },
+        );
 
         // Verify result
 
@@ -1440,10 +1697,14 @@ describe("McpClient", () => {
         expect(mockK8sDeployment.getRunningPodName).toHaveBeenCalled();
 
         // Verify MCP SDK client was used
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "stdio_tool",
-          arguments: { input: "test" },
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "stdio_tool",
+            arguments: { input: "test" },
+          },
+          undefined,
+          { signal: undefined },
+        );
 
         // Verify result
         expect(result).toMatchObject({
@@ -1555,10 +1816,14 @@ describe("McpClient", () => {
         );
 
         // Verify the tool was called with just the tool name (stripped using catalogName)
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "prefix_test_tool",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "prefix_test_tool",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
 
         expect(result).toMatchObject({
           id: "call_prefix_test",
@@ -1610,10 +1875,14 @@ describe("McpClient", () => {
         );
 
         // Verify stripping worked using mcpServerName fallback
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "fallback_tool",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "fallback_tool",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
 
         expect(result).toMatchObject({
           id: "call_fallback_test",
@@ -1655,10 +1924,14 @@ describe("McpClient", () => {
         );
 
         // Verify the tool name was not mangled since no prefix matched
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "standalone_tool_name",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "standalone_tool_name",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
 
         expect(result).toMatchObject({
           id: "call_identity_test",
@@ -4040,8 +4313,179 @@ describe("McpClient", () => {
             catalogName: "github-oauth-server",
             serverId: mcpServer.id,
             reauthUrl: `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
+            // Owner-invoked personal connection → personal credential, no team.
+            credentialScope: "personal",
+            credentialTeamName: null,
           },
         });
+      });
+
+      test("labels the expired-auth error with the owning team for a team-scoped credential", async ({
+        makeUser,
+        makeTeam,
+        makeOrganization,
+      }) => {
+        const org = await makeOrganization();
+        const teamMember = await makeUser({
+          email: "team-expired-member@example.com",
+        });
+        const team = await makeTeam(org.id, teamMember.id, {
+          name: "Platform Team",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "github-team-server",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+          oauthConfig: {
+            name: "GitHub",
+            server_url: "https://api.githubcopilot.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["repo"],
+            default_scopes: ["repo"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          { access_token: "expired-token" },
+          "team-expired-oauth-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "github-team-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          teamId: team.id,
+          scope: "team",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-team-server__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const { UnauthorizedError } = await import(
+          "@modelcontextprotocol/sdk/client/auth.js"
+        );
+        mockCallTool.mockRejectedValueOnce(new UnauthorizedError());
+        mockConnect.mockResolvedValue(undefined);
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_team_expired",
+            name: "github-team-server__list_repos",
+            arguments: {},
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "team-token",
+            teamId: team.id,
+            isOrganizationToken: false,
+            userId: teamMember.id,
+          },
+        );
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?._meta).toMatchObject({
+          archestraError: {
+            type: "auth_expired",
+            serverId: mcpServer.id,
+            credentialScope: "team",
+            credentialTeamName: "Platform Team",
+          },
+        });
+      });
+
+      test("does not label a personal install as the caller's own when the caller is not the owner", async ({
+        makeUser,
+      }) => {
+        const connectionOwner = await makeUser({
+          email: "personal-owner@example.com",
+        });
+        const invokingUser = await makeUser({
+          email: "personal-invoker@example.com",
+        });
+
+        // Non-OAuth (PAT) catalog so no token refresh intercepts the auth-error
+        // tool result before the expired-auth message is built.
+        const catalog = await InternalMcpCatalogModel.create({
+          name: "github-shared-personal",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+        });
+
+        const secret = await secretManager().createSecret(
+          { access_token: "expired-pat" },
+          "shared-personal-secret",
+        );
+
+        // Personal install owned by connectionOwner, statically assigned to the
+        // agent so a different caller routes through it — the retained-assignment
+        // shape the scope helper must not misattribute as the caller's own.
+        const mcpServer = await McpServerModel.create({
+          name: "github-shared-personal",
+          catalogId: catalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: connectionOwner.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-shared-personal__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: catalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        // Tool RESULT (not a thrown error) carrying an auth failure — this path
+        // builds the expired-auth message without the assigned-credential owner
+        // guard that the thrown path has, so the scope helper is what protects
+        // against misattribution here.
+        mockCallTool.mockResolvedValueOnce({
+          isError: true,
+          content: [{ type: "text", text: "401 unauthorized: token expired" }],
+        });
+        mockConnect.mockResolvedValue(undefined);
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_shared_personal",
+            name: "github-shared-personal__list_repos",
+            arguments: {},
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "invoker-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: invokingUser.id,
+          },
+        );
+
+        expect(result).toMatchObject({ isError: true });
+        const archestraError = (
+          result?._meta as { archestraError?: Record<string, unknown> }
+        )?.archestraError;
+        expect(archestraError).toMatchObject({
+          type: "auth_expired",
+          serverId: mcpServer.id,
+        });
+        // Not the caller's own credential → no "Your personal credentials …".
+        expect(archestraError?.credentialScope).toBeUndefined();
+        expect(archestraError?.credentialTeamName).toBeUndefined();
       });
 
       test("records a no_refresh_token state when an OAuth tool call throws UnauthorizedError and no refresh token is stored", async ({
@@ -4714,6 +5158,64 @@ describe("McpClient", () => {
         // callTool should have been called twice (first stale, then fresh)
         expect(mockCallTool).toHaveBeenCalledTimes(2);
       });
+
+      test("skips the stale-session retry when the call is aborted", async () => {
+        const { StreamableHTTPError } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "stale-session-server__aborted_no_retry",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+        vi.spyOn(
+          McpHttpSessionModel,
+          "findRecordByConnectionKey",
+        ).mockResolvedValue({
+          sessionId: "stale-session-id",
+          sessionEndpointUrl: null,
+          sessionEndpointPodName: null,
+        });
+        mockConnect.mockResolvedValue(undefined);
+
+        // The sibling test above proves this exact error triggers a
+        // fresh-session retry. With the run aborted, the abort guard must
+        // short-circuit before that retry — no second callTool, no session
+        // teardown — and propagate the abort.
+        mockCallTool.mockRejectedValue(
+          new StreamableHTTPError(
+            404,
+            "Error POSTing to endpoint: Session not found",
+          ),
+        );
+
+        const controller = new AbortController();
+        controller.abort();
+
+        await expect(
+          mcpClient.executeToolCallForOwner(
+            {
+              id: "call_aborted_no_retry",
+              name: "stale-session-server__aborted_no_retry",
+              arguments: {},
+            },
+            agentOwner(agentId),
+            undefined,
+            { abortSignal: controller.signal },
+          ),
+        ).rejects.toThrow();
+
+        expect(mockCallTool).toHaveBeenCalledTimes(1);
+        expect(McpHttpSessionModel.deleteStaleSession).not.toHaveBeenCalled();
+      });
     });
 
     describe("Tool name casing resolution", () => {
@@ -4752,10 +5254,14 @@ describe("McpClient", () => {
         await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
         // Verify callTool was called with the original camelCase name
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "getUserInfo",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "getUserInfo",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
       });
 
       test("resolves PascalCase tool name from remote server", async () => {
@@ -4788,10 +5294,14 @@ describe("McpClient", () => {
 
         await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "GetRepository",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "GetRepository",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
       });
 
       test("falls back to stripped name when listTools fails", async () => {
@@ -4823,10 +5333,14 @@ describe("McpClient", () => {
         await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
         // Falls back to the lowercased stripped name
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "sometool",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "sometool",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
       });
 
       test("falls back to stripped name when tool not in server list", async () => {
@@ -4860,10 +5374,14 @@ describe("McpClient", () => {
         await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
         // Falls back to stripped name since no match found
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "missingtool",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "missingtool",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
       });
 
       test("preserves already-correct lowercase tool name", async () => {
@@ -4896,10 +5414,14 @@ describe("McpClient", () => {
 
         await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
-        expect(mockCallTool).toHaveBeenCalledWith({
-          name: "search_issues",
-          arguments: {},
-        });
+        expect(mockCallTool).toHaveBeenCalledWith(
+          {
+            name: "search_issues",
+            arguments: {},
+          },
+          undefined,
+          { signal: undefined },
+        );
       });
     });
 

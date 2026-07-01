@@ -17,6 +17,7 @@ from contracts import (
     to_jsonable,
 )
 from discover import (
+    _dangling_refs,
     _extract_dependencies_block,
     _parse_hook_command,
     _redact,
@@ -344,3 +345,72 @@ def test_symlinked_skill_dir_is_skipped(tmp_path: Path) -> None:
     blob = json.dumps(to_jsonable(inv))
     assert "EXTERNAL_SKILL_BODY" not in blob
     assert "EXTERNAL_BUNDLED_FILE" not in blob
+
+
+# --- dangling references: surface repo files a migrated body points at but we didn't capture ---
+
+
+def test_dangling_refs_flags_only_existing_unbundled_files(tmp_path: Path) -> None:
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "run.sh").write_text("echo hi")
+    body = "run `scripts/run.sh`, `scripts/missing.sh`, and `$CLAUDE_PROJECT_DIR/scripts/run.sh`"
+    refs = _dangling_refs(body, [tmp_path], tmp_path, bundled=set())
+    assert set(refs) == {"scripts/run.sh"}  # missing.sh skipped; the two run.sh refs dedupe to one
+
+
+def test_dangling_refs_skips_bundled_files(tmp_path: Path) -> None:
+    (tmp_path / "scripts").mkdir()
+    real = tmp_path / "scripts" / "run.sh"
+    real.write_text("echo hi")
+    # a file that travels with this artifact is safe even though it exists in the repo.
+    assert _dangling_refs("see scripts/run.sh", [tmp_path], tmp_path, bundled={real.resolve()}) == []
+
+
+def test_dangling_refs_resolves_against_multiple_bases(tmp_path: Path) -> None:
+    # a skill body may address a sibling by skill-dir-relative `../shared.md` OR a tool by
+    # repo-root-relative `tools/x.py`; both should resolve and flag.
+    skills = tmp_path / ".claude" / "skills"
+    (skills / "dcf").mkdir(parents=True)
+    (skills / "shared.md").write_text("shared")
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "x.py").write_text("x")
+    refs = _dangling_refs("read ../shared.md then run tools/x.py", [skills / "dcf", tmp_path],
+                          tmp_path, bundled=set())
+    assert set(refs) == {".claude/skills/shared.md", "tools/x.py"}
+
+
+def test_dangling_refs_ignores_root_escaping_ref(tmp_path: Path) -> None:
+    # ../../etc/x.sh resolves outside the repo -> never flagged (and never read).
+    assert _dangling_refs("see ../../outside.sh", [tmp_path], tmp_path, bundled=set()) == []
+
+
+def test_discover_warns_on_dangling_command_reference(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    (src / ".claude" / "commands").mkdir(parents=True)
+    (src / ".claude" / "commands" / "greet.md").write_text("Run `scripts/run.sh` to greet.")
+    (src / "scripts").mkdir()
+    (src / "scripts" / "run.sh").write_text("echo hi")  # exists but lives outside captured dirs
+
+    inv = discover(src)
+    assert any("scripts/run.sh" in w for w in inv.warnings)
+    assert len(inv.warnings) == 1  # no secrets in this fixture, so the dangle is the only warning
+
+
+def test_discover_flags_ref_captured_as_separate_item(tmp_path: Path) -> None:
+    # the cross-artifact break: a command points at a tool captured as its OWN local_tool, so the
+    # tool is NOT bundled into the command's skill -> it still dangles and must be flagged.
+    src = tmp_path / "src"
+    (src / ".claude" / "commands").mkdir(parents=True)
+    (src / ".claude" / "commands" / "run.md").write_text("Run `python3 tools/foo.py`.")
+    (src / "tools").mkdir()
+    (src / "tools" / "foo.py").write_text("print('hi')")  # captured separately as a local_tool
+
+    inv = discover(src)
+    assert any(it.id == "local_tool:foo" for it in inv.items)  # captured as its own item...
+    assert any("tools/foo.py" in w for w in inv.warnings)      # ...yet still flagged for the command
+
+
+def test_fixture_skill_flags_repo_root_tool_reference(inv: Inventory) -> None:
+    # summarize-text's SKILL.md runs `python3 tools/word_count.py`; that tool is captured as its
+    # own local_tool, not bundled into the skill, so the skill's reference dangles.
+    assert any("tools/word_count.py" in w for w in inv.warnings)

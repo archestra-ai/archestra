@@ -1774,6 +1774,86 @@ describe("createAgentServer tools/list", () => {
       executeToolCallForOwnerSpy.mockRestore();
     }
   });
+
+  test("advertises the healthy-connection tool when two assigned tools share a name across different catalog items", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+
+    // Two different catalog items whose installs happen to share a display
+    // name, producing two tool rows with the identical slugified name.
+    const brokenCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "weather-fixture-broken",
+      serverUrl: "https://weather.example.com/mcp",
+    });
+    await makeMcpServer({
+      name: "Weather Fixture",
+      catalogId: brokenCatalog.id,
+      ownerId: user.id,
+      localInstallationStatus: "success",
+      oauthRefreshError: "refresh_failed",
+    });
+    const brokenTool = await ToolModel.createToolIfNotExists({
+      name: "weather_fixture__get_weather",
+      description: "broken connection",
+      parameters: { type: "object", properties: {} },
+      catalogId: brokenCatalog.id,
+    });
+
+    const healthyCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "weather-fixture-healthy",
+      serverUrl: "https://weather.example.com/mcp",
+    });
+    await makeMcpServer({
+      name: "Weather Fixture",
+      catalogId: healthyCatalog.id,
+      ownerId: user.id,
+      localInstallationStatus: "success",
+    });
+    const healthyTool = await ToolModel.createToolIfNotExists({
+      name: "weather_fixture__get_weather",
+      description: "healthy connection",
+      parameters: { type: "object", properties: {} },
+      catalogId: healthyCatalog.id,
+    });
+
+    // Assign the broken one first so a naive "last one wins" dedupe would
+    // keep it.
+    await makeAgentTool(agent.id, brokenTool.id);
+    await makeAgentTool(agent.id, healthyTool.id);
+
+    const { server } = await createAgentServer(agent.id);
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+
+    expect(listToolsHandler).toBeDefined();
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+
+    const weatherTools = response.tools.filter(
+      (tool) => tool.name === "weather_fixture__get_weather",
+    );
+    expect(weatherTools).toHaveLength(1);
+    expect(weatherTools[0]?.description).toBe("healthy connection");
+  });
 });
 
 describe("extractPassthroughHeaders", async () => {

@@ -414,7 +414,7 @@ describe("OAuth helper functions", () => {
       expect(result).toEqual({
         configuredScopes: ["READ"],
         discoveredScopes: [],
-        scopesToUse: ["READ"],
+        scopesToUse: ["READ", "offline_access"],
       });
       expect(fetchMock).not.toHaveBeenCalled();
 
@@ -443,7 +443,7 @@ describe("OAuth helper functions", () => {
       expect(result).toEqual({
         configuredScopes: [],
         discoveredScopes: ["jira:read"],
-        scopesToUse: ["jira:read"],
+        scopesToUse: ["jira:read", "offline_access"],
       });
 
       globalThis.fetch = originalFetch;
@@ -470,8 +470,68 @@ describe("OAuth helper functions", () => {
       expect(result).toEqual({
         configuredScopes: [],
         discoveredScopes: ["jira:write"],
-        scopesToUse: ["jira:write"],
+        scopesToUse: ["jira:write", "offline_access"],
       });
+
+      globalThis.fetch = originalFetch;
+    });
+
+    test("omits offline_access when additional_scopes is empty", async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
+      globalThis.fetch = fetchMock;
+
+      const result = await resolveOAuthScopesForAuthorization({
+        oauthConfig: {
+          server_url: "https://accounts.google.com",
+          supports_resource_metadata: false,
+          scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+          additional_scopes: [],
+        },
+      });
+
+      expect(result.scopesToUse).toEqual([
+        "https://www.googleapis.com/auth/gmail.readonly",
+      ]);
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      globalThis.fetch = originalFetch;
+    });
+
+    test("appends configured additional_scopes verbatim", async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
+      globalThis.fetch = fetchMock;
+
+      const result = await resolveOAuthScopesForAuthorization({
+        oauthConfig: {
+          server_url: "https://example.com",
+          supports_resource_metadata: false,
+          scopes: ["read"],
+          additional_scopes: ["offline_access", "custom:scope"],
+        },
+      });
+
+      expect(result.scopesToUse).toEqual([
+        "read",
+        "offline_access",
+        "custom:scope",
+      ]);
+
+      globalThis.fetch = originalFetch;
+    });
+
+    test("does not duplicate a scope already present", async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
+      globalThis.fetch = fetchMock;
+
+      const result = await resolveOAuthScopesForAuthorization({
+        oauthConfig: {
+          server_url: "https://example.com",
+          supports_resource_metadata: false,
+          scopes: ["read", "offline_access"],
+        },
+      });
+
+      expect(result.scopesToUse).toEqual(["read", "offline_access"]);
 
       globalThis.fetch = originalFetch;
     });

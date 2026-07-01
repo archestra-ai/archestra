@@ -654,6 +654,144 @@ describe("ToolModel", () => {
 
       expect(result).toHaveLength(2);
     });
+
+    test("orders the healthy-connection candidate first when two assigned tools share a name across different catalog items", async ({
+      makeUser,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const user = await makeUser();
+      const agent = await makeAgent();
+
+      // Two different catalog items whose installs happen to share a
+      // display name, producing two tool rows with the identical slugified
+      // name — the collision a caller cannot see in the tool name alone.
+      // Created directly via the model (not the makeTool fixture, whose
+      // findByName lookup can't disambiguate same-named tools either).
+      const brokenCatalog = await makeInternalMcpCatalog({
+        name: "weather-fixture-broken",
+        serverUrl: "https://weather.example.com/mcp",
+      });
+      await makeMcpServer({
+        name: "Weather Fixture",
+        catalogId: brokenCatalog.id,
+        ownerId: user.id,
+        localInstallationStatus: "success",
+        oauthRefreshError: "refresh_failed",
+      });
+      const brokenTool = await ToolModel.createToolIfNotExists({
+        name: "weather_fixture__get_weather",
+        description: "broken connection",
+        parameters: {},
+        catalogId: brokenCatalog.id,
+      });
+
+      const healthyCatalog = await makeInternalMcpCatalog({
+        name: "weather-fixture-healthy",
+        serverUrl: "https://weather.example.com/mcp",
+      });
+      await makeMcpServer({
+        name: "Weather Fixture",
+        catalogId: healthyCatalog.id,
+        ownerId: user.id,
+        localInstallationStatus: "success",
+      });
+      const healthyTool = await ToolModel.createToolIfNotExists({
+        name: "weather_fixture__get_weather",
+        description: "healthy connection",
+        parameters: {},
+        catalogId: healthyCatalog.id,
+      });
+
+      // Assign the broken one first so a naive "first row returned" pick
+      // would resolve to it.
+      await AgentToolModel.create(agent.id, brokenTool.id);
+      await AgentToolModel.create(agent.id, healthyTool.id);
+
+      const result = await ToolModel.getMcpToolsAssignedToAgent(
+        ["weather_fixture__get_weather"],
+        agent.id,
+      );
+
+      expect(result).toHaveLength(2);
+      expect(result[0].catalogId).toBe(healthyCatalog.id);
+    });
+
+    test("does not rank a static pin to a broken server as healthy just because its catalog has an unrelated working install", async ({
+      makeUser,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const user = await makeUser();
+      const agent = await makeAgent();
+
+      // A catalog item with two installs: the one this agent's assignment
+      // is pinned to is broken, but a different, unrelated install of the
+      // same catalog item is healthy. A catalog-wide health check would
+      // wrongly call the pinned assignment healthy.
+      const pinnedCatalog = await makeInternalMcpCatalog({
+        name: "weather-fixture-pinned",
+        serverUrl: "https://weather.example.com/mcp",
+      });
+      const brokenPinnedServer = await makeMcpServer({
+        name: "Weather Fixture",
+        catalogId: pinnedCatalog.id,
+        ownerId: user.id,
+        localInstallationStatus: "success",
+        oauthRefreshError: "refresh_failed",
+      });
+      await makeMcpServer({
+        name: "Weather Fixture (unrelated install)",
+        catalogId: pinnedCatalog.id,
+        localInstallationStatus: "success",
+      });
+      // Explicit, deterministically ordered ids: without the fix, a
+      // catalog-wide health tie falls back to sorting by id, which would
+      // otherwise pick either row depending on random UUID generation.
+      // Pinning the broken row's id below the healthy row's id means a
+      // health tie would deterministically (wrongly) prefer it.
+      const pinnedTool = await ToolModel.createToolIfNotExists({
+        id: "00000000-0000-4000-8000-000000000001",
+        name: "weather_fixture__get_weather",
+        description: "statically pinned to the broken install",
+        parameters: {},
+        catalogId: pinnedCatalog.id,
+      });
+
+      const dynamicCatalog = await makeInternalMcpCatalog({
+        name: "weather-fixture-dynamic",
+        serverUrl: "https://weather.example.com/mcp",
+      });
+      await makeMcpServer({
+        name: "Weather Fixture",
+        catalogId: dynamicCatalog.id,
+        ownerId: user.id,
+        localInstallationStatus: "success",
+      });
+      const dynamicTool = await ToolModel.createToolIfNotExists({
+        id: "00000000-0000-4000-8000-000000000002",
+        name: "weather_fixture__get_weather",
+        description: "dynamically resolved, genuinely healthy",
+        parameters: {},
+        catalogId: dynamicCatalog.id,
+      });
+
+      await AgentToolModel.create(agent.id, pinnedTool.id, {
+        mcpServerId: brokenPinnedServer.id,
+        credentialResolutionMode: "static",
+      });
+      await AgentToolModel.create(agent.id, dynamicTool.id);
+
+      const result = await ToolModel.getMcpToolsAssignedToAgent(
+        ["weather_fixture__get_weather"],
+        agent.id,
+      );
+
+      expect(result).toHaveLength(2);
+      expect(result[0].catalogId).toBe(dynamicCatalog.id);
+    });
   });
 
   describe("findByNameForAgent", () => {
@@ -1476,6 +1614,72 @@ describe("ToolModel", () => {
       expect(toolWithoutParams?.description).toBe(
         "Has description but no parameters",
       );
+    });
+
+    test("applies the configured invocation and result defaults to new proxy tools", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      const [tool] = await ToolModel.bulkCreateProxyToolsIfNotExists(
+        [
+          {
+            name: "proxy-tool-with-default",
+            description: "Discovered tool",
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+        agent.id,
+        {
+          invocationAction: "allow_when_context_is_untrusted",
+          resultAction: "mark_as_trusted",
+        },
+      );
+
+      const inv = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+      expect(inv).toHaveLength(1);
+      expect(inv[0].action).toBe("allow_when_context_is_untrusted");
+
+      const trusted = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
+      expect(trusted).toHaveLength(1);
+      expect(trusted[0].action).toBe("mark_as_trusted");
+    });
+
+    test("falls back to the original hardcoded defaults when no override is provided", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      const [tool] = await ToolModel.bulkCreateProxyToolsIfNotExists(
+        [
+          {
+            name: "proxy-tool-no-override",
+            description: "Discovered tool",
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+        agent.id,
+      );
+
+      const inv = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+      expect(inv).toHaveLength(1);
+      expect(inv[0].action).toBe("block_when_context_is_untrusted");
+
+      const trusted = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
+      expect(trusted).toHaveLength(1);
+      expect(trusted[0].action).toBe("mark_as_untrusted");
     });
   });
 
@@ -3097,6 +3301,63 @@ describe("ToolModel", () => {
           ),
         );
       expect(catalogRows).toHaveLength(1);
+    });
+
+    test("does not promote a default-prefixed discovery when the branded short-name twin is already cataloged", async () => {
+      const brandedOrg = { appName: "Acme Copilot", iconLogo: null };
+      archestraMcpBranding.syncFromOrganization(brandedOrg);
+
+      const brandedName = archestraMcpBranding.getToolName(
+        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+      );
+      const defaultName = getArchestraToolFullName(
+        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+        { appName: null, fullWhiteLabeling: false },
+      );
+      expect(brandedName).not.toBe(defaultName); // branded env: prefixes differ
+
+      await db.insert(schema.internalMcpCatalogTable).values({
+        id: ARCHESTRA_MCP_CATALOG_ID,
+        ...getArchestraMcpCatalogMetadata(),
+      });
+      // The canonical, branded built-in already lives in the catalog.
+      await db.insert(schema.toolsTable).values({
+        name: brandedName,
+        parameters: {},
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        agentId: null,
+      });
+      // Off-brand discovery: the same built-in arrived under the DEFAULT prefix as
+      // a shared proxy tool (catalog_id NULL) — what LLM-proxy auto-discovery used
+      // to persist before the persistTools guard recognized both prefixes.
+      const [discovered] = await db
+        .insert(schema.toolsTable)
+        .values({
+          name: defaultName,
+          parameters: {},
+          catalogId: null,
+          agentId: null,
+        })
+        .returning();
+
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID, brandedOrg);
+
+      // The discovered twin must NOT be promoted into the catalog…
+      const [after] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.id, discovered.id));
+      expect(after?.catalogId).toBeNull();
+
+      // …and the catalog holds exactly one row for the artifact_write short name.
+      const catalogRows = await db
+        .select({ name: schema.toolsTable.name })
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID));
+      const twins = catalogRows
+        .map((r) => r.name)
+        .filter((name) => name === brandedName || name === defaultName);
+      expect(twins).toEqual([brandedName]);
     });
   });
 

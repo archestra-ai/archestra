@@ -499,9 +499,12 @@ describe("Authnz", () => {
       const fakeUserId = "user-session-test";
 
       vi.spyOn(betterAuth.api, "getSession").mockResolvedValue({
-        user: { id: fakeUserId },
-        session: { id: "session-abc" },
-      } as Awaited<ReturnType<typeof betterAuth.api.getSession>>);
+        response: {
+          user: { id: fakeUserId },
+          session: { id: "session-abc" },
+        },
+        headers: new Headers(),
+      } as unknown as Awaited<ReturnType<typeof betterAuth.api.getSession>>);
 
       vi.spyOn(UserModel, "getById").mockResolvedValue({
         id: fakeUserId,

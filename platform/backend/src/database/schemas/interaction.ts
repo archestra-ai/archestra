@@ -4,6 +4,7 @@ import type {
 } from "@archestra/shared";
 import {
   type AnyPgColumn,
+  boolean,
   index,
   integer,
   jsonb,
@@ -37,8 +38,10 @@ const interactionsTable = pgTable(
       onDelete: "set null",
     }),
     /**
-     * Optional external agent ID passed via X-Archestra-Agent-Id header.
-     * This allows clients to associate interactions with their own agent identifiers.
+     * Client-app / external agent attribution. Set from the caller-supplied
+     * X-Archestra-Agent-Id header (or X-Archestra-Meta segment 0) when present;
+     * otherwise auto-discovered for known client apps (Claude → "anthropic_claude").
+     * Lets clients associate interactions with their own agent identifiers.
      */
     externalAgentId: varchar("external_agent_id"),
     /**
@@ -86,13 +89,15 @@ const interactionsTable = pgTable(
      * Session ID to group related LLM requests together.
      * Can be extracted from:
      * - X-Archestra-Session-Id header (explicit)
-     * - Claude Code's metadata.user_id field (format: user_xxx_session_{uuid})
+     * - Claude/Anthropic metadata.user_id field
      * - OpenAI's user field
      */
     sessionId: varchar("session_id"),
     /**
-     * Source of the session ID for display purposes.
-     * Values: 'claude_code', 'header', 'openai_user', null
+     * Provenance of the session ID (NOT the client app — that is
+     * external_agent_id). Values: 'claude_metadata', 'header', 'meta_header',
+     * 'openwebui_chat', 'openai_user', null. Legacy rows may carry 'claude_code'
+     * / 'claude_desktop'.
      */
     sessionSource: varchar("session_source"),
     /**
@@ -116,7 +121,8 @@ const interactionsTable = pgTable(
     request: jsonb("request").$type<InteractionRequest>().notNull(),
     processedRequest: jsonb("processed_request").$type<InteractionRequest>(),
     /**
-     * Delta-encoding metadata (Claude Code / Claude Desktop interactions only).
+     * Delta-encoding metadata (Claude/Anthropic interactions only — session_source
+     * 'claude_metadata', or the legacy 'claude_code' / 'claude_desktop').
      * For eligible rows the `request`/`processedRequest` columns store only the
      * suffix of `messages` that is new versus the parent row; the full request is
      * rebuilt on read by walking the parent chain. Legacy / non-Claude rows leave
@@ -160,6 +166,9 @@ const interactionsTable = pgTable(
      */
     baselineModel: varchar("baseline_model"),
     inputTokens: integer("input_tokens"),
+    inputTokensEstimated: boolean("input_tokens_estimated")
+      .notNull()
+      .default(false),
     outputTokens: integer("output_tokens"),
     cacheReadTokens: integer("cache_read_tokens"),
     cacheWriteTokens: integer("cache_write_tokens"),

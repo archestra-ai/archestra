@@ -374,6 +374,70 @@ describe("resolveToolAuthState", () => {
     });
   });
 
+  it("propagates a personal credential scope for structured auth-expired errors", () => {
+    expect(
+      resolveToolAuthState({
+        rawOutput: {
+          archestraError: {
+            type: "auth_expired",
+            message: "Expired",
+            catalogName: "GitHub",
+            catalogId: "cat_1",
+            serverId: "s_1",
+            reauthUrl:
+              "http://localhost:3000/mcp/registry?reauth=cat_1&server=s_1",
+            credentialScope: "personal",
+          },
+        },
+      }),
+    ).toEqual({
+      kind: "auth-expired",
+      catalogName: "GitHub",
+      reauthUrl: "http://localhost:3000/mcp/registry?reauth=cat_1&server=s_1",
+      catalogId: "cat_1",
+      serverId: "s_1",
+      credentialScope: "personal",
+    });
+  });
+
+  it("carries the owning team name for team-scoped auth-expired errors", () => {
+    expect(
+      resolveToolAuthState({
+        rawOutput: {
+          archestraError: {
+            type: "auth_expired",
+            message: "Expired",
+            catalogName: "GitHub",
+            catalogId: "cat_1",
+            serverId: "s_1",
+            reauthUrl:
+              "http://localhost:3000/mcp/registry?reauth=cat_1&server=s_1",
+            credentialScope: "team",
+            credentialTeamName: "Platform Team",
+          },
+        },
+      }),
+    ).toMatchObject({
+      kind: "auth-expired",
+      credentialScope: "team",
+      credentialTeamName: "Platform Team",
+    });
+  });
+
+  it("leaves scope undefined for text-parsed expired-auth errors", () => {
+    const authState = resolveToolAuthState({
+      errorText: [
+        'Expired or invalid authentication for "GitHub".',
+        "To re-authenticate, please visit: http://localhost:3000/mcp/registry?reauth=cat_1&server=s_1",
+      ].join("\n"),
+    });
+
+    expect(authState?.kind).toBe("auth-expired");
+    expect(
+      (authState as { credentialScope?: string }).credentialScope,
+    ).toBeUndefined();
+  });
+
   it("parses policy-denied tool errors from errorText", () => {
     const authState = resolveToolAuthState({
       errorText:

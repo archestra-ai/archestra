@@ -4,6 +4,7 @@
 // execution). Must not import chat-mcp-client.ts (cycle).
 import { randomUUID } from "node:crypto";
 import {
+  extractMcpToolError,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   parseFullToolName,
@@ -27,8 +28,10 @@ import {
   archestraMcpBranding,
   executeArchestraTool,
 } from "@/archestra-mcp-server";
+import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
+import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import type {
   RepeatSeverity,
   ToolCallRepeatTracker,
@@ -87,6 +90,13 @@ export interface ChatToolContext {
   blockOnApprovalRequired?: boolean;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];
+  /**
+   * Bridge that surfaces a delegated child agent's tool calls on the caller's
+   * conversation surface (chat path only). Threaded into the child run so its
+   * tool calls — and those of any deeper descendant — appear nested under the
+   * delegation call that spawned them.
+   */
+  subagentToolStream?: SubagentToolStreamBridge;
   mcpGwToken: McpGatewayToken;
   globalToolPolicy: GlobalToolPolicy;
   considerContextUntrusted: boolean;
@@ -219,6 +229,17 @@ export function buildMcpGatewayTool(params: {
               isError: archestraResponse.isError ?? false,
             });
 
+            // Archestra tool errors (schema/validation, policy, not-found,
+            // stale-version) are a function of the arguments, so an identical
+            // re-issue won't resolve them; let the repeat breaker nudge a step
+            // sooner (the first retry still runs — see noteDeterministicError).
+            if (archestraResponse.isError) {
+              ctx.repeatTracker.noteDeterministicError(
+                mcpTool.name,
+                toolArguments,
+              );
+            }
+
             // Return errors as tool-result text so the LLM can read
             // and recover, instead of throwing (which surfaces as a
             // fatal chat error). Matches executeMcpTool behavior.
@@ -346,6 +367,10 @@ export function buildAgentDelegationTool(params: {
           const response = await executeArchestraTool(agentTool.name, args, {
             ...archestraContext,
             contextIsTrusted: toolExecutionContext.contextIsTrusted,
+            // Surface the child's tool calls on the caller's conversation,
+            // attributed to this delegation call (options.toolCallId).
+            subagentToolStream: ctx.subagentToolStream,
+            currentToolCallId: options.toolCallId,
           });
 
           span.setAttribute(
@@ -528,6 +553,23 @@ export async function buildArchestraToolOutput(params: {
     );
   }
   if (!resourceUri) {
+    // A dispatched third-party tool with no MCP-App UI. If it returned a
+    // structured Archestra error (e.g. the expired-auth re-auth payload),
+    // preserve `_meta`/`structuredContent` so chat renders the same rich card
+    // as a direct call. The bare-text fallback below strips
+    // `_meta.archestraError`/`structuredContent.archestraError`, degrading the
+    // card to a text-parsed one (which loses e.g. the credential scope). Mirrors
+    // the direct path (executeMcpTool), which keeps these fields on error.
+    if (response.isError && extractMcpToolError(response)) {
+      return {
+        content: text,
+        _meta: response._meta as Record<string, unknown> | undefined,
+        structuredContent: response.structuredContent as
+          | Record<string, unknown>
+          | undefined,
+        rawContent: response.content as ContentBlock[],
+      };
+    }
     return text;
   }
 
@@ -652,13 +694,17 @@ async function executeWithToolSpan<R>(params: {
         throwIfAborted(ctx.abortSignal);
         return await run({ span, startTime });
       } catch (error) {
-        reportToolMetrics({
-          toolName,
-          agentId: ctx.agentId,
-          agentName: ctx.agentName,
-          startTime,
-          isError: true,
-        });
+        const aborted = ctx.abortSignal?.aborted || isAbortLikeError(error);
+        // A stopped run is a cancellation, not a tool failure — don't count it.
+        if (!aborted) {
+          reportToolMetrics({
+            toolName,
+            agentId: ctx.agentId,
+            agentName: ctx.agentName,
+            startTime,
+            isError: true,
+          });
+        }
         const logPayload = {
           agentId: ctx.agentId,
           userId: ctx.userId,
@@ -666,7 +712,7 @@ async function executeWithToolSpan<R>(params: {
           err: error,
           errorMessage: error instanceof Error ? error.message : String(error),
         };
-        if (isAbortLikeError(error)) {
+        if (aborted) {
           logger.info(logPayload, abortLogMessage);
         } else {
           logger.error(logPayload, failureLogMessage);
@@ -788,6 +834,10 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         // mcp-client scopes per-conversation sessions by this key; in UI chat it
         // is the conversation id, in headless executions the execution key.
         conversationId: isolationKey,
+        // Cancels the in-flight upstream call when the chat run is stopped,
+        // instead of letting it run to completion past the post-call
+        // throwIfAborted below. Covers subagents too (shared builder).
+        abortSignal,
         ...(elicitation
           ? { elicitationHandler: elicitation.createHandler({ toolName }) }
           : {}),
@@ -801,13 +851,17 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
       isError: result.isError ?? false,
     });
   } catch (error) {
-    reportToolMetrics({
-      toolName,
-      agentId,
-      agentName,
-      startTime,
-      isError: true,
-    });
+    // A stopped run aborts the call mid-flight; that is a cancellation, not a
+    // tool failure, so don't count it as an error.
+    if (!abortSignal?.aborted) {
+      reportToolMetrics({
+        toolName,
+        agentId,
+        agentName,
+        startTime,
+        isError: true,
+      });
+    }
     throw error;
   }
   throwIfAborted(abortSignal);
@@ -1145,24 +1199,7 @@ function resolveApprovalPolicyTarget(
   toolName: string,
   args: unknown,
 ): { toolName: string; toolInput: Record<string, unknown> } {
-  const toolInput = isRecord(args) ? args : {};
-  const shortName = archestraMcpBranding.getToolShortName(toolName);
-  if (shortName !== TOOL_RUN_TOOL_SHORT_NAME) {
-    return { toolName, toolInput };
-  }
-
-  const targetToolName = toolInput.tool_name;
-  if (typeof targetToolName !== "string" || targetToolName.length === 0) {
-    return { toolName, toolInput };
-  }
-
-  const targetToolInput = isRecord(toolInput.tool_args)
-    ? toolInput.tool_args
-    : {};
-  return {
-    toolName: targetToolName,
-    toolInput: targetToolInput,
-  };
+  return resolveRunToolTarget(toolName, args);
 }
 
 function reportToolMetrics(params: {

@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { ArrowRightIcon, Plus } from "lucide-react";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
+import { CallPolicyToggle } from "@/components/call-policy-toggle";
 import { DebouncedInput } from "@/components/debounced-input";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +34,6 @@ import {
   getCallPolicyActionFromPolicies,
 } from "@/lib/policy.utils";
 import { useTeams } from "@/lib/teams/team.query";
-import { CallPolicyToggle } from "./call-policy-toggle";
 import { PolicyCard } from "./policy-card";
 import {
   type PolicyCondition,
@@ -224,7 +224,7 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                     },
                     {
                       value: "block_when_context_is_untrusted",
-                      label: "Allow in safe context",
+                      label: "Block in sensitive context",
                     },
                     {
                       value: "require_approval",

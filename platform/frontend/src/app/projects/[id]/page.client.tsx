@@ -1,11 +1,14 @@
 "use client";
 
-import { PROJECT_INSTRUCTIONS_FILENAME } from "@archestra/shared";
+import {
+  isEditableTextFile,
+  PROJECT_INSTRUCTIONS_FILENAME,
+} from "@archestra/shared";
 import {
   CalendarClock,
   Download,
   Eye,
-  FileText,
+  Loader2,
   MessageCircle,
   MoreHorizontal,
   Pencil,
@@ -17,8 +20,13 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { collapseProjectChats } from "@/app/projects/[id]/project-chats.utils";
+import {
+  collapseProjectChats,
+  countRunsByTrigger,
+  formatScheduledRecentRow,
+} from "@/app/projects/[id]/project-chats.utils";
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
+import { runChatHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentIcon } from "@/components/agent-icon";
 import { FileDetailHeader } from "@/components/chat/file-detail-header";
 import type { FileListItem } from "@/components/chat/file-list-section";
@@ -31,8 +39,11 @@ import {
 } from "@/components/chat/project-instructions";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { SelectableFileList } from "@/components/chat/selectable-file-list";
+import { FileDropZone } from "@/components/files/file-drop-zone";
 import { PageLayout } from "@/components/page-layout";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
+import { QueryLoadError } from "@/components/query-load-error";
+import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,10 +52,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useCreateConversation } from "@/lib/chat/chat.query";
+import { conversationStorageKeys } from "@/lib/chat/chat-utils";
+import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
-import { buildProjectChatHandoffUrl } from "@/lib/projects/project-chat-handoff";
 import { canManageProject } from "@/lib/projects/project-permissions";
 import {
   useDeleteProject,
@@ -53,7 +65,9 @@ import {
   useProject,
   useProjectConversations,
   useProjectFiles,
+  useUploadProjectFiles,
 } from "@/lib/projects/projects.query";
+import { useScheduleTriggerRuns } from "@/lib/schedule-trigger.query";
 import { sandboxArtifactUrl } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
@@ -70,7 +84,7 @@ export default function ProjectDetailPageClient() {
 function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { data: project, isPending } = useProject(id);
+  const { data: project, isPending, isLoadingError, refetch } = useProject(id);
   // Chats are hidden from admin oversight, so don't even fetch them there.
   const { data: conversations } = useProjectConversations(id, {
     enabled: !!project && project.viewerRole !== "admin",
@@ -94,6 +108,16 @@ function ProjectDetail() {
         <p className="py-12 text-center text-sm text-muted-foreground">
           Loading…
         </p>
+      </PageLayout>
+    );
+  }
+  if (isLoadingError) {
+    return (
+      <PageLayout title="Project" description="">
+        <QueryLoadError
+          title="Couldn't load this project"
+          onRetry={() => refetch()}
+        />
       </PageLayout>
     );
   }
@@ -132,9 +156,6 @@ function ProjectDetail() {
           description={project.description ?? ""}
           actionButton={
             <div className="flex items-center gap-2">
-              {project.viewerRole === "shared" && (
-                <Badge variant="secondary">Shared with you</Badge>
-              )}
               {isAdminView && (
                 <Badge variant="secondary">
                   Viewing as administrator
@@ -224,8 +245,10 @@ function ProjectDetail() {
       <div className="hidden md:flex h-full min-h-0">
         <ProjectFilesSidebar
           projectId={project.id}
-          projectName={project.name}
           canManageProject={canManage}
+          // Anyone with real project access (owner or shared) may edit its text
+          // files; the admin-oversight view is read-only.
+          canEditFiles={!isAdminView}
         />
       </div>
     </div>
@@ -235,20 +258,133 @@ function ProjectDetail() {
 // === internal components ===
 
 /**
- * The real /chat composer; submitting hands off to /chat, which creates the
- * project chat (via ?project=) and sends the prompt (via ?user_prompt=).
+ * The real /chat composer. Rather than route through an empty `/chat` (which
+ * flashes the New Chat splash, then blanks again while it creates the chat over
+ * the network and remounts at /chat/<id>), it creates the project chat up front
+ * — the project page stays on screen during the request, and `useCreateConversation`
+ * seeds the conversation cache so `/chat/<id>` renders without a load. The opening
+ * message rides {@link setPendingProjectChatHandoff} across the single navigation,
+ * where `/chat/<id>` sends it as the conversation's first message.
  */
 function ProjectChatInput({ projectId }: { projectId: string }) {
   const router = useRouter();
+  const createConversation = useCreateConversation();
+  const { data: projectFiles } = useProjectFiles(projectId);
+  const projectHasFiles = (projectFiles?.length ?? 0) > 0;
 
   return (
     <NewChatComposer
-      onSubmitPrompt={(text, agentId) =>
-        router.push(
-          buildProjectChatHandoffUrl({ projectId, prompt: text, agentId }),
-        )
-      }
+      onSubmit={({ text, agentId, modelId, apiKeyId }) => {
+        // Ignore a second submit while the first create is still in flight.
+        if (createConversation.isPending) return;
+        createConversation.mutate(
+          {
+            agentId,
+            modelId: modelId || undefined,
+            chatApiKeyId: apiKeyId ?? undefined,
+            projectId,
+          },
+          {
+            onSuccess: (conversation) => {
+              if (!conversation) return;
+              // The opening prompt travels to /chat/<id>, which sends it (with
+              // any attachments the composer stashed) as the first message.
+              setPendingProjectChatHandoff({
+                conversationId: conversation.id,
+                prompt: text,
+              });
+              // Continuity with the project page: when the project already has
+              // files, open the new chat with its Files panel showing. Persisted
+              // per conversation, since /chat reads this on mount.
+              if (projectHasFiles) {
+                const keys = conversationStorageKeys(conversation.id);
+                localStorage.setItem(keys.rightPanelOpen, "true");
+                localStorage.setItem(keys.rightPanelTab, "files");
+              }
+              router.push(`/chat/${conversation.id}`);
+            },
+          },
+        );
+      }}
     />
+  );
+}
+
+// A Recents row for a schedule: keyed on the schedule's LATEST run (not the
+// possibly-stale run this collapsed conversation was built from), so it stays in
+// lockstep with the SCHEDULES section — a spinner while that run is running, and
+// clicking it opens the current run's chat rather than the last completed one.
+function ScheduledRecentRow({
+  conv,
+  scheduled,
+}: {
+  conv: {
+    id: string;
+    scheduleTriggerId: string | null;
+    scheduleRunId: string | null;
+    lastMessageAt: string;
+  };
+  scheduled: { title: string; meta: string };
+}) {
+  const router = useRouter();
+  const { resolve, isResolving } = useResolveRunChat();
+  const triggerId = conv.scheduleTriggerId;
+  const { data: runsResponse } = useScheduleTriggerRuns(triggerId, {
+    limit: 1,
+    refetchInterval: (query) =>
+      query.state.data?.data?.[0]?.status === "running" ? 3_000 : false,
+  });
+  const latestRun = runsResponse?.data?.[0];
+  const isRunning = latestRun?.status === "running";
+
+  const openLatestRun = () => {
+    if (!triggerId) {
+      router.push(`/chat/${conv.id}`);
+      return;
+    }
+    const href = latestRun ? runChatHref({ triggerId, run: latestRun }) : null;
+    if (href) {
+      router.push(href);
+    } else if (latestRun) {
+      // Legacy run without a conversation: mint one, then open it.
+      resolve(triggerId, latestRun.id);
+    } else {
+      // Runs not loaded yet — fall back to this row's own conversation.
+      router.push(
+        `/chat/${conv.id}?scheduleTriggerId=${triggerId}&scheduleRunId=${conv.scheduleRunId}`,
+      );
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={openLatestRun}
+      disabled={isResolving}
+      className="flex w-full items-center gap-3 rounded-lg border bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+        {isRunning ? (
+          <Loader2
+            className="h-4 w-4 animate-spin text-amber-500"
+            aria-hidden
+          />
+        ) : (
+          <CalendarClock className="h-4 w-4 text-primary" aria-hidden />
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="truncate block text-sm font-medium">
+          {scheduled.title}
+        </span>
+        <span className="block truncate text-xs text-muted-foreground">
+          {scheduled.meta}
+        </span>
+      </span>
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {formatRelativeTimeFromNow(conv.lastMessageAt)}
+      </span>
+    </button>
   );
 }
 
@@ -270,6 +406,7 @@ function ChatsList({
   // A schedule's runs collapse to one row (its latest run); user chats are shown
   // as-is. Newest activity first.
   const chats = collapseProjectChats(conversations);
+  const runCounts = countRunsByTrigger(conversations);
   return (
     <section>
       <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
@@ -282,37 +419,35 @@ function ChatsList({
       ) : (
         <div className="space-y-2">
           {chats.map((conv) => {
-            const isScheduled = conv.origin === "schedule_trigger";
-            // A scheduled row opens its latest run's chat WITH the schedule
-            // context, so the chat sidebar shows the runs navigator for the rest.
-            const href = isScheduled
-              ? `/chat/${conv.id}?scheduleTriggerId=${conv.scheduleTriggerId}&scheduleRunId=${conv.scheduleRunId}`
-              : `/chat/${conv.id}`;
+            if (conv.origin === "schedule_trigger") {
+              const scheduled = formatScheduledRecentRow({
+                scheduleName: conv.scheduleName,
+                prompt: conv.title,
+                runCount: conv.scheduleTriggerId
+                  ? (runCounts.get(conv.scheduleTriggerId) ?? 0)
+                  : 0,
+              });
+              return (
+                <ScheduledRecentRow
+                  key={conv.id}
+                  conv={conv}
+                  scheduled={scheduled}
+                />
+              );
+            }
             return (
               <Link
                 key={conv.id}
-                href={href}
+                href={`/chat/${conv.id}`}
                 className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-muted/50"
               >
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                  {isScheduled ? (
-                    <CalendarClock
-                      className="h-4 w-4 text-primary"
-                      aria-hidden
-                    />
-                  ) : (
-                    <MessageCircle
-                      className="h-4 w-4 text-primary"
-                      aria-hidden
-                    />
-                  )}
+                  <MessageCircle className="h-4 w-4 text-primary" aria-hidden />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="truncate text-sm font-medium">
-                      {isScheduled
-                        ? (conv.scheduleName ?? "Scheduled task")
-                        : (conv.title ?? "Untitled chat")}
+                      {conv.title ?? "Untitled chat"}
                     </span>
                     {conv.readOnly && (
                       <Badge variant="outline" className="shrink-0 gap-1">
@@ -322,11 +457,9 @@ function ChatsList({
                     )}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {isScheduled
-                      ? (conv.title ?? "No prompt")
-                      : conv.readOnly
-                        ? `by ${conv.authorName ?? "someone else"}`
-                        : "by you"}
+                    {conv.readOnly
+                      ? `by ${conv.authorName ?? "someone else"}`
+                      : "by you"}
                   </span>
                 </span>
                 <span className="shrink-0 text-xs text-muted-foreground">
@@ -342,22 +475,27 @@ function ChatsList({
 }
 
 /**
- * The project's files as a full-height right sidebar — the exact chat-page
- * Files panel: same resizable shell, same tab header, same stacked
- * list-over-preview body.
+ * The project's files as a full-height right sidebar — the same resizable shell
+ * and stacked list-over-preview body as the chat-page Files panel, minus the tab
+ * header: Files is the only view here, and the project name already shows in the
+ * page title, so both are dropped.
  */
 function ProjectFilesSidebar({
   projectId,
-  projectName,
   canManageProject,
+  canEditFiles,
 }: {
   projectId: string;
-  projectName: string;
   /** Owner / project-admin — gates editing the pinned instructions. */
   canManageProject: boolean;
+  /** Real project access (owner/shared, not oversight) — gates editing files. */
+  canEditFiles: boolean;
 }) {
   const { data: files } = useProjectFiles(projectId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The selected file's in-place editor is open. Lifted here so the Edit toggle
+  // can sit in the action row next to Download/Delete.
+  const [editing, setEditing] = useState(false);
   // Opening a file shows it below the list (split); `expanded` fills the panel.
   const [expanded, setExpanded] = useState(false);
 
@@ -372,6 +510,8 @@ function ProjectFilesSidebar({
       name: f.filename,
       mimeType: f.mimeType,
       contentUrl: sandboxArtifactUrl(f.downloadRef),
+      // The real row id (null for a rowless hand-placed object) — gates editing.
+      rowId: f.id,
     }));
   const selected = items.find((i) => i.id === selectedId) ?? null;
   const instructionsSelected = selectedId === INSTRUCTIONS_SELECTION;
@@ -379,14 +519,28 @@ function ProjectFilesSidebar({
   const detailName = instructionsSelected
     ? PROJECT_INSTRUCTIONS_FILENAME
     : (selected?.name ?? "");
+  // Editable only for a row-backed .md/.txt file when the viewer has real project
+  // access (the admin-oversight view is read-only, so `canEditFiles` is false).
+  const selectedEditable =
+    selected != null &&
+    canEditFiles &&
+    selected.rowId != null &&
+    isEditableTextFile({
+      filename: selected.name,
+      mimeType: selected.mimeType,
+    });
 
   const openFile = (id: string) => {
     setSelectedId(id);
+    // Files and instructions both open in the read view; editing is entered
+    // explicitly via the Edit affordance in the action row.
+    setEditing(false);
     setExpanded(false);
   };
   const collapse = () => setExpanded(false);
   const deselect = () => {
     setSelectedId(null);
+    setEditing(false);
     setExpanded(false);
   };
 
@@ -396,6 +550,7 @@ function ProjectFilesSidebar({
   useEffect(() => {
     if (selectedMissing) {
       setSelectedId(null);
+      setEditing(false);
       setExpanded(false);
     }
   }, [selectedMissing]);
@@ -404,6 +559,7 @@ function ProjectFilesSidebar({
   // delete authorizes — so file select/delete is available to anyone here (the
   // chat panel gates on conversation ownership; the project surface on access).
   const deleteProjectFiles = useDeleteProjectFiles(projectId);
+  const uploadProjectFiles = useUploadProjectFiles(projectId);
   const { requestDelete, dialog: deleteDialog } = useFileDeletion<FileListItem>(
     {
       deleteItems: (toDelete) => deleteProjectFiles.mutateAsync(toDelete),
@@ -414,21 +570,11 @@ function ProjectFilesSidebar({
 
   return (
     <ResizableRightPanel>
-      <Tabs value="files" className="flex-1 min-h-0 flex flex-col gap-0">
-        <div className="flex items-center gap-2 border-b px-2 py-2">
-          <div className="min-w-0 flex-1 overflow-x-auto">
-            <TabsList className="h-8 w-max">
-              <TabsTrigger value="files" className="text-xs px-3">
-                <FileText className="h-3 w-3" />
-                Files
-              </TabsTrigger>
-            </TabsList>
-          </div>
-          <span className="shrink-0 truncate pr-1 text-xs text-muted-foreground">
-            {projectName}
-          </span>
-        </div>
-
+      <FileDropZone
+        onDropFiles={(droppedFiles) => uploadProjectFiles.mutate(droppedFiles)}
+        disabled={uploadProjectFiles.isPending}
+        className="flex-1 min-h-0 flex flex-col gap-0"
+      >
         <div className="flex-1 min-h-0 overflow-hidden relative">
           <div className="flex h-full flex-col">
             {/* The list fills the panel when nothing is open, is capped above
@@ -465,6 +611,17 @@ function ProjectFilesSidebar({
                 onExpand={() => setExpanded(true)}
                 onCollapse={collapse}
               >
+                {instructionsSelected && canManageProject && !editing && (
+                  <button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    title="Edit instructions"
+                    className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    <span className="sr-only">Edit instructions</span>
+                  </button>
+                )}
                 {selected && !instructionsSelected && (
                   <div className="flex shrink-0 items-center">
                     {selected.contentUrl && (
@@ -479,6 +636,17 @@ function ProjectFilesSidebar({
                           Download {selected.name}
                         </span>
                       </a>
+                    )}
+                    {selectedEditable && !editing && (
+                      <button
+                        type="button"
+                        onClick={() => setEditing(true)}
+                        title={`Edit ${selected.name}`}
+                        className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        <Pencil className="h-4 w-4" />
+                        <span className="sr-only">Edit {selected.name}</span>
+                      </button>
                     )}
                     <button
                       type="button"
@@ -501,14 +669,25 @@ function ProjectFilesSidebar({
               <ProjectInstructionsPanel
                 projectId={projectId}
                 isOwner={canManageProject}
-                onClose={deselect}
+                editing={editing}
+                onExitEdit={() => setEditing(false)}
               />
             ) : previewing && selected ? (
-              <FilePreview file={selected} onClose={deselect} />
+              <FilePreview
+                // Per-file key: drop any editor state when the previewed file changes.
+                key={selected.id}
+                file={selected}
+                onClose={deselect}
+                // Only row-backed files are editable; a rowless (obj_) object has
+                // no `rowId`, so `selectedEditable` is false and Edit stays hidden.
+                fileId={selected.rowId ?? undefined}
+                editing={editing && selectedEditable}
+                onExitEdit={() => setEditing(false)}
+              />
             ) : null}
           </div>
         </div>
-      </Tabs>
+      </FileDropZone>
       {deleteDialog}
     </ResizableRightPanel>
   );

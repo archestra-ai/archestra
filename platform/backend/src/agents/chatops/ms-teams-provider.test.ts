@@ -135,6 +135,89 @@ describe("MSTeamsProvider.wasBotMentioned", () => {
   });
 });
 
+describe("MSTeamsProvider.parseMuteReaction", () => {
+  const CHANNEL = "19:abcdef@thread.tacv2";
+  const ROOT = "1700000000000";
+  const channelReaction = (overrides: Record<string, unknown> = {}) => ({
+    type: "messageReaction",
+    conversation: {
+      id: `${CHANNEL};messageid=${ROOT}`,
+      conversationType: "channel",
+    },
+    channelData: { channel: { id: CHANNEL } },
+    reactionsAdded: [{ type: "1f507_mutedspeaker" }],
+    ...overrides,
+  });
+
+  test("returns channel + thread (root from conversation id) for a mute reaction", () => {
+    const provider = createProvider();
+    expect(provider.parseMuteReaction(channelReaction())).toEqual({
+      channelId: CHANNEL,
+      threadId: ROOT,
+    });
+  });
+
+  test("accepts the shushing-face reaction id too", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({ reactionsAdded: [{ type: "lipssealed" }] }),
+      ),
+    ).not.toBeNull();
+  });
+
+  test("derives the thread root from conversation id, NOT replyToId", () => {
+    const provider = createProvider();
+    // replyToId points at the reacted (bot reply) message, which must be ignored.
+    const result = provider.parseMuteReaction(
+      channelReaction({ replyToId: "9999-bot-reply-message-id" }),
+    );
+    expect(result?.threadId).toBe(ROOT);
+  });
+
+  test("null for a non-mute reaction", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({ reactionsAdded: [{ type: "like" }] }),
+      ),
+    ).toBeNull();
+  });
+
+  test("null when the activity is not a messageReaction", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(channelReaction({ type: "message" })),
+    ).toBeNull();
+  });
+
+  test("null outside team channels (no sticky state to clear)", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({
+          conversation: {
+            id: `${CHANNEL};messageid=${ROOT}`,
+            conversationType: "groupChat",
+          },
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  test("null when the thread root can't be resolved (no false mute)", () => {
+    const provider = createProvider();
+    // conversation id without ;messageid= — we must NOT guess a key.
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({
+          conversation: { id: CHANNEL, conversationType: "channel" },
+        }),
+      ),
+    ).toBeNull();
+  });
+});
+
 describe("MSTeamsProvider.parseWebhookNotification is mention-agnostic", () => {
   test("channel message WITH @mention is parsed", async () => {
     const provider = createProvider();
@@ -239,6 +322,89 @@ describe("MSTeamsProvider file attachment downloads", () => {
 
     expect(result).not.toBeNull();
     expect(result?.attachments).toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("file-only message (empty text + file attachment) is parsed with attachments", async () => {
+    const provider = createProvider();
+    const fileContent = Buffer.from("file-only teams message");
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(fileContent, { status: 200 }),
+    );
+
+    const result = await provider.parseWebhookNotification(
+      makeActivity({
+        text: undefined,
+        attachments: [
+          {
+            contentType: "application/pdf",
+            contentUrl: "https://teams.blob.core.windows.net/files/report.pdf",
+            name: "report.pdf",
+          },
+        ],
+      }),
+      {},
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.text).toBe("");
+    expect(result?.attachments).toHaveLength(1);
+    expect(result?.attachments?.[0].name).toBe("report.pdf");
+  });
+
+  test("message with neither text nor attachments returns null", async () => {
+    const provider = createProvider();
+
+    const result = await provider.parseWebhookNotification(
+      makeActivity({ text: undefined, attachments: undefined }),
+      {},
+    );
+
+    expect(result).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("file-only message whose download fails is dropped (no empty turn)", async () => {
+    const provider = createProvider();
+
+    // The download fails (e.g. expired/oversized), so no attachment survives.
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 404 }));
+
+    const result = await provider.parseWebhookNotification(
+      makeActivity({
+        text: undefined,
+        attachments: [
+          {
+            contentType: "application/pdf",
+            contentUrl: "https://teams.blob.core.windows.net/files/report.pdf",
+            name: "report.pdf",
+          },
+        ],
+      }),
+      {},
+    );
+
+    expect(result).toBeNull();
+  });
+
+  test("card-only message with empty text returns null (cards are not files)", async () => {
+    const provider = createProvider();
+
+    const result = await provider.parseWebhookNotification(
+      makeActivity({
+        text: undefined,
+        attachments: [
+          {
+            contentType: "application/vnd.microsoft.card.adaptive",
+            content: JSON.stringify({ type: "AdaptiveCard" }),
+          },
+        ],
+      }),
+      {},
+    );
+
+    expect(result).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -639,5 +805,145 @@ describe("MSTeamsProvider.convertToThreadMessages file metadata", () => {
         name: "vacation.jpg",
       },
     ]);
+  });
+});
+
+describe("MSTeamsProvider.sendReply", () => {
+  // Drives a reply through the conversationReference branch (no live
+  // turnContext) and returns the text handed to context.sendActivity.
+  async function captureReplyText(
+    options: Pick<
+      Parameters<MSTeamsProvider["sendReply"]>[0],
+      "footer" | "hint"
+    >,
+  ): Promise<string> {
+    const provider = createProvider();
+    const sendActivity = vi.fn().mockResolvedValue({ id: "reply-1" });
+    const continueConversationAsync = vi.fn(
+      async (
+        _appId: string,
+        _ref: unknown,
+        callback: (context: {
+          sendActivity: typeof sendActivity;
+        }) => Promise<void>,
+      ) => {
+        await callback({ sendActivity });
+      },
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock adapter
+    (provider as any).adapter = { continueConversationAsync };
+
+    await provider.sendReply({
+      originalMessage: {
+        messageId: "msg-1",
+        channelId: "19:abc@thread.tacv2",
+        workspaceId: "team-uuid",
+        senderId: "user-1",
+        senderName: "Alice",
+        text: "hi",
+        rawText: "hi",
+        timestamp: new Date(),
+        isThreadReply: false,
+        metadata: { conversationReference: { foo: "bar" } },
+      },
+      text: "Here is your answer",
+      ...options,
+    });
+
+    return sendActivity.mock.calls[0][0] as string;
+  }
+
+  test("puts the mute hint on its own italic line above the footer", async () => {
+    const text = await captureReplyText({
+      footer: "🤖 Agent",
+      hint: 'Reply "mute" to stop',
+    });
+
+    expect(text).toBe(
+      'Here is your answer\n\n---\n\n_Reply "mute" to stop_\n\n🤖 Agent',
+    );
+  });
+
+  test("renders the hint under its own separator when there is no footer", async () => {
+    const text = await captureReplyText({ hint: 'Reply "mute" to stop' });
+
+    expect(text).toBe('Here is your answer\n\n---\n\n_Reply "mute" to stop_');
+  });
+});
+
+describe("MSTeamsProvider.addApprovalRequestForm", () => {
+  // Drives the form through the conversationReference branch (no live
+  // turnContext) and captures the Adaptive Card sent to the channel.
+  async function captureApprovalCard(options: {
+    toolName: string;
+    toolArgs?: Record<string, unknown>;
+  }): Promise<{ body: Array<Record<string, unknown>> }> {
+    const provider = createProvider();
+    const sendActivity = vi.fn().mockResolvedValue(undefined);
+    const continueConversationAsync = vi.fn(
+      async (
+        _appId: string,
+        _ref: unknown,
+        callback: (context: {
+          sendActivity: typeof sendActivity;
+        }) => Promise<void>,
+      ) => {
+        await callback({ sendActivity });
+      },
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock adapter
+    (provider as any).adapter = { continueConversationAsync };
+
+    await provider.addApprovalRequestForm({
+      channelId: "19:abc@thread.tacv2",
+      threadId: "19:abc@thread.tacv2",
+      approvalId: "appr-1",
+      taskId: "task-1",
+      toolName: options.toolName,
+      toolArgs: options.toolArgs,
+      originalMessage: {
+        messageId: "msg-1",
+        channelId: "19:abc@thread.tacv2",
+        workspaceId: "team-uuid",
+        senderId: "user-1",
+        senderEmail: "user@example.com",
+        senderName: "Alice",
+        text: "do it",
+        rawText: "do it",
+        timestamp: new Date(),
+        isThreadReply: false,
+        metadata: { conversationReference: { foo: "bar" } },
+      },
+    });
+
+    const activity = sendActivity.mock.calls[0][0];
+    return activity.attachments[0].content as {
+      body: Array<Record<string, unknown>>;
+    };
+  }
+
+  test("renders the tool's arguments as a monospace block when provided", async () => {
+    const card = await captureApprovalCard({
+      toolName: "github__create_issue",
+      toolArgs: { repo: "octo/repo", title: "Bug" },
+    });
+
+    const textBlocks = card.body.filter((b) => b.type === "TextBlock");
+    expect(textBlocks[0].text).toBe("`github__create_issue`");
+    const argsBlock = textBlocks.find((b) => b.fontType === "Monospace");
+    expect(argsBlock).toBeDefined();
+    expect(argsBlock?.text).toContain('"repo": "octo/repo"');
+    expect(argsBlock?.text).toContain('"title": "Bug"');
+  });
+
+  test("omits the arguments block when there are no arguments", async () => {
+    const card = await captureApprovalCard({
+      toolName: "dangerous_tool",
+      toolArgs: {},
+    });
+
+    const textBlocks = card.body.filter((b) => b.type === "TextBlock");
+    expect(textBlocks[0].text).toBe("`dangerous_tool`");
+    expect(textBlocks.some((b) => b.fontType === "Monospace")).toBe(false);
   });
 });

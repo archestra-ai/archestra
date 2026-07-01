@@ -3,6 +3,7 @@
 import {
   compareModelsForDisplay,
   E2eTestId,
+  isLegacyGeminiModel,
   isOpenRouterLatestAlias,
   type ModelInputModality,
   providerDisplayNames,
@@ -39,6 +40,7 @@ import {
   ConnectAccountBadge,
   FreeModelBadge,
   LatestModelBadge,
+  OldModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
 import { Button } from "@/components/ui/button";
@@ -541,14 +543,11 @@ export const ModelSelector = memo(function ModelSelector({
   suppressAutoSelect = false,
   fallbackModelName,
 }: ModelSelectorProps) {
-  const {
-    modelsByProvider,
-    isPending: isLoading,
-    isPlaceholderData,
-  } = useLlmModelsByProvider({
-    apiKeyId: apiKeyId ?? undefined,
-    enabled,
-  });
+  const { modelsByProvider, isLoading, isPlaceholderData } =
+    useLlmModelsByProvider({
+      apiKeyId: apiKeyId ?? undefined,
+      enabled,
+    });
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
 
@@ -695,6 +694,8 @@ export const ModelSelector = memo(function ModelSelector({
       availableModels: allAvailableModels.map((m) => ({
         id: m.dbId,
         isBest: m.isBest,
+        requiresUserConnection: m.requiresUserConnection,
+        isConnected: m.isConnected,
       })),
       isLoading,
     });
@@ -894,6 +895,8 @@ export const ModelSelector = memo(function ModelSelector({
                       {isOpenRouterLatestAlias(provider, model.id) && (
                         <LatestModelBadge />
                       )}
+                      {provider === "gemini" &&
+                        isLegacyGeminiModel(model.id) && <OldModelBadge />}
                       <div className="ml-auto flex items-center gap-2">
                         <ModelCapabilityBadges
                           capabilities={model.capabilities}

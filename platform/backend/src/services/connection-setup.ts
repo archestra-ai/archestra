@@ -139,9 +139,8 @@ export async function ensureConnectionVirtualKey(params: {
  * passthrough requests (Claude Code subscription, Claude Desktop API key) to the
  * acting user via the X-Archestra-Virtual-Key header. The key carries NO provider
  * credential — it only identifies the user. One key per user (named like the
- * standard connection key) that accumulates the LLM proxies it has been
- * connected to (idempotent add), so reuse across proxies keeps a single,
- * manageable key while still scoping access to the proxies actually used.
+ * standard connection key); LLM proxy access is governed by the user's own
+ * access permissions at request time, so the key is not bound to any proxy.
  *
  * Reuses the existing key when present and still typed passthrough with a
  * readable secret; recreates it otherwise. Creation happens only here (at
@@ -153,9 +152,8 @@ export async function ensureConnectionPassthroughKey(params: {
   organizationId: string;
   userId: string;
   userEmail: string;
-  llmProxyId: string;
 }): Promise<string> {
-  const { organizationId, userId, userEmail, llmProxyId } = params;
+  const { organizationId, userId, userEmail } = params;
 
   const name = connectionPassthroughKeyName(userEmail);
   const existing = await VirtualApiKeyModel.findByAuthorScopeName({
@@ -171,12 +169,6 @@ export async function ensureConnectionPassthroughKey(params: {
         ? await secretManager().getSecret(existing.secretId)
         : null;
     if (existing.keyType === "passthrough" && secret) {
-      // Add the target proxy to the allowed list (idempotent); the per-user key
-      // accumulates the proxies it has been connected to.
-      await VirtualApiKeyModel.ensureLlmProxyMapping({
-        virtualApiKeyId: existing.id,
-        llmProxyId,
-      });
       return existing.id;
     }
     // Wrong type (name squatted) or secret revoked out from under us: replace
@@ -198,7 +190,6 @@ export async function ensureConnectionPassthroughKey(params: {
     keyType: "passthrough",
     scope: "personal",
     authorId: userId,
-    allowedLlmProxyIds: [llmProxyId],
   });
 
   // Names are not unique, so two concurrent setups can both miss the lookup
@@ -212,10 +203,6 @@ export async function ensureConnectionPassthroughKey(params: {
   });
   if (winner && winner.id !== virtualKey.id) {
     await VirtualApiKeyModel.delete(virtualKey.id);
-    await VirtualApiKeyModel.ensureLlmProxyMapping({
-      virtualApiKeyId: winner.id,
-      llmProxyId,
-    });
     return winner.id;
   }
 

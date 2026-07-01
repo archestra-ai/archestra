@@ -52,6 +52,8 @@ The bot responds with a list of options to choose which agent will handle messag
 
 In channels the bot stays silent until it is @mentioned. Once mentioned in a thread, it keeps replying to every message in that thread without further mentions. Starting a new thread needs a fresh mention. Direct messages always get a reply, no mention required.
 
+To stop the bot replying in a thread, send `mute` (you can address it by name with no @mention, e.g. `Archestra mute`), or react to one of its replies with the mute (🔇) or shushing-face (🤫) emoji. It goes quiet until the thread is @mentioned again. As a reminder, the bot adds a short hint about this to its first reply in each thread.
+
 ### Commands
 
 Archestra uses native Slack slash commands — type them directly in the message box without mentioning the bot.
@@ -113,7 +115,7 @@ Admins can view autoprovisioned users on the **Settings → Members** page — f
 
 ## Attachments
 
-Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Image attachments are included inline in the agent's context; non-image attachments are noted but not processed as inline content.
+Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Files the selected model can read — images, PDFs, and text documents such as CSV, TSV, JSON, XML, YAML, TOML, and Markdown — are included inline in the agent's context. When the agent has a code sandbox, other file types (for example a SQLite database or a ZIP archive) are placed into the sandbox so the agent can open them with its tools. Anything that still cannot be provided is noted by name so the agent can tell the user. A message that contains only a file (no text) is processed too.
 
 **Limits:**
 - Max 20 attachments per message

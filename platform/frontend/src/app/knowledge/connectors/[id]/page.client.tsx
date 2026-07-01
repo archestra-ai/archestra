@@ -28,6 +28,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { MetadataItem } from "@/components/metadata-card";
 import { PageLayout } from "@/components/page-layout";
+import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -112,7 +113,12 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     },
   ];
 
-  const { data: connector, isPending } = useConnector(connectorId);
+  const {
+    data: connector,
+    isPending,
+    isLoadingError,
+    refetch,
+  } = useConnector(connectorId);
   const syncConnector = useSyncConnector();
   const forceResync = useForceResyncConnector();
   const testConnection = useTestConnectorConnection();
@@ -224,6 +230,17 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
 
   if (isPending) {
     return <LoadingSpinner />;
+  }
+
+  if (isLoadingError) {
+    return (
+      <div className="p-6">
+        <QueryLoadError
+          title="Couldn't load this connector"
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
   }
 
   if (!connector) {

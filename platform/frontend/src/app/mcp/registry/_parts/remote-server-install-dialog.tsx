@@ -20,6 +20,10 @@ import {
 } from "@/components/ui/select";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
+import {
+  MCP_CONFIG_AUTOCOMPLETE,
+  MCP_SECRET_AUTOCOMPLETE,
+} from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import {
@@ -526,6 +530,11 @@ export function RemoteServerInstallDialog({
                         : fieldConfig.type === "number"
                           ? "number"
                           : "text"
+                    }
+                    autoComplete={
+                      fieldConfig.sensitive
+                        ? MCP_SECRET_AUTOCOMPLETE
+                        : MCP_CONFIG_AUTOCOMPLETE
                     }
                     placeholder={
                       fieldConfig.default?.toString() || fieldConfig.description

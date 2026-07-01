@@ -140,7 +140,7 @@ prompt.
 ## RBAC
 
 The sandbox MCP tools (`run_command`, `upload_file`, `download_file`,
-`search_files`, `save_result`) are gated by `sandbox:execute` (`backend/src/archestra-mcp-server/rbac.ts`). Sandboxes are
+`search_files`, `save_file`) are gated by `sandbox:execute` (`backend/src/archestra-mcp-server/rbac.ts`). Sandboxes are
 scoped to the caller's organization + user + **conversation**: a `target: { id }`
 referencing a sandbox outside that scope is rejected.
 

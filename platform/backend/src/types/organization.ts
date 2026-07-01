@@ -10,9 +10,11 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { sanitizeSvg } from "@/utils/sanitize-svg";
+import { ToolInvocation, TrustedData } from "./autonomy-policies";
 import {
   NetworkPolicyInputSchema,
   NetworkPolicySchema,
+  TrustedImageRegistriesSchema,
   ValidationRegexSchema,
 } from "./environment";
 import { LimitCleanupIntervalSchema } from "./limit";
@@ -303,6 +305,9 @@ const extendedFields = {
   customFont: OrganizationCustomFontSchema,
   compressionScope: OrganizationCompressionScopeSchema,
   globalToolPolicy: GlobalToolPolicySchema,
+  defaultDiscoveredToolInvocationPolicy:
+    ToolInvocation.ToolInvocationPolicyActionSchema,
+  defaultDiscoveredToolResultPolicy: TrustedData.TrustedDataPolicyActionSchema,
   analyticsInstanceId: z.string().uuid(),
   analyticsInstanceStartedAt: z.date().nullable(),
   analyticsInstanceLastHeartbeatAt: z.date().nullable(),
@@ -331,6 +336,8 @@ const extendedFields = {
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
   connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
   defaultNetworkPolicy: NetworkPolicySchema.nullable(),
+  defaultEnvironmentTrustedImageRegistries:
+    TrustedImageRegistriesSchema.nullable(),
 };
 
 const InternalSelectOrganizationSchema = createSelectSchema(
@@ -340,6 +347,9 @@ const InternalSelectOrganizationSchema = createSelectSchema(
 export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
   analyticsInstanceStartedAt: true,
   analyticsInstanceLastHeartbeatAt: true,
+  // Deprecated leftover column from the reverted PR #6027 (see schema). Retained
+  // in the DB for backward-compatibility but never exposed via the API.
+  discoveredToolPolicy: true,
   // Preset feature removed; columns retained in DB (non-destructive) but no
   // longer exposed via the API.
   presetEntityName: true,
@@ -351,6 +361,9 @@ export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
 ).omit({
+  // Deprecated leftover column from the reverted PR #6027 (see schema). Retained
+  // in the DB for backward-compatibility but never accepted by the API.
+  discoveredToolPolicy: true,
   // Preset feature removed; columns retained in DB (non-destructive) but no
   // longer accepted by the API, mirroring SelectOrganizationSchema.
   presetEntityName: true,
@@ -379,6 +392,10 @@ export const UpdateAppearanceSettingsSchema = z.object({
 
 export const UpdateSecuritySettingsSchema = z.object({
   globalToolPolicy: GlobalToolPolicySchema.optional(),
+  defaultDiscoveredToolInvocationPolicy:
+    ToolInvocation.ToolInvocationPolicyActionSchema.optional(),
+  defaultDiscoveredToolResultPolicy:
+    TrustedData.TrustedDataPolicyActionSchema.optional(),
   allowChatFileUploads: z.boolean().optional(),
   /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */
   allowToolAutoAssignment: z.boolean().optional(),
@@ -466,6 +483,7 @@ export const UpdateDefaultEnvironmentSchema = z.object({
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: z.boolean().optional(),
   validationRegex: ValidationRegexSchema.nullable().optional(),
+  trustedImageRegistries: TrustedImageRegistriesSchema.nullable().optional(),
 });
 
 export type UpdateDefaultEnvironment = z.infer<

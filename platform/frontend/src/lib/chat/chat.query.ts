@@ -6,10 +6,12 @@ import {
 } from "@archestra/shared";
 import {
   keepPreviousData,
+  type QueryClient,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
@@ -22,6 +24,7 @@ import {
 } from "@/lib/chat/conversation-files";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { handleApiError } from "@/lib/utils";
+import websocketService from "@/lib/websocket/websocket";
 
 const {
   getChatConversations,
@@ -31,6 +34,7 @@ const {
   createChatConversation,
   updateChatConversation,
   setConversationHooksDebug,
+  markChatConversationRead,
   clearChatConversationErrors,
   compactChatConversation,
   deleteChatConversation,
@@ -51,6 +55,37 @@ const {
   deleteChatAttachment,
   deleteSkillSandboxArtifact,
 } = archestraApiSdk;
+
+/**
+ * Invalidate every cache entry that should refresh when a chat turn produces or
+ * rewrites files. Always refreshes the chat's own Files panel
+ * (`["conversation-files", id]`) and the conversation (for a rewritten
+ * artifact); when the chat belongs to a project, also refreshes that project's
+ * Files panel (`["projects", projectId, "files"]`).
+ *
+ * The project cross-invalidation is the symmetric counterpart to the
+ * project-side mutations that invalidate `["conversation-files"]`. Without it, a
+ * file created inside a project chat stays invisible in the project's Files
+ * panel until a hard reload — navigating there via the breadcrumb keeps the
+ * cached (stale) list because the query was never marked stale.
+ */
+export function invalidateConversationFileQueries(
+  queryClient: QueryClient,
+  {
+    conversationId,
+    projectId,
+  }: { conversationId: string; projectId?: string | null },
+) {
+  queryClient.invalidateQueries({
+    queryKey: ["conversation-files", conversationId],
+  });
+  queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
+  if (projectId) {
+    queryClient.invalidateQueries({
+      queryKey: ["projects", projectId, "files"],
+    });
+  }
+}
 
 export function mergeUpdatedConversationIntoCache(
   oldConversation:
@@ -223,8 +258,84 @@ export function useConversations({
     enabled,
     staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise
     gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    // Backstop for the conversation_updated websocket push (see
+    // useConversationUpdatedCacheSync): if the socket was down when a message
+    // landed, refocusing or reconnecting still refreshes the unread indicators.
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
+}
+
+/**
+ * Mark a conversation read (owner-only on the server), clearing its sidebar
+ * new-messages dot. Optimistically flips `unread` to false across cached
+ * conversation lists so the dot disappears the instant the chat is opened; the
+ * optimistic write also stops {@link useKeepViewedConversationRead} from
+ * re-firing while the request is in flight.
+ */
+export function useMarkConversationRead() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      callApi(() => markChatConversationRead({ path: { id } }), null),
+    onMutate: ({ id }) => {
+      queryClient.setQueriesData<
+        archestraApiTypes.GetChatConversationsResponses["200"]
+      >({ queryKey: ["conversations"] }, (old) =>
+        old
+          ? old.map((c) =>
+              c.id === id && c.unread ? { ...c, unread: false } : c,
+            )
+          : old,
+      );
+    },
+  });
+}
+
+/**
+ * Keep the conversation shown in the URL marked read: whenever it appears
+ * unread in the list cache — on open, or when the conversation_updated push
+ * refreshes the list while you're viewing it — POST a read. Keyed on the live
+ * pathname, not page-held state, so a freshly-created chat whose id lags the
+ * URL never clears a chat you have already navigated away from.
+ */
+export function useKeepViewedConversationRead() {
+  const pathname = usePathname();
+  const { mutate: markRead } = useMarkConversationRead();
+  const { data: conversations } = useConversations({});
+
+  const viewedConversationId = pathname.startsWith("/chat/")
+    ? (pathname.split("/").at(-1) ?? undefined)
+    : undefined;
+  const isViewedUnread = viewedConversationId
+    ? !!conversations?.find((c) => c.id === viewedConversationId)?.unread
+    : false;
+
+  useEffect(() => {
+    if (viewedConversationId && isViewedUnread) {
+      markRead({ id: viewedConversationId });
+    }
+  }, [viewedConversationId, isViewedUnread, markRead]);
+}
+
+/**
+ * Refresh the sidebar's unread indicators when the server pushes a
+ * conversation_updated message (a turn finished in one of the owner's chats).
+ * This is what surfaces the dot on a backgrounded chat whose stream completion
+ * the client never witnessed. Mount once, app-wide.
+ */
+export function useConversationUpdatedCacheSync(enabled = true) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    websocketService.connect();
+    return websocketService.subscribe("conversation_updated", () => {
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    });
+  }, [enabled, queryClient]);
 }
 
 export function useCreateConversation() {
@@ -459,6 +570,12 @@ export function useDeleteConversation() {
         queryKey: ["conversations"],
       });
 
+      // Capture the deleted conversation's project (if any) so onSettled can
+      // also refresh the project page's own conversation list.
+      const projectId = previousQueries
+        .flatMap(([, data]) => data ?? [])
+        .find((c) => c.id === deletedId)?.projectId;
+
       // Optimistically remove the conversation from every cached list
       queryClient.setQueriesData<
         archestraApiTypes.GetChatConversationsResponses["200"]
@@ -466,7 +583,7 @@ export function useDeleteConversation() {
         old ? old.filter((c) => c.id !== deletedId) : old,
       );
 
-      return { previousQueries };
+      return { previousQueries, projectId };
     },
     onError: (_error, _deletedId, context) => {
       // Roll back optimistic removal on failure
@@ -489,9 +606,16 @@ export function useDeleteConversation() {
 
       toast.success("Conversation deleted");
     },
-    onSettled: () => {
+    onSettled: (_data, _error, _deletedId, context) => {
       // Always refetch to ensure server state is in sync
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      // A project chat is also listed on its project page under a separate
+      // query key, which the sidebar invalidation above does not cover.
+      if (context?.projectId) {
+        queryClient.invalidateQueries({
+          queryKey: ["projects", context.projectId, "conversations"],
+        });
+      }
     },
   });
 }

@@ -1,5 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
-import { DEFAULT_APP_NAME, RouteId } from "@archestra/shared";
+import {
+  DEFAULT_APP_NAME,
+  OFFLINE_ACCESS_OAUTH_SCOPE,
+  RouteId,
+} from "@archestra/shared";
 import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -38,6 +42,7 @@ interface OAuthScopeConfig {
   auth_server_url?: string;
   resource_metadata_url?: string;
   well_known_url?: string;
+  additional_scopes?: string[];
 }
 
 /**
@@ -139,12 +144,30 @@ export async function resolveOAuthScopesForAuthorization(params: {
   discoveredScopes: string[];
   scopesToUse: string[];
 }> {
+  // Append the catalog item's additional scopes on top of the configured or
+  // discovered scopes, deduped. Defaults to `["offline_access"]` when unset so
+  // the provider issues a refresh token (`offline_access` is a behavioral scope
+  // that providers like Microsoft Entra omit from metadata and require to be
+  // requested). Clear it for providers that reject it (e.g. Google).
+  const additionalScopes = params.oauthConfig.additional_scopes ?? [
+    OFFLINE_ACCESS_OAUTH_SCOPE,
+  ];
+  const withAdditionalScopes = (scopes: string[]): string[] => {
+    const merged = [...scopes];
+    for (const scope of additionalScopes) {
+      if (!merged.includes(scope)) {
+        merged.push(scope);
+      }
+    }
+    return merged;
+  };
+
   const configuredScopes = params.oauthConfig.scopes ?? [];
   if (configuredScopes.length > 0) {
     return {
       configuredScopes,
       discoveredScopes: [],
-      scopesToUse: configuredScopes,
+      scopesToUse: withAdditionalScopes(configuredScopes),
     };
   }
 
@@ -164,7 +187,7 @@ export async function resolveOAuthScopesForAuthorization(params: {
   return {
     configuredScopes,
     discoveredScopes,
-    scopesToUse: discoveredScopes,
+    scopesToUse: withAdditionalScopes(discoveredScopes),
   };
 }
 

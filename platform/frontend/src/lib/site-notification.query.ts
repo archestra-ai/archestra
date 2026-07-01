@@ -6,7 +6,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "./utils";
+import { handleApiError, throwOnApiError } from "./utils";
 
 export const siteNotificationKeys = {
   all: ["site-notification"] as const,
@@ -36,9 +36,7 @@ export function useActiveSiteNotification(
     queryKey: siteNotificationKeys.active(),
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getSiteNotification();
-      if (error) {
-        return null;
-      }
+      throwOnApiError(error, { toastOnError: false });
       return data as SiteNotification | null;
     },
     staleTime: 60 * 1000,
@@ -58,9 +56,7 @@ export function useSiteNotification(
     queryFn: async () => {
       const { data, error } =
         await archestraApiSdk.getSiteNotificationSettings();
-      if (error) {
-        return null;
-      }
+      throwOnApiError(error, { toastOnError: false });
       return data as SiteNotification | null;
     },
     staleTime: 60 * 1000,

@@ -19,7 +19,7 @@ import {
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
-  TOOL_SAVE_RESULT_FULL_NAME,
+  TOOL_SAVE_FILE_FULL_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
@@ -1131,7 +1131,7 @@ describe("MCP Gateway (stateless mode)", () => {
           TOOL_READ_FILE_FULL_NAME,
           TOOL_RUN_COMMAND_FULL_NAME,
           TOOL_RUN_TOOL_FULL_NAME,
-          TOOL_SAVE_RESULT_FULL_NAME,
+          TOOL_SAVE_FILE_FULL_NAME,
           TOOL_SEARCH_FILES_FULL_NAME,
           TOOL_SEARCH_TOOLS_FULL_NAME,
           TOOL_UPLOAD_FILE_FULL_NAME,
@@ -1221,7 +1221,7 @@ describe("MCP Gateway (stateless mode)", () => {
       // Persistent-files tools are gated by the Projects flag — absent here.
       expect(toolNames).not.toContain(TOOL_SEARCH_FILES_FULL_NAME);
       expect(toolNames).not.toContain(TOOL_READ_FILE_FULL_NAME);
-      expect(toolNames).not.toContain(TOOL_SAVE_RESULT_FULL_NAME);
+      expect(toolNames).not.toContain(TOOL_SAVE_FILE_FULL_NAME);
       expect(toolNames).not.toContain(TOOL_EDIT_FILE_FULL_NAME);
       expect(toolNames).not.toContain(TOOL_DELETE_FILE_FULL_NAME);
     } finally {

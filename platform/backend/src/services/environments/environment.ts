@@ -7,6 +7,7 @@ import {
   type Environment,
   type EnvironmentList,
   type InternalMcpCatalogServerType,
+  type TrustedImageRegistries,
   type UpdateEnvironment,
 } from "@/types";
 import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
@@ -57,6 +58,7 @@ export async function createEnvironment(params: {
     networkPolicy: data.networkPolicy ?? null,
     restricted: data.restricted,
     validationRegex: data.validationRegex ?? null,
+    trustedImageRegistries: data.trustedImageRegistries ?? null,
   });
   reconcileEnvironmentEngine(created);
   return created;
@@ -84,6 +86,7 @@ export async function updateEnvironment(params: {
     networkPolicy: data.networkPolicy,
     restricted: data.restricted,
     validationRegex: data.validationRegex,
+    trustedImageRegistries: data.trustedImageRegistries,
   });
   if (!updated) {
     throw new ApiError(404, "Environment not found");
@@ -160,6 +163,39 @@ export async function assertValuesMatchEnvironmentRegex(params: {
   } catch (e) {
     throw new ApiError(400, (e as Error).message);
   }
+}
+
+/**
+ * Resolve the trusted image registries governing a catalog item, plus a
+ * human-readable label for messages. A set `environmentId` resolves to that
+ * environment's list; a null/undefined one falls back to the org's default
+ * environment (`defaultEnvironmentTrustedImageRegistries`), mirroring
+ * `resolveEnvironmentValidationRegex`. A NULL or empty list means "no
+ * restriction" (any image allowed).
+ */
+export async function resolveTrustedImageRegistries(params: {
+  environmentId: string | null | undefined;
+  organizationId: string;
+}): Promise<{ registries: TrustedImageRegistries | null; label: string }> {
+  const { environmentId, organizationId } = params;
+
+  if (!environmentId) {
+    const organization = await OrganizationModel.getById(organizationId);
+    return {
+      registries:
+        organization?.defaultEnvironmentTrustedImageRegistries ?? null,
+      label: organization?.defaultEnvironmentName ?? "Default",
+    };
+  }
+
+  const environment = await EnvironmentModel.findByIdForOrganization(
+    environmentId,
+    organizationId,
+  );
+  return {
+    registries: environment?.trustedImageRegistries ?? null,
+    label: environment?.name ?? "Default",
+  };
 }
 
 /**

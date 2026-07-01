@@ -1,18 +1,23 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { getArchestraToolShortName } from "@archestra/shared";
+import {
+  getArchestraToolShortName,
+  SUBAGENT_TOOL_CALL_PART_TYPE,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import type { PanelApp } from "./apps-context";
 import {
   collectBrowserToolCallIds,
+  collectSubagentToolCalls,
   deriveAppsFromMessages,
   extractFileAttachments,
   extractOwnedAppRender,
   filterOptimisticToolCalls,
   getAppRenderVerb,
   hasTextPart,
-  humanizeToolLabel,
   identifyCompactToolGroups,
+  isBlankAssistantTextPart,
   isSupersededRender,
+  mcpToolLabel,
 } from "./chat-messages.utils";
 
 const getToolShortName = (toolName: string) =>
@@ -243,25 +248,21 @@ describe("collectBrowserToolCallIds", () => {
   });
 });
 
-describe("humanizeToolLabel", () => {
-  it("humanizes server and tool from a prefixed name", () => {
-    expect(humanizeToolLabel("system__get-system-stats")).toBe(
-      "System / Get System Stats",
+describe("mcpToolLabel", () => {
+  it("shows the raw server and tool name from a prefixed name", () => {
+    expect(mcpToolLabel("Archestra PM__show_board")).toBe(
+      "Archestra PM / show_board",
     );
   });
 
-  it("handles underscore-separated tool names", () => {
-    expect(humanizeToolLabel("weather__get_forecast")).toBe(
-      "Weather / Get Forecast",
+  it("preserves the raw tool name's separators", () => {
+    expect(mcpToolLabel("weather__get_forecast")).toBe(
+      "weather / get_forecast",
     );
   });
 
-  it("splits camelCase tool names", () => {
-    expect(humanizeToolLabel("fs__listFiles")).toBe("Fs / List Files");
-  });
-
-  it("humanizes a bare tool name with no server prefix", () => {
-    expect(humanizeToolLabel("render_app")).toBe("Render App");
+  it("returns a bare tool name with no server prefix unchanged", () => {
+    expect(mcpToolLabel("render_app")).toBe("render_app");
   });
 });
 
@@ -287,9 +288,45 @@ describe("deriveAppsFromMessages", () => {
     expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
       {
         toolCallId: "call_1",
-        label: "Pm / Show Board",
+        label: "pm / show_board",
         uiResourceUri: "ui://pm/board",
         appId: null,
+        mcpServerId: null,
+        version: null,
+        createdAt: Date.parse("2026-05-29T18:13:52.000Z"),
+      },
+    ]);
+  });
+
+  it("captures the concrete install from _meta.ui.mcpServerId (server-scoped deep link)", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        metadata: { createdAt: "2026-05-29T18:13:52.000Z" },
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "pm__show_board",
+            toolCallId: "call_1",
+            state: "output-available",
+            output: {
+              _meta: {
+                ui: { resourceUri: "ui://pm/board", mcpServerId: "srv-1" },
+              },
+            },
+          },
+        ],
+      },
+    ] as never;
+
+    expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
+      {
+        toolCallId: "call_1",
+        label: "pm / show_board",
+        uiResourceUri: "ui://pm/board",
+        appId: null,
+        mcpServerId: "srv-1",
         version: null,
         createdAt: Date.parse("2026-05-29T18:13:52.000Z"),
       },
@@ -327,9 +364,10 @@ describe("deriveAppsFromMessages", () => {
     ).toEqual([
       {
         toolCallId: "call_1",
-        label: "Pm / Show Board",
+        label: "pm / show_board",
         uiResourceUri: "ui://pm/board",
         appId: null,
+        mcpServerId: null,
         version: null,
         createdAt: 0,
       },
@@ -368,7 +406,7 @@ describe("deriveAppsFromMessages", () => {
     expect(apps).toHaveLength(1);
     expect(apps[0]).toMatchObject({
       toolCallId: "call_1",
-      label: "Pm / Show Board",
+      label: "pm / show_board",
     });
   });
 
@@ -557,17 +595,19 @@ describe("deriveAppsFromMessages", () => {
     expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
       {
         toolCallId: "call_1",
-        label: "Pm / Show Board",
+        label: "pm / show_board",
         uiResourceUri: "ui://pm/board",
         appId: null,
+        mcpServerId: null,
         version: null,
         createdAt: Date.parse("2026-05-29T18:00:00.000Z"),
       },
       {
         toolCallId: "call_2",
-        label: "Pm / Show Board",
+        label: "pm / show_board",
         uiResourceUri: "ui://pm/board",
         appId: null,
+        mcpServerId: null,
         version: null,
         createdAt: Date.parse("2026-05-29T18:05:00.000Z"),
       },
@@ -819,6 +859,56 @@ describe("identifyCompactToolGroups", () => {
     expect(groupMap.get(0)?.entries).toHaveLength(1);
     expect(groupMap.get(4)?.entries).toHaveLength(1);
   });
+
+  it("compacts a delegation call with surfaced subagent children alongside its siblings", () => {
+    const parts = [
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "input-available",
+        input: {},
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "output-available",
+        output: "ok",
+      },
+      {
+        type: "tool-agent__child",
+        toolCallId: "call_p",
+        state: "input-available",
+        input: {},
+      },
+      {
+        type: "tool-agent__child",
+        toolCallId: "call_p",
+        state: "output-available",
+        output: "done",
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_2",
+        state: "input-available",
+        input: {},
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_2",
+        state: "output-available",
+        output: "map",
+      },
+    ] as UIMessage["parts"];
+
+    const { groupMap, consumedIndices } = identifyCompactToolGroups(parts, {
+      getToolShortName: () => null,
+    });
+
+    expect(groupMap.size).toBe(1);
+    expect(groupMap.get(0)?.entries).toHaveLength(3);
+    expect(consumedIndices.has(2)).toBe(true);
+    expect(consumedIndices.has(3)).toBe(true);
+  });
 });
 
 describe("isSupersededRender", () => {
@@ -881,5 +971,146 @@ describe("getAppRenderVerb", () => {
 
   it("returns null for non-app tools", () => {
     expect(getAppRenderVerb("google__search")).toBeNull();
+  });
+});
+
+describe("collectSubagentToolCalls", () => {
+  const subagentPart = (
+    parentToolCallId: string,
+    toolCallId: string,
+    toolName = "web_search",
+  ) =>
+    ({
+      type: SUBAGENT_TOOL_CALL_PART_TYPE,
+      data: {
+        parentToolCallId,
+        toolCallId,
+        toolName,
+        state: "output-available",
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: minimal part stub
+    }) as any;
+
+  const message = (parts: unknown[]): UIMessage =>
+    ({ id: "m", role: "assistant", parts }) as UIMessage;
+
+  it("returns an empty map when no subagent parts exist", () => {
+    const map = collectSubagentToolCalls([
+      message([{ type: "text", text: "hi" }]),
+    ]);
+    expect(map.size).toBe(0);
+  });
+
+  it("groups children by their parent delegation call and preserves the chain (P1->C1,C2; C2->G1)", () => {
+    const map = collectSubagentToolCalls([
+      message([
+        { type: "tool-agent__child", toolCallId: "P1" },
+        subagentPart("P1", "C1", "web_search"),
+        subagentPart("P1", "C2", "agent__grandchild"),
+        subagentPart("C2", "G1", "fetch"),
+      ]),
+    ]);
+
+    expect(map.get("P1")?.map((e) => e.toolCallId)).toEqual(["C1", "C2"]);
+    expect(map.get("C2")?.map((e) => e.toolCallId)).toEqual(["G1"]);
+    // The nested delegation C2 is both a child of P1 and a parent of G1.
+    expect(map.has("C2")).toBe(true);
+    expect(map.get("P1")?.[0]).toMatchObject({
+      toolCallId: "C1",
+      toolName: "web_search",
+      state: "output-available",
+    });
+  });
+
+  it("collects across messages and dedupes a toolCallId present twice (live + persisted)", () => {
+    const map = collectSubagentToolCalls([
+      message([subagentPart("P1", "C1")]),
+      message([subagentPart("P1", "C1")]),
+    ]);
+    expect(map.get("P1")?.length).toBe(1);
+  });
+
+  it("ignores malformed subagent parts (missing ids)", () => {
+    const map = collectSubagentToolCalls([
+      message([
+        {
+          type: SUBAGENT_TOOL_CALL_PART_TYPE,
+          data: { toolName: "x" },
+          // biome-ignore lint/suspicious/noExplicitAny: malformed stub
+        } as any,
+      ]),
+    ]);
+    expect(map.size).toBe(0);
+  });
+
+  it("carries input, output, and errorText onto the collected entry", () => {
+    const richPart = {
+      type: SUBAGENT_TOOL_CALL_PART_TYPE,
+      data: {
+        parentToolCallId: "P1",
+        toolCallId: "C1",
+        toolName: "fetch",
+        input: { url: "x" },
+        output: { status: 200 },
+        errorText: "nope",
+        state: "output-error",
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: minimal part stub
+    } as any;
+    const map = collectSubagentToolCalls([message([richPart])]);
+    expect(map.get("P1")?.[0]).toMatchObject({
+      toolCallId: "C1",
+      input: { url: "x" },
+      output: { status: 200 },
+      errorText: "nope",
+      state: "output-error",
+    });
+  });
+
+  it("skips a message that has no parts without throwing", () => {
+    const map = collectSubagentToolCalls([
+      { id: "m", role: "assistant" } as UIMessage,
+    ]);
+    expect(map.size).toBe(0);
+  });
+});
+
+describe("isBlankAssistantTextPart", () => {
+  const textPart = (text: string): UIMessage["parts"][number] => ({
+    type: "text",
+    text,
+  });
+
+  it.each([
+    " ",
+    "   ",
+    "\n\n",
+    "\t",
+    "\n  \t ",
+  ])("suppresses whitespace-only assistant text %j", (text) => {
+    expect(isBlankAssistantTextPart(textPart(text), "assistant")).toBe(true);
+  });
+
+  it("suppresses an empty-string assistant text part", () => {
+    expect(isBlankAssistantTextPart(textPart(""), "assistant")).toBe(true);
+  });
+
+  it("keeps assistant text that has real content", () => {
+    expect(isBlankAssistantTextPart(textPart("  hello  "), "assistant")).toBe(
+      false,
+    );
+  });
+
+  it("never suppresses non-assistant (user) text, even when blank", () => {
+    expect(isBlankAssistantTextPart(textPart("\n\n"), "user")).toBe(false);
+  });
+
+  it("ignores non-text parts", () => {
+    expect(
+      isBlankAssistantTextPart(
+        { type: "step-start" } as UIMessage["parts"][number],
+        "assistant",
+      ),
+    ).toBe(false);
   });
 });

@@ -1,8 +1,18 @@
+import { eq } from "drizzle-orm";
+import { afterEach } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import db, { schema } from "@/database";
 import { AgentToolModel, ToolModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { persistTools } from "./tools";
 
 describe("persistTools", () => {
+  afterEach(() => {
+    // archestraMcpBranding is a process-global singleton; reset it so the
+    // branded-org test below cannot leak into other tests in this file.
+    archestraMcpBranding.syncFromOrganization(null);
+  });
+
   test("creates new tools in bulk", async ({ makeAgent }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 
@@ -47,6 +57,41 @@ describe("persistTools", () => {
     }
   });
 
+  test("threads the configured invocation and result defaults onto discovered tools' policies", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    await persistTools(
+      [
+        {
+          toolName: "discovered-with-default",
+          toolParameters: { type: "object", properties: {} },
+          toolDescription: "Discovered tool",
+        },
+      ],
+      agent.id,
+      { invocationAction: "require_approval", resultAction: "mark_as_trusted" },
+    );
+
+    const tool = await ToolModel.findByName("discovered-with-default");
+    if (!tool) throw new Error("expected discovered tool to be persisted");
+
+    const inv = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+    expect(inv).toHaveLength(1);
+    expect(inv[0].action).toBe("require_approval");
+
+    const trusted = await db
+      .select()
+      .from(schema.trustedDataPoliciesTable)
+      .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
+    expect(trusted).toHaveLength(1);
+    expect(trusted[0].action).toBe("mark_as_trusted");
+  });
+
   test("handles empty tools array without errors", async ({ makeAgent }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 
@@ -77,6 +122,54 @@ describe("persistTools", () => {
     const regularTool = await ToolModel.findByName("regular-tool");
     expect(regularTool).not.toBeNull();
     expect(regularTool?.catalogId).toBeNull();
+  });
+
+  test("skips Archestra built-ins under BOTH the default and branded prefix", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    // White-labeled org: the gateway serves built-ins as `acme_copilot__*`, but a
+    // client (e.g. chat routed through the LLM proxy) can still hand the proxy the
+    // default `archestra__*` name. BOTH are the same built-in and must be skipped —
+    // recognizing only the current brand auto-discovers the off-brand twin and, once
+    // seeding promotes it, surfaces a duplicate built-in in the catalog.
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Copilot",
+      iconLogo: null,
+    });
+
+    const tools = [
+      {
+        toolName: "archestra__whoami", // default prefix, core tool
+        toolParameters: { type: "object" },
+        toolDescription: "off-brand built-in",
+      },
+      {
+        toolName: "archestra__edit_file", // default prefix, the observed symptom
+        toolParameters: { type: "object" },
+        toolDescription: "off-brand built-in",
+      },
+      {
+        toolName: "acme_copilot__whoami", // branded prefix
+        toolParameters: { type: "object" },
+        toolDescription: "branded built-in",
+      },
+      {
+        toolName: "regular-tool", // a genuine external tool
+        toolParameters: { type: "object" },
+        toolDescription: "Regular tool",
+      },
+    ];
+
+    await persistTools(tools, agent.id);
+
+    // Neither prefix of a built-in may be auto-discovered…
+    expect(await ToolModel.findByName("archestra__whoami")).toBeNull();
+    expect(await ToolModel.findByName("archestra__edit_file")).toBeNull();
+    expect(await ToolModel.findByName("acme_copilot__whoami")).toBeNull();
+    // …but a real external tool still is.
+    expect(await ToolModel.findByName("regular-tool")).not.toBeNull();
   });
 
   test("skips agent delegation tools (agent__*)", async ({ makeAgent }) => {

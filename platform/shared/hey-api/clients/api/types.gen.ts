@@ -3332,6 +3332,10 @@ export type OpenrouterChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     stream?: boolean | null;
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
 };
 
 export type OpenrouterChatCompletionResponseInput = {
@@ -8642,6 +8646,10 @@ export type OpenrouterChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     stream?: boolean | null;
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
 };
 
 export type OpenrouterChatCompletionResponse = {
@@ -11008,6 +11016,7 @@ export type GetAgentsResponses = {
             resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
+            sandboxAvailable?: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -11248,6 +11257,7 @@ export type CreateAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     };
 };
 
@@ -11453,6 +11463,7 @@ export type GetAllAgentsResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     }>;
 };
 
@@ -11633,6 +11644,7 @@ export type GetDefaultMcpGatewayResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     };
 };
 
@@ -11813,6 +11825,7 @@ export type GetDefaultLlmProxyResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     };
 };
 
@@ -12072,6 +12085,7 @@ export type ImportAgentResponses = {
             resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
+            sandboxAvailable?: boolean;
         };
         warnings: Array<{
             type: 'tool' | 'knowledgeBase' | 'connector' | 'delegation';
@@ -12345,6 +12359,7 @@ export type GetAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     };
 };
 
@@ -12578,6 +12593,7 @@ export type UpdateAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     };
 };
 
@@ -12760,6 +12776,7 @@ export type CloneAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     };
 };
 
@@ -13103,6 +13120,7 @@ export type RestoreAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
     };
 };
 
@@ -15476,6 +15494,10 @@ export type GetAppsResponses = {
             scope: 'personal' | 'team' | 'org';
             authorId: string | null;
             latestVersion: number;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
         } | {
             name: string;
             description: string | null;
@@ -15483,9 +15505,9 @@ export type GetAppsResponses = {
             cspOrigin: 'platform-pinned' | 'author-declared';
             source: 'external';
             catalogId: string;
+            mcpServerId: string;
+            scope: 'personal' | 'team' | 'org';
             resourceUri: string;
-            runnable: boolean;
-            availabilityScopes: Array<'personal' | 'team' | 'org'>;
         }>;
         pagination: {
             currentPage: number;
@@ -15522,6 +15544,7 @@ export type CreateAppData = {
         };
         environmentId?: string | null;
         teamIds?: Array<string>;
+        openInChat?: boolean;
     };
     path?: never;
     query?: never;
@@ -15619,6 +15642,7 @@ export type CreateAppResponses = {
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
         warnings?: Array<string>;
+        conversationId?: string;
     };
 };
 
@@ -15707,6 +15731,11 @@ export type GetExternalAppResponses = {
         name: string;
         description: string | null;
         resourceUri: string;
+        resources: Array<{
+            resourceUri: string;
+            toolName: string;
+            name: string;
+        }>;
         defaultMcpServerId: string | null;
         installs: Array<{
             mcpServerId: string;
@@ -15806,6 +15835,178 @@ export type GetAppTemplatesResponses = {
 };
 
 export type GetAppTemplatesResponse = GetAppTemplatesResponses[keyof GetAppTemplatesResponses];
+
+export type OpenAppInChatData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/open-in-chat';
+};
+
+export type OpenAppInChatErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAppInChatError = OpenAppInChatErrors[keyof OpenAppInChatErrors];
+
+export type OpenAppInChatResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        conversationId: string;
+    };
+};
+
+export type OpenAppInChatResponse = OpenAppInChatResponses[keyof OpenAppInChatResponses];
+
+export type OpenExternalAppInChatData = {
+    body: {
+        resourceUri: string;
+    };
+    path: {
+        mcpServerId: string;
+    };
+    query?: never;
+    url: '/api/apps/external/{mcpServerId}/open-in-chat';
+};
+
+export type OpenExternalAppInChatErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenExternalAppInChatError = OpenExternalAppInChatErrors[keyof OpenExternalAppInChatErrors];
+
+export type OpenExternalAppInChatResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        conversationId: string;
+    };
+};
+
+export type OpenExternalAppInChatResponse = OpenExternalAppInChatResponses[keyof OpenExternalAppInChatResponses];
 
 export type DeleteAppData = {
     body?: never;
@@ -19417,6 +19618,17 @@ export type BedrockConverseWithDefaultAgentData = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                reasoningContent: {
+                    reasoningText: {
+                        text: string;
+                        signature?: string;
+                    };
+                } | {
+                    redactedReasoning: {
+                        data: string;
+                    };
+                };
             }>;
         }>;
         system?: Array<{
@@ -19436,6 +19648,8 @@ export type BedrockConverseWithDefaultAgentData = {
                 type: string;
                 ttl?: string;
             };
+        } | {
+            [key: string]: unknown;
         }>;
         inferenceConfig?: {
             maxTokens?: number;
@@ -19741,6 +19955,17 @@ export type BedrockConverseWithAgentData = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                reasoningContent: {
+                    reasoningText: {
+                        text: string;
+                        signature?: string;
+                    };
+                } | {
+                    redactedReasoning: {
+                        data: string;
+                    };
+                };
             }>;
         }>;
         system?: Array<{
@@ -19760,6 +19985,8 @@ export type BedrockConverseWithAgentData = {
                 type: string;
                 ttl?: string;
             };
+        } | {
+            [key: string]: unknown;
         }>;
         inferenceConfig?: {
             maxTokens?: number;
@@ -20067,6 +20294,17 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                reasoningContent: {
+                    reasoningText: {
+                        text: string;
+                        signature?: string;
+                    };
+                } | {
+                    redactedReasoning: {
+                        data: string;
+                    };
+                };
             }>;
         }>;
         system?: Array<{
@@ -20086,6 +20324,8 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                 type: string;
                 ttl?: string;
             };
+        } | {
+            [key: string]: unknown;
         }>;
         inferenceConfig?: {
             maxTokens?: number;
@@ -20262,6 +20502,17 @@ export type BedrockConverseStreamWithAgentData = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                reasoningContent: {
+                    reasoningText: {
+                        text: string;
+                        signature?: string;
+                    };
+                } | {
+                    redactedReasoning: {
+                        data: string;
+                    };
+                };
             }>;
         }>;
         system?: Array<{
@@ -20281,6 +20532,8 @@ export type BedrockConverseStreamWithAgentData = {
                 type: string;
                 ttl?: string;
             };
+        } | {
+            [key: string]: unknown;
         }>;
         inferenceConfig?: {
             maxTokens?: number;
@@ -20459,6 +20712,17 @@ export type BedrockConverseWithAgentAndModelData = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                reasoningContent: {
+                    reasoningText: {
+                        text: string;
+                        signature?: string;
+                    };
+                } | {
+                    redactedReasoning: {
+                        data: string;
+                    };
+                };
             }>;
         }>;
         system?: Array<{
@@ -20478,6 +20742,8 @@ export type BedrockConverseWithAgentAndModelData = {
                 type: string;
                 ttl?: string;
             };
+        } | {
+            [key: string]: unknown;
         }>;
         inferenceConfig?: {
             maxTokens?: number;
@@ -20786,6 +21052,17 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                reasoningContent: {
+                    reasoningText: {
+                        text: string;
+                        signature?: string;
+                    };
+                } | {
+                    redactedReasoning: {
+                        data: string;
+                    };
+                };
             }>;
         }>;
         system?: Array<{
@@ -20805,6 +21082,8 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                 type: string;
                 ttl?: string;
             };
+        } | {
+            [key: string]: unknown;
         }>;
         inferenceConfig?: {
             maxTokens?: number;
@@ -21533,12 +21812,13 @@ export type GetChatConversationsResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -21695,12 +21975,13 @@ export type CreateChatConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -21938,12 +22219,13 @@ export type GetChatConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -22103,12 +22385,13 @@ export type UpdateChatConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -22233,6 +22516,91 @@ export type SetConversationHooksDebugResponses = {
 };
 
 export type SetConversationHooksDebugResponse = SetConversationHooksDebugResponses[keyof SetConversationHooksDebugResponses];
+
+export type MarkChatConversationReadData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/read';
+};
+
+export type MarkChatConversationReadErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type MarkChatConversationReadError = MarkChatConversationReadErrors[keyof MarkChatConversationReadErrors];
+
+export type MarkChatConversationReadResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type MarkChatConversationReadResponse = MarkChatConversationReadResponses[keyof MarkChatConversationReadResponses];
 
 export type GetChatConversationFilesData = {
     body?: never;
@@ -22616,12 +22984,13 @@ export type ForkChatConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -22963,12 +23332,13 @@ export type CompactChatConversationResponses = {
             } | null;
             projectName?: string | null;
             projectIcon?: string | null;
+            unread?: boolean;
             messages: Array<unknown>;
             chatErrors: Array<{
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -23395,12 +23765,13 @@ export type GetSharedConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -23556,12 +23927,13 @@ export type ForkSharedConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -23719,12 +24091,13 @@ export type GenerateChatConversationTitleResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -23881,12 +24254,13 @@ export type UpdateChatMessageResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -25724,6 +26098,7 @@ export type GetConfigResponses = {
             betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
             sandbox: boolean;
+            sandboxArtifactBytesLimit: number;
             agentSkillsEnabled: boolean;
             agentEnvironmentsEnabled: boolean;
             appsEnabled: boolean;
@@ -26686,6 +27061,7 @@ export type ListEnvironmentsResponses = {
                 allowedCidrs: Array<string>;
             } | null;
             validationRegex: string | null;
+            trustedImageRegistries: Array<string> | null;
             restricted: boolean;
             sortOrder: number;
             createdAt: string;
@@ -26711,6 +27087,7 @@ export type CreateEnvironmentData = {
         } | null;
         restricted?: boolean;
         validationRegex?: string | null;
+        trustedImageRegistries?: Array<string> | null;
     };
     path?: never;
     query?: never;
@@ -26799,6 +27176,7 @@ export type CreateEnvironmentResponses = {
             allowedCidrs: Array<string>;
         } | null;
         validationRegex: string | null;
+        trustedImageRegistries: Array<string> | null;
         restricted: boolean;
         sortOrder: number;
         createdAt: string;
@@ -26906,6 +27284,7 @@ export type UpdateEnvironmentData = {
         } | null;
         restricted?: boolean;
         validationRegex?: string | null;
+        trustedImageRegistries?: Array<string> | null;
     };
     path: {
         id: string;
@@ -26996,6 +27375,7 @@ export type UpdateEnvironmentResponses = {
             allowedCidrs: Array<string>;
         } | null;
         validationRegex: string | null;
+        trustedImageRegistries: Array<string> | null;
         restricted: boolean;
         sortOrder: number;
         createdAt: string;
@@ -30316,7 +30696,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
-            response: OpenAiChatCompletionResponse;
+            response: OpenAiChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -30338,6 +30720,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -30355,7 +30738,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -30466,9 +30849,6 @@ export type GetInteractionsResponses = {
                 user?: string;
                 [key: string]: unknown;
             } | null;
-            /**
-             * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
-             */
             response: {
                 id: string;
                 object: 'response';
@@ -30512,6 +30892,8 @@ export type GetInteractionsResponses = {
                     [key: string]: unknown;
                 };
                 [key: string]: unknown;
+            } | {
+                error: string;
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -30534,6 +30916,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -30551,7 +30934,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -30614,6 +30997,8 @@ export type GetInteractionsResponses = {
                     prompt_tokens: number;
                     total_tokens: number;
                 };
+            } | {
+                error: string;
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -30636,6 +31021,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -30653,7 +31039,110 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            executionId: string | null;
+            userId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            request: {
+                model: string;
+                input: string | Array<string>;
+                dimensions?: number;
+                encoding_format?: 'float' | 'base64';
+            };
+            processedRequest?: {
+                model: string;
+                input: string | Array<string>;
+                dimensions?: number;
+                encoding_format?: 'float' | 'base64';
+            } | null;
+            response: {
+                object: 'list';
+                data: Array<{
+                    object: 'embedding';
+                    embedding: Array<number>;
+                    index: number;
+                }>;
+                model: string;
+                usage: {
+                    prompt_tokens: number;
+                    total_tokens: number;
+                };
+            } | {
+                error: string;
+            };
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
+            type: 'gemini:embeddings';
+            model: string | null;
+            baselineModel: string | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -30692,7 +31181,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: GeminiGenerateContentRequest;
             processedRequest?: GeminiGenerateContentRequest | null;
-            response: GeminiGenerateContentResponse;
+            response: GeminiGenerateContentResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -30714,6 +31205,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -30731,7 +31223,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -30772,7 +31264,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: AnthropicMessagesRequest;
             processedRequest?: AnthropicMessagesRequest | null;
-            response: AnthropicMessagesResponse;
+            response: AnthropicMessagesResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -30794,6 +31288,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -30811,7 +31306,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -30938,6 +31433,17 @@ export type GetInteractionsResponses = {
                             type: string;
                             ttl?: string;
                         };
+                    } | {
+                        reasoningContent: {
+                            reasoningText: {
+                                text: string;
+                                signature?: string;
+                            };
+                        } | {
+                            redactedReasoning: {
+                                data: string;
+                            };
+                        };
                     }>;
                 }>;
                 system?: Array<{
@@ -30954,6 +31460,8 @@ export type GetInteractionsResponses = {
                         type: string;
                         ttl?: string;
                     };
+                } | {
+                    [key: string]: unknown;
                 }>;
                 inferenceConfig?: {
                     maxTokens?: number;
@@ -31107,6 +31615,17 @@ export type GetInteractionsResponses = {
                             type: string;
                             ttl?: string;
                         };
+                    } | {
+                        reasoningContent: {
+                            reasoningText: {
+                                text: string;
+                                signature?: string;
+                            };
+                        } | {
+                            redactedReasoning: {
+                                data: string;
+                            };
+                        };
                     }>;
                 }>;
                 system?: Array<{
@@ -31123,6 +31642,8 @@ export type GetInteractionsResponses = {
                         type: string;
                         ttl?: string;
                     };
+                } | {
+                    [key: string]: unknown;
                 }>;
                 inferenceConfig?: {
                     maxTokens?: number;
@@ -31250,6 +31771,8 @@ export type GetInteractionsResponses = {
                 serviceTier?: {
                     type?: 'default' | 'throughput';
                 };
+            } | {
+                error: string;
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -31272,6 +31795,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31289,7 +31813,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31330,7 +31854,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
-            response: CerebrasChatCompletionResponse;
+            response: CerebrasChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31352,6 +31878,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31369,7 +31896,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31410,7 +31937,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
-            response: MistralChatCompletionResponse;
+            response: MistralChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31432,6 +31961,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31449,7 +31979,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31490,7 +32020,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
-            response: PerplexityChatCompletionResponse;
+            response: PerplexityChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31512,6 +32044,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31529,7 +32062,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31570,7 +32103,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
-            response: GroqChatCompletionResponse;
+            response: GroqChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31592,6 +32127,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31609,7 +32145,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31650,7 +32186,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
-            response: XaiChatCompletionResponse;
+            response: XaiChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31672,6 +32210,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31689,7 +32228,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31728,9 +32267,11 @@ export type GetInteractionsResponses = {
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
-            request: XaiChatCompletionRequest;
-            processedRequest?: XaiChatCompletionRequest | null;
-            response: OpenrouterChatCompletionResponse;
+            request: OpenrouterChatCompletionRequest;
+            processedRequest?: OpenrouterChatCompletionRequest | null;
+            response: OpenrouterChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31752,6 +32293,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31769,7 +32311,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31810,7 +32352,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: VllmChatCompletionRequest;
             processedRequest?: VllmChatCompletionRequest | null;
-            response: VllmChatCompletionResponse;
+            response: VllmChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31832,6 +32376,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31849,7 +32394,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31888,7 +32433,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: OllamaChatCompletionRequest;
             processedRequest?: OllamaChatCompletionRequest | null;
-            response: OllamaChatCompletionResponse;
+            response: OllamaChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31910,6 +32457,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -31927,7 +32475,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -31966,7 +32514,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: CohereChatRequest;
             processedRequest?: CohereChatRequest | null;
-            response: CohereChatResponse;
+            response: CohereChatResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -31988,6 +32538,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -32005,7 +32556,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -32046,7 +32597,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: ZhipuaiChatCompletionRequest;
             processedRequest?: ZhipuaiChatCompletionRequest | null;
-            response: ZhipuaiChatCompletionResponse;
+            response: ZhipuaiChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -32068,6 +32621,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -32085,7 +32639,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -32126,7 +32680,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: DeepSeekChatCompletionRequest;
             processedRequest?: DeepSeekChatCompletionRequest | null;
-            response: DeepSeekChatCompletionResponse;
+            response: DeepSeekChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -32148,6 +32704,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -32165,7 +32722,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -32847,6 +33404,8 @@ export type GetInteractionsResponses = {
                     prompt_tokens_details?: unknown;
                 };
                 [key: string]: unknown;
+            } | {
+                error: string;
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -32869,6 +33428,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -32886,7 +33446,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -32927,7 +33487,9 @@ export type GetInteractionsResponses = {
             authenticatedAppName: string | null;
             request: MinimaxChatCompletionRequest;
             processedRequest?: MinimaxChatCompletionRequest | null;
-            response: MinimaxChatCompletionResponse;
+            response: MinimaxChatCompletionResponse | {
+                error: string;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -32949,6 +33511,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -32966,7 +33529,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -33074,6 +33637,8 @@ export type GetInteractionsResponses = {
                     prompt_tokens_details?: unknown;
                 };
                 [key: string]: unknown;
+            } | {
+                error: string;
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -33096,6 +33661,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -33113,7 +33679,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -33224,9 +33790,6 @@ export type GetInteractionsResponses = {
                 user?: string;
                 [key: string]: unknown;
             } | null;
-            /**
-             * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
-             */
             response: {
                 id: string;
                 object: 'response';
@@ -33270,6 +33833,8 @@ export type GetInteractionsResponses = {
                     [key: string]: unknown;
                 };
                 [key: string]: unknown;
+            } | {
+                error: string;
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -33292,6 +33857,7 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
@@ -33309,7 +33875,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -33364,9 +33930,9 @@ export type GetInteractionSessionsData = {
          */
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
         /**
-         * Filter by client/session source (e.g. claude_code, claude_desktop)
+         * Filter by client app (queries external_agent_id; e.g. claude)
          */
-        sessionSource?: 'claude_code' | 'claude_desktop';
+        client?: 'claude';
         /**
          * Filter by session ID
          */
@@ -33771,7 +34337,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
-        response: OpenAiChatCompletionResponse;
+        response: OpenAiChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -33793,6 +34361,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -33810,7 +34379,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -33921,9 +34490,6 @@ export type GetInteractionResponses = {
             user?: string;
             [key: string]: unknown;
         } | null;
-        /**
-         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
-         */
         response: {
             id: string;
             object: 'response';
@@ -33967,6 +34533,8 @@ export type GetInteractionResponses = {
                 [key: string]: unknown;
             };
             [key: string]: unknown;
+        } | {
+            error: string;
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -33989,6 +34557,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34006,7 +34575,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -34069,6 +34638,8 @@ export type GetInteractionResponses = {
                 prompt_tokens: number;
                 total_tokens: number;
             };
+        } | {
+            error: string;
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -34091,6 +34662,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34108,7 +34680,110 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        executionId: string | null;
+        userId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        request: {
+            model: string;
+            input: string | Array<string>;
+            dimensions?: number;
+            encoding_format?: 'float' | 'base64';
+        };
+        processedRequest?: {
+            model: string;
+            input: string | Array<string>;
+            dimensions?: number;
+            encoding_format?: 'float' | 'base64';
+        } | null;
+        response: {
+            object: 'list';
+            data: Array<{
+                object: 'embedding';
+                embedding: Array<number>;
+                index: number;
+            }>;
+            model: string;
+            usage: {
+                prompt_tokens: number;
+                total_tokens: number;
+            };
+        } | {
+            error: string;
+        };
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
+        type: 'gemini:embeddings';
+        model: string | null;
+        baselineModel: string | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -34147,7 +34822,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: GeminiGenerateContentRequest;
         processedRequest?: GeminiGenerateContentRequest | null;
-        response: GeminiGenerateContentResponse;
+        response: GeminiGenerateContentResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -34169,6 +34846,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34186,7 +34864,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -34227,7 +34905,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: AnthropicMessagesRequest;
         processedRequest?: AnthropicMessagesRequest | null;
-        response: AnthropicMessagesResponse;
+        response: AnthropicMessagesResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -34249,6 +34929,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34266,7 +34947,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -34393,6 +35074,17 @@ export type GetInteractionResponses = {
                         type: string;
                         ttl?: string;
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             }>;
             system?: Array<{
@@ -34409,6 +35101,8 @@ export type GetInteractionResponses = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                [key: string]: unknown;
             }>;
             inferenceConfig?: {
                 maxTokens?: number;
@@ -34562,6 +35256,17 @@ export type GetInteractionResponses = {
                         type: string;
                         ttl?: string;
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             }>;
             system?: Array<{
@@ -34578,6 +35283,8 @@ export type GetInteractionResponses = {
                     type: string;
                     ttl?: string;
                 };
+            } | {
+                [key: string]: unknown;
             }>;
             inferenceConfig?: {
                 maxTokens?: number;
@@ -34705,6 +35412,8 @@ export type GetInteractionResponses = {
             serviceTier?: {
                 type?: 'default' | 'throughput';
             };
+        } | {
+            error: string;
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -34727,6 +35436,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34744,7 +35454,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -34785,7 +35495,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
-        response: CerebrasChatCompletionResponse;
+        response: CerebrasChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -34807,6 +35519,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34824,7 +35537,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -34865,7 +35578,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
-        response: MistralChatCompletionResponse;
+        response: MistralChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -34887,6 +35602,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34904,7 +35620,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -34945,7 +35661,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
-        response: PerplexityChatCompletionResponse;
+        response: PerplexityChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -34967,6 +35685,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -34984,7 +35703,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35025,7 +35744,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
-        response: GroqChatCompletionResponse;
+        response: GroqChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35047,6 +35768,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35064,7 +35786,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35105,7 +35827,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
-        response: XaiChatCompletionResponse;
+        response: XaiChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35127,6 +35851,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35144,7 +35869,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35183,9 +35908,11 @@ export type GetInteractionResponses = {
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
-        request: XaiChatCompletionRequest;
-        processedRequest?: XaiChatCompletionRequest | null;
-        response: OpenrouterChatCompletionResponse;
+        request: OpenrouterChatCompletionRequest;
+        processedRequest?: OpenrouterChatCompletionRequest | null;
+        response: OpenrouterChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35207,6 +35934,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35224,7 +35952,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35265,7 +35993,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: VllmChatCompletionRequest;
         processedRequest?: VllmChatCompletionRequest | null;
-        response: VllmChatCompletionResponse;
+        response: VllmChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35287,6 +36017,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35304,7 +36035,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35343,7 +36074,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: OllamaChatCompletionRequest;
         processedRequest?: OllamaChatCompletionRequest | null;
-        response: OllamaChatCompletionResponse;
+        response: OllamaChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35365,6 +36098,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35382,7 +36116,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35421,7 +36155,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: CohereChatRequest;
         processedRequest?: CohereChatRequest | null;
-        response: CohereChatResponse;
+        response: CohereChatResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35443,6 +36179,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35460,7 +36197,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35501,7 +36238,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: ZhipuaiChatCompletionRequest;
         processedRequest?: ZhipuaiChatCompletionRequest | null;
-        response: ZhipuaiChatCompletionResponse;
+        response: ZhipuaiChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35523,6 +36262,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35540,7 +36280,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -35581,7 +36321,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: DeepSeekChatCompletionRequest;
         processedRequest?: DeepSeekChatCompletionRequest | null;
-        response: DeepSeekChatCompletionResponse;
+        response: DeepSeekChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -35603,6 +36345,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -35620,7 +36363,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -36302,6 +37045,8 @@ export type GetInteractionResponses = {
                 prompt_tokens_details?: unknown;
             };
             [key: string]: unknown;
+        } | {
+            error: string;
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -36324,6 +37069,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -36341,7 +37087,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -36382,7 +37128,9 @@ export type GetInteractionResponses = {
         authenticatedAppName: string | null;
         request: MinimaxChatCompletionRequest;
         processedRequest?: MinimaxChatCompletionRequest | null;
-        response: MinimaxChatCompletionResponse;
+        response: MinimaxChatCompletionResponse | {
+            error: string;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -36404,6 +37152,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -36421,7 +37170,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -36529,6 +37278,8 @@ export type GetInteractionResponses = {
                 prompt_tokens_details?: unknown;
             };
             [key: string]: unknown;
+        } | {
+            error: string;
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -36551,6 +37302,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -36568,7 +37320,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -36679,9 +37431,6 @@ export type GetInteractionResponses = {
             user?: string;
             [key: string]: unknown;
         } | null;
-        /**
-         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
-         */
         response: {
             id: string;
             object: 'response';
@@ -36725,6 +37474,8 @@ export type GetInteractionResponses = {
                 [key: string]: unknown;
             };
             [key: string]: unknown;
+        } | {
+            error: string;
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -36747,6 +37498,7 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
+        inputTokensEstimated: boolean;
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
@@ -36764,7 +37516,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -36951,6 +37703,7 @@ export type GetInternalMcpCatalogResponses = {
             well_known_url?: string;
             default_scopes: Array<string>;
             supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
             generic_oauth?: boolean;
             token_endpoint?: string;
             access_token_env_var?: string;
@@ -36986,6 +37739,10 @@ export type GetInternalMcpCatalogResponses = {
         clonedFrom: string | null;
         environmentId: string | null;
         catalogReinstallRequired: boolean;
+        catalogItemApprovalStatus: string | null;
+        catalogItemApprovalReason: string | null;
+        catalogItemApprovalReviewedBy: string | null;
+        catalogItemApprovalReviewedAt: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -37000,6 +37757,7 @@ export type GetInternalMcpCatalogResponses = {
         toolCount: number;
         providesUi?: boolean;
         appId?: string | null;
+        imageApprovalRequired?: boolean;
     }>;
 };
 
@@ -37086,6 +37844,7 @@ export type CreateInternalMcpCatalogItemData = {
             well_known_url?: string;
             default_scopes: Array<string>;
             supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
             generic_oauth?: boolean;
             token_endpoint?: string;
             access_token_env_var?: string;
@@ -37283,6 +38042,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             well_known_url?: string;
             default_scopes: Array<string>;
             supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
             generic_oauth?: boolean;
             token_endpoint?: string;
             access_token_env_var?: string;
@@ -37318,6 +38078,10 @@ export type CreateInternalMcpCatalogItemResponses = {
         clonedFrom: string | null;
         environmentId: string | null;
         catalogReinstallRequired: boolean;
+        catalogItemApprovalStatus: string | null;
+        catalogItemApprovalReason: string | null;
+        catalogItemApprovalReviewedBy: string | null;
+        catalogItemApprovalReviewedAt: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -37577,6 +38341,7 @@ export type GetInternalMcpCatalogItemResponses = {
             well_known_url?: string;
             default_scopes: Array<string>;
             supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
             generic_oauth?: boolean;
             token_endpoint?: string;
             access_token_env_var?: string;
@@ -37612,6 +38377,10 @@ export type GetInternalMcpCatalogItemResponses = {
         clonedFrom: string | null;
         environmentId: string | null;
         catalogReinstallRequired: boolean;
+        catalogItemApprovalStatus: string | null;
+        catalogItemApprovalReason: string | null;
+        catalogItemApprovalReviewedBy: string | null;
+        catalogItemApprovalReviewedAt: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -37707,6 +38476,7 @@ export type UpdateInternalMcpCatalogItemData = {
             well_known_url?: string;
             default_scopes: Array<string>;
             supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
             generic_oauth?: boolean;
             token_endpoint?: string;
             access_token_env_var?: string;
@@ -37905,6 +38675,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             well_known_url?: string;
             default_scopes: Array<string>;
             supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
             generic_oauth?: boolean;
             token_endpoint?: string;
             access_token_env_var?: string;
@@ -37940,6 +38711,10 @@ export type UpdateInternalMcpCatalogItemResponses = {
         clonedFrom: string | null;
         environmentId: string | null;
         catalogReinstallRequired: boolean;
+        catalogItemApprovalStatus: string | null;
+        catalogItemApprovalReason: string | null;
+        catalogItemApprovalReviewedBy: string | null;
+        catalogItemApprovalReviewedAt: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -38221,6 +38996,432 @@ export type RefreshInternalMcpCatalogImageResponses = {
 };
 
 export type RefreshInternalMcpCatalogImageResponse = RefreshInternalMcpCatalogImageResponses[keyof RefreshInternalMcpCatalogImageResponses];
+
+export type ListPendingImageApprovalCatalogItemsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/internal_mcp_catalog/pending-image-approval';
+};
+
+export type ListPendingImageApprovalCatalogItemsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListPendingImageApprovalCatalogItemsError = ListPendingImageApprovalCatalogItemsErrors[keyof ListPendingImageApprovalCatalogItemsErrors];
+
+export type ListPendingImageApprovalCatalogItemsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        version: string | null;
+        description: string | null;
+        instructions: string | null;
+        repository: string | null;
+        installationCommand: string | null;
+        requiresAuth: boolean;
+        authDescription: string | null;
+        authFields: Array<{
+            name: string;
+            label: string;
+            type: string;
+            required: boolean;
+            description?: string;
+        }> | null;
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        multitenant: boolean;
+        dynamicConnectionMcpServerId: string | null;
+        serverUrl: string | null;
+        docsUrl: string | null;
+        clientSecretId: string | null;
+        localConfigSecretId: string | null;
+        localConfig: {
+            command?: string;
+            arguments?: Array<string>;
+            environment?: Array<{
+                key: string;
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
+                value?: string;
+                promptOnInstallation: boolean;
+                required?: boolean;
+                description?: string;
+                default?: LocalConfigEnvironmentDefault;
+                mounted?: boolean;
+            }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
+            }>;
+            dockerImage?: string;
+            serviceAccount?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
+            nodePort?: number;
+            imagePullSecrets?: Array<{
+                source: 'existing';
+                name: string;
+            } | {
+                source: 'credentials';
+                server: string;
+                username: string;
+                password?: string;
+                email?: string;
+            }>;
+        } | null;
+        deploymentSpecYaml: string | null;
+        userConfig: {
+            [key: string]: UserConfigField;
+        } | null;
+        oauthConfig: {
+            name: string;
+            server_url: string;
+            grant_type?: 'authorization_code' | 'client_credentials';
+            auth_server_url?: string;
+            authorization_endpoint?: string;
+            resource_metadata_url?: string;
+            client_id: string;
+            client_secret?: string;
+            audience?: string;
+            resource?: string;
+            redirect_uris: Array<string>;
+            scopes: Array<string>;
+            description?: string;
+            well_known_url?: string;
+            default_scopes: Array<string>;
+            supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
+            generic_oauth?: boolean;
+            token_endpoint?: string;
+            access_token_env_var?: string;
+            requires_proxy?: boolean;
+            provider_name?: string;
+            browser_auth?: boolean;
+            streamable_http_url?: string;
+            streamable_http_port?: number;
+        } | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            assertionMode?: 'exchange' | 'passthrough';
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedIssuer?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            clientSecretOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
+        icon: string | null;
+        organizationId: string | null;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        clonedFrom: string | null;
+        environmentId: string | null;
+        catalogReinstallRequired: boolean;
+        catalogItemApprovalStatus: string | null;
+        catalogItemApprovalReason: string | null;
+        catalogItemApprovalReviewedBy: string | null;
+        catalogItemApprovalReviewedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName?: string | null;
+    }>;
+};
+
+export type ListPendingImageApprovalCatalogItemsResponse = ListPendingImageApprovalCatalogItemsResponses[keyof ListPendingImageApprovalCatalogItemsResponses];
+
+export type ApproveCatalogItemImageData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/internal_mcp_catalog/{id}/approve';
+};
+
+export type ApproveCatalogItemImageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ApproveCatalogItemImageError = ApproveCatalogItemImageErrors[keyof ApproveCatalogItemImageErrors];
+
+export type ApproveCatalogItemImageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        version: string | null;
+        description: string | null;
+        instructions: string | null;
+        repository: string | null;
+        installationCommand: string | null;
+        requiresAuth: boolean;
+        authDescription: string | null;
+        authFields: Array<{
+            name: string;
+            label: string;
+            type: string;
+            required: boolean;
+            description?: string;
+        }> | null;
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        multitenant: boolean;
+        dynamicConnectionMcpServerId: string | null;
+        serverUrl: string | null;
+        docsUrl: string | null;
+        clientSecretId: string | null;
+        localConfigSecretId: string | null;
+        localConfig: {
+            command?: string;
+            arguments?: Array<string>;
+            environment?: Array<{
+                key: string;
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
+                value?: string;
+                promptOnInstallation: boolean;
+                required?: boolean;
+                description?: string;
+                default?: LocalConfigEnvironmentDefault;
+                mounted?: boolean;
+            }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
+            }>;
+            dockerImage?: string;
+            serviceAccount?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
+            nodePort?: number;
+            imagePullSecrets?: Array<{
+                source: 'existing';
+                name: string;
+            } | {
+                source: 'credentials';
+                server: string;
+                username: string;
+                password?: string;
+                email?: string;
+            }>;
+        } | null;
+        deploymentSpecYaml: string | null;
+        userConfig: {
+            [key: string]: UserConfigField;
+        } | null;
+        oauthConfig: {
+            name: string;
+            server_url: string;
+            grant_type?: 'authorization_code' | 'client_credentials';
+            auth_server_url?: string;
+            authorization_endpoint?: string;
+            resource_metadata_url?: string;
+            client_id: string;
+            client_secret?: string;
+            audience?: string;
+            resource?: string;
+            redirect_uris: Array<string>;
+            scopes: Array<string>;
+            description?: string;
+            well_known_url?: string;
+            default_scopes: Array<string>;
+            supports_resource_metadata: boolean;
+            additional_scopes?: Array<string>;
+            generic_oauth?: boolean;
+            token_endpoint?: string;
+            access_token_env_var?: string;
+            requires_proxy?: boolean;
+            provider_name?: string;
+            browser_auth?: boolean;
+            streamable_http_url?: string;
+            streamable_http_port?: number;
+        } | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            assertionMode?: 'exchange' | 'passthrough';
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedIssuer?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            clientSecretOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
+        icon: string | null;
+        organizationId: string | null;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        clonedFrom: string | null;
+        environmentId: string | null;
+        catalogReinstallRequired: boolean;
+        catalogItemApprovalStatus: string | null;
+        catalogItemApprovalReason: string | null;
+        catalogItemApprovalReviewedBy: string | null;
+        catalogItemApprovalReviewedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName?: string | null;
+    };
+};
+
+export type ApproveCatalogItemImageResponse = ApproveCatalogItemImageResponses[keyof ApproveCatalogItemImageResponses];
 
 export type DeleteInternalMcpCatalogItemByNameData = {
     body?: never;
@@ -44710,6 +45911,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -44810,6 +46012,7 @@ export type CreateMcpServerInstallationRequestData = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -44970,6 +46173,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -45235,6 +46439,7 @@ export type GetMcpServerInstallationRequestResponses = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -45335,6 +46540,7 @@ export type UpdateMcpServerInstallationRequestData = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -45507,6 +46713,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -45689,6 +46896,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -45871,6 +47079,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -46053,6 +47262,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                 well_known_url?: string;
                 default_scopes: Array<string>;
                 supports_resource_metadata: boolean;
+                additional_scopes?: Array<string>;
                 generic_oauth?: boolean;
                 token_endpoint?: string;
                 access_token_env_var?: string;
@@ -50093,7 +51303,7 @@ export type OpenAiListModelsWithAgentResponses = {
 export type OpenAiListModelsWithAgentResponse = OpenAiListModelsWithAgentResponses[keyof OpenAiListModelsWithAgentResponses];
 
 export type OpenrouterChatCompletionsWithDefaultAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: OpenrouterChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -50184,7 +51394,7 @@ export type OpenrouterChatCompletionsWithDefaultAgentResponses = {
 export type OpenrouterChatCompletionsWithDefaultAgentResponse = OpenrouterChatCompletionsWithDefaultAgentResponses[keyof OpenrouterChatCompletionsWithDefaultAgentResponses];
 
 export type OpenrouterChatCompletionsWithAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: OpenrouterChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -51360,6 +52570,8 @@ export type GetOrganizationResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -51423,6 +52635,7 @@ export type GetOrganizationResponses = {
         } | null;
         defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -51653,6 +52866,8 @@ export type UpdateAppearanceSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -51716,6 +52931,7 @@ export type UpdateAppearanceSettingsResponses = {
         } | null;
         defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -51726,6 +52942,8 @@ export type UpdateAppearanceSettingsResponse = UpdateAppearanceSettingsResponses
 export type UpdateSecuritySettingsData = {
     body: {
         globalToolPolicy?: 'permissive' | 'restrictive';
+        defaultDiscoveredToolInvocationPolicy?: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy?: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads?: boolean;
         allowToolAutoAssignment?: boolean;
     };
@@ -51818,6 +53036,8 @@ export type UpdateSecuritySettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -51881,6 +53101,7 @@ export type UpdateSecuritySettingsResponses = {
         } | null;
         defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -51982,6 +53203,8 @@ export type UpdateLlmSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -52045,6 +53268,7 @@ export type UpdateLlmSettingsResponses = {
         } | null;
         defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -52148,6 +53372,8 @@ export type UpdateAgentSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -52211,6 +53437,7 @@ export type UpdateAgentSettingsResponses = {
         } | null;
         defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -52324,6 +53551,8 @@ export type UpdateConnectionSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -52387,6 +53616,7 @@ export type UpdateConnectionSettingsResponses = {
         } | null;
         defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -52407,6 +53637,7 @@ export type UpdateDefaultEnvironmentData = {
         } | null;
         restricted?: boolean;
         validationRegex?: string | null;
+        trustedImageRegistries?: Array<string> | null;
     };
     path?: never;
     query?: never;
@@ -52497,6 +53728,8 @@ export type UpdateDefaultEnvironmentResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -52560,6 +53793,7 @@ export type UpdateDefaultEnvironmentResponses = {
         } | null;
         defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -52661,6 +53895,8 @@ export type UpdateAuthSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -52724,6 +53960,7 @@ export type UpdateAuthSettingsResponses = {
         } | null;
         defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -52827,6 +54064,8 @@ export type UpdateKnowledgeSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -52890,6 +54129,7 @@ export type UpdateKnowledgeSettingsResponses = {
         } | null;
         defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -52988,6 +54228,8 @@ export type DropEmbeddingConfigResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -53051,6 +54293,7 @@ export type DropEmbeddingConfigResponses = {
         } | null;
         defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -53238,6 +54481,8 @@ export type CompleteOnboardingResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
@@ -53301,6 +54546,7 @@ export type CompleteOnboardingResponses = {
         } | null;
         defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -54681,6 +55927,97 @@ export type GetProjectFilesResponses = {
 };
 
 export type GetProjectFilesResponse = GetProjectFilesResponses[keyof GetProjectFilesResponses];
+
+export type UploadProjectFilesData = {
+    body: {
+        name: string;
+        mimeType: string;
+        dataBase64: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/files';
+};
+
+export type UploadProjectFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UploadProjectFilesError = UploadProjectFilesErrors[keyof UploadProjectFilesErrors];
+
+export type UploadProjectFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        filename: string;
+        mimeType: string;
+    };
+};
+
+export type UploadProjectFilesResponse = UploadProjectFilesResponses[keyof UploadProjectFilesResponses];
 
 export type GetProjectInstructionsData = {
     body?: never;
@@ -56289,12 +57626,13 @@ export type CreateScheduleTriggerRunConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -59423,6 +60761,97 @@ export type GetSkillSandboxArtifactResponses = {
      */
     200: unknown;
 };
+
+export type UpdateSkillSandboxArtifactContentData = {
+    body: {
+        content: string;
+    };
+    path: {
+        artifactId: string;
+    };
+    query?: never;
+    url: '/api/skill-sandbox/artifacts/{artifactId}/content';
+};
+
+export type UpdateSkillSandboxArtifactContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateSkillSandboxArtifactContentError = UpdateSkillSandboxArtifactContentErrors[keyof UpdateSkillSandboxArtifactContentErrors];
+
+export type UpdateSkillSandboxArtifactContentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+        fileId: string;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+    };
+};
+
+export type UpdateSkillSandboxArtifactContentResponse = UpdateSkillSandboxArtifactContentResponses[keyof UpdateSkillSandboxArtifactContentResponses];
 
 export type GetSkillSandboxConversationArtifactsData = {
     body?: never;
@@ -62900,10 +64329,6 @@ export type GetAllVirtualApiKeysResponses = {
                 providerApiKeyId: string;
                 providerApiKeyName: string;
             }>;
-            allowedLlmProxies: Array<{
-                id: string;
-                name: string;
-            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -62929,7 +64354,6 @@ export type CreateVirtualApiKeyData = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
         }>;
-        allowedLlmProxyIds?: Array<string>;
         ownerId?: string;
     };
     path?: never;
@@ -63028,10 +64452,6 @@ export type CreateVirtualApiKeyResponses = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
-        }>;
-        allowedLlmProxies: Array<{
-            id: string;
-            name: string;
         }>;
     };
 };
@@ -63134,7 +64554,6 @@ export type UpdateVirtualApiKeyData = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
         }>;
-        allowedLlmProxyIds?: Array<string>;
     };
     path: {
         id: string;
@@ -63233,10 +64652,6 @@ export type UpdateVirtualApiKeyResponses = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
-        }>;
-        allowedLlmProxies: Array<{
-            id: string;
-            name: string;
         }>;
     };
 };

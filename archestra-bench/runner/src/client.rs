@@ -10,9 +10,11 @@ use serde::Serialize;
 use serde_json::Value as JsonValue;
 use tokio::sync::Mutex;
 use tokio::time::{Duration, sleep, timeout};
+use tracing::info;
 
 use crate::chat_stream;
 use crate::config::types::ToolExposureMode;
+use crate::elicitation::{ElicitationAnswer, ElicitationParse, answer_for, parse_elicitation_event};
 
 const DEFAULT_CHAT_TIMEOUT_S: f64 = 1800.0;
 
@@ -591,6 +593,63 @@ impl EvalClient {
         self.request(Method::GET, path, None, None)
             .await
             .map_err(ClientError::Api)
+    }
+
+    /// Auto-answer an MCP elicitation carried by a chat stream event, if the event is one. A tool
+    /// that elicits mid-call blocks server-side until this POST answers it, and no human watches a
+    /// benchmark stream. A non-elicitation event is a no-op; an answer POST that fails returns `Err`
+    /// so the caller can fail the stage rather than wait out the backend's 10-minute timeout.
+    pub async fn answer_if_elicitation(
+        &self,
+        event: &HashMap<String, JsonValue>,
+    ) -> Result<(), ClientError> {
+        let req = match parse_elicitation_event(event) {
+            ElicitationParse::NotElicitation => return Ok(()),
+            // A `data-mcp-elicitation` event we can't answer would otherwise leave the tool blocked
+            // for 10 minutes; surface it instead of silently ignoring it.
+            ElicitationParse::Malformed => {
+                return Err(ContractError(
+                    "unanswerable data-mcp-elicitation event: missing id/conversationId".to_string(),
+                )
+                .into());
+            }
+            ElicitationParse::Request(req) => req,
+        };
+        let answer = answer_for(&req);
+        self.resolve_elicitation(&req.id, &req.conversation_id, &answer)
+            .await?;
+        info!(
+            "auto-answered MCP elicitation {} ({:?}) with {}",
+            req.id,
+            req.mode,
+            answer.action.as_wire()
+        );
+        Ok(())
+    }
+
+    /// POST the answer to `/api/chat/elicitation/:id`. The backend caches the response for its
+    /// 10-minute poll window, so a very early POST is still consumed.
+    pub(crate) async fn resolve_elicitation(
+        &self,
+        id: &str,
+        conversation_id: &str,
+        answer: &ElicitationAnswer,
+    ) -> Result<(), ClientError> {
+        let mut body = serde_json::json!({
+            "conversationId": conversation_id,
+            "action": answer.action.as_wire(),
+        });
+        if let Some(content) = &answer.content {
+            body["content"] = JsonValue::Object(content.clone());
+        }
+        self.request(
+            Method::POST,
+            &format!("/api/chat/elicitation/{id}"),
+            None,
+            Some(&body),
+        )
+        .await?;
+        Ok(())
     }
 
     pub async fn create_conversation(

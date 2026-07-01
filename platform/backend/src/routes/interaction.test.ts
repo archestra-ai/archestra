@@ -1,11 +1,16 @@
-import { ChatErrorCode } from "@archestra/shared";
+import {
+  ChatErrorCode,
+  CLAUDE_CLIENT_FILTER,
+  CLAUDE_CLIENT_ID,
+  CLAUDE_DESKTOP_CLIENT_ID,
+} from "@archestra/shared";
 import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { InsertInteraction, User } from "@/types";
+import type { InsertInteraction, InteractionResponse, User } from "@/types";
 
 describe("interaction routes", () => {
   let app: FastifyInstanceWithZod;
@@ -128,6 +133,142 @@ describe("interaction routes", () => {
     );
   });
 
+  test("lists an interaction whose response is an upstream-error object", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+    // A failed upstream LLM call is persisted with the provider's interaction
+    // type but a response of `{ error }` (llm-proxy-handler.ts). The row must
+    // still serialize on read-back instead of 500-ing the whole list.
+    await InteractionModel.create({
+      profileId: agent.id,
+      request: {
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 64,
+        messages: [{ role: "user", content: "Hello" }],
+      },
+      response: {
+        error: "Upstream provider returned an error response",
+      } as unknown as InteractionResponse,
+      type: "anthropic:messages",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/interactions?limit=10&offset=0&sortBy=createdAt&sortDirection=desc",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toHaveLength(1);
+    expect(response.json().data[0].response).toEqual({
+      error: "Upstream provider returned an error response",
+    });
+  });
+
+  test("normalizes a stored response that matches no provider schema", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+    // Provider-schema drift / partial-stream bodies / legacy shapes: a response
+    // that is neither a valid provider response nor `{ error }` must not 500 the
+    // whole list — the model coerces it to a serializable sentinel.
+    await InteractionModel.create({
+      profileId: agent.id,
+      request: {
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 64,
+        messages: [{ role: "user", content: "Hello" }],
+      },
+      response: {
+        unexpected: "shape",
+      } as unknown as InteractionResponse,
+      type: "anthropic:messages",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/interactions?limit=10&offset=0&sortBy=createdAt&sortDirection=desc",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toHaveLength(1);
+    expect(response.json().data[0].response).toEqual({
+      error: "Malformed stored interaction response",
+    });
+  });
+
+  test("serializes an error-response interaction on the detail route", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+    const interaction = await InteractionModel.create({
+      profileId: agent.id,
+      request: {
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 64,
+        messages: [{ role: "user", content: "Hello" }],
+      },
+      response: {
+        error: "Upstream provider returned an error response",
+      } as unknown as InteractionResponse,
+      type: "anthropic:messages",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${interaction.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().response).toEqual({
+      error: "Upstream provider returned an error response",
+    });
+  });
+
+  test("serializes a gemini:embeddings interaction (OpenAI-compatible shape)", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+    // Gemini embeddings are persisted via the OpenAI-compatible embedding
+    // client; the read schema must model this type or the whole list 500s.
+    await InteractionModel.create({
+      profileId: agent.id,
+      request: { model: "text-embedding-004", input: ["hello"] },
+      response: {
+        object: "list",
+        data: [{ object: "embedding", embedding: [0.1, 0.2], index: 0 }],
+        model: "text-embedding-004",
+        usage: { prompt_tokens: 1, total_tokens: 1 },
+      },
+      type: "gemini:embeddings",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/interactions?limit=10&offset=0&sortBy=createdAt&sortDirection=desc",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toHaveLength(1);
+    expect(response.json().data[0].type).toBe("gemini:embeddings");
+  });
+
   test("returns chat errors on interaction detail for chat sessions", async ({
     makeAgent,
   }) => {
@@ -239,7 +380,7 @@ describe("interaction routes", () => {
     await InteractionModel.create({
       profileId: agent.id,
       sessionId: "route-delta-session",
-      sessionSource: "claude_code",
+      sessionSource: "claude_metadata",
       type: "anthropic:messages",
       request: anthropicReq([m0]),
       response: anthropicResp,
@@ -247,7 +388,7 @@ describe("interaction routes", () => {
     const tip = await InteractionModel.create({
       profileId: agent.id,
       sessionId: "route-delta-session",
-      sessionSource: "claude_code",
+      sessionSource: "claude_metadata",
       type: "anthropic:messages",
       request: anthropicReq(fullMessages),
       response: anthropicResp,
@@ -283,7 +424,7 @@ describe("interaction routes", () => {
     );
   });
 
-  test("filters the sessions endpoint by sessionSource (client)", async ({
+  test("filters the sessions endpoint by client (external_agent_id)", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({
@@ -299,11 +440,11 @@ describe("interaction routes", () => {
       model: "gpt-4",
       choices: [],
     } as unknown as InsertInteraction["response"];
-    const make = (sessionId: string, sessionSource: string) =>
+    const make = (sessionId: string, externalAgentId: string | null) =>
       InteractionModel.create({
         profileId: agent.id,
         sessionId,
-        sessionSource,
+        externalAgentId,
         source: "api",
         request: {
           model: "gpt-4",
@@ -313,18 +454,17 @@ describe("interaction routes", () => {
         type: "openai:chatCompletions",
       });
 
-    await make("cc", "claude_code");
-    await make("cd", "claude_desktop");
-    await make("hdr", "header");
+    await make("auto", CLAUDE_CLIENT_ID);
+    await make("desktop", CLAUDE_DESKTOP_CLIENT_ID);
+    await make("customer", "my-custom-agent");
 
-    // Filtered to claude_code → only the claude_code session.
+    // The Claude filter expands to every Claude client id → both Claude sessions.
     const filtered = await app.inject({
       method: "GET",
-      url: "/api/interactions/sessions?limit=50&offset=0&sessionSource=claude_code",
+      url: `/api/interactions/sessions?limit=50&offset=0&client=${CLAUDE_CLIENT_FILTER}`,
     });
     expect(filtered.statusCode).toBe(200);
-    expect(filtered.json().data).toHaveLength(1);
-    expect(filtered.json().data[0].sessionSource).toBe("claude_code");
+    expect(filtered.json().data).toHaveLength(2);
 
     // No filter → all three sessions.
     const all = await app.inject({

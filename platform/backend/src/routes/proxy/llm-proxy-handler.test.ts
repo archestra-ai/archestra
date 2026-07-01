@@ -57,10 +57,10 @@ vi.mock("prom-client", () => ({
 }));
 
 // Mock tool-invocation to control policy evaluation results.
-// Defaults: evaluatePolicies → null (allow), getGlobalToolPolicy → "permissive".
-// These defaults match the real behavior when no policies exist in the DB.
+// Default: evaluatePolicies → null (allow), matching the real behavior when no
+// policies exist in the DB. The global tool policy is read from the real
+// organization record (via OrganizationModel), so it is not mocked here.
 const mockEvaluatePolicies = vi.fn<() => Promise<PolicyBlockResult | null>>();
-const mockGetGlobalToolPolicy = vi.fn<() => Promise<string>>();
 
 vi.mock("@/guardrails/tool-invocation", async (importOriginal) => {
   const original =
@@ -68,7 +68,6 @@ vi.mock("@/guardrails/tool-invocation", async (importOriginal) => {
   return {
     ...original,
     evaluatePolicies: (..._args: unknown[]) => mockEvaluatePolicies(),
-    getGlobalToolPolicy: (..._args: unknown[]) => mockGetGlobalToolPolicy(),
   };
 });
 
@@ -148,7 +147,6 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
 
     // Default: policies allow everything (matches real behavior when no policies exist)
     mockEvaluatePolicies.mockResolvedValue(null);
-    mockGetGlobalToolPolicy.mockResolvedValue("permissive");
   });
 
   afterEach(async () => {
@@ -287,7 +285,6 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
           keyType: "passthrough",
           scope: "personal",
           authorId: owner.id,
-          allowedLlmProxyIds: [testAgent.id],
         });
 
       const response = await app.inject({
@@ -655,7 +652,6 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
 
     // Default: policies allow everything
     mockEvaluatePolicies.mockResolvedValue(null);
-    mockGetGlobalToolPolicy.mockResolvedValue("permissive");
   });
 
   afterEach(async () => {
@@ -937,7 +933,6 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
     testAgent = await makeAgent({ name: "Test Extra Headers Agent" });
     metrics.llm.initializeMetrics([]);
     mockEvaluatePolicies.mockResolvedValue(null);
-    mockGetGlobalToolPolicy.mockResolvedValue("permissive");
 
     await app.register(openAiProxyRoutes);
     await ModelModel.upsert({
@@ -1285,7 +1280,6 @@ describe("LLM Proxy Handler — per-user provider connect required", () => {
     );
     metrics.llm.initializeMetrics([]);
     mockEvaluatePolicies.mockResolvedValue(null);
-    mockGetGlobalToolPolicy.mockResolvedValue("permissive");
 
     await app.register(githubCopilotProxyRoutes);
   });

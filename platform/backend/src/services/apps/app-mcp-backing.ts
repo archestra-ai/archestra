@@ -3,8 +3,8 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentToolModel,
+  AppAccessModel,
   AppModel,
-  AppTeamModel,
   InternalMcpCatalogModel,
   McpServerModel,
   ToolModel,
@@ -125,7 +125,7 @@ export async function syncAppBacking(app: App): Promise<void> {
     const server = await McpServerModel.findById(app.mcpServerId);
     if (!server) return;
     const teamIds =
-      app.scope === "team" ? await AppTeamModel.getTeamsForApp(app.id) : [];
+      app.scope === "team" ? await AppAccessModel.getTeamsForApp(app.id) : [];
     if (server.scope !== app.scope) {
       await McpServerModel.setScope(server.id, app.scope);
     }

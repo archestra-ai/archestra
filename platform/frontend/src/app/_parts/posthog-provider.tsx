@@ -1,10 +1,10 @@
 "use client";
 
-import posthog from "posthog-js";
+import posthog, { type PostHogConfig } from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { useCallback, useEffect, useRef } from "react";
 import { useSession } from "@/lib/auth/auth.query";
-import config from "@/lib/config/config";
+import config, { getTracingHeaderHosts } from "@/lib/config/config";
 import { usePublicConfig } from "@/lib/config/config.query";
 
 export function PostHogProviderWrapper({
@@ -40,10 +40,19 @@ export function PostHogProviderWrapper({
       analytics.posthog.key &&
       !isPostHogInitializedRef.current
     ) {
-      posthog.init(analytics.posthog.key, {
+      // `__add_tracing_headers` is the config key posthog-js reads to decorate
+      // requests to our own hosts with `X-POSTHOG-SESSION-ID` /
+      // `X-POSTHOG-DISTINCT-ID` headers, so backend-captured errors and logs
+      // cross-reference this session replay. It isn't in posthog-js's exported
+      // config type, hence the local intersection type.
+      const initConfig: Partial<PostHogConfig> & {
+        __add_tracing_headers?: string[];
+      } = {
         ...config.posthog.config,
         api_host: analytics.posthog.host,
-      });
+        __add_tracing_headers: getTracingHeaderHosts(),
+      };
+      posthog.init(analytics.posthog.key, initConfig);
       isPostHogInitializedRef.current = true;
     }
 

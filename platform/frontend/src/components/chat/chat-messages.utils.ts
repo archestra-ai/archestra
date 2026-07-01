@@ -7,13 +7,14 @@ import {
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   parseFullToolName,
+  SUBAGENT_TOOL_CALL_PART_TYPE,
+  type SubagentToolCallPartData,
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
-import { startCase } from "lodash-es";
 import {
   getToolErrorText,
   isCompactEligible,
@@ -78,6 +79,21 @@ export function extractFileAttachments(
  */
 export function hasTextPart(parts: UIMessage["parts"] | undefined): boolean {
   return parts?.some((p) => p.type === "text") ?? false;
+}
+
+/**
+ * Assistant turns routinely contain throwaway whitespace-only `text` parts that
+ * the model streams right before a tool call (e.g. `" "`, `"   "`, `"\n\n"`).
+ * They carry no content and must not render as empty message bubbles. The check
+ * trims before testing for emptiness, matching the `text.trim().length > 0`
+ * guards used elsewhere in the message stream; a bare `!part.text` only catches
+ * the strictly-empty string and lets whitespace through.
+ */
+export function isBlankAssistantTextPart(
+  part: UIMessage["parts"][number],
+  role: UIMessage["role"],
+): boolean {
+  return role === "assistant" && part.type === "text" && !part.text.trim();
 }
 
 const UUID_PATTERN =
@@ -206,14 +222,12 @@ export function getAppRenderVerb(toolName: string): string | null {
  */
 
 /**
- * Friendly label for an external MCP tool, derived from its full name.
- * "system__get-system-stats" -> "System / Get System Stats"; "render_app" -> "Render App".
+ * Address-bar label for an external MCP tool: the raw server and tool name from
+ * its full name, e.g. "Archestra PM__show_board" -> "Archestra PM / show_board".
  */
-export function humanizeToolLabel(fullToolName: string): string {
+export function mcpToolLabel(fullToolName: string): string {
   const { serverName, toolName } = parseFullToolName(fullToolName);
-  return serverName
-    ? `${startCase(serverName)} / ${startCase(toolName)}`
-    : startCase(toolName);
+  return serverName ? `${serverName} / ${toolName}` : toolName;
 }
 
 export function deriveAppsFromMessages(
@@ -239,7 +253,7 @@ export function deriveAppsFromMessages(
         continue;
       }
 
-      const { outputUri, fullToolName } = parseToolAppRender(
+      const { outputUri, mcpServerId, fullToolName } = parseToolAppRender(
         part,
         earlyToolUiStarts[part.toolCallId],
       );
@@ -252,9 +266,10 @@ export function deriveAppsFromMessages(
         seen.add(part.toolCallId);
         apps.push({
           toolCallId: part.toolCallId,
-          label: humanizeToolLabel(fullToolName),
+          label: mcpToolLabel(fullToolName),
           uiResourceUri: outputUri,
           appId: null,
+          mcpServerId,
           version: null,
           createdAt: createdAt ?? 0,
         });
@@ -281,7 +296,7 @@ export function deriveAppsFromMessages(
 
       const entry: PanelApp = {
         toolCallId: part.toolCallId,
-        label: ownedApp.appName ?? humanizeToolLabel(fullToolName),
+        label: ownedApp.appName ?? mcpToolLabel(fullToolName),
         uiResourceUri: getArchestraAppResourceUri(ownedApp.appId),
         appId: ownedApp.appId,
         version: ownedApp.latestVersion,
@@ -380,6 +395,65 @@ export function collectBrowserToolCallIds(params: {
   }
 
   return ids;
+}
+
+/** One tool call a delegated child agent made, ready to render as a tool card. */
+export type SubagentChildEntry = {
+  toolCallId: string;
+  toolName: string;
+  input: unknown;
+  output: unknown;
+  state: string | undefined;
+  errorText: string | undefined;
+};
+
+/**
+ * Collect every subagent tool call in the conversation into a map keyed by the
+ * delegation call that spawned it (`parentToolCallId`). A child whose own
+ * `toolCallId` is itself a key has descendants (a nested delegation), so the
+ * renderer recurses to build an arbitrary-depth tree. Collected across all
+ * messages — not per-message — so where the backend stored a part never affects
+ * how it nests. Deduped by `toolCallId` so a part present both live (streamed)
+ * and persisted (after reload) renders once.
+ */
+export function collectSubagentToolCalls(
+  messages: UIMessage[],
+): Map<string, SubagentChildEntry[]> {
+  const byParent = new Map<string, SubagentChildEntry[]>();
+  const seen = new Set<string>();
+  for (const message of messages) {
+    for (const part of message.parts ?? []) {
+      const candidate = part as { type?: string; data?: unknown };
+      if (candidate.type !== SUBAGENT_TOOL_CALL_PART_TYPE) {
+        continue;
+      }
+      const data = candidate.data as SubagentToolCallPartData | undefined;
+      if (
+        !data ||
+        typeof data.parentToolCallId !== "string" ||
+        typeof data.toolCallId !== "string" ||
+        seen.has(data.toolCallId)
+      ) {
+        continue;
+      }
+      seen.add(data.toolCallId);
+      const entry: SubagentChildEntry = {
+        toolCallId: data.toolCallId,
+        toolName: data.toolName,
+        input: data.input,
+        output: data.output,
+        state: data.state,
+        errorText: data.errorText,
+      };
+      const list = byParent.get(data.parentToolCallId);
+      if (list) {
+        list.push(entry);
+      } else {
+        byParent.set(data.parentToolCallId, [entry]);
+      }
+    }
+  }
+  return byParent;
 }
 
 export function identifyCompactToolGroups(
@@ -572,14 +646,21 @@ function getToolName(part: DynamicToolUIPart | ToolUIPart): string | null {
 function parseToolAppRender(
   part: DynamicToolUIPart | ToolUIPart,
   early: { uiResourceUri?: string; toolName?: string } | undefined,
-): { outputUri: string | null; fullToolName: string } {
-  const outputUri =
-    // biome-ignore lint/suspicious/noExplicitAny: checking nested _meta shape on unknown output
-    ((part.output as any)?._meta?.ui?.resourceUri as string | undefined) ??
-    early?.uiResourceUri ??
-    null;
+): {
+  outputUri: string | null;
+  mcpServerId: string | null;
+  fullToolName: string;
+} {
+  // biome-ignore lint/suspicious/noExplicitAny: checking nested _meta shape on unknown output
+  const ui = (part.output as any)?._meta?.ui as
+    | { resourceUri?: string; mcpServerId?: string }
+    | undefined;
+  const outputUri = ui?.resourceUri ?? early?.uiResourceUri ?? null;
+  // A server-scoped deep link (apps-page open-in-chat) stamps the concrete
+  // install so the chat mounts against it; live tool calls omit it.
+  const mcpServerId = ui?.mcpServerId ?? null;
   const fullToolName = getToolName(part) ?? early?.toolName ?? "";
-  return { outputUri, fullToolName };
+  return { outputUri, mcpServerId, fullToolName };
 }
 
 function finalizeCurrentGroup(params: {

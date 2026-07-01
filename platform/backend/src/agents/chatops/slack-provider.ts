@@ -15,7 +15,11 @@ import {
   LRUCacheManager,
 } from "@/cache-manager";
 import logger from "@/logging";
-import { AgentModel, ChatOpsChannelBindingModel } from "@/models";
+import {
+  AgentModel,
+  ChatOpsChannelBindingModel,
+  OrganizationModel,
+} from "@/models";
 import type {
   AddApprovalRequestFormOptions,
   ChatOpsApprovalDecision,
@@ -38,15 +42,26 @@ import {
   isSsoConfigured,
 } from "./auto-provision";
 import {
+  clearChannelThreadActive,
   isChannelThreadActive,
+  isMuteReaction,
+  isThreadMuteCommand,
   markChannelThreadActive,
+  mightBeAddressedMuteCommand,
+  resolveChannelGateAction,
 } from "./channel-activation";
 import {
+  buildThreadMutedNotice,
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
-import { EventDedupMap, errorMessage, isSlackDmChannel } from "./utils";
+import {
+  EventDedupMap,
+  errorMessage,
+  formatApprovalToolArgs,
+  isSlackDmChannel,
+} from "./utils";
 
 /**
  * Slack provider using Slack Web API.
@@ -257,6 +272,13 @@ class SlackProvider implements ChatOpsProvider {
 
     const event = body.event;
 
+    // Reaction-based mute: reacting with 🔇/🤫 on one of the bot's OWN channel
+    // replies mutes that thread. Pure side effect — never forwarded to the agent.
+    if (event.type === "reaction_added") {
+      await this.handleMuteReaction(event);
+      return null;
+    }
+
     // Only process message and app_mention events.
     // assistant_thread_started and assistant_thread_context_changed events are
     // subscribed in the manifest (required for "Agents & AI Apps" designation)
@@ -283,31 +305,70 @@ class SlackProvider implements ChatOpsProvider {
     const hasBotMention =
       event.type === "app_mention" ||
       Boolean(this.botUserId && text.includes(`<@${this.botUserId}>`));
+    const cleanedText = this.cleanBotMention(text);
 
     // Channel auto-reply gate: in channels the bot stays quiet until
     // @mentioned (app_mention event or message text containing <@BOT_ID>),
     // then keeps replying to that thread without further mentions until the
     // activation TTL lapses. DMs are always processed without a mention.
+    //
+    // A user can end the sticky behavior early by sending a mute command (e.g.
+    // "@bot mute"). It's honored both when the bot is mentioned and when the
+    // thread is already active (so muting needs no re-mention), then the bot
+    // stays quiet until @mentioned again.
     if (!isDM) {
       const activation = {
         provider: this.providerId,
         channelId: event.channel,
         threadId: threadTs,
       };
-      if (hasBotMention) {
-        await markChannelThreadActive(activation);
-      } else if (!(await isChannelThreadActive(activation))) {
-        return null;
+      // "mute" / "shut up" etc., optionally prefixed by a name the bot answers
+      // to ("Archestra shut up") with no explicit @mention. The app name is
+      // DB-backed, so only resolve it when the message might be such a command.
+      let wantsMute = isThreadMuteCommand(cleanedText);
+      if (!wantsMute && mightBeAddressedMuteCommand(cleanedText)) {
+        wantsMute = isThreadMuteCommand(cleanedText, [
+          await OrganizationModel.getAppName(),
+        ]);
+      }
+      // isActive is only consulted when the bot wasn't mentioned (see
+      // resolveChannelGateAction), so skip the cache read on mentions.
+      const isActive = hasBotMention
+        ? false
+        : await isChannelThreadActive(activation);
+      switch (
+        resolveChannelGateAction({
+          botMentioned: hasBotMention,
+          wantsMute,
+          isActive,
+        })
+      ) {
+        case "mute":
+          await this.muteThreadAndNotify(event.channel, threadTs);
+          return null;
+        case "activate":
+          await markChannelThreadActive(activation);
+          break;
+        case "ignore":
+          return null;
+        case "process":
+          break;
       }
     }
 
-    const cleanedText = this.cleanBotMention(text);
-    if (!cleanedText && event.type !== "app_mention") {
+    // Download file attachments first (we're already in an addressed context —
+    // DM, mention, or active thread — gated above). A file-only message (empty
+    // text) is kept only when a file actually survived download: oversized,
+    // expired, or failed downloads must not leave the bot answering an empty
+    // turn. Genuinely empty, attachment-less messages are dropped here.
+    const attachments = await this.downloadSlackFiles(event.files);
+    if (
+      !cleanedText &&
+      event.type !== "app_mention" &&
+      attachments.length === 0
+    ) {
       return null;
     }
-
-    // Download file attachments if present
-    const attachments = await this.downloadSlackFiles(event.files);
 
     // Resolve display names in one LRU-cached batch: the sender (so prompts
     // say "ildar", not "U0966V5MTM4"), the bot itself (so the agent
@@ -400,17 +461,31 @@ class SlackProvider implements ChatOpsProvider {
             },
           ],
         });
-      } else if (options.footer) {
-        blocks.push({
-          type: "context",
-          elements: [{ type: "plain_text", text: options.footer, emoji: true }],
-        });
+      } else {
+        // An even-more-subtle hint (e.g. the one-time mute tip) sits on its own
+        // context line ABOVE the agent footer, so the footer stays the last
+        // line of the reply.
+        if (options.hint) {
+          blocks.push({
+            type: "context",
+            elements: [{ type: "plain_text", text: options.hint, emoji: true }],
+          });
+        }
+        if (options.footer) {
+          blocks.push({
+            type: "context",
+            elements: [
+              { type: "plain_text", text: options.footer, emoji: true },
+            ],
+          });
+        }
       }
 
-      const fallbackText =
+      const fallbackText = truncateFallbackText(
         isFinal && options.footer
           ? `${chunkText}\n\n${options.footer}`
-          : chunkText;
+          : chunkText,
+      );
 
       // Follow-ups thread under the first message when the original wasn't a
       // thread, so we don't spam the channel with N top-level posts.
@@ -460,17 +535,28 @@ class SlackProvider implements ChatOpsProvider {
           emoji: true,
         },
         action_id: `approval_decision_${options.approvalId}_${action}`,
+        // Slack caps a button `value` at 2,000 chars and rejects oversized
+        // chat.postMessage payloads with `msg_too_large`. Embedding the full
+        // original message (text, rawText, base64 attachments, metadata) here
+        // scales with user input and blew past that limit. The approve/decline
+        // click path only needs the requester's email (authz check, not
+        // recoverable from the click payload) plus channel/thread for replies.
         value: JSON.stringify({
           taskId: options.taskId,
           approvalId: options.approvalId,
           toolName: options.toolName,
-          originalMessage: options.originalMessage,
+          originalMessage: {
+            channelId: options.originalMessage.channelId,
+            threadId: options.originalMessage.threadId,
+            senderEmail: options.originalMessage.senderEmail,
+          },
           approved,
         }),
         style,
       };
     };
 
+    const argsText = formatApprovalToolArgs(options.toolArgs);
     const postArgs = {
       channel: options.channelId,
       text: "",
@@ -482,6 +568,17 @@ class SlackProvider implements ChatOpsProvider {
             text: `\`${options.toolName}\``,
           },
         },
+        ...(argsText
+          ? [
+              {
+                type: "section" as const,
+                text: {
+                  type: "mrkdwn" as const,
+                  text: `\`\`\`\n${argsText}\n\`\`\``,
+                },
+              },
+            ]
+          : []),
         {
           type: "actions" as const,
           elements: [
@@ -566,7 +663,8 @@ class SlackProvider implements ChatOpsProvider {
                 "*Available commands:*\n" +
                 `\`${SLACK_SLASH_COMMANDS.SELECT_AGENT}\` — Change the default agent handling requests in the channel\n` +
                 `\`${SLACK_SLASH_COMMANDS.STATUS}\` — Check the current agent handling requests in the channel\n` +
-                `\`${SLACK_SLASH_COMMANDS.HELP}\` — Show available commands`,
+                `\`${SLACK_SLASH_COMMANDS.HELP}\` — Show available commands\n` +
+                "`mute` — Reply with this (or `mute` me directly) to stop auto-replies in a thread; @mention me to resume",
             },
           },
           { type: "divider" },
@@ -894,7 +992,7 @@ class SlackProvider implements ChatOpsProvider {
       approvalId?: string;
       approved?: boolean;
       toolName?: string;
-      originalMessage: IncomingChatMessage;
+      originalMessage?: Partial<IncomingChatMessage>;
     };
     try {
       parsedValue = JSON.parse(action.value) as {
@@ -902,7 +1000,7 @@ class SlackProvider implements ChatOpsProvider {
         approvalId?: string;
         approved?: boolean;
         toolName?: string;
-        originalMessage: IncomingChatMessage;
+        originalMessage?: Partial<IncomingChatMessage>;
       };
     } catch {
       return null;
@@ -922,6 +1020,28 @@ class SlackProvider implements ChatOpsProvider {
       return null;
     }
 
+    // The button value now carries only a slimmed-down original message (see
+    // addApprovalRequestForm). Reconstruct a complete IncomingChatMessage,
+    // falling back to the live interactive payload for ids and to safe defaults
+    // for fields the click path doesn't read. Older in-flight buttons that
+    // still carry a full message keep working unchanged.
+    const embedded = parsedValue.originalMessage;
+    const originalMessage: IncomingChatMessage = {
+      messageId: embedded.messageId ?? "",
+      channelId: embedded.channelId ?? p.channel?.id ?? "",
+      workspaceId: embedded.workspaceId ?? p.team?.id ?? null,
+      threadId: embedded.threadId ?? p.message?.thread_ts ?? p.message?.ts,
+      senderId: embedded.senderId ?? "",
+      senderEmail: embedded.senderEmail,
+      senderName: embedded.senderName ?? "",
+      text: embedded.text ?? "",
+      rawText: embedded.rawText ?? "",
+      timestamp: new Date(),
+      isThreadReply: embedded.isThreadReply ?? false,
+      metadata: embedded.metadata,
+      attachments: embedded.attachments,
+    };
+
     return {
       taskId: parsedValue.taskId,
       approvalId: parsedValue.approvalId,
@@ -934,7 +1054,7 @@ class SlackProvider implements ChatOpsProvider {
       userId: p.user?.id || "unknown",
       userName: p.user?.name || "Unknown",
       responseUrl: p.response_url || "",
-      originalMessage: parsedValue.originalMessage,
+      originalMessage,
     };
   }
 
@@ -990,7 +1110,7 @@ class SlackProvider implements ChatOpsProvider {
 
     // Send welcome DM (fire-and-forget) — skip when SSO is enabled
     if (provisioned.invitationId !== null && !(await isSsoConfigured())) {
-      const welcome = buildWelcomeMessage({
+      const welcome = await buildWelcomeMessage({
         invitationId: provisioned.invitationId,
         email: senderEmail,
         name: displayName,
@@ -1011,7 +1131,8 @@ class SlackProvider implements ChatOpsProvider {
             "*Available commands:*\n" +
             `\`${slashCommands.SELECT_AGENT}\` — Change the default agent\n` +
             `\`${slashCommands.STATUS}\` — Show current agent binding\n` +
-            `\`${slashCommands.HELP}\` — Show this help message\n\n` +
+            `\`${slashCommands.HELP}\` — Show this help message\n` +
+            "`mute` — Reply with this in a thread to stop auto-replies there; @mention me to resume\n\n" +
             "Or just send a message to interact with the assigned agent.",
         };
 
@@ -1250,11 +1371,14 @@ class SlackProvider implements ChatOpsProvider {
         ? `https://app.slack.com/app-settings/${this.teamId}/${this.config.appId}/oauth`
         : "https://api.slack.com/apps";
 
+    const appName = await OrganizationModel.getAppName();
     const text = [
-      ":warning: *Your Archestra Slack app is missing required scopes*",
+      `:warning: *Your ${appName} Slack app is missing required scopes*`,
       "",
       "The following scopes need to be added to your Slack app:",
       scopeList,
+      "",
+      "Until they're added, some features may not work fully.",
       "",
       "*To update your app:*",
       `1. Open your <${appSettingsUrl}|Slack app settings>`,
@@ -1288,6 +1412,99 @@ class SlackProvider implements ChatOpsProvider {
   // ===========================================================================
   // Private Methods
   // ===========================================================================
+
+  /**
+   * Mute a channel thread, confirming ONLY on a real active→muted transition.
+   * Redelivered events / repeat mutes find the key already gone and stay silent.
+   */
+  private async muteThreadAndNotify(
+    channelId: string,
+    threadTs: string,
+  ): Promise<void> {
+    const wasActive = await clearChannelThreadActive({
+      provider: this.providerId,
+      channelId,
+      threadId: threadTs,
+    });
+    if (wasActive) {
+      await this.postThreadMutedNotice(channelId, threadTs);
+    }
+  }
+
+  /**
+   * Mute a thread when a 🔇/🤫 reaction lands on one of the bot's OWN channel
+   * messages. Slack reaction events carry only the reacted message's ts, not its
+   * thread_ts, so we resolve the thread root (the activation key) via the API.
+   */
+  private async handleMuteReaction(event: SlackReactionEvent): Promise<void> {
+    if (
+      !this.botUserId ||
+      event.item?.type !== "message" ||
+      event.item_user !== this.botUserId ||
+      !isMuteReaction(event.reaction ?? "")
+    ) {
+      return;
+    }
+    const channelId = event.item.channel;
+    // DMs have no sticky activation to clear; skip the wasted API lookup.
+    if (isSlackDmChannel(channelId)) return;
+
+    const threadTs = await this.resolveThreadRoot(channelId, event.item.ts);
+    if (!threadTs) return; // couldn't resolve — never claim a false "muted"
+    await this.muteThreadAndNotify(channelId, threadTs);
+  }
+
+  /**
+   * Resolve the thread root ts a message belongs to — the value the activation
+   * key was written with. conversations.replies returns the thread's parent as
+   * messages[0]; its ts (or thread_ts) is the root. Returns null on failure so
+   * callers don't post a false confirmation.
+   */
+  private async resolveThreadRoot(
+    channelId: string,
+    ts: string,
+  ): Promise<string | null> {
+    if (!this.client) return null;
+    try {
+      const result = await this.client.conversations.replies({
+        channel: channelId,
+        ts,
+        limit: 1,
+      });
+      const root = result.messages?.[0];
+      return (
+        (root?.thread_ts as string | undefined) ||
+        (root?.ts as string | undefined) ||
+        null
+      );
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), channelId, ts },
+        "[SlackProvider] Failed to resolve thread root for mute reaction",
+      );
+      return null;
+    }
+  }
+
+  /** Confirm a thread was muted, threaded under the message that muted it. */
+  private async postThreadMutedNotice(
+    channelId: string,
+    threadTs: string,
+  ): Promise<void> {
+    if (!this.client) return;
+    try {
+      await this.client.chat.postMessage({
+        channel: channelId,
+        text: buildThreadMutedNotice(),
+        thread_ts: threadTs,
+      });
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[SlackProvider] Failed to post thread-muted notice",
+      );
+    }
+  }
 
   /**
    * Handle a slash command received via socket mode.
@@ -1424,8 +1641,12 @@ class SlackProvider implements ChatOpsProvider {
         switch (type) {
           case "events_api": {
             await safeAck();
-            const eventBody = body as { event?: { ts?: string } };
-            const eventTs = eventBody?.event?.ts;
+            // Messages carry event.ts; reaction events carry event.event_ts
+            // instead — fall back to it so reactions dedup on redelivery too.
+            const eventBody = body as {
+              event?: { ts?: string; event_ts?: string };
+            };
+            const eventTs = eventBody?.event?.ts ?? eventBody?.event?.event_ts;
             if (eventTs && this.socketDedup.mark(eventTs)) {
               break;
             }
@@ -1775,10 +1996,22 @@ function decodeSlackEntities(text: string): string {
 // Slack's `markdown` block has a 12,000-char limit per block.
 const MARKDOWN_BLOCK_CHAR_LIMIT = 12_000;
 
+// Slack's chat.postMessage `text` is only a notification/accessibility fallback
+// — the rendered reply lives in `blocks`. Slack rejects oversized payloads with
+// `msg_too_large`, so cap the fallback well below Slack's ~40,000-char text
+// limit instead of duplicating the full (already block-rendered) chunk into it.
+const SLACK_FALLBACK_TEXT_LIMIT = 3_000;
+
+function truncateFallbackText(text: string): string {
+  if (text.length <= SLACK_FALLBACK_TEXT_LIMIT) return text;
+  return `${text.slice(0, SLACK_FALLBACK_TEXT_LIMIT - 1)}…`;
+}
+
 // Slack rejects chat.postMessage with more than 50 expanded blocks. Each
-// sendReply message reserves 1 slot for a context footer (continuation hint
-// or agent footer), so the markdown block's expansion is bounded to 45 — 4
-// under the 49 ceiling for safety against estimator drift.
+// sendReply message reserves slots for context footers (a continuation hint, or
+// the agent footer plus an optional one-time mute hint — at most 2), so the
+// markdown block's expansion is bounded to 45, keeping the worst case (45 + 2)
+// safely under the 50 ceiling against estimator drift.
 const MAX_ESTIMATED_RENDERED_BLOCKS = 45;
 
 /**
@@ -2065,9 +2298,16 @@ interface SlackEventPayload {
     ts: string;
     thread_ts?: string;
     files?: SlackFile[];
+    // reaction_added fields (channel/ts live under `item`, not at the top level)
+    reaction?: string;
+    item?: { type?: string; channel: string; ts: string };
+    item_user?: string;
   };
   challenge?: string;
 }
+
+/** A Slack `reaction_added` event (subset we use). */
+type SlackReactionEvent = NonNullable<SlackEventPayload["event"]>;
 
 interface SlackInteractivePayload {
   type: string;

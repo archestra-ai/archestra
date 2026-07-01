@@ -1,6 +1,6 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import { DEFAULT_APP_NAME, MCP_SERVER_TOOL_NAME_SEPARATOR } from "./consts";
-import { slugify } from "./utils";
+import { parseFullToolName, slugify } from "./utils";
 
 export const ARCHESTRA_MCP_SERVER_NAME = "archestra";
 
@@ -41,6 +41,16 @@ export const TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME =
 export const TOOL_GET_MCP_SERVER_LOGS_SHORT_NAME = "get_mcp_server_logs";
 export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME =
   "create_mcp_server_installation_request";
+export const TOOL_CREATE_TEAM_SHORT_NAME = "create_team";
+export const TOOL_GET_TEAM_SHORT_NAME = "get_team";
+export const TOOL_LIST_TEAMS_SHORT_NAME = "list_teams";
+export const TOOL_EDIT_TEAM_SHORT_NAME = "edit_team";
+export const TOOL_DELETE_TEAM_SHORT_NAME = "delete_team";
+export const TOOL_LIST_TEAM_MEMBERS_SHORT_NAME = "list_team_members";
+export const TOOL_ADD_TEAM_MEMBER_SHORT_NAME = "add_team_member";
+export const TOOL_UPDATE_TEAM_MEMBER_ROLE_SHORT_NAME =
+  "update_team_member_role";
+export const TOOL_REMOVE_TEAM_MEMBER_SHORT_NAME = "remove_team_member";
 export const TOOL_CREATE_LIMIT_SHORT_NAME = "create_limit";
 export const TOOL_GET_LIMITS_SHORT_NAME = "get_limits";
 export const TOOL_UPDATE_LIMIT_SHORT_NAME = "update_limit";
@@ -124,7 +134,7 @@ export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
 // persistent files: produced by agents, scoped to a conversation (or a project)
 export const TOOL_SEARCH_FILES_SHORT_NAME = "search_files";
 export const TOOL_READ_FILE_SHORT_NAME = "read_file";
-export const TOOL_SAVE_RESULT_SHORT_NAME = "save_result";
+export const TOOL_SAVE_FILE_SHORT_NAME = "save_file";
 export const TOOL_EDIT_FILE_SHORT_NAME = "edit_file";
 export const TOOL_DELETE_FILE_SHORT_NAME = "delete_file";
 // MCP Apps — authoring/management (chat) + per-app data store (app runtime).
@@ -168,6 +178,15 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME,
   TOOL_GET_MCP_SERVER_LOGS_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
+  TOOL_CREATE_TEAM_SHORT_NAME,
+  TOOL_GET_TEAM_SHORT_NAME,
+  TOOL_LIST_TEAMS_SHORT_NAME,
+  TOOL_EDIT_TEAM_SHORT_NAME,
+  TOOL_DELETE_TEAM_SHORT_NAME,
+  TOOL_LIST_TEAM_MEMBERS_SHORT_NAME,
+  TOOL_ADD_TEAM_MEMBER_SHORT_NAME,
+  TOOL_UPDATE_TEAM_MEMBER_ROLE_SHORT_NAME,
+  TOOL_REMOVE_TEAM_MEMBER_SHORT_NAME,
   TOOL_CREATE_LIMIT_SHORT_NAME,
   TOOL_GET_LIMITS_SHORT_NAME,
   TOOL_UPDATE_LIMIT_SHORT_NAME,
@@ -220,7 +239,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_UPLOAD_FILE_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
-  TOOL_SAVE_RESULT_SHORT_NAME,
+  TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_EDIT_FILE_SHORT_NAME,
   TOOL_DELETE_FILE_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
@@ -397,8 +416,8 @@ export const TOOL_SEARCH_FILES_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_SEARCH_FILES_SHORT_NAME}` as const;
 export const TOOL_READ_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_READ_FILE_SHORT_NAME}` as const;
-export const TOOL_SAVE_RESULT_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_SAVE_RESULT_SHORT_NAME}` as const;
+export const TOOL_SAVE_FILE_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_SAVE_FILE_SHORT_NAME}` as const;
 export const TOOL_EDIT_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_EDIT_FILE_SHORT_NAME}` as const;
 export const TOOL_DELETE_FILE_FULL_NAME =
@@ -427,6 +446,22 @@ export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_CREATE_SKILL_SHORT_NAME,
   TOOL_UPDATE_SKILL_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
+
+const SKILL_RUNTIME_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set(
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+);
+
+/**
+ * True for an Archestra skill-runtime/plumbing tool (list, load, create,
+ * update), regardless of its server prefix. Every skill-enabled agent carries
+ * the whole set once its org opts in, so recommending them inside a generated
+ * skill is circular noise. Matched by short name (prefix stripped) so
+ * white-labeled tool prefixes are caught too.
+ */
+export function isSkillRuntimeTool(toolName: string): boolean {
+  const { toolName: shortName } = parseFullToolName(toolName);
+  return SKILL_RUNTIME_TOOL_SHORT_NAMES.has(shortName);
+}
 
 /**
  * MCP App management tools — assigned to new agents by default when the apps
@@ -474,7 +509,7 @@ export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
 export const PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
-  TOOL_SAVE_RESULT_SHORT_NAME,
+  TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_EDIT_FILE_SHORT_NAME,
   TOOL_DELETE_FILE_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];

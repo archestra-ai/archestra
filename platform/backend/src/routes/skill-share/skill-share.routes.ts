@@ -176,7 +176,11 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Skill share link not found");
       }
 
-      const marketplaceName = await deriveMarketplaceName(organizationId);
+      // The marketplace name is frozen at create time (clients register the
+      // marketplace under it locally), so a rotation must keep the existing
+      // link's name — re-deriving it would silently rename the marketplace if
+      // the org's branding changed since the link was created.
+      const marketplaceName = existing.marketplaceName;
       if (isReservedMarketplaceName(marketplaceName)) {
         throw new ApiError(
           400,

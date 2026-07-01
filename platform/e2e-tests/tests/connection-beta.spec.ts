@@ -131,67 +131,6 @@ test.describe("connection_beta wizard", () => {
     expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
   });
 
-  test("claude-code ends with a copyable test message whose marker the logs link searches for", async ({
-    page,
-    goToPage,
-  }) => {
-    await goToPage(page, "/connection_beta?clientId=claude-code");
-
-    // a final wizard step prompts a restart + the sample message…
-    await expect(
-      page.getByText(/Restart Claude Code and send a test message/i),
-    ).toBeVisible();
-
-    // …and the logs link searches for the unique marker that the displayed
-    // sample message carries (the marker alone pins the session — no
-    // sessionSource filter)
-    const link = page.getByTestId("connect-test-setup-link");
-    await expect(link).toBeVisible();
-    const href = (await link.getAttribute("href")) ?? "";
-    expect(href).toMatch(/^\/llm\/logs\?/);
-    expect(href).not.toContain("sessionSource");
-    expect(href).toContain("userId=");
-
-    const marker = new URL(href, "http://x").searchParams.get("search");
-    expect(marker).toMatch(/^conn-test-[0-9a-f]{12}$/);
-    // the copyable sample message contains exactly that marker
-    await expect(page.getByTestId("connect-sample-message")).toContainText(
-      marker as string,
-    );
-  });
-
-  test("claude-desktop's final step searches the logs for its sample-message marker", async ({
-    page,
-    goToPage,
-  }) => {
-    await goToPage(page, "/connection_beta?clientId=claude-desktop");
-
-    const link = page.getByTestId("connect-test-setup-link");
-    await expect(link).toBeVisible();
-    const href = (await link.getAttribute("href")) ?? "";
-    expect(href).not.toContain("sessionSource");
-    expect(href).toContain("userId=");
-
-    const marker = new URL(href, "http://x").searchParams.get("search");
-    expect(marker).toMatch(/^conn-test-[0-9a-f]{12}$/);
-    await expect(page.getByTestId("connect-sample-message")).toContainText(
-      marker as string,
-    );
-  });
-
-  test("non-Claude script clients get no 'Test your setup' step", async ({
-    page,
-    goToPage,
-  }) => {
-    await goToPage(page, "/connection_beta?clientId=codex");
-
-    // the command still generates, but there's no verify step / logs link
-    await expect(
-      page.getByText(/curl -fsSL '.*\/api\/connection-setups\//),
-    ).toBeVisible();
-    await expect(page.getByTestId("connect-test-setup-link")).toHaveCount(0);
-  });
-
   test("admins configure the page from a dialog on the page itself", async ({
     page,
     goToPage,

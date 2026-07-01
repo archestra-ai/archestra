@@ -1,3 +1,4 @@
+export * from "./client";
 export type {
   CostSavingsInput,
   CostSavingsResult,

@@ -41,6 +41,7 @@ import {
   constructResponseSchema,
   type NetworkPolicy,
   SelectOrganizationSchema,
+  type TrustedImageRegistries,
   UpdateAgentSettingsSchema,
   UpdateAppearanceSettingsSchema,
   UpdateAuthSettingsSchema,
@@ -373,6 +374,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         defaultNetworkPolicy: typeof body.networkPolicy;
         defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: TrustedImageRegistries | null;
       }> = {};
       if ("name" in body) {
         data.defaultEnvironmentName = body.name ?? null;
@@ -391,6 +393,10 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       if ("validationRegex" in body) {
         data.defaultEnvironmentValidationRegex = body.validationRegex ?? null;
+      }
+      if ("trustedImageRegistries" in body) {
+        data.defaultEnvironmentTrustedImageRegistries =
+          body.trustedImageRegistries ?? null;
       }
 
       const organization = await OrganizationModel.patch(organizationId, data);

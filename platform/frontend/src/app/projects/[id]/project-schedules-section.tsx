@@ -2,14 +2,16 @@
 
 import {
   CalendarClock,
+  ExternalLink,
+  Loader2,
   MoreHorizontal,
-  Pencil,
+  Pause,
   Play,
   Plus,
   Power,
   Trash2,
 } from "lucide-react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { runChatHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import {
@@ -30,6 +32,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -44,6 +47,7 @@ import {
   useDeleteScheduleTrigger,
   useDisableScheduleTrigger,
   useEnableScheduleTrigger,
+  useRunScheduleTriggerNow,
   useScheduleTriggerRuns,
   useScheduleTriggers,
   useUpdateScheduleTrigger,
@@ -105,11 +109,7 @@ export function ProjectSchedulesSection({
       ) : (
         <div className="space-y-2">
           {schedules.map((schedule) => (
-            <ScheduleRow
-              key={schedule.id}
-              schedule={schedule}
-              projectId={projectId}
-            />
+            <ScheduleRow key={schedule.id} schedule={schedule} />
           ))}
         </div>
       )}
@@ -119,100 +119,82 @@ export function ProjectSchedulesSection({
 
 // === internal components ===
 
-function ScheduleRow({
-  schedule,
-  projectId,
-}: {
-  schedule: ScheduleTrigger;
-  // The owning project id, guaranteed non-null here (the schedule's own
-  // projectId is nullable in the type); used for the runs-route link.
-  projectId: string;
-}) {
+function ScheduleRow({ schedule }: { schedule: ScheduleTrigger }) {
+  const router = useRouter();
   const enableSchedule = useEnableScheduleTrigger();
   const disableSchedule = useDisableScheduleTrigger();
   const deleteSchedule = useDeleteScheduleTrigger();
+  const runNow = useRunScheduleTriggerNow();
   const [editOpen, setEditOpen] = useState(false);
 
   const { resolve, isResolving } = useResolveRunChat();
-  // Clicking the schedule opens its LAST run's chat. Fetch just that run (no
-  // polling — the section already refreshes the trigger list).
+  // "Open recent run" (overflow menu) opens this schedule's LAST run's chat.
+  // Fetch just that run; poll while it's running so a manual/scheduled run shows
+  // its live "running" state (spinner) here and settles on its own.
   const { data: runsResponse } = useScheduleTriggerRuns(schedule.id, {
     limit: 1,
-    refetchInterval: false,
+    refetchInterval: (query) =>
+      query.state.data?.data?.[0]?.status === "running" ? 3_000 : false,
   });
   const lastRun = runsResponse?.data?.[0];
-
-  const labelClassName = cn(
-    "min-w-0 flex-1 hover:opacity-80 transition-opacity",
-    !schedule.enabled && "opacity-60",
-  );
-  const scheduleLabel = (
-    <>
-      <span className="flex items-center gap-2">
-        <span className="truncate text-sm font-medium">{schedule.name}</span>
-        {!schedule.enabled && (
-          <Badge variant="outline" className="shrink-0">
-            Disabled
-          </Badge>
-        )}
-      </span>
-      <span className="block truncate text-xs text-muted-foreground">
-        {schedule.agent?.name ?? "Default agent"}
-      </span>
-    </>
-  );
-
+  const isLastRunActive = lastRun?.status === "running";
   const lastRunChatHref = lastRun
     ? runChatHref({ triggerId: schedule.id, run: lastRun })
     : null;
-  // Last run has a chat → link straight to it. Last run without one (legacy) →
-  // create it on click, then open. No runs yet → the runs page (empty state).
-  let nameNode: React.ReactNode;
-  if (lastRunChatHref) {
-    nameNode = (
-      <Link href={lastRunChatHref} className={labelClassName}>
-        {scheduleLabel}
-      </Link>
-    );
-  } else if (lastRun) {
-    nameNode = (
-      <button
-        type="button"
-        disabled={isResolving}
-        className={cn(labelClassName, "text-left")}
-        onClick={() => resolve(schedule.id, lastRun.id)}
-      >
-        {scheduleLabel}
-      </button>
-    );
-  } else {
-    nameNode = (
-      <Link
-        href={`/projects/${projectId}/schedules/${schedule.id}`}
-        className={labelClassName}
-      >
-        {scheduleLabel}
-      </Link>
-    );
-  }
+  // Last run has a chat → go straight to it. Last run without one (legacy) →
+  // create it, then open. No runs yet → the menu item is disabled.
+  const openRecentRun = () => {
+    if (lastRunChatHref) router.push(lastRunChatHref);
+    else if (lastRun) resolve(schedule.id, lastRun.id);
+  };
 
   return (
     <div className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
-      <span
+      <button
+        type="button"
+        onClick={() => setEditOpen(true)}
         className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10",
-          !schedule.enabled && "bg-muted",
+          "flex min-w-0 flex-1 items-center gap-3 text-left transition-opacity hover:opacity-80",
+          !schedule.enabled && "opacity-60",
         )}
       >
-        <CalendarClock
+        <span
           className={cn(
-            "h-4 w-4 text-primary",
-            !schedule.enabled && "text-muted-foreground",
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10",
+            !schedule.enabled && "bg-muted",
           )}
-          aria-hidden
-        />
-      </span>
-      {nameNode}
+        >
+          {isLastRunActive ? (
+            <Loader2
+              className="h-4 w-4 animate-spin text-amber-500"
+              aria-hidden
+            />
+          ) : (
+            <CalendarClock
+              className={cn(
+                "h-4 w-4 text-primary",
+                !schedule.enabled && "text-muted-foreground",
+              )}
+              aria-hidden
+            />
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="truncate text-sm font-medium">
+              {schedule.name}
+            </span>
+            {!schedule.enabled && (
+              <Badge variant="outline" className="shrink-0">
+                Disabled
+              </Badge>
+            )}
+          </span>
+          <span className="block truncate text-xs text-muted-foreground">
+            {schedule.agent?.name ?? "Default agent"}
+          </span>
+        </span>
+      </button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" aria-label="Schedule actions">
@@ -220,6 +202,21 @@ function ScheduleRow({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            disabled={!lastRun || isResolving}
+            onSelect={openRecentRun}
+          >
+            <ExternalLink className="h-4 w-4" />
+            Open recent run
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={runNow.isPending}
+            onSelect={() => runNow.mutate(schedule.id)}
+          >
+            <Play className="h-4 w-4" />
+            Run manually
+          </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() =>
               schedule.enabled
@@ -229,19 +226,15 @@ function ScheduleRow({
           >
             {schedule.enabled ? (
               <>
-                <Power className="h-4 w-4" />
+                <Pause className="h-4 w-4" />
                 Disable
               </>
             ) : (
               <>
-                <Play className="h-4 w-4" />
+                <Power className="h-4 w-4" />
                 Enable
               </>
             )}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setEditOpen(true)}>
-            <Pencil className="h-4 w-4" />
-            Edit
           </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"

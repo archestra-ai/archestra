@@ -1,20 +1,6 @@
-import {
-  parseFullToolName,
-  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
-} from "@archestra/shared";
+import { isSkillRuntimeTool } from "@archestra/shared";
 import { promptNeedsRendering } from "@/templating";
 import type { ResourceVisibilityScope } from "@/types/visibility";
-
-/**
- * Short names of the Archestra skill-runtime/plumbing tools (list, load,
- * create, update). Every skill-enabled agent carries the whole set once
- * its org opts in, so recommending them inside a generated skill is circular
- * noise — the activating agent already has them. Matched by short name (prefix
- * stripped) so white-labeled tool prefixes are caught too.
- */
-const SKILL_RUNTIME_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set(
-  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
-);
 
 /**
  * The subset of an agent the migration actually reads. Declaring it explicitly
@@ -331,12 +317,6 @@ function buildAllowedTools(
     detail: `${tools.length} tool(s) carried into allowed-tools`,
   });
   return tools.map((tool) => tool.name).join(" ");
-}
-
-/** True for an Archestra skill-runtime tool, regardless of its server prefix. */
-function isSkillRuntimeTool(toolName: string): boolean {
-  const { toolName: shortName } = parseFullToolName(toolName);
-  return SKILL_RUNTIME_TOOL_SHORT_NAMES.has(shortName);
 }
 
 /**

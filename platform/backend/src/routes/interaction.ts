@@ -1,9 +1,9 @@
 import {
+  ClientFilterSchema,
   createPaginatedResponseSchema,
   InteractionSourceSchema,
   PaginationQuerySchema,
   RouteId,
-  SessionClientSourceSchema,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -162,8 +162,8 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
             source: InteractionSourceSchema.optional().describe(
               "Filter by interaction source",
             ),
-            sessionSource: SessionClientSourceSchema.optional().describe(
-              "Filter by client/session source (e.g. claude_code, claude_desktop)",
+            client: ClientFilterSchema.optional().describe(
+              "Filter by client app (queries external_agent_id; e.g. claude)",
             ),
             sessionId: z.string().optional().describe("Filter by session ID"),
             startDate: z
@@ -195,7 +195,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId,
           userId,
           source,
-          sessionSource,
+          client,
           sessionId,
           startDate,
           endDate,
@@ -223,7 +223,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId,
           filterUserId: userId,
           source,
-          sessionSource,
+          client,
           sessionId,
           startDate,
           endDate,
@@ -241,7 +241,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId,
           userId,
           source,
-          sessionSource,
+          client,
           sessionId,
           startDate: startDate ? new Date(startDate) : undefined,
           endDate: endDate ? new Date(endDate) : undefined,

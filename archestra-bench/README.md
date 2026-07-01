@@ -111,6 +111,7 @@ Which Archestra capability each task is built to exercise. A task usually leans 
 | `review-file-upload-persistence` | basic | ✓ | ✓ | | | | | red-herring | |
 | `solidarity-tax-usd` | basic | ✓ | | | | | ✓ | | |
 | `ib-deck-qc` | basic | ✓ | ✓ | | | | | red-herring | persist |
+| `expense-report-continue` | basic | ✓ | ✓ | ✓ | | | | | persist |
 | `author-skill` | archestra-api | ✓ | | | author | | | | state |
 | `letter-count` | archestra-api | | | | | | | | state |
 | `author-aec-normalizer-skill` | archestra-api | ✓ | ✓ | | author | | | | state |
@@ -136,7 +137,8 @@ Which Archestra capability each task is built to exercise. A task usually leans 
 - **State/persist** — marked only where introspecting/mutating Archestra's own state is the task's
   *headline* point. `state`: the answer itself comes from what the agent *did* to Archestra, graded via
   the `[state].rest` backend snapshot (`author-skill`, `letter-count`); `persist`: a file carried across
-  a `new_conversation` boundary via persistent storage (`purchase-ledger`, `ib-deck-qc`).
+  a `new_conversation` boundary via persistent storage (`purchase-ledger`, `ib-deck-qc`,
+  `expense-report-continue`).
   (`decode-cipher`/`xlsx-live-formulas` also
   snapshot `[state].rest`, but only to enforce skill use — counted under Skills, not here.)
 

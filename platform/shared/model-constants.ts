@@ -132,19 +132,25 @@ export function providerRequiresPerUserCredential(
 export function isProviderApiKeyOptional(params: {
   provider: SupportedProvider;
   azureEntraIdEnabled?: boolean;
+  anthropicWifEnabled?: boolean;
 }): boolean {
   return (
     PROVIDERS_WITH_OPTIONAL_API_KEY.has(params.provider) ||
-    (params.provider === "azure" && params.azureEntraIdEnabled === true)
+    (params.provider === "azure" && params.azureEntraIdEnabled === true) ||
+    (params.provider === "anthropic" && params.anthropicWifEnabled === true)
   );
 }
 
 export function getProvidersWithOptionalApiKey(params?: {
   azureEntraIdEnabled?: boolean;
+  anthropicWifEnabled?: boolean;
 }): SupportedProvider[] {
   const providers = [...PROVIDERS_WITH_OPTIONAL_API_KEY];
   if (params?.azureEntraIdEnabled === true) {
     providers.push("azure");
+  }
+  if (params?.anthropicWifEnabled === true) {
+    providers.push("anthropic");
   }
   return providers;
 }

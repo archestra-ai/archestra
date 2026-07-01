@@ -75,7 +75,7 @@ describe("ensureProvisionedUser", () => {
     );
   });
 
-  test('concurrent race resolves to the existing user with invitationId ""', async ({
+  test("concurrent race resolves to the existing user with no invitation (suppresses the welcome)", async ({
     makeOrganization,
   }) => {
     await makeOrganization();
@@ -106,6 +106,9 @@ describe("ensureProvisionedUser", () => {
 
     expect(result).not.toBeNull();
     expect(result?.user.id).toBe(racingUserId);
-    expect(result?.invitationId).toBe("");
+    // The already-existing user must come back with a null invitation so the
+    // caller's `invitationId !== null` gate skips the welcome DM (an empty
+    // string would pass that gate and send a broken signup link).
+    expect(result?.invitationId).toBeNull();
   });
 });

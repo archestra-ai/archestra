@@ -150,7 +150,10 @@ const INSTRUCTIONS_MARKDOWN_COMPONENTS: Components = {
     />
   ),
   code: ({ node, ...props }) => (
-    <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs" {...props} />
+    <code
+      className="rounded bg-muted px-1 py-0.5 font-mono text-xs"
+      {...props}
+    />
   ),
 };
 

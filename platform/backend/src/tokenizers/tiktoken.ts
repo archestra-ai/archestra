@@ -1,5 +1,5 @@
 import { get_encoding, type Tiktoken } from "tiktoken";
-import { BaseTokenizer, type ProviderMessage } from "./base";
+import { BaseTokenizer } from "./base";
 
 /**
  * Tiktoken-based tokenizer (OpenAI's tokenizer)
@@ -15,11 +15,7 @@ export class TiktokenTokenizer extends BaseTokenizer {
     this.encoding = get_encoding("cl100k_base");
   }
 
-  countMessageTokens(message: ProviderMessage): number {
-    const text = this.getMessageText(message);
-    const fullText = `${message.role || ""}${text}`;
-
-    const tokens = this.encoding.encode(fullText);
-    return tokens.length;
+  protected computeMessageTokens(encodableText: string): number {
+    return this.encoding.encode(encodableText).length;
   }
 }

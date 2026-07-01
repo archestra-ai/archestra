@@ -1,7 +1,4 @@
-import {
-  parseFullToolName,
-  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
-} from "@archestra/shared";
+import { isSkillRuntimeTool } from "@archestra/shared";
 import { createLLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import { generateTaggedText } from "@/utils/generate-tagged-text";
@@ -144,15 +141,6 @@ Rules:
 - Base it only on the provided agent details; do not invent capabilities.`;
 
 const MAX_PROMPT_CHARS = 4000;
-
-const SKILL_RUNTIME_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set(
-  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
-);
-
-function isSkillRuntimeTool(toolName: string): boolean {
-  const { toolName: shortName } = parseFullToolName(toolName);
-  return SKILL_RUNTIME_TOOL_SHORT_NAMES.has(shortName);
-}
 
 function truncate(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max)}…` : value;

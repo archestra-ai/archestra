@@ -1,0 +1,53 @@
+"""Verify the agent authored a keyboard-driven kanban app with correct SDK usage.
+
+Reads BENCH_STATE: `rest` is the `/api/apps?search=...` snapshot (keep `source == "owned"` rows);
+`tool_calls` is the ordered tool invocations. The unusual requirement is keyboard-only operation, so
+the authored HTML should wire keyboard handling. The platform injects `window.archestra` and rejects
+HTML that self-imports the SDK, so a clean app uses the injected global and does not import the SDK
+file. Grading never renders the app; these check the authored markup, not runtime behavior.
+"""
+
+import json
+
+from bench_verifier import result, state
+
+_PREFIX = "keyboard-kanban-app-"
+_KEYBOARD_MARKERS = ("keydown", "keyup", "arrowright", "arrowleft", "arrowup", "arrowdown", "tabindex")
+
+
+def _owned_apps() -> list[dict]:
+    rest = state()["rest"]
+    assert len(rest) == 1, f"expected one captured rest path, got {list(rest)}"
+    resp = next(iter(rest.values()))
+    rows = resp.get("data") if isinstance(resp, dict) else None
+    assert isinstance(rows, list), f"unexpected /api/apps response: {resp!r}"
+    return [r for r in rows if r.get("source") == "owned" and str(r.get("name", "")).startswith(_PREFIX)]
+
+
+def _authoring_blob() -> str:
+    parts: list[str] = []
+    for call in state().get("tool_calls", []):
+        name = call.get("name")
+        inp = call.get("input") or {}
+        if name == "archestra__run_tool":
+            name, inp = inp.get("tool_name"), (inp.get("tool_args") or {})
+        if name and (name.endswith("__edit_app") or name.endswith("__scaffold_app") or name.endswith("__refine_app")):
+            parts.append(json.dumps(inp))
+    return "\n".join(parts)
+
+
+def test_app_authored() -> None:
+    apps = _owned_apps()
+    assert apps, f"no owned app named {_PREFIX}<cell> was created"
+    app = apps[0]
+    assert int(app.get("latestVersion", 0)) >= 2, (
+        f"app {app.get('name')!r} never got past a bare scaffold (version {app.get('latestVersion')!r})"
+    )
+    assert result()["app_id"] == app.get("id"), "submitted app_id does not match the created app"
+
+
+def test_keyboard_driven() -> None:
+    blob = _authoring_blob().lower()
+    assert any(marker in blob for marker in _KEYBOARD_MARKERS), (
+        "authored HTML shows no keyboard handling; the board is not keyboard-driven"
+    )

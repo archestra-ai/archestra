@@ -341,41 +341,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      // admin-view load bypasses access filtering; the read + scope checks
-      // below re-impose it before we reveal anything about the resource.
-      const agent = await AgentModel.findById(id, user.id, true);
-      if (!agent || agent.organizationId !== organizationId) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // caller must be able to read this resource (type-level, then instance
-      // scope) BEFORE we reveal its type — otherwise a user with only
-      // agent:read could distinguish an inaccessible profile/MCP-gateway/
-      // LLM-proxy from a nonexistent id via the "not an internal agent" 400.
-      const agentChecker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-      try {
-        agentChecker.require(agent.agentType, "read");
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-      if (!agentChecker.isAdmin(agent.agentType)) {
-        const accessible = await AgentModel.findById(id, user.id, false);
-        if (!accessible) {
-          throw new ApiError(404, "Agent not found");
-        }
-      }
-
-      // only now that the caller is allowed to read it do we disclose that it
-      // is the wrong kind of resource for conversion.
-      if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
-        throw new ApiError(
-          400,
-          "Only internal agents can be converted to skills.",
-        );
-      }
+      const { agent, agentChecker } =
+        await authorizeInternalAgentForSkillConversion({
+          id,
+          userId: user.id,
+          organizationId,
+        });
 
       // If the caller wants the source agent gone, prove they may delete it
       // BEFORE creating the skill, so a permission failure doesn't leave an
@@ -497,34 +468,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Mirror the convert route's read-authorization so the suggestion endpoint
-      // can't be used to probe agents the caller may not see. admin-view load
-      // first, then re-impose access filtering before disclosing anything.
-      const agent = await AgentModel.findById(id, user.id, true);
-      if (!agent || agent.organizationId !== organizationId) {
-        throw new ApiError(404, "Agent not found");
-      }
-      const agentChecker = await getAgentTypePermissionChecker({
+      const { agent } = await authorizeInternalAgentForSkillConversion({
+        id,
         userId: user.id,
         organizationId,
       });
-      try {
-        agentChecker.require(agent.agentType, "read");
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-      if (!agentChecker.isAdmin(agent.agentType)) {
-        const accessible = await AgentModel.findById(id, user.id, false);
-        if (!accessible) {
-          throw new ApiError(404, "Agent not found");
-        }
-      }
-      if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
-        throw new ApiError(
-          400,
-          "Only internal agents can be converted to skills.",
-        );
-      }
 
       const description = await suggestSkillDescription({
         agent,
@@ -1354,6 +1302,55 @@ async function authorizeSkillCreate(params: {
     teamIds: params.teamIds,
     organizationId: params.organizationId,
   });
+}
+
+/**
+ * Read-authorize an internal agent for the convert-to-skill flow, shared by the
+ * convert and suggest-description routes.
+ *
+ * admin-view load bypasses access filtering; the read + scope checks below
+ * re-impose it BEFORE we reveal anything about the resource — otherwise a user
+ * with only agent:read could distinguish an inaccessible
+ * profile/MCP-gateway/LLM-proxy from a nonexistent id via the "not an internal
+ * agent" 400. Only once the caller is allowed to read it do we disclose that it
+ * is the wrong kind of resource for conversion.
+ *
+ * Returns the loaded agent and its permission checker so callers can run
+ * follow-up checks (e.g. delete) without reloading.
+ */
+async function authorizeInternalAgentForSkillConversion(params: {
+  id: string;
+  userId: string;
+  organizationId: string;
+}) {
+  const { id, userId, organizationId } = params;
+
+  const agent = await AgentModel.findById(id, userId, true);
+  if (!agent || agent.organizationId !== organizationId) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  const agentChecker = await getAgentTypePermissionChecker({
+    userId,
+    organizationId,
+  });
+  try {
+    agentChecker.require(agent.agentType, "read");
+  } catch {
+    throw new ApiError(404, "Agent not found");
+  }
+  if (!agentChecker.isAdmin(agent.agentType)) {
+    const accessible = await AgentModel.findById(id, userId, false);
+    if (!accessible) {
+      throw new ApiError(404, "Agent not found");
+    }
+  }
+
+  if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
+    throw new ApiError(400, "Only internal agents can be converted to skills.");
+  }
+
+  return { agent, agentChecker };
 }
 
 /** Explicit `allowedTools` wins over the SKILL.md frontmatter when provided. */

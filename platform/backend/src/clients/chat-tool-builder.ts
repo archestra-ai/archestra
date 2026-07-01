@@ -229,6 +229,17 @@ export function buildMcpGatewayTool(params: {
               isError: archestraResponse.isError ?? false,
             });
 
+            // Archestra tool errors (schema/validation, policy, not-found,
+            // stale-version) are a function of the arguments, so an identical
+            // re-issue won't resolve them; let the repeat breaker nudge a step
+            // sooner (the first retry still runs — see noteDeterministicError).
+            if (archestraResponse.isError) {
+              ctx.repeatTracker.noteDeterministicError(
+                mcpTool.name,
+                toolArguments,
+              );
+            }
+
             // Return errors as tool-result text so the LLM can read
             // and recover, instead of throwing (which surfaces as a
             // fatal chat error). Matches executeMcpTool behavior.

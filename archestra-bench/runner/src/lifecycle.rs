@@ -1024,6 +1024,18 @@ pub fn build_backend_env(
     // Per-lane projects isolate file ownership so lanes sharing one backend don't collide on common
     // artifact names; the feature must be on for `POST /api/projects` and project-scoped conversations.
     env.insert("ARCHESTRA_PROJECTS_ENABLED".to_string(), "true".to_string());
+    // MCP Apps and agent environments ship dark behind these flags; the bench turns them on for every
+    // env (like the sandbox/projects flags above) so a run never depends on the operator's `.env` or
+    // `ARCHESTRA_BETA`. With Apps on, the platform assigns the app authoring tools to every agent at
+    // creation time (AgentModel.create -> assignAppToolsToAgent), independent of the bench's
+    // auto-assignment toggle, so non-apps agents carry them too. That mirrors the real product -- a
+    // user with Apps enabled has those tools -- and under the default search_and_run_only exposure
+    // they sit behind search_tools rather than in the upfront context, acting as realistic distractors.
+    env.insert("ARCHESTRA_APPS_ENABLED".to_string(), "true".to_string());
+    env.insert(
+        "ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED".to_string(),
+        "true".to_string(),
+    );
     env
 }
 
@@ -1208,6 +1220,26 @@ mod tests {
         assert_eq!(
             env.get("ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN"),
             Some(&"/dev/dagger".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_backend_env_force_enables_apps_and_environments() {
+        // Apps + agent environments are force-on for every env so a run doesn't depend on the
+        // operator's `.env`/`ARCHESTRA_BETA`; the apps env's tools can't resolve without them.
+        let base = HashMap::new();
+        let env = build_backend_env(
+            &base,
+            "postgres://h/db",
+            "http://localhost:1",
+            2,
+            MANAGED_DAGGER_HOST,
+            "/dev/dagger",
+        );
+        assert_eq!(env.get("ARCHESTRA_APPS_ENABLED"), Some(&"true".to_string()));
+        assert_eq!(
+            env.get("ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED"),
+            Some(&"true".to_string())
         );
     }
 

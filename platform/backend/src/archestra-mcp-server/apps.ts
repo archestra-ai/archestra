@@ -53,6 +53,7 @@ import { buildAppRenderResult } from "@/services/apps/app-render-result";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import {
   buildValidatedVersionPayload,
+  htmlHasDocumentRoot,
   validateAppHtmlStatic,
 } from "@/services/apps/app-ui-policy";
 import { ApiError, appOwner, type CommonToolResult } from "@/types";
@@ -458,27 +459,19 @@ const registry = defineArchestraTools([
       }
 
       const { userId, organizationId } = context;
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId,
+      const loaded = await loadAppForCaller({
         userId,
-        isAppAdmin: await callerIsAppAdmin(userId, organizationId),
+        organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
-      try {
-        await assertCallerMayModifyApp({
-          userId,
-          organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
-        });
-      } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
-        throw error;
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
+      const authError = await authorizeModifyApp({
+        userId,
+        organizationId,
+        app,
+      });
+      if (authError) return errorResult(authError.error);
 
       const capability = await buildAppCapabilityContext({
         userId,
@@ -613,18 +606,13 @@ const registry = defineArchestraTools([
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
+      const loaded = await loadAppForCaller({
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
+        organizationId: context.organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
       return buildAppRenderResult(app);
     },
   }),
@@ -639,18 +627,13 @@ const registry = defineArchestraTools([
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
+      const loaded = await loadAppForCaller({
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
+        organizationId: context.organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
       const version = args.version ?? app.latestVersion;
       const row = await AppVersionModel.findByAppAndVersion(app.id, version);
       if (!row) {
@@ -681,31 +664,20 @@ const registry = defineArchestraTools([
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
+      const loaded = await loadAppForCaller({
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
+        organizationId: context.organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
 
-      try {
-        await assertCallerMayModifyApp({
-          userId: context.userId,
-          organizationId: context.organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
-        });
-      } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
-        throw error;
-      }
+      const authError = await authorizeModifyApp({
+        userId: context.userId,
+        organizationId: context.organizationId,
+        app,
+      });
+      if (authError) return errorResult(authError.error);
 
       // Edits apply to the bytes the caller read. Versions are immutable, so
       // this snapshot equals the locked head whenever the CAS below passes;
@@ -724,6 +696,25 @@ const registry = defineArchestraTools([
       let warnings: string[];
       try {
         const editedHtml = applyStrReplaceEdits(base.html, args.edits);
+        // A *partial* edit that strips the document root the base still had
+        // (e.g. deletes part of the doc) would otherwise save with only a soft
+        // warning and leave the model building on broken HTML — reject it
+        // atomically. A deliberate whole-document replacement (the documented
+        // "full rewrite is one edit replacing the whole document") is allowed
+        // to produce whatever the author intends, and an app that was already
+        // a fragment (no root in the base) is unaffected.
+        const isWholeDocumentRewrite =
+          args.edits.length === 1 && args.edits[0].old_str === base.html;
+        if (
+          !isWholeDocumentRewrite &&
+          htmlHasDocumentRoot(base.html) &&
+          !htmlHasDocumentRoot(editedHtml)
+        ) {
+          throw new ApiError(
+            400,
+            "The edit would leave the app without a document root (no <head> or <html> element), which breaks it. Keep the full HTML document intact; re-read with read_app if you need the current source. Nothing was saved.",
+          );
+        }
         // Permissions ride the version envelope; an HTML-only edit inherits the
         // base version's permissions rather than dropping them.
         const validated = await buildValidatedVersionPayload({
@@ -790,27 +781,19 @@ const registry = defineArchestraTools([
         return errorResult("Authentication required.");
       }
       const { userId, organizationId } = context;
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId,
+      const loaded = await loadAppForCaller({
         userId,
-        isAppAdmin: await callerIsAppAdmin(userId, organizationId),
+        organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
-      try {
-        await assertCallerMayModifyApp({
-          userId,
-          organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
-        });
-      } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
-        throw error;
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
+      const authError = await authorizeModifyApp({
+        userId,
+        organizationId,
+        app,
+      });
+      if (authError) return errorResult(authError.error);
 
       // Fence resolution against the app's bound environment (not the org
       // default scaffold_app uses), so a tool only valid elsewhere is rejected.
@@ -851,18 +834,13 @@ const registry = defineArchestraTools([
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
+      const loaded = await loadAppForCaller({
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
+        organizationId: context.organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
       const head = await AppVersionModel.findByAppAndVersion(
         app.id,
         app.latestVersion,
@@ -917,7 +895,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_PUBLISH_APP_SHORT_NAME,
     title: "Publish App",
     description:
-      "Promote an app out of personal scope so others can run it — to specific teams (scope: team, with teamIds) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Returns the app's standalone run page. Validate the app first; publishing does not change its HTML.",
+      "Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, with teamIds) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Returns the app's standalone run page. Validate the app first; publishing does not change its HTML.",
     schema: PublishAppSchema,
     outputSchema: PublishAppOutputSchema,
     async handler({ args, context }) {
@@ -935,15 +913,13 @@ const registry = defineArchestraTools([
           "teamIds is only valid when publishing to a team; omit it for org scope.",
         );
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId,
+      const loaded = await loadAppForCaller({
         userId,
-        isAppAdmin: await callerIsAppAdmin(userId, organizationId),
+        organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
 
       let teamIds: string[];
       try {
@@ -1024,30 +1000,19 @@ const registry = defineArchestraTools([
           "preview_app_tool requires human approval, which only the interactive chat surface can present; it cannot be run from this context.",
         );
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
+      const loaded = await loadAppForCaller({
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
+        organizationId: context.organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
-      try {
-        await assertCallerMayModifyApp({
-          userId: context.userId,
-          organizationId: context.organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
-        });
-      } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
-        throw error;
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
+      const authError = await authorizeModifyApp({
+        userId: context.userId,
+        organizationId: context.organizationId,
+        app,
+      });
+      if (authError) return errorResult(authError.error);
 
       // Preview is for the app's assigned upstream MCP tools — the data store
       // and other built-ins are not run through here.
@@ -1115,18 +1080,13 @@ const registry = defineArchestraTools([
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
+      const loaded = await loadAppForCaller({
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
+        organizationId: context.organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
 
       const head = app.latestVersion;
       // The app name is author-set; collapse whitespace and escape angle
@@ -1210,30 +1170,19 @@ const registry = defineArchestraTools([
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
       }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
+      const loaded = await loadAppForCaller({
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
+        organizationId: context.organizationId,
+        appId: args.appId,
       });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
-      try {
-        await assertCallerMayModifyApp({
-          userId: context.userId,
-          organizationId: context.organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
-        });
-      } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
-        throw error;
-      }
+      if ("error" in loaded) return errorResult(loaded.error);
+      const { app } = loaded;
+      const authError = await authorizeModifyApp({
+        userId: context.userId,
+        organizationId: context.organizationId,
+        app,
+      });
+      if (authError) return errorResult(authError.error);
       const deleted = await AppModel.delete(args.appId);
       if (!deleted) {
         return errorResult(`Failed to delete app ${args.appId}.`);
@@ -1256,6 +1205,54 @@ export const tools = registry.tools;
 // =============================================================================
 
 /**
+ * Load an app the caller may see, resolving app-admin standing for visibility.
+ * Returns the app, or a ready error result text when no visible app matches —
+ * the not-found shape every app tool returns before acting on an id.
+ */
+async function loadAppForCaller(params: {
+  userId: string;
+  organizationId: string;
+  appId: string;
+}): Promise<{ app: App } | { error: string }> {
+  const app = await AppModel.findByIdForCaller({
+    id: params.appId,
+    organizationId: params.organizationId,
+    userId: params.userId,
+    isAppAdmin: await callerIsAppAdmin(params.userId, params.organizationId),
+  });
+  if (!app) {
+    return { error: `No app found with id ${params.appId}.` };
+  }
+  return { app };
+}
+
+/**
+ * Authorize the caller to modify an already-loaded app, mirroring the REST
+ * modify gate (scope + author + the app's teams). Returns an error result text
+ * on a policy denial (ApiError) and null when allowed; non-ApiError faults
+ * propagate.
+ */
+async function authorizeModifyApp(params: {
+  userId: string;
+  organizationId: string;
+  app: App;
+}): Promise<{ error: string } | null> {
+  try {
+    await assertCallerMayModifyApp({
+      userId: params.userId,
+      organizationId: params.organizationId,
+      scope: params.app.scope,
+      authorId: params.app.authorId,
+      resourceTeamIds: await AppAccessModel.getTeamsForApp(params.app.id),
+    });
+    return null;
+  } catch (error) {
+    if (error instanceof ApiError) return { error: error.message };
+    throw error;
+  }
+}
+
+/**
  * Apply ordered str_replace edits to a document. Each `old_str` must occur
  * exactly once in the running text; 0 or >1 matches (or `old_str === new_str`)
  * throws `ApiError(400)` naming the offending edit, so the whole call fails
@@ -1276,9 +1273,12 @@ function applyStrReplaceEdits(
     }
     const count = countOccurrences(working, edit.old_str);
     if (count === 0) {
+      const hint =
+        describeNearMiss(working, edit.old_str) ??
+        "Call read_app for the current source.";
       throw new ApiError(
         400,
-        `${label}: old_str not found in the current HTML (0 matches). Call read_app for the current source.`,
+        `${label}: old_str not found in the current HTML (0 matches). ${hint}`,
       );
     }
     if (count > 1) {
@@ -1294,6 +1294,98 @@ function applyStrReplaceEdits(
       working.slice(at + edit.old_str.length);
   });
   return working;
+}
+
+/** Cap a span shown in an error hint, eliding the middle of an overlong one. */
+function capHint(span: string, max = 1500): string {
+  if (span.length <= max) return span;
+  const half = Math.floor((max - 20) / 2);
+  return `${span.slice(0, half)}\n…[elided]…\n${span.slice(span.length - half)}`;
+}
+
+/**
+ * Collapse each run of whitespace in `s` to a single space, returning the
+ * normalized text plus a map from each normalized code-unit index to the
+ * original index it began at (a collapsed space maps to its run's first char).
+ * Operates on JS code units so the map composes with the `indexOf`/`slice` the
+ * edit path already uses.
+ */
+function normalizeWhitespace(s: string): { text: string; map: number[] } {
+  let text = "";
+  const map: number[] = [];
+  let i = 0;
+  while (i < s.length) {
+    if (/\s/.test(s[i])) {
+      const runStart = i;
+      while (i < s.length && /\s/.test(s[i])) i++;
+      text += " ";
+      map.push(runStart);
+    } else {
+      text += s[i];
+      map.push(i);
+      i++;
+    }
+  }
+  return { text, map };
+}
+
+/**
+ * Best-effort, advisory recovery hint when an `old_str` matched 0 times: point
+ * the model at the current text it most likely meant, so it copies ground truth
+ * instead of replaying a corrupted literal. Never changes match semantics (the
+ * edit still requires an exact unique match) — returns a hint sentence or null.
+ */
+function describeNearMiss(haystack: string, oldStr: string): string | null {
+  // 1. Whitespace-insensitive unique match — the common "reformatted the
+  //    indentation" drift. Collapse both sides, and if the needle then occurs
+  //    exactly once, hand back the exact current bytes of that span to copy.
+  const needle = oldStr.replace(/\s+/g, " ").trim();
+  if (needle.length > 0) {
+    const norm = normalizeWhitespace(haystack);
+    const first = norm.text.indexOf(needle);
+    if (
+      first !== -1 &&
+      norm.text.indexOf(needle, first + needle.length) === -1
+    ) {
+      const startOrig = norm.map[first];
+      const afterIdx = first + needle.length;
+      const endOrig =
+        afterIdx < norm.map.length ? norm.map[afterIdx] : haystack.length;
+      const span = haystack.slice(startOrig, endOrig);
+      return `A unique match exists in the current HTML once whitespace is normalized. Copy this exact current text as old_str:\n${capHint(span)}`;
+    }
+  }
+  // 2. Anchor window — the longest line of old_str that occurs exactly once in
+  //    the current HTML anchors a ±3-line window of ground truth, so a one-char
+  //    drift elsewhere in the block is visible against the real source.
+  const anchors = oldStr
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length >= 8)
+    .sort((a, b) => b.length - a.length);
+  for (const anchor of anchors) {
+    const first = haystack.indexOf(anchor);
+    if (first === -1) continue;
+    if (haystack.indexOf(anchor, first + anchor.length) !== -1) continue;
+    const window = lineWindowAround(haystack, first, 3);
+    return `The closest unique anchor from your old_str appears here in the current HTML (±3 lines); re-copy the exact current text:\n${capHint(window)}`;
+  }
+  return null;
+}
+
+/** The text of the line containing `at` in `s`, plus `radius` lines on each side. */
+function lineWindowAround(s: string, at: number, radius: number): string {
+  let start = s.lastIndexOf("\n", at - 1) + 1;
+  for (let k = 0; k < radius && start > 0; k++) {
+    start = s.lastIndexOf("\n", start - 2) + 1;
+  }
+  let end = s.indexOf("\n", at);
+  if (end === -1) end = s.length;
+  for (let k = 0; k < radius && end < s.length; k++) {
+    const next = s.indexOf("\n", end + 1);
+    end = next === -1 ? s.length : next;
+  }
+  return s.slice(start, end);
 }
 
 /**
@@ -1508,12 +1600,16 @@ function truncateUtf8(
   return { text: buf.subarray(0, end).toString("utf8"), truncated: true };
 }
 
+// Count every start position where `needle` matches, including overlapping ones
+// (e.g. "\n\n" twice in "\n\n\n"). The edit path uses this to enforce a unique
+// match, so a self-overlapping old_str must read as ambiguous — not collapse to
+// one and silently replace the first occurrence. Advance by one position.
 function countOccurrences(haystack: string, needle: string): number {
   let count = 0;
   let pos = haystack.indexOf(needle);
   while (pos !== -1) {
     count++;
-    pos = haystack.indexOf(needle, pos + needle.length);
+    pos = haystack.indexOf(needle, pos + 1);
   }
   return count;
 }

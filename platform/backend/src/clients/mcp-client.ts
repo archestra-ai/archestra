@@ -2592,6 +2592,7 @@ class McpClient {
     const reauthUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`;
     const scope = await this.describeResolvedCredentialScope(
       mcpServerId,
+      tokenAuth,
       resolvedServer,
     );
     return {
@@ -2620,10 +2621,15 @@ class McpClient {
    * the re-authentication card can tell the user whose credential expired.
    * Mirrors the runtime resolution priority in {@link pickInstallForCaller}:
    * an org-scoped install is org-wide; anything bound to a team is a team
-   * credential; everything else is a personal credential.
+   * credential; everything else is a personal credential — but a personal
+   * install is only reported as "personal" (the card says "Your personal
+   * credentials …") when the caller actually owns it. Returns null when the
+   * scope can't be attributed to the caller, so the card falls back to neutral
+   * generic copy.
    */
   private async describeResolvedCredentialScope(
     mcpServerId: string,
+    tokenAuth: TokenAuthContext | undefined,
     preloadedServer?: Pick<McpServer, "scope" | "teamId" | "ownerId">,
   ): Promise<{
     credentialScope: ResourceVisibilityScope;
@@ -2648,7 +2654,20 @@ class McpClient {
         credentialTeamName: team?.name ?? null,
       };
     }
-    return { credentialScope: "personal", credentialTeamName: null };
+    // Personal install. Only present it as the caller's own credential when the
+    // caller owns it. A personal install resolved on behalf of another caller —
+    // a catalog pinned to a service-account connection
+    // (dynamicConnectionMcpServerId) or a retained static assignment — must not
+    // be labeled "personal", or the card would falsely claim "Your personal
+    // credentials …" and point the caller at the wrong owner.
+    if (
+      tokenAuth?.userId &&
+      server.ownerId &&
+      tokenAuth.userId === server.ownerId
+    ) {
+      return { credentialScope: "personal", credentialTeamName: null };
+    }
+    return null;
   }
 
   private buildAssignedCredentialUnavailableMessage(

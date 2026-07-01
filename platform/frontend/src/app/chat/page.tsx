@@ -240,7 +240,10 @@ export function ChatPageContent({
   // paths overwrite skill metadata from their own options, so a URL-seeded
   // skill written into pendingSkillRef would be silently dropped. This ref is
   // merged into a message's skill metadata only when the submit carries no
-  // skill of its own, and cleared only once it has been attached.
+  // skill of its own, and cleared only once it has been attached. It
+  // deliberately survives an agent switch on the new-chat screen — skills are
+  // agent-agnostic, so the deep-linked skill attaches to the first message of
+  // whichever agent the user ends up sending with.
   const pendingUrlSkillRef = useRef<ChatSkillMetadata | null>(null);
   // Composer prefill from a `?skillId=` deep link when slash commands are
   // enabled; handed to the composer once and cleared via onPrefillApplied.
@@ -484,13 +487,17 @@ export function ChatPageContent({
   const urlSkillQuery = useSkill(urlSkillId);
   const skillSlashCommandsEnabled =
     organization?.skillSlashCommandsEnabled ?? false;
+  // A combined skillId + user_prompt link must stage, never prefill: the
+  // auto-send effect below merges the staged ref onto the auto-sent message,
+  // whereas a composer prefill would be orphaned by that send and dropped.
+  const urlSkillWantsPrefill = skillSlashCommandsEnabled && !initialUserPrompt;
   // Same query the composer's slash-command table is built from (identical
   // input → shared TanStack cache entry). The prefill token must come from
   // that table, not be re-derived from the skill name, so slug collisions
   // resolve to the right skill.
   const urlSkillCommandsQuery = useSkillsPaginated(
     { limit: 100 },
-    { enabled: skillSlashCommandsEnabled && !!urlSkillId },
+    { enabled: urlSkillWantsPrefill && !!urlSkillId },
   );
   useEffect(() => {
     if (urlSkillProcessedRef.current || !urlSkillId) return;
@@ -502,7 +509,7 @@ export function ChatPageContent({
     // The prefill path additionally needs the command table; an errored list
     // query settles with no commands, which falls back to the silent stage.
     if (
-      skillSlashCommandsEnabled &&
+      urlSkillWantsPrefill &&
       !urlSkillCommandsQuery.isSuccess &&
       !urlSkillCommandsQuery.isError
     ) {
@@ -515,7 +522,7 @@ export function ChatPageContent({
     const action = resolveUrlSkillAction({
       skill: urlSkillQuery.data ?? null,
       isError: urlSkillQuery.isError,
-      slashCommandsEnabled: skillSlashCommandsEnabled,
+      slashCommandsEnabled: urlSkillWantsPrefill,
       skillCommands: urlSkillCommandsQuery.data?.data
         ? buildSkillCommands(urlSkillCommandsQuery.data.data)
         : [],
@@ -534,7 +541,7 @@ export function ChatPageContent({
     urlSkillCommandsQuery.isError,
     urlSkillCommandsQuery.data,
     isOrgLoading,
-    skillSlashCommandsEnabled,
+    urlSkillWantsPrefill,
     pathname,
     router,
     searchParams,

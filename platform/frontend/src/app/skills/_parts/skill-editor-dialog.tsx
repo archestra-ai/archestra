@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -130,6 +131,15 @@ export function SkillEditorDialog({
   // soft-deleted files held in a trash bin until the dialog is closed; restorable until then.
   const [trash, setTrash] = useState<TrashedFile[]>([]);
   const [trashExpanded, setTrashExpanded] = useState(true);
+
+  // A dead deep link (`/skills?edit=<id>` for a deleted or inaccessible
+  // skill) resolves to null; close instead of showing a blank editor.
+  useEffect(() => {
+    if (open && isEdit && !isLoading && !skill) {
+      toast.error("Skill not found");
+      onOpenChange(false);
+    }
+  }, [open, isEdit, isLoading, skill, onOpenChange]);
 
   useEffect(() => {
     if (!open) return;

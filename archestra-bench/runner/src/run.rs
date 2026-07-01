@@ -2394,13 +2394,19 @@ impl RunArtifacts {
         } else {
             record.insert("data".to_string(), data);
         }
-        let line = match serde_json::to_string(&serde_json::Value::Object(record)) {
+        let mut line = match serde_json::to_string(&serde_json::Value::Object(record)) {
             Ok(l) => l,
             Err(e) => {
                 error!("failed to serialize trajectory record: {e}");
                 return;
             }
         };
+        // Emit the record and its terminator as one buffer: a `tokio::fs::File`'s writes are
+        // backgrounded and its `write_all` does not guarantee the bytes reached the kernel before
+        // the next append runs, so a record and a separate newline write could interleave with the
+        // following record under `O_APPEND`. One atomic write plus an explicit flush (both still
+        // under the `sequence` lock) keeps every record on its own line.
+        line.push('\n');
         if let Err(e) = async {
             let mut f: tokio::fs::File = fs::OpenOptions::new()
                 .create(true)
@@ -2408,7 +2414,7 @@ impl RunArtifacts {
                 .open(self.path.join("trajectory.jsonl"))
                 .await?;
             f.write_all(line.as_bytes()).await?;
-            f.write_all(b"\n").await?;
+            f.flush().await?;
             Ok::<(), std::io::Error>(())
         }
         .await

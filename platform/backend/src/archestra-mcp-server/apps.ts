@@ -423,7 +423,7 @@ const registry = defineArchestraTools([
             { err: error, appId: app.id },
             "scaffold_app: tool assignment failed after creation",
           );
-          return scaffoldPartialToolFailureResult(app);
+          return scaffoldPartialToolFailureResult(app, payload.html);
         }
       }
 
@@ -833,7 +833,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_VALIDATE_APP_SHORT_NAME,
     title: "Validate App",
     description:
-      "The pre-publish gate for an app's head version: static structural checks (`findings`, each carrying its own specific message) plus the most recent live-render diagnostics (`live`), with `ok` true when neither reports an error. Run it after editing and fix any error findings with edit_app before publish_app. Live diagnostics exist only once the app has rendered for a viewer, so `live.status` is commonly no_render_observed right after authoring — a clean static pass is enough to proceed, and the result text explains each field. To re-read render diagnostics on their own without the static gate, use get_app_diagnostics instead.",
+      "The pre-publish gate for an app's head version: static structural checks (`findings`, each carrying its own specific message) plus the most recent live-render diagnostics (`live`), with `ok` true when neither reports an error. Run it after editing and fix any error findings with edit_app before publish_app. Live diagnostics exist only once the app has rendered for a viewer, so `live.status` is commonly no_render_observed right after authoring — a clean static pass is enough to proceed, and the result text spells out the findings and the live-render outcome. To re-read render diagnostics on their own without the static gate, use get_app_diagnostics instead.",
     schema: ValidateAppSchema,
     outputSchema: ValidateAppOutputSchema,
     async handler({ args, context }) {
@@ -1668,13 +1668,16 @@ async function resolveToolsParam(params: {
  * scaffold_app result for the partial case: the app was created but assigning
  * its tools failed. A partial success, not an error — the model gets the app id
  * and a `partial` status so it repairs the tools with set_app_tools instead of
- * assuming the app was never created (an errorResult here loses both).
+ * assuming the app was never created (an errorResult here loses both). Carries
+ * the same seeded HTML + SDK summary the success path returns, so the model can
+ * keep building (after repairing tools) without a read_app round-trip.
  *
  * @public — exercised by apps.test.ts to pin the partial-success result
  * contract; the handler above is its only production caller.
  */
 export function scaffoldPartialToolFailureResult(
   app: App,
+  seededHtml: string,
 ): ReturnType<typeof structuredSuccessResult> {
   return structuredSuccessResult(
     {
@@ -1685,7 +1688,7 @@ export function scaffoldPartialToolFailureResult(
       latestVersion: app.latestVersion,
       status: "partial" as const,
     },
-    `Created app "${app.name}" (${app.id}), but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold).`,
+    `Created app "${app.name}" (${app.id}), but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold), then build it up with edit_app.\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${seededHtml}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
   );
 }
 

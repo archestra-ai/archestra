@@ -1994,7 +1994,10 @@ describe("scaffoldPartialToolFailureResult", () => {
     makeApp,
   }) => {
     const app = await makeApp({ name: "Partial App" });
-    const result = scaffoldPartialToolFailureResult(app);
+    const result = scaffoldPartialToolFailureResult(
+      app,
+      "<html><body>seed</body></html>",
+    );
     // The app was created, so the model must NOT read this as a failure: it is a
     // non-error result carrying the app id and a partial status so it can repair
     // the tools with set_app_tools rather than assume nothing was created.

@@ -48,6 +48,34 @@ export function buildSkillCommands(
   });
 }
 
+/** What the chat page should do with a skill resolved from a `?skillId=` deep link. */
+export type UrlSkillAction =
+  | { kind: "prefill"; text: string }
+  | { kind: "stage"; skill: ChatSkillMetadata }
+  | { kind: "none" };
+
+/**
+ * Decide how a `?skillId=` deep link stages its skill. With
+ * skills-as-slash-commands enabled the composer is prefilled with the skill's
+ * slash command (the visible text is the single source of truth — deleting it
+ * detaches the skill); otherwise the skill is held silently and attached to
+ * the first message. A missing skill (404) or fetch error stages nothing.
+ */
+export function resolveUrlSkillAction(params: {
+  skill: { id: string; name: string } | null;
+  isError: boolean;
+  slashCommandsEnabled: boolean;
+}): UrlSkillAction {
+  const { skill, isError, slashCommandsEnabled } = params;
+  if (isError || !skill) {
+    return { kind: "none" };
+  }
+  if (slashCommandsEnabled) {
+    return { kind: "prefill", text: `${skillCommandValue(skill.name)} ` };
+  }
+  return { kind: "stage", skill: { id: skill.id, name: skill.name } };
+}
+
 /**
  * If `text` begins with a known skill command token, return the matched skill
  * and the prompt text that follows it. The token is the run of non-whitespace

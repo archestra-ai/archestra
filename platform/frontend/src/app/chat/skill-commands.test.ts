@@ -3,6 +3,7 @@ import {
   buildSkillCommands,
   isDebugCommand,
   parseSkillCommand,
+  resolveUrlSkillAction,
   skillCommandValue,
 } from "./skill-commands";
 
@@ -81,5 +82,53 @@ describe("parseSkillCommand", () => {
   it("returns null for unknown tokens and plain text", () => {
     expect(parseSkillCommand("/unknown hello", commands)).toBeNull();
     expect(parseSkillCommand("just a message", commands)).toBeNull();
+  });
+});
+
+describe("resolveUrlSkillAction", () => {
+  const skill = { id: "s1", name: "Deep Research" };
+
+  it("prefills the slash command (with a trailing space) when slash commands are enabled", () => {
+    expect(
+      resolveUrlSkillAction({
+        skill,
+        isError: false,
+        slashCommandsEnabled: true,
+      }),
+    ).toEqual({ kind: "prefill", text: "/deep-research " });
+  });
+
+  it("stages the skill silently when slash commands are disabled", () => {
+    expect(
+      resolveUrlSkillAction({
+        skill,
+        isError: false,
+        slashCommandsEnabled: false,
+      }),
+    ).toEqual({ kind: "stage", skill: { id: "s1", name: "Deep Research" } });
+  });
+
+  it("does nothing when the skill was not found, regardless of the flag", () => {
+    for (const slashCommandsEnabled of [true, false]) {
+      expect(
+        resolveUrlSkillAction({
+          skill: null,
+          isError: false,
+          slashCommandsEnabled,
+        }),
+      ).toEqual({ kind: "none" });
+    }
+  });
+
+  it("does nothing when the skill fetch errored", () => {
+    for (const slashCommandsEnabled of [true, false]) {
+      expect(
+        resolveUrlSkillAction({
+          skill: null,
+          isError: true,
+          slashCommandsEnabled,
+        }),
+      ).toEqual({ kind: "none" });
+    }
   });
 });

@@ -151,6 +151,7 @@ import { useOrganization } from "@/lib/organization.query";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { useProjectFiles } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
+import { useSkill } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
@@ -163,6 +164,7 @@ import ArchestraPromptInput, {
   type ArchestraPromptInputProps,
 } from "./prompt-input";
 import { resolveSharedConversationForkState } from "./shared-conversation-fork";
+import { resolveUrlSkillAction } from "./skill-commands";
 
 const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
   "runs",
@@ -233,6 +235,17 @@ export function ChatPageContent({
   // Skill invoked via slash command on the first message of a new chat,
   // held until the conversation exists and the message can be sent.
   const pendingSkillRef = useRef<ChatSkillMetadata | undefined>(undefined);
+  // Skill staged from a `?skillId=` deep link when skills-as-slash-commands
+  // are disabled. Deliberately separate from pendingSkillRef: both submit
+  // paths overwrite skill metadata from their own options, so a URL-seeded
+  // skill written into pendingSkillRef would be silently dropped. This ref is
+  // merged into a message's skill metadata only when the submit carries no
+  // skill of its own, and cleared only once it has been attached.
+  const pendingUrlSkillRef = useRef<ChatSkillMetadata | null>(null);
+  // Composer prefill from a `?skillId=` deep link when slash commands are
+  // enabled; handed to the composer once and cleared via onPrefillApplied.
+  const [composerPrefill, setComposerPrefill] = useState<string | null>(null);
+  const urlSkillProcessedRef = useRef(false);
   const pendingInitialSendConversationRef = useRef<string | undefined>(
     undefined,
   );
@@ -462,6 +475,51 @@ export function ChatPageContent({
     pendingPromptRef.current = handoff.prompt || undefined;
     pendingFilesRef.current = drainPendingChatHandoffFiles();
   }, [conversationId]);
+
+  // Resolve a `?skillId=` deep link (from /chat/new) into either a composer
+  // prefill (skills-as-slash-commands enabled) or a silent pending attach.
+  // The param is transient, same posture as user_prompt: stripped once
+  // processed so a refresh or remount cannot re-stage the skill.
+  const urlSkillId = searchParams.get("skillId");
+  const urlSkillQuery = useSkill(urlSkillId);
+  const skillSlashCommandsEnabled =
+    organization?.skillSlashCommandsEnabled ?? false;
+  useEffect(() => {
+    if (urlSkillProcessedRef.current || !urlSkillId) return;
+    // Wait for both the skill fetch and the org flag that picks the mechanism.
+    // useSkill treats a 404 as success with null data (allowNotFound), and a
+    // non-404 lands the query in its error state — both settle this effect.
+    if (isOrgLoading) return;
+    if (!urlSkillQuery.isSuccess && !urlSkillQuery.isError) return;
+
+    urlSkillProcessedRef.current = true;
+    clearSkillIdQueryParam({ pathname, router, searchParams });
+
+    const action = resolveUrlSkillAction({
+      skill: urlSkillQuery.data ?? null,
+      isError: urlSkillQuery.isError,
+      slashCommandsEnabled: skillSlashCommandsEnabled,
+    });
+    if (action.kind === "prefill") {
+      setComposerPrefill(action.text);
+    } else if (action.kind === "stage") {
+      pendingUrlSkillRef.current = action.skill;
+    }
+  }, [
+    urlSkillId,
+    urlSkillQuery.isSuccess,
+    urlSkillQuery.isError,
+    urlSkillQuery.data,
+    isOrgLoading,
+    skillSlashCommandsEnabled,
+    pathname,
+    router,
+    searchParams,
+  ]);
+
+  const handleComposerPrefillApplied = useCallback(() => {
+    setComposerPrefill(null);
+  }, []);
 
   // Update URL when conversation changes
   const selectConversation = useCallback(
@@ -1287,10 +1345,14 @@ export function ChatPageContent({
     pendingInitialSendConversationRef.current = conversationId;
     const promptToSend = pendingPromptRef.current;
     const filesToSend = pendingFilesRef.current;
-    const skillToSend = pendingSkillRef.current;
+    // A skill staged from a `?skillId=` deep link rides the first message when
+    // the submit carried no skill of its own; a typed slash command wins. The
+    // URL skill is cleared here — only once it is attached to this message.
+    const skillToSend = pendingSkillRef.current ?? pendingUrlSkillRef.current;
     pendingPromptRef.current = undefined;
     pendingFilesRef.current = [];
     pendingSkillRef.current = undefined;
+    pendingUrlSkillRef.current = null;
 
     const parts: ChatMessagePart[] = [];
 
@@ -1475,6 +1537,10 @@ export function ChatPageContent({
       }
     }
 
+    // A skill staged from a `?skillId=` deep link rides the first message that
+    // carries no skill of its own; a user-typed slash command always wins.
+    const skillToAttach = options?.skill ?? pendingUrlSkillRef.current;
+
     // Attach-once: captured app render diagnostics ride this message's
     // metadata and the store is drained — a regenerate never re-attaches.
     const appDiagnostics = drainAppDiagnostics();
@@ -1483,10 +1549,12 @@ export function ChatPageContent({
       parts: ensureNonEmptyParts(parts),
       metadata: {
         createdAt: new Date().toISOString(),
-        ...(options?.skill ? { skill: options.skill } : {}),
+        ...(skillToAttach ? { skill: skillToAttach } : {}),
         ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
       },
     });
+    // Cleared only after the send above attached it (or a typed command won).
+    pendingUrlSkillRef.current = null;
   };
 
   const isBrowserPanelVisible = isBrowserPanelOpen && !isPlaywrightSetupVisible;
@@ -1860,6 +1928,11 @@ export function ChatPageContent({
     const handoffFilesReady =
       handoffHasAttachments && hasPendingChatHandoffFiles();
     if (!initialUserPrompt && !handoffFilesReady) return;
+
+    // A skill deep link must finish staging before the auto-send fires, else
+    // the first message would miss it. Processing strips skillId from the URL
+    // (success, not-found, and error alike), which re-runs this effect.
+    if (searchParams.get("skillId")) return;
 
     // Skip if conversation already exists
     if (conversationId) return;
@@ -2341,6 +2414,8 @@ export function ChatPageContent({
                               ? conversationPerUserConnect.modelName
                               : undefined
                           }
+                          prefillText={composerPrefill}
+                          onPrefillApplied={handleComposerPrefillApplied}
                         />
                         <div className="text-center">
                           <Version inline />
@@ -2466,6 +2541,8 @@ export function ChatPageContent({
                             ? initialPerUserConnect.modelName
                             : undefined
                         }
+                        prefillText={composerPrefill}
+                        onPrefillApplied={handleComposerPrefillApplied}
                       />
                     </div>
                   </div>
@@ -2598,6 +2675,21 @@ function clearUserPromptQueryParam(params: {
   // The attachments marker is one-shot too: drop it once consumed so a remount
   // can't re-trigger a drain (which would now find an empty store).
   nextSearchParams.delete("attachments");
+  const nextUrl = nextSearchParams.toString()
+    ? `${params.pathname}?${nextSearchParams.toString()}`
+    : params.pathname;
+  params.router.replace(nextUrl);
+}
+
+// skillId is a one-shot deep-link param (same posture as user_prompt): drop it
+// once the skill has been resolved and staged so it is never processed twice.
+function clearSkillIdQueryParam(params: {
+  pathname: string;
+  router: ReturnType<typeof useRouter>;
+  searchParams: URLSearchParams;
+}) {
+  const nextSearchParams = new URLSearchParams(params.searchParams.toString());
+  nextSearchParams.delete("skillId");
   const nextUrl = nextSearchParams.toString()
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;

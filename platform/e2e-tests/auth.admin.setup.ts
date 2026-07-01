@@ -17,7 +17,8 @@ setup("authenticate as admin", async ({ page }) => {
   await page.goto(`${UI_BASE_URL}/chat`, { waitUntil: "domcontentloaded" });
 
   // Mark onboarding as complete and set restrictive tool policies via API.
-  // Proxy-discovered tools use a separate policy switch, so set both.
+  // Proxy-discovered tools have their own default invocation/result policies,
+  // so set those too (block in sensitive context + mark results as sensitive).
   await page.request.post(
     `${UI_BASE_URL}/api/organization/complete-onboarding`,
     { data: { onboardingComplete: true } },
@@ -27,7 +28,9 @@ setup("authenticate as admin", async ({ page }) => {
     {
       data: {
         globalToolPolicy: "restrictive",
-        discoveredToolPolicy: "apply_policies",
+        defaultDiscoveredToolInvocationPolicy:
+          "block_when_context_is_untrusted",
+        defaultDiscoveredToolResultPolicy: "mark_as_untrusted",
       },
     },
   );

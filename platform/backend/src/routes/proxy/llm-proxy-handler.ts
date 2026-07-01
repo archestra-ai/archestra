@@ -636,6 +636,13 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Limit check passed`,
     );
 
+    // Resolve the agent's organization once. Reused below for the discovered-tool
+    // persist defaults and further down for the global tool policy, so a proxied
+    // request that includes tools no longer reads the organization twice.
+    const organization = await OrganizationModel.getById(
+      resolvedAgent.organizationId,
+    );
+
     // Persist tools declared by client (only for llm_proxy agents)
     if (resolvedAgent.agentType === "llm_proxy") {
       const tools = requestAdapter.getTools();
@@ -646,9 +653,6 @@ export async function handleLLMProxy<
         );
         // Apply the org's configured default policies to every newly
         // discovered tool persisted below.
-        const organization = await OrganizationModel.getById(
-          resolvedAgent.organizationId,
-        );
         await utils.tools.persistTools(
           tools.map((t) => ({
             toolName: t.name,
@@ -729,9 +733,10 @@ export async function handleLLMProxy<
       }
     };
 
-    // Get global tool policy from organization (with fallback) - needed for both trusted data and tool invocation
-    const globalToolPolicy =
-      await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
+    // Global tool policy is an org-level setting; read it from the organization
+    // resolved above (defaults to "permissive" if the org is missing). Needed for
+    // both trusted data and tool invocation enforcement.
+    const globalToolPolicy = organization?.globalToolPolicy ?? "permissive";
 
     // Fetch the agent's teams (with labels) once. Used both for policy
     // evaluation context (trusted data) and for trace span team attributes.

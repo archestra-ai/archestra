@@ -447,7 +447,9 @@ jobs:
 
       - name: Run backend unit tests (shard ${{ matrix.shard }} of 4)
         working-directory: ./platform/backend
-        run: pnpm exec vitest run --shard=${{ matrix.shard }}/4
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: pnpm exec vitest run --shard="${SHARD}/4"
 
   # Stable-named gate over the shard matrix so branch protection / merge queue
   # can require a single check ("Backend Unit Tests") regardless of shard count.

@@ -15,30 +15,48 @@ use serde_json::{Map, Value as JsonValue};
 const ELICITATION_EVENT_TYPE: &str = "data-mcp-elicitation";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ElicitationMode {
+pub(crate) enum ElicitationMode {
     Form,
     Url,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ElicitationRequest {
+pub(crate) struct ElicitationRequest {
     pub id: String,
     pub conversation_id: String,
     pub mode: ElicitationMode,
     pub requested_schema: Option<JsonValue>,
 }
 
-/// A response ready to POST to `/api/chat/elicitation/:id`. `action` is a wire literal ("accept" /
-/// "decline"); `content` is present only for an accepted form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ElicitationAction {
+    Accept,
+    Decline,
+}
+
+impl ElicitationAction {
+    /// The wire literal the backend's `ChatMcpElicitationResponseSchema` expects.
+    pub fn as_wire(self) -> &'static str {
+        match self {
+            ElicitationAction::Accept => "accept",
+            ElicitationAction::Decline => "decline",
+        }
+    }
+}
+
+/// A response ready to POST to `/api/chat/elicitation/:id`. `content` is present only for an
+/// accepted form.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ElicitationAnswer {
-    pub action: &'static str,
+pub(crate) struct ElicitationAnswer {
+    pub action: ElicitationAction,
     pub content: Option<Map<String, JsonValue>>,
 }
 
 /// Parse a chat SSE event into an elicitation request, or `None` when it is not one. Fields live
 /// under the nested `data` object, matching the backend writer and frontend reader.
-pub fn parse_elicitation_request(event: &HashMap<String, JsonValue>) -> Option<ElicitationRequest> {
+pub(crate) fn parse_elicitation_request(
+    event: &HashMap<String, JsonValue>,
+) -> Option<ElicitationRequest> {
     if event.get("type").and_then(|v| v.as_str()) != Some(ELICITATION_EVENT_TYPE) {
         return None;
     }
@@ -63,14 +81,14 @@ pub fn parse_elicitation_request(event: &HashMap<String, JsonValue>) -> Option<E
 
 /// The auto-answer: accept a form with recommended defaults; decline a URL flow (it cannot be
 /// completed headlessly, and declining unblocks the tool).
-pub fn answer_for(req: &ElicitationRequest) -> ElicitationAnswer {
+pub(crate) fn answer_for(req: &ElicitationRequest) -> ElicitationAnswer {
     match req.mode {
         ElicitationMode::Form => ElicitationAnswer {
-            action: "accept",
+            action: ElicitationAction::Accept,
             content: Some(default_content_from_schema(req.requested_schema.as_ref())),
         },
         ElicitationMode::Url => ElicitationAnswer {
-            action: "decline",
+            action: ElicitationAction::Decline,
             content: None,
         },
     }
@@ -79,7 +97,7 @@ pub fn answer_for(req: &ElicitationRequest) -> ElicitationAnswer {
 /// Build form content from a requested schema, recommended default first: the property's declared
 /// `default`, else its first `enum` value, else a typed zero-value. Every value is coerced into the
 /// backend-allowed union; a property that cannot yield an allowed value is omitted.
-pub fn default_content_from_schema(schema: Option<&JsonValue>) -> Map<String, JsonValue> {
+pub(crate) fn default_content_from_schema(schema: Option<&JsonValue>) -> Map<String, JsonValue> {
     let mut content = Map::new();
     let Some(properties) = schema
         .and_then(|s| s.get("properties"))
@@ -262,7 +280,7 @@ mod tests {
             })),
         };
         let answer = answer_for(&req);
-        assert_eq!(answer.action, "accept");
+        assert_eq!(answer.action, ElicitationAction::Accept);
         assert_eq!(answer.content.unwrap().get("name"), Some(&json!("")));
     }
 
@@ -275,7 +293,7 @@ mod tests {
             requested_schema: None,
         };
         let answer = answer_for(&req);
-        assert_eq!(answer.action, "decline");
+        assert_eq!(answer.action, ElicitationAction::Decline);
         assert!(answer.content.is_none());
     }
 }

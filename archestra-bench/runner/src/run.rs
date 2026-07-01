@@ -17,7 +17,6 @@ use crate::chat_stream::{ChatRecordKind, ChatRunResult, ChatStreamRecord, apply_
 use crate::client::{AgentCreate, ContractError, EvalClient, FilePart};
 use crate::config::types::{EnvConfig, Stage, Task, ToolExposureMode};
 use crate::config::{Lane, load_envs, load_lanes};
-use crate::elicitation::{answer_for, parse_elicitation_request};
 use crate::fixture_mcp::{FIXTURE_MCP_NAME, FixtureMcp};
 use crate::interactions::{RunUsage, extract_effective_prompts, sum_usage};
 use crate::lifecycle::Instance;
@@ -2002,27 +2001,14 @@ async fn drive_stage(
         match record.kind {
             ChatRecordKind::Event if record.event.is_some() => {
                 let event = record.event.unwrap();
-                // A tool that elicits mid-call blocks server-side until this POST answers it. No
-                // human is watching a benchmark stream, so auto-answer and let the agent continue.
-                if let Some(req) = parse_elicitation_request(&event) {
-                    let answer = answer_for(&req);
-                    if let Err(e) = client
-                        .resolve_elicitation(&req.id, &req.conversation_id, &answer)
-                        .await
-                    {
-                        // Backend heartbeats keep the stream from going idle, so a failed answer
-                        // would otherwise hang until the backend's 10-minute elicitation timeout.
-                        // Fail the stage now instead.
-                        if stream_parse_error.is_none() {
-                            stream_parse_error =
-                                Some(format!("failed to answer MCP elicitation {}: {e}", req.id));
-                        }
-                        break;
+                // Auto-answer any elicitation this event carries before folding it. Backend
+                // heartbeats keep the stream from going idle, so a failed answer would otherwise
+                // hang until the backend's 10-minute elicitation timeout; fail the stage instead.
+                if let Err(e) = client.answer_if_elicitation(&event).await {
+                    if stream_parse_error.is_none() {
+                        stream_parse_error = Some(format!("failed to answer MCP elicitation: {e}"));
                     }
-                    info!(
-                        "auto-answered MCP elicitation {} ({:?}) with {}",
-                        req.id, req.mode, answer.action
-                    );
+                    break;
                 }
                 apply_chat_event(run, &event);
             }

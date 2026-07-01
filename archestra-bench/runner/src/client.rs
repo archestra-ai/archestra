@@ -10,10 +10,11 @@ use serde::Serialize;
 use serde_json::Value as JsonValue;
 use tokio::sync::Mutex;
 use tokio::time::{Duration, sleep, timeout};
+use tracing::info;
 
 use crate::chat_stream;
 use crate::config::types::ToolExposureMode;
-use crate::elicitation::ElicitationAnswer;
+use crate::elicitation::{ElicitationAnswer, answer_for, parse_elicitation_request};
 
 const DEFAULT_CHAT_TIMEOUT_S: f64 = 1800.0;
 
@@ -594,9 +595,32 @@ impl EvalClient {
             .map_err(ClientError::Api)
     }
 
-    /// Answer a pending MCP elicitation so the blocked tool call unblocks. The backend caches the
-    /// response for its 10-minute poll window, so a very early POST is still consumed.
-    pub async fn resolve_elicitation(
+    /// Auto-answer an MCP elicitation carried by a chat stream event, if the event is one. A tool
+    /// that elicits mid-call blocks server-side until this POST answers it, and no human watches a
+    /// benchmark stream. A non-elicitation event is a no-op; an answer POST that fails returns `Err`
+    /// so the caller can fail the stage rather than wait out the backend's 10-minute timeout.
+    pub async fn answer_if_elicitation(
+        &self,
+        event: &HashMap<String, JsonValue>,
+    ) -> Result<(), ClientError> {
+        let Some(req) = parse_elicitation_request(event) else {
+            return Ok(());
+        };
+        let answer = answer_for(&req);
+        self.resolve_elicitation(&req.id, &req.conversation_id, &answer)
+            .await?;
+        info!(
+            "auto-answered MCP elicitation {} ({:?}) with {}",
+            req.id,
+            req.mode,
+            answer.action.as_wire()
+        );
+        Ok(())
+    }
+
+    /// POST the answer to `/api/chat/elicitation/:id`. The backend caches the response for its
+    /// 10-minute poll window, so a very early POST is still consumed.
+    pub(crate) async fn resolve_elicitation(
         &self,
         id: &str,
         conversation_id: &str,
@@ -604,7 +628,7 @@ impl EvalClient {
     ) -> Result<(), ClientError> {
         let mut body = serde_json::json!({
             "conversationId": conversation_id,
-            "action": answer.action,
+            "action": answer.action.as_wire(),
         });
         if let Some(content) = &answer.content {
             body["content"] = JsonValue::Object(content.clone());

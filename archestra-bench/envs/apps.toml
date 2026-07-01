@@ -16,12 +16,6 @@ fixture_mcp = true
 # assertion treats them as expected rather than a leak.
 tools = ["scaffold_app", "refine_app", "read_app", "edit_app", "validate_app", "list_apps", "render_app", "publish_app"]
 
-[agent]
-# A teammate handing off app work would rather keep moving than be pinged for every choice. This
-# nudge keeps the agent from stalling when a tool asks it to confirm details; the harness also
-# auto-answers any elicitation that still reaches it.
-system_prompt = "When a tool asks you to confirm details or fill in options, choose sensible defaults and keep going rather than waiting for someone to answer."
-
 # DeepWiki: a public, no-auth remote MCP the repo-docs-app wires into its app. Must list tools without
 # auth or env setup hard-fails naming it.
 [[mcps]]

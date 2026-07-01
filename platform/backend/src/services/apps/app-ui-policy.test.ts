@@ -230,7 +230,9 @@ describe("validateAppHtmlStatic", () => {
     );
     const unknown = findings.find((f) => f.message.startsWith("Uses "));
     expect(unknown?.severity).toBe("warning");
-    expect(unknown?.message).toContain("archestra.tool,");
+    // \b after "tool" so this names the offending archestra.tool, not the valid
+    // archestra.tools it points at (a substring of it).
+    expect(unknown?.message).toMatch(/\barchestra\.tool\b/);
     expect(unknown?.message).toContain("archestra.tools");
   });
 
@@ -249,9 +251,20 @@ describe("validateAppHtmlStatic", () => {
     expect(findings).toEqual([]);
   });
 
-  test("a bad archestra call named only in prose or a comment does not warn", async () => {
+  test("a bad archestra call named only in page prose does not warn", async () => {
     const findings = await validateAppHtmlStatic(
       "<html><head></head><body><p>Do not call archestra.storage.get directly.</p></body></html>",
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test("a bad archestra call only inside a JS comment does not warn", async () => {
+    const findings = await validateAppHtmlStatic(
+      `<html><head><script>
+        // use archestra.storage.user.get, not archestra.storage.get
+        /* archestra.tool.call is also wrong */
+        const x = 1;
+      </script></head><body/></html>`,
     );
     expect(findings).toEqual([]);
   });
@@ -272,9 +285,10 @@ describe("validateAppHtmlStatic", () => {
     );
     const topWarnings = findings.filter((f) => f.message.startsWith("Uses"));
     expect(topWarnings).toHaveLength(1);
-    expect(topWarnings[0].message).toContain("archestra.tool");
-    expect(topWarnings[0].message).not.toMatch(
-      /archestra\.tool,.*archestra\.tool[, ]/,
+    // The offending member is listed once, even though .call and .list both hit
+    // it. \b so the count ignores the valid archestra.tools in the surface list.
+    expect(topWarnings[0].message.match(/\barchestra\.tool\b/g)).toHaveLength(
+      1,
     );
   });
 });

@@ -244,7 +244,7 @@ function unknownArchestraSdkMembers(html: string): {
   const storageMisuse = new Set<string>();
   const unknownTopLevel = new Set<string>();
   for (const block of html.matchAll(SCRIPT_BLOCK_PATTERN)) {
-    const script = block[1];
+    const script = stripJsComments(block[1]);
     for (const match of script.matchAll(ARCHESTRA_TOP_LEVEL_PATTERN)) {
       if (!topLevel.has(match[1])) {
         unknownTopLevel.add(`archestra.${match[1]}`);
@@ -260,6 +260,17 @@ function unknownArchestraSdkMembers(html: string): {
     storageMisuse: [...storageMisuse],
     unknownTopLevel: [...unknownTopLevel],
   };
+}
+
+// Drop // line and /* */ block comments from a script so a commented-out or
+// documented call (`// use archestra.storage.user.get, not .get`) does not warn.
+// Block comments collapse to a space so a comment between tokens can never fuse
+// two identifiers into a spurious `archestra.*`. Only ever deletes spans, so it
+// can miss a call that is literally inside a comment-shaped string, never invent
+// one; string literals are left as-is (lexically unsafe to strip), a known limit
+// shared with browserStorageApisUsed.
+function stripJsComments(script: string): string {
+  return script.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, "");
 }
 
 const RESOURCE_REF_PATTERN =

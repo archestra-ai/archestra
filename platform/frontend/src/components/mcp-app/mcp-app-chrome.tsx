@@ -256,42 +256,29 @@ export function McpAppStandaloneButton({
 }
 
 /**
- * Compact app-icon circle that stands in for an app render kept out of the chat
- * stream — a superseded (older) render, or the live render while it's hosted in
- * the right panel. Visually matches the chat's tool-call circles (`size-8`
- * bordered circle) but carries the app icon; no tool-status dot. When `active`
- * (the app is the one currently shown in the right panel) it takes a pressed
- * look and clicking it closes the panel; otherwise clicking opens the app there.
+ * Compact, non-interactive app-icon marker shown next to a tool-call circle in
+ * the chat. Visually matches the tool-call circles (`size-8` bordered circle)
+ * but carries the app icon; no tool-status dot. It's a pure indicator —
+ * opening/closing the right panel is handled by the app's "Open in right panel"
+ * button and the panel's own collapse control.
  */
 export function McpAppMarkerCircle({
   label,
-  active = false,
-  onClick,
 }: {
   /** Tooltip text — the app name (plus optional context like "Shown in right panel"). */
   label: string;
-  /** Pressed state: this app is currently displayed in the right panel. */
-  active?: boolean;
-  onClick: () => void;
 }) {
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={onClick}
+          <span
+            role="img"
             aria-label={label}
-            aria-pressed={active}
-            className={cn(
-              "relative inline-flex size-8 items-center justify-center rounded-full border transition-all hover:border-accent-foreground/20 hover:bg-accent hover:text-foreground",
-              active
-                ? "border-accent-foreground/20 bg-accent text-foreground ring-2 ring-primary/20"
-                : "bg-background text-muted-foreground",
-            )}
+            className="relative inline-flex size-8 items-center justify-center rounded-full border bg-background text-muted-foreground"
           >
             <AppWindow className="h-4 w-4" />
-          </button>
+          </span>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
           {label}

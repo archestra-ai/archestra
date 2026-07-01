@@ -127,6 +127,7 @@ export function McpAppSection({
   toolInput,
   rawOutput,
   preloadedResource,
+  toolDetails,
   onSendMessage,
 }: {
   uiResourceUri: string;
@@ -156,6 +157,11 @@ export function McpAppSection({
   rawOutput?: McpToolOutput;
   /** HTML pre-fetched by the backend and delivered via SSE — skips the in-browser HTTP fetch */
   preloadedResource?: AppResourceMeta;
+  /**
+   * Expanded tool-call details (input/output) from the host tool card. Rendered
+   * at the top of the column below the marker, so it sits above the inline app.
+   */
+  toolDetails?: React.ReactNode;
   /** Called when the MCP App sends a ui/message request to inject a user message into the conversation */
   onSendMessage?: (text: string) => void;
 }) {
@@ -254,18 +260,16 @@ export function McpAppSection({
   // click opens the latest render in the right panel.
   if (isSupersededRender({ apps, toolCallId, appId })) {
     return (
-      <McpAppMarkerCircle
-        label={
-          shownInRightPanel
-            ? `${headerName} · Shown in right panel`
-            : headerName
-        }
-        active={shownInRightPanel}
-        onClick={() => {
-          if (shownInRightPanel) closePanel();
-          else if (latestToolCallId) showInPanel(latestToolCallId);
-        }}
-      />
+      <>
+        <McpAppMarkerCircle
+          label={
+            shownInRightPanel
+              ? `${headerName} · Shown in right panel`
+              : headerName
+          }
+        />
+        {toolDetails ? <div className="w-full">{toolDetails}</div> : null}
+      </>
     );
   }
 
@@ -407,63 +411,73 @@ export function McpAppSection({
   // inside the height-constrained panel (item 3).
   const diagnostics = appId ? <AppDiagnosticsPanel appId={appId} /> : null;
 
-  // When hosted in the right panel the chat shows a compact, pressed app marker
-  // (item 1). The wrapper stays auto-width so it sits on the same row as the
-  // tool-call circle above it.
-  if (renderInPanel) {
-    return (
-      <div className="flex flex-col items-start gap-2">
-        <McpAppMarkerCircle
-          label={`${headerName} · Shown in right panel`}
-          active
-          onClick={closePanel}
-        />
-        {portalTarget && createPortal(liveSurface, portalTarget)}
-        {diagnostics}
-        {/* Settings + delete for the panel-hosted owned app. Both are modals
-            (portal to body), so their position here is irrelevant (items 6, 7). */}
-        {isOwnedInPanel && ownedApp ? (
-          <>
-            <AppSettingsDialog
-              appId={appId}
-              open={settingsOpen}
-              onOpenChange={setSettingsOpen}
-            />
-            <AppDeleteDialog
-              app={{ id: ownedApp.id, name: ownedApp.name }}
-              open={deleteOpen}
-              onOpenChange={setDeleteOpen}
-              onDeleted={closePanel}
-            />
-          </>
-        ) : null}
-      </div>
-    );
-  }
+  // The app marker is always a top-level flex item, so it sits on the same row
+  // as the host tool-call circle. It's pressed while the app is shown in the
+  // right panel (click closes it); otherwise clicking opens it there.
+  const marker = (
+    <McpAppMarkerCircle
+      label={
+        renderInPanel ? `${headerName} · Shown in right panel` : headerName
+      }
+    />
+  );
 
-  // Frameless inline: the app, an "Open in right panel" button below it (item
-  // 2), then diagnostics. `w-full` makes this wrap to its own row under the
-  // tool-call circle.
-  return (
+  // Everything under the circle+marker row stacks in one full-width column:
+  // tool-call details (above the app), then the inline app card + its
+  // "Open in right panel" button (inline only — in the panel the app is
+  // portaled away), then the diagnostics summary.
+  const belowColumn = (
     <div className="flex w-full flex-col items-start gap-2">
-      {liveSurface}
-      {toolCallId && displayMode !== "fullscreen" ? (
-        // Match the card's 80% width and right-justify so the button lines up
-        // with the app's right edge, not the full chat width.
-        <div className="flex w-full max-w-[80%] justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-auto gap-1.5 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-            onClick={handleShowInPanel}
-          >
-            <PanelRight className="h-3.5 w-3.5" />
-            Open in right panel
-          </Button>
-        </div>
+      {toolDetails ? <div className="w-full">{toolDetails}</div> : null}
+      {!renderInPanel ? (
+        <>
+          {liveSurface}
+          {toolCallId && displayMode !== "fullscreen" ? (
+            // Match the card's 80% width and right-justify so the button lines
+            // up with the app's right edge, not the full chat width.
+            <div className="flex w-full max-w-[80%] justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-auto gap-1.5 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                onClick={handleShowInPanel}
+              >
+                <PanelRight className="h-3.5 w-3.5" />
+                Open in right panel
+              </Button>
+            </div>
+          ) : null}
+        </>
       ) : null}
       {diagnostics}
     </div>
+  );
+
+  return (
+    <>
+      {marker}
+      {belowColumn}
+      {renderInPanel && portalTarget
+        ? createPortal(liveSurface, portalTarget)
+        : null}
+      {/* Settings + delete for the panel-hosted owned app. Both are modals
+          (portal to body), so their position here is irrelevant (items 6, 7). */}
+      {isOwnedInPanel && ownedApp ? (
+        <>
+          <AppSettingsDialog
+            appId={appId}
+            open={settingsOpen}
+            onOpenChange={setSettingsOpen}
+          />
+          <AppDeleteDialog
+            app={{ id: ownedApp.id, name: ownedApp.name }}
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            onDeleted={closePanel}
+          />
+        </>
+      ) : null}
+    </>
   );
 }

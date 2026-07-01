@@ -122,7 +122,10 @@ export function McpAppCard({
             : fillContainer
               ? "flex-1 min-h-0 overflow-hidden [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-h-0 [&_iframe]:!max-h-none [&>div]:!h-full"
               : capInlineHeight
-                ? "[&_iframe]:!w-full max-h-[max(320px,60vh)] overflow-y-auto"
+                ? // The runtime already clamps the iframe to this cap and scrolls
+                  // its content internally, so clip here (not `overflow-y-auto`)
+                  // to avoid a second, outer scrollbar next to the iframe's.
+                  "[&_iframe]:!w-full max-h-[max(320px,60vh)] overflow-hidden"
                 : "[&_iframe]:!w-full",
         )}
       >

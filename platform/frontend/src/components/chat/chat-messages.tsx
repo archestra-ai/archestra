@@ -1832,10 +1832,33 @@ const MessageTool = memo(
         iconInfo?.catalogId ??
         (appMgmtShortName !== null ? ARCHESTRA_MCP_CATALOG_ID : undefined);
 
-      // Tool-call circle and the app marker/card share one flex-wrap row: the
-      // compact marker (superseded / shown-in-right-panel) sits on the same line
-      // as the circle, while a full inline app card is `w-full` and wraps to its
-      // own line below.
+      // Expanded tool-call details (input/output). Handed to McpAppSection so it
+      // can place them above the app in the column below the circle+marker row.
+      const toolDetails = isOpen ? (
+        <Tool defaultOpen={true}>
+          <ToolHeader
+            type={`tool-${displayToolName}`}
+            state={getHeaderState({
+              state: part.state || "input-available",
+              toolResultPart,
+              errorText,
+            })}
+            isCollapsible={!!hasInput}
+          />
+          <ToolContent>
+            {hasInput ? <ToolInput input={displayInput} /> : null}
+            {toolResultPart && (
+              <ToolOutput
+                label="Result"
+                output={mcpOutput?.content ?? toolResultPart.output}
+              />
+            )}
+          </ToolContent>
+        </Tool>
+      ) : undefined;
+
+      // Tool-call circle and the app marker share the flex-wrap row's first line;
+      // the tool details + inline app card stack in a full-width column below.
       return (
         <div className="mb-4">
           <div className="flex flex-wrap items-start gap-1.5">
@@ -1887,6 +1910,7 @@ const MessageTool = memo(
                   toolCallId={part.toolCallId}
                   toolInput={mcpAppToolInput}
                   rawOutput={mcpOutput}
+                  toolDetails={toolDetails}
                   preloadedResource={
                     earlyToolUiData?.html
                       ? {
@@ -1907,34 +1931,11 @@ const MessageTool = memo(
                   agentId={agentId}
                   toolName={mcpAppToolName}
                   toolCallId={part.toolCallId}
+                  toolDetails={toolDetails}
                   onSendMessage={onSendMessage}
                 />
               ) : null)}
           </div>
-          {isOpen && (
-            <div className="mt-2">
-              <Tool defaultOpen={true}>
-                <ToolHeader
-                  type={`tool-${displayToolName}`}
-                  state={getHeaderState({
-                    state: part.state || "input-available",
-                    toolResultPart,
-                    errorText,
-                  })}
-                  isCollapsible={!!hasInput}
-                />
-                <ToolContent>
-                  {hasInput ? <ToolInput input={displayInput} /> : null}
-                  {toolResultPart && (
-                    <ToolOutput
-                      label="Result"
-                      output={mcpOutput?.content ?? toolResultPart.output}
-                    />
-                  )}
-                </ToolContent>
-              </Tool>
-            </div>
-          )}
         </div>
       );
     }

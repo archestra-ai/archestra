@@ -93758,6 +93758,9 @@
                         "azureOpenAiEntraIdEnabled": {
                           "type": "boolean"
                         },
+                        "anthropicWifEnabled": {
+                          "type": "boolean"
+                        },
                         "bedrockIamAuthEnabled": {
                           "type": "boolean"
                         },
@@ -93843,6 +93846,7 @@
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",
+                        "anthropicWifEnabled",
                         "bedrockIamAuthEnabled",
                         "geminiVertexAiEnabled",
                         "globalToolPolicy",

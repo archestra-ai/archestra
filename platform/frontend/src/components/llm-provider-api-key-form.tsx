@@ -318,6 +318,7 @@ export function LlmProviderApiKeyForm({
   const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
+  const anthropicWifEnabled = useFeature("anthropicWifEnabled");
   const { data: providerBaseUrls } = useProviderBaseUrls();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: isLlmProviderApiKeyAdmin } = useHasPermissions({
@@ -727,6 +728,7 @@ export function LlmProviderApiKeyForm({
                     {isProviderApiKeyOptional({
                       provider,
                       azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+                      anthropicWifEnabled: anthropicWifEnabled === true,
                     }) ? (
                       <span className="font-normal text-muted-foreground">
                         (optional)
@@ -936,7 +938,10 @@ export function LlmProviderApiKeyForm({
             provider,
             azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
           }) &&
-            provider !== "azure" && (
+            // Docker-localhost hint applies to self-hosted providers only, not
+            // cloud keyless auth (Azure Entra ID, Anthropic WIF).
+            provider !== "azure" &&
+            provider !== "anthropic" && (
               <p className="text-xs text-muted-foreground">
                 If this app runs in Docker, <code>localhost</code> points at the
                 container, not your host machine. Use{" "}

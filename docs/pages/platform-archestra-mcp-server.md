@@ -1902,16 +1902,16 @@ Required RBAC permission: `skill:update`
 |------|-------------|--------------------------|
 | `scaffold_app` | Create a new interactive app (dashboard, form, tracker, game, or any custom UI) seeded from the default starter template. | `app:create` |
 | `refine_app` | Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. | `app:update` |
-| `list_apps` | List apps visible to the caller, optionally filtered by name. | `app:read` |
+| `list_apps` | List apps visible to the caller, optionally filtered by name — use it to find an app's id. | `app:read` |
 | `render_app` | Render an existing app by id, if the caller may view it. | `app:read` |
 | `read_app` | Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. | `app:read` |
-| `edit_app` | Build up an app's HTML with str_replace edits — the path for any change, from a one-line tweak to a full rewrite (replace the whole document in a single edit). | `app:update` |
+| `edit_app` | The single path for any change to an app's HTML, from a one-line tweak to a full rewrite (one edit whose old_str is the whole document). | `app:update` |
 | `set_app_tools` | Replace an existing app's assigned upstream tools with exactly the set you pass (the full desired list; [] clears all). | `app:update` |
-| `validate_app` | Validate an app's current head version: static structural checks plus the diagnostics from its most recent live render. | `app:read` |
+| `validate_app` | The pre-publish gate for an app's head version: static structural checks (`findings`, each carrying its own specific message) plus the most recent live-render diagnostics (`live`), with `ok` true w... | `app:read` |
 | `publish_app` | Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, wi... | `app:update` |
 | `preview_app_tool` | Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. | `app:update` |
 | `get_app_diagnostics` | Check how the app's current version rendered for you. | `app:read` |
-| `delete_app` | Soft-delete an app the caller owns or administers. | `app:delete` |
+| `delete_app` | Soft-delete an app the caller owns or administers, and remove its MCP backing so it is no longer served. | `app:delete` |
 | `app_data_get` | Read a value from the calling app's data store (per-user or shared partition). | `app:read` |
 | `app_data_set` | Write a value to the calling app's data store (per-user or shared partition). | `app:update` |
 | `app_data_list` | List all entries in one partition of the calling app's data store. | `app:read` |
@@ -1947,6 +1947,7 @@ Required RBAC permission: `app:create`
 | `latestVersion` | `number` | Yes |  |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 | `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
+| `status` | `"ok" \| "partial"` | No | Absent or "ok" on full success. "partial" means the app was created (see id) but assigning its tools failed — the app exists; assign them with set_app_tools rather than re-scaffolding. |
 
 #### refine_app
 
@@ -2078,6 +2079,7 @@ Required RBAC permission: `app:update`
 | `latestVersion` | `number` | Yes |  |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 | `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
+| `status` | `"ok" \| "partial"` | No | Absent or "ok" on full success. "partial" means the app was created (see id) but assigning its tools failed — the app exists; assign them with set_app_tools rather than re-scaffolding. |
 
 #### set_app_tools
 

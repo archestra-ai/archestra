@@ -654,6 +654,144 @@ describe("ToolModel", () => {
 
       expect(result).toHaveLength(2);
     });
+
+    test("orders the healthy-connection candidate first when two assigned tools share a name across different catalog items", async ({
+      makeUser,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const user = await makeUser();
+      const agent = await makeAgent();
+
+      // Two different catalog items whose installs happen to share a
+      // display name, producing two tool rows with the identical slugified
+      // name — the collision a caller cannot see in the tool name alone.
+      // Created directly via the model (not the makeTool fixture, whose
+      // findByName lookup can't disambiguate same-named tools either).
+      const brokenCatalog = await makeInternalMcpCatalog({
+        name: "weather-fixture-broken",
+        serverUrl: "https://weather.example.com/mcp",
+      });
+      await makeMcpServer({
+        name: "Weather Fixture",
+        catalogId: brokenCatalog.id,
+        ownerId: user.id,
+        localInstallationStatus: "success",
+        oauthRefreshError: "refresh_failed",
+      });
+      const brokenTool = await ToolModel.createToolIfNotExists({
+        name: "weather_fixture__get_weather",
+        description: "broken connection",
+        parameters: {},
+        catalogId: brokenCatalog.id,
+      });
+
+      const healthyCatalog = await makeInternalMcpCatalog({
+        name: "weather-fixture-healthy",
+        serverUrl: "https://weather.example.com/mcp",
+      });
+      await makeMcpServer({
+        name: "Weather Fixture",
+        catalogId: healthyCatalog.id,
+        ownerId: user.id,
+        localInstallationStatus: "success",
+      });
+      const healthyTool = await ToolModel.createToolIfNotExists({
+        name: "weather_fixture__get_weather",
+        description: "healthy connection",
+        parameters: {},
+        catalogId: healthyCatalog.id,
+      });
+
+      // Assign the broken one first so a naive "first row returned" pick
+      // would resolve to it.
+      await AgentToolModel.create(agent.id, brokenTool.id);
+      await AgentToolModel.create(agent.id, healthyTool.id);
+
+      const result = await ToolModel.getMcpToolsAssignedToAgent(
+        ["weather_fixture__get_weather"],
+        agent.id,
+      );
+
+      expect(result).toHaveLength(2);
+      expect(result[0].catalogId).toBe(healthyCatalog.id);
+    });
+
+    test("does not rank a static pin to a broken server as healthy just because its catalog has an unrelated working install", async ({
+      makeUser,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const user = await makeUser();
+      const agent = await makeAgent();
+
+      // A catalog item with two installs: the one this agent's assignment
+      // is pinned to is broken, but a different, unrelated install of the
+      // same catalog item is healthy. A catalog-wide health check would
+      // wrongly call the pinned assignment healthy.
+      const pinnedCatalog = await makeInternalMcpCatalog({
+        name: "weather-fixture-pinned",
+        serverUrl: "https://weather.example.com/mcp",
+      });
+      const brokenPinnedServer = await makeMcpServer({
+        name: "Weather Fixture",
+        catalogId: pinnedCatalog.id,
+        ownerId: user.id,
+        localInstallationStatus: "success",
+        oauthRefreshError: "refresh_failed",
+      });
+      await makeMcpServer({
+        name: "Weather Fixture (unrelated install)",
+        catalogId: pinnedCatalog.id,
+        localInstallationStatus: "success",
+      });
+      // Explicit, deterministically ordered ids: without the fix, a
+      // catalog-wide health tie falls back to sorting by id, which would
+      // otherwise pick either row depending on random UUID generation.
+      // Pinning the broken row's id below the healthy row's id means a
+      // health tie would deterministically (wrongly) prefer it.
+      const pinnedTool = await ToolModel.createToolIfNotExists({
+        id: "00000000-0000-4000-8000-000000000001",
+        name: "weather_fixture__get_weather",
+        description: "statically pinned to the broken install",
+        parameters: {},
+        catalogId: pinnedCatalog.id,
+      });
+
+      const dynamicCatalog = await makeInternalMcpCatalog({
+        name: "weather-fixture-dynamic",
+        serverUrl: "https://weather.example.com/mcp",
+      });
+      await makeMcpServer({
+        name: "Weather Fixture",
+        catalogId: dynamicCatalog.id,
+        ownerId: user.id,
+        localInstallationStatus: "success",
+      });
+      const dynamicTool = await ToolModel.createToolIfNotExists({
+        id: "00000000-0000-4000-8000-000000000002",
+        name: "weather_fixture__get_weather",
+        description: "dynamically resolved, genuinely healthy",
+        parameters: {},
+        catalogId: dynamicCatalog.id,
+      });
+
+      await AgentToolModel.create(agent.id, pinnedTool.id, {
+        mcpServerId: brokenPinnedServer.id,
+        credentialResolutionMode: "static",
+      });
+      await AgentToolModel.create(agent.id, dynamicTool.id);
+
+      const result = await ToolModel.getMcpToolsAssignedToAgent(
+        ["weather_fixture__get_weather"],
+        agent.id,
+      );
+
+      expect(result).toHaveLength(2);
+      expect(result[0].catalogId).toBe(dynamicCatalog.id);
+    });
   });
 
   describe("findByNameForAgent", () => {

@@ -1665,10 +1665,15 @@ function getImplicitArchestraMetaTools() {
   );
 }
 
+// First occurrence wins: callers (getMcpToolsByAgent) order candidates with
+// a healthy MCP server connection first, so when two catalog items' installs
+// collide on display name, the working one is the one advertised.
 function dedupeToolsByName<T extends { name: string }>(tools: T[]) {
   const deduped = new Map<string, T>();
   for (const tool of tools) {
-    deduped.set(tool.name, tool);
+    if (!deduped.has(tool.name)) {
+      deduped.set(tool.name, tool);
+    }
   }
   return Array.from(deduped.values());
 }

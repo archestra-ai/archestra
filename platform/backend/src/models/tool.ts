@@ -33,7 +33,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -567,8 +567,15 @@ class ToolModel {
     const tools =
       assignedToolIds.length > 0
         ? await db
-            .select()
+            .select(getTableColumns(schema.toolsTable))
             .from(schema.toolsTable)
+            .leftJoin(
+              schema.agentToolsTable,
+              and(
+                eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+                eq(schema.agentToolsTable.agentId, agentId),
+              ),
+            )
             .where(
               and(
                 inArray(schema.toolsTable.id, assignedToolIds),
@@ -579,7 +586,14 @@ class ToolModel {
                 toolInEnvironmentPredicate(agentEnvironmentId),
               ),
             )
-            .orderBy(desc(schema.toolsTable.createdAt))
+            .orderBy(
+              desc(
+                ToolModel.hasHealthyMcpServerInstall(
+                  schema.agentToolsTable.mcpServerId,
+                ),
+              ),
+              desc(schema.toolsTable.createdAt),
+            )
         : [];
 
     // Auto-inject query_knowledge_sources when the agent has knowledge sources
@@ -1576,6 +1590,14 @@ class ToolModel {
           isNotNull(schema.toolsTable.catalogId), // Only MCP tools (have catalogId)
           toolInEnvironmentPredicate(agentEnvironmentId),
         ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.agentToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
       );
 
     return mcpTools;
@@ -1625,6 +1647,14 @@ class ToolModel {
           isNotNull(schema.toolsTable.catalogId),
           toolInEnvironmentPredicate(agentEnvironmentId),
         ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.agentToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
       )
       .limit(1);
 
@@ -1788,6 +1818,14 @@ class ToolModel {
           inArray(schema.toolsTable.name, toolNames),
           isNotNull(schema.toolsTable.catalogId),
         ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.appToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
       );
   }
 
@@ -1823,6 +1861,14 @@ class ToolModel {
           sql`RIGHT(${schema.toolsTable.name}, ${suffix.length}) = ${suffix}`,
           isNotNull(schema.toolsTable.catalogId),
         ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.appToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
       )
       .limit(1);
   }
@@ -3030,6 +3076,36 @@ class ToolModel {
           "Failed to trigger auto-configure for discovered tools",
         );
       });
+  }
+
+  /**
+   * True when the connection a tool call would actually reach is connected
+   * and authenticated: the assignment's pinned server when it has one (a
+   * static credential pin), otherwise any healthy install of the tool's
+   * catalog item — dynamic resolution defers to the connection policy,
+   * which could reach any of them. Checking catalog-wide health alone would
+   * misrank a static pin to a broken server as healthy whenever the same
+   * catalog item has an unrelated working install elsewhere. Two different
+   * catalog items can produce tool rows with an identical name; ordering by
+   * this expression lets every caller that picks "the" match among
+   * same-named candidates prefer a working connection over one that needs
+   * re-authentication, was never installed, or is pinned to a broken one.
+   */
+  private static hasHealthyMcpServerInstall(
+    assignmentMcpServerId: AnyPgColumn,
+  ) {
+    return sql<boolean>`COALESCE(
+      (SELECT ${schema.mcpServersTable.localInstallationStatus} = 'success'
+         AND ${schema.mcpServersTable.oauthRefreshError} IS NULL
+       FROM ${schema.mcpServersTable}
+       WHERE ${schema.mcpServersTable.id} = ${assignmentMcpServerId}),
+      EXISTS (
+        SELECT 1 FROM ${schema.mcpServersTable}
+        WHERE ${schema.mcpServersTable.catalogId} = ${schema.toolsTable.catalogId}
+          AND ${schema.mcpServersTable.localInstallationStatus} = 'success'
+          AND ${schema.mcpServersTable.oauthRefreshError} IS NULL
+      )
+    )`;
   }
 }
 

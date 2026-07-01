@@ -94,6 +94,11 @@ export interface ChatReplyOptions {
   replyInThread?: boolean;
   /** Optional: Footer text to append (e.g. agent name) */
   footer?: string;
+  /**
+   * Optional: an even-more-subtle hint rendered on its own line below the
+   * footer (e.g. the one-time "you can mute me" tip on a thread's first reply).
+   */
+  hint?: string;
   /** Provider-specific conversation reference for reply routing */
   conversationReference?: unknown;
 }

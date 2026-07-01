@@ -37,7 +37,6 @@ import type {
   UsageView,
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
-import { internalCodeFromProviderMessage } from "./context-overflow-patterns";
 
 // =============================================================================
 // TYPE ALIASES
@@ -534,7 +533,7 @@ export const perplexityAdapterFactory: LLMProvider<
     if (get(error, "error.code") === "context_length_exceeded") {
       return ArchestraInternalErrorCode.ContextLengthExceeded;
     }
-    return internalCodeFromProviderMessage(get(error, "error.message"));
+    return undefined;
   },
 
   extractErrorMessage(error: unknown): string {

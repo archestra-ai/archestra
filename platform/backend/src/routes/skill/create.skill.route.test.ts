@@ -238,8 +238,8 @@ describe("POST /api/skills", () => {
       expect(response.statusCode).toBe(400);
       // the skill row must not have been committed
       expect(
-        await SkillModel.findByName(ctx.organizationId, "orphan-check"),
-      ).toBeNull();
+        await SkillModel.findAllByName(ctx.organizationId, "orphan-check"),
+      ).toHaveLength(0);
     });
 
     test("persists team assignments atomically with the skill", async ({
@@ -291,8 +291,8 @@ describe("POST /api/skills", () => {
 
       expect(response.statusCode).toBe(400);
       expect(
-        await SkillModel.findByName(ctx.organizationId, "teamless-skill"),
-      ).toBeNull();
+        await SkillModel.findAllByName(ctx.organizationId, "teamless-skill"),
+      ).toHaveLength(0);
     });
   });
 });

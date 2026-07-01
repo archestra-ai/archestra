@@ -1037,6 +1037,47 @@ describe("SlackProvider.sendReply", () => {
     });
   });
 
+  test("renders the mute hint as its own subtle context block above the footer", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    await provider.sendReply({
+      originalMessage: {
+        messageId: "1234567890.123456",
+        channelId: "C12345",
+        workspaceId: "T12345",
+        threadId: "1111111111.000000",
+        senderId: "U_SENDER",
+        senderName: "Test User",
+        text: "hello",
+        rawText: "hello",
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+      text: "hi there",
+      footer: "🤖 Agent",
+      hint: 'Reply "mute" to stop',
+    });
+
+    const { blocks } = postMessage.mock.calls[0][0];
+    // markdown, then the hint context, then the footer as the final block.
+    expect(blocks).toEqual([
+      { type: "markdown", text: "hi there" },
+      {
+        type: "context",
+        elements: [
+          { type: "plain_text", text: 'Reply "mute" to stop', emoji: true },
+        ],
+      },
+      {
+        type: "context",
+        elements: [{ type: "plain_text", text: "🤖 Agent", emoji: true }],
+      },
+    ]);
+  });
+
   test("splits into thread follow-ups when markdown expansion would exceed Slack's 50-block cap", async () => {
     const provider = createProvider();
     const postMessage = vi

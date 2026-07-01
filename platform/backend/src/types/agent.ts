@@ -335,7 +335,7 @@ export const PolicyConfigSchema = z.object({
     .describe(
       "When should this tool be allowed to be invoked? " +
         "'allow_when_context_is_sensitive' - Allow invocation even when sensitive data is present (safe read-only tools). " +
-        "'block_when_context_is_sensitive' - Allow only when context is safe, block when sensitive data is present (tools that could leak data). " +
+        "'block_when_context_is_sensitive' - Block when sensitive data is present, allow only when context is safe (tools that could leak data). " +
         "'require_approval' - Require user confirmation before executing in chat; block in autonomous sessions (write/mutating tools that are not outright destructive: create/update/send/post/charge). " +
         "'block_always' - Never allow automatic invocation (obviously destructive tools whose name is solely dedicated to deleting or destroying data).",
     ),

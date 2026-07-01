@@ -34,7 +34,6 @@ import {
   isMcpImageBlock,
 } from "../utils/mcp-image";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
-import { internalCodeFromProviderMessage } from "./context-overflow-patterns";
 
 // =============================================================================
 // TYPE ALIASES
@@ -1247,13 +1246,11 @@ export const anthropicAdapterFactory: LLMProvider<
     } as AnthropicProvider.Messages.MessageCreateParamsStreaming);
   },
 
-  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
-    // Anthropic and its compatible gateways (e.g. third-party Anthropic-shaped
-    // endpoints) signal context overflow only via the message, with no structured
-    // code, and each phrases it differently. Classify against the shared vocabulary.
-    const message: unknown =
-      get(error, "error.error.message") ?? get(error, "error.message");
-    return internalCodeFromProviderMessage(message);
+  extractInternalCode(_error: unknown): ArchestraInternalErrorCode | undefined {
+    // Anthropic and its compatible gateways signal context overflow only via the
+    // message with no structured code, so there is no structured signal to
+    // classify overflow against.
+    return undefined;
   },
 
   extractErrorMessage(error: unknown): string {

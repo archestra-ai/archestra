@@ -3332,6 +3332,10 @@ export type OpenrouterChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     stream?: boolean | null;
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
 };
 
 export type OpenrouterChatCompletionResponseInput = {
@@ -8642,6 +8646,10 @@ export type OpenrouterChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     stream?: boolean | null;
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
 };
 
 export type OpenrouterChatCompletionResponse = {
@@ -15493,9 +15501,9 @@ export type GetAppsResponses = {
             cspOrigin: 'platform-pinned' | 'author-declared';
             source: 'external';
             catalogId: string;
+            mcpServerId: string;
+            scope: 'personal' | 'team' | 'org';
             resourceUri: string;
-            runnable: boolean;
-            availabilityScopes: Array<'personal' | 'team' | 'org'>;
         }>;
         pagination: {
             currentPage: number;
@@ -15719,6 +15727,11 @@ export type GetExternalAppResponses = {
         name: string;
         description: string | null;
         resourceUri: string;
+        resources: Array<{
+            resourceUri: string;
+            toolName: string;
+            name: string;
+        }>;
         defaultMcpServerId: string | null;
         installs: Array<{
             mcpServerId: string;
@@ -15903,6 +15916,93 @@ export type OpenAppInChatResponses = {
 };
 
 export type OpenAppInChatResponse = OpenAppInChatResponses[keyof OpenAppInChatResponses];
+
+export type OpenExternalAppInChatData = {
+    body: {
+        resourceUri: string;
+    };
+    path: {
+        mcpServerId: string;
+    };
+    query?: never;
+    url: '/api/apps/external/{mcpServerId}/open-in-chat';
+};
+
+export type OpenExternalAppInChatErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenExternalAppInChatError = OpenExternalAppInChatErrors[keyof OpenExternalAppInChatErrors];
+
+export type OpenExternalAppInChatResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        conversationId: string;
+    };
+};
+
+export type OpenExternalAppInChatResponse = OpenExternalAppInChatResponses[keyof OpenExternalAppInChatResponses];
 
 export type DeleteAppData = {
     body?: never;
@@ -21630,6 +21730,7 @@ export type GetChatConversationsResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -21792,6 +21893,7 @@ export type CreateChatConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -22035,6 +22137,7 @@ export type GetChatConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -22200,6 +22303,7 @@ export type UpdateChatConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -22330,6 +22434,91 @@ export type SetConversationHooksDebugResponses = {
 };
 
 export type SetConversationHooksDebugResponse = SetConversationHooksDebugResponses[keyof SetConversationHooksDebugResponses];
+
+export type MarkChatConversationReadData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/read';
+};
+
+export type MarkChatConversationReadErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type MarkChatConversationReadError = MarkChatConversationReadErrors[keyof MarkChatConversationReadErrors];
+
+export type MarkChatConversationReadResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type MarkChatConversationReadResponse = MarkChatConversationReadResponses[keyof MarkChatConversationReadResponses];
 
 export type GetChatConversationFilesData = {
     body?: never;
@@ -22713,6 +22902,7 @@ export type ForkChatConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -23060,6 +23250,7 @@ export type CompactChatConversationResponses = {
             } | null;
             projectName?: string | null;
             projectIcon?: string | null;
+            unread?: boolean;
             messages: Array<unknown>;
             chatErrors: Array<{
                 id: string;
@@ -23492,6 +23683,7 @@ export type GetSharedConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -23653,6 +23845,7 @@ export type ForkSharedConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -23816,6 +24009,7 @@ export type GenerateChatConversationTitleResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -23978,6 +24172,7 @@ export type UpdateChatMessageResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -31965,8 +32160,8 @@ export type GetInteractionsResponses = {
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
-            request: XaiChatCompletionRequest;
-            processedRequest?: XaiChatCompletionRequest | null;
+            request: OpenrouterChatCompletionRequest;
+            processedRequest?: OpenrouterChatCompletionRequest | null;
             response: OpenrouterChatCompletionResponse | {
                 error: string;
             };
@@ -35580,8 +35775,8 @@ export type GetInteractionResponses = {
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
-        request: XaiChatCompletionRequest;
-        processedRequest?: XaiChatCompletionRequest | null;
+        request: OpenrouterChatCompletionRequest;
+        processedRequest?: OpenrouterChatCompletionRequest | null;
         response: OpenrouterChatCompletionResponse | {
             error: string;
         };
@@ -50958,7 +51153,7 @@ export type OpenAiListModelsWithAgentResponses = {
 export type OpenAiListModelsWithAgentResponse = OpenAiListModelsWithAgentResponses[keyof OpenAiListModelsWithAgentResponses];
 
 export type OpenrouterChatCompletionsWithDefaultAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: OpenrouterChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -51049,7 +51244,7 @@ export type OpenrouterChatCompletionsWithDefaultAgentResponses = {
 export type OpenrouterChatCompletionsWithDefaultAgentResponse = OpenrouterChatCompletionsWithDefaultAgentResponses[keyof OpenrouterChatCompletionsWithDefaultAgentResponses];
 
 export type OpenrouterChatCompletionsWithAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: OpenrouterChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -57269,6 +57464,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         } | null;
         projectName?: string | null;
         projectIcon?: string | null;
+        unread?: boolean;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;

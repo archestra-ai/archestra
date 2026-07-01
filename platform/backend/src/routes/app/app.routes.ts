@@ -33,7 +33,10 @@ import {
   callerIsAppAdmin,
   resolveOrgTeamIds,
 } from "@/services/apps/app-authorization";
-import { createSeededAppConversation } from "@/services/apps/app-chat-conversation";
+import {
+  createSeededAppConversation,
+  createSeededExternalAppConversation,
+} from "@/services/apps/app-chat-conversation";
 import {
   createAppBacking,
   deleteAppBacking,
@@ -163,11 +166,13 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...external.map((catalogApp) => ({
           source: "external" as const,
           catalogId: catalogApp.catalogId,
-          name: catalogApp.name,
-          description: catalogApp.description,
+          mcpServerId: catalogApp.mcpServerId,
+          scope: catalogApp.scope,
+          // "Server / Tool" as the title (short tool name, never the slug
+          // prefix); the tool's own description as the subtitle.
+          name: `${catalogApp.serverName} / ${catalogApp.toolName}`,
+          description: catalogApp.toolDescription,
           resourceUri: catalogApp.resourceUri,
-          runnable: catalogApp.runnable,
-          availabilityScopes: catalogApp.availabilityScopes,
           executionModel: "server-scoped" as const,
           cspOrigin: "author-declared" as const,
         })),
@@ -344,6 +349,35 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // The service re-checks app visibility (404s if the caller can't view it).
       const { conversationId } = await createSeededAppConversation({
         appId,
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send({ conversationId });
+    },
+  );
+
+  fastify.post(
+    "/api/apps/external/:mcpServerId/open-in-chat",
+    {
+      schema: {
+        operationId: RouteId.OpenExternalAppInChat,
+        description:
+          "Open an external (MCP-server) UI app in chat: create a conversation with the app rendered against the given install (no model turn) and return its id to navigate to.",
+        tags: ["Apps"],
+        params: z.object({ mcpServerId: UuidIdSchema }),
+        body: z.object({ resourceUri: z.string().min(1) }),
+        response: constructResponseSchema(OpenAppInChatResponseSchema),
+      },
+    },
+    async (
+      { params: { mcpServerId }, body: { resourceUri }, user, organizationId },
+      reply,
+    ) => {
+      // The service re-checks install access + that the resource exists (404s
+      // otherwise).
+      const { conversationId } = await createSeededExternalAppConversation({
+        mcpServerId,
+        resourceUri,
         userId: user.id,
         organizationId,
       });

@@ -66,6 +66,7 @@ import { useAssignableTeams } from "@/lib/teams/team.query";
 import { useCanModifyCatalogItem } from "../../_parts/catalog-edit-access";
 import { clearCatalogEditParam } from "../../_parts/catalog-edit-link";
 import { resolveCatalogEnvironmentLabel } from "../../_parts/catalog-environment-label";
+import { shouldShowMcpCardChatButton } from "../../_parts/chat-button-visibility";
 import {
   computeDeploymentStatusSummary,
   DeploymentStatusDot,
@@ -505,19 +506,22 @@ export function McpServerCard({
   );
   const toolsCount = item.toolCount ?? 0;
 
-  const chatButton =
-    toolsCount > 0 ? (
-      <Button
-        variant="outline"
-        size="sm"
-        className="flex-1"
-        disabled={isChatCreating}
-        onClick={handleChatWithMcpServer}
-      >
-        <MessageSquare className="h-4 w-4" />
-        {isChatCreating ? "Creating..." : "Chat"}
-      </Button>
-    ) : null;
+  const chatButton = shouldShowMcpCardChatButton({
+    toolsCount,
+    isBuiltin: isBuiltinVariant,
+    hasInstallation: allServersForCatalog.length > 0,
+  }) ? (
+    <Button
+      variant="outline"
+      size="sm"
+      className="flex-1"
+      disabled={isChatCreating}
+      onClick={handleChatWithMcpServer}
+    >
+      <MessageSquare className="h-4 w-4" />
+      {isChatCreating ? "Creating..." : "Chat"}
+    </Button>
+  ) : null;
 
   const settingsButton = (
     <Button

@@ -160,6 +160,27 @@ describe("ConnectCommandPanel", () => {
     expect(screen.getByTestId("connect-change-platform")).toBeInTheDocument();
   });
 
+  it("shows a Finish the OAuth flow step for Claude Code when a gateway is connected", async () => {
+    renderPanel();
+    await screen.findByText(COMMAND);
+
+    expect(
+      screen.getByRole("heading", { name: "Finish the OAuth flow" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Claude Code opens your browser/),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the OAuth step when only a proxy (no gateway) is connected", async () => {
+    renderPanel({ mcpGateways: [], mcpGatewayId: null });
+    await screen.findByText(COMMAND);
+
+    expect(
+      screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("regenerates without skills after opting out in Options", async () => {
     const user = userEvent.setup();
     renderPanel();

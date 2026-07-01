@@ -1666,7 +1666,7 @@ Required RBAC permission: `skill:update`
 | `edit_app` | Build up an app's HTML with str_replace edits — the path for any change, from a one-line tweak to a full rewrite (replace the whole document in a single edit). | `app:update` |
 | `set_app_tools` | Replace an existing app's assigned upstream tools with exactly the set you pass (the full desired list; [] clears all). | `app:update` |
 | `validate_app` | Validate an app's current head version: static structural checks plus the diagnostics from its most recent live render. | `app:read` |
-| `publish_app` | Promote an app out of personal scope so others can run it — to specific teams (scope: team, with teamIds) or the whole organization (scope: org). | `app:update` |
+| `publish_app` | Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, wi... | `app:update` |
 | `preview_app_tool` | Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. | `app:update` |
 | `get_app_diagnostics` | Check how the app's current version rendered for you. | `app:read` |
 | `delete_app` | Soft-delete an app the caller owns or administers. | `app:delete` |

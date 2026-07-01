@@ -130,6 +130,7 @@ export function McpAppSection({
   uiResourceUri,
   agentId,
   appId,
+  mcpServerId,
   appName,
   appVersion,
   toolName,
@@ -148,6 +149,12 @@ export function McpAppSection({
    * forwarded into the iframe (they are not app data).
    */
   appId?: string;
+  /**
+   * External app render against a concrete install: drive the server endpoint
+   * (`/api/mcp/server/:id`) instead of the agent gateway. Set for the apps-page
+   * open-in-chat deep link (the conversation's agent need not have the server).
+   */
+  mcpServerId?: string | null;
   appName?: string | null;
   /** Owned-app version this render shows — keys the render-loop diagnostics. */
   appVersion?: number | null;
@@ -348,11 +355,14 @@ export function McpAppSection({
       endpoint={
         appId
           ? { kind: "app", appId }
-          : {
-              kind: "agent",
-              agentId,
-              serverPrefix: parseFullToolName(toolName).serverName ?? toolName,
-            }
+          : mcpServerId
+            ? { kind: "server", mcpServerId }
+            : {
+                kind: "agent",
+                agentId,
+                serverPrefix:
+                  parseFullToolName(toolName).serverName ?? toolName,
+              }
       }
       displayMode={displayMode}
       onDisplayModeChange={setDisplayMode}

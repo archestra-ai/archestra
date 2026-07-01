@@ -59,6 +59,36 @@ export async function clearChannelThreadActive(params: {
 }
 
 /**
+ * Claim the one-time "you can mute me" hint slot for a channel thread.
+ *
+ * Returns true the FIRST time it's called for a given thread (and records that
+ * the hint was shown), false thereafter — so the subtle mute hint rides only
+ * the bot's first reply in a thread, not every reply. Shares the sticky
+ * auto-reply TTL: once a thread goes idle long enough to stop auto-replying, a
+ * later revival is effectively a fresh conversation worth hinting again.
+ *
+ * Get-then-set (not atomic): a rare race could show the hint twice, which is
+ * harmless. Callers should only claim on a reply they're actually posting.
+ *
+ * A purely decorative hint must never break a reply, so a cache failure is
+ * swallowed and treated as "don't hint" rather than propagated.
+ */
+export async function claimThreadMuteHint(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  threadId: string;
+}): Promise<boolean> {
+  const key = muteHintKey(params);
+  try {
+    if ((await cacheManager.get<boolean>(key)) === true) return false;
+    await cacheManager.set(key, true, CHATOPS_CHANNEL_AUTO_REPLY.ACTIVE_TTL_MS);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Whether a message is a request to mute the bot in the current channel thread.
  *
  * The match is against the whole mention-stripped message, normalized to lower
@@ -161,6 +191,18 @@ function activationKey(params: {
     params.provider === "slack"
       ? CacheKey.SlackThreadActive
       : CacheKey.TeamsThreadActive;
+  return `${prefix}-${params.channelId}::${params.threadId}`;
+}
+
+function muteHintKey(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  threadId: string;
+}): AllowedCacheKey {
+  const prefix =
+    params.provider === "slack"
+      ? CacheKey.SlackThreadMuteHint
+      : CacheKey.TeamsThreadMuteHint;
   return `${prefix}-${params.channelId}::${params.threadId}`;
 }
 

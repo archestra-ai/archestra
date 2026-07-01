@@ -2055,6 +2055,62 @@ describe("InteractionModel", () => {
       expect(sessions.pagination.total).toBe(1);
       expect(sessions.data[0].sessionId).toBe(conversation.id);
     });
+
+    test("search tolerates a 36-char non-UUID session_id without failing the query", async ({
+      makeAdmin,
+    }) => {
+      // The interactions↔conversations join casts session_id to uuid. A bare
+      // LENGTH(session_id) = 36 guard is not enough: a 36-char NON-uuid session
+      // id (e.g. some a2a / external-agent ids) passes the length check and made
+      // `session_id::uuid` throw "invalid input syntax for type uuid", 500-ing
+      // the whole search query. This row reproduces that case.
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      // Exactly 36 characters, hyphenated like a UUID, but contains non-hex
+      // letters — so it is NOT castable to uuid.
+      const nonUuidSessionId = "abcdefgh-ijkl-mnop-qrst-uvwxyz012345";
+      expect(nonUuidSessionId).toHaveLength(36);
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: nonUuidSessionId,
+        request: {
+          model: "gpt-4",
+          messages: [
+            {
+              role: "user",
+              content: "trace token NonUuidSearchTok matches here",
+            },
+          ],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Before the fix this throws during the conversations join; after, it
+      // returns the matching session (which simply joins no conversation).
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { search: "NonUuidSearchTok" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].sessionId).toBe(nonUuidSessionId);
+      expect(sessions.data[0].conversationTitle).toBeNull();
+    });
   });
 
   describe("getSessions source filtering", () => {

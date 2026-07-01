@@ -107,6 +107,7 @@ import {
   filterOptimisticToolCalls,
   hasTextPart,
   identifyCompactToolGroups,
+  isBlankAssistantTextPart,
   resolveRunToolTargetName,
   type SubagentChildEntry,
 } from "./chat-messages.utils";
@@ -665,10 +666,12 @@ export function ChatMessages({
 
                     switch (part.type) {
                       case "text": {
-                        // Skip empty text parts from assistant messages.
-                        // OpenAI-compatible providers (Ollama, vLLM, etc.) may send empty content
-                        // alongside tool calls, which the AI SDK converts into an empty text part.
-                        if (!part.text && message.role === "assistant") {
+                        // Skip blank text parts from assistant messages. Models
+                        // routinely stream a whitespace-only chunk (" ", "\n\n")
+                        // right before a tool call, which the AI SDK turns into a
+                        // text part; rendered, it shows as an empty message bubble.
+                        // Trims so whitespace-only — not just "" — is suppressed.
+                        if (isBlankAssistantTextPart(part, message.role)) {
                           return null;
                         }
 
@@ -1592,9 +1595,13 @@ const MessageTool = memo(
   }) {
     const rawOutput = toolResultPart ? toolResultPart.output : part.output;
     const mcpOutput = rawOutput as McpToolOutput | undefined;
-    const uiResourceUri =
-      (mcpOutput?._meta?.ui as { resourceUri?: string } | undefined)
-        ?.resourceUri ?? earlyToolUiData?.uiResourceUri;
+    const uiMeta = mcpOutput?._meta?.ui as
+      | { resourceUri?: string; mcpServerId?: string }
+      | undefined;
+    const uiResourceUri = uiMeta?.resourceUri ?? earlyToolUiData?.uiResourceUri;
+    // A server-scoped deep link (apps-page open-in-chat) stamps the concrete
+    // install so the chat mounts against it instead of the agent gateway.
+    const uiMcpServerId = uiMeta?.mcpServerId;
 
     // When the model dispatched through run_tool, the MCP App belongs to the
     // *target* tool. Unwrap so the app receives the target tool's name (for the
@@ -1858,6 +1865,7 @@ const MessageTool = memo(
               {uiResourceUri ? (
                 <McpAppSection
                   uiResourceUri={uiResourceUri}
+                  mcpServerId={uiMcpServerId}
                   agentId={agentId}
                   toolName={mcpAppToolName}
                   toolCallId={part.toolCallId}
@@ -1965,6 +1973,7 @@ const MessageTool = memo(
             agentId && (
               <McpAppSection
                 uiResourceUri={uiResourceUri}
+                mcpServerId={uiMcpServerId}
                 agentId={agentId}
                 toolName={mcpAppToolName}
                 toolCallId={part.toolCallId}

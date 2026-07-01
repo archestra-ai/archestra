@@ -36,7 +36,7 @@ The same clone URL works for Claude Code, Codex, Copilot, and Cursor; only the i
 
 ```
 claude plugin marketplace add <clone-url>
-/plugin marketplace browse <marketplace-name>
+claude plugin install <marketplace-name>@<marketplace-name>
 ```
 
 **Codex**

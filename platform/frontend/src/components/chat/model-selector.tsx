@@ -694,6 +694,8 @@ export const ModelSelector = memo(function ModelSelector({
       availableModels: allAvailableModels.map((m) => ({
         id: m.dbId,
         isBest: m.isBest,
+        requiresUserConnection: m.requiresUserConnection,
+        isConnected: m.isConnected,
       })),
       isLoading,
     });

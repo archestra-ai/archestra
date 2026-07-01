@@ -95,6 +95,7 @@ describe("GET /api/apps", () => {
     await makeTool({
       catalogId: catalog.id,
       name: "get-time",
+      description: "Tells the current time",
       meta: { _meta: { ui: { resourceUri: "ui://get-time/app.html" } } },
     });
 
@@ -117,15 +118,17 @@ describe("GET /api/apps", () => {
     ).toMatchObject({
       source: "external",
       catalogId: catalog.id,
-      name: "Get Time",
+      scope: "org",
+      // "<server> / <tool>" title, tool description as subtitle.
+      name: "Get Time / get-time",
+      description: "Tells the current time",
       resourceUri: "ui://get-time/app.html",
-      runnable: true,
       executionModel: "server-scoped",
       cspOrigin: "author-declared",
     });
   });
 
-  test("lists a UI catalog once regardless of how many installs back it", async ({
+  test("lists a UI catalog's tool once per accessible install", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTool,
@@ -151,11 +154,51 @@ describe("GET /api/apps", () => {
       url: "/api/apps?limit=100&offset=0",
     });
     const items = res.json().data as Array<Record<string, unknown>>;
-    expect(
-      items.filter(
-        (i) => i.source === "external" && i.catalogId === catalog.id,
-      ),
-    ).toHaveLength(1);
+    const external = items.filter(
+      (i) => i.source === "external" && i.catalogId === catalog.id,
+    );
+    // One card per concrete install, each carrying a distinct mcpServerId.
+    expect(external).toHaveLength(3);
+    expect(new Set(external.map((i) => i.mcpServerId)).size).toBe(3);
+  });
+
+  test("lists each ui:// tool of one server as its own card (server title, tool subtitle)", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Archestra PM",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_board",
+      meta: { _meta: { ui: { resourceUri: "ui://pm/board.html" } } },
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_backlog",
+      meta: { _meta: { ui: { resourceUri: "ui://pm/backlog.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/apps?limit=100&offset=0",
+    });
+    const items = res.json().data as Array<Record<string, unknown>>;
+    const external = items.filter(
+      (i) => i.source === "external" && i.catalogId === catalog.id,
+    );
+    // Each tool is its own card, titled "<server> / <tool>".
+    expect(external.map((i) => i.name).sort()).toEqual([
+      "Archestra PM / show_backlog",
+      "Archestra PM / show_board",
+    ]);
   });
 
   test("excludes catalogs without a ui:// tool from the unified listing", async ({

@@ -64,6 +64,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
     mutateAsync: mocks.mutateAsync,
   }),
   useConversation: () => ({ data: conversationMock.data }),
+  useConversationUpdatedCacheSync: () => {},
 }));
 
 vi.mock("@/lib/hooks/use-app-name", () => ({

@@ -1,6 +1,6 @@
 import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
-import type { Openrouter } from "@/types";
+import { Openrouter } from "@/types";
 import { openrouterAdapterFactory } from "./openrouter";
 
 function createResponse(
@@ -111,22 +111,54 @@ describe("OpenrouterStreamAdapter", () => {
   });
 });
 
-describe("extractInternalCode", () => {
-  test("classifies OpenRouter's uncoded 'maximum context length' message as overflow", () => {
-    // OpenRouter returns a descriptive 400 with no structured error.code — the
-    // structured-only check missed it (#3219).
-    const error = {
-      error: {
-        message:
-          "This endpoint's maximum context length is 204800 tokens. However, you requested about 309977 tokens (303247 of text input, 6730 of tool input). Please reduce the length of either one.",
+describe("openrouterAdapterFactory.execute", () => {
+  function captureRequestClient(): {
+    client: unknown;
+    requests: Array<Record<string, unknown>>;
+  } {
+    const requests: Array<Record<string, unknown>> = [];
+    const client = {
+      chat: {
+        completions: {
+          create: (request: Record<string, unknown>) => {
+            requests.push(request);
+            return Promise.resolve(
+              createResponse({
+                role: "assistant",
+                content: "hi",
+                refusal: null,
+              }),
+            );
+          },
+        },
       },
     };
-    expect(openrouterAdapterFactory.extractInternalCode(error)).toBe(
-      ArchestraInternalErrorCode.ContextLengthExceeded,
-    );
-  });
+    return { client, requests };
+  }
 
-  test("still classifies the structured context_length_exceeded code", () => {
+  function executeWith(
+    request: Partial<Openrouter.Types.ChatCompletionsRequest>,
+  ) {
+    const { client, requests } = captureRequestClient();
+    return openrouterAdapterFactory
+      .execute(client, request as Openrouter.Types.ChatCompletionsRequest)
+      .then(() => requests[0]);
+  }
+
+  test("injects the response-healing plugin for non-streaming json requests", async () => {
+    const sent = await executeWith({
+      model: "openrouter/free-model",
+      messages: [],
+      response_format: { type: "json_schema" },
+    });
+
+    expect(sent.plugins).toEqual([{ id: "response-healing" }]);
+    expect(sent.stream).toBe(false);
+  });
+});
+
+describe("extractInternalCode", () => {
+  test("classifies the structured context_length_exceeded code", () => {
     const error = { error: { code: "context_length_exceeded" } };
     expect(openrouterAdapterFactory.extractInternalCode(error)).toBe(
       ArchestraInternalErrorCode.ContextLengthExceeded,
@@ -136,5 +168,36 @@ describe("extractInternalCode", () => {
   test("leaves an unrelated 400 unclassified", () => {
     const error = { error: { message: "invalid model specified" } };
     expect(openrouterAdapterFactory.extractInternalCode(error)).toBeUndefined();
+  });
+});
+
+describe("ChatCompletionRequestSchema", () => {
+  test("preserves the nested json_schema body so it reaches OpenRouter", () => {
+    const responseFormat = {
+      type: "json_schema",
+      json_schema: {
+        name: "out",
+        strict: true,
+        schema: { type: "object", properties: { a: { type: "string" } } },
+      },
+    };
+
+    const parsed = Openrouter.API.ChatCompletionRequestSchema.parse({
+      model: "openrouter/free-model",
+      messages: [],
+      response_format: responseFormat,
+    });
+
+    expect(parsed.response_format).toEqual(responseFormat);
+  });
+
+  test("strips a client-supplied plugins field", () => {
+    const parsed = Openrouter.API.ChatCompletionRequestSchema.parse({
+      model: "openrouter/free-model",
+      messages: [],
+      plugins: [{ id: "web" }],
+    });
+
+    expect("plugins" in parsed).toBe(false);
   });
 });

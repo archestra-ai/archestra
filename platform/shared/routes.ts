@@ -304,6 +304,7 @@ export const RouteId = {
   ForkChatConversation: "forkChatConversation",
   UpdateChatConversation: "updateChatConversation",
   SetConversationHooksDebug: "setConversationHooksDebug",
+  MarkChatConversationRead: "markChatConversationRead",
   DeleteChatConversation: "deleteChatConversation",
   ClearChatConversationErrors: "clearChatConversationErrors",
   CompactChatConversation: "compactChatConversation",
@@ -614,6 +615,7 @@ export const RouteId = {
   UnassignToolFromApp: "unassignToolFromApp",
   GetAppTemplates: "getAppTemplates",
   OpenAppInChat: "openAppInChat",
+  OpenExternalAppInChat: "openExternalAppInChat",
   PostAppRenderDiagnostics: "postAppRenderDiagnostics",
   PostAppRenderScreenshot: "postAppRenderScreenshot",
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)

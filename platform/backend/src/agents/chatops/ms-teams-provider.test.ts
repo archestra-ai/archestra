@@ -808,6 +808,69 @@ describe("MSTeamsProvider.convertToThreadMessages file metadata", () => {
   });
 });
 
+describe("MSTeamsProvider.sendReply", () => {
+  // Drives a reply through the conversationReference branch (no live
+  // turnContext) and returns the text handed to context.sendActivity.
+  async function captureReplyText(
+    options: Pick<
+      Parameters<MSTeamsProvider["sendReply"]>[0],
+      "footer" | "hint"
+    >,
+  ): Promise<string> {
+    const provider = createProvider();
+    const sendActivity = vi.fn().mockResolvedValue({ id: "reply-1" });
+    const continueConversationAsync = vi.fn(
+      async (
+        _appId: string,
+        _ref: unknown,
+        callback: (context: {
+          sendActivity: typeof sendActivity;
+        }) => Promise<void>,
+      ) => {
+        await callback({ sendActivity });
+      },
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock adapter
+    (provider as any).adapter = { continueConversationAsync };
+
+    await provider.sendReply({
+      originalMessage: {
+        messageId: "msg-1",
+        channelId: "19:abc@thread.tacv2",
+        workspaceId: "team-uuid",
+        senderId: "user-1",
+        senderName: "Alice",
+        text: "hi",
+        rawText: "hi",
+        timestamp: new Date(),
+        isThreadReply: false,
+        metadata: { conversationReference: { foo: "bar" } },
+      },
+      text: "Here is your answer",
+      ...options,
+    });
+
+    return sendActivity.mock.calls[0][0] as string;
+  }
+
+  test("puts the mute hint on its own italic line above the footer", async () => {
+    const text = await captureReplyText({
+      footer: "🤖 Agent",
+      hint: 'Reply "mute" to stop',
+    });
+
+    expect(text).toBe(
+      'Here is your answer\n\n---\n\n_Reply "mute" to stop_\n\n🤖 Agent',
+    );
+  });
+
+  test("renders the hint under its own separator when there is no footer", async () => {
+    const text = await captureReplyText({ hint: 'Reply "mute" to stop' });
+
+    expect(text).toBe('Here is your answer\n\n---\n\n_Reply "mute" to stop_');
+  });
+});
+
 describe("MSTeamsProvider.addApprovalRequestForm", () => {
   // Drives the form through the conversationReference branch (no live
   // turnContext) and captures the Adaptive Card sent to the channel.

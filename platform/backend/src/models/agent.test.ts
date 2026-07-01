@@ -2557,6 +2557,10 @@ describe("AgentModel", () => {
       expect(gateway.isPersonalGateway).toBe(true);
       expect(gateway.authorId).toBe(user.id);
       expect(gateway.organizationId).toBe(org.id);
+      // Personal gateways default to "All" mode, which coerces toolExposureMode
+      // to the search_tools/run_tool dispatch surface.
+      expect(gateway.accessAllTools).toBe(true);
+      expect(gateway.toolExposureMode).toBe("search_and_run_only");
     });
 
     test("is idempotent within the same (user, org) - second call returns the same row", async ({
@@ -2610,6 +2614,12 @@ describe("AgentModel", () => {
       expect(gatewayA?.isPersonalGateway).toBe(true);
       expect(gatewayB?.isPersonalGateway).toBe(true);
       expect(gatewayA?.id).not.toBe(gatewayB?.id);
+      // The bulk-backfill path must produce the same "All" mode defaults as
+      // ensurePersonalMcpGateway, even though it bypasses AgentModel.create.
+      expect(gatewayA?.accessAllTools).toBe(true);
+      expect(gatewayA?.toolExposureMode).toBe("search_and_run_only");
+      expect(gatewayB?.accessAllTools).toBe(true);
+      expect(gatewayB?.toolExposureMode).toBe("search_and_run_only");
 
       const secondCount = await AgentModel.bulkBackfillPersonalMcpGateways();
       expect(secondCount).toBe(0);

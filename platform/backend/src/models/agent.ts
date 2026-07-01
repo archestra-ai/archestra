@@ -2212,6 +2212,12 @@ class AgentModel {
           scope: "personal",
           description: PERSONAL_MCP_GATEWAY_DESCRIPTION,
           isPersonalGateway: true,
+          // The personal gateway defaults to "All" mode so it can reach every
+          // tool the user can access without per-tool assignment. Via the
+          // invariant in AgentModel.create, accessAllTools coerces
+          // toolExposureMode to "search_and_run_only" (the search_tools/run_tool
+          // dispatch surface).
+          accessAllTools: true,
         },
         userId,
       );
@@ -2287,6 +2293,11 @@ class AgentModel {
         agentType: "mcp_gateway" as const,
         scope: "personal" as const,
         isPersonalGateway: true,
+        // Personal gateways default to "All" mode (see ensurePersonalMcpGateway).
+        // This raw INSERT bypasses AgentModel.create, so set both fields here to
+        // preserve the accessAllTools => search_and_run_only invariant.
+        accessAllTools: true,
+        toolExposureMode: "search_and_run_only" as const,
         slug: `my-gateway-${userPart}-${crypto.randomUUID().slice(0, 6)}`,
       };
     });

@@ -131,17 +131,36 @@ jobs:
             echo "checkout_ref=${ACTION_TAG_NAME}"
           } >> "${GITHUB_OUTPUT}"
 
-      # Re-draft the release so it's not visible until all artifacts are built.
-      # We removed "draft: true" from release-please-config.json because draft releases
-      # don't create git tags, and release-please needs the tag to exist when calculating
-      # the next version (otherwise it creates bogus PRs with stale versions).
-      - name: Re-draft release until artifacts are ready
-        if: steps.resolve-release.outputs.should_publish == 'true'
+      # release-please creates the GitHub release as a DRAFT ("draft": true in
+      # release-please-config.json) so it stays hidden until every artifact is built and
+      # pushed. It is published (draft -> published) by the publish-github-release job
+      # once all artifacts are ready.
+      #
+      # We do NOT toggle a published release back to draft: GitHub's immutable-releases
+      # feature rejects that ("state cannot be changed when release is immutable", HTTP
+      # 422), which is what previously failed the release-please job and silently skipped
+      # every downstream image/chart publish job.
+      #
+      # Draft releases don't create the underlying git tag, but downstream build jobs
+      # check out the tag ref (checkout_ref) and release-please needs the tag to exist
+      # when calculating the next version (otherwise it creates bogus PRs with stale
+      # versions). So we create the tag ourselves, pinned to the release commit.
+      - name: Create git tag for draft release
+        if: steps.resolve-release.outputs.should_publish == 'true' && !inputs.publish_existing_release
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ steps.resolve-release.outputs.tag_name }}
-        run: gh release edit "$TAG_NAME" --draft=true
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          if gh api "repos/${GH_REPO}/git/ref/tags/${TAG_NAME}" >/dev/null 2>&1; then
+            echo "Tag ${TAG_NAME} already exists; nothing to do."
+          else
+            gh api "repos/${GH_REPO}/git/refs" \
+              -f ref="refs/tags/${TAG_NAME}" \
+              -f sha="${RELEASE_SHA}"
+            echo "Created tag ${TAG_NAME} -> ${RELEASE_SHA}"
+          fi
 
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image
@@ -254,14 +273,70 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
+      # Publish the draft (draft -> published) now that all artifacts are ready. This is
+      # the one release-state transition GitHub's immutable-releases feature allows, and
+      # it is what locks the release as immutable. Guarded so re-runs / the
+      # publish_existing_release path don't 422 on an already-published release.
       - name: Publish release
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
-        run: gh release edit "$TAG_NAME" --draft=false
+        run: |
+          IS_DRAFT=$(gh release view "$TAG_NAME" --json isDraft --jq '.isDraft')
+          if [ "$IS_DRAFT" = "true" ]; then
+            gh release edit "$TAG_NAME" --draft=false
+            echo "Published release $TAG_NAME."
+          else
+            echo "Release $TAG_NAME is already published; skipping."
+          fi
 
       - name: Trigger website deploy
         env:
           VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
         run: curl -X POST "$VERCEL_DEPLOY_HOOK_URL"
+
+  notify-release-failure:
+    name: Notify release failure
+    # Pages #alerting whenever any job in the release pipeline fails, so a broken release
+    # (e.g. an image or chart that never published) is surfaced immediately instead of
+    # failing silently. Skipped jobs are not failures, so ordinary non-release pushes and
+    # dispatch-time opt-outs do not trigger an alert.
+    needs:
+      - release-please
+      - build-and-push-mcp-server-docker-image
+      - build-and-push-sandbox-base-docker-image
+      - build-and-push-platform-docker-image-to-dockerhub
+      - publish-platform-helm-chart
+      - publish-github-release
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions: {}
+    steps:
+      - name: Post failure alert to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTING_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          VERSION: ${{ needs.release-please.outputs.platform_version }}
+          RP_RESULT: ${{ needs.release-please.result }}
+          MCP_RESULT: ${{ needs.build-and-push-mcp-server-docker-image.result }}
+          SANDBOX_RESULT: ${{ needs.build-and-push-sandbox-base-docker-image.result }}
+          PLATFORM_RESULT: ${{ needs.build-and-push-platform-docker-image-to-dockerhub.result }}
+          HELM_RESULT: ${{ needs.publish-platform-helm-chart.result }}
+          PUBLISH_RESULT: ${{ needs.publish-github-release.result }}
+        run: |
+          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
+            echo "::warning::SLACK_ALERTING_WEBHOOK_URL not set; skipping Slack alert."
+            exit 0
+          fi
+          TEXT=":rotating_light: *Platform release failed* — \`${VERSION:-unknown}\`
+          A job in the release pipeline failed, so release artifacts may not have published.
+          • release-please: \`${RP_RESULT}\`
+          • platform image (Docker Hub): \`${PLATFORM_RESULT}\`
+          • MCP server image: \`${MCP_RESULT}\`
+          • sandbox base image: \`${SANDBOX_RESULT}\`
+          • Helm chart: \`${HELM_RESULT}\`
+          • publish GitHub release: \`${PUBLISH_RESULT}\`
+          <${RUN_URL}|View failed CI run>"
+          jq -n --arg text "$TEXT" '{text: $text}' \
+            | curl -sSf -X POST -H 'Content-type: application/json' --data @- "${SLACK_WEBHOOK_URL}"

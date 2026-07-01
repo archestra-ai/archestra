@@ -162,10 +162,20 @@ afterEach(() => {
 });
 
 /**
- * Clean up the PGlite client after all tests in the file complete
+ * Clean up the PGlite client after all tests in the file complete.
+ *
+ * Clearing the injected test DB matters in shared workers (isolate: false):
+ * module-level consumers evaluated while the NEXT file loads — e.g.
+ * better-auth's eager context init querying trusted IdP providers — would
+ * otherwise reach this file's closed PGlite and surface as unhandled
+ * "PGlite is closed" rejections. With the DB cleared they get getDb()'s
+ * "Database not initialized", which those import-time paths already handle.
  */
 afterAll(async () => {
   console.warn = originalConsoleWarn;
+
+  const dbModule = await import("../database/index.js");
+  dbModule.__setTestDb(null);
 
   if (pgliteClient) {
     await pgliteClient.close();

@@ -22,16 +22,11 @@ vi.mock("@/k8s/cluster-dns", async (importOriginal) => ({
 
 // reconcileEnvironment short-circuits unless the sandbox feature is on; flip the
 // flag, leaving the rest of config real so the StatefulSet builder tests stand.
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/config")>();
-  return {
-    ...actual,
-    default: {
-      ...actual.default,
-      skillsSandbox: { ...actual.default.skillsSandbox, enabled: true },
-    },
-  };
-});
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    skillsSandbox: { enabled: true },
+  }),
+);
 
 // Mock the leaf module (not the @/models barrel) so the override propagates
 // through the index's `export { default as OrganizationModel }` re-export to the

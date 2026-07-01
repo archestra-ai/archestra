@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 import { fetchAzureModels } from "./azure";
 
-vi.mock("@/config", () => ({
-  default: {
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
     llm: {
       azure: {
         baseUrl:
@@ -10,12 +10,8 @@ vi.mock("@/config", () => ({
         apiVersion: "2024-02-01",
       },
     },
-  },
-}));
-
-vi.mock("@/logging", () => ({
-  default: { warn: vi.fn(), error: vi.fn() },
-}));
+  }),
+);
 
 vi.mock("@/clients/azure-openai-credentials", () => ({
   getAzureManagementBearerTokenProvider: vi.fn(() => async () => "mgmt-token"),

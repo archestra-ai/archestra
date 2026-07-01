@@ -20,10 +20,9 @@ vi.mock("@/clients/azure-openai-credentials", () => ({
 }));
 
 // Mock auth for permission checks
-vi.mock("@/auth", () => ({
-  hasPermission: vi.fn(),
-  userHasPermission: vi.fn(),
-}));
+vi.mock("@/auth", async () =>
+  (await import("@/test/mocks/auth")).authModuleMock(),
+);
 
 // Mock testProviderApiKey to avoid external calls
 vi.mock("@/routes/chat/model-fetchers/registry", () => ({

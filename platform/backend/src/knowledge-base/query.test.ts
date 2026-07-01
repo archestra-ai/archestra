@@ -36,18 +36,11 @@ vi.mock("./query-expansion", () => ({
   KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT: 4.0,
 }));
 
-vi.mock("@/config", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/config")>();
-  return {
-    ...original,
-    default: {
-      ...original.default,
-      kb: {
-        hybridSearchEnabled: true,
-      },
-    },
-  };
-});
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    kb: { hybridSearchEnabled: true },
+  }),
+);
 
 import OpenAI from "openai";
 import { KbChunkModel, KbDocumentModel } from "@/models";

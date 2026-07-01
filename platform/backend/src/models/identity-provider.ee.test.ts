@@ -15,16 +15,6 @@ import IdentityProviderModel, {
   type IdpGetRoleData,
 } from "./identity-provider.ee";
 
-// Mock the logger to avoid console output during tests
-vi.mock("@/logging", () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
 // Mock cacheManager for SSO groups caching tests (preserves LRUCacheManager, CacheKey exports)
 const mockCacheStore = new Map<string, unknown>();
 vi.mock("@/cache-manager", async (importOriginal) => {

@@ -2,7 +2,6 @@ import { createServer } from "node:http";
 import type { ClientWebSocketMessage } from "@archestra/shared";
 import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
-import type * as originalConfigModule from "@/config";
 import AgentModel from "@/models/agent";
 import {
   afterAll,
@@ -13,14 +12,9 @@ import {
   test,
 } from "@/test";
 
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-    },
-  };
-});
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock(),
+);
 
 const { browserStreamFeature } = await import(
   "@/features/browser-stream/services/browser-stream.feature"

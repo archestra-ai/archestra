@@ -23,15 +23,15 @@ vi.mock("@/models", () => ({
 }));
 
 // Mock config
-vi.mock("@/config", () => ({
-  default: {
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
     kb: {
       taskWorkerPollIntervalSeconds: 1,
       taskWorkerMaxConcurrent: 2,
       taskWorkerShutdownTimeoutSeconds: 5,
     },
-  },
-}));
+  }),
+);
 
 // Mock observability metrics (avoid importing tracing which requires config.observability.otel)
 vi.mock("@/observability/metrics", () => ({
@@ -46,14 +46,6 @@ vi.mock("@/observability/metrics", () => ({
 }));
 
 // Suppress logger output during tests
-vi.mock("@/logging", () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
 
 // Import after mocks are set up
 import { afterEach, beforeEach, describe, expect, test } from "vitest";

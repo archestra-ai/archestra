@@ -5,20 +5,14 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import type * as originalConfigModule from "@/config";
 import { BrowserStreamService } from "@/features/browser-stream/services/browser-stream.service";
 import AgentModel from "@/models/agent";
 import { beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-    },
-  };
-});
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock(),
+);
 
 // Import routes AFTER mocking config (dynamic import needed because of the mock)
 const { default: browserStreamRoutes } = await import(

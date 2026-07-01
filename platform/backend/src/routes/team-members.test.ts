@@ -1,35 +1,21 @@
 import { vi } from "vitest";
-import type * as originalConfigModule from "@/config";
 import { TeamModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-const { hasPermissionMock } = vi.hoisted(() => ({
-  hasPermissionMock: vi.fn(),
-}));
+vi.mock("@/auth", async () =>
+  (await import("@/test/mocks/auth")).authModuleMock(),
+);
 
-vi.mock("@/auth", async () => {
-  const actual = await vi.importActual<typeof import("@/auth")>("@/auth");
-  return {
-    ...actual,
-    hasPermission: hasPermissionMock,
-  };
-});
+import { hasPermission } from "@/auth";
 
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-      enterpriseFeatures: {
-        ...actual.default.enterpriseFeatures,
-        core: true,
-      },
-    },
-  };
-});
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    enterpriseFeatures: { core: true },
+  }),
+);
 
 describe("team routes", () => {
   let app: FastifyInstanceWithZod;
@@ -38,7 +24,7 @@ describe("team routes", () => {
 
   beforeEach(async ({ makeAdmin, makeMember, makeOrganization }) => {
     vi.clearAllMocks();
-    hasPermissionMock.mockResolvedValue({ success: true });
+    vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
 
     adminUser = await makeAdmin();
     const organization = await makeOrganization();
@@ -130,7 +116,10 @@ describe("team routes", () => {
       await memberApp.register(teamRoutes);
 
       // Member does not have organization-level team management permission
-      hasPermissionMock.mockResolvedValue({ success: false });
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
 
       const response = await memberApp.inject({
         method: "GET",
@@ -173,7 +162,10 @@ describe("team routes", () => {
       const { default: teamRoutes } = await import("./team");
       await memberApp.register(teamRoutes);
 
-      hasPermissionMock.mockResolvedValue({ success: false });
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
 
       const response = await memberApp.inject({
         method: "GET",
@@ -372,7 +364,10 @@ describe("team routes", () => {
       const { default: teamRoutes } = await import("./team");
       await memberApp.register(teamRoutes);
 
-      hasPermissionMock.mockResolvedValue({ success: false });
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
 
       const response = await memberApp.inject({
         method: "PUT",
@@ -420,7 +415,10 @@ describe("team routes", () => {
       const { default: teamRoutes } = await import("./team");
       await memberApp.register(teamRoutes);
 
-      hasPermissionMock.mockResolvedValue({ success: false });
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
 
       const response = await memberApp.inject({
         method: "PUT",
@@ -531,7 +529,10 @@ describe("team routes", () => {
       });
       const { default: teamRoutes } = await import("./team");
       await teamAdminApp.register(teamRoutes);
-      hasPermissionMock.mockResolvedValue({ success: false });
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
 
       const response = await teamAdminApp.inject({
         method: "POST",
@@ -575,7 +576,10 @@ describe("team routes", () => {
       });
       const { default: teamRoutes } = await import("./team");
       await memberApp.register(teamRoutes);
-      hasPermissionMock.mockResolvedValue({ success: false });
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
 
       const response = await memberApp.inject({
         method: "POST",
@@ -617,7 +621,10 @@ describe("team routes", () => {
       });
       const { default: teamRoutes } = await import("./team");
       await teamAdminApp.register(teamRoutes);
-      hasPermissionMock.mockResolvedValue({ success: false });
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
 
       const response = await teamAdminApp.inject({
         method: "PUT",
@@ -747,7 +754,10 @@ describe("team routes", () => {
       const { default: teamRoutes } = await import("./team");
       await memberApp.register(teamRoutes);
 
-      hasPermissionMock.mockResolvedValue({ success: false });
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
 
       const response = await memberApp.inject({
         method: "GET",
@@ -879,7 +889,10 @@ describe("team routes", () => {
       });
       const { default: teamRoutes } = await import("./team");
       await teamAdminApp.register(teamRoutes);
-      hasPermissionMock.mockResolvedValue({ success: false });
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
 
       const response = await teamAdminApp.inject({
         method: "POST",
@@ -927,7 +940,10 @@ describe("team routes", () => {
       });
       const { default: teamRoutes } = await import("./team");
       await teamAdminApp.register(teamRoutes);
-      hasPermissionMock.mockResolvedValue({ success: false });
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
 
       const deleteResponse = await teamAdminApp.inject({
         method: "DELETE",
@@ -968,8 +984,9 @@ describe("team routes", () => {
       });
       const { default: teamRoutes } = await import("./team");
       await legacyRoleApp.register(teamRoutes);
-      hasPermissionMock.mockImplementation(async (permissions) => ({
+      vi.mocked(hasPermission).mockImplementation(async (permissions) => ({
         success: permissions?.team?.includes("admin") ?? false,
+        error: null,
       }));
 
       const response = await legacyRoleApp.inject({
@@ -980,11 +997,11 @@ describe("team routes", () => {
 
       expect(response.statusCode).toBe(403);
       expect(response.json().error.message).toContain("team admin");
-      expect(hasPermissionMock).toHaveBeenCalledWith(
+      expect(vi.mocked(hasPermission)).toHaveBeenCalledWith(
         { team: ["create"] },
         expect.any(Object),
       );
-      expect(hasPermissionMock).not.toHaveBeenCalledWith(
+      expect(vi.mocked(hasPermission)).not.toHaveBeenCalledWith(
         { team: ["admin"] },
         expect.any(Object),
       );

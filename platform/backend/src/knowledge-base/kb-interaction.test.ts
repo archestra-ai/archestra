@@ -62,20 +62,11 @@ vi.mock("@/observability", () => ({
   },
 }));
 
-vi.mock("@/logging", () => ({
-  default: {
-    warn: vi.fn(),
-    debug: vi.fn(),
-    info: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
-vi.mock("@/config", () => ({
-  default: {
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
     observability: { otel: { captureContent: false, contentMaxLength: 10000 } },
-  },
-}));
+  }),
+);
 
 // ===== Tests =====
 

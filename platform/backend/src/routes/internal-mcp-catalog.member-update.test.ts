@@ -15,7 +15,9 @@ import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 // scope gate uses getPermissionsForUserContext (the REAL member role), so this
 // verifies the handler restricts a member to their own personal items even with
 // the route-level `mcpRegistry:update` grant.
-vi.mock("@/auth", () => ({ hasPermission: vi.fn() }));
+vi.mock("@/auth", async () =>
+  (await import("@/test/mocks/auth")).authModuleMock(),
+);
 const mockHasPermission = hasPermission as Mock;
 
 describe("member catalog update is limited to own personal items", () => {

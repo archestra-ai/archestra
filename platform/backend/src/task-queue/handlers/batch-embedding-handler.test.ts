@@ -18,15 +18,6 @@ vi.mock("@/models", () => ({
   },
 }));
 
-vi.mock("@/logging", () => ({
-  default: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}));
-
 import { handleBatchEmbedding } from "./batch-embedding-handler";
 
 describe("handleBatchEmbedding", () => {

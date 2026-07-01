@@ -38,23 +38,16 @@ vi.mock("@/clients/azure-openai-credentials", () => ({
   isAzureOpenAiEntraIdEnabled: mockIsAzureOpenAiEntraIdEnabled,
 }));
 
-vi.mock("@/config", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/config")>();
-  return {
-    ...original,
-    default: {
-      ...original.default,
-      llm: {
-        ...original.default.llm,
-        azure: {
-          ...original.default.llm.azure,
-          apiVersion: "2024-02-01",
-          baseUrl: "https://fallback-resource.openai.azure.com/openai",
-        },
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    llm: {
+      azure: {
+        apiVersion: "2024-02-01",
+        baseUrl: "https://fallback-resource.openai.azure.com/openai",
       },
     },
-  };
-});
+  }),
+);
 
 import { type AzureEmbeddingError, callAzureEmbedding } from "./azure";
 

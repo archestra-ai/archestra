@@ -196,8 +196,12 @@ function getIsCreateFormValid(params: {
   byosEnabled: boolean;
   values: LlmProviderApiKeyFormValues;
 }) {
-  const { azureOpenAiEntraIdEnabled, anthropicWifEnabled, byosEnabled, values } =
-    params;
+  const {
+    azureOpenAiEntraIdEnabled,
+    anthropicWifEnabled,
+    byosEnabled,
+    values,
+  } = params;
 
   if (values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4") {
     return Boolean(

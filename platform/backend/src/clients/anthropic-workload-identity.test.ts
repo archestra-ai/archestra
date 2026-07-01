@@ -189,7 +189,9 @@ describe("anthropicWorkloadIdentity", () => {
       };
       const fetchMock = vi
         .spyOn(globalThis, "fetch")
-        .mockImplementation(async () => tokenResponse("sk-ant-oat01-file", 3600));
+        .mockImplementation(async () =>
+          tokenResponse("sk-ant-oat01-file", 3600),
+        );
 
       await anthropicWorkloadIdentity.getAccessToken();
       await writeFile(tokenFile, "jwt-generation-2\n", "utf8");

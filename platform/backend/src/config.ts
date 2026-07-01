@@ -452,6 +452,7 @@ export const parseDatabaseStatementTimeoutMillis = (
   return parsed;
 };
 
+/** @public — exported for testability */
 export interface AnthropicWifConfig {
   federationRuleId: string;
   organizationId: string;

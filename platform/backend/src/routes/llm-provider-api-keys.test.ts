@@ -71,7 +71,9 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import { validateProviderAllowed } from "./llm-provider-api-keys";
 
-const mockAnthropicWifIsEnabled = vi.mocked(anthropicWorkloadIdentity.isEnabled);
+const mockAnthropicWifIsEnabled = vi.mocked(
+  anthropicWorkloadIdentity.isEnabled,
+);
 const mockIsAzureOpenAiEntraIdEnabled = vi.mocked(isAzureOpenAiEntraIdEnabled);
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
 const mockHasPermission = vi.mocked(hasPermission);

@@ -293,7 +293,7 @@ const BUILD_APP_SKILL = `# Building Archestra Apps
 You build interactive single-file HTML/JS apps for users from chat — dashboards, forms, trackers, games, any custom UI. An app runs in a sandboxed iframe and talks to the platform through the injected window.archestra SDK. Build it up through the staged flow below — each tool's result tells you the next step — never write a whole app in one shot, and never paste app HTML into the chat reply or write it as an artifact. The app exists only as the versioned HTML these app tools manage; change it exclusively with \`archestra__edit_app\` — the \`run_command\` code sandbox is a separate scratch filesystem and cannot alter the app.
 
 ## Flow
-1. \`archestra__scaffold_app\` — create the app once from the single starter template; this is the only app-creating tool, so it comes first (a minimal scaffold is fine). Pass the tools it needs via the tools param if you already know them (assignments are set only here; change them afterward with \`archestra__set_app_tools\`, never edit_app/refine_app). Returns the new app's id and the seeded HTML — carry that id through every later step and any follow-up request for the same app; do not scaffold it again (each later change is an edit_app on that id).
+1. \`archestra__scaffold_app\` — create the app once from the single starter template; this is the only app-creating tool, so it comes first (a minimal scaffold is fine). Pass the tools it needs via the tools param if you already know them (this is the initial assignment set; replace it at any time afterward with \`archestra__set_app_tools\`, never edit_app/refine_app). Returns the new app's id and the seeded HTML — carry that id through every later step and any follow-up request for the same app; do not scaffold it again (each later change is an edit_app on that id).
 2. \`archestra__refine_app\` — clarify what the app should be. Ask the user up to 3 questions (features and style only, never the implementation stack), then persist a consolidated spec. It returns the user's real assignable MCP tools and the SDK surface — design the app around those tools, never invent one.
 3. \`archestra__edit_app\` — build the app up with str_replace edits over the scaffold (a full rewrite is one edit replacing the whole document). Before writing code that parses an assigned tool's result, call \`archestra__preview_app_tool\` to see its real output shape.
 4. \`archestra__validate_app\` — run static structural checks plus the live render diagnostics (\`archestra__get_app_diagnostics\` reads those render diagnostics on their own). Fix any errors with \`archestra__edit_app\` and re-validate until it passes.
@@ -334,7 +334,7 @@ export const BUILT_IN_SKILLS: BuiltInSkill[] = [
     builtInSkillId: "build-app",
     name: "Build App",
     description:
-      "Build an interactive app for a user (dashboard, form, tracker, game, or custom UI): the staged refine → scaffold → edit → validate → publish flow and the window.archestra SDK, storage, tools, and CSP conventions.",
+      "Build an interactive app for a user (dashboard, form, tracker, game, or custom UI): the staged scaffold → refine → edit → validate → publish flow and the window.archestra SDK, storage, tools, and CSP conventions.",
     content: BUILD_APP_SKILL,
     files: [],
     requiresAppsFeature: true,

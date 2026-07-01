@@ -51,6 +51,7 @@ import {
 } from "@/test";
 import { APP_HTML_MAX_BYTES } from "@/types/app";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { scaffoldPartialToolFailureResult } from "./apps";
 
 // The elicitation bridge polls cacheManager for the user's answer; cacheManager
 // is the Postgres-backed singleton (not started in PGlite tests), so back it
@@ -1985,5 +1986,20 @@ describe("publish_app", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("Unknown team");
+  });
+});
+
+describe("scaffoldPartialToolFailureResult", () => {
+  test("reports a created-but-unassigned app as a non-error partial result", async ({
+    makeApp,
+  }) => {
+    const app = await makeApp({ name: "Partial App" });
+    const result = scaffoldPartialToolFailureResult(app);
+    // The app was created, so the model must NOT read this as a failure: it is a
+    // non-error result carrying the app id and a partial status so it can repair
+    // the tools with set_app_tools rather than assume nothing was created.
+    expect(result.isError).toBe(false);
+    expect(structured(result).id).toBe(app.id);
+    expect(structured(result).status).toBe("partial");
   });
 });

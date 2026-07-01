@@ -23,14 +23,7 @@ vi.mock("@/auth");
 
 const hasPermissionMock = vi.mocked(hasPermission);
 
-vi.mock("@/observability", () => ({
-  initializeObservabilityMetrics: vi.fn(),
-  metrics: {
-    llm: { initializeMetrics: vi.fn() },
-    mcp: { initializeMcpMetrics: vi.fn() },
-    agentExecution: { initializeAgentExecutionMetrics: vi.fn() },
-  },
-}));
+vi.mock("@/observability");
 
 function seedRow(
   organizationId: string,

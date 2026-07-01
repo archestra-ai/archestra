@@ -1,5 +1,10 @@
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import {
+  getPermissionsForUserContext,
+  hasPermission,
+  userHasPermission,
+} from "@/auth/utils";
 import db, { schema } from "@/database";
 import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -10,16 +15,12 @@ import type { User } from "@/types";
 
 const {
   connectAndGetToolsMock,
-  hasPermissionMock,
-  userHasPermissionMock,
   k8sStartServerMock,
   k8sRestartServerMock,
   k8sStopServerMock,
   k8sGetOrLoadDeploymentMock,
 } = vi.hoisted(() => ({
   connectAndGetToolsMock: vi.fn(),
-  hasPermissionMock: vi.fn(),
-  userHasPermissionMock: vi.fn(),
   k8sStartServerMock: vi.fn(),
   k8sRestartServerMock: vi.fn(),
   k8sStopServerMock: vi.fn(),
@@ -36,13 +37,7 @@ vi.mock("@/clients/mcp-client", () => ({
   },
 }));
 
-vi.mock("@/auth/utils", () => ({
-  hasPermission: hasPermissionMock,
-  userHasPermission: userHasPermissionMock,
-  // The image gate resolves the catalog author's privilege; empty permissions
-  // make the author a non-privileged member, so these image-based cases gate.
-  getPermissionsForUserContext: () => Promise.resolve({}),
-}));
+vi.mock("@/auth/utils");
 
 vi.mock("@/k8s/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
@@ -53,6 +48,12 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
     getOrLoadDeployment: k8sGetOrLoadDeploymentMock,
   },
 }));
+
+const hasPermissionMock = vi.mocked(hasPermission);
+const userHasPermissionMock = vi.mocked(userHasPermission);
+const getPermissionsForUserContextMock = vi.mocked(
+  getPermissionsForUserContext,
+);
 
 /**
  * Install-time trusted-image-registry gate: a personal local catalog item whose
@@ -70,8 +71,11 @@ describe("MCP Server Install - trusted-image-registry gate", () => {
     organizationId = organization.id;
     await makeMember(user.id, organization.id);
 
-    hasPermissionMock.mockResolvedValue({ success: true });
+    hasPermissionMock.mockResolvedValue({ success: true, error: null });
     userHasPermissionMock.mockResolvedValue(true);
+    // The image gate resolves the catalog author's privilege; empty permissions
+    // make the author a non-privileged member, so these image-based cases gate.
+    getPermissionsForUserContextMock.mockResolvedValue({});
     k8sStartServerMock.mockResolvedValue(undefined);
     k8sRestartServerMock.mockResolvedValue(undefined);
     k8sStopServerMock.mockResolvedValue(undefined);
@@ -95,6 +99,7 @@ describe("MCP Server Install - trusted-image-registry gate", () => {
     connectAndGetToolsMock.mockReset();
     hasPermissionMock.mockReset();
     userHasPermissionMock.mockReset();
+    getPermissionsForUserContextMock.mockReset();
     k8sStartServerMock.mockReset();
     k8sRestartServerMock.mockReset();
     k8sStopServerMock.mockReset();

@@ -31,6 +31,8 @@ Consequences:
   });
   ```
 
+- **`@/auth/utils`**: bare `vi.mock("@/auth/utils");` (resolves `src/auth/__mocks__/utils.ts`). Needed separately from `@/auth` when the code under test imports from "@/auth/utils" directly — module mocks match specifiers, not re-exports.
+- **`@/observability`**: bare `vi.mock("@/observability");` (resolves `src/observability/__mocks__/index.ts`). `metrics`/`tracing` are memoized proxy trees — any `metrics.<ns>.<fn>` access yields a stable `vi.fn()`, so assert via `vi.mocked(metrics.llm.someFn)` with no factory.
 - **`@/logging`**: do NOT mock just to silence output — the shared setup already runs the real logger at level `silent`. Only mock when a test asserts on logger calls, with a bare `vi.mock("@/logging");` (resolves `src/logging/__mocks__/index.ts`). `vi.spyOn(logger, ...)` does not work — the export is a Proxy binding methods to a private pino instance.
 - **`@/config`**: use the canonical deep-merge factory so unspecified keys keep their real values:
 

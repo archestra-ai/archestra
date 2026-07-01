@@ -4155,6 +4155,94 @@ describe("McpClient", () => {
             catalogName: "github-oauth-server",
             serverId: mcpServer.id,
             reauthUrl: `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
+            // Owner-invoked personal connection → personal credential, no team.
+            credentialScope: "personal",
+            credentialTeamName: null,
+          },
+        });
+      });
+
+      test("labels the expired-auth error with the owning team for a team-scoped credential", async ({
+        makeUser,
+        makeTeam,
+        makeOrganization,
+      }) => {
+        const org = await makeOrganization();
+        const teamMember = await makeUser({
+          email: "team-expired-member@example.com",
+        });
+        const team = await makeTeam(org.id, teamMember.id, {
+          name: "Platform Team",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "github-team-server",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+          oauthConfig: {
+            name: "GitHub",
+            server_url: "https://api.githubcopilot.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["repo"],
+            default_scopes: ["repo"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          { access_token: "expired-token" },
+          "team-expired-oauth-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "github-team-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          teamId: team.id,
+          scope: "team",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-team-server__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const { UnauthorizedError } = await import(
+          "@modelcontextprotocol/sdk/client/auth.js"
+        );
+        mockCallTool.mockRejectedValueOnce(new UnauthorizedError());
+        mockConnect.mockResolvedValue(undefined);
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_team_expired",
+            name: "github-team-server__list_repos",
+            arguments: {},
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "team-token",
+            teamId: team.id,
+            isOrganizationToken: false,
+            userId: teamMember.id,
+          },
+        );
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?._meta).toMatchObject({
+          archestraError: {
+            type: "auth_expired",
+            serverId: mcpServer.id,
+            credentialScope: "team",
+            credentialTeamName: "Platform Team",
           },
         });
       });

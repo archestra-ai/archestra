@@ -8,6 +8,7 @@ import {
   getArchestraToolFullName,
   HOOK_RUN_PART_TYPE,
   parseFullToolName,
+  type ResourceVisibilityScope,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_AGENT_POKE_PREFIX,
   SWAP_AGENT_POKE_TEXT,
@@ -2653,6 +2654,50 @@ function isMessagePositionBefore(params: {
   return params.boundaryPartIndex < params.beforePartIndex;
 }
 
+// Names which credential expired on the re-authentication card. The returned
+// subject is grammatically the plural "credentials" so it reads naturally with
+// the "… have expired or are invalid" copy that follows. Falls back to the
+// scope-less "Your credentials" when the resolved scope is unknown (text-parsed
+// errors, or chat history predating the structured field).
+function expiredCredentialSubject(params: {
+  scope?: ResourceVisibilityScope;
+  teamName?: string | null;
+}): React.ReactNode {
+  const { scope, teamName } = params;
+
+  if (scope === "personal") {
+    return (
+      <>
+        Your <span className="font-medium">personal</span> credentials
+      </>
+    );
+  }
+
+  if (scope === "team") {
+    return teamName ? (
+      <>
+        The <span className="font-medium">{teamName}</span> team&rsquo;s
+        credentials
+      </>
+    ) : (
+      <>
+        Your <span className="font-medium">team&rsquo;s</span> credentials
+      </>
+    );
+  }
+
+  if (scope === "org") {
+    return (
+      <>
+        The <span className="font-medium">organization&rsquo;s</span>{" "}
+        credentials
+      </>
+    );
+  }
+
+  return <>Your credentials</>;
+}
+
 function authCardProps(params: {
   toolName: string;
   authState: ToolAuthState | null;
@@ -2683,8 +2728,12 @@ function authCardProps(params: {
         title: "Expired / Invalid Authentication",
         description: (
           <>
-            Your credentials for &ldquo;{displayName}&rdquo; have expired or are
-            invalid. Re-authenticate to continue using this tool.
+            {expiredCredentialSubject({
+              scope: authState.credentialScope,
+              teamName: authState.credentialTeamName,
+            })}{" "}
+            for &ldquo;{displayName}&rdquo; have expired or are invalid.
+            Re-authenticate to continue using this tool.
           </>
         ),
         buttonText: onReauth ? "Re-authenticate" : "Manage credentials",

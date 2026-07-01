@@ -68,6 +68,7 @@ import type {
   MCPGatewayAuthMethod,
   McpServer,
   McpToolAssignment,
+  ResourceVisibilityScope,
   ToolOwner,
 } from "@/types";
 import { agentOwner } from "@/types";
@@ -690,12 +691,12 @@ class McpClient {
 
         if (toolResultAuthError && tool.catalogId && targetMcpServerId) {
           const catalogDisplayName = tool.catalogName || catalogItem.name;
-          const authError = this.buildExpiredAuthMessage(
+          const authError = await this.buildExpiredAuthMessage({
             catalogDisplayName,
-            tool.catalogId,
-            targetMcpServerId,
+            catalogId: tool.catalogId,
+            mcpServerId: targetMcpServerId,
             tokenAuth,
-          );
+          });
           return await this.createErrorResult(
             toolCall,
             owner,
@@ -925,12 +926,13 @@ class McpClient {
                 assignmentError,
               );
             }
-            const authError = this.buildExpiredAuthMessage(
+            const authError = await this.buildExpiredAuthMessage({
               catalogDisplayName,
-              tool.catalogId,
-              targetMcpServerId,
+              catalogId: tool.catalogId,
+              mcpServerId: targetMcpServerId,
               tokenAuth,
-            );
+              resolvedServer: targetServer,
+            });
             return await this.createErrorResult(
               toolCall,
               owner,
@@ -2402,12 +2404,12 @@ class McpClient {
 
       if (isRetryAuthError && toolCatalogId) {
         const catalogDisplayName = toolCatalogName || catalogItem.name;
-        const authError = this.buildExpiredAuthMessage(
+        const authError = await this.buildExpiredAuthMessage({
           catalogDisplayName,
-          toolCatalogId,
-          targetMcpServerId,
+          catalogId: toolCatalogId,
+          mcpServerId: targetMcpServerId,
           tokenAuth,
-        );
+        });
         return await this.createErrorResult(
           toolCall,
           owner,
@@ -2568,15 +2570,30 @@ class McpClient {
    * Build an actionable error message for expired or invalid credentials,
    * with a deep link to the re-authentication dialog.
    */
-  private buildExpiredAuthMessage(
-    catalogDisplayName: string,
-    catalogId: string,
-    mcpServerId: string,
-    tokenAuth?: TokenAuthContext,
-    detailOverride?: string,
-  ): AuthExpiredMcpToolError {
+  private async buildExpiredAuthMessage(params: {
+    catalogDisplayName: string;
+    catalogId: string;
+    mcpServerId: string;
+    tokenAuth?: TokenAuthContext;
+    detailOverride?: string;
+    // Pass the already-loaded install to avoid a redundant lookup when the
+    // caller has resolved it (otherwise the scope is fetched by id).
+    resolvedServer?: Pick<McpServer, "scope" | "teamId" | "ownerId">;
+  }): Promise<AuthExpiredMcpToolError> {
+    const {
+      catalogDisplayName,
+      catalogId,
+      mcpServerId,
+      tokenAuth,
+      detailOverride,
+      resolvedServer,
+    } = params;
     const context = this.formatAuthContext(tokenAuth);
     const reauthUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`;
+    const scope = await this.describeResolvedCredentialScope(
+      mcpServerId,
+      resolvedServer,
+    );
     return {
       type: "auth_expired",
       message: formatActionableAuthError({
@@ -2592,7 +2609,46 @@ class McpClient {
       catalogName: catalogDisplayName,
       serverId: mcpServerId,
       reauthUrl,
+      credentialScope: scope?.credentialScope,
+      credentialTeamName: scope?.credentialTeamName,
     };
+  }
+
+  /**
+   * Describe which credential (personal / team / org) a resolved install
+   * represents, plus the owning team's display name for team credentials, so
+   * the re-authentication card can tell the user whose credential expired.
+   * Mirrors the runtime resolution priority in {@link pickInstallForCaller}:
+   * an org-scoped install is org-wide; anything bound to a team is a team
+   * credential; everything else is a personal credential.
+   */
+  private async describeResolvedCredentialScope(
+    mcpServerId: string,
+    preloadedServer?: Pick<McpServer, "scope" | "teamId" | "ownerId">,
+  ): Promise<{
+    credentialScope: ResourceVisibilityScope;
+    credentialTeamName: string | null;
+  } | null> {
+    let server = preloadedServer;
+    if (!server) {
+      const [loaded] = await McpServerModel.findByIdsBasic([mcpServerId]);
+      server = loaded;
+    }
+    if (!server) {
+      return null;
+    }
+
+    if (server.scope === "org") {
+      return { credentialScope: "org", credentialTeamName: null };
+    }
+    if (server.teamId) {
+      const [team] = await TeamModel.findByIds([server.teamId]);
+      return {
+        credentialScope: "team",
+        credentialTeamName: team?.name ?? null,
+      };
+    }
+    return { credentialScope: "personal", credentialTeamName: null };
   }
 
   private buildAssignedCredentialUnavailableMessage(

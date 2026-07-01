@@ -750,6 +750,10 @@ function ChatSessionHook({
             errorSeqRef.current === reattachErrorSeq
           ) {
             setIsRecovering(false);
+            // This reattach ends the recovery without an onFinish/onError, so
+            // drop any pending "clear the persisted error on success" intent —
+            // otherwise it leaks into a later unrelated success.
+            recoveredPersistedErrorRef.current = false;
             // Drop the stale duplicate-run error so the SDK returns to
             // "ready" instead of idling in the suppressed error state.
             clearErrorRef.current?.();
@@ -1007,6 +1011,9 @@ function ChatSessionHook({
   ) {
     lastUserMessageIdRef.current = lastStableUserMessage.id;
     retryCountRef.current = 0;
+    // A new turn: any pending "clear the prior turn's persisted error on a
+    // successful retry" intent no longer applies to this turn.
+    recoveredPersistedErrorRef.current = false;
   }
 
   useEffect(() => {

@@ -871,7 +871,9 @@ export function ChatPageContent({
   // mutation already invalidated the model/key caches. Fire-and-forget: the
   // provider-auth card owns its own feedback.
   const handleProviderConnected = useCallback(() => {
-    void resendLastUserMessage();
+    void resendLastUserMessage().catch((error) => {
+      console.error("[Chat] Failed to re-run after provider connect", error);
+    });
   }, [resendLastUserMessage]);
 
   // "Try again" on a retryable chat error: resend the last user turn, and only

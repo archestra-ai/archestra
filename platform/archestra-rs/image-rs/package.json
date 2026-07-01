@@ -15,6 +15,9 @@
     "test": "cargo test -p image_core --locked",
     "type-check": "cargo check -p image_core -p image_rs --locked"
   },
+  "dependencies": {
+    "@archestra/napi-loader": "workspace:*"
+  },
   "devDependencies": {
     "@napi-rs/cli": "^3.4.0"
   },

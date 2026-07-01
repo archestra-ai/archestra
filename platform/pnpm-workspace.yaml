@@ -3,6 +3,7 @@ packages:
   - "drizzle-migration-linter"
   - "frontend"
   - "shared"
+  - "archestra-rs/napi-loader"
   - "archestra-rs/sandbox-rs"
   - "archestra-rs/app-runtime-rs"
   - "archestra-rs/image-rs"

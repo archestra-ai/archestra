@@ -312,8 +312,13 @@ jobs:
       - name: Verify no immature dependencies
         run: pnpm install --fix-lockfile --lockfile-only --ignore-scripts
 
+      # Backend unit tests run in the parallel sharded "Backend Unit Tests"
+      # jobs below; here the backend runs check:commit (same checks minus
+      # vitest) so this job stops being serialized behind the largest suite.
       - name: Type checking, linting, formatting, unit tests
-        run: pnpm check:ci
+        run: |
+          pnpm exec turbo check:ci --filter=!@backend
+          pnpm exec turbo check:commit --filter=@backend
 
       # Validates the production build (turbo build: next build + backend build +
       # Rust NAPI) compiles on every push. This replaces the per-push Docker image
@@ -396,6 +401,62 @@ jobs:
           fi
 
           echo "✅ All validation checks passed"
+
+  # Backend unit tests, sharded across parallel runners. Vitest's --shard
+  # slices the file list deterministically (SHA1 of each path), so the four
+  # jobs partition the suite exactly once. Splitting this out of the lint job
+  # takes the suite off the workflow's critical path.
+  backend-unit-tests:
+    name: Backend Unit Tests (shard ${{ matrix.shard }}/4)
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    # A full local suite run is ~4 min on comparable hardware; a shard is a
+    # quarter of that plus setup. 15 minutes means something is hung.
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./platform
+    strategy:
+      # A failing shard must not cancel its siblings; we want the full
+      # failure picture in one pass.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Run backend unit tests (shard ${{ matrix.shard }} of 4)
+        working-directory: ./platform/backend
+        run: pnpm exec vitest run --shard=${{ matrix.shard }}/4
+
+  # Stable-named gate over the shard matrix so branch protection / merge queue
+  # can require a single check ("Backend Unit Tests") regardless of shard count.
+  backend-unit-tests-gate:
+    name: Backend Unit Tests
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    if: always()
+    needs: [backend-unit-tests]
+    permissions: {}
+    steps:
+      - name: Check shard results
+        env:
+          SHARDS_RESULT: ${{ needs.backend-unit-tests.result }}
+        run: |
+          if [ "$SHARDS_RESULT" != "success" ]; then
+            echo "::error::One or more backend unit test shards failed (result: $SHARDS_RESULT)."
+            exit 1
+          fi
+          echo "✅ All backend unit test shards passed."
 
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW)

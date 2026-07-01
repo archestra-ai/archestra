@@ -24,6 +24,8 @@ Archestra tools are **trusted**, meaning they bypass [tool invocation policies](
 
 However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without `knowledgeSource:create` permission will not see [`create_knowledge_base`](#create_knowledge_base) in their tool list and cannot execute it.
 
+Some tools enforce an **additional access requirement** in their handler beyond this RBAC permission — for example, the team membership tools gate on `team:read` but then require the caller to be an organization-level team manager or an admin (team-member role) of the specific team. These tools are marked with a † in the tables below, and the requirement is spelled out in each tool's details.
+
 ## Tools Reference
 
 ### Identity
@@ -627,14 +629,16 @@ This tool takes no arguments.
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
 | `create_team` | Create a new team in the organization. | `team:create` |
-| `get_team` | Retrieve a single team by its ID or name, including its current member count. | `team:read` |
-| `list_teams` | List all teams in the organization, optionally filtered by a name substring. | `team:read` |
+| `get_team` | Retrieve a single team by its ID or name, including its current member count. | `team:read` † |
+| `list_teams` | List all teams in the organization, optionally filtered by a name substring. | `team:read` † |
 | `edit_team` | Update a team's name and/or description. | `team:update` |
 | `delete_team` | Delete a team by ID. | `team:delete` |
-| `list_team_members` | List all members of a team along with their roles. | `team:read` |
-| `add_team_member` | Add an organization user to a team by user ID or email, optionally as an admin. | `team:read` |
-| `update_team_member_role` | Change a team member's role between admin and member. | `team:read` |
-| `remove_team_member` | Remove a member from a team. | `team:read` |
+| `list_team_members` | List all members of a team along with their roles. | `team:read` † |
+| `add_team_member` | Add an organization user to a team by user ID or email, optionally as an admin. | `team:read` † |
+| `update_team_member_role` | Change a team member's role between admin and member. | `team:read` † |
+| `remove_team_member` | Remove a member from a team. | `team:read` † |
+
+† This tool enforces an additional access requirement beyond its RBAC permission — see its details below.
 
 #### create_team
 
@@ -665,6 +669,8 @@ Required RBAC permission: `team:create`
 
 Required RBAC permission: `team:read`
 
+Additional access requirement: Callers without organization-level team management (`team:create`) can only read teams they are a member of.
+
 ##### Input
 
 | Parameter | Type | Required | Description |
@@ -689,6 +695,8 @@ Required RBAC permission: `team:read`
 #### list_teams
 
 Required RBAC permission: `team:read`
+
+Additional access requirement: Callers without organization-level team management (`team:create`) only see teams they are a member of.
 
 ##### Input
 
@@ -757,6 +765,8 @@ Required RBAC permission: `team:delete`
 
 Required RBAC permission: `team:read`
 
+Additional access requirement: Callers without organization-level team management (`team:create`) can only read members of teams they are a member of.
+
 ##### Input
 
 | Parameter | Type | Required | Description |
@@ -780,6 +790,8 @@ Required RBAC permission: `team:read`
 #### add_team_member
 
 Required RBAC permission: `team:read`
+
+Additional access requirement: Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.
 
 ##### Input
 
@@ -807,6 +819,8 @@ Required RBAC permission: `team:read`
 
 Required RBAC permission: `team:read`
 
+Additional access requirement: Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.
+
 ##### Input
 
 | Parameter | Type | Required | Description |
@@ -832,6 +846,8 @@ Required RBAC permission: `team:read`
 #### remove_team_member
 
 Required RBAC permission: `team:read`
+
+Additional access requirement: Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.
 
 ##### Input
 

@@ -127,6 +127,11 @@ export default defineConfig({
           name: "clean",
           include: testFiles.clean,
           isolate: false,
+          // Workers are shared in this project, so the test setup restores
+          // shared mutable state (the config object) between tests. The
+          // isolated project skips that — its per-file registries can't leak,
+          // and exotic config mocks (getter-only properties) would break it.
+          env: { ARCHESTRA_TEST_SHARED_WORKERS: "true" },
           // Inherit everything else from root, but globalSetup must not be
           // re-run per project — the snapshot is built once at the root.
           globalSetup: [],

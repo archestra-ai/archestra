@@ -270,7 +270,7 @@ describe("isDynamicallyAvailableArchestraTool", () => {
 
   describe("sandbox built-ins", () => {
     const originalSandboxEnabled = config.skillsSandbox.enabled;
-    beforeAll(() => {
+    beforeEach(() => {
       (config.skillsSandbox as { enabled: boolean }).enabled = true;
     });
     afterAll(() => {

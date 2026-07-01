@@ -14,7 +14,7 @@ import {
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import config from "@/config";
@@ -32,7 +32,7 @@ import TrustedDataPolicyModel from "./trusted-data-policy";
 // auto-assigned app tools into them (app-tool assignment is covered in
 // tool-archestra-assignment.test.ts)
 const originalAppsEnabled = config.apps.enabled;
-beforeAll(() => {
+beforeEach(() => {
   (config.apps as { enabled: boolean }).enabled = false;
 });
 afterAll(() => {

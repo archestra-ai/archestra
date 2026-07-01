@@ -45,6 +45,7 @@ Consequences:
   ```
 
   Never hand-roll a partial `{ default: { kb: {...} } }` — it silently drops the rest of the config.
+- **Mutating the real config** (`config.apps.enabled = true` style, common in clean-project files): set it in `beforeEach` or inside the test, NOT in `beforeAll` or at module scope — the shared setup restores the pristine config before every test in the shared-worker project, so a once-per-file mutation evaporates after the first test. No manual restore needed.
 - **Never write a bespoke partial factory** for a module that has a canonical mock, and **never mix a bare `vi.mock("x")` with a factory `vi.mock("x", ...)` for the same specifier across files** — Vitest can silently skip one depending on execution order (vitest-dev/vitest#10145).
 - Mock typing is real: `vi.mocked(fn)` carries the actual signature. If the compiler rejects your mock's resolved value, the OLD untyped mock was probably wrong (e.g. resolving a truthy object where the code expects a boolean).
 

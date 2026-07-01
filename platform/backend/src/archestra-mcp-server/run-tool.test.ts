@@ -808,7 +808,7 @@ describe("run_tool", () => {
     let dynamicAgent: Agent;
     let dynamicContext: ArchestraContext;
 
-    beforeAll(() => {
+    beforeEach(() => {
       (config.skillsSandbox as { enabled: boolean }).enabled = true;
     });
 

@@ -109,7 +109,7 @@ describe("sandbox tools (runtime enabled)", () => {
   let context: ArchestraContext;
   const originalEnabled = config.skillsSandbox.enabled;
 
-  beforeAll(() => {
+  beforeEach(() => {
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
   });
 
@@ -1067,7 +1067,7 @@ describe("sandbox tools (runtime enabled)", () => {
     // exercise the real persistence + validation path against PGlite.
     describe("with the runtime engine available", () => {
       const originalDagger = config.daggerRuntime.enabled;
-      beforeAll(() => {
+      beforeEach(() => {
         (config.daggerRuntime as { enabled: boolean }).enabled = true;
       });
       afterAll(() => {
@@ -1186,7 +1186,7 @@ describe("sandbox tools (runtime enabled)", () => {
     // gate runs; a deleted skill must fail the call before any container build.
     describe("revocation gate", () => {
       const originalDagger = config.daggerRuntime.enabled;
-      beforeAll(() => {
+      beforeEach(() => {
         (config.daggerRuntime as { enabled: boolean }).enabled = true;
       });
       afterAll(() => {
@@ -1251,7 +1251,7 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
   let context: ArchestraContext;
   const originalEnabled = config.skillsSandbox.enabled;
 
-  beforeAll(() => {
+  beforeEach(() => {
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
   });
   afterAll(() => {
@@ -1532,7 +1532,7 @@ describe("project file scope (save_file, scoped search/my_file)", () => {
   let context: ArchestraContext;
   const originalEnabled = config.skillsSandbox.enabled;
 
-  beforeAll(() => {
+  beforeEach(() => {
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
   });
   afterAll(() => {
@@ -1940,7 +1940,7 @@ describe("read_file", () => {
   let context: ArchestraContext;
   const originalEnabled = config.skillsSandbox.enabled;
 
-  beforeAll(() => {
+  beforeEach(() => {
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
   });
   afterAll(() => {
@@ -2414,7 +2414,7 @@ describe("edit_file / delete_file", () => {
   let context: ArchestraContext;
   const originalEnabled = config.skillsSandbox.enabled;
 
-  beforeAll(() => {
+  beforeEach(() => {
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
   });
   afterAll(() => {
@@ -2656,7 +2656,7 @@ describe("projects feature gating (search_files / save_file / my_file)", () => {
   const originalSandbox = config.skillsSandbox.enabled;
   const originalProjects = config.projects.enabled;
 
-  beforeAll(() => {
+  beforeEach(() => {
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
   });
   afterAll(() => {

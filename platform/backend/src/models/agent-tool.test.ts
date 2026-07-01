@@ -15,7 +15,7 @@ import AgentToolModel from "./agent-tool";
 // auto-assigned app tools into them (app-tool assignment is covered in
 // tool-archestra-assignment.test.ts)
 const originalAppsEnabled = config.apps.enabled;
-beforeAll(() => {
+beforeEach(() => {
   (config.apps as { enabled: boolean }).enabled = false;
 });
 afterAll(() => {

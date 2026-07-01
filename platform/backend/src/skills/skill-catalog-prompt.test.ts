@@ -73,7 +73,7 @@ describe("buildSkillCatalogPrompt (sandbox available)", () => {
   let userId: string;
   const originalEnabled = config.skillsSandbox.enabled;
 
-  beforeAll(() => {
+  beforeEach(() => {
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
   });
 

@@ -259,7 +259,7 @@ impl SandboxBackend for DaggerBackend {
     async fn check_session(&self, traceparent: Option<String>) -> Result<()> {
         attach_trace(traceparent.as_deref());
         // ensure_warm covers the engine-reachable + base-image-buildable invariant.
-        let _ = self.ensure_warm().await?;
+        self.ensure_warm().await?;
         self.client.version().await.map_err(from_sdk)?;
         Ok(())
     }
@@ -1032,10 +1032,6 @@ fn any_exit_opts<'a>() -> ContainerWithExecOpts<'a> {
     }
 }
 
-/// categorise an error returned by the dagger SDK during exec evaluation. SDK
-/// errors with an embedded `exit code: N` come from a container exec that
-/// returned non-zero (kill-by-signal counts here too); everything else is a
-/// real transport/engine failure.
 /// categorise an error returned by the dagger SDK during exec evaluation. an
 /// exec that returned non-zero (kill-by-signal counts here too) becomes a
 /// `CommandFailed`; everything else is a real transport/engine failure, tagged

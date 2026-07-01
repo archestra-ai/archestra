@@ -198,11 +198,12 @@ function resolveResourceFile(params: {
   // Reject absolute paths and any `..` traversal *segment*. A substring test
   // (startsWith("..") / includes("../")) also drops legitimate names that merely
   // begin with or contain dots, e.g. a "notes.." folder, silently losing the
-  // file — so match whole segments, mirroring SkillFileInputSchema in
-  // ../validation.ts.
+  // file — so match whole segments. Split on both separators so a Windows-style
+  // "..\\evil.md" (which materialize.ts later re-splits) is still rejected, not
+  // just POSIX "../"; mirrors the intent of SkillFileInputSchema in ../validation.ts.
   if (
     path.posix.isAbsolute(relPath) ||
-    relPath.split("/").some((segment) => segment === "..")
+    relPath.split(/[/\\]/).some((segment) => segment === "..")
   ) {
     logger.warn(
       { path: file.path },

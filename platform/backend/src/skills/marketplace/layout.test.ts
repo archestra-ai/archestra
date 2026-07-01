@@ -93,4 +93,18 @@ describe("computeLayout", () => {
     expect(files.some((f) => /evil\.md$/.test(f.path))).toBe(false);
     expect(files.some((f) => /etc\.md$/.test(f.path))).toBe(false);
   });
+
+  test("drops Windows-style backslash traversal segments", () => {
+    const files = computeLayout({
+      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+      marketplaceName: "org-abcd1234-skills",
+      ownerName: "Acme Corp",
+      displayName: "Acme Skills",
+      skills: [makeSkill([makeResourceFile("..\\evil.md")])],
+    });
+
+    // materialize.ts re-splits stored paths, so a backslash ".." segment must
+    // be rejected too, not just POSIX "../".
+    expect(files.some((f) => /evil\.md$/.test(f.path))).toBe(false);
+  });
 });

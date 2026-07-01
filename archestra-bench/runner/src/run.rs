@@ -1089,10 +1089,12 @@ fn require_id(value: &HashMap<String, serde_json::Value>, what: &str) -> Result<
     value
         .get("id")
         .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
         .map(str::to_string)
         .ok_or_else(|| {
             RunError::Client(
-                ContractError(format!("{what}: API response missing string `id`")).into(),
+                ContractError(format!("{what}: API response missing non-empty string `id`"))
+                    .into(),
             )
         })
 }

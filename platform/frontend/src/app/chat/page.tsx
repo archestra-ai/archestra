@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
+import { getScheduledRunChatState } from "@/app/scheduled-tasks/schedule-trigger.utils";
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
@@ -56,6 +57,7 @@ import MessageThread, {
   type PartialUIMessage,
 } from "@/components/message-thread";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
+import { ScheduledRunInProgress } from "@/components/scheduled-tasks/scheduled-run-in-progress";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -147,6 +149,7 @@ import {
 import { useOrganization } from "@/lib/organization.query";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { useProjectFiles } from "@/lib/projects/projects.query";
+import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
@@ -314,6 +317,43 @@ export function ChatPageContent({
   // enables the right-side Runs tab.
   const scheduledRun = scheduledRunContext(searchParams);
   const scheduledRunTriggerId = scheduledRun?.triggerId ?? null;
+
+  // Poll the pinned scheduled run while it's still running. A project-scoped
+  // run's transcript is only persisted at completion, so the chat shows an
+  // in-progress placeholder (and hides the composer) until then, and reveals the
+  // transcript the moment the run finishes. Polling stops once the run is
+  // terminal so a completed run's chat isn't polled forever.
+  const { data: scheduledRunData } = useScheduleTriggerRun(
+    scheduledRunTriggerId,
+    scheduledRun?.runId ?? null,
+    {
+      refetchInterval: (query) =>
+        query.state.data?.status === "running" ? 3_000 : false,
+    },
+  );
+  const { isRunInProgress: isScheduledRunInProgress } =
+    getScheduledRunChatState({
+      context: scheduledRun,
+      runStatus: scheduledRunData?.status,
+    });
+  // When the run flips from running to done, refetch the conversation so its
+  // just-persisted transcript (or error card) loads without a manual refresh.
+  const prevScheduledRunStatusRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const previous = prevScheduledRunStatusRef.current;
+    const current = scheduledRunData?.status;
+    prevScheduledRunStatusRef.current = current;
+    if (
+      previous === "running" &&
+      current != null &&
+      current !== "running" &&
+      conversationId
+    ) {
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", conversationId],
+      });
+    }
+  }, [scheduledRunData?.status, conversationId, queryClient]);
 
   const hasChatAccess = canReadAgent !== false;
   const canUseProviderSettings =
@@ -843,6 +883,30 @@ export function ChatPageContent({
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
+
+  // A scheduled run's transcript is persisted only when it completes, so a run
+  // opened while still running seeds the live chat session empty. When the run
+  // finishes, the completion effect refetches the conversation; hydrate the
+  // (still-empty) session with the arrived transcript so the chat renders without
+  // a manual refresh. Gated to the empty-session case, so it never clobbers an
+  // ordinary conversation (seeded via initialMessages) or a live turn.
+  useEffect(() => {
+    if (!scheduledRunTriggerId || isScheduledRunInProgress || !setMessages) {
+      return;
+    }
+    if (
+      persistedConversationMessages.length > 0 &&
+      chatSession?.messages?.length === 0
+    ) {
+      setMessages(persistedConversationMessages);
+    }
+  }, [
+    scheduledRunTriggerId,
+    isScheduledRunInProgress,
+    persistedConversationMessages,
+    chatSession?.messages?.length,
+    setMessages,
+  ]);
 
   // Re-send the most recent user message by regenerating its turn. Shared by the
   // provider-connect auto-rerun and the "Try again" affordance. Resolves to whether
@@ -2020,6 +2084,7 @@ export function ChatPageContent({
               canManageShare={canManageShare}
               isShared={isShared}
               canCreateProject={canCreateProjectFromThisChat}
+              scheduleTriggerId={scheduledRunTriggerId}
               onShare={() => setIsShareDialogOpen(true)}
               onExportMarkdown={handleExportMarkdown}
               onCreateProject={() => setIsCreateProjectOpen(true)}
@@ -2079,7 +2144,9 @@ export function ChatPageContent({
                     isRightPanelOpen && "hidden md:block",
                   )}
                 >
-                  {isReadOnlyConversation ? (
+                  {isScheduledRunInProgress ? (
+                    <ScheduledRunInProgress />
+                  ) : isReadOnlyConversation ? (
                     <MessageThread
                       messages={sharedConversationMessages}
                       chatErrors={conversation?.chatErrors ?? []}
@@ -2130,7 +2197,7 @@ export function ChatPageContent({
                   )}
                 </div>
 
-                {isReadOnlyConversation ? (
+                {isScheduledRunInProgress ? null : isReadOnlyConversation ? (
                   <div className="sticky bottom-0 bg-background border-t p-4">
                     <div className="max-w-4xl mx-auto space-y-3">
                       <div className="relative">

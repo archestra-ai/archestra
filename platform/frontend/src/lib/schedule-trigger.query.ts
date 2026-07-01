@@ -131,7 +131,6 @@ export function getScheduleTriggerRunsQueryParams(params?: {
   offset?: number;
   status?: ScheduleTriggerRunStatus;
   enabled?: boolean;
-  refetchInterval?: number | false;
 }) {
   return {
     limit: params?.limit,
@@ -222,7 +221,14 @@ export function useScheduleTriggerRuns(
     offset?: number;
     status?: ScheduleTriggerRunStatus;
     enabled?: boolean;
-    refetchInterval?: number | false;
+    // Accepts the TanStack function form so callers can poll only while a run is
+    // active and stop the instant the list settles (reads the latest data).
+    refetchInterval?:
+      | number
+      | false
+      | ((query: {
+          state: { data: PaginatedResponse<ScheduleTriggerRun> | undefined };
+        }) => number | false);
   },
 ) {
   const queryParams = getScheduleTriggerRunsQueryParams(params);
@@ -278,7 +284,14 @@ export function useScheduleTriggerRun(
   runId: string | null,
   params?: {
     enabled?: boolean;
-    refetchInterval?: number | false;
+    // Accepts the TanStack function form so callers can poll only while the run
+    // is running and stop the instant it's terminal (reads the latest data).
+    refetchInterval?:
+      | number
+      | false
+      | ((query: {
+          state: { data: ScheduleTriggerRun | null | undefined };
+        }) => number | false);
   },
 ) {
   return useQuery({

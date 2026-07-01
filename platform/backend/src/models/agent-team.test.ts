@@ -1,7 +1,47 @@
 import { describe, expect, test } from "@/test";
 import AgentTeamModel from "./agent-team";
+import TeamLabelModel from "./team-label";
 
 describe("AgentTeamModel", () => {
+  describe("getTeamLabelInfoForAgent", () => {
+    test("returns each team's id, name and labels", async ({
+      makeAgent,
+      makeTeam,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team1 = await makeTeam(org.id, user.id, { name: "Platform" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Security" });
+      const agent = await makeAgent();
+
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team1.id, team2.id]);
+      await TeamLabelModel.syncTeamLabels(team1.id, [
+        { key: "env", value: "prod", keyId: "", valueId: "" },
+      ]);
+
+      const info = await AgentTeamModel.getTeamLabelInfoForAgent(agent.id);
+
+      expect(info).toHaveLength(2);
+      const platform = info.find((t) => t.id === team1.id);
+      const security = info.find((t) => t.id === team2.id);
+      expect(platform?.name).toBe("Platform");
+      expect(platform?.labels).toEqual([
+        expect.objectContaining({ key: "env", value: "prod" }),
+      ]);
+      expect(security?.labels).toEqual([]);
+    });
+
+    test("returns empty array when agent has no teams", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent();
+      const info = await AgentTeamModel.getTeamLabelInfoForAgent(agent.id);
+      expect(info).toEqual([]);
+    });
+  });
+
   describe("getTeamsForAgent", () => {
     test("returns team IDs for a single agent", async ({
       makeAgent,
@@ -138,6 +178,73 @@ describe("AgentTeamModel", () => {
       );
 
       expect(accessibleIds).toContain(orgAgent.id);
+    });
+
+    test("team-scoped agent is accessible when user is a member of one of its teams but not another", async ({
+      makeAgent,
+      makeTeam,
+      makeOrganization,
+      makeUser,
+      makeTeamMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const memberTeam = await makeTeam(org.id, user.id);
+      const otherTeam = await makeTeam(org.id, user.id);
+      await makeTeamMember(memberTeam.id, user.id);
+
+      const visibleAgent = await makeAgent({
+        organizationId: org.id,
+        scope: "team",
+      });
+      await AgentTeamModel.assignTeamsToAgent(visibleAgent.id, [memberTeam.id]);
+
+      const hiddenAgent = await makeAgent({
+        organizationId: org.id,
+        scope: "team",
+      });
+      await AgentTeamModel.assignTeamsToAgent(hiddenAgent.id, [otherTeam.id]);
+
+      const accessibleIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        user.id,
+        false,
+      );
+
+      expect(accessibleIds).toContain(visibleAgent.id);
+      expect(accessibleIds).not.toContain(hiddenAgent.id);
+    });
+
+    test("personal-scoped agent is accessible only to its author", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const author = await makeUser();
+      const otherUser = await makeUser();
+
+      const ownAgent = await makeAgent({
+        organizationId: org.id,
+        scope: "personal",
+        authorId: author.id,
+      });
+      const otherUsersAgent = await makeAgent({
+        organizationId: org.id,
+        scope: "personal",
+        authorId: otherUser.id,
+      });
+
+      const authorAccessibleIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(author.id, false);
+      expect(authorAccessibleIds).toContain(ownAgent.id);
+      expect(authorAccessibleIds).not.toContain(otherUsersAgent.id);
+
+      const otherAccessibleIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        otherUser.id,
+        false,
+      );
+      expect(otherAccessibleIds).toContain(otherUsersAgent.id);
+      expect(otherAccessibleIds).not.toContain(ownAgent.id);
     });
   });
 

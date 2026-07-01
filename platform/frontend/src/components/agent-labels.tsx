@@ -1,6 +1,6 @@
 "use client";
 
-import { LABEL_RESERVED_CHARS } from "@shared";
+import { LABEL_RESERVED_CHARS } from "@archestra/shared";
 import { Plus, Tags, X } from "lucide-react";
 import { forwardRef, useCallback, useImperativeHandle, useState } from "react";
 import { Badge } from "@/components/ui/badge";

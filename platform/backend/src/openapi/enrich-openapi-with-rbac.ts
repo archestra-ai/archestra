@@ -1,8 +1,8 @@
-import { RouteId } from "@shared";
+import { RouteId } from "@archestra/shared";
 import {
   permissionDescriptions,
   requiredEndpointPermissionsMap,
-} from "@shared/access-control";
+} from "@archestra/shared/access-control";
 
 // === Exports ===
 
@@ -229,6 +229,8 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
   [RouteId.UpdateAgent]:
     "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`; `llm_proxy` requires `llmProxy:update`. Additional scope and team-admin checks may apply.",
   [RouteId.DeleteAgent]:
+    "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`; `llm_proxy` requires `llmProxy:delete`. Additional scope checks may apply.",
+  [RouteId.RestoreAgent]:
     "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`; `llm_proxy` requires `llmProxy:delete`. Additional scope checks may apply.",
 } satisfies Partial<Record<RouteId, string>>;
 

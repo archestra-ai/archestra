@@ -2,7 +2,7 @@ import {
   TOOL_CREATE_LLM_PROXY_SHORT_NAME,
   TOOL_EDIT_LLM_PROXY_SHORT_NAME,
   TOOL_GET_LLM_PROXY_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { z } from "zod";
 import {
   AgentScopeSchema,
@@ -56,7 +56,7 @@ const EditLlmProxyToolArgsSchema = z
       "Updated visibility scope for the LLM proxy.",
     ),
     toolExposureMode: ToolExposureModeSchema.optional().describe(
-      "How tools should be exposed to MCP clients and models.",
+      "How tools should be loaded for MCP clients and models.",
     ),
     teams: z
       .array(UuidIdSchema)

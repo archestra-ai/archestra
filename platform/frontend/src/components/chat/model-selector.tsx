@@ -1,11 +1,14 @@
 "use client";
 
 import {
+  compareModelsForDisplay,
   E2eTestId,
+  isLegacyGeminiModel,
+  isOpenRouterLatestAlias,
   type ModelInputModality,
   providerDisplayNames,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import {
   CheckIcon,
   CopyIcon,
@@ -15,12 +18,11 @@ import {
   Layers,
   Loader2,
   Mic,
-  RefreshCw,
   Settings2,
   Video,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ModelSelectorContent,
   ModelSelectorEmpty,
@@ -34,7 +36,13 @@ import {
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
-import { UnknownCapabilitiesBadge } from "@/components/model-badges";
+import {
+  ConnectAccountBadge,
+  FreeModelBadge,
+  LatestModelBadge,
+  OldModelBadge,
+  UnknownCapabilitiesBadge,
+} from "@/components/model-badges";
 import { Button } from "@/components/ui/button";
 import { DialogClose } from "@/components/ui/dialog";
 import { Toggle } from "@/components/ui/toggle";
@@ -49,9 +57,8 @@ import {
   type LlmModel,
   type ModelCapabilities,
   useLlmModelsByProvider,
-  useSyncLlmModels,
 } from "@/lib/llm-models.query";
-import { cn } from "@/lib/utils";
+import { cn, formatContextLength } from "@/lib/utils";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */
 type FilterableModality = Exclude<ModelInputModality, "text">;
@@ -94,6 +101,19 @@ interface ModelSelectorProps {
   apiKeyId?: string | null;
   /** Whether the model query should be enabled */
   enabled?: boolean;
+  /**
+   * Keep the current (unavailable) model instead of auto-selecting a fallback.
+   * Used when the agent pins a per-user-credential model (e.g. GitHub Copilot)
+   * the viewer hasn't connected: we surface a "connect" prompt on send rather
+   * than silently substituting a different provider's model.
+   */
+  suppressAutoSelect?: boolean;
+  /**
+   * Display name to show when `selectedModel` isn't in the viewer's available
+   * models (e.g. a per-user model they can't access). Without it the trigger
+   * would fall back to the raw model UUID.
+   */
+  fallbackModelName?: string;
 }
 
 /** Map our provider names to logo provider names
@@ -118,6 +138,7 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   deepseek: "deepseek",
   minimax: "minimax",
   azure: "azure",
+  "github-copilot": "github-copilot",
 };
 
 /**
@@ -143,6 +164,14 @@ function parseModelValue(
     provider: value.substring(0, colonIndex) as SupportedProvider,
     modelId: value.substring(colonIndex + 1),
   };
+}
+
+/** Shared model ordering (routers, recommended, then the rest alphabetically). */
+function compareLlmModels(a: LlmModel, b: LlmModel): number {
+  return compareModelsForDisplay(
+    { modelId: a.id, isBest: a.isBest },
+    { modelId: b.id, isBest: b.isBest },
+  );
 }
 
 /**
@@ -219,20 +248,6 @@ function ModelCapabilityBadges({
       </div>
     </TooltipProvider>
   );
-}
-
-/**
- * Formats a context length number into a human-readable string.
- * e.g., 128000 -> "128K", 1000000 -> "1M"
- */
-function formatContextLength(contextLength: number): string {
-  if (contextLength >= 1_000_000) {
-    return `${(contextLength / 1_000_000).toFixed(contextLength % 1_000_000 === 0 ? 0 : 1)}M`;
-  }
-  if (contextLength >= 1_000) {
-    return `${(contextLength / 1_000).toFixed(contextLength % 1_000 === 0 ? 0 : 1)}K`;
-  }
-  return contextLength.toString();
 }
 
 /**
@@ -402,14 +417,10 @@ function ModelFiltersBar({
   filters,
   onFiltersChange,
   availableModalities,
-  onRefresh,
-  isRefreshing,
 }: {
   filters: ModelFilters;
   onFiltersChange: (filters: ModelFilters) => void;
   availableModalities: Set<FilterableModality>;
-  onRefresh: () => void;
-  isRefreshing: boolean;
 }) {
   const toggleModality = useCallback(
     (modality: FilterableModality, pressed: boolean) => {
@@ -463,26 +474,6 @@ function ModelFiltersBar({
         </>
       )}
       {visibleModalityFilters.length === 0 && <div className="flex-1" />}
-      <TooltipProvider delayDuration={300}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              className="rounded-sm p-1 opacity-70 ring-offset-background transition-opacity hover:opacity-100 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50"
-            >
-              <RefreshCw
-                className={cn("size-4", isRefreshing && "animate-spin")}
-              />
-              <span className="sr-only">Refresh models</span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            Refresh models from providers
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
       <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
         <XIcon className="size-4" />
         <span className="sr-only">Close</span>
@@ -540,7 +531,7 @@ function modelMatchesFilters(model: LlmModel, filters: ModelFilters): boolean {
  * - Search functionality to filter models
  * - Models filtered by configured API keys
  */
-export function ModelSelector({
+export const ModelSelector = memo(function ModelSelector({
   selectedModel,
   onModelChange,
   disabled = false,
@@ -549,16 +540,14 @@ export function ModelSelector({
   variant = "default",
   apiKeyId,
   enabled = true,
+  suppressAutoSelect = false,
+  fallbackModelName,
 }: ModelSelectorProps) {
-  const {
-    modelsByProvider,
-    isPending: isLoading,
-    isPlaceholderData,
-  } = useLlmModelsByProvider({
-    apiKeyId: apiKeyId ?? undefined,
-    enabled,
-  });
-  const syncMutation = useSyncLlmModels();
+  const { modelsByProvider, isLoading, isPlaceholderData } =
+    useLlmModelsByProvider({
+      apiKeyId: apiKeyId ?? undefined,
+      enabled,
+    });
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
 
@@ -619,6 +608,17 @@ export function ModelSelector({
     return Object.keys(filteredModelsByProvider) as SupportedProvider[];
   }, [filteredModelsByProvider]);
 
+  // Sort once per data change rather than on every render inside the JSX map.
+  const sortedModelsByProvider = useMemo(() => {
+    const sorted: Partial<Record<SupportedProvider, LlmModel[]>> = {};
+    for (const provider of filteredProviders) {
+      sorted[provider] = [...(filteredModelsByProvider[provider] ?? [])].sort(
+        compareLlmModels,
+      );
+    }
+    return sorted;
+  }, [filteredModelsByProvider, filteredProviders]);
+
   // Find the provider for a given model
   const getProviderForModel = (model: string): SupportedProvider | null => {
     for (const provider of availableProviders) {
@@ -643,8 +643,10 @@ export function ModelSelector({
       );
       if (model) return model.displayName;
     }
-    return selectedModel; // Fall back to ID if not found
-  }, [selectedModel, availableProviders, modelsByProvider]);
+    // Not in the viewer's available models (e.g. a per-user model they can't
+    // access): prefer the server-resolved name over the raw model UUID.
+    return fallbackModelName ?? selectedModel;
+  }, [selectedModel, availableProviders, modelsByProvider, fallbackModelName]);
 
   const handleSelectModel = (modelValue: string) => {
     // Parse the provider:modelId format
@@ -683,11 +685,17 @@ export function ModelSelector({
   // the stale models would incorrectly trigger auto-select for the wrong provider.
   useEffect(() => {
     if (isPlaceholderData) return;
+    // The agent pins a per-user-credential model the viewer hasn't connected;
+    // keep it selected so the send surfaces a connect prompt instead of
+    // silently switching to another provider's model.
+    if (suppressAutoSelect) return;
     const modelToSelect = resolveAutoSelectedModel({
       selectedModel,
       availableModels: allAvailableModels.map((m) => ({
         id: m.dbId,
         isBest: m.isBest,
+        requiresUserConnection: m.requiresUserConnection,
+        isConnected: m.isConnected,
       })),
       isLoading,
     });
@@ -697,6 +705,7 @@ export function ModelSelector({
   }, [
     isLoading,
     isPlaceholderData,
+    suppressAutoSelect,
     allAvailableModels,
     selectedModel,
     onModelChange,
@@ -802,8 +811,6 @@ export function ModelSelector({
             filters={filters}
             onFiltersChange={setFilters}
             availableModalities={availableModalities}
-            onRefresh={() => syncMutation.mutate()}
-            isRefreshing={syncMutation.isPending}
           />
           <ModelSelectorInput placeholder="Search models..." autoFocus />
           <ModelSelectorList>
@@ -853,7 +860,7 @@ export function ModelSelector({
                 key={provider}
                 heading={providerDisplayNames[provider]}
               >
-                {filteredModelsByProvider[provider]?.map((model) => {
+                {(sortedModelsByProvider[provider] ?? []).map((model) => {
                   // Use provider:modelId format for unique keys/values
                   // This prevents issues when different providers have models with the same ID
                   const modelValue = createModelValue(provider, model.dbId);
@@ -861,6 +868,13 @@ export function ModelSelector({
                     <ModelSelectorItem
                       key={modelValue}
                       value={modelValue}
+                      // value is provider:dbId (a UUID) for stable selection,
+                      // so search must match human-readable terms via keywords
+                      keywords={[
+                        model.displayName,
+                        model.id,
+                        providerDisplayNames[provider],
+                      ]}
                       onSelect={() => handleSelectModel(modelValue)}
                       className="group"
                     >
@@ -874,6 +888,15 @@ export function ModelSelector({
                         </span>
                         <CopyModelIdButton modelId={model.id} />
                       </ModelSelectorName>
+                      {model.isFree && <FreeModelBadge />}
+                      {model.requiresUserConnection && !model.isConnected && (
+                        <ConnectAccountBadge />
+                      )}
+                      {isOpenRouterLatestAlias(provider, model.id) && (
+                        <LatestModelBadge />
+                      )}
+                      {provider === "gemini" &&
+                        isLegacyGeminiModel(model.id) && <OldModelBadge />}
                       <div className="ml-auto flex items-center gap-2">
                         <ModelCapabilityBadges
                           capabilities={model.capabilities}
@@ -905,4 +928,4 @@ export function ModelSelector({
       </ModelSelectorRoot>
     </div>
   );
-}
+});

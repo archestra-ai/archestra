@@ -23,6 +23,39 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Poll `/api/auth/get-session` until the backend serves 2xx. The endpoint
+ * is public and returns 200 with a null user when unauthenticated, so a
+ * non-2xx response signals the backend is still warming up (or down).
+ */
+async function waitForBackendReady(request: APIRequestContext): Promise<void> {
+  const start = Date.now();
+  // Capped well under the project's 60s per-test timeout so the rest of
+  // the setup (signOut, signIn, teams creation, assignments) keeps headroom.
+  const timeoutMs = 30_000;
+  let delay = 500;
+  let lastError: string | null = null;
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const response = await request.get(
+        `${UI_BASE_URL}/api/auth/get-session`,
+        { headers: { Origin: UI_BASE_URL } },
+      );
+      if (response.ok()) {
+        return;
+      }
+      lastError = `${response.status()} ${await response.text()}`;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+    }
+    await sleep(delay);
+    delay = Math.min(delay * 1.5, 5000);
+  }
+  throw new Error(
+    `Backend did not respond OK to GET /api/auth/get-session within ${timeoutMs}ms (last: ${lastError ?? "n/a"})`,
+  );
+}
+
+/**
  * Sign in a user via API and return true if successful
  * Handles rate limiting (429) with exponential backoff retry
  */
@@ -39,7 +72,7 @@ async function signInUser(
           Origin: UI_BASE_URL,
         },
       }),
-    { retryStatuses: [429] },
+    { retryStatuses: [429, 500, 502, 503, 504] },
   );
 
   return response.ok();
@@ -254,7 +287,20 @@ async function withRetries(
       attempt < maxRetries &&
       params.retryStatuses.includes(response.status())
     ) {
-      await sleep(delay);
+      // better-auth's 429 carries x-retry-after (seconds until its rate-limit
+      // window clears). Honor it so a transient rate-limit recovers within
+      // this setup attempt instead of forcing a full test-level retry — the
+      // default exponential backoff never sleeps longer than the ~10s window,
+      // and retrying inside the window keeps the limiter's bucket full.
+      const headers = response.headers();
+      const retryAfterSec = Number.parseInt(
+        headers["x-retry-after"] ?? headers["retry-after"] ?? "",
+        10,
+      );
+      const waitMs = Number.isFinite(retryAfterSec)
+        ? Math.min(retryAfterSec * 1000 + 500, 20_000)
+        : delay;
+      await sleep(waitMs);
       delay *= 2;
       continue;
     }
@@ -306,6 +352,11 @@ async function assertAdminPermissions(
 
 // Setup teams - runs after users are created
 setup("setup teams and assignments", async ({ page }) => {
+  // Single up-front backend readiness probe; the signOut→signIn→GET chain
+  // below has no warm-up tolerance, so transient connection / 5xx during
+  // pod warmup intermittently aborted the chain mid-flight.
+  await waitForBackendReady(page.request);
+
   await signOut(page.request);
   await page.context().clearCookies();
 

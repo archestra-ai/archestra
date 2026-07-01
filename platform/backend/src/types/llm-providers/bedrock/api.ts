@@ -88,6 +88,16 @@ export const UsageSchema = z.object({
   totalTokens: z.number().optional(),
   cacheReadInputTokens: z.number().optional(),
   cacheWriteInputTokens: z.number().optional(),
+  // Per-TTL split of cache writes (sorted 1h before 5m). Needed to bill the 1h
+  // write portion at the higher rate; Zod would strip it without this field.
+  cacheDetails: z
+    .array(
+      z.object({
+        ttl: z.string().optional(),
+        inputTokens: z.number().optional(),
+      }),
+    )
+    .optional(),
 });
 
 // Metrics

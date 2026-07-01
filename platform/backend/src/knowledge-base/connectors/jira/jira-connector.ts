@@ -484,8 +484,13 @@ function buildJql(
 ): string {
   const clauses: string[] = [];
 
-  if (config.projectKey) {
-    clauses.push(`project = "${config.projectKey}"`);
+  const projectKeyList = getProjectKeyList(config);
+  if (projectKeyList.length === 1) {
+    clauses.push(`project = "${projectKeyList[0]}"`);
+  } else if (projectKeyList.length > 1) {
+    clauses.push(
+      `project IN (${projectKeyList.map((key) => `"${key}"`).join(", ")})`,
+    );
   }
 
   if (config.jqlQuery) {
@@ -518,6 +523,11 @@ function buildJql(
     return `${jql} ORDER BY updated ASC`;
   }
   return jql;
+}
+
+function getProjectKeyList(config: JiraConfig): string[] {
+  const keys = config.projectKey?.split(",") ?? [];
+  return [...new Set(keys.map((key) => key.trim()).filter(Boolean))];
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: SDK issue types vary between v2/v3

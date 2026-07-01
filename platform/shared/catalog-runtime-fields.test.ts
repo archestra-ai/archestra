@@ -74,7 +74,6 @@ describe("isMetadataOnlyEdit", () => {
       authorId: "user-1",
       createdAt: new Date("2026-01-01T00:00:00Z"),
       updatedAt: new Date("2026-01-01T00:00:00Z"),
-      presetFieldValues: {},
       labels: [{ key: "env", value: "prod" }],
       teams: [],
       authorName: "Alex",
@@ -105,6 +104,6 @@ describe("isMetadataOnlyEdit", () => {
 
   test("METADATA_ONLY_CATALOG_FIELDS is the public contract", () => {
     // Tripwire — adding a field here is a behavior change everywhere.
-    expect(METADATA_ONLY_CATALOG_FIELDS).toEqual(["description"]);
+    expect(METADATA_ONLY_CATALOG_FIELDS).toEqual(["description", "labels"]);
   });
 });

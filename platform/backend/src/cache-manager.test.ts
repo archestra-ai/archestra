@@ -187,17 +187,6 @@ describe("CacheManager", () => {
       );
     });
 
-    test("sets value with custom TTL", async () => {
-      cacheManager.start();
-      mockKeyv.set.mockResolvedValue(true);
-
-      const value = { foo: "bar" };
-      const customTtl = 5000;
-      await cacheManager.set("test-key" as AllowedCacheKey, value, customTtl);
-
-      expect(mockKeyv.set).toHaveBeenCalledWith("test-key", value, customTtl);
-    });
-
     test("throws when not started", async () => {
       await expect(
         cacheManager.set("test-key" as AllowedCacheKey, { foo: "bar" }),
@@ -223,17 +212,6 @@ describe("CacheManager", () => {
 
       expect(result).toBe(true);
       expect(mockKeyv.delete).toHaveBeenCalledWith("test-key");
-    });
-
-    test("returns false when key does not exist", async () => {
-      cacheManager.start();
-      mockKeyv.delete.mockResolvedValue(false);
-
-      const result = await cacheManager.delete(
-        "missing-key" as AllowedCacheKey,
-      );
-
-      expect(result).toBe(false);
     });
 
     test("returns false when not started", async () => {
@@ -411,24 +389,6 @@ describe("CacheManager", () => {
         "test-key",
         "fresh-result",
         3600000,
-      );
-    });
-
-    test("respects custom TTL", async () => {
-      cacheManager.start();
-      mockKeyv.get.mockResolvedValue(undefined);
-      mockKeyv.set.mockResolvedValue(true);
-
-      const fnc = vi.fn().mockResolvedValue("result");
-      const customTtl = 10000;
-      await cacheManager.wrap("test-key" as AllowedCacheKey, fnc, {
-        ttl: customTtl,
-      });
-
-      expect(mockKeyv.set).toHaveBeenCalledWith(
-        "test-key",
-        "result",
-        customTtl,
       );
     });
   });

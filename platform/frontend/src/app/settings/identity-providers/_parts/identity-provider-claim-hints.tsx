@@ -1,4 +1,5 @@
-import { IDENTITY_PROVIDER_ID } from "@shared";
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { IDENTITY_PROVIDER_ID } from "@archestra/shared";
 import type { ReactNode } from "react";
 
 type ClaimHint = {

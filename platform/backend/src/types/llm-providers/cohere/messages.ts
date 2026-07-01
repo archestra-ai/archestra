@@ -21,9 +21,24 @@ export const CohereMessageContentBlockSchema = z.union([
   }),
 ]);
 
+// Cohere v2 user messages accept image content blocks; `url` may be a base64
+// data URI or a web URL. https://docs.cohere.com/reference/chat
+export const CohereImageUrlContentSchema = z.object({
+  type: z.literal("image_url"),
+  image_url: z.object({
+    url: z.string(),
+    detail: z.enum(["auto", "low", "high"]).optional(),
+  }),
+});
+
+const CohereUserContentBlockSchema = z.union([
+  CohereTextContentSchema,
+  CohereImageUrlContentSchema,
+]);
+
 export const CohereUserMessageSchema = z.object({
   role: z.literal("user"),
-  content: z.union([z.string(), z.array(CohereMessageContentBlockSchema)]),
+  content: z.union([z.string(), z.array(CohereUserContentBlockSchema)]),
 });
 
 export const CohereAssistantMessageSchema = z.object({

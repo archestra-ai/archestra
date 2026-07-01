@@ -3,7 +3,7 @@ import {
   IdentityProviderSamlConfigSchema,
   IdpRoleMappingConfigSchema,
   IdpTeamSyncConfigSchema,
-} from "@shared";
+} from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -36,6 +36,8 @@ export const PublicIdentityProviderSchema = SelectIdentityProviderSchema.pick({
 export const IdentityProviderLatestIdTokenClaimsSchema = z.object({
   providerId: z.string(),
   claims: z.record(z.string(), z.unknown()).nullable(),
+  accessTokenClaims: z.record(z.string(), z.unknown()).nullable(),
+  accessTokenExpiresAt: z.date().nullable(),
   updatedAt: z.date().nullable(),
 });
 

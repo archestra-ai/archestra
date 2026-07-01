@@ -1,7 +1,7 @@
 import type { IncomingHttpHeaders } from "node:http";
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import { vi } from "vitest";
-import { UserModel } from "@/models";
+import { ServiceAccountModel, UserModel } from "@/models";
 import {
   beforeEach,
   describe,
@@ -12,6 +12,11 @@ import {
 import { hasPermission } from "./utils";
 
 vi.mock("@/models", () => ({
+  ServiceAccountModel: {
+    verifyToken: vi.fn(),
+    getPermissions: vi.fn(),
+    findById: vi.fn(),
+  },
   UserModel: {
     getById: vi.fn(),
     getUserPermissions: vi.fn(),
@@ -36,6 +41,12 @@ const mockUserModel = UserModel as unknown as {
   getUserPermissions: MockedFunction<typeof UserModel.getUserPermissions>;
 };
 
+const mockServiceAccountModel = ServiceAccountModel as unknown as {
+  verifyToken: MockedFunction<typeof ServiceAccountModel.verifyToken>;
+  getPermissions: MockedFunction<typeof ServiceAccountModel.getPermissions>;
+  findById: MockedFunction<typeof ServiceAccountModel.findById>;
+};
+
 const mockBetterAuth = betterAuth as unknown as {
   api: {
     hasPermission: MockedFunction<typeof betterAuth.api.hasPermission>;
@@ -54,6 +65,9 @@ describe("hasPermission", () => {
       mcpServerInstallation: ["admin"],
       team: ["read"],
     });
+    mockServiceAccountModel.verifyToken.mockResolvedValue(null);
+    mockServiceAccountModel.getPermissions.mockResolvedValue({});
+    mockServiceAccountModel.findById.mockResolvedValue(null);
   });
 
   describe("session-based authentication", () => {
@@ -194,7 +208,7 @@ describe("hasPermission", () => {
       expect(result).toEqual({
         success: false,
         error: expect.objectContaining({
-          message: "No API key provided",
+          message: "Invalid API key",
         }),
       });
     });
@@ -221,7 +235,7 @@ describe("hasPermission", () => {
       expect(result).toEqual({
         success: false,
         error: expect.objectContaining({
-          message: "No API key provided",
+          message: "Invalid API key",
         }),
       });
       expect(mockUserModel.getById).not.toHaveBeenCalled();

@@ -3,16 +3,17 @@
 import {
   E2eTestId,
   providerDisplayNames,
+  providerRequiresPerUserCredential,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { Plus, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { useMemo, useState } from "react";
+import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import {
   type LlmProviderApiKeyResponse,
   PROVIDER_CONFIG,
 } from "@/components/llm-provider-api-key-form";
-import { LlmProviderApiKeyOptionLabel } from "@/components/llm-provider-options";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -40,6 +41,7 @@ export function ProviderKeyMappingsField({
     SupportedProvider | ""
   >("");
   const [selectedApiKeyId, setSelectedApiKeyId] = useState("");
+  const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const providerGroups = useMemo(
     () => groupProviderApiKeys(providerApiKeys),
     [providerApiKeys],
@@ -64,6 +66,26 @@ export function ProviderKeyMappingsField({
         ([provider]) => provider === selectedProvider,
       )?.[1] ?? [])
     : [];
+  // Per-user providers (e.g. GitHub Copilot) self-map to the caller's own
+  // account — there's no key to pick, so the provider change handler below
+  // auto-selects it and the key field renders read-only.
+  const isPerUserProvider = selectedProvider
+    ? providerRequiresPerUserCredential(selectedProvider)
+    : false;
+  const selectedKey = selectedProviderKeys.find(
+    (apiKey) => apiKey.id === selectedApiKeyId,
+  );
+
+  const handleProviderChange = (value: SupportedProvider) => {
+    setSelectedProvider(value);
+    if (providerRequiresPerUserCredential(value)) {
+      const keys =
+        providerGroups.find(([provider]) => provider === value)?.[1] ?? [];
+      setSelectedApiKeyId(keys[0]?.id ?? "");
+    } else {
+      setSelectedApiKeyId("");
+    }
+  };
 
   const handleAddProviderKey = () => {
     if (!selectedProvider || !selectedApiKeyId) {
@@ -91,10 +113,9 @@ export function ProviderKeyMappingsField({
           <Label>Provider</Label>
           <Select
             value={selectedProvider}
-            onValueChange={(value) => {
-              setSelectedProvider(value as SupportedProvider);
-              setSelectedApiKeyId("");
-            }}
+            onValueChange={(value) =>
+              handleProviderChange(value as SupportedProvider)
+            }
           >
             <SelectTrigger
               className="w-full"
@@ -126,33 +147,32 @@ export function ProviderKeyMappingsField({
 
         <div className="space-y-2">
           <Label>Provider API Key</Label>
-          <Select
-            value={selectedApiKeyId}
-            onValueChange={setSelectedApiKeyId}
-            disabled={!selectedProvider}
-          >
-            <SelectTrigger
-              className="w-full"
+          {isPerUserProvider ? (
+            <div
+              className="flex h-9 w-full items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground"
               data-testid={E2eTestId.VirtualKeyParentKeySelect}
             >
-              <SelectValue placeholder="Select key" />
-            </SelectTrigger>
-            <SelectContent>
-              {selectedProviderKeys.map((key) => {
-                const config = PROVIDER_CONFIG[key.provider];
-                return (
-                  <SelectItem key={key.id} value={key.id}>
-                    <LlmProviderApiKeyOptionLabel
-                      icon={config.icon}
-                      providerName={config.name}
-                      keyName={key.name}
-                      secondaryLabel={config.name}
-                    />
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
+              {selectedKey?.name ?? "Your own account"} — per-user
+            </div>
+          ) : (
+            <LlmProviderApiKeyDropdown
+              availableKeys={selectedProviderKeys}
+              selectedApiKeyId={selectedApiKeyId || null}
+              disabled={!selectedProvider}
+              open={apiKeySelectorOpen}
+              onOpenChange={setApiKeySelectorOpen}
+              onSelectKey={(keyId) => {
+                setSelectedApiKeyId(keyId);
+                setApiKeySelectorOpen(false);
+              }}
+              triggerVariant="select"
+              triggerClassName="w-full text-sm"
+              popoverClassName="w-[var(--radix-popover-trigger-width)]"
+              popoverPortal={false}
+              emptyTriggerLabel="Select key"
+              triggerTestId={E2eTestId.VirtualKeyParentKeySelect}
+            />
+          )}
         </div>
 
         <div className="space-y-2">

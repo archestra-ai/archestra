@@ -1,6 +1,11 @@
-import { and, eq, gt, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
+import db, { schema, withDbTransaction } from "@/database";
 import type { InsertMessage, Message } from "@/types";
+import { isUuid } from "@/utils/uuid";
+
+type DbExecutor =
+  | typeof db
+  | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 class MessageModel {
   /**
@@ -12,7 +17,7 @@ class MessageModel {
   ): Promise<void> {
     await db
       .update(schema.conversationsTable)
-      .set({ updatedAt: new Date() })
+      .set({ updatedAt: new Date(), lastMessageAt: new Date() })
       .where(eq(schema.conversationsTable.id, conversationId));
   }
 
@@ -28,12 +33,15 @@ class MessageModel {
     return message;
   }
 
-  static async bulkCreate(messages: InsertMessage[]): Promise<void> {
+  static async bulkCreate(
+    messages: InsertMessage[],
+    executor: DbExecutor = db,
+  ): Promise<void> {
     if (messages.length === 0) {
       return;
     }
 
-    await db.insert(schema.messagesTable).values(messages);
+    await executor.insert(schema.messagesTable).values(messages);
 
     // Update conversation's updatedAt for all affected conversations
     const uniqueConversationIds = [
@@ -96,7 +104,7 @@ class MessageModel {
   static async findByAnyId(id: string): Promise<Message | null> {
     // Try DB UUID first (fast indexed lookup) — only if it looks like a UUID
     // to avoid PostgreSQL "invalid input syntax for type uuid" errors
-    if (UUID_REGEX.test(id)) {
+    if (isUuid(id)) {
       const byDbId = await MessageModel.findById(id);
       if (byDbId) return byDbId;
     }
@@ -149,6 +157,61 @@ class MessageModel {
     return updatedMessage;
   }
 
+  /**
+   * Replace a message's full content. Used when a turn changes after it was
+   * first persisted — e.g. a tool call that has since been approved or declined.
+   */
+  static async updateContent(
+    messageId: string,
+    content: Message["content"],
+  ): Promise<Message> {
+    // Validate the row exists so the return type holds — `.returning()`
+    // would otherwise yield `undefined` for an unknown id.
+    const message = await MessageModel.findById(messageId);
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    const [updatedMessage] = await db
+      .update(schema.messagesTable)
+      .set({
+        content,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.messagesTable.id, messageId))
+      .returning();
+
+    // A content change (e.g. a tool call's final output landing in an existing
+    // assistant message) is fresh activity the owner may not have seen, so it
+    // advances the conversation's recency the same way a new message does.
+    await MessageModel.touchConversation(updatedMessage.conversationId);
+
+    return updatedMessage;
+  }
+
+  /**
+   * Hard-delete the given message rows by their primary keys. Accepts an
+   * optional executor so a regenerate can delete the stale trailing turn and
+   * persist its replacement in one transaction. Deletion is by identity (id),
+   * never by a timestamp window, so colliding `createdAt` values can't cause
+   * the wrong rows to be removed.
+   */
+  static async deleteByIds(
+    ids: string[],
+    executor: DbExecutor = db,
+  ): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const rows = await executor
+      .delete(schema.messagesTable)
+      .where(inArray(schema.messagesTable.id, ids))
+      .returning({ id: schema.messagesTable.id });
+
+    return rows.length;
+  }
+
   static async deleteAfterMessage(
     conversationId: string,
     messageId: string,
@@ -178,16 +241,17 @@ class MessageModel {
 
   /**
    * Update a text part and optionally delete subsequent messages atomically.
-   * Uses a transaction to ensure both operations succeed or fail together.
+   * Accepts an optional executor so callers can compose this with other writes
+   * (e.g. compaction invalidation) inside a single outer transaction.
    */
   static async updateTextPartAndDeleteSubsequent(
     messageId: string,
     partIndex: number,
     newText: string,
     deleteSubsequent: boolean,
+    executor: DbExecutor = db,
   ): Promise<Message> {
-    return await db.transaction(async (tx) => {
-      // Fetch the current message within transaction
+    const run = async (tx: DbExecutor): Promise<Message> => {
       const [message] = await tx
         .select()
         .from(schema.messagesTable)
@@ -238,11 +302,14 @@ class MessageModel {
       }
 
       return updatedMessage;
-    });
+    };
+
+    // when no outer transaction is provided, wrap so update + delete remain atomic
+    if (executor === db) {
+      return await withDbTransaction(async (tx) => run(tx));
+    }
+    return await run(executor);
   }
 }
 
 export default MessageModel;
-
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

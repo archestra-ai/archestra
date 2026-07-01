@@ -4,7 +4,7 @@ import {
   BROWSER_PREVIEW_HEADER_HEIGHT,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
-} from "@shared";
+} from "@archestra/shared";
 import { ExternalLink, X } from "lucide-react";
 import { useCallback } from "react";
 import { BrowserPreviewContent } from "@/components/chat/browser-preview-content";
@@ -24,6 +24,8 @@ interface BrowserPanelProps {
   initialNavigateUrl?: string;
   /** Called after initial navigation is triggered */
   onInitialNavigateComplete?: () => void;
+  /** When true, hide the panel's own title + close button (the parent already provides them). */
+  hideHeader?: boolean;
 }
 
 export function BrowserPanel({
@@ -35,6 +37,7 @@ export function BrowserPanel({
   isCreatingConversation = false,
   initialNavigateUrl,
   onInitialNavigateComplete,
+  hideHeader = false,
 }: BrowserPanelProps) {
   const handleOpenInNewWindow = useCallback(() => {
     if (!conversationId) return;
@@ -66,7 +69,8 @@ export function BrowserPanel({
       isCreatingConversation={isCreatingConversation}
       initialNavigateUrl={initialNavigateUrl}
       onInitialNavigateComplete={onInitialNavigateComplete}
-      className="border-t"
+      className={hideHeader ? undefined : "border-t"}
+      hideHeader={hideHeader}
       headerActions={
         <>
           <Button
@@ -78,15 +82,17 @@ export function BrowserPanel({
           >
             <ExternalLink className="h-3 w-3" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={onClose}
-            title="Close"
-          >
-            <X className="h-3 w-3" />
-          </Button>
+          {!hideHeader && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={onClose}
+              title="Close"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
         </>
       }
     />

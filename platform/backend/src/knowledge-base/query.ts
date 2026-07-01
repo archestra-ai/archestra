@@ -1,4 +1,4 @@
-import { addNomicTaskPrefix } from "@shared";
+import { addNomicTaskPrefix } from "@archestra/shared";
 import config from "@/config";
 import logger from "@/logging";
 import { KbChunkModel } from "@/models";
@@ -27,6 +27,7 @@ interface ChunkResult {
     title: string;
     sourceUrl: string | null;
     documentId: string;
+    sourceId: string | null;
     connectorType: string | null;
   };
 }
@@ -38,6 +39,12 @@ class QueryService {
     queryText: string;
     userAcl: AclEntry[];
     bypassAcl?: boolean;
+    /**
+     * Defense-in-depth environment isolation. When provided (incl. `null` =
+     * Default), the chunk search also requires the chunk's connector to be in
+     * this environment, so a stray cross-env connectorId cannot leak results.
+     */
+    environmentId?: string | null;
     limit?: number;
   }): Promise<ChunkResult[]> {
     const {
@@ -45,6 +52,7 @@ class QueryService {
       organizationId,
       queryText,
       bypassAcl = false,
+      environmentId,
       limit = 10,
     } = params;
     if (connectorIds.length === 0) return [];
@@ -74,6 +82,7 @@ class QueryService {
           limit: overFetchLimit,
           userAcl: params.userAcl,
           bypassAcl,
+          environmentId,
           type: eq.type,
           hybridEnabled,
         }),
@@ -131,6 +140,7 @@ class QueryService {
     limit: number;
     userAcl: AclEntry[];
     bypassAcl: boolean;
+    environmentId?: string | null;
     type: "semantic" | "keyword";
     hybridEnabled: boolean;
   }): Promise<VectorSearchResult[]> {
@@ -141,6 +151,7 @@ class QueryService {
       limit,
       userAcl,
       bypassAcl,
+      environmentId,
       type,
       hybridEnabled,
     } = params;
@@ -198,6 +209,7 @@ class QueryService {
           limit,
           userAcl,
           bypassAcl,
+          environmentId,
         })
       : Promise.resolve([] as VectorSearchResult[]);
 
@@ -209,6 +221,7 @@ class QueryService {
         limit,
         userAcl,
         bypassAcl,
+        environmentId,
       }),
       fullTextPromise,
     ]);
@@ -251,6 +264,7 @@ class QueryService {
         title: row.title,
         sourceUrl: row.sourceUrl,
         documentId: row.documentId,
+        sourceId: row.sourceId ?? null,
         connectorType: row.connectorType,
       },
     }));

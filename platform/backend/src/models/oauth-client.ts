@@ -1,3 +1,4 @@
+import { OFFLINE_ACCESS_OAUTH_SCOPE } from "@archestra/shared";
 import { and, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { CimdUpsertData } from "@/types";
@@ -62,6 +63,32 @@ class OAuthClientModel {
   }
 
   /**
+   * Register `offline_access` on a client that asks for it at authorize but
+   * registered only a narrower scope (e.g. Claude Desktop registers "mcp" yet
+   * requests offline_access to obtain a refresh token). The OAuth provider
+   * validates authorize-time scopes against the client's *stored* scopes, so a
+   * refresh-capable client missing offline_access fails with `invalid_scope`.
+   *
+   * Idempotent and atomic: only updates clients that registered the
+   * `refresh_token` grant and don't already carry the scope. Self-heals clients
+   * registered before offline_access was added at DCR time.
+   */
+  static async ensureOfflineAccessScope(clientId: string): Promise<void> {
+    await db
+      .update(schema.oauthClientsTable)
+      .set({
+        scopes: sql`array_append(coalesce(${schema.oauthClientsTable.scopes}, ARRAY[]::text[]), ${OFFLINE_ACCESS_OAUTH_SCOPE})`,
+      })
+      .where(
+        and(
+          eq(schema.oauthClientsTable.clientId, clientId),
+          sql`coalesce(${schema.oauthClientsTable.grantTypes}, ARRAY[]::text[]) @> ARRAY['refresh_token']::text[]`,
+          sql`NOT (coalesce(${schema.oauthClientsTable.scopes}, ARRAY[]::text[]) @> ARRAY[${OFFLINE_ACCESS_OAUTH_SCOPE}]::text[])`,
+        ),
+      );
+  }
+
+  /**
    * Atomically insert or update an OAuth client from a CIMD document.
    * Uses onConflictDoUpdate on the unique clientId column to avoid
    * race conditions between concurrent requests.
@@ -72,6 +99,13 @@ class OAuthClientModel {
       redirectUris: data.redirectUris,
       grantTypes: data.grantTypes,
       responseTypes: data.responseTypes,
+      // Persist scopes so the OAuth provider's authorize-time scope check has a
+      // non-null set to validate against. A null scopes column lets the provider
+      // fall back to its full configured scope list — but `ensureOfflineAccessScope`
+      // later turns that null into a partial array (e.g. ['offline_access']),
+      // which then rejects the `mcp` scope. Storing scopes here keeps `mcp` in the
+      // client's set.
+      scopes: data.scopes,
       tokenEndpointAuthMethod: data.tokenEndpointAuthMethod,
       public: data.isPublic,
       metadata: data.metadata,

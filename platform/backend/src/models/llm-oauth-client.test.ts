@@ -1,4 +1,4 @@
-import { LLM_PROXY_OAUTH_SCOPE } from "@shared";
+import { LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";

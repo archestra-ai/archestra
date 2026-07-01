@@ -1,4 +1,4 @@
-import { EXECUTION_ID_HEADER, META_HEADER } from "@shared";
+import { EXECUTION_ID_HEADER, META_HEADER } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import { getExecutionId } from "./execution-id";
 

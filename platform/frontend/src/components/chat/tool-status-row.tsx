@@ -7,6 +7,7 @@ type ToolStatusRowAction =
       onClick: () => void;
       variant?: "secondary" | "outline" | "default";
       icon?: ReactNode;
+      disabled?: boolean;
     }
   | {
       label: string;
@@ -33,7 +34,7 @@ export function ToolStatusRow({
   tone = "default",
 }: ToolStatusRowProps) {
   return (
-    <div className="p-4 pt-0">
+    <div className="p-4">
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <div
           className={tone === "destructive" ? "text-destructive" : undefined}
@@ -88,6 +89,7 @@ export function ToolStatusRow({
                   variant={action.variant ?? "secondary"}
                   size="sm"
                   onClick={action.onClick}
+                  disabled={action.disabled}
                 >
                   {action.icon}
                   {action.label}

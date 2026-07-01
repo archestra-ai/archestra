@@ -9,11 +9,11 @@ import {
   type Resource,
   roleDescriptions,
   TimeInMs,
-} from "@shared";
+} from "@archestra/shared";
 import {
   allAvailableActions,
   predefinedPermissionsMap,
-} from "@shared/access-control";
+} from "@archestra/shared/access-control";
 import { and, eq, getTableColumns, ilike, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
@@ -572,6 +572,25 @@ class OrganizationRoleModel {
     throw new Error(
       "OrganizationRoleModel.delete() should not be called directly. Use betterAuth.api.deleteOrgRole() in routes, or direct DB operations in test fixtures.",
     );
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const role = await OrganizationRoleModel.getById(id, organizationId);
+    if (!role) return null;
+
+    return {
+      id: role.id,
+      organizationId: role.organizationId,
+      role: role.role,
+      name: role.name,
+      description: role.description ?? null,
+      permission: role.permission,
+      predefined: role.predefined,
+      createdAt: role.createdAt?.toISOString() ?? null,
+    };
   }
 
   private static getPermissionsCacheKey(

@@ -42,7 +42,7 @@ backend/src/
 Users pass pagination parameters as query strings:
 
 ```typescript
-// From @shared
+// From @archestra/shared
 PaginationQuerySchema = {
   limit: number   // Items per page (default: 20, max: 100)
   offset: number  // Starting position (default: 0)
@@ -81,7 +81,7 @@ All paginated endpoints return this structure:
 
 ```typescript
 import { count } from "drizzle-orm";
-import type { PaginationQuery } from "@shared";
+import type { PaginationQuery } from "@archestra/shared";
 import db, { schema } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
 
@@ -114,7 +114,7 @@ import { z } from "zod";
 import {
   PaginationQuerySchema,
   createPaginatedResponseSchema,
-} from "@shared";
+} from "@archestra/shared";
 import {
   SelectYourSchema,
 } from "@/types";
@@ -154,7 +154,7 @@ curl http://localhost:9000/api/your-endpoint?limit=20&offset=40
 
 ## API Reference
 
-### Types (from `@shared`)
+### Types (from `@archestra/shared`)
 
 #### `PaginationQuerySchema`
 

@@ -1,4 +1,4 @@
-import { BUILT_IN_AGENT_IDS, BUILT_IN_AGENT_NAMES } from "@shared";
+import { BUILT_IN_AGENT_IDS, BUILT_IN_AGENT_NAMES } from "@archestra/shared";
 import { vi } from "vitest";
 import { AgentModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";

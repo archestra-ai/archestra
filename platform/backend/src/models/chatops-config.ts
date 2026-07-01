@@ -1,7 +1,12 @@
 import { SLACK_DEFAULT_CONNECTION_MODE } from "@/agents/chatops/constants";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
-import type { MsTeamsDbConfig, SecretValue, SlackDbConfig } from "@/types";
+import type {
+  MsTeamsDbConfig,
+  NgrokDbConfig,
+  SecretValue,
+  SlackDbConfig,
+} from "@/types";
 import SecretModel from "./secret";
 
 /**
@@ -13,6 +18,7 @@ const FORCE_DB = true;
 
 const MS_TEAMS_SECRET_NAME = "chatops-ms-teams";
 const SLACK_SECRET_NAME = "chatops-slack";
+const NGROK_SECRET_NAME = "chatops-ngrok";
 
 class ChatOpsConfigModel {
   async getMsTeamsConfig(): Promise<MsTeamsDbConfig | null> {
@@ -50,6 +56,53 @@ class ChatOpsConfigModel {
   async saveSlackConfig(value: SlackDbConfig): Promise<void> {
     await this.saveConfig(SLACK_SECRET_NAME, value as unknown as SecretValue);
     logger.info("ChatOpsConfigModel: saved Slack config to DB");
+  }
+
+  async getNgrokConfig(): Promise<NgrokDbConfig | null> {
+    return this.getConfig<NgrokDbConfig>(NGROK_SECRET_NAME);
+  }
+
+  async saveNgrokConfig(value: NgrokDbConfig): Promise<void> {
+    await this.saveConfig(NGROK_SECRET_NAME, value as unknown as SecretValue);
+    logger.info("ChatOpsConfigModel: saved ngrok config to DB");
+  }
+
+  /**
+   * Non-secret ChatOps connectivity snapshot for audit diffs.
+   */
+  async getRedactedSnapshotForAudit(): Promise<Record<string, unknown>> {
+    const [ms, slack, ngrok] = await Promise.all([
+      this.getMsTeamsConfig(),
+      this.getSlackConfig(),
+      this.getNgrokConfig(),
+    ]);
+
+    return {
+      msTeams: ms
+        ? {
+            enabled: ms.enabled,
+            hasAppId: Boolean(ms.appId),
+            hasAppSecret: Boolean(ms.appSecret),
+            hasTenantId: Boolean(ms.tenantId),
+          }
+        : null,
+      slack: slack
+        ? {
+            enabled: slack.enabled,
+            connectionMode: slack.connectionMode,
+            hasBotToken: Boolean(slack.botToken),
+            hasSigningSecret: Boolean(slack.signingSecret),
+            hasAppId: Boolean(slack.appId),
+            hasAppLevelToken: Boolean(slack.appLevelToken),
+          }
+        : null,
+      ngrok: ngrok
+        ? {
+            hasAuthToken: Boolean(ngrok.authToken),
+            hasDomain: Boolean(ngrok.domain),
+          }
+        : null,
+    };
   }
 
   private async getConfig<T>(secretName: string): Promise<T | null> {

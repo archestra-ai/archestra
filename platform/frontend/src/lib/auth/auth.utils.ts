@@ -1,4 +1,8 @@
-import { type Permissions, type Resource, resourceLabels } from "@shared";
+import {
+  type Permissions,
+  type Resource,
+  resourceLabels,
+} from "@archestra/shared";
 
 /**
  * Format a Permissions object into a human-readable "Missing permissions: ..." string

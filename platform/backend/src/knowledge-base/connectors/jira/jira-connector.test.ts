@@ -302,6 +302,31 @@ describe("JiraConnector", () => {
       );
     });
 
+    test("builds project IN JQL for multiple project keys", async () => {
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues: [],
+        nextPageToken: null,
+      });
+
+      const batches = [];
+      for await (const batch of connector.sync({
+        config: {
+          ...validConfig,
+          projectKey: "ENG, OPS",
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(mockEnhancedSearchPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jql: expect.stringContaining('project IN ("ENG", "OPS")'),
+        }),
+      );
+    });
+
     test("paginates through multiple pages", async () => {
       const page1Issues = Array.from({ length: 50 }, (_, i) =>
         makeIssue(`PROJ-${i + 1}`, `Issue ${i + 1}`),

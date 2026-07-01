@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-04-23
+lastUpdated: 2026-06-11
 ---
 
 <!--
@@ -33,22 +33,11 @@ Tool assignments can point to a specific installed MCP server connection or use 
 
 After the gateway is configured, use **Connect** to copy connection details for supported clients.
 
-## Tool Assignment Mode
+## Tool Assignment
 
-A gateway has a tool assignment mode: **Manual** (default) or **Automatic**.          
+An admin picks each gateway tool explicitly. Each assignment can be pinned to a specific installed MCP server connection, or use **Resolve at call time** (see Gateway Model above).
 
-In **Manual** mode, an admin picks each tool individually. Each assignment can be pinned to a specific installed MCP server connection, or use **Resolve at call time** (see Gateway Model above).
-
-In **Automatic** mode, the gateway's tools are derived from labels. The gateway receives every tool from every [catalog entry](/docs/platform-private-registry#labels) that shares at least one `key: value` label pair with the gateway. For example, a gateway labeled `department: finance` automatically receives tools from every MCP catalog item tagged `department: finance`. These tools are kept in sync when labels are changed or new catalog items are added.
-
-When Automatic mode is used together with [Search-and-run tool mode](#search-and-run-tool-mode), matched tools are not exposed directly through MCP `tools/list`. The label-matched catalog tools define the full set of tools that `search_tools` can discover and `run_tool` can execute behind the scenes.
-
-**Automatic** mode puts some constraints on upstream MCP servers:
-
-1. The gateway will inherit _all_ tools from matched catalog items, not a configurable subset of the MCP server tools.
-2. Credential resolution is set to **Resolve at call time** for all upstream MCP servers. Each caller must have their own access to the upstream MCP servers. Gateways that need a single shared service-account connection should stay in **Manual** mode.
-
-**Example.** A finance team owns five catalog entries today — Snowflake, NetSuite, Stripe, Salesforce, and Confluence — and expects to add more over time. The admin tags each entry `department: finance` and creates an MCP gateway labeled the same. The gateway picks up every tool from those five entries without manual wiring. When the team adds an SAP integration to the registry six months later, only that catalog entry needs the `department: finance` label; the gateway includes its tools on the next save. 
+Use explicit assignment when different clients need different subsets of the same installed MCP server, or when a gateway should use a shared service-account connection for some tools and caller-specific credentials for others.
 
 ## Authentication
 
@@ -111,18 +100,22 @@ If a gateway is scoped to one team, members outside that team cannot use it even
 
 See [Access Control](/docs/platform-access-control) for the permission model.
 
-## Search-and-Run Tool Mode
+## Load Tools When Needed
 
 By default, a gateway exposes every assigned tool through MCP `tools/list`.
 
-For larger toolsets, you can enable **Search-and-run tool mode** in the gateway dialog. In that mode, clients only see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools.
+For larger toolsets, enable **Load tools when needed** in the gateway dialog. This keeps the initial tool list small. Clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first.
 
-Those two tools are enabled implicitly by the mode and do not appear in the built-in tool picker. The rest of the gateway's assigned tools stay available behind the scenes:
+Those two tools are enabled implicitly and do not appear in the built-in tool picker. The rest of the gateway's assigned tools stay available on demand:
 
 - `search_tools` can discover them
 - `run_tool` can execute them
 
 Use this when the full tool list is too large or noisy to send to the model on every turn, but the gateway still needs the same underlying tool access.
+
+With **Access all tools** also enabled, a signed-in user's `search_tools` and `run_tool` reach every MCP catalog tool and knowledge source that user can access. Credentials resolve at call time per the MCP server's **Agent connections** setting — on behalf of the user by default, or one shared account when the server is configured that way. Nothing is assigned to the gateway. Sessions authenticated with org or team tokens stay limited to assigned tools, and the org-wide **Dynamic Tool Access** security setting can disable the behavior entirely.
+
+Tool call policies still apply to the target tool. `run_tool` does not bypass input conditions, team conditions, untrusted-context rules, or approval-required rules.
 
 ## Custom Headers
 
@@ -133,3 +126,11 @@ Configure the allowlist in the gateway's **Advanced** section. Only headers on t
 Gateway header passthrough does not override credentials managed by Archestra. If a forwarded header conflicts with an upstream credential header such as `Authorization`, the credential resolved by Archestra takes precedence.
 
 Header passthrough applies to remote MCP servers and local MCP servers using streamable-http transport. Stdio-based servers do not support HTTP headers.
+
+## Elicitation
+
+MCP servers behind a gateway can use MCP elicitation to ask the connected client for more information during a tool call. Archestra passes these requests through only when the caller supports elicitation, so non-interactive clients are not asked to complete forms.
+
+## Environment
+
+A gateway can be assigned a deployment environment. It then exposes and executes only tools (and knowledge) from the same environment — a "dev" gateway cannot reach "prod" servers. Built-in servers are always available. Unassigned gateways use the Default environment. See [Environments](/docs/platform-environments).

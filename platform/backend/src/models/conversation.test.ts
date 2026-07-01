@@ -1,4 +1,4 @@
-import { ChatErrorCode } from "@shared";
+import { ChatErrorCode } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import ConversationModel from "./conversation";
 import ConversationChatErrorModel from "./conversation-chat-error";
@@ -158,6 +158,132 @@ describe("ConversationModel", () => {
     expect(conversations.every((c) => Array.isArray(c.messages))).toBe(true);
   });
 
+  test("findAll reports unread once a message lands after the conversation was read", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Unread Agent", teams: [] });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Unread Conversation",
+    });
+
+    const unreadOf = async () => {
+      const [row] = await ConversationModel.findAll(user.id, org.id);
+      return row.unread;
+    };
+
+    // A message arrives after creation (lastMessageAt > createdAt), never read.
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant", parts: [{ type: "text", text: "hi" }] },
+    });
+    expect(await unreadOf()).toBe(true);
+
+    // Reading it clears the flag.
+    expect(
+      await ConversationModel.markRead({
+        id: conversation.id,
+        userId: user.id,
+        organizationId: org.id,
+      }),
+    ).toBe(true);
+    expect(await unreadOf()).toBe(false);
+
+    // A later message makes it unread again.
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant", parts: [{ type: "text", text: "more" }] },
+    });
+    expect(await unreadOf()).toBe(true);
+  });
+
+  test("findAll reports unread when a tool result updates an already-read message", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Tool Update Agent", teams: [] });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Tool Update Conversation",
+    });
+    const message = await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        role: "assistant",
+        parts: [{ type: "text", text: "working" }],
+      },
+    });
+
+    await ConversationModel.markRead({
+      id: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+    const [readRow] = await ConversationModel.findAll(user.id, org.id);
+    expect(readRow.unread).toBe(false);
+
+    // A tool call's final output lands in the existing assistant message (a
+    // content change, not a new message) — it should still surface as unread.
+    await MessageModel.updateContent(message.id, {
+      role: "assistant",
+      parts: [{ type: "text", text: "done" }],
+    });
+    const [afterRow] = await ConversationModel.findAll(user.id, org.id);
+    expect(afterRow.unread).toBe(true);
+  });
+
+  test("markRead does not touch a conversation owned by another user", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const owner = await makeUser();
+    const other = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Owner Agent", teams: [] });
+
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Owned Conversation",
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant", parts: [{ type: "text", text: "hi" }] },
+    });
+
+    // A non-owner marking read matches no row...
+    expect(
+      await ConversationModel.markRead({
+        id: conversation.id,
+        userId: other.id,
+        organizationId: org.id,
+      }),
+    ).toBe(false);
+
+    // ...so the owner still sees it as unread.
+    const [row] = await ConversationModel.findAll(owner.id, org.id);
+    expect(row.unread).toBe(true);
+  });
+
   test("can update a conversation", async ({
     makeUser,
     makeOrganization,
@@ -253,7 +379,7 @@ describe("ConversationModel", () => {
     );
   });
 
-  test("updated conversation moves to top of list", async ({
+  test("updating a conversation title does not change list order", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -287,16 +413,19 @@ describe("ConversationModel", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // Update the first conversation - should move it to the top
+    // Update the first conversation - order should stay the same,
+    // only new message exhange changes the order
     await ConversationModel.update(first.id, user.id, org.id, {
       title: "First Updated",
     });
 
-    // Verify first is now on top after being updated
+    // Order is unchanged; only the title was updated.
     conversations = await ConversationModel.findAll(user.id, org.id);
-    expect(conversations[0].id).toBe(first.id);
-    expect(conversations[0].title).toBe("First Updated");
-    expect(conversations[1].id).toBe(second.id);
+    expect(conversations[0].id).toBe(second.id);
+    expect(conversations[1].id).toBe(first.id);
+    expect(conversations.find((c) => c.id === first.id)?.title).toBe(
+      "First Updated",
+    );
   });
 
   test("adding a message moves conversation to top of list", async ({
@@ -712,6 +841,86 @@ describe("ConversationModel", () => {
     expect(found?.messages).toHaveLength(1);
     expect(found?.messages[0].id).toBe(message.id);
     expect(found?.messages[0].id).not.toBe("temp-ai-sdk-id");
+  });
+
+  test("findById filters already-persisted empty assistant rows", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Empty Bubble Agent", teams: [] });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Empty Bubble Test",
+    });
+
+    // a healthy turn: user prompt + assistant answer.
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "user",
+      content: { role: "user", parts: [{ type: "text", text: "hello" }] },
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant", parts: [{ type: "text", text: "hi" }] },
+    });
+
+    // historical bad assistant rows that must not render after refresh.
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant", parts: [] },
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant" },
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: "",
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          { type: "data-token-usage", data: { totalTokens: 5 } },
+        ],
+      },
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        role: "assistant",
+        parts: [
+          {
+            type: "data-tool-ui-start",
+            data: { toolCallId: "call_orphan", toolName: "render_chart" },
+          },
+        ],
+      },
+    });
+
+    const found = await ConversationModel.findById({
+      id: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    expect(found?.messages).toHaveLength(2);
+    expect(found?.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(found?.messages[1].parts).toEqual([{ type: "text", text: "hi" }]);
   });
 
   test("findById merges database UUIDs into multiple messages", async ({

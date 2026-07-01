@@ -1,12 +1,14 @@
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
 import { and, asc, eq, getTableColumns, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
   InsertOptimizationRule,
   OptimizationRule,
   UpdateOptimizationRule,
 } from "@/types";
+import AgentModel from "./agent";
 
 class OptimizationRuleModel {
   /**
@@ -76,6 +78,7 @@ class OptimizationRuleModel {
           and(
             eq(schema.optimizationRulesTable.entityType, "agent"),
             eq(schema.agentsTable.organizationId, organizationId),
+            notDeleted(schema.agentsTable),
           ),
         ),
       )
@@ -132,6 +135,7 @@ class OptimizationRuleModel {
             and(
               eq(schema.optimizationRulesTable.entityType, "agent"),
               eq(schema.agentsTable.organizationId, organizationId),
+              notDeleted(schema.agentsTable),
             ),
           ),
         ),
@@ -172,18 +176,7 @@ class OptimizationRuleModel {
       return !!team;
     }
 
-    const [agent] = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.id, entityId),
-          eq(schema.agentsTable.organizationId, organizationId),
-        ),
-      )
-      .limit(1);
-
-    return !!agent;
+    return AgentModel.existsInOrganization({ id: entityId, organizationId });
   }
 
   /**
@@ -399,6 +392,7 @@ class OptimizationRuleModel {
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
         zhipuai: [],
         deepseek: [],
+        "github-copilot": [], // Copilot model availability is subscription-specific, no defaults
         bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults
         minimax: [],
         azure: [], // Azure optimization rules are deployment-specific, no defaults
@@ -442,6 +436,29 @@ class OptimizationRuleModel {
       { organizationId },
       "OptimizationRuleModel.ensureDefaultOptimizationRules: completed",
     );
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const row = await OptimizationRuleModel.findByIdForOrganization(
+      id,
+      organizationId,
+    );
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      conditions: row.conditions,
+      provider: row.provider,
+      targetModel: row.targetModel,
+      enabled: row.enabled,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
   }
 }
 

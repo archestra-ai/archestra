@@ -1,10 +1,12 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
-} from "@shared";
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
+  computeMcpEnvConflicts,
   getDefaultArchestraToolIds,
+  isCatalogInEnvironment,
   sortAndFilterTools,
   sortCatalogItems,
 } from "./agent-tools-editor.utils";
@@ -260,5 +262,90 @@ describe("sortCatalogItems", () => {
       "slack",
       "empty",
     ]);
+  });
+});
+
+describe("isCatalogInEnvironment", () => {
+  const env = (environmentId: string | null, serverType = "local") => ({
+    id: "c1",
+    name: "Cat",
+    serverType,
+    environmentId,
+  });
+
+  it("matches when catalog and agent share an environment id", () => {
+    expect(isCatalogInEnvironment(env("env-a"), "env-a")).toBe(true);
+    expect(isCatalogInEnvironment(env("env-a"), "env-b")).toBe(false);
+  });
+
+  it("treats null (Default runtime) as its own bucket on both sides", () => {
+    expect(isCatalogInEnvironment(env(null), null)).toBe(true);
+    expect(isCatalogInEnvironment(env(null), "env-a")).toBe(false);
+    expect(isCatalogInEnvironment(env("env-a"), null)).toBe(false);
+  });
+
+  it("treats missing environmentId as the Default runtime bucket", () => {
+    expect(isCatalogInEnvironment({ id: "c1", name: "Cat" }, null)).toBe(true);
+    expect(isCatalogInEnvironment({ id: "c1", name: "Cat" }, "env-a")).toBe(
+      false,
+    );
+  });
+
+  it("exempts builtin catalogs from every environment", () => {
+    expect(isCatalogInEnvironment(env("env-a", "builtin"), "env-b")).toBe(true);
+    expect(isCatalogInEnvironment(env(null, "builtin"), "env-a")).toBe(true);
+  });
+});
+
+describe("computeMcpEnvConflicts", () => {
+  const catalogs = [
+    {
+      id: "default-mcp",
+      name: "Default MCP",
+      serverType: "local",
+      environmentId: null,
+    },
+    {
+      id: "prod-mcp",
+      name: "Prod MCP",
+      serverType: "local",
+      environmentId: "prod",
+    },
+    {
+      id: "builtin",
+      name: "Archestra",
+      serverType: "builtin",
+      environmentId: null,
+    },
+  ];
+
+  it("flags selected catalogs not in the agent's environment", () => {
+    const conflicts = computeMcpEnvConflicts(
+      catalogs,
+      ["default-mcp", "prod-mcp", "builtin"],
+      "prod",
+    );
+    expect(conflicts).toEqual([
+      { catalogId: "default-mcp", name: "Default MCP" },
+    ]);
+  });
+
+  it("never flags builtin catalogs", () => {
+    const conflicts = computeMcpEnvConflicts(catalogs, ["builtin"], "prod");
+    expect(conflicts).toEqual([]);
+  });
+
+  it("returns no conflicts when everything matches the Default runtime", () => {
+    const conflicts = computeMcpEnvConflicts(
+      catalogs,
+      ["default-mcp", "builtin"],
+      null,
+    );
+    expect(conflicts).toEqual([]);
+  });
+
+  it("skips unknown catalog ids", () => {
+    const conflicts = computeMcpEnvConflicts(catalogs, ["ghost"], "prod");
+    expect(conflicts).toEqual([]);
   });
 });

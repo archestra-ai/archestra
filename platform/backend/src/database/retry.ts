@@ -146,6 +146,19 @@ export async function withDbRetry<T>(
   throw new Error("withDbRetry: unreachable");
 }
 
+/**
+ * Retry a full database transaction callback on transient connection errors.
+ *
+ * Transaction retries must wrap the whole transaction because checked-out
+ * transaction clients are not covered by the pool.query() wrapper.
+ * @public — exported for testability and standalone Drizzle clients.
+ */
+export async function withTransactionRetry<T>(
+  runTransaction: () => Promise<T>,
+): Promise<T> {
+  return withDbRetry(runTransaction);
+}
+
 /** Symbol marker to prevent double-wrapping the same pool */
 const RETRY_WRAPPED = Symbol("retryWrapped");
 
@@ -182,4 +195,53 @@ export function wrapPoolWithRetry(pool: {
   }) as typeof pool.query;
 
   (pool as Record<symbol, unknown>)[RETRY_WRAPPED] = true;
+}
+
+let dbErrorSafetyNetInstalled = false;
+
+/**
+ * Install process-level handlers that swallow transient pg connection errors
+ * instead of letting them crash the backend.
+ *
+ * pg.Pool already emits `error` for idle-client failures, and createPool()
+ * installs a listener for that. Yet in practice errors still escape — observed
+ * during a Postgres OOMKilled restart, where the `BoundPool` emitted an
+ * `error` event that surfaced as an uncaught exception, terminating the
+ * Node process with exit code 1.
+ *
+ * This safety net inspects every `uncaughtException` / `unhandledRejection`
+ * via {@link isTransientDbError}. Transient pg/socket errors are logged and
+ * swallowed — the next pool.query() reconnects naturally. All other errors
+ * fall through to the default behavior (log + exit) so we never mask real
+ * bugs.
+ *
+ * Idempotent — multiple calls are no-ops.
+ */
+export function installDbErrorSafetyNet(): void {
+  if (dbErrorSafetyNetInstalled) return;
+  dbErrorSafetyNetInstalled = true;
+
+  process.on("uncaughtException", (err) => {
+    if (isTransientDbError(err)) {
+      logger.error(
+        { err },
+        "Swallowed transient DB error at process level; pool will reconnect",
+      );
+      return;
+    }
+    logger.fatal({ err }, "Uncaught exception, exiting");
+    process.exit(1);
+  });
+
+  process.on("unhandledRejection", (reason) => {
+    if (isTransientDbError(reason)) {
+      logger.error(
+        { err: reason },
+        "Swallowed transient DB rejection at process level; pool will reconnect",
+      );
+      return;
+    }
+    logger.fatal({ err: reason }, "Unhandled promise rejection, exiting");
+    process.exit(1);
+  });
 }

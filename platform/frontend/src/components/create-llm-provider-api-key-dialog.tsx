@@ -1,6 +1,6 @@
 "use client";
 
-import { isProviderApiKeyOptional } from "@shared";
+import { isProviderApiKeyOptional } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -31,6 +31,9 @@ export type CreateLlmProviderApiKeyDialogProps = {
   title: string;
   description: string;
   defaultValues?: Partial<LlmProviderApiKeyFormValues>;
+  /** Restrict the provider picker to this allowlist (e.g. the providers the
+   * selected connect client can actually route). Omit to allow all providers. */
+  allowedProviders?: LlmProviderApiKeyFormValues["provider"][];
   showConsoleLink?: boolean;
   onSuccess?: () => void;
 };
@@ -41,6 +44,7 @@ export function CreateLlmProviderApiKeyDialog({
   title,
   description,
   defaultValues,
+  allowedProviders,
   showConsoleLink = false,
   onSuccess,
 }: CreateLlmProviderApiKeyDialogProps) {
@@ -138,6 +142,7 @@ export function CreateLlmProviderApiKeyDialog({
             form={form}
             existingKeys={existingKeys}
             isPending={createMutation.isPending}
+            allowedProviders={allowedProviders}
             bedrockIamAuthEnabled={bedrockIamAuthEnabled}
             geminiVertexAiEnabled={geminiVertexAiEnabled}
           />

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { OAUTH_TOKEN_TYPE } from "@shared";
+import { OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { afterEach, describe, expect, test, vi } from "@/test";

@@ -1,4 +1,4 @@
-import { USER_ID_HEADER } from "@shared";
+import { USER_ID_HEADER } from "@archestra/shared";
 import logger from "@/logging";
 import { UserModel } from "@/models";
 

@@ -1,6 +1,18 @@
-import type { SupportedProvider } from "@shared";
-import { and, eq, ilike, inArray, notInArray, or, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import {
+  CACHE_PRICE_MULTIPLIERS,
+  type SupportedProvider,
+} from "@archestra/shared";
+import {
+  and,
+  count,
+  eq,
+  ilike,
+  inArray,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type {
   CreateModel,
@@ -11,12 +23,20 @@ import type {
 } from "@/types";
 
 /**
- * Effective pricing result with source tracking.
+ * Effective pricing result with source tracking. All prices are per-million
+ * tokens as decimal strings. Cache prices are null when the model's provider has
+ * no cache pricing model (neither explicit nor multiplier-derivable).
  */
 interface EffectivePricing {
   pricePerMillionInput: string;
   pricePerMillionOutput: string;
   source: PriceSource;
+  /** Cache-read price per million tokens, or null when unpriced. */
+  pricePerMillionCacheRead: string | null;
+  /** Cache-write price per million tokens at the default (5m) TTL, or null when unpriced. */
+  pricePerMillionCacheWrite: string | null;
+  /** Source of the cache price, or null when unpriced. */
+  cacheSource: PriceSource | null;
 }
 
 /**
@@ -46,6 +66,73 @@ function getDefaultModelPrice(model: string): {
     pricePerMillionInput: price,
     pricePerMillionOutput: price,
   };
+}
+
+/**
+ * Resolve one cache direction (read or write) with per-field precedence:
+ * custom override → registry-synced → multiplier-derived from the input price.
+ * Returns a null price + null source when none of those apply.
+ */
+function resolveCacheDirection(params: {
+  custom: string | null | undefined;
+  syncedPerToken: string | null | undefined;
+  multiplierFactor: number | undefined;
+  effectivePricePerMillionInput: number;
+}): { price: string | null; source: PriceSource | null } {
+  const {
+    custom,
+    syncedPerToken,
+    multiplierFactor,
+    effectivePricePerMillionInput,
+  } = params;
+  if (custom != null) {
+    return { price: custom, source: "custom" };
+  }
+  if (syncedPerToken != null) {
+    return {
+      price: formatCachePrice(Number.parseFloat(syncedPerToken) * 1_000_000),
+      source: "models_dev",
+    };
+  }
+  if (multiplierFactor !== undefined) {
+    return {
+      price: formatCachePrice(effectivePricePerMillionInput * multiplierFactor),
+      source: "derived_multiplier",
+    };
+  }
+  return { price: null, source: null };
+}
+
+/**
+ * Collapse the read/write cache-price sources into one label for display,
+ * favouring the most authoritative direction: custom → models.dev → derived.
+ *
+ * It reads `derived_multiplier` (the "estimated" signal) only when BOTH
+ * directions are derived. This matters because providers that don't charge for
+ * cache writes (OpenAI/Gemini/DeepSeek) always derive a structurally-zero write;
+ * that known-zero must not make a model with a real synced cache-read price
+ * appear estimated. (Synced-read + non-zero-derived-write does not occur in
+ * practice — the providers with a non-zero write surcharge publish both prices.)
+ */
+function combineCacheSource(
+  readSource: PriceSource | null,
+  writeSource: PriceSource | null,
+): PriceSource {
+  const sources = [readSource, writeSource].filter(
+    (s): s is PriceSource => s != null,
+  );
+  if (sources.includes("custom")) return "custom";
+  if (sources.includes("models_dev")) return "models_dev";
+  return "derived_multiplier";
+}
+
+/**
+ * Format a per-million cache price as a precise, trailing-zero-free string.
+ * Cache prices are often sub-cent per million, so the 2-decimal rounding used
+ * for the larger input/output magnitudes would be materially lossy here.
+ */
+function formatCachePrice(perMillion: number): string {
+  return Number.parseFloat(perMillion.toFixed(8)).toString();
 }
 
 class ModelModel {
@@ -172,6 +259,27 @@ class ModelModel {
   }
 
   /**
+   * Find embedding models by exact model ID across providers.
+   */
+  static async findEmbeddingModelsByModelId(params: {
+    modelId: string;
+    provider?: SupportedProvider;
+  }): Promise<Model[]> {
+    const conditions = [eq(schema.modelsTable.modelId, params.modelId)];
+
+    if (params.provider) {
+      conditions.push(eq(schema.modelsTable.provider, params.provider));
+    }
+
+    const results = await db
+      .select()
+      .from(schema.modelsTable)
+      .where(and(...conditions));
+
+    return results.filter((model) => ModelModel.supportsEmbeddings(model));
+  }
+
+  /**
    * Create new model
    */
   static async create(data: CreateModel): Promise<Model> {
@@ -202,10 +310,12 @@ class ModelModel {
           supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
           promptPricePerToken: data.promptPricePerToken,
           completionPricePerToken: data.completionPricePerToken,
+          cacheReadPricePerToken: data.cacheReadPricePerToken,
+          cacheWritePricePerToken: data.cacheWritePricePerToken,
           embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
           lastSyncedAt: new Date(),
           updatedAt: new Date(),
-          // NOTE: customPricePerMillionInput/Output intentionally NOT updated
+          // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
           // NOTE: capability fields only backfill when the existing DB value is null
           // to preserve user-edited values while still populating missing metadata
         },
@@ -238,7 +348,7 @@ class ModelModel {
     );
 
     // Wrap all batches in a transaction to ensure atomicity
-    const results = await db.transaction(async (tx) => {
+    const results = await withDbTransaction(async (tx) => {
       const batchResults: Model[] = [];
 
       for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
@@ -264,10 +374,12 @@ class ModelModel {
               supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
+              cacheReadPricePerToken: sql`excluded.cache_read_price_per_token`,
+              cacheWritePricePerToken: sql`excluded.cache_write_price_per_token`,
               embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
-              // NOTE: customPricePerMillionInput/Output intentionally NOT updated
+              // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
               // NOTE: capability fields only backfill when the existing DB value is null
               // to preserve user-edited values while still populating missing metadata
             },
@@ -305,7 +417,7 @@ class ModelModel {
       "Starting batched full model upsert",
     );
 
-    const results = await db.transaction(async (tx) => {
+    const results = await withDbTransaction(async (tx) => {
       const batchResults: Model[] = [];
 
       for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
@@ -331,9 +443,13 @@ class ModelModel {
               supportsToolCalling: sql`excluded.supports_tool_calling`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
+              cacheReadPricePerToken: sql`excluded.cache_read_price_per_token`,
+              cacheWritePricePerToken: sql`excluded.cache_write_price_per_token`,
               embeddingDimensions: sql`excluded.embedding_dimensions`,
               customPricePerMillionInput: sql`NULL`,
               customPricePerMillionOutput: sql`NULL`,
+              customPricePerMillionCacheRead: sql`NULL`,
+              customPricePerMillionCacheWrite: sql`NULL`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
             },
@@ -426,6 +542,13 @@ class ModelModel {
     if (data.customPricePerMillionOutput !== undefined) {
       set.customPricePerMillionOutput = data.customPricePerMillionOutput;
     }
+    if (data.customPricePerMillionCacheRead !== undefined) {
+      set.customPricePerMillionCacheRead = data.customPricePerMillionCacheRead;
+    }
+    if (data.customPricePerMillionCacheWrite !== undefined) {
+      set.customPricePerMillionCacheWrite =
+        data.customPricePerMillionCacheWrite;
+    }
     if (data.ignored !== undefined) {
       set.ignored = data.ignored;
     }
@@ -450,9 +573,9 @@ class ModelModel {
 
   /**
    * Ensure a model entry exists for the given modelId and provider.
-   * Marks the model as discovered via LLM Proxy so it's preserved even
-   * without API key links (users can set custom pricing for metrics).
-   * Used by LLM proxy to ensure models are tracked even before models.dev sync.
+   * Newly inserted rows are marked as discovered via LLM Proxy so custom
+   * models can be priced for metrics. Existing synced provider models keep
+   * their source classification so deleting the provider key can clean them up.
    */
   static async ensureModelExists(
     modelId: string,
@@ -467,24 +590,58 @@ class ModelModel {
         discoveredViaLlmProxy: true,
         lastSyncedAt: new Date(),
       })
-      .onConflictDoUpdate({
-        target: [schema.modelsTable.provider, schema.modelsTable.modelId],
-        set: {
-          discoveredViaLlmProxy: true,
-        },
-      });
+      .onConflictDoNothing();
   }
 
   /**
-   * Get effective pricing for a model using 3-tier priority:
+   * Get effective pricing for a model.
+   *
+   * Input/output price uses 3-tier priority:
    * 1. Custom admin-set price (customPricePerMillionInput/Output) — if non-null
    * 2. models.dev synced price (promptPricePerToken/completionPricePerToken × 1M) — if non-null
    * 3. Default fallback ($30 for mini/haiku/nano models, $50 for others)
+   *
+   * Cache read/write price uses its own 3-tier priority:
+   * 1. Custom admin-set cache price — if non-null
+   * 2. models.dev synced cache price — if non-null
+   * 3. Derived from the effective input price via the provider's cache multiplier
+   *
+   * Cache prices are null when the provider has no cache pricing model and none
+   * was synced/set (so cache cost is not fabricated for non-caching providers).
    */
   static getEffectivePricing(
     model: Model | null,
     modelId?: string,
+    /** Provider hint used for cache-price derivation when `model` is null (default tier). */
+    provider?: SupportedProvider,
   ): EffectivePricing {
+    const { pricePerMillionInput, pricePerMillionOutput, source } =
+      ModelModel.getEffectiveBasePricing(model, modelId);
+    const cache = ModelModel.getEffectiveCachePricing(
+      model,
+      pricePerMillionInput,
+      provider,
+    );
+
+    return {
+      pricePerMillionInput,
+      pricePerMillionOutput,
+      source,
+      ...cache,
+    };
+  }
+
+  /**
+   * Resolve the effective input/output price (per million) and its source.
+   */
+  private static getEffectiveBasePricing(
+    model: Model | null,
+    modelId?: string,
+  ): {
+    pricePerMillionInput: string;
+    pricePerMillionOutput: string;
+    source: PriceSource;
+  } {
     // Tier 1: Custom admin-set price
     if (
       model?.customPricePerMillionInput != null &&
@@ -515,10 +672,60 @@ class ModelModel {
 
     // Tier 3: Default fallback
     const nameForDefault = model?.modelId ?? modelId ?? "";
-    const defaults = getDefaultModelPrice(nameForDefault);
     return {
-      ...defaults,
+      ...getDefaultModelPrice(nameForDefault),
       source: "default",
+    };
+  }
+
+  /**
+   * Resolve the effective cache read/write price (per million) and its source.
+   * `effectivePricePerMillionInput` is the already-resolved input price used for
+   * the multiplier-derived fallback tier.
+   */
+  private static getEffectiveCachePricing(
+    model: Model | null,
+    effectivePricePerMillionInput: string,
+    providerHint?: SupportedProvider,
+  ): {
+    pricePerMillionCacheRead: string | null;
+    pricePerMillionCacheWrite: string | null;
+    cacheSource: PriceSource | null;
+  } {
+    // Read and write are resolved independently: a registry may price one
+    // direction and not the other (e.g. OpenAI/Gemini publish a cache-read
+    // price but no cache-write price), so we must not discard a known price
+    // just because its counterpart is missing.
+    const provider = model?.provider ?? providerHint;
+    const multiplier = provider ? CACHE_PRICE_MULTIPLIERS[provider] : undefined;
+    const priceIn = Number.parseFloat(effectivePricePerMillionInput);
+
+    const read = resolveCacheDirection({
+      custom: model?.customPricePerMillionCacheRead,
+      syncedPerToken: model?.cacheReadPricePerToken,
+      multiplierFactor: multiplier?.read,
+      effectivePricePerMillionInput: priceIn,
+    });
+    const write = resolveCacheDirection({
+      custom: model?.customPricePerMillionCacheWrite,
+      syncedPerToken: model?.cacheWritePricePerToken,
+      multiplierFactor: multiplier?.write,
+      effectivePricePerMillionInput: priceIn,
+    });
+
+    if (read.price === null && write.price === null) {
+      // Provider has no cache pricing model; leave cache unpriced.
+      return {
+        pricePerMillionCacheRead: null,
+        pricePerMillionCacheWrite: null,
+        cacheSource: null,
+      };
+    }
+
+    return {
+      pricePerMillionCacheRead: read.price,
+      pricePerMillionCacheWrite: write.price,
+      cacheSource: combineCacheSource(read.source, write.source),
     };
   }
 
@@ -535,7 +742,11 @@ class ModelModel {
       provider,
       modelId,
     );
-    const pricing = ModelModel.getEffectivePricing(modelEntry, modelId);
+    const pricing = ModelModel.getEffectivePricing(
+      modelEntry,
+      modelId,
+      provider,
+    );
     const inputPricePerToken = Number(pricing.pricePerMillionInput) / 1_000_000;
     return tokensSaved * inputPricePerToken;
   }
@@ -593,6 +804,9 @@ class ModelModel {
         pricePerMillionOutput: null,
         isCustomPrice: false,
         priceSource: "default",
+        pricePerMillionCacheRead: null,
+        pricePerMillionCacheWrite: null,
+        cachePriceSource: null,
       };
     }
 
@@ -607,6 +821,9 @@ class ModelModel {
       pricePerMillionOutput: pricing.pricePerMillionOutput,
       isCustomPrice: pricing.source === "custom",
       priceSource: pricing.source,
+      pricePerMillionCacheRead: pricing.pricePerMillionCacheRead,
+      pricePerMillionCacheWrite: pricing.pricePerMillionCacheWrite,
+      cachePriceSource: pricing.cacheSource,
     };
   }
 
@@ -628,6 +845,60 @@ class ModelModel {
     }
 
     return true;
+  }
+
+  static supportsEmbeddings(model: Model): boolean {
+    if (model.ignored) {
+      return false;
+    }
+
+    return model.embeddingDimensions !== null;
+  }
+
+  static async countAll(): Promise<number> {
+    const [row] = await db.select({ c: count() }).from(schema.modelsTable);
+    return Number(row?.c ?? 0);
+  }
+
+  /**
+   * Snapshot for audit logs (global model row — `organizationId` is unused).
+   */
+  // Globally scoped audit snapshot: LLM model catalog entries are platform-wide;
+  // the modelsTable has no organizationId column, and the admin-only route
+  // handler is likewise unscoped. Intentional match.
+  static async findByIdForAudit(
+    id: string,
+    _organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const row = await ModelModel.findById(id);
+    if (!row) return null;
+
+    const caps = ModelModel.toCapabilities(row);
+    return {
+      id: row.id,
+      modelId: row.modelId,
+      provider: row.provider,
+      description: row.description ?? null,
+      ignored: row.ignored,
+      embeddingDimensions: row.embeddingDimensions,
+      discoveredViaLlmProxy: row.discoveredViaLlmProxy,
+      contextLength: caps.contextLength,
+      pricePerMillionInput: caps.pricePerMillionInput,
+      pricePerMillionOutput: caps.pricePerMillionOutput,
+      isCustomPrice: caps.isCustomPrice,
+      priceSource: caps.priceSource,
+      pricePerMillionCacheRead: caps.pricePerMillionCacheRead,
+      pricePerMillionCacheWrite: caps.pricePerMillionCacheWrite,
+      cachePriceSource: caps.cachePriceSource,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  static async snapshotModelCatalogForAudit(): Promise<
+    Record<string, unknown>
+  > {
+    return { llmModelRowCount: await ModelModel.countAll() };
   }
 }
 

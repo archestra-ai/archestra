@@ -3,7 +3,11 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import config from "@/config";
 import logger from "@/logging";
-import { wrapPoolWithRetry } from "./retry";
+import {
+  installDbErrorSafetyNet,
+  withTransactionRetry,
+  wrapPoolWithRetry,
+} from "./retry";
 import * as schema from "./schemas";
 import {
   DATABASE_URL_VAULT_REF_ENV,
@@ -64,6 +68,7 @@ export async function initializeDatabase(): Promise<void> {
   });
 
   instrumentDrizzleClient(db, { dbSystem: "postgresql" });
+  installDbErrorSafetyNet();
   logger.info(
     { poolMax: config.database.poolMax },
     "Database connection pool initialized",
@@ -81,6 +86,19 @@ export function getDb() {
     );
   }
   return db;
+}
+
+/**
+ * Run a database transaction with retry around the whole transaction.
+ *
+ * Pool-level retry only applies to standalone `pool.query()` calls. Drizzle
+ * transactions use a checked-out client, so transient connection failures must
+ * retry the entire transaction callback.
+ */
+export async function withDbTransaction<T>(
+  callback: (tx: Transaction) => Promise<T>,
+): Promise<T> {
+  return withTransactionRetry(() => getDb().transaction(callback));
 }
 
 /**
@@ -102,17 +120,25 @@ export async function isDatabaseHealthy(): Promise<boolean> {
     return false;
   }
 
+  let timeoutHandle: NodeJS.Timeout | undefined;
   try {
     await Promise.race([
       pool.query("SELECT 1"),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Health check timeout")), 3000),
-      ),
+      new Promise((_, reject) => {
+        timeoutHandle = setTimeout(
+          () => reject(new Error("Health check timeout")),
+          3000,
+        );
+      }),
     ]);
     return true;
   } catch (error) {
     logger.warn({ error }, "Database health check failed");
     return false;
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
   }
 }
 
@@ -158,6 +184,8 @@ let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
  *   Postgres `max_connections` so that pods × poolMax stays under the server limit.
  * - idleTimeoutMillis: 30s (close idle connections after 30s)
  * - connectionTimeoutMillis: 10s (fail if can't get connection in 10s)
+ * - statement_timeout: ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS (default 30s);
+ *   kills runaway queries so a single slow query can't hang a connection forever.
  *
  * Connection keepalive configuration:
  * - keepAlive: true (enable TCP keepalive probes)
@@ -174,6 +202,9 @@ function createPool(connectionString: string): pg.Pool {
     max: config.database.poolMax,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
+    // Per-connection statement timeout: kills runaway queries instead of
+    // letting them hang a connection indefinitely. 0 disables it.
+    statement_timeout: config.database.statementTimeoutMillis,
     // Keepalive configuration to prevent "Connection terminated unexpectedly"
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000,

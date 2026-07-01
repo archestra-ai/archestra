@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
 import { vi } from "vitest";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import {
@@ -12,10 +12,10 @@ import {
 import { beforeEach, describe, expect, test } from "@/test";
 import * as llmApiKeyResolution from "@/utils/llm-api-key-resolution";
 import {
+  resolveAgentLlmOrDefault,
   resolveBestAvailableLlm,
   resolveConfiguredAgentLlm,
   resolveConversationLlmSelectionForAgent,
-  resolveFastModelName,
 } from "./llm-resolution";
 
 vi.mock("@/clients/gemini-client", () => ({
@@ -41,8 +41,12 @@ const MOCK_MODEL = {
   supportsToolCalling: null,
   promptPricePerToken: null,
   completionPricePerToken: null,
+  cacheReadPricePerToken: null,
+  cacheWritePricePerToken: null,
   customPricePerMillionInput: null,
   customPricePerMillionOutput: null,
+  customPricePerMillionCacheRead: null,
+  customPricePerMillionCacheWrite: null,
   embeddingDimensions: null,
   ignored: false,
   discoveredViaLlmProxy: false,
@@ -326,6 +330,17 @@ describe("resolveConversationLlmSelectionForAgent", () => {
       LlmProviderApiKeyModelLinkModel,
       "getRankedModelsForApiKeys",
     ).mockResolvedValue([]);
+    vi.spyOn(
+      LlmProviderApiKeyModelLinkModel,
+      "getLinkedModelSelectionKeys",
+    ).mockImplementation(
+      async (selections) =>
+        new Set(
+          selections.map(
+            (selection) => `${selection.apiKeyId}:${selection.modelId}`,
+          ),
+        ),
+    );
     vi.spyOn(ModelModel, "findById").mockResolvedValue(null);
   });
 
@@ -375,6 +390,64 @@ describe("resolveConversationLlmSelectionForAgent", () => {
     expect(result.modelId).toBe("m-explicit");
     expect(result.chatApiKeyId).toBe("key-openai");
     expect(result.selectedModel).toBe("gpt-4o");
+  });
+
+  test("honors an explicit per-user provider model by model alone, ignoring a carried-over foreign key", async () => {
+    vi.spyOn(ModelModel, "findById").mockImplementation(async (id) => {
+      if (id === "m-copilot") {
+        return mockModel({
+          id: "m-copilot",
+          modelId: "gpt-4",
+          provider: "github-copilot",
+        });
+      }
+      return null;
+    });
+
+    const result = await resolveConversationLlmSelectionForAgent({
+      agent: { llmApiKeyId: "key-anthropic", modelId: "m-agent" },
+      organizationId: "org-1",
+      userId: "user-1",
+      // The picker carried over a non-Copilot key (the member hasn't connected
+      // Copilot, so that pair isn't linked). A per-user model is still honored
+      // by model alone — its credential is resolved per-user at request time.
+      explicitModelId: "m-copilot",
+      explicitApiKeyId: "key-azure",
+    });
+
+    expect(result.modelId).toBe("m-copilot");
+    expect(result.chatApiKeyId).toBeNull();
+    expect(result.selectedModel).toBe("gpt-4");
+    expect(result.selectedProvider).toBe("github-copilot");
+  });
+
+  test("does not pin a key when the org default points at a per-user model", async () => {
+    // The org default pins a Copilot model + the admin's key; another member
+    // inherits the model but must not inherit the admin's (inaccessible) key.
+    vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
+      defaultModelId: "m-copilot",
+      defaultLlmApiKeyId: "key-admin-copilot",
+    } as never);
+    vi.spyOn(ModelModel, "findById").mockImplementation(async (id) => {
+      if (id === "m-copilot") {
+        return mockModel({
+          id: "m-copilot",
+          modelId: "gpt-4o",
+          provider: "github-copilot",
+        });
+      }
+      return null;
+    });
+
+    const result = await resolveConversationLlmSelectionForAgent({
+      agent: { llmApiKeyId: null, modelId: null },
+      organizationId: "org-1",
+      userId: "member-2",
+    });
+
+    expect(result.modelId).toBe("m-copilot");
+    expect(result.chatApiKeyId).toBeNull();
+    expect(result.selectedProvider).toBe("github-copilot");
   });
 
   test("an explicit model with no key falls through to the agent", async () => {
@@ -450,6 +523,41 @@ describe("resolveConversationLlmSelectionForAgent", () => {
 
     const result = await resolveConversationLlmSelectionForAgent({
       agent: { llmApiKeyId: null, modelId: "m-agent" },
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({
+      modelId: "m-org",
+      chatApiKeyId: "org-key",
+      selectedModel: "gpt-4o",
+      selectedProvider: "openai",
+    });
+  });
+
+  test("skips a configured model that is no longer linked to its API key", async () => {
+    vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
+      id: "org-1",
+      defaultModelId: "m-org",
+      defaultLlmApiKeyId: "org-key",
+    } as never);
+    vi.spyOn(
+      LlmProviderApiKeyModelLinkModel,
+      "getLinkedModelSelectionKeys",
+    ).mockResolvedValue(new Set(["org-key:m-org"]));
+    vi.spyOn(ModelModel, "findById").mockImplementation(async (id) => {
+      if (id === "m-org") {
+        return mockModel({
+          id: "m-org",
+          modelId: "gpt-4o",
+          provider: "openai",
+        });
+      }
+      return null;
+    });
+
+    const result = await resolveConversationLlmSelectionForAgent({
+      agent: { llmApiKeyId: "stale-key", modelId: "stale-model" },
       organizationId: "org-1",
       userId: "user-1",
     });
@@ -568,54 +676,125 @@ describe("resolveConfiguredAgentLlm", () => {
   });
 });
 
-describe("resolveFastModelName", () => {
+describe("resolveAgentLlmOrDefault", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockResolvedValue(
+      NO_KEY,
+    );
   });
 
-  test("returns hardcoded FAST_MODELS fallback when no chatApiKeyId", async () => {
-    const result = await resolveFastModelName("anthropic", undefined);
+  test("uses an explicitly configured agent model and key", async () => {
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
+      id: "key-123",
+      provider: "anthropic",
+      secretId: null,
+      baseUrl: null,
+      inferenceBaseUrl: null,
+    } as never);
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({
+        id: "model-123",
+        provider: "anthropic",
+        modelId: "claude-configured",
+      }),
+    );
 
-    // Should return the hardcoded fast model for anthropic
-    expect(result).toBe("claude-haiku-4-5-20251001");
-  });
-
-  test("returns fastest model from DB when chatApiKeyId is provided", async () => {
-    vi.spyOn(
-      LlmProviderApiKeyModelLinkModel,
-      "getFastestModel",
-    ).mockResolvedValue({
-      ...MOCK_MODEL,
-      modelId: "claude-haiku-3-5",
+    const result = await resolveAgentLlmOrDefault({
+      agent: { llmApiKeyId: "key-123", modelId: "model-123" },
+      organizationId: "org-1",
+      userId: "user-1",
     });
 
-    const result = await resolveFastModelName("anthropic", "key-123");
-
-    expect(result).toBe("claude-haiku-3-5");
-    expect(
-      LlmProviderApiKeyModelLinkModel.getFastestModel,
-    ).toHaveBeenCalledWith("key-123");
+    expect(result).toEqual({
+      provider: "anthropic",
+      apiKey: undefined,
+      modelName: "claude-configured",
+      baseUrl: null,
+    });
   });
 
-  test("falls back to hardcoded model when DB has no fastest model", async () => {
-    vi.spyOn(
-      LlmProviderApiKeyModelLinkModel,
-      "getFastestModel",
-    ).mockResolvedValue(null);
+  test("falls back to organization default model and key", async () => {
+    vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
+      id: "org-1",
+      defaultModelId: "model-org",
+      defaultLlmApiKeyId: "key-org",
+    } as never);
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({
+        id: "model-org",
+        provider: "bedrock",
+        modelId: "anthropic.claude-sonnet-4-5",
+      }),
+    );
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockResolvedValue({
+      apiKey: "org-key",
+      source: "organization",
+      chatApiKeyId: "key-org",
+      baseUrl: "https://bedrock.example.test",
+    });
 
-    const result = await resolveFastModelName("openai", "key-456");
+    const result = await resolveAgentLlmOrDefault({
+      agent: null,
+      organizationId: "org-1",
+      userId: "user-1",
+    });
 
-    expect(result).toBe("gpt-4o-mini");
+    expect(result).toEqual({
+      provider: "bedrock",
+      apiKey: "org-key",
+      modelName: "anthropic.claude-sonnet-4-5",
+      baseUrl: "https://bedrock.example.test",
+    });
   });
 
-  test("falls back to hardcoded model when DB lookup throws", async () => {
+  test("falls back to best available model when no organization default is set", async () => {
+    vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
+      id: "org-1",
+      defaultModelId: null,
+      defaultLlmApiKeyId: null,
+    } as never);
+    vi.spyOn(TeamModel, "getUserTeamIds").mockResolvedValue([]);
     vi.spyOn(
-      LlmProviderApiKeyModelLinkModel,
-      "getFastestModel",
-    ).mockRejectedValue(new Error("DB connection failed"));
+      LlmProviderApiKeyModel,
+      "getAvailableKeysForUser",
+    ).mockResolvedValue([{ id: "key-available" }] as never);
+    vi.spyOn(LlmProviderApiKeyModelLinkModel, "getBestModel").mockResolvedValue(
+      mockModel({
+        id: "model-best",
+        provider: "openai",
+        modelId: "gpt-best",
+      }),
+    );
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({
+        id: "model-best",
+        provider: "openai",
+        modelId: "gpt-best",
+      }),
+    );
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockImplementation(
+      async ({ provider }) =>
+        provider === "openai"
+          ? {
+              apiKey: "openai-key",
+              source: "personal",
+              chatApiKeyId: "key-available",
+              baseUrl: null,
+            }
+          : NO_KEY,
+    );
 
-    const result = await resolveFastModelName("openai", "key-789");
+    const result = await resolveAgentLlmOrDefault({
+      organizationId: "org-1",
+      userId: "user-1",
+    });
 
-    expect(result).toBe("gpt-4o-mini");
+    expect(result).toEqual({
+      provider: "openai",
+      apiKey: "openai-key",
+      modelName: "gpt-best",
+      baseUrl: null,
+    });
   });
 });

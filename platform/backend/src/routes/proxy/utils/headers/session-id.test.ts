@@ -1,4 +1,4 @@
-import { SESSION_ID_HEADER } from "@shared";
+import { SESSION_ID_HEADER } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import { extractSessionInfo } from "./session-id";
 
@@ -43,6 +43,61 @@ describe("extractSessionInfo", () => {
     expect(result).toEqual({
       sessionId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       sessionSource: "claude_code",
+    });
+  });
+
+  test("extracts session ID from Claude Desktop JSON metadata.user_id", () => {
+    const result = extractSessionInfo(
+      {},
+      {
+        metadata: {
+          user_id: JSON.stringify({
+            device_id:
+              "68ccdef7c5bef524514efc6d13d1c480542af5b4f5ceeb1e9d65b5c1c9a77826",
+            account_uuid: "",
+            session_id: "86ce5c03-16a6-43a5-b890-e64322431a74",
+          }),
+        },
+      },
+    );
+
+    expect(result).toEqual({
+      sessionId: "86ce5c03-16a6-43a5-b890-e64322431a74",
+      sessionSource: "claude_desktop",
+    });
+  });
+
+  test("falls back to claude_code when metadata.user_id is not JSON", () => {
+    const result = extractSessionInfo(
+      {},
+      {
+        metadata: {
+          user_id:
+            "user_abc123_account_456_session_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        },
+      },
+    );
+
+    expect(result).toEqual({
+      sessionId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      sessionSource: "claude_code",
+    });
+  });
+
+  test("falls through when Claude Desktop JSON has no session_id", () => {
+    const result = extractSessionInfo(
+      {},
+      {
+        metadata: {
+          user_id: JSON.stringify({ device_id: "abc", account_uuid: "" }),
+        },
+        user: "openai-user",
+      },
+    );
+
+    expect(result).toEqual({
+      sessionId: "openai-user",
+      sessionSource: "openai_user",
     });
   });
 

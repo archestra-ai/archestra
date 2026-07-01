@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@shared";
+import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -12,6 +12,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   ActiveFilterBadges,
+  AgentDeletedStatusFilter,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -19,6 +20,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
@@ -36,11 +38,12 @@ import {
   useDeleteProfile,
   useProfile,
   useProfilesPaginated,
+  useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useTeams } from "@/lib/teams/team.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
 type McpGatewaysInitialData = {
@@ -122,15 +125,28 @@ function McpGateways({
   const authorIdsFromUrl = searchParams.get("authorIds");
   const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
   const labelsFromUrl = searchParams.get("labels");
+  const statusFromUrl = searchParams.get("status") as
+    | "active"
+    | "deleted"
+    | null;
+  const isDeletedView = statusFromUrl === "deleted";
 
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
+  const { data: canDeleteAgents } = useHasPermissions({ agent: ["delete"] });
   const gatewayAgentTypes: Array<"mcp_gateway" | "profile"> = canReadAgents
-    ? ["mcp_gateway", "profile"]
+    ? isDeletedView && !canDeleteAgents
+      ? ["mcp_gateway"]
+      : ["mcp_gateway", "profile"]
     : ["mcp_gateway"];
 
-  const { data: agentsResponse, isPending } = useProfilesPaginated({
+  const {
+    data: agentsResponse,
+    isPending,
+    isLoadingError: isGatewaysLoadError,
+    refetch: refetchGateways,
+  } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
     limit: pageSize,
     offset,
@@ -151,11 +167,11 @@ function McpGateways({
         ? true
         : undefined,
     labels: labelsFromUrl || undefined,
+    status: statusFromUrl || undefined,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
-  const { data: userTeams } = useTeams({
-    initialData: initialData?.teams,
+  const { data: userTeams } = useMyTeams({
     enabled: !!canReadTeams,
   });
 
@@ -215,6 +231,7 @@ function McpGateways({
   const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
     null,
   );
+  const restoreGateway = useRestoreProfile();
 
   const handleSortingChange = useCallback(
     (updater: SortingState | ((old: SortingState) => SortingState)) => {
@@ -398,11 +415,50 @@ function McpGateways({
               setEditingGateway(agentData);
             }}
             onDelete={setDeletingGatewayId}
+            onRestore={(agentId) => {
+              restoreGateway.mutate(agentId, {
+                onSuccess: (data) => {
+                  if (!data) return;
+                  toast.success("MCP Gateway restored successfully");
+                },
+              });
+            }}
           />
         );
       },
     },
   ];
+
+  if (isGatewaysLoadError) {
+    return (
+      <PageLayout
+        title="MCP Gateways"
+        description={
+          <p className="text-sm text-muted-foreground">
+            MCP Gateways provide a unified MCP endpoint for your AI agents to
+            access tools and subagents.
+            {docsUrl && (
+              <>
+                {" "}
+                <ExternalDocsLink
+                  href={docsUrl}
+                  className="underline hover:text-foreground"
+                  showIcon={false}
+                >
+                  Read more in the docs
+                </ExternalDocsLink>
+              </>
+            )}
+          </p>
+        }
+      >
+        <QueryLoadError
+          title="Couldn't load your MCP gateways"
+          onRetry={() => refetchGateways()}
+        />
+      </PageLayout>
+    );
+  }
 
   return (
     <LoadingWrapper
@@ -449,7 +505,13 @@ function McpGateways({
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter ownerLabelPlural="MCP gateways" />
+                <AgentScopeFilter
+                  ownerLabelPlural="MCP gateways"
+                  adminPermission={{ mcpGateway: ["admin"] }}
+                />
+                <AgentDeletedStatusFilter
+                  deletePermission={{ mcpGateway: ["delete"] }}
+                />
               </div>
               {!canReadTeams && (
                 <PermissionRequirementHint
@@ -457,7 +519,7 @@ function McpGateways({
                   permissions={[{ resource: "team", action: "read" }]}
                 />
               )}
-              <ActiveFilterBadges />
+              <ActiveFilterBadges adminPermission={{ mcpGateway: ["admin"] }} />
             </div>
 
             <div data-testid={E2eTestId.AgentsTable}>
@@ -480,7 +542,8 @@ function McpGateways({
                     teamIdsFromUrl ||
                     authorIdsFromUrl ||
                     excludeAuthorIdsFromUrl ||
-                    labelsFromUrl,
+                    labelsFromUrl ||
+                    isDeletedView,
                 )}
                 onClearFilters={() =>
                   updateQueryParams({
@@ -490,10 +553,20 @@ function McpGateways({
                     authorIds: null,
                     excludeAuthorIds: null,
                     labels: null,
+                    status: null,
                     page: "1",
                   })
                 }
-                emptyMessage="No MCP gateways found"
+                emptyMessage={
+                  isDeletedView
+                    ? "No deleted MCP gateways found"
+                    : "No MCP gateways found"
+                }
+                filteredEmptyMessage={
+                  isDeletedView
+                    ? "No deleted MCP gateways found."
+                    : "No MCP gateways match your filters. Try adjusting your search."
+                }
               />
             </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   ArrowLeft,
@@ -18,7 +18,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { ConnectorFilesSection } from "@/app/knowledge/connectors/_parts/connector-files-section";
+import { ConnectorDocumentsTable } from "@/app/knowledge/connectors/_parts/connector-documents-table";
 import { ConnectorRunDetailsDialog } from "@/app/knowledge/connectors/_parts/connector-run-details-dialog";
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -28,6 +28,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { MetadataItem } from "@/components/metadata-card";
 import { PageLayout } from "@/components/page-layout";
+import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -102,8 +103,22 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     from === "knowledge-bases"
       ? "Back to Knowledge Bases"
       : "Back to Connectors";
+  const currentTab =
+    searchParams.get("tab") === "documents" ? "documents" : "runs";
+  const tabs = [
+    { label: "Sync Runs", href: `/knowledge/connectors/${connectorId}` },
+    {
+      label: "Documents",
+      href: `/knowledge/connectors/${connectorId}?tab=documents`,
+    },
+  ];
 
-  const { data: connector, isPending } = useConnector(connectorId);
+  const {
+    data: connector,
+    isPending,
+    isLoadingError,
+    refetch,
+  } = useConnector(connectorId);
   const syncConnector = useSyncConnector();
   const forceResync = useForceResyncConnector();
   const testConnection = useTestConnectorConnection();
@@ -217,6 +232,17 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     return <LoadingSpinner />;
   }
 
+  if (isLoadingError) {
+    return (
+      <div className="p-6">
+        <QueryLoadError
+          title="Couldn't load this connector"
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
+
   if (!connector) {
     return (
       <div className="p-6">
@@ -256,6 +282,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         </div>
       }
       description=""
+      tabs={tabs}
       actionButton={
         <div className="flex flex-wrap items-center gap-2">
           <Tooltip>
@@ -365,44 +392,39 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
             <MetadataItem label="Documents">
               <div>{connector.totalDocsIngested}</div>
             </MetadataItem>
-            {connector.connectorType !== "file_upload" && (
-              <MetadataItem label="Schedule">
-                <div>{formatCronSchedule(connector.schedule)}</div>
-              </MetadataItem>
-            )}
+            <MetadataItem label="Schedule">
+              <div>{formatCronSchedule(connector.schedule)}</div>
+            </MetadataItem>
             <KnowledgeBasesMetadataItem connectorId={connectorId} />
           </div>
         </div>
-        {connector.connectorType === "file_upload" ? (
-          <ConnectorFilesSection connectorId={connectorId} />
-        ) : (
-          <>
-            <h2 className="text-lg font-semibold">Sync Runs</h2>
 
-            <LoadingWrapper
-              isPending={isRunsPending}
-              loadingFallback={<LoadingSpinner />}
-            >
-              {(runsData?.data ?? []).length === 0 ? (
-                <div className="text-muted-foreground">
-                  No sync runs yet. Trigger a manual sync or wait for the
-                  scheduled sync.
-                </div>
-              ) : (
-                <DataTable
-                  columns={columns}
-                  data={runsData?.data ?? []}
-                  manualPagination={true}
-                  pagination={{
-                    pageIndex,
-                    pageSize,
-                    total: runsData?.pagination?.total ?? 0,
-                  }}
-                  onPaginationChange={handlePaginationChange}
-                />
-              )}
-            </LoadingWrapper>
-          </>
+        {currentTab === "documents" ? (
+          <ConnectorDocumentsTable connectorId={connectorId} />
+        ) : (
+          <LoadingWrapper
+            isPending={isRunsPending}
+            loadingFallback={<LoadingSpinner />}
+          >
+            {(runsData?.data ?? []).length === 0 ? (
+              <div className="text-muted-foreground">
+                No sync runs yet. Trigger a manual sync or wait for the
+                scheduled sync.
+              </div>
+            ) : (
+              <DataTable
+                columns={columns}
+                data={runsData?.data ?? []}
+                manualPagination={true}
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  total: runsData?.pagination?.total ?? 0,
+                }}
+                onPaginationChange={handlePaginationChange}
+              />
+            )}
+          </LoadingWrapper>
         )}
 
         <ConnectorRunDetailsDialog

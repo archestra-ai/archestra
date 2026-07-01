@@ -1,4 +1,4 @@
-import { RouteId } from "@shared";
+import { RouteId } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import { enrichOpenApiWithRbac } from "./enrich-openapi-with-rbac";
 

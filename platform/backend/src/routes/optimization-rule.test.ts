@@ -1,4 +1,5 @@
 import { OptimizationRuleModel } from "@/models";
+import AgentModel from "@/models/agent";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -132,6 +133,29 @@ describe("optimization rule routes", () => {
 
       expect(response.statusCode).toBe(404);
     });
+
+    test("returns 404 for a rule targeting a soft-deleted agent", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      const rule = await OptimizationRuleModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        conditions: [{ maxLength: 1000 }],
+        provider: "openai",
+        targetModel: "gpt-4o-mini",
+        enabled: true,
+      });
+
+      await AgentModel.delete(agent.id);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/optimization-rules/${rule.id}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
   });
 
   describe("GET /api/optimization-rules", () => {
@@ -180,6 +204,41 @@ describe("optimization rule routes", () => {
         ]),
       );
     });
+
+    test("excludes rules targeting soft-deleted agents", async ({
+      makeAgent,
+    }) => {
+      const activeAgent = await makeAgent({ organizationId });
+      const deletedAgent = await makeAgent({ organizationId });
+      const activeRule = await OptimizationRuleModel.create({
+        entityType: "agent",
+        entityId: activeAgent.id,
+        conditions: [{ maxLength: 1000 }],
+        provider: "openai",
+        targetModel: "gpt-4o-mini",
+        enabled: true,
+      });
+      const deletedRule = await OptimizationRuleModel.create({
+        entityType: "agent",
+        entityId: deletedAgent.id,
+        conditions: [{ maxLength: 1000 }],
+        provider: "openai",
+        targetModel: "gpt-4o-mini",
+        enabled: true,
+      });
+
+      await AgentModel.delete(deletedAgent.id);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/optimization-rules",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const ids = response.json().map((rule: { id: string }) => rule.id);
+      expect(ids).toContain(activeRule.id);
+      expect(ids).not.toContain(deletedRule.id);
+    });
   });
 
   describe("POST /api/optimization-rules", () => {
@@ -196,6 +255,28 @@ describe("optimization rule routes", () => {
         payload: {
           entityType: "team",
           entityId: otherTeam.id,
+          conditions: [{ maxLength: 1000 }],
+          provider: "openai",
+          targetModel: "gpt-4o-mini",
+          enabled: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    test("does not create a rule for a soft-deleted agent", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      await AgentModel.delete(agent.id);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/optimization-rules",
+        payload: {
+          entityType: "agent",
+          entityId: agent.id,
           conditions: [{ maxLength: 1000 }],
           provider: "openai",
           targetModel: "gpt-4o-mini",
@@ -286,6 +367,63 @@ describe("optimization rule routes", () => {
         entityId: organizationId,
       });
     });
+
+    test("does not move a rule to a soft-deleted agent", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      await AgentModel.delete(agent.id);
+      const rule = await OptimizationRuleModel.create({
+        entityType: "organization",
+        entityId: organizationId,
+        conditions: [{ maxLength: 1000 }],
+        provider: "openai",
+        targetModel: "gpt-4o-mini",
+        enabled: true,
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/optimization-rules/${rule.id}`,
+        payload: {
+          entityType: "agent",
+          entityId: agent.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      await expect(
+        OptimizationRuleModel.findByIdForOrganization(rule.id, organizationId),
+      ).resolves.toMatchObject({
+        id: rule.id,
+        entityType: "organization",
+        entityId: organizationId,
+      });
+    });
+
+    test("returns 404 when updating a rule targeting a soft-deleted agent", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      const rule = await OptimizationRuleModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        conditions: [{ maxLength: 1000 }],
+        provider: "openai",
+        targetModel: "gpt-4o-mini",
+        enabled: true,
+      });
+
+      await AgentModel.delete(agent.id);
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/optimization-rules/${rule.id}`,
+        payload: { enabled: false },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
   });
 
   describe("DELETE /api/optimization-rules/:id", () => {
@@ -314,6 +452,29 @@ describe("optimization rule routes", () => {
           otherOrganization.id,
         ),
       ).resolves.toMatchObject({ id: rule.id });
+    });
+
+    test("returns 404 when deleting a rule targeting a soft-deleted agent", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      const rule = await OptimizationRuleModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        conditions: [{ maxLength: 1000 }],
+        provider: "openai",
+        targetModel: "gpt-4o-mini",
+        enabled: true,
+      });
+
+      await AgentModel.delete(agent.id);
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/optimization-rules/${rule.id}`,
+      });
+
+      expect(response.statusCode).toBe(404);
     });
   });
 });

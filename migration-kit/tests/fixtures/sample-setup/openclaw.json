@@ -1,0 +1,6 @@
+{
+  "ANTHROPIC_API_KEY": "sk-ant-examplesecret0000000000000000000000",
+  "primaryModel": "anthropic/claude-sonnet-4-5",
+  "heartbeatSeconds": 30,
+  "maxIterations": 100
+}

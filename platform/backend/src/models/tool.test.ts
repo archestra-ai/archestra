@@ -12,16 +12,32 @@ import {
   TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
-} from "@shared";
-import { and, eq } from "drizzle-orm";
+} from "@archestra/shared";
+import { and, eq, sql } from "drizzle-orm";
+import { afterAll, beforeAll, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
 import OrganizationModel from "./organization";
 import TeamModel from "./team";
 import ToolModel, { parseArchestraBuiltInName } from "./tool";
+import ToolInvocationPolicyModel from "./tool-invocation-policy";
+import TrustedDataPolicyModel from "./trusted-data-policy";
+
+// these suites assert exact assigned-tool sets after agent creation; pin the
+// apps feature off so a local ARCHESTRA_APPS_ENABLED=true does not leak
+// auto-assigned app tools into them (app-tool assignment is covered in
+// tool-archestra-assignment.test.ts)
+const originalAppsEnabled = config.apps.enabled;
+beforeAll(() => {
+  (config.apps as { enabled: boolean }).enabled = false;
+});
+afterAll(() => {
+  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
+});
 
 describe("ToolModel", () => {
   describe("slugifyName", () => {
@@ -1826,7 +1842,7 @@ describe("ToolModel", () => {
       const agent = await makeAgent();
       await seedAndAssignArchestraTools(agent.id);
 
-      const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
+      const { ARCHESTRA_MCP_CATALOG_ID } = await import("@archestra/shared");
       const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
       const toolNames = tools.map((t) => t.name);
 
@@ -1892,7 +1908,7 @@ describe("ToolModel", () => {
 
       // Create a new agent WITHOUT a knowledgeBaseId and assign all Archestra tools
       const agent = await makeAgent({ name: "Test Agent" });
-      const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
+      const { ARCHESTRA_MCP_CATALOG_ID } = await import("@archestra/shared");
       await ToolModel.assignArchestraToolsToAgent(
         agent.id,
         ARCHESTRA_MCP_CATALOG_ID,
@@ -2882,6 +2898,263 @@ describe("ToolModel", () => {
       expect(catalog?.description).not.toContain("Archestra");
       expect(artifactTool).toBeDefined();
     });
+
+    test("does not crash startup when a legacy/branded prefix duplicate exists", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      const brandedOrg = { appName: "Acme Copilot", iconLogo: null };
+
+      archestraMcpBranding.syncFromOrganization(brandedOrg);
+      const brandedName = archestraMcpBranding.getToolName(
+        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+      );
+      const legacyName = getArchestraToolFullName(
+        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+        { appName: null, fullWhiteLabeling: false },
+      );
+
+      await db.insert(schema.internalMcpCatalogTable).values({
+        id: ARCHESTRA_MCP_CATALOG_ID,
+        ...getArchestraMcpCatalogMetadata(),
+      });
+      // Stage a legacy + branded sibling for one built-in (same short name,
+      // different prefix). Branded row first so reconciliation keeps the legacy
+      // row and attempts the colliding rename onto the existing branded name.
+      await db.insert(schema.toolsTable).values({
+        name: brandedName,
+        parameters: {},
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        agentId: null,
+      });
+      await db.insert(schema.toolsTable).values({
+        name: legacyName,
+        parameters: {},
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        agentId: null,
+      });
+
+      // Reseeding under branding renames the legacy row toward the branded name,
+      // which collides with the staged sibling. One built-in conflict must not
+      // crash startup — seeding resolves.
+      await expect(
+        ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID, brandedOrg),
+      ).resolves.not.toThrow();
+
+      // The branded built-in converges to exactly one row.
+      const brandedRows = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          and(
+            eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+            eq(schema.toolsTable.name, brandedName),
+          ),
+        );
+      expect(brandedRows).toHaveLength(1);
+    });
+
+    test("does not duplicate built-in tool rows across repeated seeds", async () => {
+      archestraMcpBranding.syncFromOrganization(null);
+
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      const rows = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          and(
+            eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+            eq(schema.toolsTable.name, "archestra__whoami"),
+          ),
+        );
+
+      expect(rows).toHaveLength(1);
+    });
+
+    test("reports only freshly inserted tools as newly created", async () => {
+      archestraMcpBranding.syncFromOrganization(null);
+
+      const firstRun = await ToolModel.seedArchestraTools(
+        ARCHESTRA_MCP_CATALOG_ID,
+      );
+      expect(firstRun).toContain("archestra__whoami");
+
+      const secondRun = await ToolModel.seedArchestraTools(
+        ARCHESTRA_MCP_CATALOG_ID,
+      );
+      expect(secondRun).toEqual([]);
+    });
+
+    test("keeps a feature-flagged-off built-in but prunes a truly-removed one", async () => {
+      // The suite pins config.apps.enabled = false, so getArchestraMcpTools()
+      // omits app tools. A pre-existing app-tool row must survive reseed (the
+      // definition still exists, the feature is merely dark); a row whose short
+      // name is gone from the registry is the only kind that is genuinely stale.
+      archestraMcpBranding.syncFromOrganization(null);
+      const catalogId = randomUUID();
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const flaggedOffName = "archestra__scaffold_app";
+      const removedName = "archestra__obsolete_tool";
+      await db.insert(schema.toolsTable).values([
+        { name: flaggedOffName, parameters: {}, catalogId, agentId: null },
+        { name: removedName, parameters: {}, catalogId, agentId: null },
+      ]);
+
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const survivors = await db
+        .select({ name: schema.toolsTable.name })
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, catalogId));
+      const names = new Set(survivors.map((t) => t.name));
+      expect(names.has(flaggedOffName)).toBe(true);
+      expect(names.has(removedName)).toBe(false);
+    });
+
+    test("rejects a duplicate built-in tool row at the database level", async () => {
+      archestraMcpBranding.syncFromOrganization(null);
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      await expect(
+        db.insert(schema.toolsTable).values({
+          name: "archestra__whoami",
+          parameters: {},
+          catalogId: ARCHESTRA_MCP_CATALOG_ID,
+          agentId: null,
+        }),
+      ).rejects.toThrow();
+    });
+
+    test("upsert reports a conflicting row as not freshly inserted", async () => {
+      archestraMcpBranding.syncFromOrganization(null);
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      // Mimics a concurrent seed's bulk insert landing on a row another process
+      // already inserted: the conflict path must report inserted=false (xmax != 0) so
+      // seedArchestraTools does not re-announce it as newly created.
+      const conflictResult = await db
+        .insert(schema.toolsTable)
+        .values({
+          name: "archestra__whoami",
+          parameters: {},
+          catalogId: ARCHESTRA_MCP_CATALOG_ID,
+          agentId: null,
+        })
+        .onConflictDoUpdate({
+          target: [schema.toolsTable.catalogId, schema.toolsTable.name],
+          targetWhere: sql`${schema.toolsTable.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${schema.toolsTable.agentId} is null and ${schema.toolsTable.delegateToAgentId} is null`,
+          set: { description: sql`excluded.description` },
+        })
+        .returning({ inserted: sql<boolean>`(xmax = 0)` });
+
+      expect(conflictResult).toHaveLength(1);
+      expect(conflictResult[0].inserted).toBe(false);
+
+      const rows = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          and(
+            eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+            eq(schema.toolsTable.name, "archestra__whoami"),
+          ),
+        );
+      expect(rows).toHaveLength(1);
+    });
+
+    test("promotes only one discovered row per name without violating the unique index", async () => {
+      archestraMcpBranding.syncFromOrganization(null);
+
+      // Two legacy "discovered" rows (catalog_id NULL) for the same built-in name.
+      await db.insert(schema.toolsTable).values([
+        {
+          name: "archestra__whoami",
+          parameters: {},
+          catalogId: null,
+          agentId: null,
+        },
+        {
+          name: "archestra__whoami",
+          parameters: {},
+          catalogId: null,
+          agentId: null,
+        },
+      ]);
+
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      const catalogRows = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          and(
+            eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+            eq(schema.toolsTable.name, "archestra__whoami"),
+          ),
+        );
+      expect(catalogRows).toHaveLength(1);
+    });
+
+    test("does not promote a default-prefixed discovery when the branded short-name twin is already cataloged", async () => {
+      const brandedOrg = { appName: "Acme Copilot", iconLogo: null };
+      archestraMcpBranding.syncFromOrganization(brandedOrg);
+
+      const brandedName = archestraMcpBranding.getToolName(
+        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+      );
+      const defaultName = getArchestraToolFullName(
+        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+        { appName: null, fullWhiteLabeling: false },
+      );
+      expect(brandedName).not.toBe(defaultName); // branded env: prefixes differ
+
+      await db.insert(schema.internalMcpCatalogTable).values({
+        id: ARCHESTRA_MCP_CATALOG_ID,
+        ...getArchestraMcpCatalogMetadata(),
+      });
+      // The canonical, branded built-in already lives in the catalog.
+      await db.insert(schema.toolsTable).values({
+        name: brandedName,
+        parameters: {},
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        agentId: null,
+      });
+      // Off-brand discovery: the same built-in arrived under the DEFAULT prefix as
+      // a shared proxy tool (catalog_id NULL) — what LLM-proxy auto-discovery used
+      // to persist before the persistTools guard recognized both prefixes.
+      const [discovered] = await db
+        .insert(schema.toolsTable)
+        .values({
+          name: defaultName,
+          parameters: {},
+          catalogId: null,
+          agentId: null,
+        })
+        .returning();
+
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID, brandedOrg);
+
+      // The discovered twin must NOT be promoted into the catalog…
+      const [after] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.id, discovered.id));
+      expect(after?.catalogId).toBeNull();
+
+      // …and the catalog holds exactly one row for the artifact_write short name.
+      const catalogRows = await db
+        .select({ name: schema.toolsTable.name })
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID));
+      const twins = catalogRows
+        .map((r) => r.name)
+        .filter((name) => name === brandedName || name === defaultName);
+      expect(twins).toEqual([brandedName]);
+    });
   });
 
   describe("findAllWithAssignments", () => {
@@ -2922,6 +3195,50 @@ describe("ToolModel", () => {
       const ids1 = result1.data.map((t) => t.id);
       const ids2 = result2.data.map((t) => t.id);
       expect(ids1).toEqual(ids2);
+    });
+
+    test("exposes MCP annotations stored in the tool's meta", async ({
+      makeAdmin,
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "AnnotationsAgent" });
+      const catalog = await makeInternalMcpCatalog();
+
+      const [withMeta] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "annotated-tool",
+          description: "Tool with annotations",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          meta: {
+            _meta: {},
+            annotations: { readOnlyHint: true, destructiveHint: false },
+          },
+        },
+      ]);
+      const plain = await ToolModel.create({
+        name: "plain-tool",
+        description: "Tool without meta",
+        parameters: {},
+      });
+      await makeAgentTool(agent.id, withMeta.id);
+      await makeAgentTool(agent.id, plain.id);
+
+      const result = await ToolModel.findAllWithAssignments({
+        userId: admin.id,
+        isAgentAdmin: true,
+      });
+
+      const annotated = result.data.find((t) => t.id === withMeta.id);
+      expect(annotated?.annotations).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+      });
+      const unannotated = result.data.find((t) => t.id === plain.id);
+      expect(unannotated?.annotations).toBeNull();
     });
 
     test("excludes the white-labeled knowledge tool from assignment listings", async ({
@@ -2967,5 +3284,251 @@ describe("ToolModel", () => {
         ),
       ).toBe(false);
     });
+  });
+});
+
+describe("ToolModel.cloneToolsAndPoliciesFromCatalog", () => {
+  test("copies tools and both policy types as provisional", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const source = await makeInternalMcpCatalog({ organizationId: org.id });
+    const clone = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      clonedFrom: source.id,
+    });
+
+    const sourceTool = await ToolModel.create({
+      catalogId: source.id,
+      name: ToolModel.slugifyName(source.name, "search"),
+      parameters: { type: "object" },
+      description: "search desc",
+    });
+    await ToolInvocationPolicyModel.create({
+      toolId: sourceTool.id,
+      conditions: [],
+      action: "block_always",
+      reason: "custom",
+    });
+    await TrustedDataPolicyModel.create({
+      toolId: sourceTool.id,
+      conditions: [],
+      action: "mark_as_trusted",
+      description: "custom",
+    });
+
+    await ToolModel.cloneToolsAndPoliciesFromCatalog({
+      sourceCatalogId: source.id,
+      targetCatalogId: clone.id,
+      targetCatalogName: clone.name,
+    });
+
+    const cloned = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, clone.id));
+    expect(cloned).toHaveLength(1);
+    expect(cloned[0].clonedPendingDiscovery).toBe(true);
+    expect(cloned[0].name).toBe(ToolModel.slugifyName(clone.name, "search"));
+    expect(cloned[0].description).toBe("search desc");
+
+    const inv = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, cloned[0].id));
+    expect(inv).toHaveLength(1);
+    expect(inv[0].action).toBe("block_always");
+
+    const trusted = await db
+      .select()
+      .from(schema.trustedDataPoliciesTable)
+      .where(eq(schema.trustedDataPoliciesTable.toolId, cloned[0].id));
+    expect(trusted).toHaveLength(1);
+    expect(trusted[0].action).toBe("mark_as_trusted");
+
+    const assignments = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(eq(schema.agentToolsTable.toolId, cloned[0].id));
+    expect(assignments).toHaveLength(0);
+  });
+});
+
+describe("ToolModel.reconcileClonedCatalogTools", () => {
+  test("confirms matches, deletes unmatched provisional, keeps policies", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const cat = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    const kept = await ToolModel.create({
+      catalogId: cat.id,
+      name: ToolModel.slugifyName(cat.name, "kept"),
+      parameters: {},
+      description: "old",
+      clonedPendingDiscovery: true,
+    });
+    await ToolInvocationPolicyModel.create({
+      toolId: kept.id,
+      conditions: [],
+      action: "block_always",
+      reason: "keep-me",
+    });
+    const dropped = await ToolModel.create({
+      catalogId: cat.id,
+      name: ToolModel.slugifyName(cat.name, "dropped"),
+      parameters: {},
+      description: null,
+      clonedPendingDiscovery: true,
+    });
+
+    expect(await ToolModel.countProvisionalForCatalog(cat.id)).toBe(2);
+
+    await ToolModel.reconcileClonedCatalogTools({
+      catalogId: cat.id,
+      discoveredToolNames: new Set([ToolModel.slugifyName(cat.name, "kept")]),
+    });
+
+    const keptRow = await ToolModel.findById(kept.id);
+    expect(keptRow?.clonedPendingDiscovery).toBe(false);
+    const inv = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, kept.id));
+    expect(inv[0]?.action).toBe("block_always");
+
+    const droppedRow = await ToolModel.findById(dropped.id);
+    expect(droppedRow).toBeNull();
+
+    expect(await ToolModel.countProvisionalForCatalog(cat.id)).toBe(0);
+  });
+
+  test("matches discovered tools by slug, not lossy raw name (spaces/case)", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const cat = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    // Provisional tool whose raw name has a space + uppercase, e.g. "Create Issue".
+    const provisionalName = ToolModel.slugifyName(cat.name, "Create Issue");
+    const kept = await ToolModel.create({
+      catalogId: cat.id,
+      name: provisionalName,
+      parameters: {},
+      description: null,
+      clonedPendingDiscovery: true,
+    });
+
+    // Discovery slugifies the same raw name with the same catalog name.
+    const discoveredToolNames = new Set([
+      ToolModel.slugifyName(cat.name, "Create Issue"),
+    ]);
+
+    const { confirmedToolIds } = await ToolModel.reconcileClonedCatalogTools({
+      catalogId: cat.id,
+      discoveredToolNames,
+    });
+
+    expect(confirmedToolIds).toContain(kept.id);
+    const keptRow = await ToolModel.findById(kept.id);
+    expect(keptRow?.clonedPendingDiscovery).toBe(false);
+  });
+});
+
+describe("provisional tools are gated from assignment", () => {
+  test("findByCatalogId excludes provisional tools", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const cat = await makeInternalMcpCatalog({ organizationId: org.id });
+    await ToolModel.create({
+      catalogId: cat.id,
+      name: ToolModel.slugifyName(cat.name, "real"),
+      parameters: {},
+      description: null,
+    });
+    await ToolModel.create({
+      catalogId: cat.id,
+      name: ToolModel.slugifyName(cat.name, "provisional"),
+      parameters: {},
+      description: null,
+      clonedPendingDiscovery: true,
+    });
+
+    const tools = await ToolModel.findByCatalogId(cat.id);
+    const names = tools.map((t) => t.name);
+    expect(names).toContain(ToolModel.slugifyName(cat.name, "real"));
+    expect(names).not.toContain(ToolModel.slugifyName(cat.name, "provisional"));
+  });
+
+  test("findAllWithAssignments INCLUDES provisional tools (guardrails management view)", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const cat = await makeInternalMcpCatalog({ organizationId: org.id });
+    const provisional = await ToolModel.create({
+      catalogId: cat.id,
+      name: ToolModel.slugifyName(cat.name, "provisional"),
+      parameters: {},
+      description: null,
+      clonedPendingDiscovery: true,
+    });
+
+    const result = await ToolModel.findAllWithAssignments({
+      pagination: { limit: 50, offset: 0 },
+      filters: { origin: cat.id },
+      isAgentAdmin: true,
+    });
+
+    const ids = result.data.map((t) => t.id);
+    expect(ids).toContain(provisional.id);
+  });
+});
+
+describe("policy configurator and cloned tools", () => {
+  test("clone copy and reconcile do not trigger the configurator", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    // triggerAutoConfigureIfEnabled is private; cast to access it for spying.
+    const spy = vi
+      // biome-ignore lint/suspicious/noExplicitAny: spy on private static method
+      .spyOn(ToolModel as any, "triggerAutoConfigureIfEnabled")
+      .mockResolvedValue(undefined);
+    try {
+      const org = await makeOrganization();
+      const source = await makeInternalMcpCatalog({ organizationId: org.id });
+      await ToolModel.create({
+        catalogId: source.id,
+        name: ToolModel.slugifyName(source.name, "search"),
+        parameters: {},
+        description: null,
+      });
+      const clone = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        clonedFrom: source.id,
+      });
+
+      await ToolModel.cloneToolsAndPoliciesFromCatalog({
+        sourceCatalogId: source.id,
+        targetCatalogId: clone.id,
+        targetCatalogName: clone.name,
+      });
+      await ToolModel.reconcileClonedCatalogTools({
+        catalogId: clone.id,
+        discoveredToolNames: new Set([
+          ToolModel.slugifyName(clone.name, "search"),
+        ]),
+      });
+
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

@@ -1,4 +1,4 @@
-import { DEFAULT_THEME_ID, type OrganizationTheme } from "@shared";
+import { DEFAULT_THEME_ID, type OrganizationTheme } from "@archestra/shared";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {

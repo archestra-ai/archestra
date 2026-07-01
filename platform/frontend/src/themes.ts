@@ -12,7 +12,7 @@ import {
   getThemeMetadata,
   type OrganizationTheme,
   type ThemeMetadata as ThemeMetadataShared,
-} from "@shared";
+} from "@archestra/shared";
 
 // Re-export ThemeMetadata for local use
 export type ThemeMetadata = ThemeMetadataShared;

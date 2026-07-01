@@ -1,6 +1,6 @@
 "use client";
 
-import { DEFAULT_APP_NAME } from "@shared";
+import { DEFAULT_APP_NAME } from "@archestra/shared";
 import { Search } from "lucide-react";
 import {
   useCallback,

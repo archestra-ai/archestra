@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-04-27
+lastUpdated: 2026-06-18
 ---
 
 <!--
@@ -28,6 +28,8 @@ An MCP server usually moves through this lifecycle:
 5. When a tool runs, Archestra resolves the correct installation and upstream credential.
 
 This separation lets admins curate a small approved catalog while still allowing each user or team to connect with their own credentials.
+
+Entries that expose a UI carry an **App** badge. Each [owned MCP App](./platform-apps) is also backed by its own registry entry: it appears here as a read-only card (visible to users with `app:read`) whose pencil manages the app's server settings — visibility, environment, assigned tools, and deletion — while authoring stays at `/apps/:id`.
 
 ## Server Configuration
 
@@ -74,9 +76,13 @@ See [Credential Resolution](/docs/mcp-authentication#credential-resolution) for 
 
 ## Labels
 
-Registry entries can carry labels — key-value pairs set under **Labels** in the registry form. Labels organize the catalog and act as a selector for [MCP Gateways](/docs/platform-mcp-gateway#tool-assignment-mode) in **Automatic** tool assignment mode. A gateway in Automatic mode receives every tool from every registry entry that shares at least one `key: value` label pair with the gateway.
+Registry entries can carry labels — key-value pairs set under **Labels** in the registry form. Labels organize the catalog and make registry entries easier to filter and manage.
 
-For example, every catalog entry tagged `department: finance` is automatically wired into a gateway tagged `department: finance`. Adding or removing labels on a registry entry reconciles the affected gateways in sync.
+## Environments
+
+A catalog entry can be assigned to a deployment [environment](/docs/platform-environments). The environment determines the Kubernetes namespace and network egress policy its installed MCP server runs under, and scopes which agents and gateways can use the server's tools (an agent only sees servers in its own environment). Restricted environments gate assignment behind the `environment:deploy-to-restricted` permission.
+
+See [Environments](/docs/platform-environments) for the full isolation model and [network egress policies](/docs/platform-environments#network-egress-policies) (including the provider support matrix and domain presets).
 
 ## From Registry To Gateway
 

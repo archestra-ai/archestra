@@ -1,5 +1,5 @@
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import type { APIRequestContext } from "@playwright/test";
-import { BUILT_IN_AGENT_IDS } from "@shared";
 import { WIREMOCK_INTERNAL_URL } from "../consts";
 import type { TestFixtures } from "./api-fixtures";
 import { expect, test } from "./api-fixtures";

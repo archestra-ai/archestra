@@ -2,10 +2,13 @@
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+} from "@archestra/shared";
+import { z } from "zod";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { __test, type ArchestraContext, executeArchestraTool } from ".";
+import { archestraMcpBranding } from "./branding";
 
 describe("executeArchestraTool", () => {
   let testAgent: Agent;
@@ -27,13 +30,20 @@ describe("executeArchestraTool", () => {
   });
 
   describe("unknown tool", () => {
-    test("should throw error for unknown tool name", async () => {
-      await expect(
-        executeArchestraTool("unknown_tool", undefined, mockContext),
-      ).rejects.toMatchObject({
-        code: -32601,
-        message: "Tool 'unknown_tool' not found",
-      });
+    test("steers an unknown tool name at the discovery path", async () => {
+      const error = await executeArchestraTool(
+        "unknown_tool",
+        undefined,
+        mockContext,
+      ).catch((e: unknown) => e);
+
+      expect(error).toMatchObject({ code: -32601 });
+      const message = (error as { message: string }).message;
+      expect(message).toContain('No tool named "unknown_tool" exists');
+      expect(message).toContain(
+        archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME),
+      );
+      expect(message).toContain("Do not guess tool names");
     });
   });
 
@@ -102,23 +112,7 @@ describe("executeArchestraTool", () => {
 
     test("catches output schema errors in one spot", () => {
       const result = __test.validateToolResult(
-        {
-          safeParse: (value: unknown) =>
-            value && typeof value === "object" && "requiredField" in value
-              ? ({ success: true, data: value } as const)
-              : ({
-                  success: false,
-                  error: {
-                    issues: [
-                      {
-                        code: "custom",
-                        path: ["requiredField"],
-                        message: "Missing required field",
-                      },
-                    ],
-                  },
-                } as const),
-        } as any,
+        z.object({ requiredField: z.string() }),
         {
           content: [{ type: "text", text: "bad output" }],
           structuredContent: {},

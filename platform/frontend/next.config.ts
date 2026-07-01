@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import {
+  MCP_CATALOG_API_BASE_URL,
+  OAUTH_ISSUER_ROOT_ALIASES,
+} from "@archestra/shared";
 import { withSentryConfig } from "@sentry/nextjs";
-import { MCP_CATALOG_API_BASE_URL } from "@shared";
 import type { NextConfig } from "next";
 
 const platformPkg = JSON.parse(
@@ -13,6 +16,9 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: platformPkg.version,
   },
+  // Lets a second `next dev` (e.g. the Playwright MSW server on :3010) run
+  // alongside the main one without colliding on `.next/dev/lock`.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   output: "standalone",
   // Version skew protection during rolling deployments.
   // https://nextjs.org/docs/app/api-reference/config/next-config-js/deploymentId
@@ -24,12 +30,16 @@ const nextConfig: NextConfig = {
   // (e.g. the dots in `v1.2.41`) are replaced with hyphens.
   // https://nextjs.org/docs/messages/deploymentid-invalid-characters
   deploymentId: process.env.VERSION?.replace(/[^a-zA-Z0-9_-]/g, "-"),
-  transpilePackages: ["@shared"],
+  transpilePackages: ["@archestra/shared"],
   // Disable dev indicators so they don't show up in docs automated screenshots
   devIndicators: false,
   turbopack: {
+    // pin the workspace root (where pnpm-lock.yaml lives) so Next.js 16 doesn't
+    // misinfer it in this monorepo and panic with "Next.js package not found"
+    // when following pnpm's hoisted next symlink.
+    root: resolve(import.meta.dirname, ".."),
     resolveAlias: {
-      "@shared/access-control": "../shared/access-control.ts",
+      "@archestra/shared/access-control": "../shared/access-control.ts",
     },
   },
   logging: {
@@ -41,12 +51,44 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
+    // Next defaults the proxy body limit to 10MB; raise it well above the
+    // backend's 70MB default so an operator who increases ARCHESTRA_API_BODY_LIMIT
+    // at runtime doesn't also have to rebuild the FE image. (next.config.ts is
+    // evaluated at build time in `output: "standalone"` mode, so this value is
+    // baked into the image — making it env-driven would silently drift from
+    // the backend's runtime value.) Anything the proxy lets through still gets
+    // sized-checked by the backend's bodyLimit, which is the authoritative cap.
+    proxyClientMaxBodySize: "200mb",
   },
   httpAgentOptions: {
     keepAlive: true,
   },
   async redirects() {
-    return [];
+    // Permanent redirects for routes renamed in the model-providers / skills /
+    // messaging-channels restructure, so existing bookmarks and links don't 404.
+    // `:path*` matches the bare path and any sub-path.
+    return [
+      {
+        source: "/agents/skills/:path*",
+        destination: "/skills/:path*",
+        permanent: true,
+      },
+      {
+        source: "/agents/triggers/:path*",
+        destination: "/messaging-channels/:path*",
+        permanent: true,
+      },
+      {
+        source: "/llm/model-providers/api-keys",
+        destination: "/llm/model-providers",
+        permanent: true,
+      },
+      {
+        source: "/llm/model-providers/models",
+        destination: "/llm/models",
+        permanent: true,
+      },
+    ];
   },
   async rewrites() {
     const backendUrl =
@@ -56,6 +98,19 @@ const nextConfig: NextConfig = {
         source: "/api/archestra-catalog/:path*",
         destination: `${MCP_CATALOG_API_BASE_URL}/:path*`,
       },
+      // Issuer-root aliases for the OAuth endpoints (see OAUTH_ISSUER_ROOT_ALIASES).
+      // MCP clients that skip RFC 8414 metadata discovery (e.g. a manual
+      // "bring your own credentials" setup) hit the conventional issuer-relative
+      // paths — /authorize, /token, /register — at the public origin. We serve
+      // the real endpoints under /api/auth/oauth2/*, so rewrite each alias onto
+      // its canonical path. An internal rewrite (not a redirect) keeps the
+      // request method, body, and query intact and routes it through the
+      // existing app/api/auth/[...path] handler, so a non-discovering client's
+      // POST to /token or /register works without depending on redirect-follow.
+      ...OAUTH_ISSUER_ROOT_ALIASES.map(({ root, canonical }) => ({
+        source: root,
+        destination: canonical,
+      })),
       // /api/auth/* is handled by the API route at app/api/auth/[...path]/route.ts
       // to properly forward the Origin header for SAML SSO callbacks.
       // API routes take precedence over rewrites in Next.js.
@@ -80,6 +135,10 @@ const nextConfig: NextConfig = {
         destination: `${backendUrl}/_sandbox/:path*`,
       },
       {
+        source: "/skills/m/:path*",
+        destination: `${backendUrl}/skills/m/:path*`,
+      },
+      {
         source: "/ws",
         destination: `${backendUrl}/ws`,
       },
@@ -102,7 +161,7 @@ function getAllowedDevOrigins(): string[] {
     });
 }
 
-export default withSentryConfig(nextConfig, {
+const sentryWebpackOptions = {
   // For all available options, see:
   // https://www.npmjs.com/package/@sentry/webpack-plugin#options
 
@@ -136,4 +195,8 @@ export default withSentryConfig(nextConfig, {
   // https://docs.sentry.io/product/crons/
   // https://vercel.com/docs/cron-jobs
   automaticVercelMonitors: true,
-});
+};
+
+export default process.env.NODE_ENV === "development"
+  ? nextConfig
+  : withSentryConfig(nextConfig, sentryWebpackOptions);

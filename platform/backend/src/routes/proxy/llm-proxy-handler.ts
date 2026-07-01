@@ -6,19 +6,22 @@
  */
 
 import {
-  type Context,
-  context as otelContext,
-  propagation,
-} from "@opentelemetry/api";
-import {
   CHAT_API_KEY_ID_HEADER,
   hasArchestraTokenPrefix,
   type InteractionSource,
   InteractionSourceSchema,
   isProviderApiKeyOptional,
+  PROVIDER_BASE_URL_HEADER,
+  providerDisplayNames,
+  providerRequiresPerUserCredential,
   SOURCE_HEADER,
   UNTRUSTED_CONTEXT_HEADER,
-} from "@shared";
+} from "@archestra/shared";
+import {
+  type Context,
+  context as otelContext,
+  propagation,
+} from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LRUCacheManager } from "@/cache-manager";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
@@ -30,20 +33,26 @@ import {
   LimitValidationService,
   LlmProviderApiKeyModel,
   ModelModel,
+  TeamModel,
   ToolInvocationPolicyModel,
   UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
 import {
   ATTR_ARCHESTRA_COST,
+  ATTR_ARCHESTRA_USAGE_CACHE_CREATION_1H_INPUT_TOKENS,
   ATTR_GENAI_COMPLETION,
   ATTR_GENAI_RESPONSE_FINISH_REASONS,
   ATTR_GENAI_RESPONSE_ID,
   ATTR_GENAI_RESPONSE_MODEL,
+  ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS,
+  ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
   ATTR_GENAI_USAGE_INPUT_TOKENS,
   ATTR_GENAI_USAGE_OUTPUT_TOKENS,
+  ATTR_GENAI_USAGE_REASONING_OUTPUT_TOKENS,
   ATTR_GENAI_USAGE_TOTAL_TOKENS,
   EVENT_GENAI_CONTENT_COMPLETION,
+  type SpanTeamInfo,
 } from "@/observability/tracing";
 import {
   type Agent,
@@ -51,7 +60,6 @@ import {
   type DualLlmAnalysis,
   type InteractionAuthMethod,
   type InteractionRequest,
-  type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
@@ -62,18 +70,22 @@ import {
 import { isLoopbackAddress } from "@/utils/network";
 import {
   assertAuthenticatedForKeylessProvider,
+  assertConsistentUserCredentials,
   attemptJwksAuth,
   resolveAgent,
   validateLlmOAuthAccessToken,
+  validatePassthroughVirtualKey,
   validateVirtualApiKey,
   virtualKeyRateLimiter,
 } from "./llm-proxy-auth";
 import {
+  applyInputTokenFallback,
   buildInteractionRecord,
   calculateInteractionCosts,
   handleError,
   normalizeToolCallsForPolicy,
   recordBlockedToolCallMetrics,
+  shouldForwardAnthropicBeta,
   toSpanUserInfo,
   withSessionContext,
 } from "./llm-proxy-helpers";
@@ -109,6 +121,7 @@ export interface LLMProxyContext<TRequest> {
   contextIsTrusted: boolean;
   enabledToolNames: Set<string>;
   globalToolPolicy: "permissive" | "restrictive";
+  discoveredToolPolicy: "relaxed" | "apply_policies";
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
@@ -123,12 +136,15 @@ export interface LLMProxyContext<TRequest> {
   userId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
   virtualKeyId?: string;
+  passthroughVirtualKeyId?: string;
   sessionId?: string | null;
   sessionSource?: SessionSource;
   source: InteractionSource;
   executionId?: string;
   parentContext?: Context;
   teamIds?: string[];
+  teams?: SpanTeamInfo[];
+  userTeams?: SpanTeamInfo[];
 }
 
 export type LLMProxyAuthOverride = {
@@ -193,10 +209,22 @@ export async function handleLLMProxy<
   const authOverride = (
     request as FastifyRequest & { llmProxyAuthOverride?: LLMProxyAuthOverride }
   ).llmProxyAuthOverride;
+  const passthroughVirtualKeyToken =
+    utils.headers.virtualKey.getPassthroughVirtualKeyToken(
+      headersForExtraction,
+    );
+  // The X-Archestra-User-Id header is an unauthenticated hint; it does not
+  // participate in the cross-credential user-consistency check below.
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
   let virtualKeyId: string | undefined;
+  let passthroughVirtualKeyId: string | undefined;
+  // Authenticated user identities, tracked per source for the consistency check.
+  let passthroughUserId: string | undefined;
+  let jwksUserId: string | undefined;
+  let oauthUserId: string | undefined;
+  let regularVirtualKeyUserId: string | undefined;
 
   const { sessionId, sessionSource } =
     utils.headers.sessionId.extractSessionInfo(
@@ -281,6 +309,30 @@ export async function handleLLMProxy<
     }
   }
 
+  // Resolve a passthrough virtual key (X-Archestra-Virtual-Key). It authenticates
+  // the acting Archestra user and gates proxy access, but carries no provider
+  // credential — the provider auth still comes from the Authorization header.
+  // Skipped for internal loopback auth overrides (in-app chat).
+  if (passthroughVirtualKeyToken && !authOverride) {
+    await virtualKeyRateLimiter.check(request.ip);
+    try {
+      const passthroughResult = await validatePassthroughVirtualKey({
+        tokenValue: passthroughVirtualKeyToken,
+        agent: resolvedAgent,
+      });
+      passthroughVirtualKeyId = passthroughResult.passthroughVirtualKeyId;
+      passthroughUserId = passthroughResult.userId;
+      // Authenticated identity → overrides the unauthenticated X-Archestra-User-Id.
+      userId = passthroughResult.userId;
+      resolvedUser = await UserModel.getById(userId);
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 401) {
+        await virtualKeyRateLimiter.recordFailure(request.ip);
+      }
+      throw error;
+    }
+  }
+
   // Authenticate and resolve API key (JWKS → virtual key → header extraction → keyless check)
   let apiKey: string | undefined;
   let perKeyBaseUrl: string | undefined;
@@ -323,6 +375,7 @@ export async function handleLLMProxy<
       perKeyBaseUrl = jwksResult.baseUrl;
       perKeyChatApiKeyId = jwksResult.chatApiKeyId;
       if (jwksResult.userId) {
+        jwksUserId = jwksResult.userId;
         userId = jwksResult.userId;
         resolvedUser = await UserModel.getById(userId);
       }
@@ -339,6 +392,26 @@ export async function handleLLMProxy<
   // a "Bearer:<token>" sentinel so downstream client creation can distinguish
   // auth tokens from raw API keys. Normalize both forms before virtual-key lookup.
   const rawApiKey = normalizeVirtualKeyCandidate(apiKey);
+
+  // In-app chat forwards a stored provider secret through the local proxy
+  // (loopback) tagged with CHAT_API_KEY_ID_HEADER and a downstream
+  // PROVIDER_BASE_URL_HEADER. That secret can itself be an `arch_*` virtual key
+  // whose mapped provider is ANOTHER Archestra instance — not one of this
+  // instance's keys — so it must be forwarded to that downstream base URL
+  // rather than rejected by local virtual-key lookup. Requiring the base-URL
+  // header keeps the clean local 401 when there is no downstream to forward to
+  // (an `arch_*` secret would otherwise leak to the default public provider).
+  const chatApiKeyIdHeader =
+    headersForExtraction[CHAT_API_KEY_ID_HEADER.toLowerCase()];
+  const providerBaseUrlHeaderValue =
+    headersForExtraction[PROVIDER_BASE_URL_HEADER.toLowerCase()];
+  const isInternalChatForward =
+    isLoopbackAddress(request.ip) &&
+    typeof chatApiKeyIdHeader === "string" &&
+    chatApiKeyIdHeader.length > 0 &&
+    typeof providerBaseUrlHeaderValue === "string" &&
+    providerBaseUrlHeaderValue.length > 0;
+
   if (
     !wasJwksAuthenticated &&
     !authOverride &&
@@ -358,6 +431,7 @@ export async function handleLLMProxy<
       authMethod = oauthResult.authMethod;
       authenticatedApp = oauthResult.authenticatedApp;
       if (oauthResult.userId) {
+        oauthUserId = oauthResult.userId;
         userId = oauthResult.userId;
         resolvedUser = await UserModel.getById(userId);
       }
@@ -380,12 +454,33 @@ export async function handleLLMProxy<
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
       wasVirtualKeyResolved = true;
       virtualKeyId = virtualResult.virtualKeyId;
+      // A personal standard virtual key identifies its owner; include it in the
+      // cross-credential consistency check.
+      if (virtualResult.virtualKeyScope === "personal") {
+        regularVirtualKeyUserId = virtualResult.virtualKeyAuthorId ?? undefined;
+      }
       authMethod = "virtual_key";
     } catch (error) {
-      if (error instanceof ApiError && error.statusCode === 401) {
-        await virtualKeyRateLimiter.recordFailure(request.ip);
+      // The token resolved as a local virtual key on success above. If it
+      // didn't and this is an internal chat forward, the secret belongs to a
+      // downstream Archestra instance: leave `apiKey` as the raw secret so it
+      // is forwarded to the provider base URL (which validates it), rather than
+      // failing or penalizing the loopback caller's rate limit.
+      if (
+        isInternalChatForward &&
+        error instanceof ApiError &&
+        error.statusCode === 401
+      ) {
+        logger.info(
+          { chatApiKeyId: chatApiKeyIdHeader },
+          `[${providerName}Proxy] forwarding non-local virtual key to provider base URL`,
+        );
+      } else {
+        if (error instanceof ApiError && error.statusCode === 401) {
+          await virtualKeyRateLimiter.recordFailure(request.ip);
+        }
+        throw error;
       }
-      throw error;
     }
   }
 
@@ -438,7 +533,32 @@ export async function handleLLMProxy<
     }
   }
 
-  // 5. Enforce authentication for keyless providers on external requests
+  // Per-user providers (e.g. GitHub Copilot) require the acting user's own
+  // linked credential. When none resolved, fail fast with an actionable error
+  // pointing at the connect flow — rather than forwarding a keyless request
+  // that the upstream would reject with a generic 401. `internal_code` gives
+  // first-party clients a machine-readable signal (mirrors
+  // ChatErrorCode.ProviderAuthRequired); the connect URL is in the message so
+  // generic OpenAI/Anthropic clients surface something actionable too.
+  if (providerRequiresPerUserCredential(providerName) && !apiKey) {
+    const providerLabel = providerDisplayNames[providerName];
+    const connectUrl = `${config.frontendBaseUrl}/settings`;
+    logger.info(
+      { providerName },
+      `[${providerName}Proxy] no per-user credential for acting user; returning provider_auth_required`,
+    );
+    return reply.status(401).send({
+      error: {
+        message: `${providerLabel} isn't connected for your account. Connect it at ${connectUrl} then retry your request.`,
+        type: "api_authentication_error",
+        internal_code: "provider_auth_required",
+      },
+    });
+  }
+
+  // 5. Enforce authentication for keyless providers on external requests.
+  // A passthrough key authenticates the user but carries no provider credential,
+  // so it intentionally does not satisfy the keyless-provider requirement.
   assertAuthenticatedForKeylessProvider(
     apiKey,
     wasVirtualKeyResolved || wasOAuthAuthenticated,
@@ -446,8 +566,20 @@ export async function handleLLMProxy<
     request.ip,
   );
 
+  // All authenticated user-scoped credentials must resolve to the same user.
+  assertConsistentUserCredentials([
+    passthroughUserId,
+    jwksUserId,
+    oauthUserId,
+    regularVirtualKeyUserId,
+  ]);
+
   if (!authMethod) {
-    authMethod = isLoopbackAddress(request.ip) ? "internal" : "provider_key";
+    authMethod = passthroughVirtualKeyId
+      ? "passthrough_virtual_key"
+      : isLoopbackAddress(request.ip)
+        ? "internal"
+        : "provider_key";
   }
 
   // Check usage limits
@@ -461,19 +593,27 @@ export async function handleLLMProxy<
         agentId: resolvedAgentId,
         userId,
         virtualKeyId,
+        passthroughVirtualKeyId,
       });
 
     if (limitViolation) {
-      const [_refusalMessage, contentMessage] = limitViolation;
+      const [_refusalMessage, contentMessage, limitMetadata] = limitViolation;
       logger.info(
         { resolvedAgentId, reason: "token_cost_limit_exceeded" },
         `${providerName} request blocked due to token cost limit`,
       );
+      // Preserve the proxy-compatible error envelope so chat clients can read structured limit metadata.
       return reply.status(429).send({
         error: {
           message: contentMessage,
           type: "rate_limit_exceeded",
           code: "token_cost_limit_exceeded",
+          usage_limit: limitMetadata
+            ? {
+                limit_type: limitMetadata.limitType,
+                entity_type: limitMetadata.entityType,
+              }
+            : undefined,
         },
       });
     }
@@ -563,12 +703,25 @@ export async function handleLLMProxy<
       }
     };
 
-    // Get global tool policy from organization (with fallback) - needed for both trusted data and tool invocation
-    const globalToolPolicy =
-      await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
+    // Get tool policies from organization (with fallback) - globalToolPolicy is
+    // needed for both trusted data and tool invocation; discoveredToolPolicy
+    // governs llm-proxy discovered tools during tool-invocation evaluation.
+    const { globalToolPolicy, discoveredToolPolicy } =
+      await utils.toolInvocation.getToolPolicies(resolvedAgentId);
 
-    // Fetch team IDs for policy evaluation context (needed for trusted data evaluation)
-    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
+    // Fetch the agent's teams (with labels) once. Used both for policy
+    // evaluation context (trusted data) and for trace span team attributes.
+    const teams =
+      await AgentTeamModel.getTeamLabelInfoForAgent(resolvedAgentId);
+    const teamIds = teams.map((team) => team.id);
+
+    // Fetch the requesting user's teams (with labels) for trace span attributes.
+    const userTeams = userId
+      ? await TeamModel.getTeamLabelInfoForUser({
+          userId,
+          organizationId: resolvedAgent.organizationId,
+        })
+      : [];
 
     // Evaluate trusted data policies
     logger.debug(
@@ -678,13 +831,32 @@ export async function handleLLMProxy<
       `${providerName} proxy: tool results compression completed`,
     );
 
+    // Read per-key base URL override from header, but ONLY from internal (localhost) requests.
+    // External clients must NOT be able to set this header — it would be an SSRF vector
+    // (attacker could redirect the proxy to arbitrary URLs like cloud metadata endpoints).
+    const providerBaseUrlHeader =
+      isLoopbackAddress(request.ip) &&
+      typeof headersForExtraction["x-archestra-provider-base-url"] === "string"
+        ? headersForExtraction["x-archestra-provider-base-url"]
+        : undefined;
+
     // Extract provider-specific headers to forward (e.g., anthropic-beta)
     // Type cast is necessary because this is a generic handler for multiple providers,
     // and only Anthropic has the anthropic-beta header in its type definition
     const headersToForward: Record<string, string> = {};
     const headersObj = headers as Record<string, unknown>;
     if (typeof headersObj["anthropic-beta"] === "string") {
-      headersToForward["anthropic-beta"] = headersObj["anthropic-beta"];
+      const baseUrlOverridden = Boolean(perKeyBaseUrl || providerBaseUrlHeader);
+      if (
+        shouldForwardAnthropicBeta(requestAdapter.getModel(), baseUrlOverridden)
+      ) {
+        headersToForward["anthropic-beta"] = headersObj["anthropic-beta"];
+      } else {
+        logger.info(
+          { model: requestAdapter.getModel() },
+          `[${providerName}Proxy] stripping anthropic-beta for non-Claude custom upstream`,
+        );
+      }
     }
 
     // Per-key extra HTTP headers (e.g. RBAC headers required by Kubeflow-style
@@ -729,14 +901,6 @@ export async function handleLLMProxy<
       );
     }
 
-    // Read per-key base URL override from header, but ONLY from internal (localhost) requests.
-    // External clients must NOT be able to set this header — it would be an SSRF vector
-    // (attacker could redirect the proxy to arbitrary URLs like cloud metadata endpoints).
-    const providerBaseUrlHeader =
-      isLoopbackAddress(request.ip) &&
-      typeof headersForExtraction["x-archestra-provider-base-url"] === "string"
-        ? headersForExtraction["x-archestra-provider-base-url"]
-        : undefined;
     const effectiveBaseUrl =
       perKeyBaseUrl || providerBaseUrlHeader || provider.getBaseUrl();
 
@@ -778,6 +942,7 @@ export async function handleLLMProxy<
       contextIsTrusted,
       enabledToolNames,
       globalToolPolicy,
+      discoveredToolPolicy,
       toonStats,
       toonSkipReason,
       dualLlmAnalyses,
@@ -788,12 +953,15 @@ export async function handleLLMProxy<
       userId,
       resolvedUser,
       virtualKeyId,
+      passthroughVirtualKeyId,
       sessionId,
       sessionSource,
       source,
       executionId,
       parentContext,
       teamIds,
+      teams,
+      userTeams,
     };
 
     if (requestAdapter.isStreaming()) {
@@ -823,6 +991,7 @@ export async function handleLLMProxy<
         executionId,
         userId,
         virtualKeyId,
+        passthroughVirtualKeyId,
         sessionId,
         sessionSource,
         source,
@@ -832,7 +1001,7 @@ export async function handleLLMProxy<
         type: provider.interactionType,
         request: requestAdapter.getOriginalRequest() as InteractionRequest,
         processedRequest: null,
-        response: { error: errorMessage } as unknown as InteractionResponse,
+        response: { error: errorMessage },
         model: requestAdapter.getModel(),
         baselineModel: requestAdapter.getModel(),
         inputTokens: 0,
@@ -882,6 +1051,7 @@ async function handleStreaming<
     contextIsTrusted,
     enabledToolNames,
     globalToolPolicy,
+    discoveredToolPolicy,
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
@@ -891,6 +1061,7 @@ async function handleStreaming<
     authenticatedApp,
     userId,
     virtualKeyId,
+    passthroughVirtualKeyId,
     resolvedUser,
     sessionId,
     sessionSource,
@@ -898,6 +1069,8 @@ async function handleStreaming<
     executionId,
     parentContext,
     teamIds,
+    teams,
+    userTeams,
   } = ctx;
 
   const providerName = provider.provider;
@@ -923,6 +1096,8 @@ async function handleStreaming<
       model: actualModel,
       stream: true,
       agent,
+      teams,
+      userTeams,
       sessionId,
       executionId,
       externalAgentId,
@@ -1024,6 +1199,19 @@ async function handleStreaming<
 
         // Set response attributes on span per OTEL GenAI semconv
         const { state } = streamAdapter;
+        // Correct zero-input usage before any consumer (span cost, metrics, the
+        // finally-block cost/persistence) reads it — they all share state.usage.
+        if (state.usage) {
+          const fallbackAdapter =
+            provider.createRequestAdapter(originalRequest);
+          state.usage = applyInputTokenFallback({
+            usage: state.usage,
+            provider: providerName,
+            providerMessages: fallbackAdapter.getProviderMessages(),
+            tools: fallbackAdapter.getTools(),
+            model: actualModel,
+          });
+        }
         if (state.model) {
           llmSpan.setAttribute(ATTR_GENAI_RESPONSE_MODEL, state.model);
         }
@@ -1031,23 +1219,58 @@ async function handleStreaming<
           llmSpan.setAttribute(ATTR_GENAI_RESPONSE_ID, state.responseId);
         }
         if (state.usage) {
-          llmSpan.setAttribute(
-            ATTR_GENAI_USAGE_INPUT_TOKENS,
-            state.usage.inputTokens,
-          );
+          // Per the GenAI semconv, gen_ai.usage.input_tokens includes cached
+          // tokens. Internally state.usage.inputTokens is uncached-only (cost,
+          // metrics, and DB depend on that), so add cache read/write back for
+          // the span attributes. The uncached value is still derivable as
+          // input_tokens - cache_read.input_tokens - cache_creation.input_tokens.
+          const totalInputTokens =
+            state.usage.inputTokens +
+            (state.usage.cacheReadTokens ?? 0) +
+            (state.usage.cacheWriteTokens ?? 0);
+          llmSpan.setAttribute(ATTR_GENAI_USAGE_INPUT_TOKENS, totalInputTokens);
           llmSpan.setAttribute(
             ATTR_GENAI_USAGE_OUTPUT_TOKENS,
             state.usage.outputTokens,
           );
           llmSpan.setAttribute(
             ATTR_GENAI_USAGE_TOTAL_TOKENS,
-            state.usage.inputTokens + state.usage.outputTokens,
+            totalInputTokens + state.usage.outputTokens,
           );
+          if (state.usage.cacheReadTokens) {
+            llmSpan.setAttribute(
+              ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
+              state.usage.cacheReadTokens,
+            );
+          }
+          if (state.usage.cacheWriteTokens) {
+            llmSpan.setAttribute(
+              ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS,
+              state.usage.cacheWriteTokens,
+            );
+          }
+          if (state.usage.cacheWrite1hTokens) {
+            llmSpan.setAttribute(
+              ATTR_ARCHESTRA_USAGE_CACHE_CREATION_1H_INPUT_TOKENS,
+              state.usage.cacheWrite1hTokens,
+            );
+          }
+          if (state.usage.reasoningTokens) {
+            llmSpan.setAttribute(
+              ATTR_GENAI_USAGE_REASONING_OUTPUT_TOKENS,
+              state.usage.reasoningTokens,
+            );
+          }
           const cost = await utils.costOptimization.calculateCost(
             actualModel,
             state.usage.inputTokens,
             state.usage.outputTokens,
             providerName,
+            {
+              readTokens: state.usage.cacheReadTokens,
+              writeTokens: state.usage.cacheWriteTokens,
+              write1hTokens: state.usage.cacheWrite1hTokens,
+            },
           );
           if (cost !== undefined) {
             llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
@@ -1094,6 +1317,7 @@ async function handleStreaming<
         contextIsTrusted,
         enabledToolNames,
         globalToolPolicy,
+        discoveredToolPolicy,
       );
 
       logger.info(
@@ -1120,6 +1344,8 @@ async function handleStreaming<
         allToolCallNames,
         reason,
         agent,
+        teams,
+        userTeams,
         sessionId,
         resolvedUser,
         providerName,
@@ -1172,7 +1398,12 @@ async function handleStreaming<
         metrics.llm.reportLLMTokens(
           providerName,
           agent,
-          { input: usage.inputTokens, output: usage.outputTokens },
+          {
+            input: usage.inputTokens,
+            output: usage.outputTokens,
+            cacheRead: usage.cacheReadTokens,
+            cacheWrite: usage.cacheWriteTokens,
+          },
           actualModel,
           source,
           externalAgentId,
@@ -1199,7 +1430,7 @@ async function handleStreaming<
         providerName,
       });
 
-      withSessionContext(sessionId, () =>
+      withSessionContext(sessionId, () => {
         metrics.llm.reportLLMCost(
           providerName,
           agent,
@@ -1207,8 +1438,19 @@ async function handleStreaming<
           costs.actualCost,
           source,
           externalAgentId,
-        ),
-      );
+        );
+        metrics.llm.reportLLMCacheCost(
+          providerName,
+          agent,
+          actualModel,
+          {
+            cacheCost: costs.cacheCost,
+            cacheReadSavings: costs.cacheReadSavings,
+          },
+          source,
+          externalAgentId,
+        );
+      });
 
       try {
         await InteractionModel.create(
@@ -1220,6 +1462,7 @@ async function handleStreaming<
             executionId,
             userId,
             virtualKeyId,
+            passthroughVirtualKeyId,
             sessionId,
             sessionSource,
             source,
@@ -1272,6 +1515,7 @@ async function handleNonStreaming<
     contextIsTrusted,
     enabledToolNames,
     globalToolPolicy,
+    discoveredToolPolicy,
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
@@ -1281,6 +1525,7 @@ async function handleNonStreaming<
     authenticatedApp,
     userId,
     virtualKeyId,
+    passthroughVirtualKeyId,
     resolvedUser,
     sessionId,
     sessionSource,
@@ -1288,6 +1533,8 @@ async function handleNonStreaming<
     executionId,
     parentContext,
     teamIds,
+    teams,
+    userTeams,
   } = ctx;
 
   const providerName = provider.provider;
@@ -1298,12 +1545,14 @@ async function handleNonStreaming<
   );
 
   // Execute request with tracing
-  const { responseAdapter } = await utils.tracing.startActiveLlmSpan({
+  const { responseAdapter, usage } = await utils.tracing.startActiveLlmSpan({
     operationName: provider.spanName,
     provider: providerName,
     model: actualModel,
     stream: false,
     agent,
+    teams,
+    userTeams,
     sessionId,
     executionId,
     externalAgentId,
@@ -1320,21 +1569,68 @@ async function handleNonStreaming<
       const result = await provider.execute(client, request);
       const adapter = provider.createResponseAdapter(result);
 
-      // Set response attributes on span per OTEL GenAI semconv
-      const usage = adapter.getUsage();
+      // Set response attributes on span per OTEL GenAI semconv. Correct zero-input
+      // usage here so the span cost and the downstream cost/persistence (which
+      // reuse this usage) all see the estimate.
+      const fallbackAdapter = provider.createRequestAdapter(originalRequest);
+      const usage = applyInputTokenFallback({
+        usage: adapter.getUsage(),
+        provider: providerName,
+        providerMessages: fallbackAdapter.getProviderMessages(),
+        tools: fallbackAdapter.getTools(),
+        model: actualModel,
+      });
       llmSpan.setAttribute(ATTR_GENAI_RESPONSE_MODEL, adapter.getModel());
       llmSpan.setAttribute(ATTR_GENAI_RESPONSE_ID, adapter.getId());
-      llmSpan.setAttribute(ATTR_GENAI_USAGE_INPUT_TOKENS, usage.inputTokens);
+      // Per the GenAI semconv, gen_ai.usage.input_tokens includes cached tokens.
+      // Internally usage.inputTokens is uncached-only (cost, metrics, and DB
+      // depend on that), so add cache read/write back for the span attributes.
+      // The uncached value is still derivable as input_tokens -
+      // cache_read.input_tokens - cache_creation.input_tokens.
+      const totalInputTokens =
+        usage.inputTokens +
+        (usage.cacheReadTokens ?? 0) +
+        (usage.cacheWriteTokens ?? 0);
+      llmSpan.setAttribute(ATTR_GENAI_USAGE_INPUT_TOKENS, totalInputTokens);
       llmSpan.setAttribute(ATTR_GENAI_USAGE_OUTPUT_TOKENS, usage.outputTokens);
       llmSpan.setAttribute(
         ATTR_GENAI_USAGE_TOTAL_TOKENS,
-        usage.inputTokens + usage.outputTokens,
+        totalInputTokens + usage.outputTokens,
       );
+      if (usage.cacheReadTokens) {
+        llmSpan.setAttribute(
+          ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
+          usage.cacheReadTokens,
+        );
+      }
+      if (usage.cacheWriteTokens) {
+        llmSpan.setAttribute(
+          ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS,
+          usage.cacheWriteTokens,
+        );
+      }
+      if (usage.cacheWrite1hTokens) {
+        llmSpan.setAttribute(
+          ATTR_ARCHESTRA_USAGE_CACHE_CREATION_1H_INPUT_TOKENS,
+          usage.cacheWrite1hTokens,
+        );
+      }
+      if (usage.reasoningTokens) {
+        llmSpan.setAttribute(
+          ATTR_GENAI_USAGE_REASONING_OUTPUT_TOKENS,
+          usage.reasoningTokens,
+        );
+      }
       const cost = await utils.costOptimization.calculateCost(
         actualModel,
         usage.inputTokens,
         usage.outputTokens,
         providerName,
+        {
+          readTokens: usage.cacheReadTokens,
+          writeTokens: usage.cacheWriteTokens,
+          write1hTokens: usage.cacheWrite1hTokens,
+        },
       );
       if (cost !== undefined) {
         llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
@@ -1354,7 +1650,7 @@ async function handleNonStreaming<
         }
       }
 
-      return { response: result, responseAdapter: adapter };
+      return { response: result, responseAdapter: adapter, usage };
     },
   });
 
@@ -1376,6 +1672,7 @@ async function handleNonStreaming<
       contextIsTrusted,
       enabledToolNames,
       globalToolPolicy,
+      discoveredToolPolicy,
     );
 
     if (toolInvocationRefusal) {
@@ -1395,6 +1692,8 @@ async function handleNonStreaming<
         allToolCallNames,
         reason,
         agent,
+        teams,
+        userTeams,
         sessionId,
         resolvedUser,
         providerName,
@@ -1404,8 +1703,7 @@ async function handleNonStreaming<
         externalAgentId,
       });
 
-      // Record interaction with refusal
-      const usage = responseAdapter.getUsage();
+      // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
         baselineModel,
         actualModel,
@@ -1413,7 +1711,7 @@ async function handleNonStreaming<
         providerName,
       });
 
-      withSessionContext(sessionId, () =>
+      withSessionContext(sessionId, () => {
         metrics.llm.reportLLMCost(
           providerName,
           agent,
@@ -1421,8 +1719,19 @@ async function handleNonStreaming<
           costs.actualCost,
           source,
           externalAgentId,
-        ),
-      );
+        );
+        metrics.llm.reportLLMCacheCost(
+          providerName,
+          agent,
+          actualModel,
+          {
+            cacheCost: costs.cacheCost,
+            cacheReadSavings: costs.cacheReadSavings,
+          },
+          source,
+          externalAgentId,
+        );
+      });
 
       await InteractionModel.create(
         buildInteractionRecord({
@@ -1433,6 +1742,7 @@ async function handleNonStreaming<
           executionId,
           userId,
           virtualKeyId,
+          passthroughVirtualKeyId,
           sessionId,
           sessionSource,
           source,
@@ -1455,8 +1765,8 @@ async function handleNonStreaming<
     }
   }
 
-  // Tool calls allowed (or no tool calls) - return response
-  const usage = responseAdapter.getUsage();
+  // Tool calls allowed (or no tool calls) - return response.
+  // `usage` (corrected for zero-input above) is reused here.
 
   // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
   // for non-streaming requests. We only report cost here to avoid double counting.
@@ -1478,7 +1788,7 @@ async function handleNonStreaming<
     providerName,
   });
 
-  withSessionContext(sessionId, () =>
+  withSessionContext(sessionId, () => {
     metrics.llm.reportLLMCost(
       providerName,
       agent,
@@ -1486,8 +1796,16 @@ async function handleNonStreaming<
       costs.actualCost,
       source,
       externalAgentId,
-    ),
-  );
+    );
+    metrics.llm.reportLLMCacheCost(
+      providerName,
+      agent,
+      actualModel,
+      { cacheCost: costs.cacheCost, cacheReadSavings: costs.cacheReadSavings },
+      source,
+      externalAgentId,
+    );
+  });
 
   try {
     await InteractionModel.create(
@@ -1499,6 +1817,7 @@ async function handleNonStreaming<
         executionId,
         userId,
         virtualKeyId,
+        passthroughVirtualKeyId,
         sessionId,
         sessionSource,
         source,

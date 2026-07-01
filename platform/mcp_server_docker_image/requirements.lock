@@ -656,10 +656,11 @@ sse-starlette==3.3.3 \
     --hash=sha256:72a95d7575fd5129bd0ae15275ac6432bb35ac542fdebb82889c24bb9f3f4049 \
     --hash=sha256:c5abb5082a1cc1c6294d89c5290c46b5f67808cfdb612b7ec27e8ba061c22e8d
     # via mcp
-starlette==1.0.0 \
-    --hash=sha256:6a4beaf1f81bb472fd19ea9b918b50dc3a77a6f2e190a12954b25e6ed5eea149 \
-    --hash=sha256:d3ec55e0bb321692d275455ddfd3df75fff145d009685eb40dc91fc66b03d38b
+starlette==1.1.0 \
+    --hash=sha256:7f0dfd38e428aad5cb6f9f667f0ca1d2d8ca3f3385dccac8305f79ec98458382 \
+    --hash=sha256:e83c7fe0ddecd8719c5b840080325aec0260acec86e9832899e377b91d65e90f
     # via
+    #   archestra-mcp-server-python-deps (pyproject.toml)
     #   fastapi
     #   mcp
     #   sse-starlette

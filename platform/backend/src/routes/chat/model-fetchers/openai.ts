@@ -1,5 +1,6 @@
 import config from "@/config";
 import type { OpenAi } from "@/types";
+import { joinBaseUrl } from "@/utils/base-url";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import type { ModelInfo } from "./types";
 
@@ -27,6 +28,27 @@ export function mapOpenAiModelToModelInfo(
   };
 }
 
+// babbage/davinci are OpenAI's legacy completions-only base models: they 404 on
+// /chat/completions ("not a chat model"). They, and the other non-chat families,
+// are dropped so they never enter the selectable chat catalog.
+const NON_CHAT_MODEL_ID_PATTERNS = [
+  "instruct",
+  "tts",
+  "whisper",
+  "image",
+  "audio",
+  "sora",
+  "dall-e",
+  "babbage",
+  "davinci",
+];
+
+/** @public — exported for unit tests; the chat-catalog filter fetchOpenAiModels applies. */
+export function isChatModelId(id: string): boolean {
+  const lower = id.toLowerCase();
+  return !NON_CHAT_MODEL_ID_PATTERNS.some((pattern) => lower.includes(pattern));
+}
+
 export async function fetchOpenAiModels(
   apiKey: string,
   baseUrlOverride?: string | null,
@@ -36,26 +58,13 @@ export async function fetchOpenAiModels(
   const data = await fetchModelsWithBearerAuth<{
     data: (OpenAi.Types.Model | OpenAi.Types.OrlandoModel)[];
   }>({
-    url: `${baseUrl}/models`,
+    url: joinBaseUrl(baseUrl, "/models"),
     apiKey,
     errorLabel: "OpenAI models",
     extraHeaders,
   });
 
-  const excludePatterns = [
-    "instruct",
-    "tts",
-    "whisper",
-    "image",
-    "audio",
-    "sora",
-    "dall-e",
-  ];
-
   return data.data
-    .filter((model) => {
-      const id = model.id.toLowerCase();
-      return !excludePatterns.some((pattern) => id.includes(pattern));
-    })
+    .filter((model) => isChatModelId(model.id))
     .map(mapOpenAiModelToModelInfo);
 }

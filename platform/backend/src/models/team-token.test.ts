@@ -1,7 +1,7 @@
 import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
-} from "@shared";
+} from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import TeamTokenModel from "./team-token";
 

@@ -1,4 +1,4 @@
-import type { McpDeploymentState } from "@shared";
+import type { McpDeploymentState } from "@archestra/shared";
 import { z } from "zod";
 
 export type K8sRuntimeStatus =

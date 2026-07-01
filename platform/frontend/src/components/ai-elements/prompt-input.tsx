@@ -1,6 +1,6 @@
 "use client";
 
-import { getMediaType } from "@shared";
+import { getMediaType } from "@archestra/shared";
 import type { ChatStatus, FileUIPart } from "ai";
 import {
   CornerDownLeftIcon,
@@ -145,6 +145,17 @@ const useOptionalProviderAttachments = () =>
 
 export type PromptInputProviderProps = PropsWithChildren<{
   initialInput?: string;
+  maxFileSize?: number;
+  /**
+   * Per-file policy check beyond the MIME `accept` and `maxFileSize` constraints.
+   * Returns a human-readable reason to reject the file, or null to accept it.
+   * Rejected files are dropped and reported via `onError` with code `rejected`.
+   */
+  validateFile?: (file: File) => string | null;
+  onError?: (err: {
+    code: "max_files" | "max_file_size" | "accept" | "rejected";
+    message: string;
+  }) => void;
 }>;
 
 /**
@@ -153,6 +164,9 @@ export type PromptInputProviderProps = PropsWithChildren<{
  */
 export function PromptInputProvider({
   initialInput: initialTextInput = "",
+  maxFileSize,
+  validateFile,
+  onError,
   children,
 }: PromptInputProviderProps) {
   // ----- textInput state
@@ -166,24 +180,59 @@ export function PromptInputProvider({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const openRef = useRef<() => void>(() => {});
 
-  const add = useCallback((files: File[] | FileList) => {
-    const incoming = Array.from(files);
-    if (incoming.length === 0) {
-      return;
-    }
+  const add = useCallback(
+    (files: File[] | FileList) => {
+      const incoming = Array.from(files);
+      if (incoming.length === 0) {
+        return;
+      }
 
-    setAttachmentFiles((prev) =>
-      prev.concat(
-        incoming.map((file) => ({
-          id: nanoid(),
-          type: "file" as const,
-          url: URL.createObjectURL(file),
-          mediaType: getMediaType(file),
-          filename: file.name,
-        })),
-      ),
-    );
-  }, []);
+      let accepted = incoming;
+      if (maxFileSize) {
+        accepted = incoming.filter((f) => f.size <= maxFileSize);
+        if (incoming.length > 0 && accepted.length === 0) {
+          onError?.({
+            code: "max_file_size",
+            message: "All files exceed the maximum size.",
+          });
+          return;
+        }
+        if (accepted.length < incoming.length) {
+          onError?.({
+            code: "max_file_size",
+            message: "Some files exceed the maximum size.",
+          });
+        }
+      }
+
+      if (validateFile) {
+        accepted = accepted.filter((f) => {
+          const rejection = validateFile(f);
+          if (rejection) {
+            onError?.({ code: "rejected", message: rejection });
+            return false;
+          }
+          return true;
+        });
+        if (accepted.length === 0) {
+          return;
+        }
+      }
+
+      setAttachmentFiles((prev) =>
+        prev.concat(
+          accepted.map((file) => ({
+            id: nanoid(),
+            type: "file" as const,
+            url: URL.createObjectURL(file),
+            mediaType: getMediaType(file),
+            filename: file.name,
+          })),
+        ),
+      );
+    },
+    [maxFileSize, validateFile, onError],
+  );
 
   const remove = useCallback((id: string) => {
     setAttachmentFiles((prev) => {
@@ -616,7 +665,34 @@ export const PromptInput = ({
     [],
   );
 
-  const add = usingProvider ? controller.attachments.add : addLocal;
+  const baseAdd = usingProvider ? controller.attachments.add : addLocal;
+  // addLocal already enforces maxFileSize, but the controller's add does not.
+  // Wrap so the size limit holds whether or not a PromptInputProvider is used.
+  const add = useCallback(
+    (files: File[] | FileList) => {
+      const incoming = Array.from(files);
+      if (!maxFileSize) {
+        baseAdd(files);
+        return;
+      }
+      const sized = incoming.filter((f) => f.size <= maxFileSize);
+      if (incoming.length > 0 && sized.length === 0) {
+        onError?.({
+          code: "max_file_size",
+          message: "All files exceed the maximum size.",
+        });
+        return;
+      }
+      if (sized.length < incoming.length) {
+        onError?.({
+          code: "max_file_size",
+          message: "Some files exceed the maximum size.",
+        });
+      }
+      if (sized.length > 0) baseAdd(sized);
+    },
+    [baseAdd, maxFileSize, onError],
+  );
   const remove = usingProvider ? controller.attachments.remove : removeLocal;
   const clear = usingProvider ? controller.attachments.clear : clearLocal;
   const openFileDialog = usingProvider
@@ -875,6 +951,7 @@ export type PromptInputTextareaProps = ComponentProps<
 
 export const PromptInputTextarea = ({
   onChange,
+  onKeyDown,
   className,
   placeholder = "What would you like to know?",
   disableEnterSubmit = false,
@@ -889,6 +966,11 @@ export const PromptInputTextarea = ({
   const isMobile = useIsMobile();
 
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
+    onKeyDown?.(e);
+    if (e.defaultPrevented) {
+      return;
+    }
+
     if (e.key === "Enter") {
       if (isComposing || e.nativeEvent.isComposing) {
         return;
@@ -1440,59 +1522,6 @@ export const PromptInputHoverCardContent = ({
   ...props
 }: PromptInputHoverCardContentProps) => (
   <HoverCardContent align={align} {...props} />
-);
-
-export type PromptInputTabsListProps = HTMLAttributes<HTMLDivElement>;
-
-export const PromptInputTabsList = ({
-  className,
-  ...props
-}: PromptInputTabsListProps) => <div className={cn(className)} {...props} />;
-
-export type PromptInputTabProps = HTMLAttributes<HTMLDivElement>;
-
-export const PromptInputTab = ({
-  className,
-  ...props
-}: PromptInputTabProps) => <div className={cn(className)} {...props} />;
-
-export type PromptInputTabLabelProps = HTMLAttributes<HTMLHeadingElement>;
-
-export const PromptInputTabLabel = ({
-  className,
-  ...props
-}: PromptInputTabLabelProps) => (
-  <h3
-    className={cn(
-      "mb-2 px-3 font-medium text-muted-foreground text-xs",
-      className,
-    )}
-    {...props}
-  />
-);
-
-export type PromptInputTabBodyProps = HTMLAttributes<HTMLDivElement>;
-
-export const PromptInputTabBody = ({
-  className,
-  ...props
-}: PromptInputTabBodyProps) => (
-  <div className={cn("space-y-1", className)} {...props} />
-);
-
-export type PromptInputTabItemProps = HTMLAttributes<HTMLDivElement>;
-
-export const PromptInputTabItem = ({
-  className,
-  ...props
-}: PromptInputTabItemProps) => (
-  <div
-    className={cn(
-      "flex items-center gap-2 px-3 py-2 text-xs hover:bg-accent",
-      className,
-    )}
-    {...props}
-  />
 );
 
 export type PromptInputCommandProps = ComponentProps<typeof Command>;

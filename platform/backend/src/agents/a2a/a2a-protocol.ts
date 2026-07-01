@@ -65,6 +65,12 @@ export const A2AArchestraApprovalRequestSchema = z.object({
   approvalId: z.string(),
   toolCallId: z.string(),
   toolName: z.string(),
+  // Arguments the tool was called with. Carried so human-facing approval
+  // prompts (e.g. ChatOps) can show what the tool will do, and so a `run_tool`
+  // dispatch can be unwrapped to the real target tool + its args. Optional
+  // because it is only populated on the live (in-memory) approval path; tasks
+  // reloaded from the database do not persist it.
+  toolInput: z.record(z.string(), z.unknown()).optional(),
   approved: z.boolean(),
   resolved: z.boolean(),
 });

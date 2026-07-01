@@ -1,11 +1,11 @@
-import { OAUTH_GRANT_TYPE } from "@shared";
+import { OAUTH_GRANT_TYPE } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { parseTrustProxy } from "@/config";
+import config, { parseTrustProxy } from "@/config";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import oauthServerRoutes from "./oauth-server";
 
@@ -77,6 +77,41 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       expect(body.resource).toBe("http://localhost:9000/v1/mcp/test-id");
       expect(body.authorization_servers).toEqual(["http://localhost:9000"]);
     });
+
+    test("returns app-connector metadata when the apps feature is enabled", async () => {
+      const original = config.apps.enabled;
+      (config.apps as { enabled: boolean }).enabled = true;
+      try {
+        const response = await app.inject({
+          method: "GET",
+          url: "/.well-known/oauth-protected-resource/api/mcp/app/11111111-1111-1111-1111-111111111111",
+          headers: { host: "localhost:9000" },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json().resource).toBe(
+          "http://localhost:9000/api/mcp/app/11111111-1111-1111-1111-111111111111",
+        );
+      } finally {
+        (config.apps as { enabled: boolean }).enabled = original;
+      }
+    });
+
+    test("app-connector discovery is dark (404) when the apps feature is disabled", async () => {
+      const original = config.apps.enabled;
+      (config.apps as { enabled: boolean }).enabled = false;
+      try {
+        const response = await app.inject({
+          method: "GET",
+          url: "/.well-known/oauth-protected-resource/api/mcp/app/11111111-1111-1111-1111-111111111111",
+          headers: { host: "localhost:9000" },
+        });
+
+        expect(response.statusCode).toBe(404);
+      } finally {
+        (config.apps as { enabled: boolean }).enabled = original;
+      }
+    });
   });
 
   describe("GET /.well-known/oauth-authorization-server", () => {
@@ -90,10 +125,17 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       expect(response.statusCode).toBe(200);
       const body = response.json();
 
-      // issuer and authorization_endpoint use the frontend base URL (browser-facing)
-      expect(body.issuer).toBe("http://localhost:3000/");
+      // issuer and authorization_endpoint use the frontend base URL
+      // (browser-facing). Derive the expected values from config so the test
+      // is independent of a local .env that points the frontend origin at a
+      // tunnel domain.
+      const browserBaseUrl = config.frontendBaseUrl;
+      const expectedIssuer = browserBaseUrl.endsWith("/")
+        ? browserBaseUrl
+        : `${browserBaseUrl}/`;
+      expect(body.issuer).toBe(expectedIssuer);
       expect(body.authorization_endpoint).toBe(
-        "http://localhost:3000/api/auth/oauth2/authorize",
+        `${browserBaseUrl}/api/auth/oauth2/authorize`,
       );
       // token, registration, and jwks use the request Host (server-to-server)
       expect(body.token_endpoint).toBe(
@@ -149,11 +191,17 @@ describe("OAuth Server - Well-Known Endpoints", () => {
 
       const body = response.json();
 
-      // issuer and authorization_endpoint use the frontend base URL (browser-facing)
-      // regardless of the Host header
-      expect(body.issuer).toBe("http://localhost:3000/");
+      // issuer and authorization_endpoint use the frontend base URL
+      // (browser-facing) regardless of the Host header. Derive from config so
+      // the test is independent of a local .env that points the frontend origin
+      // at a tunnel domain.
+      const browserBaseUrl = config.frontendBaseUrl;
+      const expectedIssuer = browserBaseUrl.endsWith("/")
+        ? browserBaseUrl
+        : `${browserBaseUrl}/`;
+      expect(body.issuer).toBe(expectedIssuer);
       expect(body.authorization_endpoint).toBe(
-        "http://localhost:3000/api/auth/oauth2/authorize",
+        `${browserBaseUrl}/api/auth/oauth2/authorize`,
       );
       // token endpoint uses the request Host (server-to-server)
       expect(body.token_endpoint).toBe(
@@ -189,7 +237,13 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       const originalEnv = process.env;
 
       beforeEach(async () => {
-        process.env = { ...originalEnv, ARCHESTRA_TRUST_PROXY: "true" };
+        process.env = {
+          ...originalEnv,
+          ARCHESTRA_TRUST_PROXY: "true",
+          // Public origins used by tests in this describe.
+          ARCHESTRA_API_BASE_URL:
+            "https://gateway.example.com,https://archestra.example.com",
+        };
         proxyApp = Fastify({
           trustProxy: parseTrustProxy(process.env.ARCHESTRA_TRUST_PROXY),
         }).withTypeProvider<ZodTypeProvider>();

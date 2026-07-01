@@ -1,10 +1,10 @@
+import { EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import {
   type APIRequestContext,
   expect,
   type Page,
   test as setup,
 } from "@playwright/test";
-import { EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,

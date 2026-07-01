@@ -149,6 +149,7 @@ describe("QueryService", () => {
       title: "Test Document",
       sourceUrl: "https://example.com/doc",
       documentId: doc.id,
+      sourceId: null,
       connectorType: "jira",
     });
     // First result should have higher score (closer embedding)

@@ -1,4 +1,4 @@
-import { getEmbeddingColumnName } from "@shared";
+import { getEmbeddingColumnName } from "@archestra/shared";
 import { count, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { AclEntry, InsertKbChunk, KbChunk } from "@/types";
@@ -8,6 +8,7 @@ export interface VectorSearchResult {
   content: string;
   chunkIndex: number;
   documentId: string;
+  sourceId?: string | null;
   title: string;
   sourceUrl: string | null;
   metadata: Record<string, unknown> | null;
@@ -76,6 +77,8 @@ class KbChunkModel {
     dimensions: number;
     userAcl: AclEntry[];
     bypassAcl?: boolean;
+    /** Defense-in-depth env isolation: require the connector to be in this env. */
+    environmentId?: string | null;
     limit?: number;
   }): Promise<VectorSearchResult[]> {
     const {
@@ -84,6 +87,7 @@ class KbChunkModel {
       dimensions,
       userAcl,
       bypassAcl = false,
+      environmentId,
       limit = 10,
     } = params;
     if (connectorIds.length === 0) return [];
@@ -100,12 +104,17 @@ class KbChunkModel {
           sql`, `,
         );
 
+    const envFilter =
+      environmentId !== undefined
+        ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
+        : sql``;
+
     const col = sql.raw(getEmbeddingColumnName(dimensions));
     const vectorCast = sql.raw(`::vector(${dimensions})`);
     const rows = await db.execute(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
-        d.title, d.source_url AS "sourceUrl", d.metadata,
+        d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
         1 - (c.${col} <=> ${embeddingStr}${vectorCast}) AS score
       FROM kb_chunks c
@@ -113,6 +122,7 @@ class KbChunkModel {
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
         AND c.${col} IS NOT NULL
+        ${envFilter}
         ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
       ORDER BY c.${col} <=> ${embeddingStr}${vectorCast}
       LIMIT ${limit}
@@ -126,6 +136,8 @@ class KbChunkModel {
     queryText: string;
     userAcl: AclEntry[];
     bypassAcl?: boolean;
+    /** Defense-in-depth env isolation: require the connector to be in this env. */
+    environmentId?: string | null;
     limit?: number;
   }): Promise<VectorSearchResult[]> {
     const {
@@ -133,6 +145,7 @@ class KbChunkModel {
       queryText,
       userAcl,
       bypassAcl = false,
+      environmentId,
       limit = 10,
     } = params;
     if (connectorIds.length === 0) return [];
@@ -148,12 +161,17 @@ class KbChunkModel {
           sql`, `,
         );
 
+    const envFilter =
+      environmentId !== undefined
+        ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
+        : sql``;
+
     const orQuery = queryText.split(/\s+/).filter(Boolean).join(" OR ");
 
     const rows = await db.execute(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
-        d.title, d.source_url AS "sourceUrl", d.metadata,
+        d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
         ts_rank(c.search_vector, websearch_to_tsquery('english', ${orQuery})) AS score
       FROM kb_chunks c
@@ -161,6 +179,7 @@ class KbChunkModel {
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
         AND c.search_vector @@ websearch_to_tsquery('english', ${orQuery})
+        ${envFilter}
         ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
       ORDER BY score DESC
       LIMIT ${limit}

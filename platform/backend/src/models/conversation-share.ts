@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type {
   Conversation,
   ConversationShare,
@@ -7,6 +7,7 @@ import type {
   ConversationShareWithTargets,
 } from "@/types";
 import ConversationChatErrorModel from "./conversation-chat-error";
+import ConversationCompactionModel from "./conversation-compaction";
 
 class ConversationShareModel {
   static async findByConversationId(params: {
@@ -95,7 +96,7 @@ class ConversationShareModel {
     // Caller must verify the requesting user owns the conversation before
     // updating share state for it. This model only enforces org/conversation
     // identity, not conversation ownership.
-    const shareId = await db.transaction(async (tx) => {
+    const shareId = await withDbTransaction(async (tx) => {
       const [existing] = await tx
         .select()
         .from(schema.conversationSharesTable)
@@ -238,9 +239,10 @@ class ConversationShareModel {
     if (rows.length === 0) return null;
 
     const firstRow = rows[0];
-    const chatErrors = await ConversationChatErrorModel.findByConversation(
-      share.conversationId,
-    );
+    const [chatErrors, compactions] = await Promise.all([
+      ConversationChatErrorModel.findByConversation(share.conversationId),
+      ConversationCompactionModel.findByConversation(share.conversationId),
+    ]);
     const messages = [];
 
     for (const row of rows) {
@@ -261,6 +263,7 @@ class ConversationShareModel {
       },
       messages,
       chatErrors,
+      compactions,
       sharedByUserId: share.createdByUserId,
     };
   }

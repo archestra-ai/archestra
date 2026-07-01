@@ -2,5 +2,18 @@
   "attribution": {
     "commit": "",
     "pr": ""
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; case \"$f\" in \"$CLAUDE_PROJECT_DIR\"/platform/*) cd \"$CLAUDE_PROJECT_DIR/platform\" && pnpm exec biome check --write --files-ignore-unknown=true --no-errors-on-unmatched \"$f\" ;; esac; } || true"
+          }
+        ]
+      }
+    ]
   }
 }

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
   type archestraApiTypes,
   IDENTITY_PROVIDER_ID,
@@ -5,7 +6,7 @@ import {
   isEntraHostname,
   isOktaHostname,
   OAUTH_TOKEN_TYPE,
-} from "@shared";
+} from "@archestra/shared";
 
 export type EnterpriseSubjectTokenType = NonNullable<
   NonNullable<

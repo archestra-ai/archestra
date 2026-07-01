@@ -1,0 +1,19 @@
+{
+  "name": "@archestra/drizzle-migration-linter",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Lint Drizzle SQL migrations for rollout-unsafe PostgreSQL schema changes.",
+  "type": "module",
+  "bin": {
+    "drizzle-migration-linter": "./src/cli.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "pnpm --dir .. exec tsx drizzle-migration-linter/src/cli.ts",
+    "test": "pnpm --dir ../backend exec vitest run --root ../drizzle-migration-linter",
+    "type-check": "pnpm --dir ../backend exec tsgo --noEmit --project ../drizzle-migration-linter/tsconfig.json"
+  },
+  "devDependencies": {}
+}

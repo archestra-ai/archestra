@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -20,7 +20,9 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
+import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { StandardDialog } from "@/components/standard-dialog";
 import {
   type TableRowAction,
@@ -49,6 +51,9 @@ import { EditKnowledgeBaseDialog } from "./_parts/edit-knowledge-base-dialog";
 type KnowledgeBaseItem =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
 
+const KNOWLEDGE_BASES_DESCRIPTION =
+  "A knowledge base is a searchable collection of content, grouped from one or more connectors, that your agents can retrieve answers from.";
+
 export default function KnowledgeBasesPage() {
   return (
     <div className="w-full h-full">
@@ -75,6 +80,8 @@ function KnowledgeBasesList() {
     data: knowledgeBases,
     isPending,
     isFetching,
+    isLoadingError: isKnowledgeBasesLoadError,
+    refetch: refetchKnowledgeBases,
   } = useKnowledgeBasesPaginated({
     limit: pageSize,
     offset,
@@ -175,14 +182,32 @@ function KnowledgeBasesList() {
     },
   ];
 
+  if (isKnowledgeBasesLoadError) {
+    return (
+      <KnowledgePageLayout
+        title="Knowledge Bases"
+        description={KNOWLEDGE_BASES_DESCRIPTION}
+        createLabel="Create Knowledge Base"
+        onCreateClick={() => setIsCreateDialogOpen(true)}
+        isPending={false}
+      >
+        <QueryLoadError
+          title="Couldn't load your knowledge bases"
+          onRetry={() => refetchKnowledgeBases()}
+        />
+      </KnowledgePageLayout>
+    );
+  }
+
   return (
     <KnowledgePageLayout
       title="Knowledge Bases"
-      description="Manage knowledge bases and their data connectors."
+      description={KNOWLEDGE_BASES_DESCRIPTION}
       createLabel="Create Knowledge Base"
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !knowledgeBases}
     >
+      <SmallTeamTierBanner featureName="Knowledge Base with access control" />
       <div>
         <div className="mb-6 flex flex-col gap-2">
           <div className="flex items-center gap-4">

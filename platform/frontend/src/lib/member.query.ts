@@ -2,10 +2,11 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   calculatePaginationMeta,
-} from "@shared";
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { throwOnApiError } from "@/lib/utils";
 import { useActiveOrganization } from "./organization.query";
 
 const { getMembers } = archestraApiSdk;
@@ -65,6 +66,7 @@ export function useMembersPaginated(
     queryKey: memberKeys.paginated(query),
     queryFn: async () => {
       const response = await getMembers({ query });
+      throwOnApiError(response.error, { toastOnError: false });
       return (
         response.data ?? {
           data: [] as Member[],

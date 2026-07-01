@@ -1,4 +1,4 @@
-import type { IncomingEmailSecurityMode } from "@shared";
+import type { IncomingEmailSecurityMode } from "@archestra/shared";
 import { vi } from "vitest";
 
 // Mock the a2a-executor service - must be before other imports

@@ -9,7 +9,6 @@ import type {
 } from "react-hook-form";
 import type { FieldScopeValue } from "@/components/field-scope-select";
 import { Button } from "@/components/ui/button";
-import { usePresetEntityName } from "@/lib/organization.query";
 
 interface HeadersReadOnlyTableProps<TFieldValues extends FieldValues> {
   form: { watch: UseFormWatch<TFieldValues> };
@@ -57,16 +56,9 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
             `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>,
           ),
         );
-        const promptOnPreset = Boolean(
-          form.watch(
-            `${fieldNamePrefix}.${index}.promptOnPreset` as FieldPath<TFieldValues>,
-          ),
-        );
         const scope: FieldScopeValue = promptOnInstallation
           ? "installation"
-          : promptOnPreset
-            ? "preset"
-            : "static";
+          : "static";
         const value = form.watch(
           `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>,
         ) as string | undefined;
@@ -99,12 +91,12 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
             }}
             className={`${GRID_CLASS} group items-center border-b py-3 text-xs last:border-b-0 cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
           >
-            <div className="font-mono">
+            <div className="min-w-0 truncate font-mono">
               {headerName || (
                 <span className="text-muted-foreground italic">unnamed</span>
               )}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 truncate">
               <ValueCell scope={scope} value={value} />
             </div>
             <div>
@@ -128,7 +120,7 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
                 <span className="text-muted-foreground">—</span>
               )}
             </div>
-            <div className="line-clamp-2 text-muted-foreground">
+            <div className="min-w-0 line-clamp-2 text-muted-foreground">
               {description || <span className="italic">no description</span>}
             </div>
             <Button
@@ -158,12 +150,8 @@ function ValueCell({
   scope: FieldScopeValue;
   value: string | undefined;
 }) {
-  const { singular } = usePresetEntityName();
   if (scope === "installation") {
     return <span className="text-muted-foreground">per-installation</span>;
-  }
-  if (scope === "preset") {
-    return <span className="text-muted-foreground">per-{singular}</span>;
   }
   if (!value) {
     return <span className="text-muted-foreground italic">not set</span>;

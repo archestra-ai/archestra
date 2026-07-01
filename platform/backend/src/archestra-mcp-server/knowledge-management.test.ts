@@ -3,7 +3,9 @@
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+  TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME,
+  TOOL_GET_KNOWLEDGE_CONNECTORS_SHORT_NAME,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import {
   knowledgeSourceAccessControlService,
@@ -13,6 +15,7 @@ import { KbChunkModel, KbDocumentModel, TeamModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, KnowledgeBase, KnowledgeBaseConnector } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { archestraMcpBranding } from "./branding";
 
 const t = (name: string) =>
   `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${name}`;
@@ -61,6 +64,47 @@ describe("knowledge-management tool execution", () => {
       expect((result.content[0] as any).text).toContain(
         "No knowledge base or connector assigned",
       );
+    });
+
+    test("queries all user-visible connectors when the agent allows dynamic access", async ({
+      makeAgent,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      // agent has NO assigned knowledge sources — only the dynamic flag
+      const dynamicAgent = await makeAgent({
+        name: "Dynamic Knowledge Agent",
+        organizationId: org.id,
+        accessAllTools: true,
+      });
+
+      const querySpy = vi
+        .spyOn(queryService, "query")
+        .mockResolvedValueOnce([] as any);
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "anything" },
+        {
+          agent: { id: dynamicAgent.id, name: dynamicAgent.name },
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(querySpy).toHaveBeenCalledOnce();
+      expect(querySpy.mock.calls[0][0].connectorIds).toContain(connector.id);
+
+      querySpy.mockRestore();
     });
 
     test("calls queryService with correct params when KB is assigned", async ({
@@ -581,6 +625,12 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain("not found");
+      expect((result.content[0] as any).text).toContain(
+        archestraMcpBranding.getToolName(TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME),
+      );
+      expect((result._meta as any)?.archestraError?.code).toBe(
+        "unknown_knowledge_base",
+      );
     });
 
     test("update_knowledge_base returns error when no fields provided", async () => {
@@ -747,6 +797,14 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain("not found");
+      expect((result.content[0] as any).text).toContain(
+        archestraMcpBranding.getToolName(
+          TOOL_GET_KNOWLEDGE_CONNECTORS_SHORT_NAME,
+        ),
+      );
+      expect((result._meta as any)?.archestraError?.code).toBe(
+        "unknown_knowledge_connector",
+      );
     });
 
     test("update_knowledge_connector returns error when no fields", async () => {

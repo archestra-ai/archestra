@@ -1,36 +1,20 @@
-import { E2eTestId } from "@shared";
+import { E2eTestId } from "@archestra/shared";
+import type { Page } from "@playwright/test";
 import { WIREMOCK_BASE_URL } from "../consts";
-import { expect, test } from "../fixtures";
 import {
+  ensureWireMockAnthropicChatProvider,
   expectChatReady,
-  getRuntimeModelForProvider,
+  getRuntimeModelForProviderFromApi,
   goToChat,
+  selectApiKeyById,
   selectApiKeyForProvider,
   selectRuntimeModelFromDialog,
 } from "../utils";
+import { expect, test } from "./api-fixtures";
 
 // Run all provider tests sequentially to avoid WireMock stub timing issues.
 // Retries handle transient streaming/WireMock flakiness in CI.
 test.describe.configure({ mode: "serial", retries: 2 });
-
-// Warm up WireMock's SSE streaming pipeline before the first test.
-// The Anthropic test (first in sequence) flakes ~41% of runs because the first
-// streaming request through WireMock takes >90s in CI due to cold-start overhead.
-// This throwaway request primes the connection so the real test succeeds immediately.
-test.beforeAll(async () => {
-  try {
-    await fetch(`${WIREMOCK_BASE_URL}/anthropic/v1/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-3-5-sonnet-20241022",
-        messages: [{ role: "user", content: "chat-ui-e2e-test warmup" }],
-      }),
-    });
-  } catch {
-    // Warm-up failure is non-fatal — the test will retry if needed
-  }
-});
 
 interface ChatProviderTestConfig {
   providerName: string;
@@ -197,7 +181,11 @@ const testConfigs: ChatProviderTestConfig[] = [
 // Test Suite
 // =============================================================================
 
-const skippedProviders = new Set<string>();
+// cerebras: model selector intermittently never renders in CI (15s timeout).
+// Tracked alongside MQ flakiness from https://github.com/archestra-ai/archestra/actions/runs/26282803981.
+// cohere: mocked streaming response intermittently never becomes visible in CI (90s timeout),
+// failing all retries. Tracked from https://github.com/archestra-ai/archestra/actions/runs/26950850016.
+const skippedProviders = new Set<string>(["cerebras", "cohere"]);
 
 for (const config of testConfigs) {
   test.describe(`Chat-UI-${config.providerName}`, () => {
@@ -209,14 +197,12 @@ for (const config of testConfigs) {
 
     test(`can send a message and receive a response from ${config.providerDisplayName}`, async ({
       page,
-      makeRandomString,
+      request,
+      makeApiRequest,
     }) => {
-      await goToChat(page);
-      await expectChatReady(page);
-      const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
-
-      const runtimeModel = await getRuntimeModelForProvider(
-        page,
+      const runtimeModel = await getRuntimeModelForProviderFromApi(
+        makeApiRequest,
+        request,
         config.providerName,
       );
       test.skip(
@@ -226,6 +212,10 @@ for (const config of testConfigs) {
       if (!runtimeModel) {
         return;
       }
+
+      await goToChat(page);
+      await expectChatReady(page);
+      const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
 
       await selectApiKeyForProvider(page, runtimeModel.provider);
 
@@ -249,7 +239,7 @@ for (const config of testConfigs) {
 
       // Generate a unique message that contains our wiremock stub ID for matching
       // The wiremock mapping matches on bodyPatterns: [{ "contains": "chat-ui-e2e-test" }]
-      const testMessageId = makeRandomString(8, config.wiremockStubId);
+      const testMessageId = makeTestMessageId(config.wiremockStubId);
       const testMessage = `Test message ${testMessageId}: Please respond with a simple greeting.`;
 
       // Type and send the message
@@ -271,4 +261,153 @@ for (const config of testConfigs) {
       await expect(page.getByText(testMessage).first()).toBeVisible();
     });
   });
+}
+
+test.describe("Chat active run reconnect", () => {
+  test.setTimeout(120_000);
+
+  // FIXME: reloading into an active stream renders the assistant turn twice.
+  // The stream-resume reconnect leaves useChat holding two assistant messages
+  // (the backend active-run replay message plus a churning client placeholder)
+  // that never reconcile, so `getByText("part three")` matches two bubbles. The
+  // React #185 render loop this test also hit is already fixed; only the
+  // duplicate-assistant reconciliation remains.
+  test.fixme("continues a streaming assistant turn after page reload", async ({
+    page,
+    request,
+    makeApiRequest,
+    syncModels,
+  }) => {
+    await expectWireMockReady();
+
+    const { apiKeyId, runtimeModel } =
+      await ensureWireMockAnthropicChatProvider({
+        request,
+        makeApiRequest,
+        syncModels,
+      });
+
+    await goToChat(page);
+    await expectChatReady(page);
+
+    await selectApiKeyById(page, apiKeyId);
+
+    const modelSelectorTrigger = page
+      .getByTestId(E2eTestId.ChatModelSelectorTrigger)
+      .or(page.getByRole("button", { name: /select model/i }))
+      .or(page.getByRole("button", { name: /claude|gpt|gemini/i }))
+      .first();
+    await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
+    await modelSelectorTrigger.click();
+
+    const modelDialog = page.getByRole("dialog", { name: "Select Model" });
+    await expect(modelDialog).toBeVisible({ timeout: 5_000 });
+    await selectRuntimeModelFromDialog(page, runtimeModel);
+
+    const testMessageId = makeTestMessageId("chat-reconnect-e2e-test");
+    const testMessage = `Test message ${testMessageId}: stream slowly.`;
+    const expectedResponse =
+      "Reconnect stream part one part two part three part four part five done.";
+    const firstChunk = page.getByText("Reconnect stream part one", {
+      exact: false,
+    });
+    const middleChunk = page.getByText("part three", { exact: false });
+    const lateChunk = page.getByText("part five done", { exact: false });
+    const finalResponse = page.getByText(expectedResponse, { exact: true });
+
+    await page.getByTestId(E2eTestId.ChatPromptTextarea).fill(testMessage);
+    await page.keyboard.press("Enter");
+
+    const conversationId = await waitForConversationId(page);
+    await expect(firstChunk).toBeVisible({ timeout: 60_000 });
+    expect(await middleChunk.isVisible()).toBe(false);
+    expect(await lateChunk.isVisible()).toBe(false);
+    expect(await finalResponse.isVisible()).toBe(false);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expectChatReady(page);
+
+    await expect(middleChunk).toBeVisible({ timeout: 90_000 });
+    await expect(lateChunk).toBeVisible({ timeout: 90_000 });
+    await expect(finalResponse).toBeVisible({ timeout: 90_000 });
+
+    await expect(async () => {
+      const transcript = await fetchConversationTranscript(
+        page,
+        conversationId,
+      );
+      expect(transcript.userMessages).toEqual([testMessage]);
+      expect(transcript.assistantMessages).toEqual([expectedResponse]);
+    }).toPass({ timeout: 15_000, intervals: [500, 1000, 2000] });
+  });
+});
+
+async function expectWireMockReady() {
+  try {
+    const response = await fetch(`${WIREMOCK_BASE_URL}/__admin/health`);
+    if (response.ok) {
+      return;
+    }
+
+    throw new Error(`${response.status} ${await response.text()}`);
+  } catch (error) {
+    throw new Error(
+      `WireMock is not reachable at ${WIREMOCK_BASE_URL}. Run tilt trigger e2e-test-dependencies before the chat reconnect e2e. ${String(
+        error,
+      )}`,
+    );
+  }
+}
+
+async function waitForConversationId(page: Page) {
+  await expect(async () => {
+    expect(extractConversationId(page.url())).toBeTruthy();
+  }).toPass({ timeout: 10_000, intervals: [250, 500, 1000] });
+
+  const conversationId = extractConversationId(page.url());
+  if (!conversationId) {
+    throw new Error(`Could not find conversation id in URL: ${page.url()}`);
+  }
+  return conversationId;
+}
+
+async function fetchConversationTranscript(page: Page, conversationId: string) {
+  return page.evaluate(async (id) => {
+    const response = await fetch(`/api/chat/conversations/${id}`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch conversation: ${response.status}`);
+    }
+
+    const conversation = (await response.json()) as {
+      messages: Array<{ role: string; parts?: Array<{ text?: string }> }>;
+    };
+    const textFor = (message: { parts?: Array<{ text?: string }> }) =>
+      message.parts
+        ?.map((part) => part.text ?? "")
+        .join("")
+        .trim() ?? "";
+
+    return {
+      userMessages: conversation.messages
+        .filter((message) => message.role === "user")
+        .map(textFor),
+      assistantMessages: conversation.messages
+        .filter((message) => message.role === "assistant")
+        .map(textFor),
+    };
+  }, conversationId);
+}
+
+function makeTestMessageId(prefix: string): string {
+  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function extractConversationId(url: string): string | null {
+  return (
+    new URL(url).pathname.match(
+      /^\/chat\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i,
+    )?.[1] ?? null
+  );
 }

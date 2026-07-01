@@ -1,4 +1,7 @@
-import { AUTO_PROVISIONED_INVITATION_STATUS, MEMBER_ROLE_NAME } from "@shared";
+import {
+  AUTO_PROVISIONED_INVITATION_STATUS,
+  MEMBER_ROLE_NAME,
+} from "@archestra/shared";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -8,7 +11,7 @@ import {
   OrganizationModel,
   UserModel,
 } from "@/models";
-import type { ChatOpsProviderType } from "@/types";
+import type { ChatOpsProviderType, User } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 
 const INVITATION_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -113,6 +116,39 @@ export async function autoProvisionUser(params: {
 }
 
 /**
+ * Resolve a chat sender to an Archestra user, auto-provisioning on first sight.
+ *
+ * Returns the existing user with `invitationId: null` when already registered, or
+ * the freshly provisioned user with the invitation id (callers gate the welcome on
+ * `invitationId !== null`). Returns `null` when provisioning succeeded but the user
+ * could not be re-resolved afterwards. `resolveDisplayName` is only invoked when a
+ * new user is actually provisioned.
+ */
+export async function ensureProvisionedUser(params: {
+  email: string;
+  resolveDisplayName: () => Promise<string>;
+  provider: ChatOpsProviderType;
+}): Promise<{ user: User; invitationId: string | null } | null> {
+  const { email, resolveDisplayName, provider } = params;
+  const normalizedEmail = email.toLowerCase();
+
+  const existing = await UserModel.findByEmail(normalizedEmail);
+  if (existing) {
+    return { user: existing, invitationId: null };
+  }
+
+  const name = await resolveDisplayName();
+  const { invitationId } = await autoProvisionUser({ email, name, provider });
+
+  const user = await UserModel.findByEmail(normalizedEmail);
+  if (!user) {
+    return null;
+  }
+
+  return { user, invitationId };
+}
+
+/**
  * Check if any SSO identity provider is configured.
  */
 export async function isSsoConfigured(): Promise<boolean> {
@@ -132,16 +168,17 @@ interface WelcomeMessage {
 /**
  * Build the welcome message sent to auto-provisioned users via DM.
  */
-export function buildWelcomeMessage(params: {
+export async function buildWelcomeMessage(params: {
   invitationId: string;
   email: string;
   name: string;
-}): WelcomeMessage {
+}): Promise<WelcomeMessage> {
   const { invitationId, email, name } = params;
   const baseUrl = config.frontendBaseUrl;
+  const appName = await OrganizationModel.getAppName();
 
   return {
-    text: `Hey there 👋 We created an Archestra user for you (${email}). Finish signing up to access Archestra web app.`,
+    text: `Hey there 👋 We created a ${appName} user for you (${email}). Finish signing up to access the ${appName} web app.`,
     actionUrl: `${baseUrl}/auth/sign-up-with-invitation?invitationId=${invitationId}&email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`,
     actionLabel: "Finish Signup",
   };

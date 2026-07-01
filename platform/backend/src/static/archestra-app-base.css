@@ -1,0 +1,222 @@
+/*
+ * Archestra Apps — platform baseline stylesheet.
+ *
+ * Injected at serve time as the first <link> in <head> of every owned app, so
+ * it leads the cascade and any app CSS that follows overrides it. It defines the
+ * design-system variables apps reference (light + dark), themed element
+ * defaults, and a small set of `.arch-*` components — so an app author writes
+ * only app-specific CSS and never hand-rolls a theme. Never stored in
+ * app_versions; served fresh, like the SDK.
+ */
+
+:root {
+  --color-text-primary: #111418;
+  --color-text-secondary: #5b6470;
+  --color-text-danger: #c0392b;
+  --color-text-inverse: #ffffff;
+  --color-background-primary: #ffffff;
+  --color-background-secondary: #f5f6f8;
+  --color-background-inverse: #111418;
+  --color-border-primary: #d8dce2;
+  --color-accent: #2d6cdf;
+
+  --border-radius-sm: 4px;
+  --border-radius-md: 6px;
+  --border-radius-lg: 10px;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-text-primary: #e8eaed;
+    --color-text-secondary: #9aa3af;
+    --color-text-danger: #ff6b6b;
+    --color-text-inverse: #111418;
+    --color-background-primary: #16191d;
+    --color-background-secondary: #1e2227;
+    --color-background-inverse: #e8eaed;
+    --color-border-primary: #2f343b;
+    --color-accent: #5b8def;
+  }
+}
+
+/* === Element baseline === */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 1.5rem;
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  background: var(--color-background-primary);
+  line-height: 1.5;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0 0 0.5rem;
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+h1 {
+  font-size: 1.5rem;
+}
+h2 {
+  font-size: 1.25rem;
+}
+h3 {
+  font-size: 1.05rem;
+}
+
+p {
+  margin: 0 0 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+a {
+  color: var(--color-accent);
+}
+
+ul,
+ol {
+  margin: 0 0 0.75rem;
+  padding-left: 1.25rem;
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--font-mono);
+}
+
+button {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-inverse);
+  color: var(--color-text-inverse);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  padding: 0.5rem;
+  color: var(--color-text-primary);
+  background: var(--color-background-primary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-md);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* === Components (opt-in, prefixed) === */
+
+.arch-card {
+  padding: 1rem;
+  background: var(--color-background-primary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-lg);
+}
+
+.arch-btn {
+  display: inline-block;
+  font: inherit;
+  padding: 0.5rem 1rem;
+  border: 1px solid transparent;
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-inverse);
+  color: var(--color-text-inverse);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.arch-btn--primary {
+  background: var(--color-accent);
+  color: #ffffff;
+}
+
+.arch-btn--ghost {
+  background: transparent;
+  color: var(--color-text-primary);
+  border-color: var(--color-border-primary);
+}
+
+.arch-input {
+  display: block;
+  width: 100%;
+  padding: 0.5rem;
+  color: var(--color-text-primary);
+  background: var(--color-background-primary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-md);
+}
+
+.arch-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--color-border-primary);
+}
+
+.arch-tab {
+  padding: 0.5rem 0.75rem;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.arch-tab[aria-selected="true"],
+.arch-tab.is-active {
+  color: var(--color-text-primary);
+  border-bottom-color: var(--color-accent);
+}
+
+.arch-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
+.arch-spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--color-border-primary);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: arch-spin 0.6s linear infinite;
+}
+
+@keyframes arch-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -4,7 +4,7 @@ import {
   DocsPage,
   type IdentityProviderFormValues,
   OAUTH_TOKEN_TYPE,
-} from "@shared";
+} from "@archestra/shared";
 import { Plus, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
@@ -56,7 +56,8 @@ interface OidcConfigFormProps {
     | "attribute-mapping"
     | "enterprise-managed-credentials"
     | "role-mapping"
-    | "team-sync";
+    | "team-sync"
+    | "token-debugger";
   /** Hide the PKCE checkbox (for providers that don't support it like GitHub) */
   hidePkce?: boolean;
   /** Hide the Provider ID field (for predefined providers like Okta, Google, GitHub) */
@@ -291,6 +292,7 @@ export function OidcConfigForm({
                 <FormControl>
                   <Input
                     type="password"
+                    autoComplete="new-password"
                     placeholder="your-client-secret"
                     {...field}
                   />
@@ -654,7 +656,12 @@ function EnterpriseManagedCredentialsForm(props: {
             <FormItem>
               <FormLabel>Exchange Client Secret</FormLabel>
               <FormControl>
-                <Input type="password" placeholder="Optional" {...field} />
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Optional"
+                  {...field}
+                />
               </FormControl>
               <FormDescription>
                 Only used when the exchange endpoint authenticates with a client

@@ -1,4 +1,4 @@
-import { META_HEADER } from "@shared";
+import { META_HEADER } from "@archestra/shared";
 
 /**
  * Parsed result from the composite X-Archestra-Meta header.

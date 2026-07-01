@@ -1,8 +1,7 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import { E2eTestId } from "@archestra/shared";
 import { AlertTriangle, Globe, Lock, Users } from "lucide-react";
-import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
@@ -19,8 +18,7 @@ import {
 } from "@/components/visibility-selector";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { usePresetEntityName } from "@/lib/organization.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 
 export type McpServerInstallScope = "personal" | "team" | "org";
 
@@ -39,9 +37,17 @@ interface SelectMcpServerCredentialTypeAndTeamsProps {
   onScopeChange?: (scope: McpServerInstallScope) => void;
   /** When true, this is a reinstall - scope is locked to existing value */
   isReinstall?: boolean;
-  /** The team ID of the existing server being reinstalled (null/undefined = personal/org) */
+  /**
+   * When true, this is a re-authentication. Like reinstall, the connection's
+   * scope cannot change — it is locked to the existing value. Without this the
+   * selector treats re-auth as a fresh install and disables the already-used
+   * scope ("already installed"), leaving the owner unable to re-authenticate
+   * their own connection.
+   */
+  isReauth?: boolean;
+  /** The team ID of the existing server being reinstalled/re-authenticated (null/undefined = personal/org) */
   existingTeamId?: string | null;
-  /** The scope of the existing server being reinstalled */
+  /** The scope of the existing server being reinstalled/re-authenticated */
   existingScope?: McpServerInstallScope;
   /** When true, only personal installation is allowed */
   personalOnly?: boolean;
@@ -53,11 +59,6 @@ interface SelectMcpServerCredentialTypeAndTeamsProps {
   onCanInstallChange?: (canInstall: boolean) => void;
   /** Pre-select a specific team (used when adding shared connection from manage dialog) */
   preselectedTeamId?: string | null;
-  /** Optional node rendered on the same row as the "Install for" select (left column). */
-  presetPicker?: ReactNode;
-  /** Whether the catalog item has presets — when false, render the legacy
-   * VisibilitySelector with icons + descriptions instead of the compact grid. */
-  hasPresets?: boolean;
 }
 
 export function SelectMcpServerCredentialTypeAndTeams({
@@ -65,6 +66,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
   catalogId,
   onScopeChange,
   isReinstall = false,
+  isReauth = false,
   existingTeamId,
   existingScope,
   personalOnly = false,
@@ -72,13 +74,13 @@ export function SelectMcpServerCredentialTypeAndTeams({
   orgOnly = false,
   onCanInstallChange,
   preselectedTeamId,
-  presetPicker,
-  hasPresets = false,
 }: SelectMcpServerCredentialTypeAndTeamsProps) {
-  const { data: teams, isLoading: isLoadingTeams } = useTeams();
+  // Reinstall and re-auth both keep the connection's existing scope — neither
+  // picks a new one, so the scope is locked to the existing value rather than
+  // disabled because the scope is "already installed".
+  const lockToExistingScope = isReinstall || isReauth;
   const { data: installedServers } = useMcpServers();
   const { data: session } = useSession();
-  const { singular } = usePresetEntityName();
   const currentUserId = session?.user?.id;
 
   // WHY: Check mcpServer:update permission to determine if user can create team installations
@@ -90,6 +92,10 @@ export function SelectMcpServerCredentialTypeAndTeams({
   // WHY: mcpServerInstallation:admin gates org-wide installations
   const { data: isMcpServerAdmin } = useHasPermissions({
     mcpServerInstallation: ["admin"],
+  });
+  // All teams for an install admin, otherwise only the teams the user belongs to.
+  const { data: teams, isLoading: isLoadingTeams } = useAssignableTeams({
+    isResourceAdmin: !!isMcpServerAdmin,
   });
 
   const { hasPersonalInstallation, teamsWithInstallation, hasOrgInstallation } =
@@ -129,13 +135,13 @@ export function SelectMcpServerCredentialTypeAndTeams({
 
   const availableTeams = useMemo(() => {
     if (!teams) return [];
-    if (isReinstall) return teams;
+    if (lockToExistingScope) return teams;
     if (!catalogId) return teams;
     return teams.filter((t) => !teamsWithInstallation.includes(t.id));
-  }, [teams, catalogId, teamsWithInstallation, isReinstall]);
+  }, [teams, catalogId, teamsWithInstallation, lockToExistingScope]);
 
   const initialScope: McpServerInstallScope = useMemo(() => {
-    if (isReinstall) {
+    if (lockToExistingScope) {
       return existingScope ?? (existingTeamId ? "team" : "personal");
     }
     if (orgOnly) return "org";
@@ -145,7 +151,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
     if (hasPersonalInstallation && availableTeams.length > 0) return "team";
     return "personal";
   }, [
-    isReinstall,
+    lockToExistingScope,
     existingScope,
     existingTeamId,
     orgOnly,
@@ -158,31 +164,31 @@ export function SelectMcpServerCredentialTypeAndTeams({
 
   const [scope, setScope] = useState<McpServerInstallScope>(initialScope);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(() => {
-    if (isReinstall) return existingTeamId ?? null;
+    if (lockToExistingScope) return existingTeamId ?? null;
     if (preselectedTeamId) return preselectedTeamId;
     return null;
   });
 
-  // WHY: During reinstall, lock scope to existing value (can't change ownership).
-  // Personal is disabled if: reinstalling a non-personal server, or (for new install)
-  // already has personal or BYOS enabled.
+  // WHY: During reinstall/re-auth, lock scope to existing value (can't change
+  // ownership). Personal is disabled if: reinstalling/re-authing a non-personal
+  // server, or (for new install) already has personal or BYOS enabled.
   const isPersonalDisabled =
     teamOnly || orgOnly
       ? true
       : personalOnly
         ? false
-        : isReinstall
+        : lockToExistingScope
           ? initialScope !== "personal"
           : hasPersonalInstallation;
 
   // WHY: Team options are disabled if:
   // 1. personalOnly or orgOnly mode (only that scope is allowed)
-  // 2. Reinstalling a non-team server (can't switch to team)
+  // 2. Reinstalling/re-authing a non-team server (can't switch to team)
   // 3. User lacks mcpServer:update permission (members can never create team installations)
   const isTeamDisabled =
     personalOnly || orgOnly
       ? true
-      : isReinstall
+      : lockToExistingScope
         ? initialScope !== "team"
         : !hasMcpServerUpdate || availableTeams.length === 0;
 
@@ -192,7 +198,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
       ? true
       : orgOnly
         ? false
-        : isReinstall
+        : lockToExistingScope
           ? initialScope !== "org"
           : !isMcpServerAdmin || hasOrgInstallation;
 
@@ -273,7 +279,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
   ]);
 
   useEffect(() => {
-    if (isReinstall) {
+    if (lockToExistingScope) {
       onScopeChange?.(initialScope);
       onTeamChange(initialScope === "team" ? (existingTeamId ?? null) : null);
       return;
@@ -306,7 +312,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
     onScopeChange?.(scope);
     onTeamChange(scope === "team" ? selectedTeamId : null);
   }, [
-    isReinstall,
+    lockToExistingScope,
     initialScope,
     existingTeamId,
     visibilityOptions,
@@ -329,28 +335,23 @@ export function SelectMcpServerCredentialTypeAndTeams({
 
   if (!canInstall) {
     return (
-      <>
-        {presetPicker}
-        <Alert>
-          <AlertTriangle className="!text-amber-500 h-4 w-4" />
-          <AlertDescription>
-            <span className="font-semibold">Already installed</span>
-            <p className="mt-1">
-              This MCP server is already installed everywhere you have
-              permission to install it
-              {presetPicker ? ` for the selected ${singular}` : ""}.
-            </p>
-          </AlertDescription>
-        </Alert>
-      </>
+      <Alert>
+        <AlertTriangle className="!text-amber-500 h-4 w-4" />
+        <AlertDescription>
+          <span className="font-semibold">Already installed</span>
+          <p className="mt-1">
+            This MCP server is already installed everywhere you have permission
+            to install it.
+          </p>
+        </AlertDescription>
+      </Alert>
     );
   }
 
   // When personalOnly, orgOnly, or preselectedTeamId, skip the scope selector
-  // entirely — scope is fixed. Still render the preset picker (if provided)
-  // so the install dialog can pick a preset.
+  // entirely — scope is fixed.
   if (personalOnly || orgOnly || preselectedTeamId) {
-    return presetPicker ? presetPicker : null;
+    return null;
   }
 
   const hideSelector = isReinstall || visibilityOptions.length <= 1;
@@ -360,7 +361,6 @@ export function SelectMcpServerCredentialTypeAndTeams({
       className="space-y-4"
       data-testid={E2eTestId.SelectCredentialTypeTeamDropdown}
     >
-      {hasPresets && presetPicker}
       {!hideSelector && (
         <VisibilitySelector
           label="Install for"

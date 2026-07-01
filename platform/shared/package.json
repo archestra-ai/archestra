@@ -1,12 +1,15 @@
 {
-  "name": "@shared",
-  "version": "1.2.50",
+  "name": "@archestra/shared",
+  "version": "1.2.76",
   "description": "",
   "type": "module",
   "private": true,
   "exports": {
     ".": "./index.ts",
-    "./access-control": "./access-control.ts"
+    "./access-control": "./access-control.ts",
+    "./e2e-test-ids": "./e2e-test-ids.ts",
+    "./permission.types": "./permission.types.ts",
+    "./test-mcp-server": "./test-mcp-server.ts"
   },
   "scripts": {
     "lint": "biome check",
@@ -25,9 +28,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "ai": "^6.0.116",
-    "better-auth": "1.5.5",
-    "zod": "^4.3.4"
+    "ai": "catalog:",
+    "better-auth": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.94.0",

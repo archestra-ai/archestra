@@ -1,6 +1,6 @@
 "use client";
 
-import { LINKED_IDP_SSO_MODE } from "@shared";
+import { LINKED_IDP_SSO_MODE } from "@archestra/shared";
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";

@@ -29,6 +29,10 @@ inputs:
     description: "Custom outputs configuration (e.g., for push-by-digest)"
     required: false
     default: ""
+  target:
+    description: "Optional Dockerfile target stage"
+    required: false
+    default: ""
   version:
     description: "Version to pass as VERSION build arg"
     required: false
@@ -134,6 +138,7 @@ runs:
         platforms: ${{ inputs.platforms }}
         tags: ${{ inputs.tags }}
         outputs: ${{ inputs.outputs }}
+        target: ${{ inputs.target }}
         network: host
         build-args: ${{ inputs.version != '' && format('VERSION={0}', inputs.version) || '' }}
         secrets: ${{ steps.prepare-secrets.outputs.value }}

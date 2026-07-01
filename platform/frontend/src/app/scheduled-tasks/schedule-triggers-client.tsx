@@ -20,6 +20,7 @@ import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -71,16 +72,21 @@ import {
   useScheduleTriggers,
   useUpdateScheduleTrigger,
 } from "@/lib/schedule-trigger.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
+import { formatRunTimestamp } from "@/lib/utils/format-run-timestamp";
 import {
   type AgentOption,
+  buildCronFromSchedule,
   buildScheduleTriggerPayload,
   DEFAULT_FORM_STATE,
   getActiveMutationVariable,
   getRunNowTrackingState,
+  isValidCronExpression,
+  parseCronToMode,
+  type ScheduleMode,
   type ScheduleTriggerFormState,
 } from "./schedule-trigger.utils";
 
@@ -115,7 +121,12 @@ export function ScheduleTriggersIndexPage() {
         })),
     [members, currentUserId],
   );
-  const { data: triggersResponse, isLoading } = useScheduleTriggers({
+  const {
+    data: triggersResponse,
+    isLoading,
+    isLoadingError: isTriggersLoadError,
+    refetch: refetchTriggers,
+  } = useScheduleTriggers({
     limit: pageSize,
     offset: pageIndex * pageSize,
     name: searchName || undefined,
@@ -126,6 +137,7 @@ export function ScheduleTriggersIndexPage() {
         ? selectedAuthorIds
         : undefined,
     refetchInterval: 5_000,
+    toastOnError: false,
   });
   const { data: agents = [], isLoading: agentsLoading } = useProfiles({
     filters: { agentType: "agent" },
@@ -396,6 +408,17 @@ export function ScheduleTriggersIndexPage() {
     [agents, openEditComposer, showOtherUsers],
   );
 
+  if (isTriggersLoadError) {
+    return (
+      <div className="flex w-full flex-col gap-5">
+        <QueryLoadError
+          title="Couldn't load your scheduled tasks"
+          onRetry={() => refetchTriggers()}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex w-full flex-col gap-5">
       <div className="flex items-center gap-4">
@@ -577,12 +600,17 @@ export function ScheduleTriggerDetailPage({
   const { data: isAgentTeamAdmin = false } = useHasPermissions({
     agent: ["team-admin"],
   });
-  const { data: userTeams = [] } = useTeams();
+  const { data: userTeams = [] } = useMyTeams();
   const userTeamIdSet = useMemo(
     () => new Set(userTeams.map((t) => t.id)),
     [userTeams],
   );
-  const { data: trigger, isLoading } = useScheduleTrigger(triggerId, {
+  const {
+    data: trigger,
+    isLoading,
+    isLoadingError: isTriggerLoadError,
+    refetch: refetchTrigger,
+  } = useScheduleTrigger(triggerId, {
     refetchInterval: 5_000,
   });
   const { data: agents = [], isLoading: agentsLoading } = useProfiles({
@@ -719,6 +747,15 @@ export function ScheduleTriggerDetailPage({
         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         <span className="text-sm text-muted-foreground">Loading...</span>
       </div>
+    );
+  }
+
+  if (isTriggerLoadError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load this scheduled task"
+        onRetry={() => refetchTrigger()}
+      />
     );
   }
 
@@ -953,43 +990,6 @@ function getDefaultTriggerName(
   return agent ? `Scheduled ${agent.label}` : "";
 }
 
-function formatRunTimestamp(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-
-  const timeStr = date.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-
-  const isToday =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-
-  if (isToday) {
-    return `Today at ${timeStr}`;
-  }
-
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const isYesterday =
-    date.getFullYear() === yesterday.getFullYear() &&
-    date.getMonth() === yesterday.getMonth() &&
-    date.getDate() === yesterday.getDate();
-
-  if (isYesterday) {
-    return `Yesterday at ${timeStr}`;
-  }
-
-  const dateStr = date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-
-  return `${dateStr} at ${timeStr}`;
-}
-
 function RunStatusIcon({ status }: { status: ScheduleTriggerRunStatus }) {
   switch (status) {
     case "success":
@@ -1084,8 +1084,6 @@ function ScheduleTriggerCreateButton({
   );
 }
 
-type ScheduleMode = "hourly" | "daily";
-
 const WEEKDAYS = [
   { label: "Mon", value: 1 },
   { label: "Tue", value: 2 },
@@ -1100,74 +1098,6 @@ const HOURS = Array.from({ length: 24 }, (_, i) => ({
   value: String(i),
   label: `${String(i).padStart(2, "0")}:00`,
 }));
-
-function parseCronToMode(cron: string): {
-  mode: ScheduleMode;
-  hour: string;
-  minute: string;
-  days: number[];
-} {
-  const parts = cron.trim().split(/\s+/);
-  const defaults = {
-    hour: "9",
-    minute: "0",
-    days: [1, 2, 3, 4, 5],
-  };
-
-  if (parts.length !== 5) {
-    return { mode: "daily", ...defaults };
-  }
-
-  const [min, hr, , , dow] = parts;
-
-  // Hourly: "0 * * * *" or "N * * * *"
-  if (hr === "*" && dow === "*") {
-    return { mode: "hourly", ...defaults };
-  }
-
-  // Daily: specific hour, days pattern
-  if (hr !== "*" && !hr.includes("/")) {
-    const dayList =
-      dow === "*"
-        ? [0, 1, 2, 3, 4, 5, 6]
-        : dow.split(",").flatMap((part) => {
-            if (part.includes("-")) {
-              const [start, end] = part.split("-").map(Number);
-              const result: number[] = [];
-              for (let i = start; i <= end; i++) result.push(i);
-              return result;
-            }
-            return [Number(part)];
-          });
-
-    return {
-      mode: "daily",
-      hour: hr,
-      minute: min,
-      days: dayList,
-    };
-  }
-
-  return { mode: "daily", ...defaults };
-}
-
-function buildCronFromSchedule(
-  mode: ScheduleMode,
-  hour: string,
-  minute: string,
-  days: number[],
-): string {
-  switch (mode) {
-    case "hourly":
-      return `${minute} * * * *`;
-    case "daily": {
-      const sorted = [...days].sort((a, b) => a - b);
-      const dowPart =
-        sorted.length === 7 || sorted.length === 0 ? "*" : sorted.join(",");
-      return `${minute} ${hour} * * ${dowPart}`;
-    }
-  }
-}
 
 function ScheduleSection({
   cronExpression,
@@ -1191,6 +1121,10 @@ function ScheduleSection({
       newMinute: string,
       newDays: number[],
     ) => {
+      // In custom mode the raw input drives cronExpression directly; presets do not.
+      if (newMode === "custom") {
+        return;
+      }
       onCronExpressionChange(
         buildCronFromSchedule(newMode, newHour, newMinute, newDays),
       );
@@ -1222,7 +1156,7 @@ function ScheduleSection({
       <Label>Schedule</Label>
 
       <div className="flex gap-1 rounded-md border p-1">
-        {(["hourly", "daily"] as const).map((m) => (
+        {(["hourly", "daily", "custom"] as const).map((m) => (
           <button
             key={m}
             type="button"
@@ -1272,6 +1206,37 @@ function ScheduleSection({
               ))}
             </SelectContent>
           </Select>
+        </div>
+      )}
+
+      {mode === "custom" && (
+        <div className="space-y-2">
+          <Label htmlFor="dialog-cron">Cron expression</Label>
+          <Input
+            id="dialog-cron"
+            value={cronExpression}
+            onChange={(event) => onCronExpressionChange(event.target.value)}
+            placeholder="0 9 * * 1-5"
+            className={cn(
+              "font-mono",
+              cronExpression.trim() &&
+                !isValidCronExpression(cronExpression) &&
+                "border-destructive focus-visible:ring-destructive",
+            )}
+          />
+          {!cronExpression.trim() ? (
+            <p className="text-xs text-muted-foreground">
+              Standard 5-field cron: minute hour day month weekday
+            </p>
+          ) : isValidCronExpression(cronExpression) ? (
+            <p className="text-xs text-muted-foreground">
+              {formatCronSchedule(cronExpression)}
+            </p>
+          ) : (
+            <p className="text-xs text-destructive">
+              Not a valid cron expression
+            </p>
+          )}
         </div>
       )}
     </div>

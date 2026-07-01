@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type Anthropic from "@anthropic-ai/sdk";
+import type { SupportedProvider } from "@archestra/shared";
 import { FinishReason, type GenerateContentResponse } from "@google/genai";
-import type { SupportedProvider } from "@shared";
 import Fastify, {
   type FastifyInstance,
   type FastifyPluginAsync,
@@ -34,6 +34,7 @@ import { cerebrasAdapterFactory } from "../adapters/cerebras";
 import { cohereAdapterFactory } from "../adapters/cohere";
 import { deepseekAdapterFactory } from "../adapters/deepseek";
 import { geminiAdapterFactory } from "../adapters/gemini";
+import { githubCopilotAdapterFactory } from "../adapters/github-copilot";
 import { groqAdapterFactory } from "../adapters/groq";
 import { minimaxAdapterFactory } from "../adapters/minimax";
 import { mistralAdapterFactory } from "../adapters/mistral";
@@ -52,6 +53,7 @@ import cerebrasProxyRoutes from "./cerebras";
 import cohereProxyRoutes from "./cohere";
 import deepseekProxyRoutes from "./deepseek";
 import geminiProxyRoutes from "./gemini";
+import githubCopilotProxyRoutes from "./github-copilot";
 import groqProxyRoutes from "./groq";
 import minimaxProxyRoutes from "./minimax";
 import mistralProxyRoutes from "./mistral";
@@ -672,6 +674,109 @@ function createAnthropicHarness(options: HarnessOptions = {}) {
   const model = options.model ?? "claude-3-5-sonnet-20241022";
   const text = options.text ?? "Mocked Anthropic response";
 
+  function createStreamEvents(): AsyncIterable<Anthropic.Messages.MessageStreamEvent> {
+    const events: Anthropic.Messages.MessageStreamEvent[] = [
+      {
+        type: "message_start",
+        message: {
+          id: "msg_stream",
+          type: "message",
+          container: null,
+          role: "assistant",
+          content: [],
+          model,
+          stop_reason: null,
+          stop_sequence: null,
+          usage: {
+            input_tokens: usage.inputTokens,
+            output_tokens: usage.outputTokens,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          } as Anthropic.Messages.Usage,
+        },
+      },
+    ];
+
+    if (options.streamingToolCall) {
+      events.push(
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "tool_use",
+            id: "toolu_123",
+            caller: { type: "direct" },
+            name: options.streamingToolCall.name,
+            input: {},
+          },
+        },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: {
+            type: "input_json_delta",
+            partial_json: options.streamingToolCall.arguments,
+          },
+        },
+        {
+          type: "content_block_stop",
+          index: 0,
+        },
+        {
+          type: "message_delta",
+          delta: {
+            container: null,
+            stop_reason: "tool_use",
+            stop_sequence: null,
+          },
+          usage: {
+            output_tokens: usage.outputTokens,
+          } as Anthropic.Messages.Usage,
+        },
+        {
+          type: "message_stop",
+        },
+      );
+    } else {
+      events.push(
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "text",
+            text: "",
+            citations: [],
+          },
+        },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text },
+        },
+        {
+          type: "content_block_stop",
+          index: 0,
+        },
+        {
+          type: "message_delta",
+          delta: {
+            container: null,
+            stop_reason: "end_turn",
+            stop_sequence: null,
+          },
+          usage: {
+            output_tokens: usage.outputTokens,
+          } as Anthropic.Messages.Usage,
+        },
+        {
+          type: "message_stop",
+        },
+      );
+    }
+
+    return createAsyncIterable(events);
+  }
+
   return {
     requests,
     client: {
@@ -679,6 +784,10 @@ function createAnthropicHarness(options: HarnessOptions = {}) {
         create: async (request: Record<string, unknown>) => {
           requests.push(request);
           options.onRequest?.(request);
+          if (request.stream === true) {
+            return createStreamEvents();
+          }
+
           return {
             id: "msg_nonstream",
             type: "message",
@@ -707,107 +816,7 @@ function createAnthropicHarness(options: HarnessOptions = {}) {
         stream: (request: Record<string, unknown>) => {
           requests.push(request);
           options.onRequest?.(request);
-
-          const events: Anthropic.Messages.MessageStreamEvent[] = [
-            {
-              type: "message_start",
-              message: {
-                id: "msg_stream",
-                type: "message",
-                container: null,
-                role: "assistant",
-                content: [],
-                model,
-                stop_reason: null,
-                stop_sequence: null,
-                usage: {
-                  input_tokens: usage.inputTokens,
-                  output_tokens: usage.outputTokens,
-                  cache_creation_input_tokens: 0,
-                  cache_read_input_tokens: 0,
-                } as Anthropic.Messages.Usage,
-              },
-            },
-          ];
-
-          if (options.streamingToolCall) {
-            events.push(
-              {
-                type: "content_block_start",
-                index: 0,
-                content_block: {
-                  type: "tool_use",
-                  id: "toolu_123",
-                  caller: { type: "direct" },
-                  name: options.streamingToolCall.name,
-                  input: {},
-                },
-              },
-              {
-                type: "content_block_delta",
-                index: 0,
-                delta: {
-                  type: "input_json_delta",
-                  partial_json: options.streamingToolCall.arguments,
-                },
-              },
-              {
-                type: "content_block_stop",
-                index: 0,
-              },
-              {
-                type: "message_delta",
-                delta: {
-                  container: null,
-                  stop_reason: "tool_use",
-                  stop_sequence: null,
-                },
-                usage: {
-                  output_tokens: usage.outputTokens,
-                } as Anthropic.Messages.Usage,
-              },
-              {
-                type: "message_stop",
-              },
-            );
-          } else {
-            events.push(
-              {
-                type: "content_block_start",
-                index: 0,
-                content_block: {
-                  type: "text",
-                  text: "",
-                  citations: [],
-                },
-              },
-              {
-                type: "content_block_delta",
-                index: 0,
-                delta: { type: "text_delta", text },
-              },
-              {
-                type: "content_block_stop",
-                index: 0,
-              },
-              {
-                type: "message_delta",
-                delta: {
-                  container: null,
-                  stop_reason: "end_turn",
-                  stop_sequence: null,
-                },
-                usage: {
-                  output_tokens: usage.outputTokens,
-                } as Anthropic.Messages.Usage,
-              },
-              {
-                type: "message_stop",
-              },
-            );
-          }
-
-          return createAsyncIterable(events);
+          return createStreamEvents();
         },
       },
     },
@@ -1861,6 +1870,25 @@ const providerConfigsByProvider = {
     routePlugin: azureProxyRoutes,
     adapterFactory: azureAdapterFactory,
     endpoint: (agentId) => `/v1/azure/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
+    model: "gpt-4o",
+    optimizedModel: "gpt-4o-mini",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  "github-copilot": makeConfig({
+    providerName: "GitHub Copilot",
+    providerSlug: "github-copilot",
+    provider: "github-copilot",
+    family: "openai",
+    routePlugin: githubCopilotProxyRoutes,
+    adapterFactory: githubCopilotAdapterFactory,
+    endpoint: (agentId) => `/v1/github-copilot/${agentId}/chat/completions`,
     headers: () => ({
       Authorization: "Bearer test-key",
       "Content-Type": "application/json",

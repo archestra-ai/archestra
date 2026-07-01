@@ -1,21 +1,21 @@
 "use client";
 
-import * as Sentry from "@sentry/nextjs";
 import { usePathname, useRouter } from "next/navigation";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/auth/auth.query";
-import { isDefaultPasswordChangePending } from "@/lib/auth/default-password-change";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 
-type SentryUser = Parameters<typeof Sentry.setUser>[0];
+type ErrorReportingUser = Parameters<
+  typeof import("@sentry/nextjs").setUser
+>[0];
 
-const safeSetSentryUser = (user: SentryUser) => {
-  try {
-    Sentry.setUser(user);
-  } catch {
-    // Silently fail if Sentry is not configured
-  }
+const safeSetErrorReportingUser = (user: ErrorReportingUser) => {
+  void import("@sentry/nextjs")
+    .then(({ setUser }) => {
+      setUser(user);
+    })
+    .catch(() => undefined);
 };
 
 const pathCorrespondsToAnAuthPage = (pathname: string) => {
@@ -32,11 +32,14 @@ const pathCorrespondsToAnAuthPage = (pathname: string) => {
  * - /auth/two-factor is used for both:
  *   1. 2FA verification during login (user not fully logged in yet)
  *   2. 2FA setup after enabling 2FA (user is logged in)
+ * - /auth/recover-account completes a 2FA sign-in with a backup code, so the
+ *   user is not fully logged in yet either
  * - /auth/sign-out must be accessible when logged in to perform sign-out
  */
 const isSpecialAuthPage = (pathname: string) => {
   return (
     pathname?.startsWith("/auth/two-factor") ||
+    pathname?.startsWith("/auth/recover-account") ||
     pathname?.startsWith("/auth/sso") ||
     pathname?.startsWith("/auth/sign-out")
   );
@@ -64,10 +67,6 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   const isLoggedIn = session?.user;
   const isAuthPage = pathCorrespondsToAnAuthPage(pathname);
   const isSpecialAuth = isSpecialAuthPage(pathname);
-  const isDefaultPasswordChangePage =
-    pathname?.startsWith("/auth/sign-in") &&
-    typeof window !== "undefined" &&
-    isDefaultPasswordChangePending();
 
   // Track mount state to avoid hydration errors with isRefetching
   useEffect(() => {
@@ -85,14 +84,14 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   // Set Sentry user context when user is authenticated
   useEffect(() => {
     if (session?.user) {
-      safeSetSentryUser({
+      safeSetErrorReportingUser({
         id: session.user.id,
         email: session.user.email,
         username: session.user.name || session.user.email,
       });
     } else {
       // Clear user context when not authenticated
-      safeSetSentryUser(null);
+      safeSetErrorReportingUser(null);
     }
   }, [session?.user]);
 
@@ -106,7 +105,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
       // - During login: user needs to complete 2FA verification (not logged in yet)
       // - During setup: user is setting up 2FA (logged in)
       return;
-    } else if (isAuthPage && isLoggedIn && !isDefaultPasswordChangePage) {
+    } else if (isAuthPage && isLoggedIn) {
       // User is logged in but on auth page (sign-in/sign-up), redirect to redirectTo or home
       const redirectTo = searchParams.get("redirectTo");
       router.push(getValidatedRedirectPath(redirectTo));
@@ -127,7 +126,6 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     isSpecialAuth,
     pathname,
     searchParams,
-    isDefaultPasswordChangePage,
   ]);
 
   // Show loading while checking auth/permissions
@@ -136,7 +134,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   } else if (isSpecialAuth) {
     // Special auth pages are always rendered (handles both 2FA verification and setup)
     return <>{children}</>;
-  } else if (isAuthPage && isLoggedIn && !isDefaultPasswordChangePage) {
+  } else if (isAuthPage && isLoggedIn) {
     // During redirects, show nothing to avoid flash
     return null;
   } else if (!isAuthPage && !isLoggedIn) {

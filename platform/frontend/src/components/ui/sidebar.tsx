@@ -338,8 +338,8 @@ function SidebarCircleToggle({
           }}
           className={cn(
             "group/circle-toggle hidden md:flex items-center justify-center",
-            "fixed top-1/2 z-30 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full",
-            "bg-background border border-sidebar-border cursor-pointer",
+            "fixed top-1/2 z-30 h-10 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full",
+            "bg-background border cursor-pointer",
             "transition-[left,background-color] duration-200 ease-in-out",
             "hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-1",
             className,
@@ -355,15 +355,15 @@ function SidebarCircleToggle({
           {isCollapsed ? (
             <ChevronRightIcon
               className={cn(
-                "absolute inset-0 m-auto size-3 opacity-0 transition-opacity duration-200",
-                !loading && "group-hover/circle-toggle:opacity-80",
+                "absolute inset-0 m-auto size-3 transition-opacity duration-200",
+                loading ? "opacity-0" : "opacity-80",
               )}
             />
           ) : (
             <ChevronLeftIcon
               className={cn(
-                "absolute inset-0 m-auto size-3 opacity-0 transition-opacity duration-200",
-                !loading && "group-hover/circle-toggle:opacity-80",
+                "absolute inset-0 m-auto size-3 transition-opacity duration-200",
+                loading ? "opacity-0" : "opacity-80",
               )}
             />
           )}
@@ -466,7 +466,7 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="sidebar-content"
       data-sidebar="content"
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto group-data-[collapsible=icon]:overflow-hidden",
+        "flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto group-data-[collapsible=icon]:overflow-hidden scrollbar-sidebar",
         className,
       )}
       {...props}
@@ -614,7 +614,9 @@ function SidebarMenuButton({
     />
   );
 
-  if (!tooltip) {
+  const hideTooltip = state !== "collapsed" || isMobile;
+
+  if (!tooltip || hideTooltip) {
     return button;
   }
 
@@ -627,12 +629,9 @@ function SidebarMenuButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>{button}</TooltipTrigger>
-      <TooltipContent
-        side="right"
-        align="center"
-        hidden={state !== "collapsed" || isMobile}
-        {...tooltip}
-      />
+      {!hideTooltip && (
+        <TooltipContent side="right" align="center" {...tooltip} />
+      )}
     </Tooltip>
   );
 }

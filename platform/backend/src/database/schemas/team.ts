@@ -1,4 +1,12 @@
-import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
+import type { TeamMemberRole } from "@/types/team-role";
 import organizationsTable from "./organization";
 import usersTable from "./user";
 
@@ -31,7 +39,7 @@ export const teamMember = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
-    role: text("role").default("member").notNull(),
+    role: text("role").$type<TeamMemberRole>().default("member").notNull(),
     /**
      * Indicates this membership was created via SSO team sync.
      * Synced members are automatically managed during SSO login.
@@ -41,6 +49,10 @@ export const teamMember = pgTable(
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [
+    uniqueIndex("team_member_team_id_user_id_unique_idx").on(
+      table.teamId,
+      table.userId,
+    ),
     index("team_member_team_id_user_id_idx").on(table.teamId, table.userId),
     index("team_member_user_id_team_id_idx").on(table.userId, table.teamId),
   ],

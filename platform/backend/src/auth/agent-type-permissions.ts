@@ -1,12 +1,15 @@
 import {
   type Action,
-  type AgentType,
   getResourceForAgentType,
   type Resource,
-} from "@shared";
-import { UserModel } from "@/models";
-import { type AgentScope, ApiError } from "@/types";
-import { userHasPermission } from "./utils";
+} from "@archestra/shared";
+import {
+  type AgentScope,
+  type AgentType,
+  AgentTypeSchema,
+  ApiError,
+} from "@/types";
+import { getPermissionsForUserContext, userHasPermission } from "./utils";
 
 /** @public — re-exported for testability */
 export { getResourceForAgentType };
@@ -82,10 +85,7 @@ export async function getAgentTypePermissionChecker(params: {
   userId: string;
   organizationId: string;
 }): Promise<AgentTypePermissionChecker> {
-  const permissions = await UserModel.getUserPermissions(
-    params.userId,
-    params.organizationId,
-  );
+  const permissions = await getPermissionsForUserContext(params);
   return {
     require(agentType: AgentType, action: Action): void {
       const resource = getResourceForAgentType(agentType);
@@ -105,6 +105,12 @@ export async function getAgentTypePermissionChecker(params: {
       return AGENT_TYPE_RESOURCES.some(
         (r) => permissions[r]?.includes("read") ?? false,
       );
+    },
+    getAgentTypesWithPermission(action: Action): AgentType[] {
+      return AgentTypeSchema.options.filter((agentType) => {
+        const resource = getResourceForAgentType(agentType);
+        return permissions[resource]?.includes(action) ?? false;
+      });
     },
     hasAnyAdminPermission(): boolean {
       return AGENT_TYPE_RESOURCES.some(
@@ -133,58 +139,87 @@ export function requireAgentModifyPermission(params: {
   userTeamIds: string[];
   userId: string;
 }): void {
-  const {
-    checker,
-    agentType,
-    agentScope,
-    agentAuthorId,
-    agentTeamIds,
-    userTeamIds,
-    userId,
-  } = params;
+  requireScopedModifyPermission({
+    isAdmin: params.checker.isAdmin(params.agentType),
+    isTeamAdmin: params.checker.isTeamAdmin(params.agentType),
+    scope: params.agentScope,
+    authorId: params.agentAuthorId,
+    resourceTeamIds: params.agentTeamIds,
+    userTeamIds: params.userTeamIds,
+    userId: params.userId,
+    resourceLabel: "agent",
+  });
+}
+
+/**
+ * Resource-agnostic 3-tier scope authorization, shared by agents and skills.
+ *
+ * - `isAdmin` → always allowed
+ * - `scope=org` → requires admin
+ * - `scope=team` → requires team-admin + membership in one of the resource's teams
+ * - `scope=personal` → requires authorship
+ *
+ * `resourceLabel` is the singular noun used in error messages (e.g. "agent",
+ * "skill"). Throws ApiError(403) if the user lacks permission.
+ */
+export function requireScopedModifyPermission(params: {
+  isAdmin: boolean;
+  isTeamAdmin: boolean;
+  scope: AgentScope;
+  authorId: string | null;
+  resourceTeamIds: string[];
+  userTeamIds: string[];
+  userId: string;
+  resourceLabel: string;
+}): void {
+  const { resourceLabel } = params;
 
   // Admins bypass all checks
-  if (checker.isAdmin(agentType)) {
+  if (params.isAdmin) {
     return;
   }
 
-  switch (agentScope) {
+  switch (params.scope) {
     case "org":
-      // Only admins can manage org-scoped agents (already checked above)
-      throw new ApiError(403, "Only admins can manage org-scoped agents");
+      throw new ApiError(
+        403,
+        `Only admins can manage org-scoped ${resourceLabel}s`,
+      );
 
     case "team": {
-      if (!checker.isTeamAdmin(agentType)) {
+      if (!params.isTeamAdmin) {
         throw new ApiError(
           403,
-          "You need team-admin permission to manage team-scoped agents",
+          `You need team-admin permission to manage team-scoped ${resourceLabel}s`,
         );
       }
-      // team-admin must be a member of at least one of the agent's teams
-      if (agentTeamIds.length === 0) {
-        throw new ApiError(
-          403,
-          "You can only manage agents in teams you are a member of",
-        );
-      }
-      const userTeamIdSet = new Set(userTeamIds);
-      const isMemberOfAnyTeam = agentTeamIds.some((id) =>
+      const userTeamIdSet = new Set(params.userTeamIds);
+      const isMemberOfAnyTeam = params.resourceTeamIds.some((id) =>
         userTeamIdSet.has(id),
       );
-      if (!isMemberOfAnyTeam) {
+      if (params.resourceTeamIds.length === 0 || !isMemberOfAnyTeam) {
         throw new ApiError(
           403,
-          "You can only manage agents in teams you are a member of",
+          `You can only manage ${resourceLabel}s in teams you are a member of`,
         );
       }
       return;
     }
 
     case "personal":
-      if (agentAuthorId !== userId) {
-        throw new ApiError(403, "You can only manage your own personal agents");
+      if (params.authorId !== params.userId) {
+        throw new ApiError(
+          403,
+          `You can only manage your own personal ${resourceLabel}s`,
+        );
       }
       return;
+
+    // Fail closed: an out-of-union scope (data corruption, manual write, or a
+    // future scope shipped before this code is updated) must be denied, not
+    // fall through and implicitly grant.
+    default:
+      throw new ApiError(403, `Unknown ${resourceLabel} scope`);
   }
 }
 
@@ -200,6 +235,8 @@ export interface AgentTypePermissionChecker {
   isTeamAdmin(agentType: AgentType): boolean;
   /** Returns true if the user has read on any of the three agent-type resources. */
   hasAnyReadPermission(): boolean;
+  /** Returns agent types for which the user has the requested permission. */
+  getAgentTypesWithPermission(action: Action): AgentType[];
   /** Returns true if the user has admin on any of the three agent-type resources. */
   hasAnyAdminPermission(): boolean;
 }
@@ -213,10 +250,7 @@ async function hasAnyAgentTypePermission(params: {
   organizationId: string;
   action: Action;
 }): Promise<boolean> {
-  const permissions = await UserModel.getUserPermissions(
-    params.userId,
-    params.organizationId,
-  );
+  const permissions = await getPermissionsForUserContext(params);
   return AGENT_TYPE_RESOURCES.some(
     (r) => permissions[r]?.includes(params.action) ?? false,
   );

@@ -1,4 +1,4 @@
-import { DocsPage, getDocsUrl } from "@shared";
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { InsertInternalMcpCatalog } from "@/types";
 import { archestraMcpBranding } from "./branding";
 

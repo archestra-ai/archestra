@@ -4,7 +4,7 @@ import {
   type archestraApiTypes,
   CONNECTOR_TYPE_LABELS,
   DocsPage,
-} from "@shared";
+} from "@archestra/shared";
 import type { ReactNode } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import {
@@ -29,9 +29,12 @@ import { LinearConfigFields } from "./linear-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
 import { OneDriveConfigFields } from "./onedrive-config-fields";
 import { OutlineConfigFields } from "./outline-config-fields";
+import { PerforceConfigFields } from "./perforce-config-fields";
 import { SalesforceConfigFields } from "./salesforce-config-fields";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { SharePointConfigFields } from "./sharepoint-config-fields";
+import { joinIfArray } from "./transform-config-array-fields";
+import { WebCrawlerConfigFields } from "./web-crawler-config-fields";
 
 export type ConnectorType =
   archestraApiTypes.CreateConnectorData["body"]["connectorType"];
@@ -48,6 +51,7 @@ export type ConnectorCredentialConfig = {
   apiTokenPlaceholder?: string;
   apiTokenRequiredMessage?: string;
   apiTokenHelpText?: ReactNode;
+  apiTokenMultiline?: boolean;
 };
 
 type ConnectorOption = {
@@ -78,7 +82,14 @@ const CONNECTOR_DISPLAY_LABELS: Record<ConnectorType, string> = {
   outline: CONNECTOR_TYPE_LABELS.outline,
   onedrive: CONNECTOR_TYPE_LABELS.onedrive ?? "OneDrive",
   salesforce: CONNECTOR_TYPE_LABELS.salesforce ?? "Salesforce",
-  file_upload: CONNECTOR_TYPE_LABELS.file_upload,
+  web_crawler: CONNECTOR_TYPE_LABELS.web_crawler,
+  perforce: CONNECTOR_TYPE_LABELS.perforce,
+};
+
+const CONNECTOR_DOC_ANCHORS: Partial<Record<ConnectorType, string>> = {
+  gdrive: "google-drive",
+  web_crawler: "web-crawler",
+  perforce: "perforce-helix-core",
 };
 
 export const CONNECTOR_OPTIONS: ConnectorOption[] = [
@@ -153,9 +164,14 @@ export const CONNECTOR_OPTIONS: ConnectorOption[] = [
     description: "Sync CRM objects from Salesforce",
   },
   {
-    type: "file_upload",
-    label: CONNECTOR_DISPLAY_LABELS.file_upload,
-    description: "Upload your own text files and zip archives",
+    type: "web_crawler",
+    label: CONNECTOR_DISPLAY_LABELS.web_crawler,
+    description: "Crawl and sync static HTML pages",
+  },
+  {
+    type: "perforce",
+    label: CONNECTOR_DISPLAY_LABELS.perforce,
+    description: "Sync text files from Perforce Helix Core depots",
   },
 ];
 
@@ -223,7 +239,19 @@ const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
       description:
         "Use https://login.salesforce.com for production and https://test.salesforce.com for sandbox.",
     },
-    file_upload: null,
+    web_crawler: {
+      fieldName: "config.startUrl",
+      label: "Start URL",
+      placeholder: "https://docs.example.com/",
+      description: "First page to crawl. Crawling stays on the same host.",
+    },
+    perforce: {
+      fieldName: "config.serverUrl",
+      label: "Server URL",
+      placeholder: "https://perforce.example.com:8080",
+      description:
+        "Base URL of the P4 REST API, served by the built-in P4 web server (p4 webserver). Use https when the server has an SSL certificate configured.",
+    },
   };
 
 const CREATE_ADVANCED_CONFIG_FIELDS: Record<
@@ -234,7 +262,9 @@ const CREATE_ADVANCED_CONFIG_FIELDS: Record<
   confluence: ({ form }) => (
     <ConfluenceConfigFields form={form} hideUrl hideIsCloud />
   ),
-  github: ({ form }) => <GithubConfigFields form={form} hideUrl hideOwner />,
+  github: ({ form }) => (
+    <GithubConfigFields form={form} hideUrl hideOwner hideAuth />
+  ),
   gitlab: ({ form }) => <GitlabConfigFields form={form} hideUrl />,
   linear: ({ form }) => <LinearConfigFields form={form} />,
   servicenow: ({ form }) => <ServiceNowConfigFields form={form} hideUrl />,
@@ -246,7 +276,8 @@ const CREATE_ADVANCED_CONFIG_FIELDS: Record<
   onedrive: ({ form }) => <OneDriveConfigFields form={form} />,
   outline: ({ form }) => <OutlineConfigFields form={form} />,
   salesforce: ({ form }) => <SalesforceConfigFields form={form} />,
-  file_upload: () => null,
+  web_crawler: ({ form }) => <WebCrawlerConfigFields form={form} />,
+  perforce: ({ form }) => <PerforceConfigFields form={form} />,
 };
 
 const EDIT_ADVANCED_CONFIG_FIELDS: Record<
@@ -254,7 +285,9 @@ const EDIT_ADVANCED_CONFIG_FIELDS: Record<
   (props: AdvancedConfigFieldsProps) => ReactNode
 > = {
   ...CREATE_ADVANCED_CONFIG_FIELDS,
-  github: ({ form }) => <GithubConfigFields form={form} hideUrl />,
+  github: ({ form }) => (
+    <GithubConfigFields form={form} hideUrl hideOwner hideAuth />
+  ),
   asana: ({ form }) => <AsanaConfigFields form={form} />,
 };
 
@@ -286,7 +319,10 @@ export function getConnectorUrlConfig(
 }
 
 export function getConnectorDocsUrl(type: ConnectorType): string | null {
-  return getFrontendDocsUrl(DocsPage.PlatformKnowledgeConnectors, type);
+  return getFrontendDocsUrl(
+    DocsPage.PlatformKnowledgeConnectors,
+    CONNECTOR_DOC_ANCHORS[type] ?? type,
+  );
 }
 
 export function getDefaultConnectorConfig(
@@ -295,7 +331,7 @@ export function getDefaultConnectorConfig(
   const defaultConfigs: Record<ConnectorType, Record<string, unknown>> = {
     jira: { type, isCloud: true },
     confluence: { type, isCloud: true },
-    github: { type, githubUrl: "https://api.github.com" },
+    github: { type, githubUrl: "https://api.github.com", authMethod: "pat" },
     gitlab: { type, gitlabUrl: "https://gitlab.com" },
     linear: {
       type,
@@ -313,7 +349,8 @@ export function getDefaultConnectorConfig(
     onedrive: { type, userIds: "", recursive: true },
     outline: { type, outlineUrl: "https://app.getoutline.com" },
     salesforce: { type, loginUrl: "https://login.salesforce.com" },
-    file_upload: { type },
+    web_crawler: { type, maxPages: 250, maxDepth: 3, batchSize: 25 },
+    perforce: { type },
   };
 
   return { ...defaultConfigs[type] };
@@ -327,6 +364,7 @@ export function getConnectorCredentialConfig(params: {
   type: ConnectorType;
   emailRequired: boolean;
   mode: "create" | "edit";
+  authMethod?: string;
 }): ConnectorCredentialConfig {
   const jiraConfluenceApiTokenLabel = params.emailRequired
     ? "API Token"
@@ -338,6 +376,8 @@ export function getConnectorCredentialConfig(params: {
     ? "API token is required"
     : "API token or personal access token is required";
 
+  const githubUsesApp =
+    params.type === "github" && params.authMethod === "github_app";
   const apiTokenLabels: Record<ConnectorType, string | undefined> = {
     servicenow: "Password",
     notion: "Integration Token",
@@ -347,13 +387,16 @@ export function getConnectorCredentialConfig(params: {
     outline: "API Key",
     jira: jiraConfluenceApiTokenLabel,
     confluence: jiraConfluenceApiTokenLabel,
-    github: "Personal Access Token",
+    // App auth stores credentials in a github_app_configs row, so there is no
+    // inline token field — the config is chosen via the dropdown instead
+    github: githubUsesApp ? undefined : "Personal Access Token",
     gitlab: "Personal Access Token",
     linear: "Personal Access Token",
     asana: "Personal Access Token",
     onedrive: "Client Secret",
     salesforce: "Password + Security Token",
-    file_upload: undefined,
+    web_crawler: undefined,
+    perforce: "Login Ticket",
   };
 
   const createApiTokenPlaceholders: Record<ConnectorType, string | undefined> =
@@ -366,13 +409,16 @@ export function getConnectorCredentialConfig(params: {
       outline: "Your Outline API key (starts with ol_api_)",
       jira: jiraConfluenceApiTokenPlaceholder,
       confluence: jiraConfluenceApiTokenPlaceholder,
-      github: "Your personal access token",
+      github: githubUsesApp
+        ? "Paste the GitHub App private key PEM"
+        : "Your personal access token",
       gitlab: "Your personal access token",
       linear: "Your personal access token",
       asana: "Your personal access token",
       onedrive: "Your Azure AD client secret",
       salesforce: "Your Salesforce password followed by your security token",
-      file_upload: undefined,
+      web_crawler: undefined,
+      perforce: "Ticket from p4 login -a -p",
     };
 
   const editApiTokenPlaceholders: Record<ConnectorType, string | undefined> = {
@@ -385,12 +431,15 @@ export function getConnectorCredentialConfig(params: {
     outline: "Leave empty to keep existing token",
     jira: "Leave empty to keep existing token",
     confluence: "Leave empty to keep existing token",
-    github: "Leave empty to keep existing token",
+    github: githubUsesApp
+      ? "Leave empty to keep existing private key"
+      : "Leave empty to keep existing token",
     gitlab: "Leave empty to keep existing token",
     linear: "Leave empty to keep existing token",
     asana: "Leave empty to keep existing token",
-    file_upload: undefined,
     onedrive: "Leave empty to keep existing token",
+    web_crawler: undefined,
+    perforce: "Leave empty to keep existing credentials",
   };
 
   const apiTokenRequiredMessages: Record<ConnectorType, string | undefined> = {
@@ -402,13 +451,16 @@ export function getConnectorCredentialConfig(params: {
     outline: "API key is required",
     jira: jiraConfluenceApiTokenRequiredMessage,
     confluence: jiraConfluenceApiTokenRequiredMessage,
-    github: "Personal access token is required",
+    github: githubUsesApp
+      ? "GitHub App private key is required"
+      : "Personal access token is required",
     gitlab: "Personal access token is required",
     linear: "Personal access token is required",
     asana: "Personal access token is required",
     onedrive: "Client secret is required",
     salesforce: "Password and security token are required",
-    file_upload: undefined,
+    web_crawler: undefined,
+    perforce: "Login ticket is required",
   };
 
   const apiTokenHelpText = getApiTokenHelpText({
@@ -424,6 +476,7 @@ export function getConnectorCredentialConfig(params: {
         : editApiTokenPlaceholders[params.type],
     apiTokenRequiredMessage: apiTokenRequiredMessages[params.type],
     apiTokenHelpText,
+    apiTokenMultiline: githubUsesApp,
   };
 }
 
@@ -459,6 +512,16 @@ function getApiTokenHelpText(params: {
   }
 
   if (params.mode === "edit") return undefined;
+
+  if (params.type === "perforce") {
+    return (
+      <p className="text-[0.8rem] text-muted-foreground">
+        A login ticket valid for all hosts, generated with{" "}
+        <code>p4 login -a -p</code>. For long-lived access, use a service
+        account whose group has an unlimited ticket timeout.
+      </p>
+    );
+  }
 
   if (params.type === "notion") {
     return (
@@ -550,6 +613,9 @@ const INLINE_CONFIG_FIELDS: Record<
                     ? "user@example.com"
                     : "Required for basic auth, leave empty for PAT"
                 }
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
                 {...field}
               />
             </FormControl>
@@ -620,6 +686,9 @@ const INLINE_CONFIG_FIELDS: Record<
                     ? "user@example.com"
                     : "Required for basic auth, leave empty for PAT"
                 }
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
                 {...field}
               />
             </FormControl>
@@ -640,28 +709,9 @@ const INLINE_CONFIG_FIELDS: Record<
       />
     </>
   ),
-  github: ({ form, mode }) =>
-    mode === "create" ? (
-      <FormField
-        control={form.control}
-        name={"config.owner"}
-        rules={{ required: "Owner is required" }}
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Owner</FormLabel>
-            <FormControl>
-              <Input
-                placeholder="my-org"
-                {...field}
-                value={(field.value as string) ?? ""}
-              />
-            </FormControl>
-            <FormDescription>GitHub organization or username.</FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-    ) : null,
+  github: ({ form }) => (
+    <GithubConfigFields form={form} hideUrl hideRepositoryOptions />
+  ),
   gitlab: () => null,
   linear: () => null,
   servicenow: ({ form, mode }) => (
@@ -864,6 +914,7 @@ const INLINE_CONFIG_FIELDS: Record<
     </>
   ),
   outline: () => <></>,
+  web_crawler: () => <></>,
   salesforce: ({ form, mode }) => (
     <FormField
       control={form.control}
@@ -880,6 +931,9 @@ const INLINE_CONFIG_FIELDS: Record<
                   ? "user@example.com"
                   : "Leave empty to keep existing credentials"
               }
+              autoComplete="off"
+              data-1p-ignore
+              data-lpignore="true"
               {...field}
             />
           </FormControl>
@@ -893,7 +947,68 @@ const INLINE_CONFIG_FIELDS: Record<
       )}
     />
   ),
-  file_upload: () => <></>,
+  perforce: ({ form, mode }) => (
+    <>
+      <FormField
+        control={form.control}
+        name={"config.depotPaths"}
+        rules={{ required: "At least one depot path is required" }}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Depot Paths</FormLabel>
+            <FormControl>
+              <Input
+                placeholder="//depot/docs, //stream/main/specs"
+                {...field}
+                value={joinIfArray(field.value)}
+              />
+            </FormControl>
+            <FormDescription>
+              Comma-separated depot paths in depot syntax, e.g.{" "}
+              <code>{"//depot/docs"}</code>. Each path is synced recursively.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name="email"
+        rules={
+          mode === "create" ? { required: "Username is required" } : undefined
+        }
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Username</FormLabel>
+            <FormControl>
+              <Input
+                placeholder={
+                  mode === "create"
+                    ? "svc-knowledge"
+                    : "Leave empty to keep existing credentials"
+                }
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                {...field}
+              />
+            </FormControl>
+            {mode === "create" && (
+              <FormDescription>
+                The Perforce user (P4USER) the connector authenticates as.
+              </FormDescription>
+            )}
+            {mode === "edit" && (
+              <FormDescription>
+                Leave empty to keep existing credentials unchanged.
+              </FormDescription>
+            )}
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </>
+  ),
 };
 
 export function ConnectorInlineConfigFields({

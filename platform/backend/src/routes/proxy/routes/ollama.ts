@@ -4,8 +4,9 @@
  * Ollama exposes an OpenAI-compatible API, so these routes mirror the OpenAI routes.
  * See: https://github.com/ollama/ollama/blob/main/docs/openai.md
  */
+
+import { RouteId } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
-import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";

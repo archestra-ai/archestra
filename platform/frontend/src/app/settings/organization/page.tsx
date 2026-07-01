@@ -1,6 +1,6 @@
 "use client";
 
-import { DEFAULT_APP_DESCRIPTION, DEFAULT_APP_NAME } from "@shared";
+import { DEFAULT_APP_DESCRIPTION, DEFAULT_APP_NAME } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import {
@@ -8,6 +8,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,7 @@ import {
   validateOnboardingWizard,
 } from "./_components/onboarding-wizards-editor.utils";
 import { OrganizationTokenSection } from "./_components/organization-token-section";
+import { SiteNotificationsSection } from "./_components/site-notifications-section";
 import { ThemeSelector } from "./_components/theme-selector";
 
 export default function OrganizationSettingsPage() {
@@ -65,8 +67,8 @@ export default function OrganizationSettingsPage() {
     DEFAULT_THEME,
     isLoadingAppearance,
   } = orgTheme ?? {
-    currentUITheme: "modern-minimal" as const,
-    DEFAULT_THEME: "modern-minimal" as const,
+    currentUITheme: "caffeine" as const,
+    DEFAULT_THEME: "caffeine" as const,
   };
 
   useOnUnmount(() => {
@@ -253,6 +255,7 @@ export default function OrganizationSettingsPage() {
 
   return (
     <SettingsSectionStack>
+      <SmallTeamTierBanner />
       {/* Appearance Section */}
       <div>
         <h3 className="text-lg font-medium mb-4">Appearance</h3>
@@ -404,6 +407,8 @@ export default function OrganizationSettingsPage() {
               />
             </CardContent>
           </Card>
+
+          <SiteNotificationsSection />
         </SettingsSectionStack>
       </div>
 

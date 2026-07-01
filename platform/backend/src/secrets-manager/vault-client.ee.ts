@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
+import { ApiError } from "@archestra/shared";
 import { Sha256 } from "@aws-crypto/sha256-js";
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
-import { ApiError } from "@shared";
 import { SignatureV4 } from "@smithy/signature-v4";
 import Vault from "node-vault";
 import logger from "@/logging";

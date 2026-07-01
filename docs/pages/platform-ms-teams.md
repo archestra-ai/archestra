@@ -3,7 +3,7 @@ title: MS Teams
 category: Agents
 order: 5
 description: Connect Archestra agents to Microsoft Teams channels
-lastUpdated: 2026-02-20
+lastUpdated: 2026-06-12
 ---
 
 <!--
@@ -28,6 +28,8 @@ The wizard will walk you through creating an Azure Bot, configuring the Teams ap
 
 See [Deployment — Environment Variables](/docs/platform-deployment#environment-variables) for the full list of environment variables if you prefer manual configuration.
 
+If your instance is not already publicly reachable (for example, running locally), Archestra can open an [ngrok](https://ngrok.com) tunnel so Teams can deliver messages. The setup wizard's **Configure ngrok** step takes your ngrok auth token and brings the tunnel up live — no restart needed. For Docker or unattended deployments, set `ARCHESTRA_NGROK_AUTH_TOKEN` instead and the tunnel starts on boot.
+
 ## Usage
 
 ### First Message
@@ -38,7 +40,13 @@ When you **first mention the bot** in a channel:
 @Archestra what's the status of service X?
 ```
 
-The bot responds with an **Adaptive Card dropdown** to select which agent handles this channel. After selection, the bot processes your message and **all future messages** in that channel.
+The bot responds with an **Adaptive Card dropdown** to select which agent handles this channel. After selection, the bot processes your message.
+
+### Replying within a thread
+
+In channels the bot stays silent until it is @mentioned. Once mentioned in a thread, it keeps replying to every message in that thread without further mentions. Starting a new thread needs a fresh mention. Direct messages and group chats always get a reply, no mention required.
+
+To stop the bot replying in a thread, send `mute` (you can address it by name with no @mention, e.g. `Archestra mute`), or react to one of its replies with the mute (🔇) or shushing-face (🤫) emoji. It goes quiet until the thread is @mentioned again. As a reminder, the bot adds a short hint about this to its first reply in each thread.
 
 ### Commands
 
@@ -56,7 +64,7 @@ You can manage the default agent for each channel from the **Agent Triggers** �
 
 ![MS Teams Agent Selection](/docs/select-agent-msteams.webp)
 
-Once set, the default agent processes all subsequent messages in that channel. You can also use the `/select-agent` command directly in Teams to change the default agent.
+Once set, the default agent handles messages in that channel's active threads. You can also use the `/select-agent` command directly in Teams to change the default agent.
 
 ### Switching Agents Inline
 
@@ -100,7 +108,7 @@ Admins can view autoprovisioned users on the **Settings → Members** page — f
 
 ## Attachments
 
-Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Image attachments are included inline in the agent's context; non-image attachments are noted but not processed as inline content.
+Messages sent to the bot can include file attachments (images, PDFs, documents, etc.) in channels, group chats, and direct messages. Attachments are automatically downloaded and passed to the agent for processing. Files the selected model can read — images, PDFs, and text documents such as CSV, TSV, JSON, XML, YAML, TOML, and Markdown — are included inline in the agent's context. When the agent has a code sandbox, other file types (for example a SQLite database or a ZIP archive) are placed into the sandbox so the agent can open them with its tools. Anything that still cannot be provided is noted by name so the agent can tell the user. A message that contains only a file (no text) is processed too.
 
 Adaptive Cards and other Teams-specific card types are not treated as file attachments.
 

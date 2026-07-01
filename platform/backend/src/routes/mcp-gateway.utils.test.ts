@@ -1,15 +1,24 @@
 import { createHash } from "node:crypto";
-import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
   OAUTH_TOKEN_ID_PREFIX,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_CREATE_SKILL_FULL_NAME,
+  TOOL_DOWNLOAD_FILE_FULL_NAME,
+  TOOL_LIST_SKILLS_FULL_NAME,
+  TOOL_LOAD_SKILL_FULL_NAME,
+  TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
-} from "@shared";
+  TOOL_UPDATE_SKILL_FULL_NAME,
+  TOOL_UPLOAD_FILE_FULL_NAME,
+  TOOL_WHOAMI_FULL_NAME,
+} from "@archestra/shared";
+import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
+import mcpClient from "@/clients/mcp-client";
 import type * as originalConfigModule from "@/config";
 import {
   AgentTeamModel,
@@ -18,6 +27,10 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import {
+  appConnectorAudienceRef,
+  buildConnectorResourceUri,
+} from "@/services/apps/app-connector-resource";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { describe, expect, test } from "@/test";
@@ -42,6 +55,7 @@ vi.mock("@/services/jwks-validator", () => ({
 
 const {
   createAgentServer,
+  ensureRequestSocketDestroySoon,
   validateMCPGatewayToken,
   validateOAuthToken,
   validateExternalIdpToken,
@@ -49,6 +63,65 @@ const {
 } = await import("./mcp-gateway.utils");
 
 type TestListToolsHandler = (request: unknown) => Promise<ListToolsResult>;
+type TestCallToolHandler = (
+  request: unknown,
+  extra: { sendRequest: ReturnType<typeof vi.fn> },
+) => Promise<{
+  content: Array<{ type: string; text: string }>;
+  isError?: boolean;
+  structuredContent?: { items?: unknown[] };
+}>;
+
+describe("ensureRequestSocketDestroySoon", () => {
+  test("adds destroySoon to injected request sockets", () => {
+    const destroy = vi.fn();
+    const request = {
+      socket: {
+        destroy,
+      },
+    };
+
+    ensureRequestSocketDestroySoon(request as never);
+
+    const socket = request.socket as typeof request.socket & {
+      destroySoon: () => void;
+    };
+    expect(socket.destroySoon).toBeTypeOf("function");
+    socket.destroySoon();
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  test("preserves sockets that already have destroySoon", () => {
+    const destroySoon = vi.fn();
+    const request = {
+      socket: {
+        destroySoon,
+      },
+    };
+
+    ensureRequestSocketDestroySoon(request as never);
+
+    expect(request.socket.destroySoon).toBe(destroySoon);
+  });
+
+  test("falls back to end when destroy is unavailable", () => {
+    const end = vi.fn();
+    const request = {
+      socket: {
+        end,
+      },
+    };
+
+    ensureRequestSocketDestroySoon(request as never);
+
+    const socket = request.socket as typeof request.socket & {
+      destroySoon: () => void;
+    };
+    expect(socket.destroySoon).toBeTypeOf("function");
+    socket.destroySoon();
+    expect(end).toHaveBeenCalledOnce();
+  });
+});
 
 describe("validateMCPGatewayToken", () => {
   describe("invalid token scenarios", () => {
@@ -603,6 +676,43 @@ describe("validateMCPGatewayToken", () => {
       await makeOAuthAccessToken(client.clientId, user.id, {
         token: tokenHash,
         referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${otherAgent.id}`,
+      });
+
+      const result = await validateOAuthToken(targetAgent.id, rawToken);
+
+      expect(result).toBeNull();
+    });
+
+    test("validateOAuthToken returns null for a token bound to an app connector", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      const client = await makeOAuthClient({ userId: user.id });
+      const targetAgent = await makeAgent({ organizationId: org.id });
+
+      const rawToken = `app-connector-token-${crypto.randomUUID()}`;
+      const tokenHash = createHash("sha256")
+        .update(rawToken)
+        .digest("base64url");
+
+      // A token bound to an App connector must never authenticate the gateway,
+      // even for an admin who would otherwise pass the user-access check.
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: tokenHash,
+        referenceId: appConnectorAudienceRef(
+          buildConnectorResourceUri(
+            "https://host",
+            "11111111-1111-1111-1111-111111111111",
+          ) as string,
+        ),
       });
 
       const result = await validateOAuthToken(targetAgent.id, rawToken);
@@ -1385,6 +1495,78 @@ describe("createAgentServer tools/list", () => {
     ).toBe(false);
   });
 
+  test("keeps assigned skill and sandbox runtime tools top-level in search_and_run_only", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const adminUser = await makeUser();
+    await makeMember(adminUser.id, org.id, { role: "admin" });
+    const config = (await import("@/config")).default;
+    const originalSandboxEnabled = config.skillsSandbox.enabled;
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+
+    try {
+      const agent = await makeAgent({
+        organizationId: org.id,
+        toolExposureMode: "search_and_run_only",
+      });
+      await seedAndAssignArchestraTools(agent.id);
+
+      const { server } = await createAgentServer(agent.id, {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: adminUser.id,
+      });
+      const listToolsHandler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestListToolsHandler>;
+        }
+      )._requestHandlers.get("tools/list");
+
+      expect(listToolsHandler).toBeDefined();
+      if (!listToolsHandler) {
+        throw new Error("Expected tools/list handler to be registered");
+      }
+
+      const response = await listToolsHandler({
+        method: "tools/list",
+        params: {},
+      });
+      const names = new Set(response.tools.map((tool) => tool.name));
+
+      // meta tools and the skill/sandbox runtime path stay top-level
+      for (const exposed of [
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        TOOL_RUN_TOOL_FULL_NAME,
+        TOOL_LIST_SKILLS_FULL_NAME,
+        TOOL_LOAD_SKILL_FULL_NAME,
+        TOOL_RUN_COMMAND_FULL_NAME,
+        TOOL_DOWNLOAD_FILE_FULL_NAME,
+        TOOL_UPLOAD_FILE_FULL_NAME,
+      ]) {
+        expect(names.has(exposed)).toBe(true);
+      }
+      // authoring + unrelated tools remain hidden behind search_tools/run_tool
+      for (const hidden of [
+        TOOL_CREATE_SKILL_FULL_NAME,
+        TOOL_UPDATE_SKILL_FULL_NAME,
+        TOOL_WHOAMI_FULL_NAME,
+      ]) {
+        expect(names.has(hidden)).toBe(false);
+      }
+    } finally {
+      (config.skillsSandbox as { enabled: boolean }).enabled =
+        originalSandboxEnabled;
+    }
+  });
+
   test("adds assigned MCP server context to search_tools description", async ({
     makeAgent,
     makeAgentTool,
@@ -1495,6 +1677,102 @@ describe("createAgentServer tools/list", () => {
     expect(response.content[0]?.text).not.toContain(
       "User context not available",
     );
+  });
+
+  test("forwards downstream elicitation requests to the MCP caller", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "workspace",
+    });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: "workspace__create_event",
+      parameters: { type: "object", properties: {} },
+    });
+    await makeAgentTool(agent.id, tool.id);
+
+    const executeToolCallForOwnerSpy = vi
+      .spyOn(mcpClient, "executeToolCallForOwner")
+      .mockResolvedValueOnce({
+        id: "call_123",
+        name: "workspace__create_event",
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      });
+
+    try {
+      const { server } = await createAgentServer(agent.id);
+      const callToolHandler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+
+      expect(callToolHandler).toBeDefined();
+      if (!callToolHandler) {
+        throw new Error("Expected tools/call handler to be registered");
+      }
+
+      const sendRequest = vi.fn().mockResolvedValue({
+        action: "accept",
+        content: { title: "Team sync" },
+      });
+
+      await callToolHandler(
+        {
+          method: "tools/call",
+          params: {
+            name: "workspace__create_event",
+            arguments: {},
+          },
+        },
+        { sendRequest },
+      );
+
+      const options = executeToolCallForOwnerSpy.mock.calls.at(-1)?.[3];
+      const elicitationHandler = options?.elicitationHandler;
+      expect(elicitationHandler).toBeTypeOf("function");
+
+      const elicitationRequest = {
+        method: "elicitation/create" as const,
+        params: {
+          mode: "form" as const,
+          message: "Provide event details",
+          requestedSchema: {
+            type: "object" as const,
+            properties: {
+              title: { type: "string" as const },
+            },
+          },
+        },
+      };
+
+      const result = await elicitationHandler?.(elicitationRequest, {
+        signal: new AbortController().signal,
+        requestId: "downstream-elicitation",
+        sendNotification: vi.fn(),
+        sendRequest: vi.fn(),
+      });
+
+      expect(sendRequest).toHaveBeenCalledWith(
+        elicitationRequest,
+        expect.any(Object),
+      );
+      expect(result).toEqual({
+        action: "accept",
+        content: { title: "Team sync" },
+      });
+    } finally {
+      executeToolCallForOwnerSpy.mockRestore();
+    }
   });
 });
 

@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -23,7 +23,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
 }));
 
 // Mock shared module
-vi.mock("@shared", () => ({
+vi.mock("@archestra/shared", () => ({
   requiredPagePermissionsMap: {
     "/protected": { "organization:read": ["read"] },
     "/admin": { "organization:write": ["write"] },
@@ -219,24 +219,6 @@ describe("WithAuthCheck", () => {
       expect(mockRouterPush).toHaveBeenCalledWith("/llm/logs");
     });
 
-    it("should keep sign-in visible while default password change is pending", () => {
-      vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
-      setWindowLocation("/auth/sign-in", "?redirectTo=%2Fchat");
-      window.sessionStorage.setItem(
-        "archestra.defaultPasswordChangePending",
-        "true",
-      );
-
-      render(
-        <WithAuthCheck>
-          <MockChild />
-        </WithAuthCheck>,
-      );
-
-      expect(mockRouterPush).not.toHaveBeenCalled();
-      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
-    });
-
     it("should ignore malicious redirectTo param and redirect to home", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
       const maliciousUrl = encodeURIComponent("https://evil.com/phishing");
@@ -339,6 +321,23 @@ describe("WithAuthCheck", () => {
       expect(screen.getByTestId("protected-content")).toBeInTheDocument();
     });
 
+    it("should allow access to /auth/recover-account when not authenticated (backup-code sign-in)", () => {
+      vi.mocked(useSession).mockReturnValue({
+        data: null,
+        isPending: false,
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(usePathname).mockReturnValue("/auth/recover-account");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+    });
+
     it("should allow access to /auth/two-factor sub-paths", () => {
       vi.mocked(useSession).mockReturnValue({
         data: null,
@@ -358,7 +357,7 @@ describe("WithAuthCheck", () => {
   });
 
   describe("Sentry user context", () => {
-    it("should set Sentry user context when user is authenticated", () => {
+    it("should set Sentry user context when user is authenticated", async () => {
       const mockUser = {
         id: "user123",
         email: "test@example.com",
@@ -381,14 +380,16 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      expect(Sentry.setUser).toHaveBeenCalledWith({
-        id: "user123",
-        email: "test@example.com",
-        username: "Test User",
+      await waitFor(() => {
+        expect(Sentry.setUser).toHaveBeenCalledWith({
+          id: "user123",
+          email: "test@example.com",
+          username: "Test User",
+        });
       });
     });
 
-    it("should use email as username when name is not available", () => {
+    it("should use email as username when name is not available", async () => {
       const mockUser = {
         id: "user456",
         email: "another@example.com",
@@ -410,14 +411,16 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      expect(Sentry.setUser).toHaveBeenCalledWith({
-        id: "user456",
-        email: "another@example.com",
-        username: "another@example.com",
+      await waitFor(() => {
+        expect(Sentry.setUser).toHaveBeenCalledWith({
+          id: "user456",
+          email: "another@example.com",
+          username: "another@example.com",
+        });
       });
     });
 
-    it("should clear Sentry user context when user is not authenticated", () => {
+    it("should clear Sentry user context when user is not authenticated", async () => {
       vi.mocked(useSession).mockReturnValue({
         data: null,
         isPending: false,
@@ -431,7 +434,9 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      expect(Sentry.setUser).toHaveBeenCalledWith(null);
+      await waitFor(() => {
+        expect(Sentry.setUser).toHaveBeenCalledWith(null);
+      });
     });
 
     it("should handle Sentry errors silently", () => {

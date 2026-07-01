@@ -40,6 +40,44 @@ class ApiKeyModel {
 
     return apiKey ? normalizeApiKey(apiKey) : null;
   }
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    // Defense-in-depth: an api key belongs to a user, and a user belongs to
+    // an org via `members`. Require both to match so an audit lookup never
+    // returns key metadata from a different organization.
+    const [row] = await db
+      .select({ apiKey: schema.apikeysTable })
+      .from(schema.apikeysTable)
+      .innerJoin(
+        schema.membersTable,
+        eq(schema.membersTable.userId, schema.apikeysTable.referenceId),
+      )
+      .where(
+        and(
+          eq(schema.apikeysTable.id, id),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+    const apiKey = row.apiKey;
+
+    // REDACTED: the raw `key` field is never included in audit snapshots.
+    return {
+      id: apiKey.id,
+      name: apiKey.name ?? null,
+      start: apiKey.start ?? null,
+      prefix: apiKey.prefix ?? null,
+      userId: apiKey.referenceId,
+      enabled: apiKey.enabled ?? null,
+      expiresAt: apiKey.expiresAt?.toISOString() ?? null,
+      createdAt: apiKey.createdAt.toISOString(),
+      updatedAt: apiKey.updatedAt.toISOString(),
+    };
+  }
 }
 
 export default ApiKeyModel;

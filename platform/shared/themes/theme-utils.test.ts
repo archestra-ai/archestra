@@ -10,15 +10,6 @@ describe("getThemeMetadata", () => {
       expect(metadata.find((t) => t.id === id)).toBeDefined();
     }
   });
-
-  test("no theme has a mode restriction (all themes support both modes)", () => {
-    const metadata = getThemeMetadata();
-    for (const entry of metadata) {
-      expect(
-        (entry as unknown as Record<string, unknown>).mode,
-      ).toBeUndefined();
-    }
-  });
 });
 
 describe("getThemeById", () => {

@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.2.50" # x-release-please-version
+  imageTag: "1.2.76" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -167,6 +167,52 @@ archestra:
   #         optional: true
   envFrom: []
 
+  # code execution runtime configuration.
+  # enables the sandbox tools (archestra__run_command / upload_file /
+  # download_file) and points the backend at a Dagger runtime pod. The
+  # execution image remains a backend default; override
+  # ARCHESTRA_DAGGER_RUNTIME_IMAGE through archestra.env only when required.
+  codeRuntime:
+    # enable or disable code execution runtime support.
+    enabled: false
+
+    # runtime limits (timeouts, concurrency, output caps) are env-driven via
+    # ARCHESTRA_SKILLS_SANDBOX_* / ARCHESTRA_DAGGER_RUNTIME_* in archestra.env.
+
+    dagger:
+      # explicit Dagger runner host. Leave empty to use the kube-pod:// pod target below.
+      # supported schemes are kube-pod:// for the secure default and tcp:// for
+      # explicit advanced deployments that provide their own transport security.
+      runnerHost: ""
+
+      managed:
+        # deploy a Dagger Engine as part of this Helm release. When false, point
+        # dagger.pod at an externally deployed Dagger Engine pod instead.
+        enabled: false
+        serviceAccount:
+          # create a tokenless service account for the privileged engine pod.
+          create: true
+          automountServiceAccountToken: false
+          annotations: {}
+
+      pod:
+        # pod created by the managed Dagger subchart or companion chart.
+        name: dagger-runtime-engine-0
+        # leave empty to use the release namespace when managed.enabled=true,
+        # or the default external companion-chart namespace (`dagger`) otherwise.
+        namespace: ""
+        container: dagger-engine
+        # optional kube context for out-of-cluster clients. leave empty for in-cluster use.
+        context: ""
+
+      rbac:
+        # create a narrow Role/RoleBinding that lets the Archestra ServiceAccount
+        # exec into the Dagger Engine pod when using kube-pod://.
+        create: true
+        # defaults to dagger.pod.namespace. set explicitly when runnerHost points
+        # at a kube-pod:// URL whose namespace differs from dagger.pod.namespace.
+        namespace: ""
+
   # Additional volumes to mount into the platform and worker pods
   # Useful for mounting credential files such as a Vertex AI service account key
   # Example:
@@ -203,6 +249,22 @@ archestra:
     # Set to a positive integer such as 1 to enable during targeted investigations.
     heapSnapshotsNearHeapLimit: 0
 
+  # Persistent "My Files" file storage. provider "db" (default) keeps bytes in
+  # Postgres; "filesystem" stores them on a PVC. When filesystem, the chart
+  # creates a PVC unless `existingClaim` names a pre-provisioned one.
+  fileStorage:
+    provider: db
+    filesystem:
+      mountPath: /data/archestra_results
+      size: 50Gi
+      # "" uses the cluster default StorageClass.
+      storageClassName: ""
+      # multi-replica / HPA needs ReadWriteMany.
+      accessModes:
+        - ReadWriteOnce
+      # set to reuse a pre-provisioned PVC instead of a chart-created one.
+      existingClaim: ""
+
   # Init containers configuration
   initContainers:
     # Wait for PostgreSQL to be ready before starting the application
@@ -216,6 +278,16 @@ archestra:
       # (and any `helm install --atomic` hits its own timeout with no clear
       # cause). The setup-postgres-extensions init container uses the same budget.
       timeoutSeconds: 300
+
+    # Worker pods only: block startup until the web Deployment has applied
+    # database migrations. This gate covers fresh installs. Upgrades are covered
+    # by archestra.migrationJob, because the platform Service can still route to
+    # previous-revision web pods while the new release is rolling out.
+    waitForMigrations:
+      enabled: true
+      # Maximum seconds to wait for the web Deployment to finish migrations
+      # before the init container gives up and fails.
+      timeoutSeconds: 600
 
     # Vault secret injection init container
     # Similar to Vault Agent Injector (writes secrets to a shared volume) but:
@@ -247,6 +319,41 @@ archestra:
     # Resource requests/limits applied to ALL init containers.
     # Required on clusters that enforce ResourceQuota (e.g., OpenShift restricted-v2 SCC).
     resources: {}
+
+  # Database migration Job.
+  #
+  # Runs `pnpm db:migrate` as a Helm pre-upgrade hook so the target version's
+  # schema is applied before web and worker Deployments roll. Disable this if
+  # migrations are applied by an external deployment pipeline.
+  #
+  # Most external Postgres deployments should not need any migrationJob env
+  # settings. Prefer setting postgresql.external_database_url to a complete
+  # connection string; the chart stores it in a Secret and passes it to the
+  # migration Job automatically.
+  migrationJob:
+    enabled: true
+    # Number of retries before the Job is marked failed and aborts the upgrade.
+    backoffLimit: 3
+    # Hard cap on Job runtime. Set to null to disable the deadline.
+    activeDeadlineSeconds: 600
+    # Resource requests/limits for the migration container.
+    # If not set, inherits from archestra.resources.
+    resources: {}
+    # Extra environment variables rendered before the shared platform env. Use
+    # this only when ARCHESTRA_DATABASE_URL contains Kubernetes $(VAR)
+    # references, such as $(PGPASSWORD), that the hook must expand.
+    env: {}
+    # Extra secret-backed environment variables rendered before shared env. This
+    # is the recommended hook-only option when ARCHESTRA_DATABASE_URL contains
+    # $(PGPASSWORD):
+    #   - name: PGPASSWORD
+    #     secretName: my-db-secret
+    #     secretKey: password
+    envFromSecrets: []
+    # Extra valueFrom environment variables rendered before shared env.
+    envWithValueFrom: []
+    # Extra envFrom entries for the migration Job.
+    envFrom: []
 
   # Resource requests and limits for the Archestra container
   # See: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
@@ -354,6 +461,30 @@ archestra:
       rbac:
         # Specifies whether RBAC resources should be created
         create: true
+
+        # Kubernetes namespaces backing deployment environments that the platform
+        # may deploy MCP servers into. The platform ServiceAccount only gets
+        # MCP-manager permissions in the release namespace by default, so an
+        # environment pointing at any other namespace fails with a 403 until that
+        # namespace is listed here.
+        #
+        # For each entry the chart creates a namespace-scoped Role + RoleBinding
+        # granting the platform ServiceAccount the same MCP-manager permissions it
+        # has in the release namespace. The namespaces MUST already exist before
+        # `helm upgrade` (a RoleBinding cannot be created in a missing namespace).
+        # An entry equal to the release namespace is ignored (already covered above).
+        #
+        # This list is also surfaced to the app (as ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES)
+        # so the environment editor offers a namespace dropdown instead of free text.
+        #
+        # Note: unlike mcpServerRbac.additionalRoleBindings (which only creates a
+        # binding to an externally-managed Role), this creates the Role too.
+        #
+        # Example:
+        #   environmentNamespaces:
+        #     - staging
+        #     - production
+        environmentNamespaces: []
 
       # NetworkPolicy configuration for MCP server pods (SSRF protection)
       # When enabled, creates a Kubernetes NetworkPolicy that prevents MCP server pods from
@@ -692,6 +823,64 @@ archestra:
         type: HTTP
         requestPath: /health
         port: 3000
+
+# dagger subchart values used only when archestra.codeRuntime.dagger.managed.enabled=true.
+# the Dagger Engine runs in the same namespace as the Archestra release so it can
+# be installed with the same `helm upgrade`.
+dagger:
+  fullnameOverride: dagger-runtime
+
+  engine:
+    kind: StatefulSet
+    # kube-pod:// uses kubectl exec + buildctl dial-stdio, so no TCP listener is
+    # needed by default. Set this to 1234 only when intentionally enabling the
+    # plaintext tcp:// transport through additional Service wiring.
+    port:
+
+    existingServiceAccount:
+      name: dagger-runtime
+
+    configJson: |
+      {
+        "logLevel": "info",
+        "security": {
+          "insecureRootCapabilities": false
+        },
+        "gc": {
+          "maxUsedSpace": "40GB",
+          "reservedSpace": "5GB",
+          "minFreeSpace": "20%"
+        }
+      }
+
+    resources:
+      requests:
+        cpu: "2"
+        memory: 8Gi
+      limits:
+        memory: 16Gi
+
+    statefulSet:
+      persistentVolumeClaim:
+        enabled: true
+        resources:
+          requests:
+            storage: 50Gi
+
+    hostPath:
+      dataVolume:
+        enabled: false
+      runVolume:
+        enabled: false
+
+    volumeMounts:
+      - name: run
+        mountPath: /run/dagger
+
+    volumes:
+      - name: run
+        emptyDir:
+          medium: Memory
 
 # PostgreSQL configuration
 postgresql:

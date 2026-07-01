@@ -11,23 +11,23 @@ vi.mock("ai", async (importOriginal) => {
   };
 });
 
-// Mock createDirectLLMModel to avoid actual API calls
+// Mock createLLMModel to avoid actual API calls
 vi.mock("@/clients/llm-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/clients/llm-client")>();
   return {
     ...actual,
-    createDirectLLMModel: vi.fn(() => "mocked-model"),
+    createLLMModel: vi.fn(() => "mocked-model"),
   };
 });
 
-// Mock LlmProviderApiKeyModelLinkModel for fast model DB lookup
-const mockGetFastestModel = vi.hoisted(() => vi.fn());
-vi.mock("@/models/llm-provider-api-key-model", () => ({
-  default: { getFastestModel: mockGetFastestModel },
-}));
-
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { createDirectLLMModel } from "@/clients/llm-client";
+import { createLLMModel } from "@/clients/llm-client";
+import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
+import ConversationModel from "@/models/conversation";
+import MessageModel from "@/models/message";
+import { test } from "@/test";
+import type { ChatMessage } from "@/types";
+import { __test as __prepareTest } from "./prepare-model-messages";
 import {
   __test,
   buildChatStopConditions,
@@ -35,11 +35,12 @@ import {
   extractFirstMessages,
   generateConversationTitle,
   getChatStopToolNames,
+  resolveTitleUserInput,
 } from "./routes";
 
 describe("prepareMessagesForProvider", () => {
   it("normalizes csv files to text/plain for anthropic", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "anthropic",
       messages: [
         {
@@ -65,7 +66,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("normalizes markdown files to text/plain for anthropic", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "anthropic",
       messages: [
         {
@@ -90,7 +91,94 @@ describe("prepareMessagesForProvider", () => {
     });
   });
 
-  it("leaves non-anthropic file parts unchanged", () => {
+  it("normalizes json files to text/plain for anthropic", () => {
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider: "anthropic",
+      messages: [
+        {
+          role: "user",
+          parts: [
+            {
+              type: "file",
+              mediaType: "application/json",
+              filename: "data.json",
+              url: "data:application/json;base64,eyJhIjoxfQ==",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts?.[0]).toMatchObject({
+      type: "file",
+      mediaType: "text/plain",
+      filename: "data.json",
+      url: "data:text/plain;base64,eyJhIjoxfQ==",
+    });
+  });
+
+  it.each([
+    "openai",
+    "openrouter",
+    "groq",
+    "xai",
+    "mistral",
+    "cohere",
+  ] as const)("inlines csv and json file parts as text for %s", (provider) => {
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider,
+      messages: [
+        {
+          role: "user",
+          parts: [
+            {
+              type: "file",
+              mediaType: "text/csv",
+              filename: "report.csv",
+              url: "data:text/csv;base64,YSxiLGM=",
+            },
+            {
+              type: "file",
+              mediaType: "application/json",
+              filename: "data.json",
+              url: "data:application/json;base64,eyJhIjoxfQ==",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts).toEqual([
+      { type: "text", text: '[Attachment "report.csv" (text/csv)]\n\na,b,c' },
+      {
+        type: "text",
+        text: '[Attachment "data.json" (application/json)]\n\n{"a":1}',
+      },
+    ]);
+  });
+
+  it("leaves image file parts unchanged for convert providers", () => {
+    const message = {
+      role: "user" as const,
+      parts: [
+        {
+          type: "file",
+          mediaType: "image/png",
+          filename: "shot.png",
+          url: "data:image/png;base64,iVBORw0KGgo=",
+        },
+      ],
+    };
+
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider: "openai",
+      messages: [message],
+    });
+
+    expect(messages[0]).toBe(message);
+  });
+
+  it("inlines text-document file parts as decoded text for gemini", () => {
     const message = {
       role: "user" as const,
       parts: [
@@ -103,7 +191,62 @@ describe("prepareMessagesForProvider", () => {
       ],
     };
 
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider: "gemini",
+      messages: [message],
+    });
+
+    // Gemini no longer receives text documents as inlineData — they are decoded
+    // and inlined as a text part, which reliably handles exotic text MIME types.
+    expect(messages[0].parts?.some((p) => p.type === "file")).toBe(false);
+    const inlined = messages[0].parts?.find(
+      (p) => p.type === "text" && p.text?.includes("a,b,c"),
+    );
+    expect(inlined).toBeDefined();
+  });
+
+  it("inlines application/csv and excel-as-text for cohere (its SDK relays base64 undecoded otherwise)", () => {
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider: "cohere",
+      messages: [
+        {
+          role: "user",
+          parts: [
+            {
+              type: "file",
+              mediaType: "application/csv",
+              filename: "report.csv",
+              url: "data:application/csv;base64,YSxiLGM=",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts).toEqual([
+      {
+        type: "text",
+        text: '[Attachment "report.csv" (application/csv)]\n\na,b,c',
+      },
+    ]);
+  });
+
+  it("leaves an invalid-UTF-8 text-document file part unchanged for convert providers", () => {
+    // `//4=` is base64 for bytes [0xFF, 0xFE] — not valid UTF-8 (a binary file
+    // mislabeled as a text document). It must NOT be inlined as garbage text.
+    const message = {
+      role: "user" as const,
+      parts: [
+        {
+          type: "file",
+          mediaType: "application/vnd.ms-excel",
+          filename: "book.xls",
+          url: "data:application/vnd.ms-excel;base64,//4=",
+        },
+      ],
+    };
+
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "openai",
       messages: [message],
     });
@@ -119,7 +262,7 @@ describe("prepareMessagesForProvider", () => {
   };
 
   it("prepends placeholder text for bedrock user messages with only a file part", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [{ role: "user", parts: [pdfFilePart] }],
     });
@@ -131,7 +274,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("prepends placeholder when the only existing text part is whitespace", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [
         {
@@ -153,7 +296,7 @@ describe("prepareMessagesForProvider", () => {
       parts: [{ type: "text", text: "Summarize this" }, pdfFilePart],
     };
 
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [message],
     });
@@ -162,7 +305,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("pads bedrock assistant messages whose only text part is whitespace", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [{ role: "assistant", parts: [{ type: "text", text: "" }] }],
     });
@@ -176,7 +319,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("pads bedrock messages whose reasoning lacks a bedrock signature", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [
         {
@@ -195,7 +338,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("pads bedrock messages that only contain ignored UI data parts", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [
         {
@@ -223,7 +366,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("pads bedrock messages that only contain step markers and ignored data parts", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [
         {
@@ -248,7 +391,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("pads bedrock messages that only contain streaming tool input", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [
         {
@@ -275,7 +418,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("pads empty bedrock assistant step blocks before later tool calls", async () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [
         {
@@ -333,7 +476,7 @@ describe("prepareMessagesForProvider", () => {
       ],
     };
 
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [message],
     });
@@ -353,7 +496,7 @@ describe("prepareMessagesForProvider", () => {
       ],
     };
 
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [message],
     });
@@ -373,12 +516,135 @@ describe("prepareMessagesForProvider", () => {
       ],
     };
 
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [message],
     });
 
     expect(messages[0]).toBe(message);
+  });
+
+  it("normalizes application/json files to text/plain for bedrock", () => {
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "user",
+          parts: [
+            { type: "text", text: "review this" },
+            {
+              type: "file",
+              mediaType: "application/json",
+              filename: "data.json",
+              url: "data:application/json;base64,eyJhIjoxfQ==",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts?.find((p) => p.type === "file")).toMatchObject({
+      type: "file",
+      mediaType: "text/plain",
+      filename: "data.json",
+      url: "data:text/plain;base64,eyJhIjoxfQ==",
+    });
+  });
+
+  it("leaves bedrock pdf files unchanged after normalization", () => {
+    const message = {
+      role: "user" as const,
+      parts: [
+        { type: "text", text: "Summarize this" },
+        {
+          type: "file",
+          mediaType: "application/pdf",
+          filename: "report.pdf",
+          url: "data:application/pdf;base64,JVBERi0=",
+        },
+      ],
+    };
+
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [message],
+    });
+
+    expect(messages[0].parts?.find((p) => p.type === "file")).toMatchObject({
+      mediaType: "application/pdf",
+    });
+  });
+});
+
+describe("buildModelMessagesForProvider", () => {
+  // ref-free messages never hit the attachment table, so these run without DB.
+  const conversationId = "conv-model-prep";
+
+  it("drops an assistant turn that converts to empty model content", async () => {
+    const { modelMessages } = await __prepareTest.buildModelMessagesForProvider(
+      {
+        provider: "openai",
+        conversationId,
+        sandboxAvailable: false,
+        messages: [
+          { role: "user", parts: [{ type: "text", text: "hi" }] },
+          {
+            // only provider-invisible parts — convertToModelMessages yields an
+            // assistant message with empty content here.
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              {
+                type: "data-tool-ui-start",
+                data: { toolCallId: "call_x", toolName: "render_chart" },
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    expect(modelMessages.map((message) => message.role)).toEqual(["user"]);
+  });
+
+  it("keeps normal text and tool assistant turns", async () => {
+    const { modelMessages } = await __prepareTest.buildModelMessagesForProvider(
+      {
+        provider: "openai",
+        conversationId,
+        sandboxAvailable: false,
+        messages: [
+          { role: "user", parts: [{ type: "text", text: "search please" }] },
+          {
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              {
+                type: "tool-search",
+                toolCallId: "call_ok",
+                toolName: "search",
+                state: "output-available",
+                input: { q: "query" },
+                output: { hits: [] },
+              },
+            ],
+          },
+          {
+            role: "assistant",
+            parts: [{ type: "text", text: "Here are the results." }],
+          },
+        ],
+      },
+    );
+
+    const assistantMessages = modelMessages.filter(
+      (message) => message.role === "assistant",
+    );
+    // the tool-call turn and the text turn both survive.
+    expect(assistantMessages.length).toBeGreaterThanOrEqual(2);
+    expect(assistantMessages.at(-1)?.content).toContainEqual(
+      expect.objectContaining({ type: "text", text: "Here are the results." }),
+    );
   });
 });
 
@@ -464,6 +730,324 @@ describe("getMessagesNotYetPersisted", () => {
 
     expect(newMessages).toHaveLength(1);
     expect(newMessages[0]?.id).toBe("assistant-1");
+  });
+
+  it("does not re-persist live messages linked by persisted message metadata", () => {
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "22222222-2222-2222-2222-222222222222",
+          content: {
+            id: "",
+            role: "assistant",
+            parts: [{ type: "text", text: "already saved" }],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "live-assistant-1",
+          role: "assistant",
+          metadata: {
+            persistedMessageId: "22222222-2222-2222-2222-222222222222",
+          },
+          parts: [{ type: "text", text: "already saved" }],
+        } as ChatMessage,
+        {
+          id: "new-user-1",
+          role: "user",
+          parts: [{ type: "text", text: "next" }],
+        },
+      ],
+    });
+
+    expect(newMessages).toHaveLength(1);
+    expect(newMessages[0]?.id).toBe("new-user-1");
+  });
+
+  it("does not re-persist an assistant message saved with an empty content id", () => {
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "11111111-1111-1111-1111-111111111111",
+          content: {
+            id: "",
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              {
+                type: "text",
+                text: "Hello! I see you've started a new chat.",
+                state: "done",
+              },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "assistant-temp-id",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            {
+              type: "text",
+              text: "Hello! I see you've started a new chat.",
+              state: "done",
+            },
+            {
+              type: "data-token-usage",
+              data: { inputTokens: 10, outputTokens: 20 },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(newMessages).toHaveLength(0);
+  });
+
+  it("consumes empty content id fallback matches so later repeated text is still persisted", () => {
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "11111111-1111-1111-1111-111111111111",
+          content: {
+            id: "",
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              { type: "text", text: "Of course!", state: "done" },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "assistant-temp-id",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            { type: "text", text: "Of course!", state: "done" },
+            {
+              type: "data-token-usage",
+              data: { inputTokens: 10, outputTokens: 20 },
+            },
+          ],
+        },
+        {
+          id: "user-2",
+          role: "user",
+          parts: [{ type: "text", text: "say it again" }],
+        },
+        {
+          id: "assistant-2",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            { type: "text", text: "Of course!", state: "done" },
+          ],
+        },
+      ],
+    });
+
+    expect(newMessages.map((message) => message.id)).toEqual([
+      "user-2",
+      "assistant-2",
+    ]);
+  });
+});
+
+describe("persistNewMessages", () => {
+  // Regression coverage for #4030: approving or declining a tool and then
+  // reloading must restore the resolved turn. The real flow persists four
+  // times — the user message and the assistant turn are saved during the
+  // first request, then the approval resume re-sends the same turn, which
+  // must update the existing assistant row in place rather than appending
+  // duplicate rows and orphaning the original approval-requested row.
+  const userMessage = {
+    id: "user-1",
+    role: "user",
+    parts: [{ type: "text", text: "Run the print test tool." }],
+  };
+
+  const printToolPart = {
+    type: "tool-print_test",
+    toolCallId: "call-1",
+    input: {},
+  };
+
+  const approvalRequested = {
+    id: "assistant-1",
+    role: "assistant",
+    parts: [{ ...printToolPart, state: "approval-requested" }],
+  };
+
+  // The approval resume re-sends the assistant turn with the answer applied.
+  const approvalResponded = {
+    id: "assistant-1",
+    role: "assistant",
+    parts: [{ ...printToolPart, state: "approval-responded" }],
+  };
+
+  const resolvedCases = [
+    {
+      decision: "approved",
+      toolState: "output-available",
+      resolvedAssistant: {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            ...printToolPart,
+            state: "output-available",
+            output: { result: ["archestra-4030-repro"] },
+          },
+          { type: "text", text: "The print test tool ran successfully." },
+        ],
+      },
+    },
+    {
+      decision: "declined",
+      toolState: "output-denied",
+      resolvedAssistant: {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { ...printToolPart, state: "output-denied" },
+          { type: "text", text: "Understood, I will not run that tool." },
+        ],
+      },
+    },
+  ];
+
+  for (const testCase of resolvedCases) {
+    test(`reconciles the resolved turn after a tool call is ${testCase.decision}, without duplicate rows (#4030)`, async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const organization = await makeOrganization();
+      await makeMember(user.id, organization.id, { role: "admin" });
+      const agent = await makeAgent({
+        organizationId: organization.id,
+        authorId: user.id,
+        scope: "personal",
+      });
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: organization.id,
+        agentId: agent.id,
+        selectedModel: "gpt-4o",
+        selectedProvider: "openai",
+      });
+
+      // First request: the user message is persisted early, then the
+      // assistant turn is persisted on finish while the tool waits for
+      // approval.
+      await __test.persistNewMessages(
+        conversation.id,
+        [userMessage],
+        "earlyUserMsg",
+      );
+      await __test.persistNewMessages(
+        conversation.id,
+        [userMessage, approvalRequested],
+        "onFinish",
+      );
+
+      // Resume request: the client re-sends the answered turn. The early
+      // persist must not duplicate it, and the finish persist must update
+      // the existing assistant row to its resolved state.
+      await __test.persistNewMessages(
+        conversation.id,
+        [userMessage, approvalResponded],
+        "earlyUserMsg",
+      );
+      await __test.persistNewMessages(
+        conversation.id,
+        [userMessage, testCase.resolvedAssistant],
+        "onFinish",
+      );
+
+      const stored = await MessageModel.findByConversation(conversation.id);
+      expect(stored.filter((row) => row.role === "user")).toHaveLength(1);
+
+      const assistantRows = stored.filter((row) => row.role === "assistant");
+      expect(assistantRows).toHaveLength(1);
+
+      const storedParts: Array<Record<string, unknown>> =
+        assistantRows[0]?.content?.parts ?? [];
+      const resolvedToolPart = storedParts.find(
+        (part) => part.toolCallId === "call-1",
+      );
+      expect(resolvedToolPart?.state).toBe(testCase.toolState);
+      expect(storedParts.some((part) => part.type === "text")).toBe(true);
+    });
+  }
+});
+
+describe("getMessagesWithChangedContent", () => {
+  it("only updates rows still in approval-requested state, matched by toolCallId", () => {
+    // The narrow scope: this update path resolves an approval-requested tool
+    // call by toolCallId. Unrelated content changes on other rows are ignored
+    // so a client can't repurpose this path to overwrite earlier messages —
+    // those edits still go through updateTextPartAndDeleteSubsequent.
+    const changed = __test.getMessagesWithChangedContent({
+      existingMessages: [
+        {
+          id: "db-text",
+          content: {
+            id: "user-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        },
+        {
+          id: "db-pending",
+          content: {
+            id: "assistant-1",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-print_test",
+                toolCallId: "call-1",
+                state: "approval-requested",
+                input: {},
+              },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        // Unrelated text edit — must be ignored.
+        {
+          id: "user-1",
+          role: "user",
+          parts: [{ type: "text", text: "hello (edited)" }],
+        },
+        // Resolved version of the approval-requested call.
+        {
+          id: "assistant-1",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-print_test",
+              toolCallId: "call-1",
+              state: "output-available",
+              input: {},
+              output: { ok: true },
+            },
+            { type: "text", text: "done" },
+          ],
+        },
+      ],
+    });
+
+    expect(changed).toHaveLength(1);
+    expect(changed[0]?.id).toBe("db-pending");
   });
 });
 
@@ -616,6 +1200,138 @@ describe("extractFirstMessages", () => {
 
     expect(result.firstUserMessage).toBe("Actual message");
   });
+
+  it("surfaces the skill name when the first user message is a bare skill invocation", () => {
+    const messages = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: "" }],
+        metadata: { skill: { id: "skill-1", name: "what-do-i-do" } },
+      },
+      {
+        role: "assistant",
+        parts: [{ type: "text", text: "Here is what you do." }],
+      },
+    ];
+
+    const result = extractFirstMessages(messages);
+
+    expect(result.firstUserMessage).toBe("");
+    expect(result.firstAssistantMessage).toBe("Here is what you do.");
+    expect(result.firstUserSkillName).toBe("what-do-i-do");
+  });
+
+  it("keeps the typed text when a skill invocation also carries a prompt", () => {
+    const messages = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: "summarize the repo" }],
+        metadata: { skill: { id: "skill-1", name: "deep-research" } },
+      },
+    ];
+
+    const result = extractFirstMessages(messages);
+
+    expect(result.firstUserMessage).toBe("summarize the repo");
+    expect(result.firstUserSkillName).toBe("deep-research");
+  });
+
+  it("returns a null skill name when the first user message has no skill metadata", () => {
+    const messages = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: "Hello" }],
+      },
+    ];
+
+    const result = extractFirstMessages(messages);
+
+    expect(result.firstUserSkillName).toBeNull();
+  });
+
+  it("captures the skill name from the first user message only", () => {
+    const messages = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: "" }],
+        metadata: { skill: { id: "skill-1", name: "first-skill" } },
+      },
+      {
+        role: "assistant",
+        parts: [{ type: "text", text: "ok" }],
+      },
+      {
+        role: "user",
+        parts: [{ type: "text", text: "" }],
+        metadata: { skill: { id: "skill-2", name: "second-skill" } },
+      },
+    ];
+
+    const result = extractFirstMessages(messages);
+
+    expect(result.firstUserSkillName).toBe("first-skill");
+  });
+
+  it("caps an over-long skill name", () => {
+    const longName = "a".repeat(200);
+    const messages = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: "" }],
+        metadata: { skill: { id: "skill-1", name: longName } },
+      },
+    ];
+
+    const result = extractFirstMessages(messages);
+
+    expect(result.firstUserSkillName).toBe("a".repeat(80));
+  });
+
+  it("ignores a whitespace-only skill name", () => {
+    const messages = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: "" }],
+        metadata: { skill: { id: "skill-1", name: "   " } },
+      },
+    ];
+
+    const result = extractFirstMessages(messages);
+
+    expect(result.firstUserSkillName).toBeNull();
+  });
+
+  it("collapses whitespace in a skill name", () => {
+    const messages = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: "" }],
+        metadata: { skill: { id: "skill-1", name: "evil\nUser: hijacked" } },
+      },
+    ];
+
+    const result = extractFirstMessages(messages);
+
+    expect(result.firstUserSkillName).toBe("evil User: hijacked");
+  });
+});
+
+describe("resolveTitleUserInput", () => {
+  it("prefers the typed first message over the skill name", () => {
+    expect(resolveTitleUserInput("summarize the repo", "deep-research")).toBe(
+      "summarize the repo",
+    );
+  });
+
+  it("falls back to the skill name when there is no typed text", () => {
+    expect(resolveTitleUserInput("", "what-do-i-do")).toBe(
+      "Skill: what-do-i-do",
+    );
+  });
+
+  it("returns an empty string when there is neither text nor skill", () => {
+    expect(resolveTitleUserInput("", null)).toBe("");
+  });
 });
 
 describe("buildTitlePrompt", () => {
@@ -624,8 +1340,7 @@ describe("buildTitlePrompt", () => {
 
     expect(prompt).toContain("User: How do I create a React component?");
     expect(prompt).not.toContain("Assistant:");
-    expect(prompt).toContain("Generate a short, concise title");
-    expect(prompt).toContain("3-6 words");
+    expect(prompt).toContain("Chat conversation messages:");
   });
 
   it("builds prompt with both user and assistant messages", () => {
@@ -640,12 +1355,12 @@ describe("buildTitlePrompt", () => {
     );
   });
 
-  it("includes instructions for title format", () => {
+  it("leaves title formatting instructions to the system prompt", () => {
     const prompt = buildTitlePrompt("Hello", "Hi there");
 
-    expect(prompt).toContain("Respond with ONLY the title");
-    expect(prompt).toContain("no quotes");
-    expect(prompt).toContain("no explanation");
+    expect(prompt).toContain("User: Hello");
+    expect(prompt).toContain("Assistant: Hi there");
+    expect(prompt).not.toContain("Respond with ONLY the title");
   });
 });
 
@@ -656,10 +1371,10 @@ describe("buildChatStopConditions", () => {
       iconLogo: null,
     });
 
-    const stopConditions = buildChatStopConditions();
+    const stopConditions = buildChatStopConditions(new ToolCallRepeatTracker());
     const toolNames = getChatStopToolNames();
 
-    expect(stopConditions).toHaveLength(3);
+    expect(stopConditions).toHaveLength(4);
     expect(toolNames.swapAgentToolName).toBe("acme_control_plane__swap_agent");
     expect(toolNames.swapToDefaultAgentToolName).toBe(
       "acme_control_plane__swap_to_default_agent",
@@ -670,35 +1385,18 @@ describe("buildChatStopConditions", () => {
 });
 
 describe("generateConversationTitle", () => {
-  it("returns generated title on success", async () => {
-    mockGenerateText.mockResolvedValueOnce({
-      text: "  Debug React Error  ",
-    });
-
-    const result = await generateConversationTitle({
-      provider: "anthropic",
-      apiKey: "test-key",
-      baseUrl: null,
-      firstUserMessage: "Help me debug this React error",
-      firstAssistantMessage: "I can help with that.",
-    });
-
-    expect(result).toBe("Debug React Error");
-    expect(mockGenerateText).toHaveBeenCalledWith(
-      expect.objectContaining({
-        model: "mocked-model",
-        prompt: expect.stringContaining("Help me debug this React error"),
-      }),
-    );
-  });
-
   it("returns null when LLM call fails", async () => {
     mockGenerateText.mockRejectedValueOnce(new Error("API Error"));
 
     const result = await generateConversationTitle({
       provider: "anthropic",
       apiKey: "test-key",
+      modelName: "claude-test",
       baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
+      systemPrompt: "Generate a title.",
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi there!",
     });
@@ -714,7 +1412,12 @@ describe("generateConversationTitle", () => {
     const result = await generateConversationTitle({
       provider: "openai",
       apiKey: "test-key",
+      modelName: "gpt-test",
       baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
+      systemPrompt: "Generate a title.",
       firstUserMessage: "Test",
       firstAssistantMessage: "",
     });
@@ -722,107 +1425,58 @@ describe("generateConversationTitle", () => {
     expect(result).toBe("Title With Whitespace");
   });
 
-  it("uses fastest model from DB when chatApiKeyId is provided", async () => {
-    mockGetFastestModel.mockResolvedValueOnce({ modelId: "db-fast-model" });
-    mockGenerateText.mockResolvedValueOnce({ text: "DB Model Title" });
+  it("uses the resolved built-in agent model and system prompt", async () => {
+    mockGenerateText.mockResolvedValueOnce({ text: "Configured Model Title" });
 
     const result = await generateConversationTitle({
       provider: "anthropic",
       apiKey: "test-key",
-      chatApiKeyId: "api-key-123",
+      modelName: "configured-title-model",
       baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
+      systemPrompt: "Return only a title.",
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi!",
     });
 
-    expect(result).toBe("DB Model Title");
-    expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-123");
-    expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "db-fast-model" }),
+    expect(result).toBe("Configured Model Title");
+    expect(createLLMModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: "title-agent-id",
+        modelName: "configured-title-model",
+        userId: "user-id",
+        sessionId: "conversation-id",
+        source: "chat:title_generation",
+      }),
     );
+    expect(mockGenerateText).toHaveBeenCalledWith({
+      model: "mocked-model",
+      system: "Return only a title.",
+      prompt: "Chat conversation messages:\n\nUser: Hello\n\nAssistant: Hi!",
+      maxOutputTokens: 64,
+    });
   });
 
-  it("falls back to FAST_MODELS when no chatApiKeyId", async () => {
-    mockGenerateText.mockResolvedValueOnce({ text: "Fallback Title" });
+  it("caps output tokens so non-streaming requests stay under the provider limit", async () => {
+    mockGenerateText.mockResolvedValueOnce({ text: "Short Title" });
 
     await generateConversationTitle({
       provider: "anthropic",
       apiKey: "test-key",
+      modelName: "claude-test",
       baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
+      systemPrompt: "Generate a title.",
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi!",
     });
 
-    expect(mockGetFastestModel).not.toHaveBeenCalled();
-    expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "claude-haiku-4-5-20251001" }),
-    );
-  });
-
-  it("falls back to FAST_MODELS when getFastestModel returns null", async () => {
-    mockGetFastestModel.mockResolvedValueOnce(null);
-    mockGenerateText.mockResolvedValueOnce({ text: "Null Fallback Title" });
-
-    await generateConversationTitle({
-      provider: "openai",
-      apiKey: "test-key",
-      chatApiKeyId: "api-key-456",
-      baseUrl: null,
-      firstUserMessage: "Hello",
-      firstAssistantMessage: "Hi!",
-    });
-
-    expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-456");
-    expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "gpt-4o-mini" }),
-    );
-  });
-
-  it("falls back to FAST_MODELS when getFastestModel throws", async () => {
-    mockGetFastestModel.mockRejectedValueOnce(new Error("DB Error"));
-    mockGenerateText.mockResolvedValueOnce({ text: "Error Fallback Title" });
-
-    await generateConversationTitle({
-      provider: "gemini",
-      apiKey: "test-key",
-      chatApiKeyId: "api-key-789",
-      baseUrl: null,
-      firstUserMessage: "Hello",
-      firstAssistantMessage: "Hi!",
-    });
-
-    expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-789");
-    expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "gemini-2.0-flash-001" }),
-    );
-  });
-});
-
-describe("title generation integration", () => {
-  it("extractFirstMessages and buildTitlePrompt work together", () => {
-    const messages = [
-      {
-        role: "user",
-        parts: [{ type: "text", text: "Help me debug this error" }],
-      },
-      {
-        role: "assistant",
-        parts: [
-          {
-            type: "text",
-            text: "I can help you debug that. What error are you seeing?",
-          },
-        ],
-      },
-    ];
-
-    const { firstUserMessage, firstAssistantMessage } =
-      extractFirstMessages(messages);
-    const prompt = buildTitlePrompt(firstUserMessage, firstAssistantMessage);
-
-    expect(prompt).toContain("User: Help me debug this error");
-    expect(prompt).toContain(
-      "Assistant: I can help you debug that. What error are you seeing?",
-    );
+    const callArg = mockGenerateText.mock.calls[0][0];
+    expect(callArg.maxOutputTokens).toBeLessThanOrEqual(64);
+    expect(callArg.maxOutputTokens).toBeGreaterThan(0);
   });
 });

@@ -2,15 +2,24 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
-} from "@shared";
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+} from "@archestra/shared";
 
 const DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+);
+const SKILL_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
 );
 
 /**
  * Given catalog items and a parallel array of tool lists, find the default
  * Archestra tools and return their IDs plus the catalog index.
+ *
+ * Pass `includeSkillTools: true` when the org has opted in (via the skills
+ * empty-state enable action) so the skill tools also appear pre-selected on
+ * the new agent form, mirroring the server-side `assignSkillToolsToAgent`
+ * behavior on save.
  *
  * Returns null if the Archestra catalog isn't found, tools aren't loaded,
  * or no default tools match.
@@ -18,6 +27,9 @@ const DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
 export function getDefaultArchestraToolIds(
   catalogItems: { id: string; name: string }[],
   toolsByCatalogIndex: ({ id: string; name: string }[] | undefined)[],
+  options: {
+    includeSkillTools?: boolean;
+  } = {},
 ): { toolIds: Set<string>; catalogIndex: number } | null {
   const catalogIndex = catalogItems.findIndex(
     (c) => c.id === ARCHESTRA_MCP_CATALOG_ID,
@@ -31,10 +43,15 @@ export function getDefaultArchestraToolIds(
     tools
       .filter((t) => {
         const shortName = parseFullToolName(t.name).toolName;
-        return (
-          shortName !== null &&
-          DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)
-        );
+        if (shortName === null) return false;
+        if (DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)) return true;
+        if (
+          options.includeSkillTools &&
+          SKILL_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)
+        ) {
+          return true;
+        }
+        return false;
       })
       .map((t) => t.id),
   );
@@ -42,6 +59,50 @@ export function getDefaultArchestraToolIds(
   if (toolIds.size === 0) return null;
 
   return { toolIds, catalogIndex };
+}
+
+type EnvScopedCatalog = {
+  id: string;
+  name: string;
+  serverType?: string | null;
+  environmentId?: string | null;
+};
+
+/**
+ * A catalog belongs to an agent's environment when it's a builtin (the
+ * Archestra platform tools, available in every environment) or its environment
+ * matches. `null`/`undefined` (Default runtime) is its own bucket.
+ */
+export function isCatalogInEnvironment(
+  catalog: EnvScopedCatalog,
+  agentEnvironmentId: string | null,
+): boolean {
+  return (
+    catalog.serverType === "builtin" ||
+    (catalog.environmentId ?? null) === (agentEnvironmentId ?? null)
+  );
+}
+
+/**
+ * The selected catalogs that don't belong to the agent's environment (builtins
+ * are always compatible). Drives the save-blocking conflict alert. Unknown
+ * catalog ids are skipped.
+ */
+export function computeMcpEnvConflicts(
+  catalogItems: EnvScopedCatalog[],
+  selectedCatalogIds: Iterable<string>,
+  agentEnvironmentId: string | null,
+): { catalogId: string; name: string }[] {
+  const byId = new Map(catalogItems.map((c) => [c.id, c]));
+  const conflicts: { catalogId: string; name: string }[] = [];
+  for (const catalogId of selectedCatalogIds) {
+    const catalog = byId.get(catalogId);
+    if (!catalog || isCatalogInEnvironment(catalog, agentEnvironmentId)) {
+      continue;
+    }
+    conflicts.push({ catalogId, name: catalog.name });
+  }
+  return conflicts;
 }
 
 export function sortCatalogItems<

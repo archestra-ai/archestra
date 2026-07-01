@@ -1,4 +1,4 @@
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -90,7 +90,7 @@ describe("RolePermissionBuilder", () => {
 
     await user.click(screen.getByRole("button", { name: "Knowledge" }));
 
-    const createCheckbox = screen.getByLabelText("Create");
+    const createCheckbox = document.getElementById("knowledgeSource-create");
     expect(createCheckbox).toBeDisabled();
 
     expect(

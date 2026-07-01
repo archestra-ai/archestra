@@ -1,10 +1,13 @@
 "use client";
 
+import { ChatErrorCode } from "@archestra/shared";
 import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
   Copy,
+  Gauge,
+  MessageSquareDashed,
   RefreshCw,
 } from "lucide-react";
 import { useState } from "react";
@@ -23,6 +26,7 @@ import {
   mapClientError,
   parseErrorResponse,
 } from "./chat-error.utils";
+import { ProviderAuthRequiredCard } from "./provider-auth-required-card";
 
 interface InlineChatErrorProps {
   error: Error;
@@ -32,6 +36,14 @@ interface InlineChatErrorProps {
   agentName?: string;
   selectedModel?: string;
   modelSource?: ModelSource | null;
+  /** Re-run the original prompt after the user connects a per-user provider. */
+  onProviderConnected?: () => void;
+  /**
+   * When set, render a "Try again" button that clears this error and resends the
+   * prompt. Wired only for scheduled-run chats — other chats omit it and keep
+   * their existing edit-the-message retry flow.
+   */
+  onRetry?: () => void | Promise<void>;
 }
 
 export function InlineChatError({
@@ -42,12 +54,49 @@ export function InlineChatError({
   agentName,
   selectedModel,
   modelSource,
+  onProviderConnected,
+  onRetry,
 }: InlineChatErrorProps) {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const { data: isAdmin } = useHasPermissions({
     organizationSettings: ["read"],
   });
   const chatError = parseErrorResponse(error) ?? mapClientError(error);
+
+  // A per-user provider the user hasn't linked yet → an inline "connect your
+  // account" card instead of a generic error.
+  if (
+    chatError.code === ChatErrorCode.ProviderAuthRequired &&
+    chatError.authAction
+  ) {
+    return (
+      <ProviderAuthRequiredCard
+        provider={chatError.authAction.provider}
+        providerLabel={chatError.authAction.providerLabel}
+        onConnected={onProviderConnected}
+      />
+    );
+  }
+
+  const isUsageLimitExceeded = chatError.usageLimitExceeded === true;
+  // An empty turn that survived the backend's auto-retries is the model's
+  // answer for this conversation, not a system failure — render it as a
+  // neutral outcome rather than a destructive error.
+  const isEmptyModelTurn = chatError.code === ChatErrorCode.EmptyResponse;
+  const isNeutralOutcome = isUsageLimitExceeded || isEmptyModelTurn;
+  const StatusIcon = isUsageLimitExceeded
+    ? Gauge
+    : isEmptyModelTurn
+      ? MessageSquareDashed
+      : AlertCircle;
+  const containerClassName = isNeutralOutcome
+    ? "bg-muted/30 border border-border rounded-lg"
+    : "bg-destructive/10 border border-destructive/20 rounded-lg";
+  const iconClassName = isNeutralOutcome
+    ? "text-muted-foreground"
+    : "text-destructive";
+  const usageLimitMessage =
+    isUsageLimitExceeded && supportMessage ? chatError.message : undefined;
   // Conversation IDs double as chat session IDs for the end-user chat flow.
   const sessionId = chatError.sessionId ?? conversationId;
 
@@ -87,12 +136,28 @@ export function InlineChatError({
     );
   };
 
+  const retryButton = onRetry ? (
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-7 gap-1.5"
+      onClick={() => {
+        void onRetry();
+      }}
+    >
+      <RefreshCw className="h-3.5 w-3.5" />
+      Try again
+    </Button>
+  ) : null;
+
   if (slimChatErrorUi) {
     return (
       <Message from="assistant">
-        <MessageContent className="bg-destructive/10 border border-destructive/20 rounded-lg">
-          <div className="flex items-start gap-2 text-destructive">
-            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+        <MessageContent className={containerClassName}>
+          <div className="flex items-start gap-2">
+            <StatusIcon
+              className={`h-4 w-4 mt-0.5 flex-shrink-0 ${iconClassName}`}
+            />
             <div className="flex-1 space-y-2">
               <p className="text-sm text-foreground">
                 {supportMessage ? supportMessage : chatError.message}
@@ -119,6 +184,12 @@ export function InlineChatError({
                   <Copy className="h-3 w-3" />
                 </Button>
               </div>
+              {usageLimitMessage && (
+                <p className="text-xs text-muted-foreground">
+                  {usageLimitMessage}
+                </p>
+              )}
+              {retryButton}
             </div>
           </div>
         </MessageContent>
@@ -128,9 +199,11 @@ export function InlineChatError({
 
   return (
     <Message from="assistant">
-      <MessageContent className="bg-destructive/10 border border-destructive/20 rounded-lg">
-        <div className="flex items-start gap-2 text-destructive">
-          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+      <MessageContent className={containerClassName}>
+        <div className="flex items-start gap-2">
+          <StatusIcon
+            className={`h-4 w-4 mt-0.5 flex-shrink-0 ${iconClassName}`}
+          />
           <div className="flex-1 space-y-2">
             {supportMessage ? (
               <p className="text-sm text-foreground">{supportMessage}</p>
@@ -181,6 +254,13 @@ export function InlineChatError({
                 <Copy className="h-3 w-3" />
               </Button>
             </div>
+            {usageLimitMessage && (
+              <p className="text-xs text-muted-foreground">
+                {usageLimitMessage}
+              </p>
+            )}
+
+            {retryButton}
 
             {isAdmin && (
               <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>

@@ -4,14 +4,14 @@ import {
   type McpDeploymentStatusEntry,
   type McpDeploymentStatusesMessage,
   type McpInstallationStatusMessage,
-} from "@shared";
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 import websocketService from "@/lib/websocket/websocket";
 
 const {
@@ -45,7 +45,7 @@ export function useMcpServers(params?: McpServersParams) {
       },
     ],
     queryFn: async () => {
-      const response = await getMcpServers({
+      const { data, error } = await getMcpServers({
         query:
           params?.catalogId ||
           params?.assignmentScope ||
@@ -61,7 +61,8 @@ export function useMcpServers(params?: McpServersParams) {
               }
             : undefined,
       });
-      return response.data ?? [];
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
     },
     initialData: params?.initialData,
     enabled: params?.enabled,
@@ -99,6 +100,13 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
         });
 
         if (status === "success" || status === "error") {
+          // Refetch the full mcp-servers list: the install row may have
+          // changes the surgical setQueriesData above doesn't cover. In
+          // particular, the per-install reinstall route returns 200 with
+          // status="pending" before the background task clears
+          // `reinstall_required`; without this invalidation the button
+          // stays visible until a manual refresh.
+          void queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
           void queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
           void queryClient.invalidateQueries({
             queryKey: ["mcp-servers", serverId, "tools"],
@@ -231,11 +239,9 @@ export function useMcpServerTools(mcpServerId: string | null) {
       const { data, error } = await getMcpServerTools({
         path: { id: mcpServerId },
       });
-      if (error) {
-        // handleApiError not used to prevent "MCP server not found" error from being shown
-        console.error("Failed to fetch MCP server tools:", error);
-        return [];
-      }
+      // A not-yet-connected server 404s here; treat that as an empty tool list
+      // (no error state, no toast) rather than a failure.
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
       return data ?? [];
     },
     enabled: !!mcpServerId,

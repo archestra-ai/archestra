@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@archestra/shared";
 import { waitForServerInstallation } from "../utils";
 import {
   callMcpTool,

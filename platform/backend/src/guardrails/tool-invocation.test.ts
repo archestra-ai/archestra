@@ -2,11 +2,16 @@ import {
   getArchestraToolFullName,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
   TOOL_LIST_AGENTS_SHORT_NAME,
-} from "@shared";
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+} from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { AgentTeamModel, OrganizationModel } from "@/models";
 import { describe, expect, test } from "@/test";
-import { evaluatePolicies, getGlobalToolPolicy } from "./tool-invocation";
+import {
+  evaluatePolicies,
+  getGlobalToolPolicy,
+  getToolPolicies,
+} from "./tool-invocation";
 
 // ---------------------------------------------------------------------------
 // getGlobalToolPolicy
@@ -77,6 +82,33 @@ describe("getGlobalToolPolicy", () => {
 });
 
 // ---------------------------------------------------------------------------
+// getToolPolicies
+// ---------------------------------------------------------------------------
+describe("getToolPolicies", () => {
+  test("resolves both policies independently from the agent's org", async ({
+    makeAgent,
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    const org = await makeOrganization({
+      globalToolPolicy: "restrictive",
+      discoveredToolPolicy: "relaxed",
+    });
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    const policies = await getToolPolicies(agent.id);
+    expect(policies).toEqual({
+      globalToolPolicy: "restrictive",
+      discoveredToolPolicy: "relaxed",
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // evaluatePolicies
 // ---------------------------------------------------------------------------
 describe("evaluatePolicies", () => {
@@ -115,6 +147,11 @@ describe("evaluatePolicies", () => {
     expect(result?.allToolCallNames).toEqual(["disabled_tool"]);
     expect(result?.contentMessage).toContain("disabled_tool");
     expect(result?.contentMessage).toContain("not enabled");
+    // non-first-person and steered at the discovery path (see PR #5395)
+    expect(result?.contentMessage).not.toContain("I attempted");
+    expect(result?.contentMessage).toContain(
+      archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME),
+    );
   });
 
   test("white-labeled built-in tools bypass enabledToolNames filtering", async ({

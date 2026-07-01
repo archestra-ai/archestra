@@ -9,6 +9,12 @@ export interface OpenAiStubOptions {
 export interface AnthropicStubOptions {
   interruptAtChunk?: number;
   includeToolUse?: boolean;
+  /** Report `input_tokens: 0` (like z.ai's Anthropic-compatible endpoint) to exercise the input-token fallback. */
+  zeroInputTokens?: boolean;
+  /** Report `output_tokens: 0` to exercise the fallback's output>0 guard. */
+  zeroOutputTokens?: boolean;
+  /** Report this many `cache_read_input_tokens` to exercise the fallback's cache guard. */
+  cacheReadInputTokens?: number;
 }
 
 export interface GeminiStubOptions {
@@ -62,14 +68,39 @@ export function createOpenAiTestClient(options: OpenAiStubOptions = {}) {
         },
       },
     },
+    embeddings: {
+      create: async (params: OpenAI.Embeddings.EmbeddingCreateParams) => {
+        const inputs = Array.isArray(params.input)
+          ? params.input
+          : [params.input];
+
+        return {
+          object: "list",
+          data: inputs.map((_input, index) => ({
+            object: "embedding",
+            embedding: [0.1, 0.2, 0.3],
+            index,
+          })),
+          model: params.model,
+          usage: {
+            prompt_tokens: inputs.length,
+            total_tokens: inputs.length,
+          },
+        } satisfies OpenAI.Embeddings.CreateEmbeddingResponse;
+      },
+    },
   };
 }
 
 export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
   return {
     messages: {
-      create: async () =>
-        ({
+      create: async (params: Anthropic.Messages.MessageCreateParams) => {
+        if (params.stream) {
+          return createAnthropicStream(options);
+        }
+
+        return {
           id: "msg-test-anthropic",
           type: "message",
           container: null,
@@ -85,12 +116,13 @@ export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
           stop_reason: "end_turn",
           stop_sequence: null,
           usage: {
-            input_tokens: 12,
-            output_tokens: 10,
+            input_tokens: options.zeroInputTokens ? 0 : 12,
+            output_tokens: options.zeroOutputTokens ? 0 : 10,
             cache_creation_input_tokens: 0,
-            cache_read_input_tokens: 0,
+            cache_read_input_tokens: options.cacheReadInputTokens ?? 0,
           },
-        }) as unknown as Anthropic.Message,
+        } as unknown as Anthropic.Message;
+      },
       stream: () => createAnthropicStream(options),
     },
   };
@@ -234,7 +266,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
         stop_reason: null,
         stop_sequence: null,
         usage: {
-          input_tokens: 12,
+          input_tokens: options.zeroInputTokens ? 0 : 12,
           output_tokens: 10,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,

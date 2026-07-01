@@ -22,8 +22,8 @@ function makePayload(
       icon: "🤖",
       scope: "org", // Should be overridden to personal
       considerContextUntrusted: false,
-      toolAssignmentMode: "manual",
       toolExposureMode: "full",
+      accessAllTools: false,
       incomingEmailEnabled: false,
       incomingEmailSecurityMode: "private",
       incomingEmailAllowedDomain: null,
@@ -189,6 +189,33 @@ describe("importAgentFromPayload", () => {
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0].type).toBe("delegation");
     expect(result.warnings[0].name).toBe("Nonexistent Agent");
+  });
+
+  test("returns warnings for soft-deleted delegation targets", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const targetAgent = await makeAgent({
+      name: "Deleted Delegate",
+      organizationId: org.id,
+    });
+    await AgentModel.delete(targetAgent.id);
+
+    const result = await importAgentFromPayload(
+      makePayload({
+        delegations: [{ targetAgentName: targetAgent.name }],
+      }),
+      user.id,
+      org.id,
+    );
+
+    expect(result.agent).toBeDefined();
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0].type).toBe("delegation");
+    expect(result.warnings[0].name).toBe(targetAgent.name);
   });
 
   test("imports labels and suggested prompts correctly", async ({

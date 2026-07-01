@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk } from "@archestra/shared";
 import { ChevronDown, CircuitBoard, Loader2, Play, Zap } from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,

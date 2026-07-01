@@ -17,7 +17,7 @@ const { serverCanAccessPageMock, serverHasPermissionsMock } = vi.hoisted(
   }),
 );
 
-vi.mock("@shared", () => ({
+vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
     getAgents: getAgentsMock,
     getTeams: getTeamsMock,

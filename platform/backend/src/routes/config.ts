@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs";
-import { RouteId, SupportedProvidersSchema } from "@shared";
+import { RouteId, SupportedProvidersSchema } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getEmailProviderInfo } from "@/agents/incoming-email";
@@ -7,13 +6,21 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import logger from "@/logging";
 import { OrganizationModel } from "@/models";
+import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
-import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
+import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
+import {
+  type DiscoveredToolPolicy,
+  EmailProviderTypeSchema,
+  type GlobalToolPolicy,
+} from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
 
-const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
+export const publicConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     PUBLIC_CONFIG_PATH,
     {
@@ -22,28 +29,18 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get public config",
         tags: ["Config"],
         response: {
-          200: z.strictObject({
-            disableBasicAuth: z.boolean(),
-            disableInvitations: z.boolean(),
-            analytics: z.strictObject({
-              enabled: z.boolean(),
-              posthog: z.strictObject({
-                key: z.string(),
-                host: z.string(),
-              }),
-            }),
-          }),
+          200: PublicConfigResponseSchema,
         },
       },
     },
     async (_request, reply) => {
-      return reply.send({
-        disableBasicAuth: config.auth.disableBasicAuth,
-        disableInvitations: config.auth.disableInvitations,
-        analytics: config.analytics,
-      });
+      return reply.send(await getPublicConfigResponse());
     },
   );
+};
+
+const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  await fastify.register(publicConfigRoutes);
 
   fastify.get(
     "/api/config",
@@ -59,15 +56,31 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               knowledgeBase: z.boolean(),
               fullWhiteLabeling: z.boolean(),
             }),
+            smallTeamTier: z.strictObject({
+              threshold: z.number(),
+              userCount: z.number(),
+              smallTeam: z.boolean(),
+              envFlag: z.boolean(),
+              communicate: z.boolean(),
+            }),
             features: z.strictObject({
+              betaEnabled: z.boolean(),
               orchestratorK8sRuntime: z.boolean(),
-              advancedToolFeaturesEnabled: z.boolean(),
+              sandbox: z.boolean(),
+              // Max size of a file the sandbox can stage. The chat composer caps
+              // sandbox-routed uploads at this instead of guessing.
+              sandboxArtifactBytesLimit: z.number(),
+              agentSkillsEnabled: z.boolean(),
+              agentEnvironmentsEnabled: z.boolean(),
+              appsEnabled: z.boolean(),
+              projectsEnabled: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               azureOpenAiEntraIdEnabled: z.boolean(),
               bedrockIamAuthEnabled: z.boolean(),
               geminiVertexAiEnabled: z.boolean(),
               globalToolPolicy: z.enum(["permissive", "restrictive"]),
+              discoveredToolPolicy: z.enum(["relaxed", "apply_policies"]),
               incomingEmail: z.object({
                 enabled: z.boolean(),
                 provider: EmailProviderTypeSchema.optional(),
@@ -76,10 +89,14 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }),
               mcpServerBaseImage: z.string(),
               orchestratorK8sNamespace: z.string(),
+              environmentNamespaces: z.array(z.string()),
               isQuickstart: z.boolean(),
               ngrokDomain: z.string(),
               virtualKeyDefaultExpirationSeconds: z.number(),
               mcpSandboxDomain: z.string().nullable(),
+              maintenanceMode: z.string().nullable(),
+              chatSecretScanEnabled: z.boolean(),
+              agentHooksEnabled: z.boolean(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -90,35 +107,57 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      // Get global tool policy from first organization (fallback to permissive)
+      // Get tool policies from first organization (fallback to permissive)
       const org = await OrganizationModel.getFirst();
       const globalToolPolicy: GlobalToolPolicy =
         org?.globalToolPolicy ?? "permissive";
+      const discoveredToolPolicy: DiscoveredToolPolicy =
+        org?.discoveredToolPolicy ?? "relaxed";
+
+      const tier = enterpriseTier.getState();
 
       return reply.send({
         enterpriseFeatures: {
-          core: config.enterpriseFeatures.core,
-          knowledgeBase: config.enterpriseFeatures.knowledgeBase,
+          core: tier.coreActive,
+          knowledgeBase: tier.knowledgeBaseActive,
           fullWhiteLabeling: config.enterpriseFeatures.fullWhiteLabeling,
         },
+        smallTeamTier: {
+          threshold: tier.threshold,
+          userCount: tier.userCount,
+          smallTeam: tier.smallTeam,
+          envFlag: tier.envFlag,
+          communicate: tier.communicate,
+        },
         features: {
+          betaEnabled: config.beta,
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
-          advancedToolFeaturesEnabled:
-            config.agents.advancedToolFeaturesEnabled,
+          sandbox: skillSandboxRuntimeService.isEnabled,
+          sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
+          agentSkillsEnabled: config.agents.skillsEnabled,
+          agentEnvironmentsEnabled: config.agents.environmentsEnabled,
+          appsEnabled: config.apps.enabled,
+          projectsEnabled: config.projects.enabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
           bedrockIamAuthEnabled: isBedrockIamAuthEnabled(),
           geminiVertexAiEnabled: isVertexAiEnabled(),
           globalToolPolicy,
+          discoveredToolPolicy,
           incomingEmail: getEmailProviderInfo(),
           mcpServerBaseImage: config.orchestrator.mcpServerBaseImage,
           orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,
+          environmentNamespaces:
+            config.orchestrator.kubernetes.environmentNamespaces,
           isQuickstart: config.isQuickstart,
-          ngrokDomain: getNgrokDomain(),
+          ngrokDomain: ngrokTunnelManager.getPublicDomain(),
           virtualKeyDefaultExpirationSeconds:
             config.llmProxy.virtualKeyDefaultExpirationSeconds,
           mcpSandboxDomain: config.mcpSandbox.domain,
+          maintenanceMode: config.maintenanceMode,
+          chatSecretScanEnabled: config.chat.secretScanEnabled,
+          agentHooksEnabled: config.hooks.enabled,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,
@@ -137,6 +176,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           zhipuai: config.llm.zhipuai.baseUrl || null,
           minimax: config.llm.minimax.baseUrl || null,
           deepseek: config.llm.deepseek.baseUrl || null,
+          "github-copilot": config.llm["github-copilot"].baseUrl || null,
           azure: config.llm.azure.baseUrl || null,
         },
       });
@@ -146,15 +186,70 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
 export default configRoutes;
 
-/**
- * Get the ngrok domain from env var or from the file written by the
- * detect-ngrok-domain.sh script (for dynamically assigned domains).
- */
-function getNgrokDomain(): string {
-  if (config.ngrokDomain) return config.ngrokDomain;
+const PublicConfigResponseSchema = z.strictObject({
+  disableBasicAuth: z.boolean(),
+  disableInvitations: z.boolean(),
+  maintenanceMode: z.string().nullable(),
+  // Effective enterprise core flag (env var OR small-team free tier). Exposed
+  // pre-auth so the login screen can decide whether to render the SSO picker.
+  enterpriseCoreActive: z.boolean(),
+  analytics: z.strictObject({
+    enabled: z.boolean(),
+    instanceId: z.string().uuid().nullable(),
+    posthog: z.strictObject({
+      key: z.string(),
+      host: z.string(),
+    }),
+  }),
+});
+
+let cachedAnalyticsInstanceId: string | null = null;
+let pendingAnalyticsInstanceId: Promise<string | null> | null = null;
+let hasLoggedAnalyticsInstanceIdError = false;
+
+async function getPublicConfigResponse(): Promise<
+  z.infer<typeof PublicConfigResponseSchema>
+> {
+  return {
+    disableBasicAuth: config.auth.disableBasicAuth,
+    disableInvitations: config.auth.disableInvitations,
+    maintenanceMode: config.maintenanceMode,
+    enterpriseCoreActive: enterpriseTier.isCoreActive(),
+    analytics: {
+      enabled: config.analytics.enabled,
+      instanceId: await getAnalyticsInstanceId(),
+      posthog: config.analytics.posthog,
+    },
+  };
+}
+
+async function getAnalyticsInstanceId(): Promise<string | null> {
+  if (config.maintenanceMode) return null;
+  if (cachedAnalyticsInstanceId) return cachedAnalyticsInstanceId;
+
+  pendingAnalyticsInstanceId ??= loadAnalyticsInstanceId();
   try {
-    return readFileSync("/app/data/.ngrok_domain", "utf-8").trim();
-  } catch {
-    return "";
+    return await pendingAnalyticsInstanceId;
+  } finally {
+    pendingAnalyticsInstanceId = null;
+  }
+}
+
+async function loadAnalyticsInstanceId(): Promise<string | null> {
+  try {
+    const instanceId = (await OrganizationModel.getAnalyticsState())
+      .analyticsInstanceId;
+    cachedAnalyticsInstanceId = instanceId;
+    hasLoggedAnalyticsInstanceIdError = false;
+    return instanceId;
+  } catch (error) {
+    if (!hasLoggedAnalyticsInstanceIdError) {
+      logger.warn(
+        { err: error },
+        "Failed to load analytics instance ID for public config",
+      );
+      hasLoggedAnalyticsInstanceIdError = true;
+    }
+    return null;
   }
 }

@@ -43,7 +43,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
       const message = messages[i];
       if (message.role === "user" && Array.isArray(message.content)) {
         for (const block of message.content) {
-          if (block.type === "tool_result" && "tool_use_id" in block) {
+          if (isToolResultBlock(block)) {
             return block.tool_use_id;
           }
         }
@@ -60,7 +60,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
     for (const message of this.request.messages) {
       if (message.role === "assistant" && Array.isArray(message.content)) {
         for (const block of message.content) {
-          if (block.type === "tool_use" && "name" in block) {
+          if (isToolUseBlock(block)) {
             toolsUsed.add(block.name);
           }
         }
@@ -108,7 +108,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
       if (Array.isArray(message.content)) {
         // Find the first text block that's not a tool_result
         for (const block of message.content) {
-          if (block.type === "text" && "text" in block) {
+          if (isTextBlock(block)) {
             return block.text;
           }
         }
@@ -156,13 +156,9 @@ class AnthropicMessagesInteraction implements InteractionUtils {
 
     // Process content blocks
     for (const block of content) {
-      if (block.type === "text" && "text" in block) {
+      if (isTextBlock(block)) {
         parts.push({ type: "text", text: block.text });
-      } else if (
-        block.type === "tool_use" &&
-        "name" in block &&
-        "id" in block
-      ) {
+      } else if (isToolUseBlock(block)) {
         // Tool invocation by assistant
         parts.push({
           type: "dynamic-tool",
@@ -224,7 +220,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
 
           // For each tool_use block, find its corresponding tool_result
           for (const block of msg.content) {
-            if (block.type === "tool_use" && "id" in block) {
+            if (isToolUseBlock(block)) {
               // Look for the tool result in the next user message
               const toolResultMsg = messages
                 .slice(i + 1)
@@ -233,23 +229,17 @@ class AnthropicMessagesInteraction implements InteractionUtils {
                     m.role === "user" &&
                     Array.isArray(m.content) &&
                     m.content.some(
-                      (b) =>
-                        b.type === "tool_result" &&
-                        "tool_use_id" in b &&
-                        b.tool_use_id === block.id,
+                      (b) => isToolResultBlock(b) && b.tool_use_id === block.id,
                     ),
                 );
 
               if (toolResultMsg && Array.isArray(toolResultMsg.content)) {
                 // Find the specific tool_result block
-                const toolResultBlock = toolResultMsg.content.find(
-                  (b) =>
-                    b.type === "tool_result" &&
-                    "tool_use_id" in b &&
-                    b.tool_use_id === block.id,
-                );
+                const toolResultBlock = toolResultMsg.content
+                  .filter(isToolResultBlock)
+                  .find((b) => b.tool_use_id === block.id);
 
-                if (toolResultBlock && toolResultBlock.type === "tool_result") {
+                if (toolResultBlock) {
                   // Parse the tool result
                   let output: unknown;
                   try {
@@ -278,8 +268,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
 
                   const outputPart = {
                     type: "dynamic-tool" as const,
-                    toolName:
-                      "name" in block ? (block.name as string) : "tool-result",
+                    toolName: block.name,
                     toolCallId: block.id,
                     state: "output-available" as const,
                     input: existingInput,
@@ -342,3 +331,46 @@ class AnthropicMessagesInteraction implements InteractionUtils {
 }
 
 export default AnthropicMessagesInteraction;
+
+// =============================================================================
+// Content block guards
+// =============================================================================
+
+// The request content-block union ends in a `{ type: string }` catch-all
+// (unknown block types are forwarded to the provider verbatim), so a literal
+// `block.type === "tool_use"` comparison no longer proves the other fields
+// exist. These guards validate the fields this module actually reads.
+
+function isTextBlock(block: unknown): block is { type: "text"; text: string } {
+  return (
+    isBlockOfType(block, "text") &&
+    typeof (block as { text?: unknown }).text === "string"
+  );
+}
+
+function isToolUseBlock(
+  block: unknown,
+): block is { type: "tool_use"; id: string; name: string; input?: unknown } {
+  return (
+    isBlockOfType(block, "tool_use") &&
+    typeof (block as { id?: unknown }).id === "string" &&
+    typeof (block as { name?: unknown }).name === "string"
+  );
+}
+
+function isToolResultBlock(
+  block: unknown,
+): block is { type: "tool_result"; tool_use_id: string; content?: unknown } {
+  return (
+    isBlockOfType(block, "tool_result") &&
+    typeof (block as { tool_use_id?: unknown }).tool_use_id === "string"
+  );
+}
+
+function isBlockOfType(block: unknown, type: string): boolean {
+  return (
+    typeof block === "object" &&
+    block !== null &&
+    (block as { type?: unknown }).type === type
+  );
+}

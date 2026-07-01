@@ -9,6 +9,7 @@ export const RouteId = {
   GetDefaultLlmProxy: "getDefaultLlmProxy",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
+  RestoreAgent: "restoreAgent",
   ExportAgent: "exportAgent",
   ImportAgent: "importAgent",
   GetLabelKeys: "getLabelKeys",
@@ -57,18 +58,18 @@ export const RouteId = {
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
   GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
+  ReinstallInternalMcpCatalogItem: "reinstallInternalMcpCatalogItem",
+  RefreshInternalMcpCatalogImage: "refreshInternalMcpCatalogImage",
   DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",
   GetInternalMcpCatalogLabelKeys: "getInternalMcpCatalogLabelKeys",
   GetInternalMcpCatalogLabelValues: "getInternalMcpCatalogLabelValues",
+  ListPendingImageApprovalCatalogItems: "listPendingImageApprovalCatalogItems",
+  ApproveCatalogItemImage: "approveCatalogItemImage",
   GetDeploymentYamlPreview: "getDeploymentYamlPreview",
   ValidateDeploymentYaml: "validateDeploymentYaml",
   ResetDeploymentYaml: "resetDeploymentYaml",
   GetK8sImagePullSecrets: "getK8sImagePullSecrets",
-  // MCP Catalog Children (UI-named "presets") Routes
-  GetCatalogChildren: "getCatalogChildren",
-  CreateCatalogChild: "createCatalogChild",
-  UpdateCatalogChild: "updateCatalogChild",
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
@@ -84,6 +85,7 @@ export const RouteId = {
   McpGatewayGet: "mcpGatewayGet",
   McpGatewayPost: "mcpGatewayPost",
   McpProxyPost: "mcpProxyPost", // Frontend session-based proxy to MCP Gateway
+  McpServerProxyPost: "mcpServerProxyPost", // Session-based proxy to one installed server's MCP App runtime
 
   // MCP Server Installation Request Routes
   GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
@@ -110,7 +112,10 @@ export const RouteId = {
   DeleteTeam: "deleteTeam",
   GetTeamMembers: "getTeamMembers",
   AddTeamMember: "addTeamMember",
+  UpdateTeamMember: "updateTeamMember",
   RemoveTeamMember: "removeTeamMember",
+  GetTeamLabelKeys: "getTeamLabelKeys",
+  GetTeamLabelValues: "getTeamLabelValues",
 
   // Team External Group Routes (SSO Team Sync)
   GetTeamExternalGroups: "getTeamExternalGroups",
@@ -170,6 +175,10 @@ export const RouteId = {
   OpenAiChatCompletionsWithAgent: "openAiChatCompletionsWithAgent",
   OpenAiResponsesWithDefaultAgent: "openAiResponsesWithDefaultAgent",
   OpenAiResponsesWithAgent: "openAiResponsesWithAgent",
+  OpenAiEmbeddingsWithDefaultAgent: "openAiEmbeddingsWithDefaultAgent",
+  OpenAiEmbeddingsWithAgent: "openAiEmbeddingsWithAgent",
+  OpenAiListModelsWithDefaultAgent: "openAiListModelsWithDefaultAgent",
+  OpenAiListModelsWithAgent: "openAiListModelsWithAgent",
 
   // Proxy Routes - OpenAI-compatible model router
   ModelRouterChatCompletionsWithDefaultAgent:
@@ -180,10 +189,15 @@ export const RouteId = {
   ModelRouterListModelsWithAgent: "modelRouterListModelsWithAgent",
   ModelRouterResponsesWithDefaultAgent: "modelRouterResponsesWithDefaultAgent",
   ModelRouterResponsesWithAgent: "modelRouterResponsesWithAgent",
+  ModelRouterEmbeddingsWithDefaultAgent:
+    "modelRouterEmbeddingsWithDefaultAgent",
+  ModelRouterEmbeddingsWithAgent: "modelRouterEmbeddingsWithAgent",
 
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
+  AnthropicListModelsWithDefaultAgent: "anthropicListModelsWithDefaultAgent",
+  AnthropicListModelsWithAgent: "anthropicListModelsWithAgent",
 
   // Proxy Routes - Cohere
   CohereChatWithDefaultAgent: "cohereChatWithDefaultAgent",
@@ -258,6 +272,19 @@ export const RouteId = {
     "minimaxChatCompletionsWithDefaultAgent",
   MinimaxChatCompletionsWithAgent: "minimaxChatCompletionsWithAgent",
 
+  // Proxy Routes - GitHub Copilot
+  GithubCopilotChatCompletionsWithDefaultAgent:
+    "githubCopilotChatCompletionsWithDefaultAgent",
+  GithubCopilotChatCompletionsWithAgent:
+    "githubCopilotChatCompletionsWithAgent",
+  GithubCopilotListModelsWithDefaultAgent:
+    "githubCopilotListModelsWithDefaultAgent",
+  GithubCopilotListModelsWithAgent: "githubCopilotListModelsWithAgent",
+
+  // GitHub Copilot device-flow sign-in (creates personal provider keys)
+  GithubCopilotDeviceAuthStart: "githubCopilotDeviceAuthStart",
+  GithubCopilotDeviceAuthPoll: "githubCopilotDeviceAuthPoll",
+
   // Proxy Routes - Azure AI Foundry
   AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
@@ -266,14 +293,21 @@ export const RouteId = {
 
   // Chat Routes
   StreamChat: "streamChat",
+  ResolveChatMcpElicitation: "resolveChatMcpElicitation",
   StopChatStream: "stopChatStream",
+  GetActiveChatRun: "getActiveChatRun",
   GetChatConversations: "getChatConversations",
   GetChatConversation: "getChatConversation",
+  GetChatConversationFiles: "getChatConversationFiles",
   GetChatAgentMcpTools: "getChatAgentMcpTools",
   CreateChatConversation: "createChatConversation",
   ForkChatConversation: "forkChatConversation",
   UpdateChatConversation: "updateChatConversation",
+  SetConversationHooksDebug: "setConversationHooksDebug",
+  MarkChatConversationRead: "markChatConversationRead",
   DeleteChatConversation: "deleteChatConversation",
+  ClearChatConversationErrors: "clearChatConversationErrors",
+  CompactChatConversation: "compactChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
   GetChatMcpTools: "getChatMcpTools",
   UpdateChatMessage: "updateChatMessage",
@@ -285,6 +319,8 @@ export const RouteId = {
   GetConversationShare: "getConversationShare",
   GetSharedConversation: "getSharedConversation",
   ForkSharedConversation: "forkSharedConversation",
+  GetChatAttachmentContent: "getChatAttachmentContent",
+  DeleteChatAttachment: "deleteChatAttachment",
   GetLlmModels: "getLlmModels",
   SyncLlmModels: "syncLlmModels",
 
@@ -302,6 +338,16 @@ export const RouteId = {
   CreateApiKey: "createApiKey",
   DeleteApiKey: "deleteApiKey",
 
+  // Service Account Routes
+  GetServiceAccounts: "getServiceAccounts",
+  GetServiceAccount: "getServiceAccount",
+  CreateServiceAccount: "createServiceAccount",
+  UpdateServiceAccount: "updateServiceAccount",
+  DeleteServiceAccount: "deleteServiceAccount",
+  CreateServiceAccountToken: "createServiceAccountToken",
+  UpdateServiceAccountToken: "updateServiceAccountToken",
+  DeleteServiceAccountToken: "deleteServiceAccountToken",
+
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   CreateVirtualApiKey: "createVirtualApiKey",
@@ -315,6 +361,13 @@ export const RouteId = {
   RotateLlmOauthClientSecret: "rotateLlmOauthClientSecret",
   DeleteLlmOauthClient: "deleteLlmOauthClient",
 
+  // MCP OAuth Client Routes
+  GetMcpOauthClients: "getMcpOauthClients",
+  CreateMcpOauthClient: "createMcpOauthClient",
+  UpdateMcpOauthClient: "updateMcpOauthClient",
+  RotateMcpOauthClientSecret: "rotateMcpOauthClientSecret",
+  DeleteMcpOauthClient: "deleteMcpOauthClient",
+
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
   UpdateModel: "updateModel",
@@ -325,6 +378,12 @@ export const RouteId = {
   GetLimit: "getLimit",
   UpdateLimit: "updateLimit",
   DeleteLimit: "deleteLimit",
+
+  // Per-environment default user limits
+  ListDefaultUserLimits: "listDefaultUserLimits",
+  CreateDefaultUserLimit: "createDefaultUserLimit",
+  UpdateDefaultUserLimit: "updateDefaultUserLimit",
+  DeleteDefaultUserLimit: "deleteDefaultUserLimit",
 
   // Organization Routes
   GetOrganization: "getOrganization",
@@ -354,17 +413,20 @@ export const RouteId = {
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",
 
-  // Preset Entity Name Routes (organization-level - configurable label for catalog presets)
-  UpdatePresetEntityName: "updatePresetEntityName",
-  UpdatePresetEntityDefaultLabel: "updatePresetEntityDefaultLabel",
-  UpdatePresetEntityDefaultValidationRegex:
-    "updatePresetEntityDefaultValidationRegex",
+  // Org-level deployment environments
+  ListEnvironments: "listEnvironments",
+  CreateEnvironment: "createEnvironment",
+  UpdateEnvironment: "updateEnvironment",
+  DeleteEnvironment: "deleteEnvironment",
+  UpdateDefaultEnvironment: "updateDefaultEnvironment",
+  GetK8sCapabilities: "getK8sCapabilities",
 
-  // Org-level preset entries (Production / Staging / Development buckets)
-  ListMcpPresetEntries: "listMcpPresetEntries",
-  CreateMcpPresetEntry: "createMcpPresetEntry",
-  UpdateMcpPresetEntry: "updateMcpPresetEntry",
-  DeleteMcpPresetEntry: "deleteMcpPresetEntry",
+  // GitHub App Configuration Routes
+  ListGithubAppConfigs: "listGithubAppConfigs",
+  CreateGithubAppConfig: "createGithubAppConfig",
+  GetGithubAppConfig: "getGithubAppConfig",
+  UpdateGithubAppConfig: "updateGithubAppConfig",
+  DeleteGithubAppConfig: "deleteGithubAppConfig",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
@@ -377,6 +439,7 @@ export const RouteId = {
   GetIdentityProvider: "getIdentityProvider",
   GetIdentityProviderLatestIdTokenClaims:
     "getIdentityProviderLatestIdTokenClaims",
+  GetIdentityProviderLinkStatus: "getIdentityProviderLinkStatus",
   CreateIdentityProvider: "createIdentityProvider",
   UpdateIdentityProvider: "updateIdentityProvider",
   DeleteIdentityProvider: "deleteIdentityProvider",
@@ -436,6 +499,9 @@ export const RouteId = {
   CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
+  ConnectNgrok: "connectNgrok",
+  DisconnectNgrok: "disconnectNgrok",
+  GetNgrokConfig: "getNgrokConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
 
   // Knowledge Base Routes
@@ -450,8 +516,11 @@ export const RouteId = {
   GetConnectors: "getConnectors",
   CreateConnector: "createConnector",
   GetConnector: "getConnector",
+  GetConnectorDocuments: "getConnectorDocuments",
+  GetConnectorDocument: "getConnectorDocument",
   UpdateConnector: "updateConnector",
   DeleteConnector: "deleteConnector",
+  DeleteConnectorDocument: "deleteConnectorDocument",
   SyncConnector: "syncConnector",
   ForceResyncConnector: "forceResyncConnector",
   TestConnectorConnection: "testConnectorConnection",
@@ -465,14 +534,92 @@ export const RouteId = {
   GetConnectorRuns: "getConnectorRuns",
   GetConnectorRun: "getConnectorRun",
 
-  // Connector File Upload Routes
-  UploadConnectorFiles: "uploadConnectorFiles",
-  GetConnectorFiles: "getConnectorFiles",
-  GetConnectorFile: "getConnectorFile",
-  DeleteConnectorFile: "deleteConnectorFile",
+  // Knowledge File Routes
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
+
+  // Site Notification Routes
+  GetSiteNotification: "getSiteNotification",
+  GetSiteNotificationSettings: "getSiteNotificationSettings",
+  CreateSiteNotification: "createSiteNotification",
+  UpdateSiteNotification: "updateSiteNotification",
+  DeleteSiteNotification: "deleteSiteNotification",
+
+  // Agent Skill Routes
+  GetSkills: "getSkills",
+  CreateSkill: "createSkill",
+  ConvertAgentToSkill: "convertAgentToSkill",
+  SuggestSkillDescription: "suggestSkillDescription",
+  GetSkill: "getSkill",
+  UpdateSkill: "updateSkill",
+  DeleteSkill: "deleteSkill",
+  ResetSkill: "resetSkill",
+  DiscoverGithubSkills: "discoverGithubSkills",
+  SearchSkillCatalog: "searchSkillCatalog",
+  PreviewGithubSkill: "previewGithubSkill",
+  ImportGithubSkills: "importGithubSkills",
+  GetSkillSourceRepos: "getSkillSourceRepos",
+  EnableSkillToolDefaults: "enableSkillToolDefaults",
+  GetSkillSandboxArtifact: "getSkillSandboxArtifact",
+  GetSkillSandboxConversationArtifacts: "getSkillSandboxConversationArtifacts",
+  CreateProject: "createProject",
+  CreateProjectFromConversation: "createProjectFromConversation",
+  GetProjects: "getProjects",
+  GetProject: "getProject",
+  UpdateProject: "updateProject",
+  SetProjectShare: "setProjectShare",
+  DeleteProject: "deleteProject",
+  GetProjectConversations: "getProjectConversations",
+  GetProjectFiles: "getProjectFiles",
+  UploadProjectFiles: "uploadProjectFiles",
+  GetProjectInstructions: "getProjectInstructions",
+  SetProjectInstructions: "setProjectInstructions",
+  PinProject: "pinProject",
+  UnpinProject: "unpinProject",
+  DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
+  UpdateSkillSandboxArtifactContent: "updateSkillSandboxArtifactContent",
+
+  // Audit Log Routes
+  GetAuditLogs: "getAuditLogs",
+
+  // Hook File Routes
+  GetHooks: "getHooks",
+  CreateHook: "createHook",
+  UpdateHook: "updateHook",
+  DeleteHook: "deleteHook",
+
+  // Skill Share Link Routes
+  GetSkillShareLinks: "getSkillShareLinks",
+  CreateSkillShareLink: "createSkillShareLink",
+  RevokeSkillShareLink: "revokeSkillShareLink",
+  RotateSkillShareLink: "rotateSkillShareLink",
+
+  // Connection Setup Routes
+  CreateConnectionSetup: "createConnectionSetup",
+  GetConnectionSetupScript: "getConnectionSetupScript",
+  CreateConnectionVirtualKey: "createConnectionVirtualKey",
+  CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
+
+  // MCP App Routes
+  GetApps: "getApps",
+  GetExternalApp: "getExternalApp",
+  CreateApp: "createApp",
+  GetApp: "getApp",
+  UpdateApp: "updateApp",
+  DeleteApp: "deleteApp",
+  GetAppVersions: "getAppVersions",
+  GetAppVersion: "getAppVersion",
+  GetAppTools: "getAppTools",
+  AssignToolToApp: "assignToolToApp",
+  UnassignToolFromApp: "unassignToolFromApp",
+  GetAppTemplates: "getAppTemplates",
+  OpenAppInChat: "openAppInChat",
+  OpenExternalAppInChat: "openExternalAppInChat",
+  PostAppRenderDiagnostics: "postAppRenderDiagnostics",
+  PostAppRenderScreenshot: "postAppRenderScreenshot",
+  // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
+  McpAppProxyPost: "mcpAppProxyPost",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

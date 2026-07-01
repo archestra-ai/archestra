@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/github/copilot_internal/v2/token",
+    "headers": {
+      "Authorization": {
+        "matches": "token .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{{regexExtract request.headers.Authorization 'token (.+)' 'tok'}}{\"token\":\"exchanged-{{tok.0}}\",\"expires_at\":9999999999,\"refresh_in\":1500}",
+    "transformers": ["response-template"]
+  }
+}

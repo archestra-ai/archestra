@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 export type CallPolicyAction =
   archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number]["action"];

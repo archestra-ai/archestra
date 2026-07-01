@@ -1,44 +1,38 @@
 import {
   and,
-  asc,
   count,
   desc,
   eq,
   ilike,
   inArray,
   isNull,
+  ne,
   or,
+  sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
-import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import {
+  type CatalogItemApprovalStatus,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   type InsertInternalMcpCatalog,
   type InternalMcpCatalog,
   type ListInternalMcpCatalog,
-  type PresetFieldValues,
+  type SecretValue,
   type UpdateInternalMcpCatalog,
-  type UserConfigFieldDefault,
 } from "@/types";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import SecretModel from "./secret";
+import ToolModel, { toolUiResourceUriSql } from "./tool";
 
 /**
  * Data-access layer for `internal_mcp_catalog` — the org's private registry
- * of MCP server templates (root rows) and their child **presets** (rows
- * with a non-NULL `parentCatalogItemId` that inherit the parent's template
- * columns and overlay their own preset field values / secrets).
- *
- * Owns CRUD for both flavors, name composition for child rows
- * (`${parent.name}-${childName}`), persistence of preset field values and
- * the per-row preset secret bundle, validation of incoming values against
- * the parent's `userConfig` / `localConfig.environment` schema, and joins
- * against labels and team assignments. Mutations on a parent that need to
- * fan out to downstream installs go through the cascade helpers exposed
- * here.
+ * of MCP server templates. Owns CRUD, joins against labels and team
+ * assignments, and secret expansion. Legacy preset (child) rows may still
+ * exist in the DB; they are filtered out of all read paths and torn down
+ * alongside their parent on delete.
  */
 class InternalMcpCatalogModel {
   static async create(
@@ -46,31 +40,6 @@ class InternalMcpCatalogModel {
     context?: { organizationId: string; authorId?: string },
   ): Promise<InternalMcpCatalog> {
     const { labels, teams, ...dbValues } = catalogItem;
-
-    // Child catalog items ("presets") store the composed name
-    // `${parent.name}-${childName}`; root items store name as submitted.
-    if (dbValues.parentCatalogItemId) {
-      if (!dbValues.childName) {
-        throw new Error(
-          "childName is required when parentCatalogItemId is set",
-        );
-      }
-      const [parent] = await db
-        .select({ name: schema.internalMcpCatalogTable.name })
-        .from(schema.internalMcpCatalogTable)
-        .where(
-          eq(schema.internalMcpCatalogTable.id, dbValues.parentCatalogItemId),
-        );
-      if (!parent) {
-        throw new Error(
-          `Parent catalog item ${dbValues.parentCatalogItemId} not found`,
-        );
-      }
-      dbValues.name = `${parent.name}-${dbValues.childName}`;
-    } else {
-      // Root rows never carry a childName.
-      dbValues.childName = null;
-    }
 
     const insertValues = {
       ...dbValues,
@@ -80,10 +49,12 @@ class InternalMcpCatalogModel {
       ...(context?.authorId ? { authorId: context.authorId } : {}),
     };
 
-    const [createdItem] = await db
-      .insert(schema.internalMcpCatalogTable)
-      .values(insertValues)
-      .returning();
+    let createdItem = (
+      await db
+        .insert(schema.internalMcpCatalogTable)
+        .values(insertValues)
+        .returning()
+    )[0];
 
     if (labels && labels.length > 0) {
       await McpCatalogLabelModel.syncCatalogLabels(
@@ -103,6 +74,18 @@ class InternalMcpCatalogModel {
       createdItem.id,
     );
 
+    // A clone copies the source's tools + guardrails as provisional rows, and
+    // its secrets as independent copies (see cloneSecretsFromSource).
+    if (createdItem.clonedFrom) {
+      await ToolModel.cloneToolsAndPoliciesFromCatalog({
+        sourceCatalogId: createdItem.clonedFrom,
+        targetCatalogId: createdItem.id,
+        targetCatalogName: createdItem.name,
+      });
+      createdItem =
+        await InternalMcpCatalogModel.cloneSecretsFromSource(createdItem);
+    }
+
     const result: InternalMcpCatalog = {
       ...createdItem,
       labels: itemLabels,
@@ -117,21 +100,56 @@ class InternalMcpCatalogModel {
     userId?: string;
     isAdmin?: boolean;
     organizationId?: string;
-    includeChildren?: boolean;
   }): Promise<ListInternalMcpCatalog[]> {
+    return InternalMcpCatalogModel.listAll(options, false);
+  }
+
+  /**
+   * Like {@link InternalMcpCatalogModel.findAll} but also returns app backing
+   * catalogs (`serverType: "app"`). The registry never uses this — only the
+   * gateway capabilities picker, where an app's launch tool is assignable like
+   * any other tool. Apps stay hidden from the registry list and the
+   * agent-callable {@link InternalMcpCatalogModel.searchByQuery}.
+   */
+  static async findAllWithApps(options?: {
+    expandSecrets?: boolean;
+    userId?: string;
+    isAdmin?: boolean;
+    organizationId?: string;
+  }): Promise<ListInternalMcpCatalog[]> {
+    return InternalMcpCatalogModel.listAll(options, true);
+  }
+
+  private static async listAll(
+    options:
+      | {
+          expandSecrets?: boolean;
+          userId?: string;
+          isAdmin?: boolean;
+          organizationId?: string;
+        }
+      | undefined,
+    includeApps: boolean,
+  ): Promise<ListInternalMcpCatalog[]> {
     const {
       expandSecrets = true,
       userId,
       isAdmin,
       organizationId,
-      includeChildren = false,
     } = options ?? {};
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
 
-    const parentOnlyCondition = includeChildren
-      ? undefined
-      : isNull(schema.internalMcpCatalogTable.parentCatalogItemId);
+    const listConditions = [
+      // Legacy preset rows (non-NULL parentCatalogItemId) are never surfaced.
+      isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
+    ];
+    if (!includeApps) {
+      // App backing catalogs are managed on the Apps page, never surfaced in the
+      // MCP registry (UI list or the agent-callable registry search).
+      listConditions.push(ne(schema.internalMcpCatalogTable.serverType, "app"));
+    }
+    const baseListCondition = and(...listConditions);
 
     if (userId && !isAdmin && !organizationId) {
       return [];
@@ -145,10 +163,10 @@ class InternalMcpCatalogModel {
           organizationId,
         );
       if (accessibleIds.length === 0) return [];
-      const where = parentOnlyCondition
+      const where = baseListCondition
         ? and(
             inArray(schema.internalMcpCatalogTable.id, accessibleIds),
-            parentOnlyCondition,
+            baseListCondition,
           )
         : inArray(schema.internalMcpCatalogTable.id, accessibleIds);
       dbItems = await db
@@ -158,8 +176,8 @@ class InternalMcpCatalogModel {
         .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
     } else {
       const baseQuery = db.select().from(schema.internalMcpCatalogTable);
-      dbItems = await (parentOnlyCondition
-        ? baseQuery.where(parentOnlyCondition)
+      dbItems = await (baseListCondition
+        ? baseQuery.where(baseListCondition)
         : baseQuery
       ).orderBy(desc(schema.internalMcpCatalogTable.createdAt));
     }
@@ -183,7 +201,6 @@ class InternalMcpCatalogModel {
       userId?: string;
       isAdmin?: boolean;
       organizationId?: string;
-      includeChildren?: boolean;
     },
   ): Promise<ListInternalMcpCatalog[]> {
     const {
@@ -191,7 +208,6 @@ class InternalMcpCatalogModel {
       userId,
       isAdmin,
       organizationId,
-      includeChildren = false,
     } = options ?? {};
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
@@ -201,12 +217,13 @@ class InternalMcpCatalogModel {
       ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
     );
 
-    const searchCondition = includeChildren
-      ? baseSearchCondition
-      : and(
-          baseSearchCondition,
-          isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
-        );
+    const searchCondition = and(
+      baseSearchCondition,
+      // Legacy preset rows (non-NULL parentCatalogItemId) are never surfaced.
+      isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
+      // App backing catalogs are never surfaced via registry search.
+      ne(schema.internalMcpCatalogTable.serverType, "app"),
+    );
 
     if (userId && !isAdmin && !organizationId) {
       return [];
@@ -340,6 +357,44 @@ class InternalMcpCatalogModel {
     return catalogItem;
   }
 
+  static async findByEnvironmentId(
+    environmentId: string,
+  ): Promise<{ id: string; multitenant: boolean }[]> {
+    return db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        multitenant: schema.internalMcpCatalogTable.multitenant,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.environmentId, environmentId),
+          eq(schema.internalMcpCatalogTable.serverType, "local"),
+        ),
+      );
+  }
+
+  static async findDefaultEnvironmentLocalCatalogs(
+    organizationId: string,
+  ): Promise<{ id: string; multitenant: boolean }[]> {
+    return db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        multitenant: schema.internalMcpCatalogTable.multitenant,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          isNull(schema.internalMcpCatalogTable.environmentId),
+          eq(schema.internalMcpCatalogTable.serverType, "local"),
+          or(
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            isNull(schema.internalMcpCatalogTable.organizationId),
+          ),
+        ),
+      );
+  }
+
   /**
    * Batch fetch multiple catalog items by IDs.
    * Returns a Map of catalog ID to catalog item.
@@ -397,6 +452,17 @@ class InternalMcpCatalogModel {
     return { ...dbItem, labels, teams };
   }
 
+  static async findByNameForAudit(
+    name: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const item = await InternalMcpCatalogModel.findByName(name, {
+      organizationId,
+    });
+    if (!item) return null;
+    return InternalMcpCatalogModel.findByIdForAudit(item.id, organizationId);
+  }
+
   static async update(
     id: string,
     catalogItem: Partial<UpdateInternalMcpCatalog>,
@@ -405,35 +471,53 @@ class InternalMcpCatalogModel {
 
     // Name immutability: matches the existing UI-enforced posture and avoids
     // cascading rename to k8s deployment names and pre-slugified tool rows.
-    if (dbValues.name !== undefined || dbValues.childName !== undefined) {
+    // App backing catalogs are exempt — they have no k8s deployment, and their
+    // launch tool's name is id-suffixed (stable across renames), so renaming an
+    // app's catalog is safe.
+    if (dbValues.name !== undefined) {
       const [existing] = await db
         .select({
           name: schema.internalMcpCatalogTable.name,
-          childName: schema.internalMcpCatalogTable.childName,
+          serverType: schema.internalMcpCatalogTable.serverType,
         })
         .from(schema.internalMcpCatalogTable)
         .where(eq(schema.internalMcpCatalogTable.id, id));
-      if (existing) {
-        if (dbValues.name !== undefined && dbValues.name !== existing.name) {
+      if (existing?.serverType !== "app") {
+        if (existing && dbValues.name !== existing.name) {
           throw new Error("Catalog item name cannot be changed after creation");
         }
-        if (
-          dbValues.childName !== undefined &&
-          dbValues.childName !== existing.childName
-        ) {
-          throw new Error("Preset childName cannot be changed after creation");
-        }
+        delete dbValues.name;
       }
-      delete dbValues.name;
-      delete dbValues.childName;
+    }
+
+    const setValues: Partial<
+      typeof schema.internalMcpCatalogTable.$inferInsert
+    > = { ...dbValues };
+
+    // Reset a stale image-approval decision when the custom image changes: the
+    // new image must be re-vetted by the install-time gate, otherwise a one-time
+    // approval would silently carry over to any swapped image.
+    if ("localConfig" in dbValues) {
+      const [existing] = await db
+        .select({ localConfig: schema.internalMcpCatalogTable.localConfig })
+        .from(schema.internalMcpCatalogTable)
+        .where(eq(schema.internalMcpCatalogTable.id, id));
+      const oldImage = existing?.localConfig?.dockerImage ?? null;
+      const newImage = dbValues.localConfig?.dockerImage ?? null;
+      if (oldImage !== newImage) {
+        setValues.catalogItemApprovalStatus = null;
+        setValues.catalogItemApprovalReason = null;
+        setValues.catalogItemApprovalReviewedBy = null;
+        setValues.catalogItemApprovalReviewedAt = null;
+      }
     }
 
     let dbItem: typeof schema.internalMcpCatalogTable.$inferSelect | undefined;
 
-    if (Object.keys(dbValues).length > 0) {
+    if (Object.keys(setValues).length > 0) {
       [dbItem] = await db
         .update(schema.internalMcpCatalogTable)
-        .set(dbValues)
+        .set(setValues)
         .where(eq(schema.internalMcpCatalogTable.id, id))
         .returning();
     } else {
@@ -470,130 +554,130 @@ class InternalMcpCatalogModel {
   }
 
   /**
-   * List child catalog items ("presets") for a given parent.
-   *
-   * Mirrors the catalog list endpoint: secrets are NOT expanded, so the
-   * preset secret bag's plaintext values never reach the wire. Callers that
-   * need to know whether secret-typed preset fields are filled use the
-   * `presetSecretId != null` heuristic (same pattern as the install dialog's
-   * preset-fallback-fields).
+   * Record the catalog item's image as `pending` admin approval. Compare-and-set:
+   * only writes when no admin decision exists yet (status NULL or already
+   * `pending`), so a concurrent admin approval is never clobbered. Returns the
+   * winning status so the caller can re-decide after a race.
    */
-  static async findChildren(parentId: string): Promise<InternalMcpCatalog[]> {
-    const dbItems = await db
+  static async markImageApprovalPending(
+    id: string,
+  ): Promise<{ status: CatalogItemApprovalStatus | null }> {
+    const [updated] = await db
+      .update(schema.internalMcpCatalogTable)
+      .set({ catalogItemApprovalStatus: "pending" })
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, id),
+          or(
+            isNull(schema.internalMcpCatalogTable.catalogItemApprovalStatus),
+            eq(
+              schema.internalMcpCatalogTable.catalogItemApprovalStatus,
+              "pending",
+            ),
+          ),
+        ),
+      )
+      .returning({
+        status: schema.internalMcpCatalogTable.catalogItemApprovalStatus,
+      });
+    if (updated) return updated;
+
+    // Lost the CAS to a concurrent admin approval — read the winning decision.
+    const [row] = await db
+      .select({
+        status: schema.internalMcpCatalogTable.catalogItemApprovalStatus,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, id));
+    return row ?? { status: null };
+  }
+
+  /**
+   * Clear a stale `pending` flag (e.g. the registry was later added to the
+   * trusted list, so the item is no longer gated). Only touches `pending` rows —
+   * an explicit `approved` decision is preserved.
+   */
+  static async clearImageApprovalPending(id: string): Promise<void> {
+    await db
+      .update(schema.internalMcpCatalogTable)
+      .set({
+        catalogItemApprovalStatus: null,
+        catalogItemApprovalReviewedBy: null,
+        catalogItemApprovalReviewedAt: null,
+      })
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, id),
+          eq(
+            schema.internalMcpCatalogTable.catalogItemApprovalStatus,
+            "pending",
+          ),
+        ),
+      );
+  }
+
+  /** Mark a catalog item's image approved; future installs proceed. */
+  static async approveImage(params: {
+    id: string;
+    reviewedBy: string;
+  }): Promise<InternalMcpCatalog | null> {
+    const { id, reviewedBy } = params;
+    await db
+      .update(schema.internalMcpCatalogTable)
+      .set({
+        catalogItemApprovalStatus: "approved",
+        catalogItemApprovalReviewedBy: reviewedBy,
+        catalogItemApprovalReviewedAt: new Date(),
+      })
+      .where(eq(schema.internalMcpCatalogTable.id, id));
+    return InternalMcpCatalogModel.findById(id, { expandSecrets: false });
+  }
+
+  /** Catalog items in this org awaiting image approval, newest first. */
+  static async listPendingImageApproval(
+    organizationId: string,
+  ): Promise<InternalMcpCatalog[]> {
+    const rows = await db
       .select()
       .from(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.parentCatalogItemId, parentId))
-      .orderBy(asc(schema.internalMcpCatalogTable.createdAt));
-
-    return InternalMcpCatalogModel.attachListMetadata(dbItems);
-  }
-
-  /**
-   * Compute the set of field keys (env-var keys + userConfig field names)
-   * that the parent currently exposes as `promptOnPreset: true`. Used by
-   * both the strict validator and the lenient filter below.
-   */
-  static getPresetScopedKeys(parent: InternalMcpCatalog): Set<string> {
-    const keys = new Set<string>();
-    for (const [key, field] of Object.entries(parent.userConfig ?? {})) {
-      if (field.promptOnPreset) keys.add(key);
-    }
-    for (const env of parent.localConfig?.environment ?? []) {
-      if (env.promptOnPreset) keys.add(env.key);
-    }
-    return keys;
-  }
-
-  /**
-   * Validate a `presetFieldValues` payload against a parent's currently
-   * preset-scoped fields. Only fields flagged `promptOnPreset: true` are
-   * allowed; throws an Error listing offenders when any other key is present.
-   *
-   * Use for *create-time* paths where a non-preset key in the payload almost
-   * certainly indicates a typo or stale frontend that should fail loudly:
-   *   - POST /api/internal_mcp_catalog/:id/children (createChild)
-   *   - POST /api/mcp_server (install — frontend builds payload from current scope)
-   *
-   * Do NOT use for PATCH update on existing children — those routes must
-   * tolerate orphan keys left over from past scope flips. See
-   * `filterFieldValuesToPresetScope` below.
-   */
-  static validateFieldValuesAgainstCatalog(
-    parent: InternalMcpCatalog,
-    fieldValues: PresetFieldValues | undefined,
-  ): void {
-    if (!fieldValues) return;
-    const presetKeys = InternalMcpCatalogModel.getPresetScopedKeys(parent);
-    const offenders = Object.keys(fieldValues).filter(
-      (key) => !presetKeys.has(key),
-    );
-    if (offenders.length > 0) {
-      throw new Error(
-        `Fields not configured for preset overrides: ${offenders.join(", ")}`,
-      );
-    }
-  }
-
-  /**
-   * Return a sanitized copy of `fieldValues` that contains only keys
-   * currently flagged `promptOnPreset: true` on the parent. Keys that are no
-   * longer preset-scoped (orphans left by a past scope flip on the parent —
-   * the cascade syncs the parent's localConfig template down but does not
-   * scrub children's `preset_field_values` jsonb) are silently dropped.
-   *
-   * Use for *update* paths on existing children — when an admin opens the
-   * preset editor the frontend copies the row's full presetFieldValues into
-   * local state and re-sends them on save, so without this filter every
-   * "Save" after a parent scope flip would 400 and silently drop the user's
-   * new value (PR #4402, user-reported).
-   *
-   * As a beneficial side effect, every successful PATCH that round-trips
-   * through this filter garbage-collects the orphans from the row's jsonb.
-   */
-  static filterFieldValuesToPresetScope(
-    parent: InternalMcpCatalog,
-    fieldValues: PresetFieldValues | undefined,
-  ): PresetFieldValues {
-    if (!fieldValues) return {};
-    const presetKeys = InternalMcpCatalogModel.getPresetScopedKeys(parent);
-    const filtered: PresetFieldValues = {};
-    const dropped: string[] = [];
-    for (const [key, value] of Object.entries(fieldValues)) {
-      if (presetKeys.has(key)) {
-        filtered[key] = value;
-      } else {
-        dropped.push(key);
-      }
-    }
-    if (dropped.length > 0) {
-      logger.info(
-        { catalogId: parent.id, droppedKeys: dropped },
-        "Dropped orphan preset keys from PATCH payload (no longer promptOnPreset on parent)",
-      );
-    }
-    return filtered;
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+          eq(
+            schema.internalMcpCatalogTable.catalogItemApprovalStatus,
+            "pending",
+          ),
+        ),
+      )
+      .orderBy(desc(schema.internalMcpCatalogTable.updatedAt));
+    const items: InternalMcpCatalog[] = rows.map((dbItem) => ({
+      ...dbItem,
+      labels: [],
+      teams: [],
+    }));
+    await InternalMcpCatalogModel.populateAuthorNames(items);
+    return items;
   }
 
   /**
    * Secret ownership when deleting a row:
-   *   - clientSecretId / localConfigSecretId are owned by the parent row.
-   *     Children store the same UUID for read-path convenience but do not own
-   *     the bag, so a child delete must leave it alone.
-   *   - presetSecretId is per-row: parent has its own default-preset bag;
-   *     each child has its own overlay bag.
-   *
-   * Therefore deleting a child only removes the child's presetSecretId;
-   * deleting a parent removes the parent-owned bags plus every child's
-   * presetSecretId. Centralizing this here means every caller — the catalog
-   * DELETE routes and McpPresetEntryModel.delete (which removes per-entry
-   * catalog rows) — gets the cleanup automatically.
+   *   - clientSecretId / localConfigSecretId / presetSecretId are owned by the
+   *     parent row. Deleting a parent removes those bags plus the per-row
+   *     presetSecretId bag of any legacy child rows it still owns.
    */
   static async delete(id: string): Promise<boolean> {
     const row = await InternalMcpCatalogModel.findSecretReferences(id);
     if (!row) return false;
 
-    // Cleanup mcp server installations across the catalog item and it's children (presets), if any.
-    const children = await InternalMcpCatalogModel.findChildren(id);
+    // Cleanup mcp server installations across the catalog item and any legacy
+    // child (preset) rows still present in the DB.
+    const children = await db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        presetSecretId: schema.internalMcpCatalogTable.presetSecretId,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.parentCatalogItemId, id));
     const catalogIds = [id, ...children.map((c) => c.id)];
 
     for (const catalogId of catalogIds) {
@@ -654,6 +738,134 @@ class InternalMcpCatalogModel {
   }
 
   /**
+   * Copy the clone source's secrets onto the clone, per key. Inherited keys
+   * fill in only what the create payload did not already supply, so a value the
+   * user entered while cloning wins over the source's. Returns the row with any
+   * new secret FK ids applied.
+   */
+  private static async cloneSecretsFromSource(
+    clone: typeof schema.internalMcpCatalogTable.$inferSelect,
+  ): Promise<typeof schema.internalMcpCatalogTable.$inferSelect> {
+    if (!clone.clonedFrom) return clone;
+
+    const [source] = await db
+      .select({
+        clientSecretId: schema.internalMcpCatalogTable.clientSecretId,
+        localConfigSecretId: schema.internalMcpCatalogTable.localConfigSecretId,
+        presetSecretId: schema.internalMcpCatalogTable.presetSecretId,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, clone.clonedFrom));
+    if (!source) return clone;
+
+    const updates: Partial<{
+      clientSecretId: string;
+      localConfigSecretId: string;
+      presetSecretId: string;
+    }> = {};
+
+    const clientSecretId = await InternalMcpCatalogModel.cloneSecretSlot({
+      sourceSecretId: source.clientSecretId,
+      cloneSecretId: clone.clientSecretId,
+      name: `${clone.name}-oauth-client-secret`,
+    });
+    if (clientSecretId) updates.clientSecretId = clientSecretId;
+
+    const localConfigSecretId = await InternalMcpCatalogModel.cloneSecretSlot({
+      sourceSecretId: source.localConfigSecretId,
+      cloneSecretId: clone.localConfigSecretId,
+      name: `${clone.name}-local-config-env`,
+    });
+    if (localConfigSecretId) updates.localConfigSecretId = localConfigSecretId;
+
+    const presetSecretId = await InternalMcpCatalogModel.cloneSecretSlot({
+      sourceSecretId: source.presetSecretId,
+      cloneSecretId: clone.presetSecretId,
+      name: `${clone.name}-preset-secrets`,
+    });
+    if (presetSecretId) updates.presetSecretId = presetSecretId;
+
+    if (Object.keys(updates).length === 0) return clone;
+
+    const [updated] = await db
+      .update(schema.internalMcpCatalogTable)
+      .set(updates)
+      .where(eq(schema.internalMcpCatalogTable.id, clone.id))
+      .returning();
+    return updated ?? clone;
+  }
+
+  /**
+   * Reconcile one secret slot of a clone against its source. Returns a new
+   * secret id to write on the clone, or null if the clone's FK is unchanged
+   * (it already had its own secret, or there is nothing to inherit).
+   *
+   * - Clone already has a secret (create payload supplied values): merge in the
+   *   source keys it is missing, so per-key the user's value wins. The clone
+   *   keeps its own secret row, so no FK change.
+   * - Clone has none: duplicate the whole source bag into a new entry.
+   */
+  private static async cloneSecretSlot(params: {
+    sourceSecretId: string | null;
+    cloneSecretId: string | null;
+    name: string;
+  }): Promise<string | null> {
+    const { sourceSecretId, cloneSecretId, name } = params;
+    const source =
+      await InternalMcpCatalogModel.readClonableSecret(sourceSecretId);
+    if (!source) return null;
+
+    if (cloneSecretId) {
+      const cloneBag =
+        (await secretManager().getSecret(cloneSecretId))?.secret ?? {};
+      const merged: SecretValue = { ...cloneBag };
+      let added = false;
+      for (const [key, value] of Object.entries(source.bag)) {
+        if (!(key in cloneBag)) {
+          merged[key] = value;
+          added = true;
+        }
+      }
+      if (added) await secretManager().updateSecret(cloneSecretId, merged);
+      return null;
+    }
+
+    if (Object.keys(source.bag).length === 0) return null;
+    if (source.isVault) {
+      return (await secretManager().createSecret(source.bag, name)).id;
+    }
+    const copy = await SecretModel.create({
+      name,
+      secret: source.bag,
+      isVault: false,
+      isByosVault: false,
+    });
+    return copy.id;
+  }
+
+  /**
+   * Resolve a source secret's value bag for cloning, or null if missing or
+   * BYOS-backed. BYOS secrets store `path#key` references into the customer's
+   * own vault; copying or resolving them would either share or materialize a
+   * secret we don't own, so they are skipped. Archestra-managed Vault secrets
+   * are read through secretManager() so the clone copy is written back to Vault
+   * rather than the DB; plain DB secrets carry their decrypted bag.
+   */
+  private static async readClonableSecret(
+    secretId: string | null,
+  ): Promise<{ bag: SecretValue; isVault: boolean } | null> {
+    if (!secretId) return null;
+    const source = await SecretModel.findById(secretId);
+    if (!source || source.isByosVault) return null;
+    if (source.isVault) {
+      const resolved = await secretManager().getSecret(secretId);
+      if (!resolved) return null;
+      return { bag: resolved.secret, isVault: true };
+    }
+    return { bag: source.secret, isVault: false };
+  }
+
+  /**
    * Expands secrets and adds them to the catalog items, mutating the items.
    * For BYOS secrets (isByosVault=true), returns vault references / paths as-is.
    * For non-BYOS secrets, resolves actual values via secretManager().
@@ -666,7 +878,6 @@ class InternalMcpCatalogModel {
     for (const item of catalogItems) {
       if (item.clientSecretId) secretIds.add(item.clientSecretId);
       if (item.localConfigSecretId) secretIds.add(item.localConfigSecretId);
-      if (item.presetSecretId) secretIds.add(item.presetSecretId);
     }
 
     if (secretIds.size === 0) return;
@@ -753,22 +964,6 @@ class InternalMcpCatalogModel {
           }
         }
       }
-
-      // Enrich preset secret values (merge into presetFieldValues)
-      if (catalogItem.presetSecretId) {
-        const unresolvedSecret = unresolvedSecretMap.get(
-          catalogItem.presetSecretId,
-        );
-        const secret = unresolvedSecret?.isByosVault
-          ? unresolvedSecret
-          : resolvedSecretMap.get(catalogItem.presetSecretId);
-        if (secret) {
-          catalogItem.presetFieldValues = {
-            ...catalogItem.presetFieldValues,
-            ...(secret.secret as Record<string, UserConfigFieldDefault>),
-          };
-        }
-      }
     }
   }
 
@@ -783,7 +978,6 @@ class InternalMcpCatalogModel {
     for (const item of catalogItems) {
       if (item.clientSecretId) secretIds.add(item.clientSecretId);
       if (item.localConfigSecretId) secretIds.add(item.localConfigSecretId);
-      if (item.presetSecretId) secretIds.add(item.presetSecretId);
     }
 
     if (secretIds.size === 0) return;
@@ -835,17 +1029,6 @@ class InternalMcpCatalogModel {
           }
         }
       }
-
-      // Preset secret values
-      if (catalogItem.presetSecretId) {
-        const secret = secretMap.get(catalogItem.presetSecretId);
-        if (secret) {
-          catalogItem.presetFieldValues = {
-            ...catalogItem.presetFieldValues,
-            ...(secret.secret as Record<string, UserConfigFieldDefault>),
-          };
-        }
-      }
     }
   }
 
@@ -860,23 +1043,30 @@ class InternalMcpCatalogModel {
     }
 
     const ids = dbItems.map((item) => item.id);
-    const [labelsMap, teamsMap, toolCountMap] = await Promise.all([
+    const [labelsMap, teamsMap, toolStatsMap] = await Promise.all([
       McpCatalogLabelModel.getLabelsForCatalogItems(ids),
       McpCatalogTeamModel.getTeamDetailsForCatalogs(ids),
-      InternalMcpCatalogModel.getToolCounts(ids),
+      InternalMcpCatalogModel.getToolStats(ids),
     ]);
 
     return dbItems.map((item) => ({
       ...item,
       labels: labelsMap.get(item.id) || [],
       teams: teamsMap.get(item.id) || [],
-      toolCount: toolCountMap.get(item.id) ?? 0,
+      toolCount: toolStatsMap.get(item.id)?.toolCount ?? 0,
+      providesUi: toolStatsMap.get(item.id)?.providesUi ?? false,
     }));
   }
 
-  private static async getToolCounts(
+  /**
+   * Per-catalog tool stats in a single grouped scan: the tool count and whether
+   * any tool exposes a `ui://` MCP App resource (`providesUi`). Runs on every
+   * catalog list load via {@link attachListMetadata}, so `providesUi` is folded
+   * into this existing scan rather than added as a separate query.
+   */
+  private static async getToolStats(
     catalogIds: string[],
-  ): Promise<Map<string, number>> {
+  ): Promise<Map<string, { toolCount: number; providesUi: boolean }>> {
     if (catalogIds.length === 0) {
       return new Map();
     }
@@ -885,6 +1075,7 @@ class InternalMcpCatalogModel {
       .select({
         catalogId: schema.toolsTable.catalogId,
         toolCount: count(schema.toolsTable.id),
+        providesUi: sql<boolean>`bool_or(${toolUiResourceUriSql()} is not null)`,
       })
       .from(schema.toolsTable)
       .where(inArray(schema.toolsTable.catalogId, catalogIds))
@@ -893,10 +1084,18 @@ class InternalMcpCatalogModel {
     return new Map(
       rows
         .filter(
-          (row): row is { catalogId: string; toolCount: number } =>
-            row.catalogId !== null,
+          (
+            row,
+          ): row is {
+            catalogId: string;
+            toolCount: number;
+            providesUi: boolean;
+          } => row.catalogId !== null,
         )
-        .map((row) => [row.catalogId, row.toolCount]),
+        .map((row) => [
+          row.catalogId,
+          { toolCount: row.toolCount, providesUi: row.providesUi ?? false },
+        ]),
     );
   }
 
@@ -925,6 +1124,74 @@ class InternalMcpCatalogModel {
         ? (nameMap.get(item.authorId) ?? null)
         : null;
     }
+  }
+
+  // Org-or-global scoped audit snapshot. Returns data only for catalog rows
+  // that belong to the requesting organization OR are global entries
+  // (organizationId IS NULL, e.g. the seeded Archestra catalog). Returns null
+  // for rows owned by a different org, preventing the snapshot-before-authz
+  // cross-tenant leak: this fetcher runs in the audit preHandler before the
+  // route handler has a chance to reject the request.
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, id),
+          or(
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            isNull(schema.internalMcpCatalogTable.organizationId),
+          ),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    const toolCount =
+      (await InternalMcpCatalogModel.getToolStats([id])).get(id)?.toolCount ??
+      0;
+
+    const transportType = row.localConfig?.transportType ?? "stdio";
+    const envKeys = Array.isArray(row.localConfig?.environment)
+      ? row.localConfig.environment.map((e) => e.key).sort()
+      : [];
+    const userConfigKeys = row.userConfig
+      ? Object.keys(row.userConfig).sort()
+      : [];
+    const authFieldKeys = Array.isArray(row.authFields)
+      ? row.authFields.map((f) => f.name).sort()
+      : [];
+
+    return {
+      id: row.id,
+      name: row.name,
+      version: row.version ?? null,
+      description: row.description ?? null,
+      serverType: row.serverType,
+      scope: row.scope,
+      organizationId: row.organizationId ?? null,
+      authorId: row.authorId,
+      multitenant: row.multitenant,
+      serverUrl: row.serverUrl ?? null,
+      docsUrl: row.docsUrl ?? null,
+      requiresAuth: row.requiresAuth,
+      transportType,
+      envKeys,
+      userConfigKeys,
+      authFieldKeys,
+      hasOauthConfig: row.oauthConfig !== null,
+      hasClientSecret: Boolean(row.clientSecretId),
+      hasLocalConfigSecret: Boolean(row.localConfigSecretId),
+      hasDeploymentSpecYaml: Boolean(row.deploymentSpecYaml),
+      hasEnterpriseManagedConfig: row.enterpriseManagedConfig !== null,
+      toolCount,
+      createdAt: row.createdAt.toISOString(),
+    };
   }
 }
 

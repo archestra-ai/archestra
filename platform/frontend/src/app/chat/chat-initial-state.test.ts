@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
   buildCreateConversationInput,
-  getProviderForModelId,
   resolveChatModelState,
   resolveInitialAgentSelection,
   resolveInitialAgentState,
@@ -156,19 +155,8 @@ describe("resolveInitialAgentSelection", () => {
   });
 });
 
-describe("getProviderForModelId", () => {
-  test("returns the model provider for a model UUID", () => {
-    expect(
-      getProviderForModelId({
-        modelId: "uuid-gpt",
-        chatModels: [model("gpt-4.1", "uuid-gpt", "openai")],
-      }),
-    ).toBe("openai");
-  });
-});
-
 describe("resolveChatModelState", () => {
-  test("includes provider information when chat models are supplied", () => {
+  test("resolves the agent's model and api key", () => {
     const result = resolveChatModelState({
       agent: { id: "agent-1", modelId: "uuid-gpt", llmApiKeyId: "key-1" },
       modelsByProvider: {
@@ -177,13 +165,11 @@ describe("resolveChatModelState", () => {
       chatApiKeys: [{ id: "key-1", provider: "openai" }],
       organization: null,
       memberDefault: null,
-      chatModels: [model("gpt-4.1", "uuid-gpt", "openai")],
     });
 
     expect(result).toEqual({
       modelId: "uuid-gpt",
       apiKeyId: "key-1",
-      provider: "openai",
     });
   });
 });

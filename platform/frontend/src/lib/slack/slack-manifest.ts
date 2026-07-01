@@ -1,4 +1,7 @@
-import { buildSlackSlashCommands, SLACK_REQUIRED_BOT_SCOPES } from "@shared";
+import {
+  buildSlackSlashCommands,
+  SLACK_REQUIRED_BOT_SCOPES,
+} from "@archestra/shared";
 
 type SlackManifestConnectionMode = "socket" | "webhook";
 
@@ -70,6 +73,7 @@ export function buildSlackManifest(params: {
               "message.channels",
               "message.groups",
               "message.im",
+              "reaction_added",
             ],
           }
         : {
@@ -81,6 +85,7 @@ export function buildSlackManifest(params: {
               "message.channels",
               "message.groups",
               "message.im",
+              "reaction_added",
             ],
           },
       interactivity: isSocket

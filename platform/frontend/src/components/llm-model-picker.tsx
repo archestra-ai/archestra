@@ -1,6 +1,6 @@
 "use client";
 
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
 import { AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
@@ -19,6 +19,8 @@ export type ModelPricing = Array<{
   model: string;
   pricePerMillionInput: string;
   pricePerMillionOutput: string;
+  isFree?: boolean;
+  isBest?: boolean;
 }>;
 
 export type SortDirection = "asc" | "desc";
@@ -42,6 +44,8 @@ type SharedProps = {
   autoSelectFirst?: boolean;
   sortDirection?: SortDirection;
   includeAllOption?: boolean;
+  /** Show a "Free only" toggle in the editable searchable select. */
+  freeFilterable?: boolean;
 };
 
 type SingleSelectProps = SharedProps & {
@@ -61,9 +65,17 @@ type MultiSelectProps = SharedProps & {
 export type LlmModelPickerProps = SingleSelectProps | MultiSelectProps;
 
 export function LlmModelPicker(props: LlmModelPickerProps) {
-  const { models, editable, autoSelectFirst, sortDirection, includeAllOption } =
-    props;
+  const {
+    models,
+    editable,
+    autoSelectFirst,
+    sortDirection,
+    includeAllOption,
+    freeFilterable,
+  } = props;
 
+  // `sortDirection` price-sorts for `autoSelectFirst`; the dropdown itself is
+  // ordered by the shared model ordering inside LlmModelSearchableSelect.
   const sortedModels = sortDirection
     ? sortModelsByPrice(models, sortDirection)
     : models;
@@ -88,7 +100,7 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
           No pricing configured for models.
         </span>{" "}
         <Link
-          href="/llm/providers/models"
+          href="/llm/models"
           className="hover:text-foreground hover:underline"
         >
           Add pricing
@@ -114,9 +126,12 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
   const options = modelsWithCurrent.map((price) => ({
     value: price.model,
     model: price.model,
+    modelId: price.model,
     provider: price.provider as SupportedProvider,
     pricePerMillionInput: price.pricePerMillionInput,
     pricePerMillionOutput: price.pricePerMillionOutput,
+    isFree: price.isFree,
+    isBest: price.isBest,
   }));
 
   if (!editable) {
@@ -148,7 +163,7 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
                   <p className="text-sm">
                     No pricing configured for this model.{" "}
                     <Link
-                      href="/llm/model-providers/models"
+                      href="/llm/models"
                       className="underline hover:text-foreground"
                     >
                       Add pricing
@@ -192,7 +207,7 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
                       <p className="text-sm">
                         No pricing configured for this model.{" "}
                         <Link
-                          href="/llm/providers/models"
+                          href="/llm/models"
                           className="underline hover:text-foreground"
                         >
                           Add pricing
@@ -218,6 +233,8 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
         placeholder="Select target model..."
         className="w-full"
         showPricing
+        freeFilterable={freeFilterable}
+        preserveOrder={sortDirection !== undefined}
       />
     );
   }
@@ -253,6 +270,8 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
       placeholder="Select target models..."
       className="w-full"
       showPricing
+      freeFilterable={freeFilterable}
+      preserveOrder={sortDirection !== undefined}
       maxSelected={props.maxSelected}
       maxBadgeDisplay={props.maxBadgeDisplay}
       includeAllOption={includeAllOption}

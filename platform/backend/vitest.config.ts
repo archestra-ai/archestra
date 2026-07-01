@@ -1,23 +1,28 @@
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 const isCI = process.env.CI === "true";
 
 export default defineConfig({
+  plugins: [rawPythonPlugin()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "@shared/access-control": path.resolve(
+      "@archestra/shared/access-control": path.resolve(
         __dirname,
         "../shared/access-control.ts",
       ),
-      "@shared": path.resolve(__dirname, "../shared/index.ts"),
+      "@archestra/shared": path.resolve(__dirname, "../shared/index.ts"),
     },
   },
   test: {
     globals: true,
     include: ["./src/**/*.test.ts"],
     environment: "node",
+    // Build the migrated schema once and snapshot it (see global-setup.ts); each test
+    // file's beforeAll then loads the snapshot instead of replaying all migrations.
+    globalSetup: ["./src/test/global-setup.ts"],
     setupFiles: ["./src/test/setup.ts"],
 
     /**
@@ -53,3 +58,15 @@ export default defineConfig({
     hookTimeout: 60000,
   },
 });
+
+function rawPythonPlugin() {
+  return {
+    name: "raw-python",
+    enforce: "pre" as const,
+    async load(id: string) {
+      if (!id.endsWith(".py")) return null;
+      const source = await readFile(id, "utf-8");
+      return `export default ${JSON.stringify(source)};`;
+    },
+  };
+}

@@ -1,5 +1,5 @@
-import type { SupportedProvider } from "@shared";
-import { RERANKER_MIN_RELEVANCE_SCORE } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
+import { RERANKER_MIN_RELEVANCE_SCORE } from "@archestra/shared";
 import { generateObject } from "ai";
 import { z } from "zod";
 import logger from "@/logging";

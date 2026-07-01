@@ -1,8 +1,8 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME,
   TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
   getAgentTypePermissionChecker,

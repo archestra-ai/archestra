@@ -4,7 +4,7 @@ import {
   providerDisplayNames,
   type SupportedProvider,
   SupportedProviders,
-} from "@shared";
+} from "@archestra/shared";
 import { Plus } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Condition } from "@/app/llm/(costs)/optimization-rules/_parts/condition";
@@ -12,7 +12,7 @@ import {
   LlmModelPicker,
   type ModelPricing,
 } from "@/components/llm-model-picker";
-import { LlmProviderSelectItems } from "@/components/llm-provider-options";
+import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

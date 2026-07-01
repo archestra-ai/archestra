@@ -1,18 +1,14 @@
 import type { TaskQueueService } from "../task-queue";
+import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";
 import { handleBatchEmbedding } from "./batch-embedding-handler";
 import { handleCheckDueConnectors } from "./check-due-connectors-handler";
 import { handleCheckDueScheduleTriggers } from "./check-due-schedule-triggers-handler";
 import { handleConnectorSync } from "./connector-sync-handler";
-import { handleProcessUploadedFiles } from "./process-uploaded-files-handler";
 import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handler";
 
 export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler("connector_sync", handleConnectorSync);
   taskQueueService.registerHandler("batch_embedding", handleBatchEmbedding);
-  taskQueueService.registerHandler(
-    "process_uploaded_files",
-    handleProcessUploadedFiles,
-  );
   taskQueueService.registerHandler(
     "check_due_connectors",
     handleCheckDueConnectors,
@@ -25,4 +21,5 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
     "schedule_trigger_run_execute",
     handleScheduleTriggerRunExecution,
   );
+  taskQueueService.registerHandler("audit_log_cleanup", handleAuditLogCleanup);
 }

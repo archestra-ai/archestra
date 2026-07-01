@@ -51,6 +51,13 @@ export async function createTeam(params: {
   await params.page.getByLabel("Team Name").fill(params.name);
   await params.page.getByLabel("Description").fill(params.description);
   await dialog.getByRole("button", { name: "Create Team" }).click();
+  // After a successful create the dialog stays open and switches to edit mode
+  // (so members/sync can be configured right away) — wait for the switch,
+  // then close it.
+  await expect(
+    dialog.getByRole("button", { name: "Save Changes" }),
+  ).toBeVisible({ timeout: 10_000 });
+  await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).not.toBeVisible({ timeout: 10_000 });
   await getVisibleTeamRow(params.page, params.name);
 }

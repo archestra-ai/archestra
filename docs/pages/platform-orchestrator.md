@@ -77,7 +77,7 @@ If a custom MCP server image is stored in a private container registry, configur
 
 Archestra supports two patterns:
 
-- **Existing Kubernetes secret**: select a pre-existing `kubernetes.io/dockerconfigjson` secret from the Archestra platform namespace.
+- **Existing Kubernetes secret**: select a preexisting `kubernetes.io/dockerconfigjson` secret from the Archestra platform namespace.
 - **Provided registry credentials**: enter the registry server, username, and password, and Archestra creates the Docker registry secret.
 
 Multiple image pull secrets can be configured for one server.

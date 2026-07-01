@@ -10,11 +10,10 @@ import {
 import organizationsTable from "./organization";
 
 /**
- * Org-level list of preset entries. Each entry is a named bucket (e.g.
- * "Production", "Staging") that catalog items can attach per-environment
- * configuration to. Names are immutable — the catalog UI uses the entry's
- * name verbatim as the `child_name` on per-catalog preset rows, so renaming
- * here would silently de-link existing configurations. Insert and delete only.
+ * Legacy preset table — the MCP-catalog "preset" feature was removed; this
+ * table is retained inert (non-destructive, no migration) and is no longer
+ * read or written by application code. It held an org-level list of named
+ * preset entries that catalog items attached per-environment configuration to.
  */
 const mcpPresetEntriesTable = pgTable(
   "mcp_preset_entry",
@@ -26,10 +25,9 @@ const mcpPresetEntriesTable = pgTable(
     name: text("name").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
     /**
-     * Optional JavaScript-compatible regex source applied to every
-     * preset-scoped field value and every prompted user field value when an
-     * MCP server is installed against this preset. The pattern is stored
-     * without delimiters or flags. NULL means no preset-level validation.
+     * Legacy preset column (feature removed) — retained inert. Held an
+     * optional JS-compatible regex source (no delimiters/flags) that
+     * validated field values at install time. No longer read or written.
      */
     validationRegex: text("validation_regex"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

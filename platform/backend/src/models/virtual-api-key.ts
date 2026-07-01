@@ -3,9 +3,9 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   type PaginationQuery,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { and, count, eq, ilike, inArray, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type { PaginatedResult } from "@/database/utils/pagination";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
@@ -13,6 +13,7 @@ import { secretManager } from "@/secrets-manager";
 import type {
   ResourceVisibilityScope,
   SelectVirtualApiKey,
+  VirtualApiKeyType,
   VirtualApiKeyWithParentInfo,
 } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
@@ -42,6 +43,7 @@ type ProviderApiKeyRoutingInfo = ProviderApiKeyInfo & {
 type VirtualApiKeyAccessContext = {
   id: string;
   organizationId: string;
+  keyType: VirtualApiKeyType;
   scope: ResourceVisibilityScope;
   authorId: string | null;
   teamIds: string[];
@@ -55,6 +57,7 @@ class VirtualApiKeyModel {
   static async create(params: {
     organizationId?: string;
     name: string;
+    keyType?: VirtualApiKeyType;
     expiresAt?: Date | null;
     scope?: ResourceVisibilityScope;
     authorId?: string | null;
@@ -70,6 +73,7 @@ class VirtualApiKeyModel {
     const {
       organizationId: providedOrganizationId,
       name,
+      keyType = "standard",
       expiresAt,
       scope = "org",
       authorId = null,
@@ -95,12 +99,13 @@ class VirtualApiKeyModel {
       FORCE_DB,
     );
 
-    const virtualKey = await db.transaction(async (tx) => {
+    const virtualKey = await withDbTransaction(async (tx) => {
       const [createdVirtualKey] = await tx
         .insert(schema.virtualApiKeysTable)
         .values({
           organizationId: resolvedOrganizationId,
           name,
+          keyType,
           secretId: secret.id,
           tokenStart,
           scope,
@@ -129,6 +134,7 @@ class VirtualApiKeyModel {
         organizationId: resolvedOrganizationId,
         virtualKeyId: virtualKey.id,
         scope,
+        keyType,
       },
       "VirtualApiKeyModel.create: virtual key created",
     );
@@ -154,14 +160,14 @@ class VirtualApiKeyModel {
     name: string;
     expiresAt?: Date | null;
     scope: ResourceVisibilityScope;
-    authorId: string;
+    authorId: string | null;
     teamIds: string[];
     providerApiKeys: ProviderApiKeyInput[];
   }): Promise<SelectVirtualApiKey | null> {
     const { id, name, expiresAt, scope, authorId, teamIds, providerApiKeys } =
       params;
 
-    const updatedVirtualKey = await db.transaction(async (tx) => {
+    const updatedVirtualKey = await withDbTransaction(async (tx) => {
       const [updated] = await tx
         .update(schema.virtualApiKeysTable)
         .set({
@@ -203,6 +209,66 @@ class VirtualApiKeyModel {
   }
 
   /**
+   * Find a key by its identity tuple. Used by the connection-setup flow to
+   * reuse the per-user auto-provisioned key instead of creating duplicates.
+   * Names are not unique in this table, so the oldest row wins
+   * deterministically — concurrent creators converge on it (see
+   * ensureConnectionVirtualKey's create-then-dedupe).
+   */
+  static async findByAuthorScopeName(params: {
+    organizationId: string;
+    authorId: string;
+    scope: ResourceVisibilityScope;
+    name: string;
+  }): Promise<SelectVirtualApiKey | null> {
+    const [row] = await db
+      .select()
+      .from(schema.virtualApiKeysTable)
+      .where(
+        and(
+          eq(schema.virtualApiKeysTable.organizationId, params.organizationId),
+          eq(schema.virtualApiKeysTable.authorId, params.authorId),
+          eq(schema.virtualApiKeysTable.scope, params.scope),
+          eq(schema.virtualApiKeysTable.name, params.name),
+        ),
+      )
+      .orderBy(
+        schema.virtualApiKeysTable.createdAt,
+        schema.virtualApiKeysTable.id,
+      )
+      .limit(1);
+
+    return row ?? null;
+  }
+
+  /**
+   * Upsert a single provider mapping on the (virtualApiKeyId, provider) PK.
+   * Replaces a stale same-provider mapping with the newly resolved key while
+   * leaving other providers' mappings untouched — unlike update(), whose
+   * syncProviderApiKeys deletes all mappings first.
+   */
+  static async ensureProviderMapping(params: {
+    virtualApiKeyId: string;
+    provider: SupportedProvider;
+    providerApiKeyId: string;
+  }): Promise<void> {
+    await db
+      .insert(schema.virtualApiKeyProviderApiKeysTable)
+      .values({
+        virtualApiKeyId: params.virtualApiKeyId,
+        provider: params.provider,
+        providerApiKeyId: params.providerApiKeyId,
+      })
+      .onConflictDoUpdate({
+        target: [
+          schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
+          schema.virtualApiKeyProviderApiKeysTable.provider,
+        ],
+        set: { providerApiKeyId: params.providerApiKeyId },
+      });
+  }
+
+  /**
    * List visible virtual keys for a provider API key.
    */
   static async findByProviderApiKeyId(
@@ -222,6 +288,7 @@ class VirtualApiKeyModel {
           id: schema.virtualApiKeysTable.id,
           organizationId: schema.virtualApiKeysTable.organizationId,
           name: schema.virtualApiKeysTable.name,
+          keyType: schema.virtualApiKeysTable.keyType,
           secretId: schema.virtualApiKeysTable.secretId,
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           scope: schema.virtualApiKeysTable.scope,
@@ -286,6 +353,7 @@ class VirtualApiKeyModel {
       .select({
         id: schema.virtualApiKeysTable.id,
         organizationId: schema.virtualApiKeysTable.organizationId,
+        keyType: schema.virtualApiKeysTable.keyType,
         scope: schema.virtualApiKeysTable.scope,
         authorId: schema.virtualApiKeysTable.authorId,
       })
@@ -375,6 +443,7 @@ class VirtualApiKeyModel {
     isAdmin?: boolean;
     search?: string;
     providerApiKeyId?: string;
+    keyType?: VirtualApiKeyType;
   }): Promise<PaginatedResult<VirtualApiKeyWithParentInfo>> {
     const {
       organizationId,
@@ -384,6 +453,7 @@ class VirtualApiKeyModel {
       isAdmin = true,
       search,
       providerApiKeyId,
+      keyType,
     } = params;
 
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
@@ -417,6 +487,10 @@ class VirtualApiKeyModel {
       );
     }
 
+    if (keyType) {
+      whereConditions.push(eq(schema.virtualApiKeysTable.keyType, keyType));
+    }
+
     const whereClause = and(...whereConditions);
 
     const [rows, [{ total }]] = await Promise.all([
@@ -425,6 +499,7 @@ class VirtualApiKeyModel {
           id: schema.virtualApiKeysTable.id,
           organizationId: schema.virtualApiKeysTable.organizationId,
           name: schema.virtualApiKeysTable.name,
+          keyType: schema.virtualApiKeysTable.keyType,
           secretId: schema.virtualApiKeysTable.secretId,
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           scope: schema.virtualApiKeysTable.scope,
@@ -611,6 +686,28 @@ class VirtualApiKeyModel {
       );
 
     return rows.map((row) => row.teamId);
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const row = await VirtualApiKeyModel.findById(id);
+    if (!row || row.organizationId !== organizationId) return null;
+
+    const teamIds = await VirtualApiKeyModel.getTeamIdsForVirtualApiKey(id);
+
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      name: row.name,
+      scope: row.scope,
+      authorId: row.authorId,
+      teamIds: [...teamIds].sort(),
+      tokenStart: row.tokenStart,
+      expiresAt: row.expiresAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+    };
   }
 
   static async getVisibilityForVirtualApiKeyIds(

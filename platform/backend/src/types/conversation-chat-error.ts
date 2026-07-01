@@ -1,4 +1,4 @@
-import { ChatErrorResponseSchema } from "@shared";
+import { ChatErrorResponseSchema } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import type { z } from "zod";
 import { schema } from "@/database";

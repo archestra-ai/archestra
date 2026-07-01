@@ -6,12 +6,26 @@ import { ShareConversationDialog } from "./share-conversation-dialog";
 
 const mockShareMutateAsync = vi.fn();
 const mockUnshareMutateAsync = vi.fn();
+const { mockToastSuccess } = vi.hoisted(() => ({
+  mockToastSuccess: vi.fn(),
+}));
+const mockUseConversationShare = vi.fn<
+  () => {
+    data: {
+      id: string;
+      visibility: "organization" | "team" | "user";
+      teamIds: string[];
+      userIds: string[];
+    } | null;
+    isLoading: boolean;
+  }
+>(() => ({
+  data: null,
+  isLoading: false,
+}));
 
 vi.mock("@/lib/chat/chat-share.query", () => ({
-  useConversationShare: vi.fn(() => ({
-    data: null,
-    isLoading: false,
-  })),
+  useConversationShare: () => mockUseConversationShare(),
   useShareConversation: vi.fn(() => ({
     mutateAsync: mockShareMutateAsync,
     isPending: false,
@@ -20,6 +34,12 @@ vi.mock("@/lib/chat/chat-share.query", () => ({
     mutateAsync: mockUnshareMutateAsync,
     isPending: false,
   })),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: mockToastSuccess,
+  },
 }));
 
 vi.mock("@/lib/auth/auth.query", () => ({
@@ -105,8 +125,27 @@ vi.mock("@/components/visibility-selector", () => ({
 
 describe("ShareConversationDialog", () => {
   beforeEach(() => {
+    mockUseConversationShare.mockReturnValue({
+      data: null,
+      isLoading: false,
+    });
     mockShareMutateAsync.mockReset();
+    mockShareMutateAsync.mockResolvedValue({
+      id: "share-1",
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
     mockUnshareMutateAsync.mockReset();
+    mockToastSuccess.mockReset();
+    Object.defineProperty(window, "location", {
+      value: { origin: "http://localhost:3000" },
+      configurable: true,
+    });
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn() },
+      configurable: true,
+    });
   });
 
   it("shares a conversation with selected teams", async () => {
@@ -130,6 +169,74 @@ describe("ShareConversationDialog", () => {
       visibility: "team",
       teamIds: ["team-1"],
       userIds: [],
+      suppressSuccessToast: true,
     });
+  });
+
+  it("keeps the dialog open, shows the share URL, and copies it after saving a visible share", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const writeText = vi.fn();
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    render(
+      <ShareConversationDialog
+        conversationId="conv-1"
+        open
+        onOpenChange={onOpenChange}
+      />,
+    );
+
+    expect(
+      screen.queryByText("http://localhost:3000/chat/conv-1"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Organization/i }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(screen.getByText("http://localhost:3000/chat/conv-1")).toBeVisible();
+    expect(writeText).toHaveBeenCalledWith("http://localhost:3000/chat/conv-1");
+    expect(mockToastSuccess).toHaveBeenCalledWith(
+      "Chat visibility updated and share link copied",
+    );
+  });
+
+  it("shows an inline copyable share URL for saved visible shares", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn();
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    mockUseConversationShare.mockReturnValue({
+      data: {
+        id: "share-1",
+        visibility: "organization",
+        teamIds: [],
+        userIds: [],
+      },
+      isLoading: false,
+    });
+
+    render(
+      <ShareConversationDialog
+        conversationId="conv-1"
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("http://localhost:3000/chat/conv-1")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Copy Link" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Copy to clipboard" }));
+
+    expect(writeText).toHaveBeenCalledWith("http://localhost:3000/chat/conv-1");
   });
 });

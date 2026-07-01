@@ -1,3 +1,5 @@
+import AnthropicProvider from "@anthropic-ai/sdk";
+import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 import type { Anthropic } from "@/types";
 import { anthropicAdapterFactory } from "./anthropic";
@@ -115,6 +117,34 @@ describe("AnthropicResponseAdapter", () => {
           arguments: {},
         },
       ]);
+    });
+  });
+
+  describe("getUsage", () => {
+    test("captures the 1h portion of the cache-creation split", () => {
+      const response = {
+        ...createMockResponse([{ type: "text", text: "hi" }]),
+        usage: {
+          input_tokens: 5,
+          output_tokens: 10,
+          cache_read_input_tokens: 2000,
+          cache_creation_input_tokens: 1000,
+          cache_creation: {
+            ephemeral_1h_input_tokens: 400,
+            ephemeral_5m_input_tokens: 600,
+          },
+        },
+      } as Anthropic.Types.MessagesResponse;
+
+      const adapter = anthropicAdapterFactory.createResponseAdapter(response);
+
+      expect(adapter.getUsage()).toEqual({
+        inputTokens: 5,
+        outputTokens: 10,
+        cacheReadTokens: 2000,
+        cacheWriteTokens: 1000,
+        cacheWrite1hTokens: 400,
+      });
     });
   });
 });
@@ -440,5 +470,271 @@ describe("AnthropicRequestAdapter", () => {
         { type: "text", text: "[Image omitted due to size]" },
       ]);
     });
+  });
+});
+
+describe("anthropicAdapterFactory.executeStream", () => {
+  function sseEvent(event: string, data: unknown): string {
+    return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  }
+
+  // builds a real Anthropic client whose transport returns a canned SSE body,
+  // so the real SDK stream parsing runs without hitting the network.
+  function clientWithSseBody(body: string): AnthropicProvider {
+    const fakeFetch = (async () =>
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      })) as unknown as typeof globalThis.fetch;
+    return new AnthropicProvider({ apiKey: "test-key", fetch: fakeFetch });
+  }
+
+  // partial_json fragments that concatenate into more than one JSON value. The
+  // SDK's messages.stream() helper eagerly partial-parses the accumulated buffer
+  // and throws on this; the raw create() stream must tolerate it.
+  test("does not throw when tool input deltas concatenate into two JSON values", async () => {
+    const body =
+      sseEvent("message_start", {
+        type: "message_start",
+        message: {
+          id: "msg_1",
+          type: "message",
+          role: "assistant",
+          model: "claude-3-5-sonnet-20241022",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      }) +
+      sseEvent("content_block_start", {
+        type: "content_block_start",
+        index: 0,
+        content_block: {
+          type: "tool_use",
+          id: "toolu_1",
+          name: "do_thing",
+          input: {},
+        },
+      }) +
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json: '{"city":"SF"}' },
+      }) +
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json: '{"unit":"c"}' },
+      }) +
+      sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }) +
+      sseEvent("message_delta", {
+        type: "message_delta",
+        delta: { stop_reason: "tool_use", stop_sequence: null },
+        usage: { output_tokens: 2 },
+      }) +
+      sseEvent("message_stop", { type: "message_stop" });
+
+    const client = clientWithSseBody(body);
+    const stream = await anthropicAdapterFactory.executeStream(
+      client,
+      createMockRequest([{ role: "user", content: "hi" }]),
+    );
+
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    for await (const event of stream) {
+      adapter.processChunk(event);
+    }
+
+    const response = adapter.toProviderResponse();
+    const toolUse = response.content.find((block) => block.type === "tool_use");
+    expect(toolUse).toBeDefined();
+    // malformed accumulated arguments fall back to empty input rather than crashing.
+    expect((toolUse as { input: unknown }).input).toEqual({});
+  });
+
+  test("parses tool input from well-formed incremental deltas", async () => {
+    const body =
+      sseEvent("message_start", {
+        type: "message_start",
+        message: {
+          id: "msg_2",
+          type: "message",
+          role: "assistant",
+          model: "claude-3-5-sonnet-20241022",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      }) +
+      sseEvent("content_block_start", {
+        type: "content_block_start",
+        index: 0,
+        content_block: {
+          type: "tool_use",
+          id: "toolu_2",
+          name: "do_thing",
+          input: {},
+        },
+      }) +
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json: '{"city":' },
+      }) +
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json: '"SF"}' },
+      }) +
+      sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }) +
+      sseEvent("message_stop", { type: "message_stop" });
+
+    const client = clientWithSseBody(body);
+    const stream = await anthropicAdapterFactory.executeStream(
+      client,
+      createMockRequest([{ role: "user", content: "hi" }]),
+    );
+
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    for await (const event of stream) {
+      adapter.processChunk(event);
+    }
+
+    const response = adapter.toProviderResponse();
+    const toolUse = response.content.find((block) => block.type === "tool_use");
+    expect((toolUse as { input: unknown }).input).toEqual({ city: "SF" });
+  });
+});
+
+describe("AnthropicStreamAdapter content block forwarding", () => {
+  type Chunk = Parameters<
+    ReturnType<
+      typeof anthropicAdapterFactory.createStreamAdapter
+    >["processChunk"]
+  >[0];
+
+  // Claude Code streams with interleaved thinking; thinking events must reach
+  // the client immediately (it replays them, signed, on the next turn), while
+  // client tool_use events stay held back for policy evaluation.
+  test("forwards thinking events and holds back tool_use events", () => {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+
+    const thinkingStart = adapter.processChunk({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "thinking", thinking: "", signature: "" },
+    } as Chunk);
+    expect(thinkingStart.sseData).toContain("content_block_start");
+    expect(thinkingStart.isToolCallChunk).toBe(false);
+
+    const thinkingDelta = adapter.processChunk({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "thinking_delta", thinking: "Let me think" },
+    } as Chunk);
+    expect(thinkingDelta.sseData).toContain("thinking_delta");
+
+    const signatureDelta = adapter.processChunk({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "signature_delta", signature: "sig-abc" },
+    } as Chunk);
+    expect(signatureDelta.sseData).toContain("signature_delta");
+
+    const toolStart = adapter.processChunk({
+      type: "content_block_start",
+      index: 1,
+      content_block: {
+        type: "tool_use",
+        id: "toolu_1",
+        name: "do_thing",
+        input: {},
+      },
+    } as Chunk);
+    expect(toolStart.sseData).toBeNull();
+    expect(toolStart.isToolCallChunk).toBe(true);
+
+    const toolDelta = adapter.processChunk({
+      type: "content_block_delta",
+      index: 1,
+      delta: { type: "input_json_delta", partial_json: '{"city":"SF"}' },
+    } as Chunk);
+    expect(toolDelta.sseData).toBeNull();
+    expect(toolDelta.isToolCallChunk).toBe(true);
+    expect(adapter.state.toolCalls[0].arguments).toBe('{"city":"SF"}');
+  });
+
+  test("forwards server_tool_use input deltas without polluting client tool calls", () => {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+
+    // a held-back client tool call, then a server tool block
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 0,
+      content_block: {
+        type: "tool_use",
+        id: "toolu_1",
+        name: "do_thing",
+        input: {},
+      },
+    } as Chunk);
+
+    const serverStart = adapter.processChunk({
+      type: "content_block_start",
+      index: 1,
+      content_block: {
+        type: "server_tool_use",
+        id: "srvtoolu_1",
+        name: "web_search",
+        input: {},
+      },
+    } as Chunk);
+    expect(serverStart.sseData).toContain("server_tool_use");
+    expect(serverStart.isToolCallChunk).toBe(false);
+
+    const serverDelta = adapter.processChunk({
+      type: "content_block_delta",
+      index: 1,
+      delta: { type: "input_json_delta", partial_json: '{"query":"x"}' },
+    } as Chunk);
+    expect(serverDelta.sseData).toContain("input_json_delta");
+    expect(serverDelta.isToolCallChunk).toBe(false);
+    // the server tool's input must not leak into the client tool call
+    expect(adapter.state.toolCalls).toHaveLength(1);
+    expect(adapter.state.toolCalls[0].arguments).toBe("");
+  });
+});
+
+describe("anthropicAdapterFactory.execute", () => {
+  // The SDK refuses non-streaming requests whose max_tokens implies a >10 min
+  // completion ("Streaming is required for operations that may take longer
+  // than 10 minutes") unless the client carries an explicit timeout. Claude
+  // Code sends max_tokens=32000 non-streaming; the proxy must forward it,
+  // not 500.
+  test("forwards large non-streaming max_tokens instead of tripping the SDK guard", async () => {
+    const client = anthropicAdapterFactory.createClient("test-key", {
+      source: "api",
+    }) as AnthropicProvider;
+
+    // Stub the transport: the guard under test runs synchronously inside
+    // messages.create before any network I/O.
+    const post = vi
+      .spyOn(client as unknown as { post: () => unknown }, "post")
+      .mockResolvedValue(
+        createMockResponse([{ type: "text", text: "ok", citations: null }]),
+      );
+
+    const response = await anthropicAdapterFactory.execute(
+      client,
+      createMockRequest([{ role: "user", content: "hi" }], {
+        model: "claude-opus-4-20250514",
+        max_tokens: 64000,
+      }),
+    );
+
+    expect(post).toHaveBeenCalled();
+    expect(response.content[0]).toMatchObject({ type: "text", text: "ok" });
   });
 });

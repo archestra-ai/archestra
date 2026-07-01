@@ -1,5 +1,6 @@
 "use client";
 
+import type { Permissions } from "@archestra/shared";
 import { X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -29,13 +30,16 @@ import { useTeams } from "@/lib/teams/team.query";
 
 type ScopeValue = "personal" | "team" | "org" | "built_in";
 type OwnerValue = "mine" | "others";
+type StatusValue = "active" | "deleted";
 
 export function AgentScopeFilter({
   showBuiltIn = false,
   ownerLabelPlural = "agents",
+  adminPermission,
 }: {
   showBuiltIn?: boolean;
   ownerLabelPlural?: string;
+  adminPermission: Permissions;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -59,7 +63,7 @@ export function AgentScopeFilter({
   );
 
   const { data: labelKeys } = useLabelKeys();
-  const { data: isAdmin } = useHasPermissions({ member: ["read"] });
+  const { data: isAdmin } = useHasPermissions(adminPermission);
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
 
@@ -238,7 +242,52 @@ export function AgentScopeFilter({
   );
 }
 
-export function ActiveFilterBadges() {
+export function AgentDeletedStatusFilter({
+  deletePermission,
+}: {
+  deletePermission: Permissions;
+}) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { data: canDelete } = useHasPermissions(deletePermission);
+
+  const status = (searchParams.get("status") as StatusValue | null) ?? "active";
+
+  const handleStatusChange = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value === "deleted") {
+        params.set("status", "deleted");
+      } else {
+        params.delete("status");
+      }
+      params.set("page", "1");
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
+
+  if (!canDelete) return null;
+
+  return (
+    <Select value={status} onValueChange={handleStatusChange}>
+      <SelectTrigger className="w-[150px]">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper" side="bottom" align="start">
+        <SelectItem value="active">Active</SelectItem>
+        <SelectItem value="deleted">Deleted</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+export function ActiveFilterBadges({
+  adminPermission,
+}: {
+  adminPermission: Permissions;
+}) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -251,7 +300,7 @@ export function ActiveFilterBadges() {
   const currentUserId = session?.user?.id;
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
-  const { data: isAdmin } = useHasPermissions({ member: ["read"] });
+  const { data: isAdmin } = useHasPermissions(adminPermission);
 
   // Users badge only shows when the author filter names specific other users,
   // not when it's just the implicit "mine" selection.

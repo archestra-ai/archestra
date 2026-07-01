@@ -1,4 +1,4 @@
-import type { ServerWebSocketMessage } from "@shared";
+import type { ServerWebSocketMessage } from "@archestra/shared";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS } from "ws";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";

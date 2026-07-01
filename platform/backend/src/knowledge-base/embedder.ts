@@ -1,4 +1,4 @@
-import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@shared";
+import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@archestra/shared";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import {

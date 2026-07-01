@@ -1,4 +1,4 @@
-import { SLACK_REQUIRED_BOT_SCOPES } from "@shared";
+import { SLACK_REQUIRED_BOT_SCOPES } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import { buildSlackManifest } from "./slack-manifest";
 
@@ -76,5 +76,28 @@ describe("buildSlackManifest", () => {
     );
 
     expect(manifest.oauth_config.scopes.bot).toEqual(SLACK_REQUIRED_BOT_SCOPES);
+  });
+
+  // The reaction-based "mute this thread" feature only works if the app is
+  // subscribed to reaction_added (and has the reactions:read scope, asserted
+  // via the shared scopes above) — pin the subscription in both modes.
+  it.each([
+    "socket",
+    "webhook",
+  ] as const)("subscribes to reaction_added events (%s mode)", (connectionMode) => {
+    const manifest = JSON.parse(
+      buildSlackManifest({
+        appName: "Archestra",
+        connectionMode,
+        webhookUrl: "https://example.test/webhook",
+        interactiveUrl: "https://example.test/interactive",
+        slashCommandUrl: "https://example.test/slash",
+      }),
+    );
+
+    expect(manifest.settings.event_subscriptions.bot_events).toContain(
+      "reaction_added",
+    );
+    expect(SLACK_REQUIRED_BOT_SCOPES).toContain("reactions:read");
   });
 });

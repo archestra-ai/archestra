@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
 import type { ChatStatus } from "ai";
 import {
   ArrowLeft,
@@ -24,7 +24,8 @@ import ArchestraPromptInput from "@/app/chat/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { LoadingSpinner } from "@/components/loading";
-import { Badge } from "@/components/ui/badge";
+import { QueryLoadError } from "@/components/query-load-error";
+import { StatusBadge } from "@/components/scheduled-tasks/status-badge";
 import { Button } from "@/components/ui/button";
 import { useInternalAgents } from "@/lib/agent.query";
 import {
@@ -91,21 +92,24 @@ export function ScheduleTriggerRunPage({
   const [showDetails, setShowDetails] = useState(false);
   const [isArtifactOpen, setIsArtifactOpen] = useState(false);
 
-  const { data: trigger, isLoading: triggerLoading } = useScheduleTrigger(
-    triggerId,
-    {
-      enabled: !!triggerId,
-      refetchInterval: 5_000,
-    },
-  );
-  const { data: run, isLoading: runLoading } = useScheduleTriggerRun(
-    triggerId,
-    runId,
-    {
-      enabled: !!triggerId && !!runId,
-      refetchInterval: 3_000,
-    },
-  );
+  const {
+    data: trigger,
+    isLoading: triggerLoading,
+    isLoadingError: isTriggerLoadError,
+    refetch: refetchTrigger,
+  } = useScheduleTrigger(triggerId, {
+    enabled: !!triggerId,
+    refetchInterval: 5_000,
+  });
+  const {
+    data: run,
+    isLoading: runLoading,
+    isLoadingError: isRunLoadError,
+    refetch: refetchRun,
+  } = useScheduleTriggerRun(triggerId, runId, {
+    enabled: !!triggerId && !!runId,
+    refetchInterval: 3_000,
+  });
   const ensureConversationMutation = useCreateScheduleTriggerRunConversation();
   const conversationId =
     run?.chatConversationId ?? bootstrappedConversationId ?? undefined;
@@ -312,7 +316,11 @@ export function ScheduleTriggerRunPage({
         } else {
           stop?.();
         }
-        return;
+        // Throw to keep the textarea and draft intact — see onSubmit contract
+        // in ArchestraPromptInputProps. The submit button doubles as Stop while
+        // streaming; treating that click as an accepted submit would clear any
+        // follow-up the user had already started typing.
+        throw new Error("stop-not-submit");
       }
 
       const hasText = message.text?.trim();
@@ -399,6 +407,18 @@ export function ScheduleTriggerRunPage({
         <Loader2 className="h-4 w-4 animate-spin" />
         Loading scheduled run...
       </div>
+    );
+  }
+
+  if (isRunLoadError || isTriggerLoadError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load this run"
+        onRetry={() => {
+          refetchRun();
+          refetchTrigger();
+        }}
+      />
     );
   }
 
@@ -693,25 +713,6 @@ function DetailItem({ label, value }: { label: string; value: string }) {
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-sm text-foreground">{value}</p>
     </div>
-  );
-}
-
-function StatusBadge({ label }: { label: string }) {
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "border-border/60 px-2 py-0.5 text-xs capitalize",
-        label === "success" &&
-          "border-emerald-500/30 bg-emerald-500/10 text-emerald-700",
-        label === "failed" &&
-          "border-destructive/30 bg-destructive/10 text-destructive",
-        label === "running" &&
-          "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-      )}
-    >
-      {label}
-    </Badge>
   );
 }
 

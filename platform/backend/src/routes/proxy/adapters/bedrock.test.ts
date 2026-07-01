@@ -368,3 +368,66 @@ describe("Bedrock client creation", () => {
     expect(client.config.baseUrl).toBe(customBaseUrl);
   });
 });
+
+describe("Bedrock getUsage", () => {
+  test("sums the 1h portion from the cacheDetails per-TTL breakdown", () => {
+    const response = {
+      output: { message: { role: "assistant", content: [{ text: "hi" }] } },
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 5,
+        outputTokens: 10,
+        cacheReadInputTokens: 2000,
+        cacheWriteInputTokens: 1000,
+        cacheDetails: [
+          { ttl: "1h", inputTokens: 400 },
+          { ttl: "5m", inputTokens: 600 },
+        ],
+      },
+    } as unknown as Bedrock.Types.ConverseResponse;
+
+    const adapter = bedrockAdapterFactory.createResponseAdapter(response);
+
+    expect(adapter.getUsage()).toEqual({
+      inputTokens: 5,
+      outputTokens: 10,
+      cacheReadTokens: 2000,
+      cacheWriteTokens: 1000,
+      cacheWrite1hTokens: 400,
+    });
+  });
+
+  test("preserves cache usage through execute() on the non-streaming path", async () => {
+    const client = {
+      converse: async () => ({
+        $metadata: { requestId: "r" },
+        output: { message: { role: "assistant", content: [{ text: "hi" }] } },
+        stopReason: "end_turn",
+        usage: {
+          inputTokens: 5,
+          outputTokens: 10,
+          cacheReadInputTokens: 2000,
+          cacheWriteInputTokens: 1000,
+          cacheDetails: [
+            { ttl: "1h", inputTokens: 400 },
+            { ttl: "5m", inputTokens: 600 },
+          ],
+        },
+      }),
+    };
+
+    const response = await bedrockAdapterFactory.execute(
+      client,
+      createConverseRequest(),
+    );
+    const adapter = bedrockAdapterFactory.createResponseAdapter(response);
+
+    expect(adapter.getUsage()).toEqual({
+      inputTokens: 5,
+      outputTokens: 10,
+      cacheReadTokens: 2000,
+      cacheWriteTokens: 1000,
+      cacheWrite1hTokens: 400,
+    });
+  });
+});

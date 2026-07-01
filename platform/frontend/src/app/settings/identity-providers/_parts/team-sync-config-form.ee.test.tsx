@@ -1,8 +1,8 @@
-import { zodResolver } from "@hookform/resolvers/zod";
 import {
   IdentityProviderFormSchema,
   type IdentityProviderFormValues,
-} from "@shared";
+} from "@archestra/shared";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useForm } from "react-hook-form";
@@ -72,9 +72,11 @@ function TestWrapper({
 }
 
 describe("TeamSyncConfigForm", () => {
-  it("shows latest ID token claims when editing an existing provider", async () => {
+  it("shows the template debugger without token claims", async () => {
     render(<TestWrapper providerId="Okta" identityProviderId="idp-1" />);
-    expect(screen.getAllByText(/engineering/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("Template Debugger")).toBeInTheDocument();
+    expect(screen.queryByText(/engineering/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/raw signed tokens/i)).not.toBeInTheDocument();
   });
 
   it("shows a live template test result for team sync extraction", async () => {

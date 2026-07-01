@@ -19,13 +19,14 @@ describe("Internal MCP Catalog - Local Config Secret Preservation on PUT", () =>
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
     mockHasPermission.mockResolvedValue({ success: true, error: null });
 
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(user.id, organization.id, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

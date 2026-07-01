@@ -1,5 +1,5 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
-import { AGENT_TOOL_PREFIX, slugify } from "@shared";
+import { AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
 import { vi } from "vitest";
 import { ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -76,9 +76,10 @@ describe("delegation tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
-      "not found or not configured for delegation",
-    );
+    const text = (result.content[0] as any).text;
+    expect(text).toContain("No delegation is configured");
+    expect(text).toContain(`${AGENT_TOOL_PREFIX}*`);
+    expect(text).toContain("Do not guess delegation names");
   });
 
   test("propagates the current trust state to delegated subagents", async ({
@@ -180,6 +181,47 @@ describe("delegation tool execution", () => {
         message: "Write the requested artifact.",
         organizationId: organization.id,
         userId: user.id,
+      }),
+    );
+  });
+
+  test("propagates chatops and scheduled run context to delegated subagents", async ({
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const targetAgent = await makeAgent({ name: "ChatOps Worker" });
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      targetAgent.id,
+    );
+    await makeAgentTool(testAgent.id, delegationTool.id);
+
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "subagent-message-chatops-context",
+      text: "Handled by subagent",
+      finishReason: "stop",
+    });
+
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
+      { message: "Write the requested artifact." },
+      {
+        ...mockContext,
+        conversationId: "synthetic-chatops-isolation-key",
+        chatOpsBindingId: "chatops-binding-1",
+        chatOpsThreadId: "thread-1",
+        scheduleTriggerRunId: "schedule-run-1",
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: targetAgent.id,
+        message: "Write the requested artifact.",
+        conversationId: "synthetic-chatops-isolation-key",
+        chatOpsBindingId: "chatops-binding-1",
+        chatOpsThreadId: "thread-1",
+        scheduleTriggerRunId: "schedule-run-1",
       }),
     );
   });

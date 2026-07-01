@@ -1,11 +1,11 @@
-import { MEMBER_ROLE_NAME } from "@shared";
+import { MEMBER_ROLE_NAME } from "@archestra/shared";
 import { APIError } from "better-auth";
 import { jwtDecode } from "jwt-decode";
 import {
   extractGroupsFromClaims,
   retrieveIdpGroups,
 } from "@/auth/idp-team-sync-cache.ee";
-import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 // Direct imports to avoid circular dependencies when importing from barrel files
 import AccountModel from "@/models/account";
@@ -103,6 +103,18 @@ export async function syncSsoRole(
     logger.debug(
       { providerId, userEmail },
       "[syncSsoRole] SSO provider not found or has no organization, skipping role sync",
+    );
+    return;
+  }
+
+  // Providers with SSO login disabled exist only to supply linked tokens for
+  // downstream authentication (e.g. enterprise-managed MCP token exchange).
+  // Their claims say nothing about the user's Archestra role, so completing
+  // a link flow against them must never rewrite the membership role.
+  if (idpProvider.ssoLoginEnabled === false) {
+    logger.info(
+      { providerId, userEmail },
+      "[syncSsoRole] Provider is not used for SSO login, skipping role sync",
     );
     return;
   }
@@ -285,10 +297,10 @@ export async function syncSsoTeams(
 ): Promise<void> {
   logger.info({ userId, userEmail }, "[syncSsoTeams] Starting SSO team sync");
 
-  // Only sync if enterprise license is activated
-  if (!config.enterpriseFeatures.core) {
+  // Only sync if enterprise features are active (license env var or small-team tier)
+  if (!enterpriseTier.isCoreActive()) {
     logger.info(
-      "[syncSsoTeams] Enterprise license not activated, skipping team sync",
+      "[syncSsoTeams] Enterprise features not active, skipping team sync",
     );
     return;
   }
@@ -325,6 +337,16 @@ export async function syncSsoTeams(
     logger.debug(
       { providerId, userEmail },
       "[syncSsoTeams] SSO provider not found or has no organization, skipping team sync",
+    );
+    return;
+  }
+
+  // Mirrors syncSsoRole: linked-token-only providers (SSO login disabled)
+  // must never rewrite team memberships from their group claims.
+  if (idpProvider.ssoLoginEnabled === false) {
+    logger.info(
+      { providerId, userEmail },
+      "[syncSsoTeams] Provider is not used for SSO login, skipping team sync",
     );
     return;
   }

@@ -52,6 +52,40 @@ describe("fetchBedrockModels", () => {
     ]);
   });
 
+  test("captures the foundation-model id from the profile's model ARN for pricing", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId:
+                "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+              inferenceProfileName: "Claude 3.5 Sonnet v2",
+              status: "ACTIVE",
+              models: [
+                {
+                  modelArn:
+                    "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0",
+                },
+              ],
+            },
+          ],
+        }),
+    });
+
+    const models = await fetchBedrockModels("test-api-key");
+
+    expect(models).toEqual([
+      {
+        id: "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+        displayName: "Claude 3.5 Sonnet v2",
+        provider: "bedrock",
+        underlyingModelName: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+      },
+    ]);
+  });
+
   test("calls ListInferenceProfiles with the correct URL and auth header", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

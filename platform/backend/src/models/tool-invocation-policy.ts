@@ -5,17 +5,20 @@ import {
   TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
   TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
   TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
-} from "@shared";
+} from "@archestra/shared";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { get } from "lodash-es";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
   AutonomyPolicyOperator,
+  DiscoveredToolPolicy,
   GlobalToolPolicy,
   ToolInvocation,
 } from "@/types";
+import { defaultDiscoveredToolPolicy } from "@/types";
 
 type EvaluationResult = {
   isAllowed: boolean;
@@ -225,25 +228,45 @@ class ToolInvocationPolicyModel {
     toolInput: Record<string, any>,
     context: PolicyEvaluationContext,
     globalToolPolicy: GlobalToolPolicy,
+    // Defaults to the discovered-tool equivalent of globalToolPolicy so callers
+    // that don't distinguish discovered tools keep single-policy behavior;
+    // production passes it explicitly.
+    discoveredToolPolicy: DiscoveredToolPolicy = defaultDiscoveredToolPolicy(
+      globalToolPolicy,
+    ),
   ): Promise<boolean> {
-    // Permissive mode: skip all approval checks (consistent with evaluateBatch)
-    if (globalToolPolicy === "permissive") {
-      return false;
-    }
-
     // Archestra tools always bypass policies (consistent with evaluateBatch)
     if (archestraMcpBranding.isToolName(toolName)) {
       return false;
     }
 
-    // Find tool by name
+    // Find tool by name. Origin columns decide which policy governs it: a
+    // shared "llm-proxy" discovered tool has all three NULL.
     const [tool] = await db
-      .select({ id: schema.toolsTable.id })
+      .select({
+        id: schema.toolsTable.id,
+        catalogId: schema.toolsTable.catalogId,
+        agentId: schema.toolsTable.agentId,
+        delegateToAgentId: schema.toolsTable.delegateToAgentId,
+      })
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.name, toolName));
 
     if (!tool) {
       logger.debug({ toolName }, "checkApprovalRequired: tool not found in DB");
+      return false;
+    }
+
+    // Permissive effective policy: skip all approval checks (consistent with
+    // evaluateBatch). Discovered tools follow discoveredToolPolicy.
+    const isDiscovered =
+      tool.catalogId === null &&
+      tool.agentId === null &&
+      tool.delegateToAgentId === null;
+    const effectiveAllows = isDiscovered
+      ? discoveredToolPolicy === "relaxed"
+      : globalToolPolicy === "permissive";
+    if (effectiveAllows) {
       return false;
     }
 
@@ -415,14 +438,25 @@ class ToolInvocationPolicyModel {
     context: PolicyEvaluationContext,
     isContextTrusted: boolean,
     globalToolPolicy: GlobalToolPolicy,
+    // Defaults to the discovered-tool equivalent of globalToolPolicy so callers
+    // that don't distinguish discovered tools keep single-policy behavior;
+    // production passes it explicitly.
+    discoveredToolPolicy: DiscoveredToolPolicy = defaultDiscoveredToolPolicy(
+      globalToolPolicy,
+    ),
   ): Promise<EvaluationResult & { toolCallName?: string }> {
     logger.debug(
-      { globalToolPolicy },
+      { globalToolPolicy, discoveredToolPolicy },
       "ToolInvocationPolicy.evaluateBatch: global policy",
     );
 
-    // YOLO mode: allow all tool calls immediately, skip policy evaluation
-    if (globalToolPolicy === "permissive") {
+    // YOLO mode: when neither policy enforces (global permissive AND discovered
+    // relaxed) there is nothing to evaluate. When they differ, the per-tool
+    // effective-policy check below decides which one applies to each tool.
+    if (
+      globalToolPolicy === "permissive" &&
+      discoveredToolPolicy === "relaxed"
+    ) {
       return { isAllowed: true, reason: "" };
     }
 
@@ -439,16 +473,29 @@ class ToolInvocationPolicyModel {
 
     const toolNames = externalToolCalls.map((tc) => tc.toolCallName);
 
-    // Fetch tool IDs for the tool names
+    // Fetch tool IDs for the tool names. The origin columns decide which policy
+    // (global vs discovered) governs each tool: a shared "llm-proxy" discovered
+    // tool has all three NULL.
     const tools = await db
       .select({
         id: schema.toolsTable.id,
         name: schema.toolsTable.name,
+        catalogId: schema.toolsTable.catalogId,
+        agentId: schema.toolsTable.agentId,
+        delegateToAgentId: schema.toolsTable.delegateToAgentId,
       })
       .from(schema.toolsTable)
       .where(inArray(schema.toolsTable.name, toolNames));
 
     const toolIdsByName = new Map(tools.map((t) => [t.name, t.id]));
+    const isDiscoveredByName = new Map(
+      tools.map((t) => [
+        t.name,
+        t.catalogId === null &&
+          t.agentId === null &&
+          t.delegateToAgentId === null,
+      ]),
+    );
     const toolIds = tools.map((t) => t.id);
 
     if (toolIds.length === 0) {
@@ -482,6 +529,17 @@ class ToolInvocationPolicyModel {
     for (const { toolCallName, toolInput } of externalToolCalls) {
       const toolId = toolIdsByName.get(toolCallName);
       if (!toolId) continue;
+
+      // Discovered (llm-proxy) tools follow the discovered-tool policy; all
+      // others follow the global tool policy. When the effective policy does
+      // not enforce (discovered=relaxed / global=permissive) the tool is
+      // allowed without consulting its policy rows.
+      const effectiveAllows = isDiscoveredByName.get(toolCallName)
+        ? discoveredToolPolicy === "relaxed"
+        : globalToolPolicy === "permissive";
+      if (effectiveAllows) {
+        continue;
+      }
 
       const policies = policiesByToolId.get(toolId) || [];
 
@@ -653,6 +711,108 @@ class ToolInvocationPolicyModel {
       .limit(1);
 
     return result.length > 0;
+  }
+
+  /**
+   * Default tool-invocation policies (empty conditions) for tools assigned to
+   * agents in the organization — audit footprint for bulk-default routes.
+   */
+  static async findDefaultPoliciesSnapshotForOrganization(
+    organizationId: string,
+  ): Promise<Record<string, unknown>> {
+    const rows = await db
+      .selectDistinct({
+        toolId: schema.toolInvocationPoliciesTable.toolId,
+        action: schema.toolInvocationPoliciesTable.action,
+      })
+      .from(schema.toolInvocationPoliciesTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(
+          schema.agentToolsTable.toolId,
+          schema.toolInvocationPoliciesTable.toolId,
+        ),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        and(
+          eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          sql`coalesce(jsonb_array_length(${schema.toolInvocationPoliciesTable.conditions}), 0) = 0`,
+        ),
+      );
+
+    const entries = rows
+      .map((r) => `${r.toolId}:${r.action}`)
+      .sort((a, b) => a.localeCompare(b));
+    return { defaultToolInvocationPolicies: entries };
+  }
+
+  // Org-scoped audit snapshot via the tool → agent_tools → agents.organizationId
+  // FK chain.  toolInvocationPoliciesTable has no organizationId column, so
+  // tenancy is resolved through any agent in the caller's organization that
+  // has been assigned the policy's tool.  Mirrors the join already used by
+  // `findDefaultPoliciesSnapshotForOrganization`.
+  //
+  // The route handler for PATCH/DELETE /api/tool-invocation/:id does not
+  // enforce this predicate today, but the audit fetcher must — the preHandler
+  // runs before route authz, so an unscoped fetch would persist another
+  // tenant's policy snapshot into the caller's audit_logs even when the route
+  // ultimately rejects the request.  Returns null when no agent in the
+  // organization is assigned the policy's tool.
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [scoped] = await db
+      .selectDistinct({
+        id: schema.toolInvocationPoliciesTable.id,
+        toolId: schema.toolInvocationPoliciesTable.toolId,
+        conditions: schema.toolInvocationPoliciesTable.conditions,
+        action: schema.toolInvocationPoliciesTable.action,
+        reason: schema.toolInvocationPoliciesTable.reason,
+        createdAt: schema.toolInvocationPoliciesTable.createdAt,
+        updatedAt: schema.toolInvocationPoliciesTable.updatedAt,
+      })
+      .from(schema.toolInvocationPoliciesTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(
+          schema.agentToolsTable.toolId,
+          schema.toolInvocationPoliciesTable.toolId,
+        ),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        and(
+          eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.toolInvocationPoliciesTable.id, id),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!scoped) return null;
+
+    return {
+      id: scoped.id,
+      toolId: scoped.toolId,
+      conditions: scoped.conditions,
+      action: scoped.action,
+      reason: scoped.reason ?? null,
+      createdAt: scoped.createdAt.toISOString(),
+      updatedAt: scoped.updatedAt.toISOString(),
+    };
   }
 }
 

@@ -1,10 +1,13 @@
-import type { SSOOptions } from "@better-auth/sso";
-import type { IdentityProviderOidcConfig, IdpRoleMappingConfig } from "@shared";
+import type {
+  IdentityProviderOidcConfig,
+  IdpRoleMappingConfig,
+} from "@archestra/shared";
 import {
   IDENTITY_PROVIDER_ID,
   IDENTITY_TRUSTED_PROVIDER_IDS,
   MEMBER_ROLE_NAME,
-} from "@shared";
+} from "@archestra/shared";
+import type { SSOOptions } from "@better-auth/sso";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";
@@ -14,7 +17,7 @@ import {
   extractGroupsFromClaims,
 } from "@/auth/idp-team-sync-cache.ee";
 import config from "@/config";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { evaluateRoleMappingTemplate } from "@/templating";
 import type {
@@ -813,7 +816,7 @@ class IdentityProviderModel {
     }
 
     // Wrap deletions in a transaction to ensure atomicity
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       /**
        * Clean up associated SSO accounts to prevent orphaned records
        * This is important because orphaned accounts can cause issues with future IdP logins
@@ -873,6 +876,36 @@ class IdentityProviderModel {
       { id, domainVerified },
       "IdentityProviderModel.setDomainVerifiedForTesting: completed",
     );
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.identityProvidersTable)
+      .where(
+        and(
+          eq(schema.identityProvidersTable.id, id),
+          eq(schema.identityProvidersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    // REDACTED: oidcConfig (clientSecret), samlConfig (x509Certificate/privateKey),
+    // roleMapping, and teamSyncConfig are omitted — they contain credentials and secrets.
+    return {
+      id: row.id,
+      organizationId: row.organizationId ?? null,
+      issuer: row.issuer,
+      providerId: row.providerId,
+      domain: row.domain,
+      domainVerified: row.domainVerified ?? null,
+      ssoLoginEnabled: row.ssoLoginEnabled,
+    };
   }
 }
 

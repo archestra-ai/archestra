@@ -2,8 +2,9 @@ import {
   getProvidersWithOptionalApiKey,
   isVaultReference,
   parseVaultReference,
+  providerRequiresPerUserCredential,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import db, { schema } from "@/database";
@@ -372,6 +373,19 @@ class LlmProviderApiKeyModel {
     conversationId: string | null;
     agentLlmApiKeyId?: string | null;
   }): Promise<LlmProviderApiKey | null> {
+    // Per-user providers (e.g. GitHub Copilot) hold an individual's token, so
+    // resolution MUST use only the acting user's personal key — never an agent's
+    // attached key, a conversation key, or a team/org key, all of which would let
+    // one user ride on another's token. Returns null (→ "link your account"
+    // prompt) when the user has no personal key of their own.
+    if (providerRequiresPerUserCredential(provider)) {
+      return LlmProviderApiKeyModel.findPersonalKey({
+        organizationId,
+        userId,
+        provider,
+      });
+    }
+
     const conversation = conversationId
       ? await ConversationModel.findById({
           id: conversationId,
@@ -435,24 +449,11 @@ class LlmProviderApiKeyModel {
     );
 
     // 3. Try personal key (prefer isPrimary, then oldest)
-    const [personalKey] = await db
-      .select()
-      .from(schema.llmProviderApiKeysTable)
-      .where(
-        and(
-          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
-          eq(schema.llmProviderApiKeysTable.provider, provider),
-          eq(schema.llmProviderApiKeysTable.scope, "personal"),
-          eq(schema.llmProviderApiKeysTable.userId, userId),
-          hasSecretOrOptional,
-        ),
-      )
-      .orderBy(
-        sql`${schema.llmProviderApiKeysTable.isPrimary} DESC`,
-        schema.llmProviderApiKeysTable.createdAt,
-      )
-      .limit(1);
-
+    const personalKey = await LlmProviderApiKeyModel.findPersonalKey({
+      organizationId,
+      userId,
+      provider,
+    });
     if (personalKey) {
       return personalKey;
     }
@@ -501,6 +502,51 @@ class LlmProviderApiKeyModel {
       .limit(1);
 
     return orgWideKey ?? null;
+  }
+
+  /**
+   * The acting user's own personal key for a provider (prefer isPrimary, then
+   * oldest). Self-contained so the per-user-credential guard can call it before
+   * the rest of getCurrentApiKey runs.
+   */
+  private static async findPersonalKey({
+    organizationId,
+    userId,
+    provider,
+  }: {
+    organizationId: string;
+    userId: string;
+    provider: SupportedProvider;
+  }): Promise<LlmProviderApiKey | null> {
+    const hasSecretOrOptional = or(
+      sql`${schema.llmProviderApiKeysTable.secretId} IS NOT NULL`,
+      inArray(
+        schema.llmProviderApiKeysTable.provider,
+        getProvidersWithOptionalApiKey({
+          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+        }),
+      ),
+    );
+
+    const [personalKey] = await db
+      .select()
+      .from(schema.llmProviderApiKeysTable)
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          eq(schema.llmProviderApiKeysTable.provider, provider),
+          eq(schema.llmProviderApiKeysTable.scope, "personal"),
+          eq(schema.llmProviderApiKeysTable.userId, userId),
+          hasSecretOrOptional,
+        ),
+      )
+      .orderBy(
+        sql`${schema.llmProviderApiKeysTable.isPrimary} DESC`,
+        schema.llmProviderApiKeysTable.createdAt,
+      )
+      .limit(1);
+
+    return personalKey ?? null;
   }
 
   /**
@@ -708,6 +754,36 @@ class LlmProviderApiKeyModel {
    * Used to determine which providers are "configured" for model filtering,
    * independent of whether model sync has linked models to those keys.
    */
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.llmProviderApiKeysTable)
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.id, id),
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    // REDACTED: secretId and any resolved key material are never included.
+    return {
+      id: row.id,
+      name: row.name,
+      provider: row.provider,
+      organizationId: row.organizationId,
+      scope: row.scope,
+      baseUrl: row.baseUrl ?? null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
   static async getConfiguredProviders(): Promise<Set<string>> {
     const rows = await db
       .selectDistinct({ provider: schema.llmProviderApiKeysTable.provider })

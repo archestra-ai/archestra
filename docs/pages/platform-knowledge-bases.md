@@ -3,7 +3,7 @@ title: Overview
 category: Knowledge
 order: 1
 description: Built-in RAG Knowledge Base to give your agents access to your data.
-lastUpdated: 2026-04-30
+lastUpdated: 2026-06-01
 ---
 
 <!--
@@ -14,6 +14,8 @@ Check ../docs_writer_prompt.md before changing this file.
 Plug your agents straight into your company's knowledge across Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, Salesforce, and more, so they can answer from your own data.
 
 The full RAG stack (chunking, embedding, hybrid search, reranking) runs inside Archestra. No external vector database or separate retrieval service required.
+
+> **Enterprise feature** (team-scoped access control) — see the [Pricing Model](/docs/platform-pricing-model).
 
 ![Agent answering from a Jira Knowledge Base with cited sources](/docs/automated_screenshots/platform-knowledge-bases_chat-with-citations.webp)
 
@@ -41,15 +43,15 @@ Pick the LLM that scores and reorders search results by relevance.
 - **Key** — any LLM provider key.
 - **Model** — any chat model from that provider.
 
-### Creating a Knowledge Base
+## Creating a Knowledge Base
 
 A Knowledge Base is a set of connectors. Create one from the **Knowledge** page and assign connectors to get data from. The same Knowledge Base can be reused across multiple agents and MCP Gateways.
 
-### Creating a Connector
+## Creating a Connector
 
 Connectors pull data from external tools (Jira, Confluence, GitHub, etc.) and feed it into one or more Knowledge Bases. Each connector has a visibility setting that controls who can query its data — see [Connector Visibility](/docs/platform-knowledge-connectors#visibility). For supported types and configuration, see [Connectors](/docs/platform-knowledge-connectors).
 
-### Assigning to an Agent
+## Assigning to an Agent
 
 1. Go to **Agents** in the left sidebar and click the agent you want to attach knowledge to (or create a new one).
 2. In the **Edit Agent** dialog, scroll to **Knowledge Sources**.

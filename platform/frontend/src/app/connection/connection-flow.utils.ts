@@ -2,7 +2,7 @@ import {
   type archestraApiTypes,
   isSupportedProvider,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 
 const DEFAULT_MCP_SERVER_SLUG = "archestra";
 

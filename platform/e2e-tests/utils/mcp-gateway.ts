@@ -1,10 +1,13 @@
 import {
+  archestraApiSdk,
+  getManageCredentialsButtonTestId,
+} from "@archestra/shared";
+import {
   type APIRequestContext,
   type APIResponse,
   expect,
   type Page,
 } from "@playwright/test";
-import { archestraApiSdk, getManageCredentialsButtonTestId } from "@shared";
 import {
   DEFAULT_TEAM_NAME,
   E2eTestId,
@@ -177,7 +180,7 @@ export async function initializeMcpSession(
     token: string;
   },
 ): Promise<void> {
-  await makeApiRequest({
+  const response = await makeApiRequest({
     request,
     method: "post",
     urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${options.profileId}`,
@@ -193,6 +196,22 @@ export async function initializeMcpSession(
       },
     },
   });
+
+  // MCP gateway can return 200 with a JSON-RPC `{ "error": {...} }` body when
+  // auth fails — `makeApiRequest` only throws on HTTP-level errors, so without
+  // this check `initializeMcpSession` would silently succeed on a JWT
+  // verification failure. Today this is masked because every caller of
+  // `waitForMcpGatewayJwtReady` also runs `listMcpTools` (which does check the
+  // body) — fixing it here closes the latent trap for any future
+  // `requireToolsListed: false` caller.
+  const initResult = (await response.json()) as {
+    error?: { message?: string; code?: number };
+  };
+  if (initResult.error) {
+    throw new Error(
+      `MCP initialize failed: ${initResult.error.message} (code: ${initResult.error.code})`,
+    );
+  }
 }
 
 export async function waitForGatewayIdentityProviderReady(params: {
@@ -286,15 +305,158 @@ export async function getTeamTokenForProfile(
   return (await valueResponse.json()).value;
 }
 
+type McpTool = {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+};
+
+/**
+ * Polls initialize (+ optional tool listing) until the MCP gateway accepts
+ * external-JWT auth for this agent. After `agents.identityProviderId` is set,
+ * the JWKS keys must be fetched from the IdP on the first validation attempt;
+ * in CI that endpoint is a cold WireMock pod and the first verify can fail
+ * for tens of seconds. ~150 s total backoff covers the worst observed cases.
+ */
+export async function waitForMcpGatewayJwtReady(params: {
+  request: APIRequestContext;
+  profileId: string;
+  token: string;
+  expectedToolName?: string;
+  requireToolsListed?: boolean;
+  /** IdP the profile was bound to; lets the give-up probe report whether that
+   *  provider row still exists (404 = deleted, which FK-nulls the binding). */
+  identityProviderId?: string;
+}): Promise<McpTool[]> {
+  const requireToolsListed = params.requireToolsListed !== false;
+  const delaysMs = [
+    0, 500, 1000, 2000, 4000, 8000, 8000, 8000, 10_000, 10_000, 10_000, 10_000,
+    15_000, 15_000, 15_000, 15_000, 15_000, 15_000,
+  ];
+  let lastError: unknown;
+  // Track every distinct failure mode encountered so the final throw points
+  // at the actual cause instead of just the last attempt's error. The real
+  // flake mode (cold JWKS vs. IdP-config not propagated vs. transient 5xx)
+  // is otherwise invisible across the ~161s retry window.
+  const seenErrors = new Map<string, number>();
+  const seenStates = new Map<string, number>();
+
+  for (const delayMs of delaysMs) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+
+    try {
+      await initializeMcpSession(params.request, {
+        profileId: params.profileId,
+        token: params.token,
+      });
+
+      if (!requireToolsListed) {
+        return [];
+      }
+
+      const tools = await listMcpTools(params.request, {
+        profileId: params.profileId,
+        token: params.token,
+      });
+
+      const matches = params.expectedToolName
+        ? tools.some((tool) => tool.name === params.expectedToolName)
+        : tools.length > 0;
+
+      if (matches) {
+        return tools;
+      }
+
+      const stateKey = params.expectedToolName
+        ? `missing-tool:${params.expectedToolName} (count=${tools.length})`
+        : `empty-tools-list`;
+      seenStates.set(stateKey, (seenStates.get(stateKey) ?? 0) + 1);
+    } catch (error) {
+      lastError = error;
+      const msg = error instanceof Error ? error.message : String(error);
+      seenErrors.set(msg, (seenErrors.get(msg) ?? 0) + 1);
+    }
+  }
+
+  const errorSummary = [
+    ...[...seenErrors.entries()].map(([m, n]) => `[error×${n}] ${m}`),
+    ...[...seenStates.entries()].map(([m, n]) => `[state×${n}] ${m}`),
+  ].join(" | ");
+
+  const headline = params.expectedToolName
+    ? `Tool ${params.expectedToolName} was not available via JWT auth`
+    : "MCP Gateway did not become ready for external JWT auth";
+
+  // The 401 collapses many silent validateExternalIdpToken null branches into
+  // one opaque error, and backend logs rotate out before the CI dump. Fold the
+  // deciding state (IdP binding present? OIDC config resolvable?) into the
+  // failure message — booleans/status only, never secret config.
+  const serverState = await probeIdpServerState(
+    params.request,
+    params.profileId,
+    params.identityProviderId,
+  );
+
+  const lastMsg = lastError instanceof Error ? lastError.message : "";
+  throw new Error(
+    `${headline} — ${delaysMs.length} attempts over ~${Math.round(delaysMs.reduce((a, b) => a + b, 0) / 1000)}s. ${errorSummary || "(no failure signal captured)"}${lastMsg && !errorSummary.includes(lastMsg) ? ` Last: ${lastMsg}` : ""} ${serverState}`,
+  );
+}
+
+async function probeIdpServerState(
+  request: APIRequestContext,
+  profileId: string,
+  expectedIdpId?: string,
+): Promise<string> {
+  try {
+    const agentResp = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/agents/${profileId}`,
+      ignoreStatusCheck: true,
+    });
+    const agent = (await agentResp.json().catch(() => ({}))) as {
+      identityProviderId?: string | null;
+      agentType?: string;
+    };
+    const idpId = agent.identityProviderId;
+    let state = `[agent GET=${agentResp.status()} identityProviderId=${idpId ? "set" : "MISSING"} agentType=${agent.agentType ?? "?"}`;
+    // Resolve which provider to probe: the one still on the agent, or — if the
+    // binding is gone — the one the profile was created with. A 404 on the
+    // latter proves the provider row was deleted (FK ON DELETE SET NULL nulled
+    // the binding); a 200 means the binding vanished without the row being
+    // deleted.
+    const probeIdpId = idpId ?? expectedIdpId;
+    if (probeIdpId) {
+      const idpResp = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/identity-providers/${probeIdpId}`,
+        ignoreStatusCheck: true,
+      });
+      const idp = (await idpResp.json().catch(() => ({}))) as {
+        oidcConfig?: { clientId?: string; jwksEndpoint?: string } | null;
+      };
+      const which = idpId ? "idp" : "expectedIdp";
+      state += `; ${which} GET=${idpResp.status()} hasOidcConfig=${!!idp.oidcConfig} hasJwksEndpoint=${!!idp.oidcConfig?.jwksEndpoint} hasClientId=${!!idp.oidcConfig?.clientId}]`;
+    } else {
+      state += "]";
+    }
+    return state;
+  } catch (error) {
+    return `[server-state probe failed: ${error instanceof Error ? error.message : String(error)}]`;
+  }
+}
+
 export async function listMcpTools(
   request: APIRequestContext,
   options: {
     profileId: string;
     token: string;
   },
-): Promise<
-  Array<{ name: string; description?: string; inputSchema?: unknown }>
-> {
+): Promise<McpTool[]> {
   const listToolsResponse = await makeApiRequest({
     request,
     method: "post",
@@ -366,15 +528,14 @@ export async function openManageCredentialsDialog(
   const connectionsNavButton = settingsDialog.getByTestId(
     E2eTestId.McpServerSettingsConnectionsNavButton,
   );
-  const connectionsHeading = settingsDialog.getByRole("heading", {
-    name: "Credentials",
-    exact: true,
-  });
+  const connectionsContent = settingsDialog.getByTestId(
+    E2eTestId.McpServerSettingsConnectionsContent,
+  );
   if (await settingsDialog.isVisible().catch(() => false)) {
-    if (!(await connectionsHeading.isVisible().catch(() => false))) {
+    if (!(await connectionsContent.isVisible().catch(() => false))) {
       await connectionsNavButton.click();
     }
-    await expect(connectionsHeading).toBeVisible({ timeout: 10_000 });
+    await expect(connectionsContent).toBeVisible({ timeout: 10_000 });
     return;
   }
 
@@ -385,10 +546,10 @@ export async function openManageCredentialsDialog(
 
   await expect(async () => {
     if (await settingsDialog.isVisible().catch(() => false)) {
-      if (!(await connectionsHeading.isVisible().catch(() => false))) {
+      if (!(await connectionsContent.isVisible().catch(() => false))) {
         await connectionsNavButton.click();
       }
-      await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
+      await expect(connectionsContent).toBeVisible({ timeout: 2_000 });
       return;
     }
 
@@ -401,7 +562,16 @@ export async function openManageCredentialsDialog(
       await closeOpenDialogs(page, { timeoutMs: 3_000 });
     }
 
-    await expect(targetCard).toBeVisible({ timeout: 2_000 });
+    if (!(await targetCard.isVisible().catch(() => false))) {
+      // Newly-installed servers may not be in the rendered list yet — re-fetch
+      // and re-apply the search filter rather than waiting on a stale page.
+      await page.reload();
+      await page.waitForLoadState("domcontentloaded");
+      if (await searchInput.isVisible().catch(() => false)) {
+        await searchInput.fill(catalogItemName);
+      }
+    }
+    await expect(targetCard).toBeVisible({ timeout: 5_000 });
 
     const manageButton = targetCard.getByTestId(
       getManageCredentialsButtonTestId(catalogItemName),
@@ -418,11 +588,11 @@ export async function openManageCredentialsDialog(
     }
 
     await expect(settingsDialog).toBeVisible({ timeout: 2_000 });
-    if (!(await connectionsHeading.isVisible().catch(() => false))) {
+    if (!(await connectionsContent.isVisible().catch(() => false))) {
       await connectionsNavButton.click();
     }
-    await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 10_000, intervals: [250, 500, 1000] });
+    await expect(connectionsContent).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000, 4000] });
 }
 
 export async function getVisibleCredentials(page: Page): Promise<string[]> {
@@ -430,9 +600,9 @@ export async function getVisibleCredentials(page: Page): Promise<string[]> {
     .getByRole("dialog")
     .filter({ visible: true })
     .last();
-  const connectionsNavButton = visibleDialog.getByRole("button", {
-    name: /^Credentials\b/,
-  });
+  const connectionsNavButton = visibleDialog.getByTestId(
+    E2eTestId.McpServerSettingsConnectionsNavButton,
+  );
   const badgeText =
     (await connectionsNavButton.textContent().catch(() => "")) ?? "";
   const expectedConnectionCount = Number.parseInt(

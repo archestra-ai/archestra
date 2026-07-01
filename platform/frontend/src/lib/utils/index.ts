@@ -1,9 +1,16 @@
-export { getApiErrorMessage, handleApiError, toApiError } from "./api";
+export {
+  getApiErrorMessage,
+  getApiErrorType,
+  handleApiError,
+  throwOnApiError,
+  toApiError,
+} from "./api";
 export {
   formatDate,
   formatRelativeTime,
   formatRelativeTimeFromNow,
 } from "./date-time";
+export { formatContextLength } from "./format-context-length";
 export { formatCronSchedule } from "./format-cron";
 export {
   computeHandlebarsReplaceOffsets,

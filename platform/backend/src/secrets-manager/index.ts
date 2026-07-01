@@ -1,4 +1,4 @@
-import { SecretsManagerType, SupportedProviders } from "@shared";
+import { SecretsManagerType, SupportedProviders } from "@archestra/shared";
 import { encodeBedrockSigV4Marker } from "@/clients/bedrock-credentials";
 import config from "@/config";
 import logger from "@/logging";

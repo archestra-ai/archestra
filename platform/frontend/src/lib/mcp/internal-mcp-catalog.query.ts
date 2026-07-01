@@ -1,21 +1,22 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { usePresetEntityName } from "@/lib/organization.query";
+import { environmentKeys } from "@/lib/environment.query";
+import { throwOnApiError } from "@/lib/utils";
 
 const {
-  createCatalogChild,
+  approveCatalogItemImage,
   createInternalMcpCatalogItem,
   deleteInternalMcpCatalogItem,
-  getCatalogChildren,
   getDeploymentYamlPreview,
   getInternalMcpCatalog,
   getInternalMcpCatalogLabelKeys,
   getInternalMcpCatalogLabelValues,
   getInternalMcpCatalogTools,
   getK8sImagePullSecrets,
+  refreshInternalMcpCatalogImage,
+  reinstallInternalMcpCatalogItem,
   resetDeploymentYaml,
-  updateCatalogChild,
   updateInternalMcpCatalogItem,
   validateDeploymentYaml,
 } = archestraApiSdk;
@@ -23,8 +24,6 @@ const {
 type InternalMcpCatalogParams = {
   initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   enabled?: boolean;
-  /** When true, include child preset rows (parentCatalogItemId IS NOT NULL) in the response. */
-  includeChildren?: boolean;
 };
 type McpCatalogLabelValuesQuery = NonNullable<
   archestraApiTypes.GetInternalMcpCatalogLabelValuesData["query"]
@@ -34,16 +33,51 @@ type UpdateInternalMcpCatalogItemParams =
     data: archestraApiTypes.UpdateInternalMcpCatalogItemData["body"];
   };
 
-export function useInternalMcpCatalog(params?: InternalMcpCatalogParams) {
-  const includeChildren = params?.includeChildren ?? false;
+/**
+ * `internal_code` the backend sets when a remote server's URL host is rejected
+ * by its environment's network egress policy. The dialogs use it to show the
+ * message inline on the Server URL field instead of a generic toast. Keep in
+ * sync with the backend constant of the same value.
+ */
+export const REMOTE_SERVER_URL_NOT_ALLOWED_CODE =
+  "remote_server_url_not_allowed";
+
+/** Read the backend `internal_code` off an error thrown by a catalog mutation. */
+export function getCatalogMutationErrorCode(
+  error: unknown,
+): string | undefined {
+  return (error as { internalCode?: string } | null)?.internalCode;
+}
+
+/** Convert a hey-api `{ error }` body into a thrown Error carrying its code. */
+function catalogMutationError(body: {
+  message: string;
+  internal_code?: string;
+}): Error {
+  const error = new Error(body.message) as Error & { internalCode?: string };
+  error.internalCode = body.internal_code;
+  return error;
+}
+
+/**
+ * `includeApps` adds App backing catalogs (whose launch tool is assignable from
+ * the gateway capabilities picker) to the result. Apps stay out of the registry,
+ * so registry surfaces omit it. The backend only honors it for callers with
+ * `app:read`, so a caller without that permission silently gets the app-free list.
+ */
+export function useInternalMcpCatalog(
+  params?: InternalMcpCatalogParams & { includeApps?: boolean },
+) {
+  const includeApps = params?.includeApps ?? false;
   return useQuery({
-    queryKey: ["mcp-catalog", { includeChildren }],
-    queryFn: async () =>
-      (
-        await getInternalMcpCatalog(
-          includeChildren ? { query: { includeChildren: true } } : {},
-        )
-      ).data ?? [],
+    queryKey: includeApps ? ["mcp-catalog", "with-apps"] : ["mcp-catalog"],
+    queryFn: async () => {
+      const { data, error } = await getInternalMcpCatalog(
+        includeApps ? { query: { includeApps } } : {},
+      );
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
     initialData: params?.initialData,
     enabled: params?.enabled,
   });
@@ -52,7 +86,11 @@ export function useInternalMcpCatalog(params?: InternalMcpCatalogParams) {
 export function useMcpCatalogLabelKeys() {
   return useQuery({
     queryKey: ["mcp-catalog", "labels", "keys"],
-    queryFn: async () => (await getInternalMcpCatalogLabelKeys()).data ?? [],
+    queryFn: async () => {
+      const { data, error } = await getInternalMcpCatalogLabelKeys();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
   });
 }
 
@@ -62,9 +100,13 @@ export function useMcpCatalogLabelValues(
   const { key } = params || {};
   return useQuery({
     queryKey: ["mcp-catalog", "labels", "values", key],
-    queryFn: async () =>
-      (await getInternalMcpCatalogLabelValues({ query: key ? { key } : {} }))
-        .data ?? [],
+    queryFn: async () => {
+      const { data, error } = await getInternalMcpCatalogLabelValues({
+        query: key ? { key } : {},
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
     enabled: !!key,
   });
 }
@@ -75,16 +117,51 @@ export function useCreateInternalMcpCatalogItem() {
     mutationFn: async (
       data: archestraApiTypes.CreateInternalMcpCatalogItemData["body"],
     ) => {
-      const response = await createInternalMcpCatalogItem({ body: data });
-      return response.data;
+      const { data: created, error } = await createInternalMcpCatalogItem({
+        body: data,
+      });
+      if (error) throw catalogMutationError(error.error);
+      return created;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       toast.success("Catalog item created successfully");
     },
     onError: (error) => {
-      console.error("Create error:", error);
-      toast.error("Failed to create catalog item");
+      // The network-policy error is shown inline on the Server URL field by the
+      // dialog; everything else falls back to a toast.
+      if (
+        getCatalogMutationErrorCode(error) ===
+        REMOTE_SERVER_URL_NOT_ALLOWED_CODE
+      ) {
+        return;
+      }
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to create catalog item",
+      );
+    },
+  });
+}
+
+export function useApproveCatalogItemImage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await approveCatalogItemImage({ path: { id } });
+      throwOnApiError(error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      toast.success("Image approved");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to approve image",
+      );
     },
   });
 }
@@ -93,23 +170,86 @@ export function useUpdateInternalMcpCatalogItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, data }: UpdateInternalMcpCatalogItemParams) => {
-      const response = await updateInternalMcpCatalogItem({
+      const { data: updated, error } = await updateInternalMcpCatalogItem({
         path: { id },
         body: data,
+      });
+      if (error) throw catalogMutationError(error.error);
+      return updated;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
+      queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
+      toast.success("Catalog item updated successfully");
+    },
+    onError: (error) => {
+      // The network-policy error is shown inline on the Server URL field by the
+      // dialog; everything else falls back to a toast.
+      if (
+        getCatalogMutationErrorCode(error) ===
+        REMOTE_SERVER_URL_NOT_ALLOWED_CODE
+      ) {
+        return;
+      }
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update catalog item",
+      );
+    },
+  });
+}
+
+/**
+ * Reinstall the shared K8s Deployment for a multi-tenant local catalog.
+ * Recreates the pod with the current catalog spec and cascades tool sync
+ * to every install attached to the catalog. Only callable when
+ * `catalog.catalogReinstallRequired === true`.
+ */
+export function useReinstallInternalMcpCatalogItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const response = await reinstallInternalMcpCatalogItem({
+        path: { id },
       });
       return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
-      // Also invalidate MCP servers to refresh reinstallRequired flags
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      // Invalidate all chat MCP tools (server config may have changed)
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
-      toast.success("Catalog item updated successfully");
+      toast.success("Catalog reinstalled successfully");
     },
     onError: (error) => {
-      console.error("Edit error:", error);
-      toast.error("Failed to update catalog item");
+      console.error("Catalog reinstall error:", error);
+      toast.error("Failed to reinstall catalog");
+    },
+  });
+}
+
+export function useRefreshInternalMcpCatalogImage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const response = await refreshInternalMcpCatalogImage({
+        path: { id },
+      });
+      return response.data;
+    },
+    onMutate: () => {
+      toast.info("Starting pod restart");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
+    },
+    onError: (error) => {
+      console.error("Pod restart error:", error);
+      toast.error("Failed to start pod restart");
     },
   });
 }
@@ -175,10 +315,11 @@ export function useGetDeploymentYamlPreview(catalogId: string | null) {
     queryKey: ["mcp-catalog", catalogId, "deployment-yaml-preview"],
     queryFn: async () => {
       if (!catalogId) return null;
-      const response = await getDeploymentYamlPreview({
+      const { data, error } = await getDeploymentYamlPreview({
         path: { id: catalogId },
       });
-      return response.data;
+      throwOnApiError(error, { toastOnError: false });
+      return data;
     },
     enabled: !!catalogId,
   });
@@ -232,82 +373,9 @@ export function useK8sImagePullSecrets() {
   return useQuery({
     queryKey: ["k8s-image-pull-secrets"],
     queryFn: async () => {
-      const response = await getK8sImagePullSecrets();
-      return response.data ?? [];
-    },
-  });
-}
-
-/**
- * A "preset" in the UI is a child catalog item — a row in
- * internal_mcp_catalog with `parentCatalogItemId` set to the parent's id.
- * The parent itself acts as the default preset and is NOT returned here.
- */
-export type CatalogPreset =
-  archestraApiTypes.GetCatalogChildrenResponses["200"][number];
-
-export function useCatalogPresets(catalogId: string | null) {
-  return useQuery({
-    queryKey: ["mcp-catalog", catalogId, "presets"],
-    queryFn: async () => {
-      if (!catalogId) return [];
-      const response = await getCatalogChildren({ path: { catalogId } });
-      return response.data ?? [];
-    },
-    enabled: !!catalogId,
-  });
-}
-
-export function useCreateCatalogPreset(catalogId: string) {
-  const queryClient = useQueryClient();
-  const { singular } = usePresetEntityName();
-  return useMutation({
-    mutationFn: async (
-      data: archestraApiTypes.CreateCatalogChildData["body"],
-    ) => {
-      const response = await createCatalogChild({
-        path: { catalogId },
-        body: data,
-      });
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["mcp-catalog", catalogId, "presets"],
-      });
-      toast.success(`${singular} created`);
-    },
-    onError: (error) => {
-      console.error("Create preset error:", error);
-      toast.error(`Failed to create ${singular}`);
-    },
-  });
-}
-
-export function useUpdateCatalogPreset(catalogId: string) {
-  const queryClient = useQueryClient();
-  const { singular } = usePresetEntityName();
-  return useMutation({
-    mutationFn: async (params: {
-      presetId: string;
-      data: archestraApiTypes.UpdateCatalogChildData["body"];
-    }) => {
-      const response = await updateCatalogChild({
-        path: { catalogId, childId: params.presetId },
-        body: params.data,
-      });
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["mcp-catalog", catalogId, "presets"],
-      });
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      toast.success(`${singular} updated`);
-    },
-    onError: (error) => {
-      console.error("Update preset error:", error);
-      toast.error(`Failed to update ${singular}`);
+      const { data, error } = await getK8sImagePullSecrets();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
     },
   });
 }

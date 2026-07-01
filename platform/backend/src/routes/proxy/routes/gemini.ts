@@ -1,5 +1,5 @@
+import { hasArchestraTokenPrefix } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
-import { hasArchestraTokenPrefix } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";

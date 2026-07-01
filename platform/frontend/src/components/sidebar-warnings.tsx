@@ -1,6 +1,6 @@
 "use client";
 
-import { DEFAULT_ADMIN_EMAIL } from "@shared";
+import { DEFAULT_ADMIN_EMAIL } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";

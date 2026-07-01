@@ -1,5 +1,7 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { connectorInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import type {
   InsertKnowledgeBaseConnector,
   KnowledgeBaseConnector,
@@ -9,6 +11,7 @@ import type {
   ConnectorSyncStatus,
   ConnectorType,
 } from "@/types/knowledge-connector";
+import { escapeLikePattern } from "@/utils/sql-search";
 
 class KnowledgeBaseConnectorModel {
   static async findByOrganization(params: {
@@ -17,6 +20,12 @@ class KnowledgeBaseConnectorModel {
     offset?: number;
     canReadAll?: boolean;
     viewerTeamIds?: string[];
+    /**
+     * When provided (including explicit `null` = Default), restrict to connectors
+     * in that environment (environment isolation). Omit to return all
+     * environments (e.g. the management UI listing).
+     */
+    environmentId?: string | null;
   }): Promise<KnowledgeBaseConnector[]> {
     let query = db
       .select()
@@ -31,6 +40,9 @@ class KnowledgeBaseConnectorModel {
             canReadAll: params.canReadAll,
             teamIds: params.viewerTeamIds,
           }),
+          params.environmentId !== undefined
+            ? connectorInEnvironmentPredicate(params.environmentId)
+            : undefined,
         ),
       )
       .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt))
@@ -63,6 +75,7 @@ class KnowledgeBaseConnectorModel {
     offset: number;
     search?: string;
     connectorType?: ConnectorType;
+    excludeConnectorTypes?: ConnectorType[];
     canReadAll?: boolean;
     viewerTeamIds?: string[];
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
@@ -72,16 +85,25 @@ class KnowledgeBaseConnectorModel {
       offset,
       search,
       connectorType,
+      excludeConnectorTypes,
       canReadAll,
       viewerTeamIds,
     } = params;
-    const searchPattern = search ? `%${search}%` : null;
+    const searchPattern = search ? `%${escapeLikePattern(search)}%` : null;
 
     const filters = [
       eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
       buildVisibilityFilter({ canReadAll, teamIds: viewerTeamIds }),
       ...(connectorType
         ? [eq(schema.knowledgeBaseConnectorsTable.connectorType, connectorType)]
+        : []),
+      ...(excludeConnectorTypes && excludeConnectorTypes.length > 0
+        ? [
+            sql`${schema.knowledgeBaseConnectorsTable.connectorType} NOT IN (${sql.join(
+              excludeConnectorTypes.map((type) => sql`${type}`),
+              sql`, `,
+            )})`,
+          ]
         : []),
       ...(searchPattern
         ? [
@@ -118,6 +140,8 @@ class KnowledgeBaseConnectorModel {
     params?: {
       canReadAll?: boolean;
       viewerTeamIds?: string[];
+      /** When provided (incl. `null` = Default), restrict to this environment. */
+      environmentId?: string | null;
     },
   ): Promise<KnowledgeBaseConnector[]> {
     return await db
@@ -131,6 +155,7 @@ class KnowledgeBaseConnectorModel {
         connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
         config: schema.knowledgeBaseConnectorsTable.config,
         secretId: schema.knowledgeBaseConnectorsTable.secretId,
+        environmentId: schema.knowledgeBaseConnectorsTable.environmentId,
         schedule: schema.knowledgeBaseConnectorsTable.schedule,
         enabled: schema.knowledgeBaseConnectorsTable.enabled,
         lastSyncAt: schema.knowledgeBaseConnectorsTable.lastSyncAt,
@@ -158,6 +183,9 @@ class KnowledgeBaseConnectorModel {
             canReadAll: params?.canReadAll,
             teamIds: params?.viewerTeamIds,
           }),
+          params?.environmentId !== undefined
+            ? connectorInEnvironmentPredicate(params.environmentId)
+            : undefined,
         ),
       )
       .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt));
@@ -182,6 +210,7 @@ class KnowledgeBaseConnectorModel {
         connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
         config: schema.knowledgeBaseConnectorsTable.config,
         secretId: schema.knowledgeBaseConnectorsTable.secretId,
+        environmentId: schema.knowledgeBaseConnectorsTable.environmentId,
         schedule: schema.knowledgeBaseConnectorsTable.schedule,
         enabled: schema.knowledgeBaseConnectorsTable.enabled,
         lastSyncAt: schema.knowledgeBaseConnectorsTable.lastSyncAt,
@@ -381,10 +410,102 @@ class KnowledgeBaseConnectorModel {
 
     return result ?? null;
   }
+
+  static async countReferencingGithubAppConfig(params: {
+    githubAppConfigId: string;
+    organizationId: string;
+  }): Promise<number> {
+    const [row] = await db
+      .select({ value: count() })
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(
+        and(
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            params.organizationId,
+          ),
+          // only connectors actively authenticating via this App config count;
+          // a stale githubAppConfigId left in the JSON after switching to PAT
+          // must not block deletion
+          sql`${schema.knowledgeBaseConnectorsTable.config}->>'authMethod' = 'github_app'`,
+          sql`${schema.knowledgeBaseConnectorsTable.config}->>'githubAppConfigId' = ${params.githubAppConfigId}`,
+        ),
+      );
+
+    return row?.value ?? 0;
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.id, id),
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            organizationId,
+          ),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    const kbAssigned = await db
+      .select({
+        id: schema.knowledgeBasesTable.id,
+        name: schema.knowledgeBasesTable.name,
+      })
+      .from(schema.knowledgeBaseConnectorAssignmentsTable)
+      .innerJoin(
+        schema.knowledgeBasesTable,
+        eq(
+          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+          schema.knowledgeBasesTable.id,
+        ),
+      )
+      .where(eq(schema.knowledgeBaseConnectorAssignmentsTable.connectorId, id));
+
+    const knowledgeBases = kbAssigned
+      .map((r) => `${r.name} (${r.id})`)
+      .sort((a, b) => a.localeCompare(b));
+
+    const configKeys =
+      row.config && typeof row.config === "object" && !Array.isArray(row.config)
+        ? Object.keys(row.config as Record<string, unknown>).sort()
+        : [];
+
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description ?? null,
+      organizationId: row.organizationId,
+      connectorType: row.connectorType,
+      visibility: row.visibility,
+      teamIds: [...(row.teamIds ?? [])].sort(),
+      schedule: row.schedule,
+      enabled: row.enabled,
+      lastSyncStatus: row.lastSyncStatus ?? null,
+      lastSyncAt: row.lastSyncAt?.toISOString() ?? null,
+      lastSyncError: row.lastSyncError
+        ? String(row.lastSyncError).slice(0, 500)
+        : null,
+      knowledgeBases,
+      configKeys,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
 }
 
 export default KnowledgeBaseConnectorModel;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 function buildVisibilityFilter(params: {
   canReadAll?: boolean;
   teamIds?: string[];
@@ -409,3 +530,4 @@ function buildVisibilityFilter(params: {
     OR ${schema.knowledgeBaseConnectorsTable.teamIds} ?| ARRAY[${teamIds}]
   )`;
 }
+// SPDX-SnippetEnd

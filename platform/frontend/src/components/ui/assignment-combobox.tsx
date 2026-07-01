@@ -4,7 +4,7 @@ import {
   getAssignmentComboboxDisabledOptionTestId,
   getAssignmentComboboxOptionTestId,
   getAssignmentComboboxSearchInputTestId,
-} from "@shared";
+} from "@archestra/shared";
 import { ExternalLink, Plus } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";

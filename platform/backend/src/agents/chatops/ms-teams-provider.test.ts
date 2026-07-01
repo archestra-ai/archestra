@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import MSTeamsProvider from "./ms-teams-provider";
 
 /**
- * Tests for @mention filtering in parseWebhookNotification.
+ * Tests for bot @mention detection (wasBotMentioned).
  *
- * In team channels (conversationType === "channel"), the bot should only
- * respond when explicitly @mentioned. Group chats and personal chats are
- * unaffected — all messages are processed.
+ * In team channels the bot stays quiet until @mentioned, then keeps replying
+ * to the thread. That gating now lives in the webhook route (mention detection
+ * + channel-activation); parseWebhookNotification no longer drops un-mentioned
+ * channel messages. These tests cover the mention-detection primitive and the
+ * fact that parsing itself is mention-agnostic.
  */
 
 function makeActivity(overrides: Record<string, unknown> = {}) {
@@ -55,8 +57,169 @@ function createProvider(): MSTeamsProvider {
   return provider;
 }
 
-describe("MSTeamsProvider @mention filtering", () => {
-  test("channel message WITH bot @mention returns parsed message", async () => {
+describe("MSTeamsProvider.wasBotMentioned", () => {
+  test("true when the bot is @mentioned", () => {
+    const provider = createProvider();
+    expect(provider.wasBotMentioned(makeActivity())).toBe(true);
+  });
+
+  test("false when there are no mention entities", () => {
+    const provider = createProvider();
+    expect(provider.wasBotMentioned(makeActivity({ entities: [] }))).toBe(
+      false,
+    );
+  });
+
+  test("false when the entities array is missing", () => {
+    const provider = createProvider();
+    expect(
+      provider.wasBotMentioned(makeActivity({ entities: undefined })),
+    ).toBe(false);
+  });
+
+  test("false when a DIFFERENT user is mentioned", () => {
+    const provider = createProvider();
+    expect(
+      provider.wasBotMentioned(
+        makeActivity({
+          entities: [
+            {
+              type: "mention",
+              mentioned: { id: "other-user-id", name: "SomeoneElse" },
+            },
+          ],
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  test("matches when mentioned.id has 28: prefix but recipient.id does not", () => {
+    const provider = createProvider();
+    expect(
+      provider.wasBotMentioned(
+        makeActivity({
+          recipient: { id: "app-id-123", name: "TestBot" },
+          entities: [
+            {
+              type: "mention",
+              mentioned: { id: "28:app-id-123", name: "TestBot" },
+            },
+          ],
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  test("matches IDs case-insensitively", () => {
+    const provider = createProvider();
+    expect(
+      provider.wasBotMentioned(
+        makeActivity({
+          recipient: { id: "28:APP-ID-123", name: "TestBot" },
+          entities: [
+            {
+              type: "mention",
+              mentioned: { id: "28:app-id-123", name: "TestBot" },
+            },
+          ],
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  test("false when the bot has no recipient id", () => {
+    const provider = createProvider();
+    expect(
+      provider.wasBotMentioned(makeActivity({ recipient: { name: "Bot" } })),
+    ).toBe(false);
+  });
+});
+
+describe("MSTeamsProvider.parseMuteReaction", () => {
+  const CHANNEL = "19:abcdef@thread.tacv2";
+  const ROOT = "1700000000000";
+  const channelReaction = (overrides: Record<string, unknown> = {}) => ({
+    type: "messageReaction",
+    conversation: {
+      id: `${CHANNEL};messageid=${ROOT}`,
+      conversationType: "channel",
+    },
+    channelData: { channel: { id: CHANNEL } },
+    reactionsAdded: [{ type: "1f507_mutedspeaker" }],
+    ...overrides,
+  });
+
+  test("returns channel + thread (root from conversation id) for a mute reaction", () => {
+    const provider = createProvider();
+    expect(provider.parseMuteReaction(channelReaction())).toEqual({
+      channelId: CHANNEL,
+      threadId: ROOT,
+    });
+  });
+
+  test("accepts the shushing-face reaction id too", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({ reactionsAdded: [{ type: "lipssealed" }] }),
+      ),
+    ).not.toBeNull();
+  });
+
+  test("derives the thread root from conversation id, NOT replyToId", () => {
+    const provider = createProvider();
+    // replyToId points at the reacted (bot reply) message, which must be ignored.
+    const result = provider.parseMuteReaction(
+      channelReaction({ replyToId: "9999-bot-reply-message-id" }),
+    );
+    expect(result?.threadId).toBe(ROOT);
+  });
+
+  test("null for a non-mute reaction", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({ reactionsAdded: [{ type: "like" }] }),
+      ),
+    ).toBeNull();
+  });
+
+  test("null when the activity is not a messageReaction", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(channelReaction({ type: "message" })),
+    ).toBeNull();
+  });
+
+  test("null outside team channels (no sticky state to clear)", () => {
+    const provider = createProvider();
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({
+          conversation: {
+            id: `${CHANNEL};messageid=${ROOT}`,
+            conversationType: "groupChat",
+          },
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  test("null when the thread root can't be resolved (no false mute)", () => {
+    const provider = createProvider();
+    // conversation id without ;messageid= — we must NOT guess a key.
+    expect(
+      provider.parseMuteReaction(
+        channelReaction({
+          conversation: { id: CHANNEL, conversationType: "channel" },
+        }),
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("MSTeamsProvider.parseWebhookNotification is mention-agnostic", () => {
+  test("channel message WITH @mention is parsed", async () => {
     const provider = createProvider();
     const result = await provider.parseWebhookNotification(makeActivity(), {});
 
@@ -64,77 +227,14 @@ describe("MSTeamsProvider @mention filtering", () => {
     expect(result?.text).toBe("hello world");
   });
 
-  test("channel message WITHOUT bot @mention returns null", async () => {
+  test("channel message WITHOUT @mention is still parsed (gating moved to the route)", async () => {
     const provider = createProvider();
     const result = await provider.parseWebhookNotification(
       makeActivity({ entities: [] }),
       {},
     );
 
-    expect(result).toBeNull();
-  });
-
-  test("channel message with @mention of DIFFERENT user returns null", async () => {
-    const provider = createProvider();
-    const result = await provider.parseWebhookNotification(
-      makeActivity({
-        entities: [
-          {
-            type: "mention",
-            mentioned: { id: "other-user-id", name: "SomeoneElse" },
-          },
-        ],
-      }),
-      {},
-    );
-
-    expect(result).toBeNull();
-  });
-
-  test("matches when mentioned.id has 28: prefix but recipient.id does not", async () => {
-    const provider = createProvider();
-    const result = await provider.parseWebhookNotification(
-      makeActivity({
-        recipient: { id: "app-id-123", name: "TestBot" },
-        entities: [
-          {
-            type: "mention",
-            mentioned: { id: "28:app-id-123", name: "TestBot" },
-          },
-        ],
-      }),
-      {},
-    );
-
     expect(result).not.toBeNull();
-  });
-
-  test("matches IDs case-insensitively", async () => {
-    const provider = createProvider();
-    const result = await provider.parseWebhookNotification(
-      makeActivity({
-        recipient: { id: "28:APP-ID-123", name: "TestBot" },
-        entities: [
-          {
-            type: "mention",
-            mentioned: { id: "28:app-id-123", name: "TestBot" },
-          },
-        ],
-      }),
-      {},
-    );
-
-    expect(result).not.toBeNull();
-  });
-
-  test("channel message with no entities array returns null", async () => {
-    const provider = createProvider();
-    const result = await provider.parseWebhookNotification(
-      makeActivity({ entities: undefined }),
-      {},
-    );
-
-    expect(result).toBeNull();
   });
 
   test("group chat message without @mention returns parsed message", async () => {
@@ -222,6 +322,89 @@ describe("MSTeamsProvider file attachment downloads", () => {
 
     expect(result).not.toBeNull();
     expect(result?.attachments).toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("file-only message (empty text + file attachment) is parsed with attachments", async () => {
+    const provider = createProvider();
+    const fileContent = Buffer.from("file-only teams message");
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(fileContent, { status: 200 }),
+    );
+
+    const result = await provider.parseWebhookNotification(
+      makeActivity({
+        text: undefined,
+        attachments: [
+          {
+            contentType: "application/pdf",
+            contentUrl: "https://teams.blob.core.windows.net/files/report.pdf",
+            name: "report.pdf",
+          },
+        ],
+      }),
+      {},
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.text).toBe("");
+    expect(result?.attachments).toHaveLength(1);
+    expect(result?.attachments?.[0].name).toBe("report.pdf");
+  });
+
+  test("message with neither text nor attachments returns null", async () => {
+    const provider = createProvider();
+
+    const result = await provider.parseWebhookNotification(
+      makeActivity({ text: undefined, attachments: undefined }),
+      {},
+    );
+
+    expect(result).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("file-only message whose download fails is dropped (no empty turn)", async () => {
+    const provider = createProvider();
+
+    // The download fails (e.g. expired/oversized), so no attachment survives.
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 404 }));
+
+    const result = await provider.parseWebhookNotification(
+      makeActivity({
+        text: undefined,
+        attachments: [
+          {
+            contentType: "application/pdf",
+            contentUrl: "https://teams.blob.core.windows.net/files/report.pdf",
+            name: "report.pdf",
+          },
+        ],
+      }),
+      {},
+    );
+
+    expect(result).toBeNull();
+  });
+
+  test("card-only message with empty text returns null (cards are not files)", async () => {
+    const provider = createProvider();
+
+    const result = await provider.parseWebhookNotification(
+      makeActivity({
+        text: undefined,
+        attachments: [
+          {
+            contentType: "application/vnd.microsoft.card.adaptive",
+            content: JSON.stringify({ type: "AdaptiveCard" }),
+          },
+        ],
+      }),
+      {},
+    );
+
+    expect(result).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -622,5 +805,145 @@ describe("MSTeamsProvider.convertToThreadMessages file metadata", () => {
         name: "vacation.jpg",
       },
     ]);
+  });
+});
+
+describe("MSTeamsProvider.sendReply", () => {
+  // Drives a reply through the conversationReference branch (no live
+  // turnContext) and returns the text handed to context.sendActivity.
+  async function captureReplyText(
+    options: Pick<
+      Parameters<MSTeamsProvider["sendReply"]>[0],
+      "footer" | "hint"
+    >,
+  ): Promise<string> {
+    const provider = createProvider();
+    const sendActivity = vi.fn().mockResolvedValue({ id: "reply-1" });
+    const continueConversationAsync = vi.fn(
+      async (
+        _appId: string,
+        _ref: unknown,
+        callback: (context: {
+          sendActivity: typeof sendActivity;
+        }) => Promise<void>,
+      ) => {
+        await callback({ sendActivity });
+      },
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock adapter
+    (provider as any).adapter = { continueConversationAsync };
+
+    await provider.sendReply({
+      originalMessage: {
+        messageId: "msg-1",
+        channelId: "19:abc@thread.tacv2",
+        workspaceId: "team-uuid",
+        senderId: "user-1",
+        senderName: "Alice",
+        text: "hi",
+        rawText: "hi",
+        timestamp: new Date(),
+        isThreadReply: false,
+        metadata: { conversationReference: { foo: "bar" } },
+      },
+      text: "Here is your answer",
+      ...options,
+    });
+
+    return sendActivity.mock.calls[0][0] as string;
+  }
+
+  test("puts the mute hint on its own italic line above the footer", async () => {
+    const text = await captureReplyText({
+      footer: "🤖 Agent",
+      hint: 'Reply "mute" to stop',
+    });
+
+    expect(text).toBe(
+      'Here is your answer\n\n---\n\n_Reply "mute" to stop_\n\n🤖 Agent',
+    );
+  });
+
+  test("renders the hint under its own separator when there is no footer", async () => {
+    const text = await captureReplyText({ hint: 'Reply "mute" to stop' });
+
+    expect(text).toBe('Here is your answer\n\n---\n\n_Reply "mute" to stop_');
+  });
+});
+
+describe("MSTeamsProvider.addApprovalRequestForm", () => {
+  // Drives the form through the conversationReference branch (no live
+  // turnContext) and captures the Adaptive Card sent to the channel.
+  async function captureApprovalCard(options: {
+    toolName: string;
+    toolArgs?: Record<string, unknown>;
+  }): Promise<{ body: Array<Record<string, unknown>> }> {
+    const provider = createProvider();
+    const sendActivity = vi.fn().mockResolvedValue(undefined);
+    const continueConversationAsync = vi.fn(
+      async (
+        _appId: string,
+        _ref: unknown,
+        callback: (context: {
+          sendActivity: typeof sendActivity;
+        }) => Promise<void>,
+      ) => {
+        await callback({ sendActivity });
+      },
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock adapter
+    (provider as any).adapter = { continueConversationAsync };
+
+    await provider.addApprovalRequestForm({
+      channelId: "19:abc@thread.tacv2",
+      threadId: "19:abc@thread.tacv2",
+      approvalId: "appr-1",
+      taskId: "task-1",
+      toolName: options.toolName,
+      toolArgs: options.toolArgs,
+      originalMessage: {
+        messageId: "msg-1",
+        channelId: "19:abc@thread.tacv2",
+        workspaceId: "team-uuid",
+        senderId: "user-1",
+        senderEmail: "user@example.com",
+        senderName: "Alice",
+        text: "do it",
+        rawText: "do it",
+        timestamp: new Date(),
+        isThreadReply: false,
+        metadata: { conversationReference: { foo: "bar" } },
+      },
+    });
+
+    const activity = sendActivity.mock.calls[0][0];
+    return activity.attachments[0].content as {
+      body: Array<Record<string, unknown>>;
+    };
+  }
+
+  test("renders the tool's arguments as a monospace block when provided", async () => {
+    const card = await captureApprovalCard({
+      toolName: "github__create_issue",
+      toolArgs: { repo: "octo/repo", title: "Bug" },
+    });
+
+    const textBlocks = card.body.filter((b) => b.type === "TextBlock");
+    expect(textBlocks[0].text).toBe("`github__create_issue`");
+    const argsBlock = textBlocks.find((b) => b.fontType === "Monospace");
+    expect(argsBlock).toBeDefined();
+    expect(argsBlock?.text).toContain('"repo": "octo/repo"');
+    expect(argsBlock?.text).toContain('"title": "Bug"');
+  });
+
+  test("omits the arguments block when there are no arguments", async () => {
+    const card = await captureApprovalCard({
+      toolName: "dangerous_tool",
+      toolArgs: {},
+    });
+
+    const textBlocks = card.body.filter((b) => b.type === "TextBlock");
+    expect(textBlocks[0].text).toBe("`dangerous_tool`");
+    expect(textBlocks.some((b) => b.fontType === "Monospace")).toBe(false);
   });
 });

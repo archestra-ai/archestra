@@ -6,6 +6,8 @@ dependencies = [
   "mcp[cli]>=1.2.0",
   "httpx",
   "fastapi",
+  # starlette <= 1.0.0: CVE-2026-48710 (BadHost host-header path confusion)
+  "starlette>=1.0.1",
   "uvicorn",
   "requests>=2.31.0",
   "python-dotenv>=1.0.0",

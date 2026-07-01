@@ -1,0 +1,29 @@
+[[stages]]
+text = """I attached orders.xlsx. In the Orders sheet, working from the order rows, which region has the highest total amount_cents, and what's the overall total across every order? If two regions tie, go with the one that comes first alphabetically."""
+
+  [[stages.files]]
+  src = "workbook.xlsx"
+  dest = "/home/sandbox/attachments/orders.xlsx"
+  mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+[[stages]]
+text = """Actually, use net revenue instead of the raw amounts. Completed orders count in full; refunds and cancellations don't count at all; and for partial refunds we only keep what we didn't give back (amount_cents minus refund_cents). Which region comes out on top, and what's the overall net total? Same tie-break. Call submit_result with result = {"top_region": "<region>", "total_cents": <integer net total across all orders>}."""
+
+[result_schema]
+type = "object"
+required = ["top_region", "total_cents"]
+additionalProperties = false
+
+  [result_schema.properties.top_region]
+  type = "string"
+  minLength = 1
+
+  [result_schema.properties.total_cents]
+  type = "integer"
+  minimum = 1
+
+[state]
+rest = ["/api/agents/{{agent_id}}/tools"]
+
+[verifier]
+deps = ["openpyxl==3.1.5"]

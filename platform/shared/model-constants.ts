@@ -21,6 +21,7 @@ export const SupportedProvidersSchema = z.enum([
   "deepseek",
   "minimax",
   "azure",
+  "github-copilot",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -45,6 +46,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "minimax:chatCompletions",
   "azure:chatCompletions",
   "azure:responses",
+  "github-copilot:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -81,6 +83,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   deepseek: "DeepSeek",
   minimax: "MiniMax",
   azure: "Azure AI Foundry",
+  "github-copilot": "GitHub Copilot",
 };
 
 /**
@@ -92,6 +95,39 @@ const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
   "ollama",
   "vllm",
 ]);
+
+/**
+ * Providers that have no usable default endpoint, so an env-seeded key without an
+ * explicit base URL is unusable: vLLM has no default at all (the OpenAI-compatible
+ * SDK would silently fall back to api.openai.com), and Azure has no resource URL.
+ * Bedrock is intentionally excluded — at runtime it infers a region (us-east-1
+ * fallback) so chat works key-only/IAM even without a base URL (only its model-list
+ * sync needs one). Gemini is excluded — its SDK supplies its own default.
+ */
+export const PROVIDERS_REQUIRING_BASE_URL = new Set<SupportedProvider>([
+  "azure",
+  "vllm",
+]);
+
+/**
+ * Providers whose credential is an individual user's token rather than a shared
+ * service key (GitHub Copilot: a per-user GitHub OAuth token tied to that
+ * account's Copilot seat). Sharing one token across users is a ToS gray area
+ * and breaks per-user attribution, so for these providers:
+ * - keys are personal-scope only (no team/org scope, no virtual-key sharing);
+ * - request-time resolution uses ONLY the acting user's personal key — never an
+ *   agent's attached key, a conversation key, a team/org key, or the shared env
+ *   fallback;
+ * - a missing personal key surfaces a "link your account" prompt, not a fallback.
+ */
+export const PROVIDERS_REQUIRING_PER_USER_CREDENTIAL =
+  new Set<SupportedProvider>(["github-copilot"]);
+
+export function providerRequiresPerUserCredential(
+  provider: SupportedProvider,
+): boolean {
+  return PROVIDERS_REQUIRING_PER_USER_CREDENTIAL.has(provider);
+}
 
 export function isProviderApiKeyOptional(params: {
   provider: SupportedProvider;
@@ -129,12 +165,13 @@ export const PERPLEXITY_MODELS = [
 /**
  * MiniMax model definitions — single source of truth.
  * MiniMax does not provide a /v1/models endpoint, so models are maintained here.
- * @see https://www.minimaxi.com/en/news
+ * @see https://platform.minimax.io/docs/guides/models-intro
  */
 export const MINIMAX_MODELS = [
-  { id: "MiniMax-M2", displayName: "MiniMax-M2" },
-  { id: "MiniMax-M2.1", displayName: "MiniMax-M2.1" },
-  { id: "MiniMax-M2.1-lightning", displayName: "MiniMax-M2.1-lightning" },
+  { id: "MiniMax-M3", displayName: "MiniMax-M3" },
+  { id: "MiniMax-M3-highspeed", displayName: "MiniMax-M3-highspeed" },
+  { id: "MiniMax-M2.7", displayName: "MiniMax-M2.7" },
+  { id: "MiniMax-M2.7-highspeed", displayName: "MiniMax-M2.7-highspeed" },
   { id: "MiniMax-M2.5", displayName: "MiniMax-M2.5" },
   { id: "MiniMax-M2.5-highspeed", displayName: "MiniMax-M2.5-highspeed" },
 ] as const;
@@ -161,134 +198,109 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
   azure: "https://<resource>.openai.azure.com/openai",
+  "github-copilot": "https://api.githubcopilot.com",
 };
+
+/**
+ * OpenRouter's built-in "Auto Router" — routes each request to a model OpenRouter
+ * picks dynamically, billed at that model's rate. Not free.
+ */
+export const OPENROUTER_AUTO_MODEL_ID = "openrouter/auto";
+
+/**
+ * OpenRouter's built-in "Free Models Router" — routes each request to a free
+ * model OpenRouter picks, filtering for the features the request needs. Always
+ * zero-cost; used as the auto-default for fresh OpenRouter organizations.
+ */
+export const OPENROUTER_FREE_MODEL_ID = "openrouter/free";
+
+/**
+ * Prefix of OpenRouter "latest" alias ids (e.g. `~anthropic/claude-sonnet-latest`)
+ * that always redirect to the newest model in a family.
+ */
+export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
 
 /**
  * Pattern-based model markers per provider.
  * Patterns are substrings that model IDs must contain (case-insensitive).
- * Used to identify "fastest" (lightweight, low latency) and "best" (highest quality) models.
+ * Used to identify "best" (highest quality) models.
  *
- * IMPORTANT: Patterns are checked in array order (first match wins).
- * More specific patterns should come before general ones.
- *
- * Note: For OpenAI "best", we use "4o-2" to match "gpt-4o-2024..." but NOT "gpt-4o-mini-...".
+ * Patterns are checked in array order (first match wins), so list each
+ * provider's ids most- to least-preferred (more specific before general). The
+ * first listed id present in the account is the one marked best.
  */
-export const MODEL_MARKER_PATTERNS: Record<
-  SupportedProvider,
-  {
-    fastest: string[];
-    best: string[];
-  }
-> = {
-  anthropic: {
-    fastest: ["haiku-4", "haiku"],
-    best: ["opus-4-6", "opus-4-5", "opus-4", "opus", "sonnet"],
-  },
-  openai: {
-    fastest: ["gpt-4o-mini", "gpt-3.5"],
-    best: [
-      "gpt-5.4",
-      "gpt-5.3",
-      "gpt-5.2",
-      "gpt-5",
-      "o3",
-      "o1",
-      "4o-2",
-      "gpt-4-turbo",
-    ],
-  },
-  gemini: {
-    fastest: ["flash"],
-    best: ["pro", "ultra"],
-  },
-  cerebras: {
-    fastest: ["llama-3.3-70b"],
-    best: ["llama-3.3-70b"],
-  },
-  cohere: {
-    fastest: ["command-light"],
-    best: ["command-r-plus", "command-r"],
-  },
-  mistral: {
-    fastest: ["mistral-small", "ministral"],
-    best: ["mistral-large"],
-  },
-  perplexity: {
-    fastest: ["sonar"],
-    best: ["sonar-pro", "sonar-reasoning-pro", "sonar-reasoning"],
-  },
-  groq: {
-    fastest: ["llama-3.1-8b", "gemma2-9b"],
-    best: ["llama-3.3-70b", "llama-3.1-70b"],
-  },
-  xai: {
-    fastest: ["fast", "grok-code"],
-    best: ["grok-4"],
-  },
-  openrouter: {
-    fastest: ["openrouter/auto"],
-    best: [
-      "openai/gpt-4.1",
-      "openai/gpt-4o",
-      "anthropic/claude-3.7",
-      "anthropic/claude-3-opus",
-    ],
-  },
-  ollama: {
-    fastest: ["llama3.2", "phi"],
-    best: ["llama3.1", "mixtral"],
-  },
-  vllm: {
-    fastest: ["llama3.2", "phi"],
-    best: ["llama3.1", "mixtral"],
-  },
-  zhipuai: {
-    fastest: ["glm-4-flash", "glm-flash"],
-    best: ["glm-4-plus", "glm-4"],
-  },
-  deepseek: {
-    fastest: ["deepseek-chat"],
-    best: ["deepseek-reasoner"],
-  },
-  minimax: {
-    fastest: ["minimax-m2.5-highspeed", "minimax-m2.1-lightning"],
-    best: ["minimax-m2.5", "minimax-m2.1", "minimax-m2"],
-  },
-  azure: {
-    fastest: ["gpt-4o-mini"],
-    best: ["gpt-4o", "o3"],
-  },
-  bedrock: {
-    fastest: ["nova-lite", "nova-micro", "haiku"],
-    best: ["opus", "sonnet", "nova-pro"],
-  },
-};
-
-/**
- * Fast models for each provider, used as fallback for title generation and other quick operations.
- * These are optimized for speed and cost rather than capability.
- *
- * Primary resolution uses LlmProviderApiKeyModelLinkModel.getFastestModel() from the database.
- * This map serves as a fallback when no database result is available.
- */
-export const FAST_MODELS: Record<SupportedProvider, string> = {
-  anthropic: "claude-haiku-4-5-20251001",
-  openai: "gpt-4o-mini",
-  openrouter: "openrouter/auto",
-  gemini: "gemini-2.0-flash-001",
-  cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
-  cohere: "command-light", // Cohere's fast model
-  vllm: "default", // vLLM uses whatever model is deployed
-  ollama: "llama3.2", // Common fast model for Ollama
-  zhipuai: "glm-4-flash", // Zhipu's fast model
-  minimax: "MiniMax-M2.5-highspeed", // MiniMax's fastest model
-  deepseek: "deepseek-chat", // DeepSeek's fast model
-  bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
-  mistral: "mistral-small-latest", // Mistral's fast model
-  perplexity: "sonar", // Perplexity's fast model
-  groq: "llama-3.1-8b-instant", // Groq's fast model
-  xai: "grok-code-fast-1", // xAI's fast model
-  azure: "gpt-4o-mini",
+export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
+  anthropic: ["opus-4-8", "opus-4-7", "opus", "sonnet"],
+  openai: [
+    "gpt-5.5-pro",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.3",
+    "gpt-5",
+    "gpt-4.1",
+    "gpt-4o",
+  ],
+  gemini: [
+    "gemini-3.5-pro",
+    "gemini-3.5-flash",
+    "gemini-3.1-pro-preview",
+    "gemini-3-pro",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+  ],
+  cerebras: ["zai-glm-4.7"],
+  cohere: ["command-a-plus", "command-a", "command-r-plus", "command-r"],
+  mistral: [
+    "mistral-medium-2604",
+    "mistral-large",
+    "mistral-medium",
+    "mistral-small",
+  ],
+  perplexity: [
+    "sonar-deep-research",
+    "sonar-reasoning-pro",
+    "sonar-pro",
+    "sonar",
+  ],
+  groq: ["openai/gpt-oss-120b", "gpt-oss", "llama-4", "llama-3.3"],
+  xai: ["grok-4.3", "grok-4", "grok-3"],
+  openrouter: [
+    "anthropic/claude-opus-4.8",
+    "anthropic/claude-opus-4.7",
+    "openai/gpt-5.5-pro",
+    "openai/gpt-5.5",
+    "google/gemini-3.1-pro-preview",
+    "x-ai/grok-4.3",
+    "deepseek/deepseek-v4-pro",
+  ],
+  ollama: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
+  vllm: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
+  zhipuai: ["glm-5.1", "glm-5", "glm-4.7", "glm-4"],
+  deepseek: ["deepseek-v4-pro", "deepseek-v4", "deepseek-v3", "deepseek-chat"],
+  minimax: ["minimax-m3", "minimax-m2.7"],
+  azure: [
+    "gpt-5.5-pro",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.3",
+    "gpt-5",
+    "gpt-4.1",
+    "gpt-4o",
+  ],
+  bedrock: [
+    "anthropic.claude-opus-4-8",
+    "anthropic.claude-opus-4-7",
+    "claude-opus",
+    "claude-sonnet",
+    "amazon.nova-pro",
+  ],
+  "github-copilot": [
+    "claude-opus",
+    "claude-sonnet",
+    "gpt-5",
+    "gpt-4.1",
+    "gpt-4o",
+  ],
 };
 
 /**
@@ -296,24 +308,59 @@ export const FAST_MODELS: Record<SupportedProvider, string> = {
  * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
  */
 export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
-  anthropic: "claude-opus-4-6-20250918",
-  openai: "gpt-5.4",
+  anthropic: "claude-opus-4-8",
+  openai: "gpt-5.5",
   openrouter: "openrouter/auto",
-  gemini: "gemini-2.5-pro",
-  cohere: "command-r-08-2024",
-  groq: "llama-3.1-8b-instant",
-  xai: "grok-4",
+  gemini: "gemini-3.5-flash",
+  cohere: "command-a-plus-05-2026",
+  groq: "openai/gpt-oss-120b",
+  xai: "grok-4.3",
   ollama: "llama3.2",
   vllm: "default",
-  cerebras: "llama-4-scout-17b-16e-instruct",
-  mistral: "mistral-large-latest",
+  cerebras: "zai-glm-4.7",
+  mistral: "mistral-medium-2604",
   perplexity: "sonar-pro",
-  zhipuai: "glm-4-plus",
-  deepseek: "deepseek-chat",
-  bedrock: "anthropic.claude-opus-4-1-20250805-v1:0",
-  minimax: "MiniMax-M2.5",
-  azure: "gpt-4o",
+  zhipuai: "glm-5.1",
+  deepseek: "deepseek-v4-pro",
+  bedrock: "anthropic.claude-opus-4-8",
+  minimax: "MiniMax-M3",
+  azure: "gpt-5.5",
+  "github-copilot": "gpt-4o",
 };
+
+/**
+ * Cache token price as a multiple of the model's per-token INPUT price.
+ * `read` = cache-read (cheap reuse); `write` = cache-creation (5-minute TTL)
+ * surcharge; `write1h` = 1-hour TTL cache-write surcharge.
+ *
+ * Used as the fallback when a model has no explicit (synced or admin-set) cache
+ * price: Anthropic/Bedrock bill a separate write surcharge (1.25x at 5m, 2x at
+ * 1h), while OpenAI/Gemini/DeepSeek auto-cache with only a read discount and no
+ * write surcharge. Providers absent from this map have no cache pricing model,
+ * so cache cost/savings are not derived for them.
+ */
+export const CACHE_PRICE_MULTIPLIERS: Partial<
+  Record<SupportedProvider, { read: number; write: number; write1h?: number }>
+> = {
+  anthropic: { read: 0.1, write: 1.25, write1h: 2 },
+  bedrock: { read: 0.1, write: 1.25, write1h: 2 },
+  openai: { read: 0.25, write: 0 },
+  gemini: { read: 0.25, write: 0 },
+  deepseek: { read: 0.1, write: 0 },
+};
+
+/**
+ * True for OpenAI "pro" reasoning models, which OpenAI serves only through the
+ * Responses API (`/v1/responses`). Calling them on `/v1/chat/completions`
+ * returns `api_not_found_error` ("not a chat model"), so the chat client must
+ * route these models to the Responses transport instead. "pro" is matched as a
+ * hyphen/slash-delimited token, so dated snapshots (`gpt-5.5-pro-2026-01-01`)
+ * are covered.
+ */
+export function requiresOpenAiResponsesApi(modelId: string): boolean {
+  return /(?:^|[-/])pro(?:[-/]|$)/i.test(modelId);
+}
+
 /**
  * Maps models.dev provider IDs to Archestra provider names.
  * This is the single source of truth for all synchronization logic.
@@ -345,6 +392,9 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     // Bedrock and Azure have dedicated auth flows and are not synced via models.dev
     "amazon-bedrock": null,
     azure: null,
+    // GitHub Copilot model availability depends on the user's subscription tier,
+    // so models are synced from Copilot's own /models endpoint, not models.dev
+    "github-copilot": null,
     perplexity: null,
     nvidia: null,
   };

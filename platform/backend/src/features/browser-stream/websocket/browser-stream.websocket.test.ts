@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import type { ClientWebSocketMessage } from "@shared";
+import type { ClientWebSocketMessage } from "@archestra/shared";
 import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
 import type * as originalConfigModule from "@/config";

@@ -1,7 +1,7 @@
 import type {
   SupportedProvider,
   SupportedProviderDiscriminator,
-} from "@shared";
+} from "@archestra/shared";
 import { AzureEmbeddingError, callAzureEmbedding } from "./azure";
 import { callGeminiEmbedding, GeminiEmbeddingError } from "./gemini";
 import { callOpenAIEmbedding, OpenAIEmbeddingError } from "./openai";

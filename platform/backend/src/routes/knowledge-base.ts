@@ -1,22 +1,20 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   RouteId,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import config from "@/config";
+import { userHasPermission } from "@/auth/utils";
+import { enterpriseTier } from "@/enterprise-tier";
 import {
   didKnowledgeSourceAclInputsChange,
   isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,
 } from "@/knowledge-base";
-import {
-  isSupportedMimeType,
-  MAX_FILE_SIZE_BYTES,
-  MAX_ZIP_TOTAL_BYTES,
-} from "@/knowledge-base/connectors/file-upload/file-processor";
+import { resolveConnectorCredentials } from "@/knowledge-base/connector-credentials";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import logger from "@/logging";
 import {
@@ -24,27 +22,28 @@ import {
   AgentKnowledgeBaseModel,
   AgentModel,
   ConnectorRunModel,
+  GithubAppConfigModel,
   KbDocumentModel,
-  KbUploadedFileModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   TaskModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
+  type ConnectorConfig,
   ConnectorConfigSchema,
-  type ConnectorCredentials,
   ConnectorCredentialsSchema,
   type ConnectorType,
   ConnectorTypeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
-  EmbeddingStatusSchema,
   KnowledgeSourceVisibilitySchema,
   SelectConnectorRunListSchema,
   SelectConnectorRunSchema,
+  SelectKbDocumentSchema,
   SelectKnowledgeBaseConnectorSchema,
   SelectKnowledgeBaseSchema,
 } from "@/types";
@@ -65,6 +64,16 @@ const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
   ),
   totalDocsIndexed: z.number(),
   assignedAgents: z.array(AssignedAgentSummarySchema),
+});
+
+const KnowledgeBaseDocumentListItemSchema = SelectKbDocumentSchema.omit({
+  content: true,
+}).extend({
+  connectorType: ConnectorTypeSchema,
+});
+
+const KnowledgeBaseDocumentDetailSchema = SelectKbDocumentSchema.extend({
+  connectorType: ConnectorTypeSchema,
 });
 
 const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -125,15 +134,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { id: string; name: string; agentType: string }
       >();
       if (allAgentIds.length > 0) {
-        const agents = await AgentModel.findByOrganizationId(organizationId);
+        const agents = await AgentModel.findBasicByOrganizationIdAndIds({
+          organizationId,
+          agentIds: allAgentIds,
+        });
         for (const agent of agents) {
-          if (allAgentIds.includes(agent.id)) {
-            agentDetailsMap.set(agent.id, {
-              id: agent.id,
-              name: agent.name,
-              agentType: agent.agentType,
-            });
-          }
+          agentDetailsMap.set(agent.id, {
+            id: agent.id,
+            name: agent.name,
+            agentType: agent.agentType,
+          });
         }
       }
 
@@ -204,7 +214,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetKnowledgeBase,
         description: "Get a knowledge base by ID",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(SelectKnowledgeBaseSchema),
       },
     },
@@ -225,7 +235,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UpdateKnowledgeBase,
         description: "Update a knowledge base",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         body: z.object({
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
@@ -257,7 +267,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Delete a knowledge base and remove its connector assignments",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -284,7 +294,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetKnowledgeBaseHealth,
         description: "Check the health of a knowledge base",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             status: z.enum(["healthy", "unhealthy"]),
@@ -417,11 +427,31 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
       }));
 
+      const validatedData = enrichedData.filter((connector) => {
+        const parsed = SelectKnowledgeBaseConnectorSchema.safeParse(connector);
+        if (parsed.success) return true;
+        logger.warn(
+          {
+            connectorId: connector.id,
+            connectorType: connector.connectorType,
+            configType: (connector.config as Record<string, unknown> | null)
+              ?.type,
+            validationErrors: parsed.error.issues.map((i) => ({
+              path: i.path.join("."),
+              code: i.code,
+              message: i.message,
+            })),
+          },
+          "Skipping connector with invalid persisted schema",
+        );
+        return false;
+      });
+
       const currentPage = Math.floor(offset / limit) + 1;
       const totalPages = Math.ceil(total / limit);
 
       return reply.send({
-        data: enrichedData,
+        data: validatedData,
         pagination: {
           currentPage,
           limit,
@@ -448,10 +478,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamIds: z.array(z.string()).optional(),
           connectorType: ConnectorTypeSchema,
           config: ConnectorConfigSchema,
-          credentials: ConnectorCredentialsSchema,
+          // optional: GitHub App connectors authenticate via a referenced
+          // github_app_configs row instead of an inline secret
+          credentials: ConnectorCredentialsSchema.optional(),
           schedule: z.string().optional(),
           enabled: z.boolean().optional(),
           knowledgeBaseIds: z.array(z.string()).optional(),
+          environmentId: z.string().uuid().nullable().optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
       },
@@ -459,22 +492,32 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body, organizationId, user }, reply) => {
       const teamIds = body.teamIds ?? [];
       const visibility = body.visibility ?? "org-wide";
+
+      await assertEnvironmentAssignable({
+        userId: user.id,
+        organizationId,
+        environmentId: body.environmentId ?? null,
+      });
+
       if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
         throw new ApiError(
           400,
           "At least one team must be selected for team-scoped connectors",
         );
       }
-
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       if (
         visibility === "team-scoped" &&
-        !config.enterpriseFeatures.knowledgeBase
+        !enterpriseTier.isKnowledgeBaseActive()
       ) {
         throw new ApiError(
           403,
-          "Team-scoped connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
+          "Team-scoped connectors require an enterprise license",
         );
       }
+      // SPDX-SnippetEnd
 
       // Validate connector config
       const connectorImpl = getConnector(body.connectorType);
@@ -497,11 +540,44 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Store credentials as a secret
-      const secret = await secretManager().createSecret(
-        body.credentials,
-        `connector-${body.name}`,
-      );
+      // GitHub App connectors reference a github_app_configs row for their
+      // credentials; everything else stores an inline secret.
+      const appConfigRef = await resolveGithubAppConfigReference({
+        config: body.config,
+        organizationId,
+        userId: user.id,
+      });
+      const usesGithubAppConfig = appConfigRef !== null;
+      const requiresCredentials = body.connectorType !== "web_crawler";
+      if (appConfigRef && body.config.type === "github") {
+        // the App config owns the host the installation token is minted against,
+        // so it is the single source of truth for the connector's API host
+        body.config.githubUrl = appConfigRef.githubUrl;
+      }
+
+      let secretId: string | null = null;
+      if (usesGithubAppConfig || !requiresCredentials) {
+        if (body.credentials) {
+          throw new ApiError(
+            400,
+            usesGithubAppConfig
+              ? "GitHub App connectors must not include inline credentials"
+              : "Web Crawler connectors must not include inline credentials",
+          );
+        }
+      } else {
+        if (!body.credentials) {
+          throw new ApiError(
+            400,
+            "Credentials are required for this connector",
+          );
+        }
+        const secret = await secretManager().createSecret(
+          body.credentials,
+          `connector-${body.name}`,
+        );
+        secretId = secret.id;
+      }
 
       // Create the connector
       const connector = await KnowledgeBaseConnectorModel.create({
@@ -512,7 +588,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamIds: body.teamIds,
         connectorType: body.connectorType,
         config: body.config,
-        secretId: secret.id,
+        secretId,
+        environmentId: body.environmentId ?? null,
         schedule: body.schedule,
         enabled: body.enabled,
       });
@@ -548,7 +625,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetConnector,
         description: "Get a connector by ID",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           SelectKnowledgeBaseConnectorSchema.extend({
             totalDocsIngested: z.number(),
@@ -567,6 +644,122 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/connectors/:id/documents",
+    {
+      schema: {
+        operationId: RouteId.GetConnectorDocuments,
+        description: "List documents for a connector",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        querystring: PaginationQuerySchema.extend({
+          search: z.string().optional(),
+        }),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(KnowledgeBaseDocumentListItemSchema),
+        ),
+      },
+    },
+    async (
+      {
+        params: { id },
+        query: { limit, offset, search },
+        organizationId,
+        user,
+      },
+      reply,
+    ) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const [data, total] = await Promise.all([
+        KbDocumentModel.findListItemsByConnector({
+          connectorId: id,
+          organizationId,
+          limit,
+          offset,
+          search,
+        }),
+        KbDocumentModel.countByConnectorWithSearch({
+          connectorId: id,
+          organizationId,
+          search,
+        }),
+      ]);
+
+      return reply.send({
+        data,
+        pagination: calculatePaginationMeta(total, { limit, offset }),
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/connectors/:id/documents/:docId",
+    {
+      schema: {
+        operationId: RouteId.GetConnectorDocument,
+        description: "Get a single connector document",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid(), docId: z.uuid() }),
+        response: constructResponseSchema(KnowledgeBaseDocumentDetailSchema),
+      },
+    },
+    async ({ params: { id, docId }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const existing = await KbDocumentModel.findListItemByIdAndConnector({
+        documentId: docId,
+        connectorId: id,
+        organizationId,
+      });
+      if (!existing) {
+        throw new ApiError(404, "Document not found");
+      }
+
+      return reply.send(existing);
+    },
+  );
+
+  fastify.delete(
+    "/api/connectors/:id/documents/:docId",
+    {
+      schema: {
+        operationId: RouteId.DeleteConnectorDocument,
+        description: "Delete a connector document",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid(), docId: z.uuid() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id, docId }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const existing = await KbDocumentModel.findListItemByIdAndConnector({
+        documentId: docId,
+        connectorId: id,
+        organizationId,
+      });
+      if (!existing) {
+        throw new ApiError(404, "Document not found");
+      }
+
+      await KbDocumentModel.delete(docId);
+      return reply.send({ success: true });
+    },
+  );
+
   fastify.put(
     "/api/connectors/:id",
     {
@@ -574,7 +767,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UpdateConnector,
         description: "Update a connector",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         body: z.object({
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
@@ -584,6 +777,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           credentials: ConnectorCredentialsSchema.optional(),
           schedule: z.string().optional(),
           enabled: z.boolean().optional(),
+          environmentId: z.string().uuid().nullable().optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
       },
@@ -595,17 +789,36 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      // Update credentials secret if provided
-      if (body.credentials && connector.secretId) {
-        await secretManager().updateSecret(
-          connector.secretId,
-          body.credentials,
-        );
+      if (body.environmentId !== undefined) {
+        await assertEnvironmentAssignable({
+          userId: user.id,
+          organizationId,
+          environmentId: body.environmentId,
+        });
+      }
+
+      // resolve the connector's auth shape after this update so credential
+      // storage stays consistent across App <-> inline-secret transitions
+      const nextConfig = body.config ?? connector.config;
+      const appConfigRef = await resolveGithubAppConfigReference({
+        config: nextConfig,
+        organizationId,
+        userId: user.id,
+      });
+      const usesGithubAppConfig = appConfigRef !== null;
+      const requiresCredentials = connector.connectorType !== "web_crawler";
+      if (appConfigRef && body.config?.type === "github") {
+        // the App config owns the host the installation token is minted against
+        body.config.githubUrl = appConfigRef.githubUrl;
       }
 
       const { credentials: _, ...updateData } = body;
       const nextVisibility = updateData.visibility ?? connector.visibility;
       const nextTeamIds = updateData.teamIds ?? connector.teamIds;
+
+      // validate everything that can reject the request BEFORE touching any
+      // secret, so a rejected update never leaves the connector with a
+      // deleted or replaced credential
       if (
         isTeamScopedWithoutTeams({
           visibility: nextVisibility,
@@ -617,26 +830,99 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "At least one team must be selected for team-scoped connectors",
         );
       }
-
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       if (
-        nextVisibility === "team-scoped" &&
         connector.visibility !== "team-scoped" &&
-        !config.enterpriseFeatures.knowledgeBase
+        nextVisibility === "team-scoped" &&
+        !enterpriseTier.isKnowledgeBaseActive()
       ) {
         throw new ApiError(
           403,
-          "Team-scoped connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
+          "Team-scoped connectors require an enterprise license",
         );
+      }
+      // SPDX-SnippetEnd
+      if (usesGithubAppConfig && body.credentials) {
+        throw new ApiError(
+          400,
+          "GitHub App connectors must not include inline credentials",
+        );
+      }
+      if (!requiresCredentials && body.credentials) {
+        throw new ApiError(
+          400,
+          "Web Crawler connectors must not include inline credentials",
+        );
+      }
+      const wasGithubApp =
+        connector.config.type === "github" &&
+        connector.config.authMethod === "github_app";
+      if (
+        wasGithubApp &&
+        !usesGithubAppConfig &&
+        !body.credentials &&
+        !connector.secretId
+      ) {
+        // leaving App auth means the connector has no inline secret yet, so a
+        // new credential must be supplied with the switch
+        throw new ApiError(
+          400,
+          "Credentials are required when switching this connector to token authentication",
+        );
+      }
+
+      let nextSecretId = connector.secretId;
+      let secretToDeleteAfterUpdate: string | null = null;
+      if (usesGithubAppConfig || !requiresCredentials) {
+        // defer dropping the connector's own inline secret until the update has
+        // been persisted, so a later failure can't orphan the connector
+        if (connector.secretId) {
+          secretToDeleteAfterUpdate = connector.secretId;
+          nextSecretId = null;
+        }
+      } else if (body.credentials) {
+        if (connector.secretId) {
+          // The edit dialog promises "leave empty to keep existing
+          // credentials" and omits the email/username field when blank, but
+          // updateSecret replaces the whole value — preserve the stored email
+          // so rotating only the token doesn't drop the username.
+          let credentials = body.credentials;
+          if (!credentials.email) {
+            const existing = await secretManager().getSecret(
+              connector.secretId,
+            );
+            const storedEmail = (
+              existing?.secret as Record<string, unknown> | undefined
+            )?.email;
+            if (typeof storedEmail === "string" && storedEmail) {
+              credentials = { ...credentials, email: storedEmail };
+            }
+          }
+          await secretManager().updateSecret(connector.secretId, credentials);
+        } else {
+          const secret = await secretManager().createSecret(
+            body.credentials,
+            `connector-${body.name ?? connector.name}`,
+          );
+          nextSecretId = secret.id;
+        }
       }
 
       // Reset checkpoint when config changes to force a full re-sync
       // (filters, queries, inclusion/exclusion criteria affect which items get synced)
       const updated = await KnowledgeBaseConnectorModel.update(id, {
         ...updateData,
+        secretId: nextSecretId,
         ...(updateData.config ? { checkpoint: null } : {}),
       });
       if (!updated) {
         throw new ApiError(404, "Connector not found");
+      }
+
+      if (secretToDeleteAfterUpdate) {
+        await secretManager().deleteSecret(secretToDeleteAfterUpdate);
       }
 
       if (
@@ -666,7 +952,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.DeleteConnector,
         description: "Delete a connector",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -708,7 +994,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.SyncConnector,
         description: "Manually trigger a connector sync",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             taskId: z.string(),
@@ -757,7 +1043,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             taskId: z.string(),
@@ -812,7 +1098,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.TestConnectorConnection,
         description: "Test a connector connection",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             success: z.boolean(),
@@ -828,8 +1114,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      // Load credentials
-      const credentials = await loadConnectorCredentials(connector.secretId);
+      // Load credentials (resolves github_app_configs references when needed)
+      const credentials = await resolveConnectorCredentials(connector);
 
       // Get the connector implementation and test
       const connectorImpl = getConnector(connector.connectorType);
@@ -851,7 +1137,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.AssignConnectorToKnowledgeBases,
         description: "Assign a connector to one or more knowledge bases",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         body: z.object({
           knowledgeBaseIds: z.array(z.string()).min(1),
         }),
@@ -885,7 +1171,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UnassignConnectorFromKnowledgeBase,
         description: "Unassign a connector from a knowledge base",
         tags: ["Connectors"],
-        params: z.object({ id: z.string(), kbId: z.string() }),
+        params: z.object({ id: z.uuid(), kbId: z.uuid() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -918,7 +1204,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetConnectorKnowledgeBases,
         description: "List knowledge bases assigned to a connector",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             data: z.array(SelectKnowledgeBaseSchema),
@@ -965,7 +1251,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetConnectorRuns,
         description: "List connector runs",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         querystring: PaginationQuerySchema,
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectConnectorRunListSchema),
@@ -1016,8 +1302,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a single connector run (including logs)",
         tags: ["Connectors"],
         params: z.object({
-          id: z.string(),
-          runId: z.string(),
+          id: z.uuid(),
+          runId: z.uuid(),
         }),
         response: constructResponseSchema(SelectConnectorRunSchema),
       },
@@ -1037,374 +1323,40 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(run);
     },
   );
-
-  // ===== File Upload Routes =====
-
-  const UploadResultSchema = z.object({
-    filename: z.string(),
-    status: z.enum([
-      "created",
-      "duplicate",
-      "unsupported",
-      "too_large",
-      "extraction_failed",
-    ]),
-    fileId: z.string().optional(),
-  });
-
-  const UploadedFileSchema = z.object({
-    id: z.string(),
-    connectorId: z.string(),
-    originalName: z.string().min(1),
-    mimeType: z.string(),
-    fileSize: z.number().int().nonnegative(),
-    contentHash: z.string(),
-    createdAt: z.string(),
-    processingStatus: z.string(),
-    processingError: z.string().nullable(),
-    embeddingStatus: EmbeddingStatusSchema,
-  });
-
-  fastify.post(
-    "/api/connectors/:id/files",
-    {
-      bodyLimit: config.api.bodyLimit,
-      schema: {
-        operationId: RouteId.UploadConnectorFiles,
-        description:
-          "Upload files to a file-upload connector. " +
-          "Send files as base64-encoded content in a JSON array.",
-        tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
-        body: z.object({
-          files: z.array(
-            z.object({
-              name: z.string(),
-              mimeType: z.string(),
-              content: z.string(), // base64-encoded file bytes
-            }),
-          ),
-        }),
-        response: constructResponseSchema(
-          z.object({ results: z.array(UploadResultSchema) }),
-        ),
-      },
-    },
-    async (request, reply) => {
-      const { id } = request.params as { id: string };
-      const { organizationId, user } = request;
-
-      const connector = await findConnectorOrThrow({
-        id,
-        organizationId,
-        userId: user.id,
-      });
-
-      if (connector.connectorType !== "file_upload") {
-        throw new ApiError(
-          400,
-          "This endpoint is only available for file_upload connectors",
-        );
-      }
-
-      const results: z.infer<typeof UploadResultSchema>[] = [];
-      const createdFileIds: string[] = [];
-
-      for (const file of request.body.files) {
-        const filename = file.name;
-        const mimeType = file.mimeType;
-
-        if (!isSupportedMimeType(filename, mimeType)) {
-          results.push({ filename, status: "unsupported" });
-          continue;
-        }
-
-        const rawBuffer = Buffer.from(file.content, "base64");
-
-        const isZip =
-          filename.toLowerCase().endsWith(".zip") ||
-          mimeType === "application/zip" ||
-          mimeType === "application/x-zip-compressed";
-        const uploadSizeLimit = isZip
-          ? MAX_ZIP_TOTAL_BYTES
-          : MAX_FILE_SIZE_BYTES;
-
-        if (rawBuffer.byteLength > uploadSizeLimit) {
-          results.push({ filename, status: "too_large" });
-          continue;
-        }
-
-        if (isZip) {
-          const JSZip = (await import("jszip")).default;
-          const zip = await JSZip.loadAsync(rawBuffer);
-          let totalBytes = 0;
-
-          for (const [relativePath, entry] of Object.entries(zip.files)) {
-            if (entry.dir) continue;
-            const basename = relativePath.split("/").pop() ?? relativePath;
-            if (basename.startsWith(".")) continue;
-            if (relativePath.startsWith("__MACOSX/")) continue;
-
-            if (!isSupportedMimeType(basename, "")) {
-              results.push({ filename: relativePath, status: "unsupported" });
-              continue;
-            }
-
-            const entryBytes = await entry.async("nodebuffer");
-            if (entryBytes.byteLength > MAX_FILE_SIZE_BYTES) {
-              results.push({ filename: relativePath, status: "too_large" });
-              continue;
-            }
-            totalBytes += entryBytes.byteLength;
-            if (totalBytes > MAX_ZIP_TOTAL_BYTES) {
-              results.push({ filename: relativePath, status: "too_large" });
-              break;
-            }
-
-            const contentHash = KbUploadedFileModel.computeContentHash(
-              entryBytes.toString("base64"),
-            );
-
-            const existing = await KbUploadedFileModel.findByContentHash(
-              id,
-              contentHash,
-            );
-            if (existing) {
-              results.push({
-                filename: relativePath,
-                status: "duplicate",
-              });
-              continue;
-            }
-
-            try {
-              const created = await KbUploadedFileModel.create({
-                connectorId: id,
-                organizationId,
-                originalName: relativePath,
-                mimeType: "",
-                fileSize: entryBytes.byteLength,
-                contentHash,
-                fileData: entryBytes,
-                processingStatus: "pending",
-              });
-              createdFileIds.push(created.id);
-              results.push({
-                filename: relativePath,
-                status: "created",
-                fileId: created.id,
-              });
-            } catch (err) {
-              if (isContentHashConflict(err)) {
-                results.push({
-                  filename: relativePath,
-                  status: "duplicate",
-                });
-                continue;
-              }
-              throw err;
-            }
-          }
-        } else {
-          const contentHash = KbUploadedFileModel.computeContentHash(
-            rawBuffer.toString("base64"),
-          );
-
-          const existing = await KbUploadedFileModel.findByContentHash(
-            id,
-            contentHash,
-          );
-          if (existing) {
-            results.push({
-              filename,
-              status: "duplicate",
-            });
-            continue;
-          }
-
-          try {
-            const created = await KbUploadedFileModel.create({
-              connectorId: id,
-              organizationId,
-              originalName: filename,
-              mimeType,
-              fileSize: rawBuffer.byteLength,
-              contentHash,
-              fileData: rawBuffer,
-              processingStatus: "pending",
-            });
-            createdFileIds.push(created.id);
-            results.push({
-              filename,
-              status: "created",
-              fileId: created.id,
-            });
-          } catch (err) {
-            if (isContentHashConflict(err)) {
-              results.push({ filename, status: "duplicate" });
-              continue;
-            }
-            throw err;
-          }
-        }
-      }
-
-      if (createdFileIds.length > 0) {
-        await taskQueueService.enqueue({
-          taskType: "process_uploaded_files",
-          payload: {
-            connectorId: id,
-            fileIds: createdFileIds,
-          },
-        });
-      }
-
-      return reply.send({ results });
-    },
-  );
-
-  fastify.get(
-    "/api/connectors/:id/files",
-    {
-      schema: {
-        operationId: RouteId.GetConnectorFiles,
-        description: "List files uploaded to a file-upload connector",
-        tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
-        querystring: PaginationQuerySchema.extend({
-          search: z.string().optional(),
-        }),
-        response: constructResponseSchema(
-          createPaginatedResponseSchema(UploadedFileSchema),
-        ),
-      },
-    },
-    async (
-      {
-        params: { id },
-        query: { limit, offset, search },
-        organizationId,
-        user,
-      },
-      reply,
-    ) => {
-      await findConnectorOrThrow({ id, organizationId, userId: user.id });
-
-      const [uploadedFiles, total] = await Promise.all([
-        KbUploadedFileModel.findByConnectorPaginated({
-          connectorId: id,
-          limit,
-          offset,
-          search,
-        }),
-        KbUploadedFileModel.countByConnector({
-          connectorId: id,
-          search,
-        }),
-      ]);
-
-      const docs = await KbDocumentModel.findBySourceIds({
-        connectorId: id,
-        sourceIds: uploadedFiles.map((f) => f.id),
-      });
-      const docBySourceId = new Map(docs.map((d) => [d.sourceId, d]));
-
-      const data = uploadedFiles.map((file) => {
-        const doc = docBySourceId.get(file.id);
-        return {
-          id: file.id,
-          connectorId: file.connectorId,
-          originalName: file.originalName,
-          mimeType: file.mimeType,
-          fileSize: file.fileSize,
-          contentHash: file.contentHash,
-          createdAt: file.createdAt.toISOString(),
-          processingStatus: file.processingStatus,
-          processingError: file.processingError ?? null,
-          embeddingStatus: doc?.embeddingStatus ?? "pending",
-        };
-      });
-
-      return reply.send({
-        data,
-        pagination: calculatePaginationMeta(total, { limit, offset }),
-      });
-    },
-  );
-
-  fastify.get(
-    "/api/connectors/:id/files/:fileId",
-    {
-      schema: {
-        operationId: RouteId.GetConnectorFile,
-        description: "Get a single uploaded file by ID",
-        tags: ["Connectors"],
-        params: z.object({ id: z.string(), fileId: z.string() }),
-        response: constructResponseSchema(UploadedFileSchema),
-      },
-    },
-    async ({ params: { id, fileId }, organizationId, user }, reply) => {
-      await findConnectorOrThrow({ id, organizationId, userId: user.id });
-
-      const file = await KbUploadedFileModel.findById(fileId);
-      if (!file || file.connectorId !== id) {
-        throw new ApiError(404, "File not found");
-      }
-
-      const doc = await KbDocumentModel.findBySourceId({
-        connectorId: id,
-        sourceId: fileId,
-      });
-
-      return reply.send({
-        id: file.id,
-        connectorId: file.connectorId,
-        originalName: file.originalName,
-        mimeType: file.mimeType,
-        fileSize: file.fileSize,
-        contentHash: file.contentHash,
-        createdAt: file.createdAt.toISOString(),
-        processingStatus: file.processingStatus,
-        processingError: file.processingError ?? null,
-        embeddingStatus: doc?.embeddingStatus ?? "pending",
-      });
-    },
-  );
-
-  fastify.delete(
-    "/api/connectors/:id/files/:fileId",
-    {
-      schema: {
-        operationId: RouteId.DeleteConnectorFile,
-        description: "Delete an uploaded file and its indexed content",
-        tags: ["Connectors"],
-        params: z.object({ id: z.string(), fileId: z.string() }),
-        response: constructResponseSchema(DeleteObjectResponseSchema),
-      },
-    },
-    async ({ params: { id, fileId }, organizationId, user }, reply) => {
-      await findConnectorOrThrow({ id, organizationId, userId: user.id });
-
-      const file = await KbUploadedFileModel.findById(fileId);
-      if (!file || file.connectorId !== id) {
-        throw new ApiError(404, "File not found");
-      }
-
-      await KbDocumentModel.deleteByConnectorAndSourceId({
-        connectorId: id,
-        sourceId: fileId,
-      });
-
-      await KbUploadedFileModel.delete(fileId);
-
-      return reply.send({ success: true });
-    },
-  );
 };
 
 export default knowledgeBaseRoutes;
 
 // ===== Internal Helpers =====
+
+/**
+ * Gate assigning a knowledge base / connector to an environment. Mirrors the
+ * agent + MCP-catalog write paths: a restricted environment (or a restricted
+ * org default when environmentId is null/omitted) requires
+ * environment:deploy-to-restricted (environment:admin implies it). Also
+ * validates the environment belongs to the org, preventing cross-tenant binding.
+ */
+async function assertEnvironmentAssignable(params: {
+  userId: string;
+  organizationId: string;
+  environmentId: string | null;
+}): Promise<void> {
+  const { userId, organizationId, environmentId } = params;
+  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
+    userHasPermission(userId, organizationId, "environment", "admin"),
+    userHasPermission(
+      userId,
+      organizationId,
+      "environment",
+      "deploy-to-restricted",
+    ),
+  ]);
+  await assertCanAssignEnvironment({
+    environmentId,
+    organizationId,
+    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
+  });
+}
 
 async function findKnowledgeBaseOrThrow(params: {
   id: string;
@@ -1440,36 +1392,50 @@ async function findConnectorOrThrow(params: {
   return connector;
 }
 
-function isContentHashConflict(error: unknown): boolean {
-  let current: unknown = error;
-  while (typeof current === "object" && current !== null) {
-    const msg = (current as Record<string, unknown>).message;
-    if (
-      typeof msg === "string" &&
-      msg.includes("kb_uploaded_files_content_hash_uidx")
-    ) {
-      return true;
-    }
-    current = (current as Record<string, unknown>).cause;
+/**
+ * Validate a connector's GitHub App reference. Returns the referenced
+ * github_app_configs id when the connector uses GitHub App auth (after
+ * confirming it belongs to the organization), or null otherwise.
+ */
+async function resolveGithubAppConfigReference(params: {
+  config: ConnectorConfig;
+  organizationId: string;
+  userId: string;
+}): Promise<{ id: string; githubUrl: string } | null> {
+  const { config, organizationId, userId } = params;
+  if (config.type !== "github" || config.authMethod !== "github_app") {
+    return null;
   }
-  return false;
-}
-
-async function loadConnectorCredentials(
-  secretId: string | null,
-): Promise<ConnectorCredentials> {
-  if (!secretId) {
-    throw new ApiError(400, "Connector has no associated credentials");
+  if (!config.githubAppConfigId) {
+    throw new ApiError(
+      400,
+      "GitHub App authentication requires githubAppConfigId",
+    );
   }
-
-  const secret = await secretManager().getSecret(secretId);
-  if (!secret) {
-    throw new ApiError(404, "Connector credentials not found");
+  // referencing a stored App credential lets the connector mint installation
+  // tokens, so it requires the dedicated githubAppConfig:read permission on top
+  // of the connector permission the route already enforces
+  const canUseAppConfig = await userHasPermission(
+    userId,
+    organizationId,
+    "githubAppConfig",
+    "read",
+  );
+  if (!canUseAppConfig) {
+    throw new ApiError(
+      403,
+      "You do not have permission to use GitHub App configurations",
+    );
   }
-
-  const data = secret.secret as Record<string, unknown>;
-  return {
-    email: (data.email as string) || "",
-    apiToken: (data.apiToken as string) || "",
-  };
+  const appConfig = await GithubAppConfigModel.findByIdForOrganization({
+    id: config.githubAppConfigId,
+    organizationId,
+  });
+  if (!appConfig) {
+    throw new ApiError(
+      400,
+      "Referenced GitHub App configuration was not found",
+    );
+  }
+  return { id: appConfig.id, githubUrl: appConfig.githubUrl };
 }

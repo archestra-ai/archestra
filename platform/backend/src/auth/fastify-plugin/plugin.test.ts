@@ -25,12 +25,15 @@ vi.mock("@/auth/utils", () => ({
 }));
 
 vi.mock("@/models", () => ({
+  ServiceAccountModel: {
+    verifyToken: vi.fn(),
+  },
   UserModel: {
     getById: vi.fn(),
   },
 }));
 
-vi.mock("@shared/access-control", () => ({
+vi.mock("@archestra/shared/access-control", () => ({
   requiredEndpointPermissionsMap: {
     createAgent: { agent: ["create"] },
     getAgents: { agent: ["read"] },
@@ -41,7 +44,7 @@ vi.mock("@shared/access-control", () => ({
 }));
 
 import { betterAuth, hasPermission } from "@/auth";
-import { UserModel } from "@/models";
+import { ServiceAccountModel, UserModel } from "@/models";
 
 // Type the mocked functions
 const mockBetterAuth = betterAuth as unknown as {
@@ -57,11 +60,21 @@ const mockUserModel = UserModel as unknown as {
   getById: MockedFunction<typeof UserModel.getById>;
 };
 
+const mockServiceAccountModel = ServiceAccountModel as unknown as {
+  verifyToken: MockedFunction<typeof ServiceAccountModel.verifyToken>;
+};
+
 import { Authnz } from "./middleware";
 import { authPlugin } from "./plugin";
 
 type Session = Awaited<ReturnType<typeof betterAuth.api.getSession>>;
 type User = Awaited<ReturnType<typeof UserModel.getById>>;
+
+// The middleware calls getSession with `returnHeaders: true`, so the resolved
+// value is `{ response, headers }`. Wrap the bare session shape the tests build
+// so the mock matches what better-auth actually returns.
+const sessionResult = (session: unknown): Session =>
+  ({ response: session, headers: new Headers() }) as unknown as Session;
 type ApiKey = Awaited<ReturnType<typeof betterAuth.api.verifyApiKey>>["key"];
 
 describe("authPlugin integration", () => {
@@ -69,14 +82,17 @@ describe("authPlugin integration", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockServiceAccountModel.verifyToken.mockResolvedValue(null);
   });
 
   describe("authentication", () => {
     test("should allow authenticated session users", async () => {
-      mockBetterAuth.api.getSession.mockResolvedValue({
-        user: { id: "user1" },
-        session: { activeOrganizationId: "org1" },
-      } as Session);
+      mockBetterAuth.api.getSession.mockResolvedValue(
+        sessionResult({
+          user: { id: "user1" },
+          session: { activeOrganizationId: "org1" },
+        }),
+      );
       mockHasPermission.mockResolvedValue({
         success: true,
         error: null,
@@ -105,6 +121,44 @@ describe("authPlugin integration", () => {
 
       expect(mockReply.status).not.toHaveBeenCalled();
       expect(mockReply.send).not.toHaveBeenCalled();
+    });
+
+    test("forwards better-auth's refreshed cookie-cache Set-Cookie to the reply", async () => {
+      const refreshedCookie =
+        "archestra.session_data=cached; Max-Age=60; Path=/";
+      const authHeaders = new Headers();
+      authHeaders.append("set-cookie", refreshedCookie);
+      mockBetterAuth.api.getSession.mockResolvedValue({
+        response: {
+          user: { id: "user1" },
+          session: { activeOrganizationId: "org1" },
+        },
+        headers: authHeaders,
+      } as unknown as Session);
+      mockHasPermission.mockResolvedValue({ success: true, error: null });
+      mockUserModel.getById.mockResolvedValue({
+        id: "user1",
+        name: "Test User",
+        organizationId: "org1",
+      } as User);
+
+      const mockRequest = {
+        url: "/api/agents",
+        method: "GET",
+        headers: {},
+        routeOptions: { schema: { operationId: "getAgents" } },
+      } as unknown as FastifyRequest;
+
+      const headerSpy = vi.fn().mockReturnThis();
+      const mockReply = {
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+        header: headerSpy,
+      } as unknown as FastifyReply;
+
+      await authnz.handle(mockRequest, mockReply);
+
+      expect(headerSpy).toHaveBeenCalledWith("set-cookie", [refreshedCookie]);
     });
 
     test("should allow valid API key authentication", async () => {
@@ -147,7 +201,7 @@ describe("authPlugin integration", () => {
     });
 
     test("should return 401 for invalid session", async () => {
-      mockBetterAuth.api.getSession.mockResolvedValue(null);
+      mockBetterAuth.api.getSession.mockResolvedValue(sessionResult(null));
 
       const mockRequest = {
         url: "/api/agents",
@@ -198,10 +252,12 @@ describe("authPlugin integration", () => {
 
   describe("authorization", () => {
     test("should return 403 for insufficient permissions", async () => {
-      mockBetterAuth.api.getSession.mockResolvedValue({
-        user: { id: "user1" },
-        session: { activeOrganizationId: "org1" },
-      } as Session);
+      mockBetterAuth.api.getSession.mockResolvedValue(
+        sessionResult({
+          user: { id: "user1" },
+          session: { activeOrganizationId: "org1" },
+        }),
+      );
       mockUserModel.getById.mockResolvedValue({
         id: "user1",
         name: "Test User",
@@ -232,10 +288,12 @@ describe("authPlugin integration", () => {
     });
 
     test("should return 403 for routes without operationId", async () => {
-      mockBetterAuth.api.getSession.mockResolvedValue({
-        user: { id: "user1" },
-        session: { activeOrganizationId: "org1" },
-      } as Session);
+      mockBetterAuth.api.getSession.mockResolvedValue(
+        sessionResult({
+          user: { id: "user1" },
+          session: { activeOrganizationId: "org1" },
+        }),
+      );
       mockUserModel.getById.mockResolvedValue({
         id: "user1",
         name: "Test User",
@@ -262,10 +320,12 @@ describe("authPlugin integration", () => {
     });
 
     test("should check specific permissions for configured routes", async () => {
-      mockBetterAuth.api.getSession.mockResolvedValue({
-        user: { id: "user1" },
-        session: { activeOrganizationId: "org1" },
-      } as Session);
+      mockBetterAuth.api.getSession.mockResolvedValue(
+        sessionResult({
+          user: { id: "user1" },
+          session: { activeOrganizationId: "org1" },
+        }),
+      );
       mockHasPermission.mockResolvedValue({
         success: true,
         error: null,
@@ -295,16 +355,19 @@ describe("authPlugin integration", () => {
       expect(mockHasPermission).toHaveBeenCalledWith(
         { agent: ["create"] },
         expect.objectContaining({}),
+        undefined,
       );
     });
   });
 
   describe("user info population", () => {
     test("should populate user and organizationId from session", async () => {
-      mockBetterAuth.api.getSession.mockResolvedValue({
-        user: { id: "user1" },
-        session: { activeOrganizationId: "org1" },
-      } as Session);
+      mockBetterAuth.api.getSession.mockResolvedValue(
+        sessionResult({
+          user: { id: "user1" },
+          session: { activeOrganizationId: "org1" },
+        }),
+      );
       mockHasPermission.mockResolvedValue({
         success: true,
         error: null,
@@ -341,10 +404,12 @@ describe("authPlugin integration", () => {
         name: "Test User",
         organizationId: "org2",
       } as User;
-      mockBetterAuth.api.getSession.mockResolvedValue({
-        user: { id: "user1" },
-        session: {}, // No activeOrganizationId
-      } as Session);
+      mockBetterAuth.api.getSession.mockResolvedValue(
+        sessionResult({
+          user: { id: "user1" },
+          session: {}, // No activeOrganizationId
+        }),
+      );
       mockHasPermission.mockResolvedValue({
         success: true,
         error: null,
@@ -402,10 +467,12 @@ describe("authPlugin integration", () => {
     });
 
     test("should reject with 401 when user population fails", async () => {
-      mockBetterAuth.api.getSession.mockResolvedValue({
-        user: { id: "user1" },
-        session: { activeOrganizationId: "org1" },
-      } as Session);
+      mockBetterAuth.api.getSession.mockResolvedValue(
+        sessionResult({
+          user: { id: "user1" },
+          session: { activeOrganizationId: "org1" },
+        }),
+      );
       mockHasPermission.mockResolvedValue({
         success: true,
         error: null,

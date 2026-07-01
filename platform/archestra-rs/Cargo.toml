@@ -1,0 +1,7 @@
+[workspace]
+members = ["app-runtime-core", "app-runtime-rs", "sandbox-core", "sandbox-rs"]
+resolver = "2"
+
+[profile.release]
+lto = "thin"
+strip = "symbols"

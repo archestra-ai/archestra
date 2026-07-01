@@ -16,16 +16,22 @@ setup("authenticate as admin", async ({ page }) => {
   // Navigate to trigger cookie storage
   await page.goto(`${UI_BASE_URL}/chat`, { waitUntil: "domcontentloaded" });
 
-  // Mark onboarding as complete and set restrictive policy via API
-  // Setting globalToolPolicy to "restrictive" prevents the permissive policy overlay from blocking UI interactions
+  // Mark onboarding as complete and set restrictive tool policies via API.
+  // Proxy-discovered tools use a separate policy switch, so set both.
   await page.request.post(
     `${UI_BASE_URL}/api/organization/complete-onboarding`,
     { data: { onboardingComplete: true } },
   );
-  await page.request.patch(
+  const securitySettingsResponse = await page.request.patch(
     `${UI_BASE_URL}/api/organization/security-settings`,
-    { data: { globalToolPolicy: "restrictive" } },
+    {
+      data: {
+        globalToolPolicy: "restrictive",
+        discoveredToolPolicy: "apply_policies",
+      },
+    },
   );
+  expect(securitySettingsResponse.ok()).toBe(true);
 
   // Reload page to dismiss onboarding dialog (on fresh env it renders before API call)
   await page.reload({ waitUntil: "domcontentloaded" });

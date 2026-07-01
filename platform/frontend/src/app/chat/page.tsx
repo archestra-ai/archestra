@@ -122,6 +122,7 @@ import {
   drainPendingChatHandoffFiles,
   hasPendingChatHandoffFiles,
 } from "@/lib/chat/pending-chat-handoff-files";
+import { takePendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import {
   applyPendingActions,
   clearPendingActions,
@@ -151,6 +152,7 @@ import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
   buildCreateConversationInput,
+  isAutoSendHandoffInProgress,
   resolveChatModelState,
   resolvePreferredModelForProvider,
 } from "./chat-initial-state";
@@ -406,6 +408,20 @@ export function ChatPageContent({
   const initialUserPrompt = useMemo(() => {
     return searchParams.get("user_prompt") || undefined;
   }, [searchParams]);
+
+  // A chat started from a project is created up front by the project composer,
+  // which stashes its opening prompt and navigates straight here. Drain that
+  // prompt (and any attachments the composer stashed) into the
+  // pending-initial-message refs so the shared send effect delivers them as the
+  // conversation's first message. Gated on the conversation id, so an ordinary
+  // /chat/<id> open never consumes it.
+  useEffect(() => {
+    if (!conversationId) return;
+    const handoff = takePendingProjectChatHandoff(conversationId);
+    if (!handoff) return;
+    pendingPromptRef.current = handoff.prompt || undefined;
+    pendingFilesRef.current = drainPendingChatHandoffFiles();
+  }, [conversationId]);
 
   // Update URL when conversation changes
   const selectConversation = useCallback(
@@ -1999,6 +2015,20 @@ export function ChatPageContent({
     );
   }
 
+  // A chat opened via a handoff (project composer, app, SSO, a2a, deep link)
+  // lands on /chat carrying a `user_prompt` (or a stashed-attachments marker),
+  // auto-creates a conversation, then navigates to /chat/<id>. Rendering the
+  // centered New Chat splash during that brief window flashes the empty home
+  // before the conversation view mounts, so suppress it while the handoff runs.
+  const isAutoSendHandoffPending = isAutoSendHandoffInProgress({
+    conversationId,
+    initialUserPrompt,
+    hasAttachmentsMarker: searchParams.get("attachments") === "1",
+    hasPendingHandoffFiles: hasPendingChatHandoffFiles(),
+    autoSendTriggered: autoSendTriggeredRef.current,
+    isCreatingConversation: createConversationMutation.isPending,
+  });
+
   return (
     <AppsProvider
       apps={mcpApps}
@@ -2253,6 +2283,11 @@ export function ChatPageContent({
                   )
                 )}
               </>
+            ) : isAutoSendHandoffPending ? (
+              /* Handoff auto-send in progress: render an empty pane instead of
+                 the centered New Chat splash, so the empty home never flashes
+                 before we navigate to /chat/<id>. */
+              <div className="flex-1 min-h-0" />
             ) : (
               /* No active chat: centered prompt input */
               newChatAgentId && (

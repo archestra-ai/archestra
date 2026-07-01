@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   buildCreateConversationInput,
+  isAutoSendHandoffInProgress,
   resolveChatModelState,
   resolveInitialAgentSelection,
   resolveInitialAgentState,
@@ -259,5 +260,85 @@ describe("shouldResetInitialChatState", () => {
         routeConversationId: undefined,
       }),
     ).toBe(true);
+  });
+});
+
+describe("isAutoSendHandoffInProgress", () => {
+  const base = {
+    conversationId: undefined,
+    initialUserPrompt: undefined,
+    hasAttachmentsMarker: false,
+    hasPendingHandoffFiles: false,
+    autoSendTriggered: false,
+    isCreatingConversation: false,
+  };
+
+  test("true on first render of a prompt handoff (before the send fires)", () => {
+    // The frame that used to flash the empty New Chat splash: /chat mounted with
+    // a user_prompt, no conversation yet, auto-send not triggered.
+    expect(
+      isAutoSendHandoffInProgress({
+        ...base,
+        initialUserPrompt: "Say hello",
+      }),
+    ).toBe(true);
+  });
+
+  test("stays true after user_prompt is stripped from the URL (latched via ref)", () => {
+    // clearUserPromptQueryParam has run, so initialUserPrompt is gone, but the
+    // conversation is still being created — the ref keeps the splash suppressed.
+    expect(
+      isAutoSendHandoffInProgress({
+        ...base,
+        initialUserPrompt: undefined,
+        autoSendTriggered: true,
+      }),
+    ).toBe(true);
+  });
+
+  test("true while the create-conversation mutation is pending", () => {
+    expect(
+      isAutoSendHandoffInProgress({ ...base, isCreatingConversation: true }),
+    ).toBe(true);
+  });
+
+  test("true for a files-only handoff whose stashed files are still in memory", () => {
+    expect(
+      isAutoSendHandoffInProgress({
+        ...base,
+        hasAttachmentsMarker: true,
+        hasPendingHandoffFiles: true,
+      }),
+    ).toBe(true);
+  });
+
+  test("false for a files-only handoff whose stashed files were lost (reload)", () => {
+    // No prompt and no pending files: nothing will auto-send, so the composer
+    // must show rather than a permanently blank pane.
+    expect(
+      isAutoSendHandoffInProgress({
+        ...base,
+        hasAttachmentsMarker: true,
+        hasPendingHandoffFiles: false,
+      }),
+    ).toBe(false);
+  });
+
+  test("false on the plain /chat new-chat page (no handoff)", () => {
+    expect(isAutoSendHandoffInProgress(base)).toBe(false);
+  });
+
+  test("false once a conversation exists, even mid-handoff signals", () => {
+    // After navigating to /chat/<id> the conversation view owns the screen; the
+    // suppression must not linger and blank out a real conversation.
+    expect(
+      isAutoSendHandoffInProgress({
+        ...base,
+        conversationId: "conv-1",
+        initialUserPrompt: "Say hello",
+        autoSendTriggered: true,
+        isCreatingConversation: true,
+      }),
+    ).toBe(false);
   });
 });

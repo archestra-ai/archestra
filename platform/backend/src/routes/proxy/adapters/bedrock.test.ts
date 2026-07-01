@@ -1,7 +1,7 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { describe, expect, test } from "@/test";
-import type { Bedrock } from "@/types";
+import { Bedrock } from "@/types";
 import { bedrockAdapterFactory, getCommandInput } from "./bedrock";
 
 const eventStreamCodec = new EventStreamCodec(toUtf8, fromUtf8);
@@ -429,5 +429,68 @@ describe("Bedrock getUsage", () => {
       cacheWriteTokens: 1000,
       cacheWrite1hTokens: 400,
     });
+  });
+});
+
+describe("Bedrock system content validation (issue #3406)", () => {
+  // Exact body @ai-sdk/amazon-bedrock emits for a Claude request with prompt
+  // caching (as used by OpenCode): a system cachePoint breakpoint follows the
+  // system text, landing at system[1]. Older Archestra validation rejected this
+  // with "body/system/1 Invalid input"; it must now validate and pass through.
+  test("accepts a cachePoint breakpoint in the system array", () => {
+    const result = Bedrock.API.ConverseRequestSchema.safeParse({
+      modelId: "anthropic.claude-haiku-4-5-20251001-v1:0",
+      system: [
+        { text: "You are a helpful assistant." },
+        { cachePoint: { type: "default" } },
+      ],
+      messages: [{ role: "user", content: [{ text: "hi" }] }],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("forwards the system cachePoint to Bedrock unchanged", () => {
+    const request = createConverseRequest({
+      system: [
+        { text: "You are a helpful assistant." },
+        { cachePoint: { type: "default" } },
+      ],
+    });
+
+    const commandInput = getCommandInput(request);
+
+    expect(commandInput.system).toEqual([
+      { text: "You are a helpful assistant." },
+      { cachePoint: { type: "default" } },
+    ]);
+  });
+
+  test("normalizes Anthropic-style { type: 'text' } system blocks", () => {
+    const request = createConverseRequest({
+      system: [{ type: "text", text: "You are a helpful assistant." }] as never,
+    });
+
+    const commandInput = getCommandInput(request);
+
+    expect(commandInput.system).toEqual([
+      { text: "You are a helpful assistant." },
+    ]);
+  });
+
+  // Forward-compat: an unmodeled but object-shaped Bedrock-native system block
+  // must not 400 the whole request — AWS is the authoritative validator, so we
+  // accept it and forward it untouched instead of rejecting future block types.
+  test("accepts and passes through an unknown system block shape", () => {
+    const futureBlock = { reasoningContent: { text: "scratchpad" } };
+    const request = createConverseRequest({
+      system: [{ text: "sys" }, futureBlock] as never,
+    });
+
+    const parsed = Bedrock.API.ConverseRequestSchema.safeParse(request);
+    expect(parsed.success).toBe(true);
+
+    const commandInput = getCommandInput(request);
+    expect(commandInput.system).toEqual([{ text: "sys" }, futureBlock]);
   });
 });

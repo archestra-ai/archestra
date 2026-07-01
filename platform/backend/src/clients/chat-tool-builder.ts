@@ -4,6 +4,7 @@
 // execution). Must not import chat-mcp-client.ts (cycle).
 import { randomUUID } from "node:crypto";
 import {
+  extractMcpToolError,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   parseFullToolName,
@@ -561,6 +562,23 @@ export async function buildArchestraToolOutput(params: {
     );
   }
   if (!resourceUri) {
+    // A dispatched third-party tool with no MCP-App UI. If it returned a
+    // structured Archestra error (e.g. the expired-auth re-auth payload),
+    // preserve `_meta`/`structuredContent` so chat renders the same rich card
+    // as a direct call. The bare-text fallback below strips
+    // `_meta.archestraError`/`structuredContent.archestraError`, degrading the
+    // card to a text-parsed one (which loses e.g. the credential scope). Mirrors
+    // the direct path (executeMcpTool), which keeps these fields on error.
+    if (response.isError && extractMcpToolError(response)) {
+      return {
+        content: text,
+        _meta: response._meta as Record<string, unknown> | undefined,
+        structuredContent: response.structuredContent as
+          | Record<string, unknown>
+          | undefined,
+        rawContent: response.content as ContentBlock[],
+      };
+    }
     return text;
   }
 

@@ -1707,7 +1707,6 @@ class McpClient {
       : this.buildConnectionUnavailableMessage(
           catalogDisplayName,
           tool.catalogId,
-          tokenAuth,
         );
     return {
       error: await this.createErrorResult(
@@ -2564,13 +2563,11 @@ class McpClient {
   private buildConnectionUnavailableMessage(
     catalogDisplayName: string,
     catalogId: string,
-    tokenAuth?: TokenAuthContext,
   ): AuthRequiredMcpToolError {
-    const context = this.formatAuthContext(tokenAuth);
     return {
       type: "auth_required",
       message:
-        `The tool's MCP server "${catalogDisplayName}" is not shared with your account (${context}), ` +
+        `The tool's MCP server "${catalogDisplayName}" is not shared with your account, ` +
         "so it cannot run for you and you cannot set up your own connection to it. " +
         "Ask the server's owner or an administrator to share it with your team or organization, " +
         "to designate a shared connection for it, or to run this tool on your behalf.",

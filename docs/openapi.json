@@ -144182,6 +144182,12 @@
                           "supports_resource_metadata": {
                             "type": "boolean"
                           },
+                          "additional_scopes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "generic_oauth": {
                             "type": "boolean"
                           },
@@ -145077,6 +145083,12 @@
                       "supports_resource_metadata": {
                         "type": "boolean"
                       },
+                      "additional_scopes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "generic_oauth": {
                         "type": "boolean"
                       },
@@ -145642,6 +145654,12 @@
                         },
                         "supports_resource_metadata": {
                           "type": "boolean"
+                        },
+                        "additional_scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
                         },
                         "generic_oauth": {
                           "type": "boolean"
@@ -146544,6 +146562,12 @@
                         "supports_resource_metadata": {
                           "type": "boolean"
                         },
+                        "additional_scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
                         "generic_oauth": {
                           "type": "boolean"
                         },
@@ -147413,6 +147437,12 @@
                       "supports_resource_metadata": {
                         "type": "boolean"
                       },
+                      "additional_scopes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "generic_oauth": {
                         "type": "boolean"
                       },
@@ -147980,6 +148010,12 @@
                         },
                         "supports_resource_metadata": {
                           "type": "boolean"
+                        },
+                        "additional_scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
                         },
                         "generic_oauth": {
                           "type": "boolean"
@@ -150020,6 +150056,12 @@
                           "supports_resource_metadata": {
                             "type": "boolean"
                           },
+                          "additional_scopes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "generic_oauth": {
                             "type": "boolean"
                           },
@@ -150921,6 +150963,12 @@
                         },
                         "supports_resource_metadata": {
                           "type": "boolean"
+                        },
+                        "additional_scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
                         },
                         "generic_oauth": {
                           "type": "boolean"
@@ -176757,6 +176805,12 @@
                                   "supports_resource_metadata": {
                                     "type": "boolean"
                                   },
+                                  "additional_scopes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
                                   "generic_oauth": {
                                     "type": "boolean"
                                   },
@@ -177439,6 +177493,12 @@
                               "supports_resource_metadata": {
                                 "type": "boolean"
                               },
+                              "additional_scopes": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
                               "generic_oauth": {
                                 "type": "boolean"
                               },
@@ -177821,6 +177881,12 @@
                                 },
                                 "supports_resource_metadata": {
                                   "type": "boolean"
+                                },
+                                "additional_scopes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
                                 },
                                 "generic_oauth": {
                                   "type": "boolean"
@@ -178534,6 +178600,12 @@
                                 "supports_resource_metadata": {
                                   "type": "boolean"
                                 },
+                                "additional_scopes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
                                 "generic_oauth": {
                                   "type": "boolean"
                                 },
@@ -179219,6 +179291,12 @@
                               "supports_resource_metadata": {
                                 "type": "boolean"
                               },
+                              "additional_scopes": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
                               "generic_oauth": {
                                 "type": "boolean"
                               },
@@ -179652,6 +179730,12 @@
                                 },
                                 "supports_resource_metadata": {
                                   "type": "boolean"
+                                },
+                                "additional_scopes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
                                 },
                                 "generic_oauth": {
                                   "type": "boolean"
@@ -180654,6 +180738,12 @@
                                 "supports_resource_metadata": {
                                   "type": "boolean"
                                 },
+                                "additional_scopes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
                                 "generic_oauth": {
                                   "type": "boolean"
                                 },
@@ -181380,6 +181470,12 @@
                                 },
                                 "supports_resource_metadata": {
                                   "type": "boolean"
+                                },
+                                "additional_scopes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
                                 },
                                 "generic_oauth": {
                                   "type": "boolean"
@@ -182111,6 +182207,12 @@
                                 },
                                 "supports_resource_metadata": {
                                   "type": "boolean"
+                                },
+                                "additional_scopes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
                                 },
                                 "generic_oauth": {
                                   "type": "boolean"

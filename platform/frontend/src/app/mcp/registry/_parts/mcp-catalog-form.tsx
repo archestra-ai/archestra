@@ -285,6 +285,7 @@ export function McpCatalogForm({
                 ? `${window.location.origin}/oauth-callback`
                 : "",
             scopes: "read, write",
+            additional_scopes: "offline_access",
             supports_resource_metadata: true,
             grantType: "authorization_code",
             authServerUrl: "",
@@ -2042,6 +2043,31 @@ export function McpCatalogForm({
                                       </FormControl>
                                       <FormDescription>
                                         Comma-separated list of OAuth scopes.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name="oauthConfig.additional_scopes"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Additional scopes</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="offline_access"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Always appended on top of the requested
+                                        scopes. offline_access is added by
+                                        default so the provider returns a
+                                        refresh token; clear it for providers
+                                        that reject it (e.g. Google).
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>

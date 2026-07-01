@@ -27,7 +27,7 @@ The model router exposes one OpenAI-compatible interface for models across confi
 - **Models API** (`/models`) for provider-qualified chat and embedding model IDs
 - **Embeddings API** (`/embeddings`) for embedding models across supported providers
 
-Embeddings routing accepts any provider-qualified embedding model ID (for example `openai:text-embedding-3-small`, `mistral:mistral-embed`, or `gemini:gemini-embedding-001`) that is registered and mapped to the request's virtual key or LLM OAuth client. OpenAI-compatible providers (OpenAI, Azure, Mistral, Ollama, vLLM, Zhipu AI, and other OpenAI-wire providers) are served through a shared OpenAI-compatible embeddings adapter; Gemini is translated to its native `embedContent` API. The response is always returned in the OpenAI embeddings shape. Providers without a compatible embeddings API, including Anthropic, Bedrock, and Cohere, return `501 Not Implemented`.
+Embedding models use the same provider-qualified IDs as chat models (for example `openai:text-embedding-3-small` or `gemini:gemini-embedding-001`). Anthropic, Bedrock, and Cohere have no compatible embeddings API and return `501 Not Implemented`.
 
 ### Model Router Connection Details
 
@@ -96,7 +96,7 @@ Archestra supports both the [Google AI Studio](https://ai.google.dev/) (Gemini D
 
 - **Generate Content API** (`:generateContent`)
 - **Stream Generate Content API** (`:streamGenerateContent`)
-- **Embeddings API** (`/embeddings`) - OpenAI-compatible request/response, translated to Gemini's native `embedContent`
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible
 
 ### Gemini Connection Details
 

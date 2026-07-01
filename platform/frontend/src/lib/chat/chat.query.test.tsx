@@ -12,6 +12,7 @@ import {
   useConversationFiles,
   useConversations,
   useConversationUpdatedCacheSync,
+  useDeleteConversation,
   useKeepViewedConversationRead,
   useMarkConversationRead,
   useMemberDefaultModel,
@@ -25,6 +26,7 @@ vi.mock("@archestra/shared", () => ({
     getMemberDefaultModel: vi.fn(),
     getConversationEnabledTools: vi.fn(),
     markChatConversationRead: vi.fn(),
+    deleteChatConversation: vi.fn(),
   },
   PLAYWRIGHT_MCP_CATALOG_ID: "playwright-catalog-id",
   PLAYWRIGHT_MCP_SERVER_NAME: "playwright-mcp",
@@ -493,5 +495,67 @@ describe("conversation read-state hooks", () => {
     });
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["conversations"] });
+  });
+});
+
+describe("useDeleteConversation project-list invalidation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(archestraApiSdk.deleteChatConversation).mockResolvedValue({
+      data: { success: true },
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.deleteChatConversation>>);
+  });
+
+  const renderDelete = (conversation: {
+    id: string;
+    projectId: string | null;
+  }) => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(
+      ["conversations", undefined],
+      [{ ...makeConversation(), ...conversation }],
+    );
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    return {
+      invalidateSpy,
+      ...renderHook(() => useDeleteConversation(), { wrapper }),
+    };
+  };
+
+  it("invalidates the project's conversation list when a project chat is deleted", async () => {
+    const { invalidateSpy, result } = renderDelete({
+      id: "c1",
+      projectId: "p1",
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync("c1");
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["projects", "p1", "conversations"],
+    });
+  });
+
+  it("does not invalidate any project query for a non-project chat", async () => {
+    const { invalidateSpy, result } = renderDelete({
+      id: "c1",
+      projectId: null,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync("c1");
+    });
+
+    const touchedProjects = invalidateSpy.mock.calls.some(
+      ([arg]) => Array.isArray(arg?.queryKey) && arg.queryKey[0] === "projects",
+    );
+    expect(touchedProjects).toBe(false);
   });
 });

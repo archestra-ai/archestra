@@ -445,7 +445,14 @@ describe("renderSetupScript (windows)", () => {
       };
       const binary = binaries[clientId];
       if (binary) {
-        expect(script).toContain(`${binary} mcp remove 'prod_gateway' 2>$null`);
+        // The remove is wrapped in try/catch: under $ErrorActionPreference='Stop',
+        // Windows PowerShell 5.1 promotes the "No MCP server named …" stderr line
+        // (emitted when the server is not yet registered — e.g. a first run or a
+        // renamed gateway) to a terminating error that 2>$null does not suppress,
+        // which would abort the script before the add ever runs.
+        expect(script).toContain(
+          `try { ${binary} mcp remove 'prod_gateway' 2>$null | Out-Null } catch { }`,
+        );
       }
     });
   }
@@ -471,7 +478,9 @@ describe("renderSetupScript (windows)", () => {
 
   test("claude-code: remove-then-add MCP and merge settings.json env", () => {
     const script = renderSetupScript(fullContext("claude-code", "windows"));
-    expect(script).toContain("claude mcp remove 'prod_gateway' 2>$null");
+    expect(script).toContain(
+      "try { claude mcp remove 'prod_gateway' 2>$null | Out-Null } catch { }",
+    );
     expect(script).toContain(
       `claude mcp add --transport http 'prod_gateway' '${MCP.url}'`,
     );

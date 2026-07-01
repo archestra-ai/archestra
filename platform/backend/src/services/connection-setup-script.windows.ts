@@ -26,8 +26,13 @@ import type {
  * - ends with next steps + revocation guidance.
  *
  * Targets Windows PowerShell 5.1 (the OS default) as well as PowerShell 7+: no
- * `-AsHashtable`, ternary, or null-coalescing; native command failures are not
- * promoted to terminating errors so remove-then-add stays idempotent.
+ * `-AsHashtable`, ternary, or null-coalescing. A native command's non-zero exit
+ * is not promoted to a terminating error ($PSNativeCommandUseErrorActionPreference),
+ * but that setting does not cover stderr: under $ErrorActionPreference='Stop'
+ * Windows PowerShell 5.1 turns any native-command stderr line into a terminating
+ * error that 2>$null does not suppress, so the idempotent MCP remove-then-add —
+ * whose remove writes "No MCP server named …" to stderr when the server is not
+ * yet registered — wraps the remove in try/catch to stay idempotent.
  */
 export function renderWindowsSetupScript(ctx: SetupScriptContext): string {
   const sections: string[] = [header(ctx)];
@@ -76,8 +81,11 @@ function psq(value: string): string {
 /**
  * Color setup + logging helpers. Colors are emitted only when NO_COLOR is
  * unset. `Say` marks section headers, `Ok` a success, `Warn`/`Err` advisory
- * and failure lines. Native command failures are demoted so an idempotent
- * remove-then-add never aborts the run.
+ * and failure lines. A native command's non-zero exit is demoted from a
+ * terminating error ($PSNativeCommandUseErrorActionPreference = $false); its
+ * stderr — which $ErrorActionPreference='Stop' still promotes to a terminating
+ * error on Windows PowerShell 5.1, past 2>$null — is instead swallowed per-call
+ * (try/catch around the idempotent MCP remove) so a re-run never aborts.
  */
 const SCRIPT_HELPERS = `$ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -330,7 +338,7 @@ function claudeCodeSections(ctx: SetupScriptContext): string[] {
 
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-claude mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null
+try { claude mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
 claude mcp add --transport http ${psq(ctx.mcp.serverName)} ${psq(ctx.mcp.url)}`);
   }
 
@@ -452,7 +460,7 @@ function codexSections(ctx: SetupScriptContext): string[] {
 
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null
+try { codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
 codex mcp add ${psq(ctx.mcp.serverName)} --url ${psq(ctx.mcp.url)}`);
   }
 
@@ -517,7 +525,7 @@ function copilotSections(ctx: SetupScriptContext): string[] {
 
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-copilot mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null
+try { copilot mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
 copilot mcp add --transport http ${psq(ctx.mcp.serverName)} ${psq(ctx.mcp.url)}
 copilot mcp get ${psq(ctx.mcp.serverName)}`);
   }

@@ -56,8 +56,8 @@ ensure_dagger_cli() {
     echo "failed to download Dagger CLI v${version}" >&2
     return 1
   fi
-  chmod +x "$tmp"
-  mv -f "$tmp" "$bin"
+  chmod +x "$tmp" || { rm -f "$tmp"; echo "failed to prepare Dagger CLI v${version}" >&2; return 1; }
+  mv -f "$tmp" "$bin" || { rm -f "$tmp"; echo "failed to install Dagger CLI v${version}" >&2; return 1; }
 }
 bootstrap() {
   local root
@@ -99,10 +99,17 @@ worktree_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 bootstrap="$worktree_root/platform/scripts/worktree-bootstrap.sh"
 [ -x "$bootstrap" ] || exit 0
 log="$worktree_root/.worktree-bootstrap.log"
-# run detached with stdio redirected to the log so `git worktree add` returns
-# immediately instead of blocking on a full pnpm install.
-nohup "$bootstrap" bootstrap >"$log" 2>&1 &
-echo "Archestra worktree bootstrap started in background (log: $log; on failure: $worktree_root/.worktree-bootstrap.failed)" >&2
+# run detached (stdio redirected to the log, stdin from /dev/null) so
+# `git worktree add` returns immediately instead of blocking on a full pnpm
+# install. Fall back to a synchronous run if nohup is unavailable, so bootstrap
+# still happens rather than falsely reporting a background launch.
+if command -v nohup >/dev/null 2>&1; then
+  nohup "$bootstrap" bootstrap >"$log" 2>&1 </dev/null &
+  echo "Archestra worktree bootstrap started in background (log: $log; on failure: $worktree_root/.worktree-bootstrap.failed)" >&2
+else
+  "$bootstrap" bootstrap >"$log" 2>&1 </dev/null \
+    || echo "Archestra worktree bootstrap failed — see $log" >&2
+fi
 exit 0
 EOF
   chmod +x "$hook"

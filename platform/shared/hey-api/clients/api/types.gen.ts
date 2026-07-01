@@ -18629,6 +18629,224 @@ export type BulkUpsertDefaultResultPolicyResponses = {
 
 export type BulkUpsertDefaultResultPolicyResponse = BulkUpsertDefaultResultPolicyResponses[keyof BulkUpsertDefaultResultPolicyResponses];
 
+export type AzureEmbeddingsWithDefaultAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/azure/embeddings';
+};
+
+export type AzureEmbeddingsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureEmbeddingsWithDefaultAgentError = AzureEmbeddingsWithDefaultAgentErrors[keyof AzureEmbeddingsWithDefaultAgentErrors];
+
+export type AzureEmbeddingsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type AzureEmbeddingsWithDefaultAgentResponse = AzureEmbeddingsWithDefaultAgentResponses[keyof AzureEmbeddingsWithDefaultAgentResponses];
+
+export type AzureEmbeddingsWithAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/azure/{agentId}/embeddings';
+};
+
+export type AzureEmbeddingsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureEmbeddingsWithAgentError = AzureEmbeddingsWithAgentErrors[keyof AzureEmbeddingsWithAgentErrors];
+
+export type AzureEmbeddingsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type AzureEmbeddingsWithAgentResponse = AzureEmbeddingsWithAgentResponses[keyof AzureEmbeddingsWithAgentResponses];
+
 export type AzureChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
     headers?: {
@@ -27384,6 +27602,224 @@ export type UpdateEnvironmentResponses = {
 };
 
 export type UpdateEnvironmentResponse = UpdateEnvironmentResponses[keyof UpdateEnvironmentResponses];
+
+export type GeminiEmbeddingsWithDefaultAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/embeddings';
+};
+
+export type GeminiEmbeddingsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GeminiEmbeddingsWithDefaultAgentError = GeminiEmbeddingsWithDefaultAgentErrors[keyof GeminiEmbeddingsWithDefaultAgentErrors];
+
+export type GeminiEmbeddingsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type GeminiEmbeddingsWithDefaultAgentResponse = GeminiEmbeddingsWithDefaultAgentResponses[keyof GeminiEmbeddingsWithDefaultAgentResponses];
+
+export type GeminiEmbeddingsWithAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/gemini/{agentId}/embeddings';
+};
+
+export type GeminiEmbeddingsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GeminiEmbeddingsWithAgentError = GeminiEmbeddingsWithAgentErrors[keyof GeminiEmbeddingsWithAgentErrors];
+
+export type GeminiEmbeddingsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type GeminiEmbeddingsWithAgentResponse = GeminiEmbeddingsWithAgentResponses[keyof GeminiEmbeddingsWithAgentResponses];
 
 export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
     body: GeminiGenerateContentRequestInput;
@@ -48854,6 +49290,224 @@ export type MinimaxChatCompletionsWithAgentResponses = {
 
 export type MinimaxChatCompletionsWithAgentResponse = MinimaxChatCompletionsWithAgentResponses[keyof MinimaxChatCompletionsWithAgentResponses];
 
+export type MistralEmbeddingsWithDefaultAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/mistral/embeddings';
+};
+
+export type MistralEmbeddingsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type MistralEmbeddingsWithDefaultAgentError = MistralEmbeddingsWithDefaultAgentErrors[keyof MistralEmbeddingsWithDefaultAgentErrors];
+
+export type MistralEmbeddingsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type MistralEmbeddingsWithDefaultAgentResponse = MistralEmbeddingsWithDefaultAgentResponses[keyof MistralEmbeddingsWithDefaultAgentResponses];
+
+export type MistralEmbeddingsWithAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/mistral/{agentId}/embeddings';
+};
+
+export type MistralEmbeddingsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type MistralEmbeddingsWithAgentError = MistralEmbeddingsWithAgentErrors[keyof MistralEmbeddingsWithAgentErrors];
+
+export type MistralEmbeddingsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type MistralEmbeddingsWithAgentResponse = MistralEmbeddingsWithAgentResponses[keyof MistralEmbeddingsWithAgentResponses];
+
 export type MistralChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
     headers: {
@@ -50189,6 +50843,224 @@ export type GetWellKnownOauthAuthorizationServerResponses = {
 };
 
 export type GetWellKnownOauthAuthorizationServerResponse = GetWellKnownOauthAuthorizationServerResponses[keyof GetWellKnownOauthAuthorizationServerResponses];
+
+export type OllamaEmbeddingsWithDefaultAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/ollama/embeddings';
+};
+
+export type OllamaEmbeddingsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OllamaEmbeddingsWithDefaultAgentError = OllamaEmbeddingsWithDefaultAgentErrors[keyof OllamaEmbeddingsWithDefaultAgentErrors];
+
+export type OllamaEmbeddingsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type OllamaEmbeddingsWithDefaultAgentResponse = OllamaEmbeddingsWithDefaultAgentResponses[keyof OllamaEmbeddingsWithDefaultAgentResponses];
+
+export type OllamaEmbeddingsWithAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/ollama/{agentId}/embeddings';
+};
+
+export type OllamaEmbeddingsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OllamaEmbeddingsWithAgentError = OllamaEmbeddingsWithAgentErrors[keyof OllamaEmbeddingsWithAgentErrors];
+
+export type OllamaEmbeddingsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type OllamaEmbeddingsWithAgentResponse = OllamaEmbeddingsWithAgentResponses[keyof OllamaEmbeddingsWithAgentResponses];
 
 export type OllamaChatCompletionsWithDefaultAgentData = {
     body: OllamaChatCompletionRequestInput;
@@ -64658,6 +65530,224 @@ export type UpdateVirtualApiKeyResponses = {
 
 export type UpdateVirtualApiKeyResponse = UpdateVirtualApiKeyResponses[keyof UpdateVirtualApiKeyResponses];
 
+export type VllmEmbeddingsWithDefaultAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/vllm/embeddings';
+};
+
+export type VllmEmbeddingsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type VllmEmbeddingsWithDefaultAgentError = VllmEmbeddingsWithDefaultAgentErrors[keyof VllmEmbeddingsWithDefaultAgentErrors];
+
+export type VllmEmbeddingsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type VllmEmbeddingsWithDefaultAgentResponse = VllmEmbeddingsWithDefaultAgentResponses[keyof VllmEmbeddingsWithDefaultAgentResponses];
+
+export type VllmEmbeddingsWithAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/vllm/{agentId}/embeddings';
+};
+
+export type VllmEmbeddingsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type VllmEmbeddingsWithAgentError = VllmEmbeddingsWithAgentErrors[keyof VllmEmbeddingsWithAgentErrors];
+
+export type VllmEmbeddingsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type VllmEmbeddingsWithAgentResponse = VllmEmbeddingsWithAgentResponses[keyof VllmEmbeddingsWithAgentResponses];
+
 export type VllmChatCompletionsWithDefaultAgentData = {
     body: VllmChatCompletionRequestInput;
     headers?: {
@@ -65025,6 +66115,224 @@ export type XaiChatCompletionsWithAgentResponses = {
 };
 
 export type XaiChatCompletionsWithAgentResponse = XaiChatCompletionsWithAgentResponses[keyof XaiChatCompletionsWithAgentResponses];
+
+export type ZhipuaiEmbeddingsWithDefaultAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/zhipuai/embeddings';
+};
+
+export type ZhipuaiEmbeddingsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ZhipuaiEmbeddingsWithDefaultAgentError = ZhipuaiEmbeddingsWithDefaultAgentErrors[keyof ZhipuaiEmbeddingsWithDefaultAgentErrors];
+
+export type ZhipuaiEmbeddingsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type ZhipuaiEmbeddingsWithDefaultAgentResponse = ZhipuaiEmbeddingsWithDefaultAgentResponses[keyof ZhipuaiEmbeddingsWithDefaultAgentResponses];
+
+export type ZhipuaiEmbeddingsWithAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/zhipuai/{agentId}/embeddings';
+};
+
+export type ZhipuaiEmbeddingsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ZhipuaiEmbeddingsWithAgentError = ZhipuaiEmbeddingsWithAgentErrors[keyof ZhipuaiEmbeddingsWithAgentErrors];
+
+export type ZhipuaiEmbeddingsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type ZhipuaiEmbeddingsWithAgentResponse = ZhipuaiEmbeddingsWithAgentResponses[keyof ZhipuaiEmbeddingsWithAgentResponses];
 
 export type ZhipuaiChatCompletionsWithDefaultAgentData = {
     body: ZhipuaiChatCompletionRequestInput;

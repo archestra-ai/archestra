@@ -649,7 +649,7 @@ const registry = defineArchestraTools([
           byteSize,
           html: row.html,
         },
-        `App "${app.name}" (${app.id}) version ${row.version}, ${byteSize} bytes:\n\n${row.html}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+        `App "${app.name}" (${app.id}) version ${row.version}, ${byteSize} bytes:\n\n${row.html}`,
       );
     },
   }),
@@ -657,7 +657,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
     description:
-      "Build up an app's HTML with str_replace edits — the path for any change, from a one-line tweak to a full rewrite (replace the whole document in a single edit). Read the current HTML with read_app first if it is not already in context, pass that read's version as baseVersion, and supply edits as [{old_str, new_str}] pairs. Each old_str must match the current HTML exactly once (include enough surrounding context to be unique); edits apply in order and the whole call is atomic — any non-match or stale baseVersion leaves the app untouched. A successful edit forks a new immutable version; assigned tools and metadata are unchanged. read_app's result carries the condensed window.archestra SDK surface; for tool-calling apps, the CDN allowlist, or platform theming, load the \"Build App\" skill (in your available skills) for the full authoring playbook.",
+      "Build up an app's HTML with str_replace edits — the path for any change, from a one-line tweak to a full rewrite (replace the whole document in a single edit). Read the current HTML with read_app first if it is not already in context, pass that read's version as baseVersion, and supply edits as [{old_str, new_str}] pairs. Each old_str must match the current HTML exactly once (include enough surrounding context to be unique); edits apply in order and the whole call is atomic — any non-match or stale baseVersion leaves the app untouched. A successful edit forks a new immutable version; assigned tools and metadata are unchanged. scaffold_app's result carries the condensed window.archestra SDK surface; for tool-calling apps, the CDN allowlist, or platform theming, load the \"Build App\" skill (in your available skills) for the full authoring playbook.",
     schema: EditAppSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
@@ -1273,6 +1273,17 @@ function applyStrReplaceEdits(
     }
     const count = countOccurrences(working, edit.old_str);
     if (count === 0) {
+      // Formatting drift (a re-indented or re-wrapped copy) is the common cause
+      // of a 0-match. If the text still matches uniquely once whitespace runs
+      // are collapsed, apply the edit at that exact span rather than failing —
+      // the model's intent is unambiguous. A genuine content mismatch (a typo
+      // in a non-whitespace character) stays a hard error below.
+      const span = findWhitespaceInsensitiveSpan(working, edit.old_str);
+      if (span) {
+        working =
+          working.slice(0, span.start) + edit.new_str + working.slice(span.end);
+        return;
+      }
       const hint =
         describeNearMiss(working, edit.old_str) ??
         "Call read_app for the current source.";
@@ -1330,34 +1341,40 @@ function normalizeWhitespace(s: string): { text: string; map: number[] } {
 }
 
 /**
- * Best-effort, advisory recovery hint when an `old_str` matched 0 times: point
- * the model at the current text it most likely meant, so it copies ground truth
- * instead of replaying a corrupted literal. Never changes match semantics (the
- * edit still requires an exact unique match) — returns a hint sentence or null.
+ * Locate `oldStr` in `haystack` ignoring differences in whitespace runs, so an
+ * edit whose old_str drifted only in indentation or line-wrapping still applies.
+ * Returns the exact original-byte span (the replacement then preserves the real
+ * surrounding text) only when the whitespace-normalized needle matches exactly
+ * once; returns null when it is absent or ambiguous, leaving the strict 0/>1
+ * match errors to fire.
+ */
+function findWhitespaceInsensitiveSpan(
+  haystack: string,
+  oldStr: string,
+): { start: number; end: number } | null {
+  const needle = oldStr.replace(/\s+/g, " ").trim();
+  if (needle.length === 0) return null;
+  const norm = normalizeWhitespace(haystack);
+  const first = norm.text.indexOf(needle);
+  if (first === -1) return null;
+  if (norm.text.indexOf(needle, first + needle.length) !== -1) return null;
+  const start = norm.map[first];
+  const afterIdx = first + needle.length;
+  const end = afterIdx < norm.map.length ? norm.map[afterIdx] : haystack.length;
+  return { start, end };
+}
+
+/**
+ * Best-effort, advisory recovery hint when an `old_str` matched 0 times and was
+ * not whitespace-recoverable either (a genuine content mismatch, not just
+ * reformatting): anchor the model at the nearest ground-truth line so it copies
+ * the real current text instead of replaying a corrupted literal. Never changes
+ * match semantics — returns a hint sentence or null.
  */
 function describeNearMiss(haystack: string, oldStr: string): string | null {
-  // 1. Whitespace-insensitive unique match — the common "reformatted the
-  //    indentation" drift. Collapse both sides, and if the needle then occurs
-  //    exactly once, hand back the exact current bytes of that span to copy.
-  const needle = oldStr.replace(/\s+/g, " ").trim();
-  if (needle.length > 0) {
-    const norm = normalizeWhitespace(haystack);
-    const first = norm.text.indexOf(needle);
-    if (
-      first !== -1 &&
-      norm.text.indexOf(needle, first + needle.length) === -1
-    ) {
-      const startOrig = norm.map[first];
-      const afterIdx = first + needle.length;
-      const endOrig =
-        afterIdx < norm.map.length ? norm.map[afterIdx] : haystack.length;
-      const span = haystack.slice(startOrig, endOrig);
-      return `A unique match exists in the current HTML once whitespace is normalized. Copy this exact current text as old_str:\n${capHint(span)}`;
-    }
-  }
-  // 2. Anchor window — the longest line of old_str that occurs exactly once in
-  //    the current HTML anchors a ±3-line window of ground truth, so a one-char
-  //    drift elsewhere in the block is visible against the real source.
+  // Anchor window — the longest line of old_str that occurs exactly once in
+  // the current HTML anchors a ±3-line window of ground truth, so a one-char
+  // drift elsewhere in the block is visible against the real source.
   const anchors = oldStr
     .split("\n")
     .map((line) => line.trim())

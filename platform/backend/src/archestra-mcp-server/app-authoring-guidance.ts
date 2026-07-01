@@ -18,12 +18,14 @@ TOOLS-ONLY DATA RULE: ALL external data must come through assigned MCP tools —
 /** @public — embedded into the Build App built-in skill (built-in-skills.ts). */
 export const APP_BUILD_LOOP_GUIDANCE = `Tool-calling apps follow a fixed order: assign the tool (search_tools to find it, then the tools param on scaffold_app — assignments are set only at scaffold time, so to add or change them afterward call set_app_tools; edit_app and refine_app never touch assignments), then — interactively — call preview_app_tool with the new app's id to observe the tool's real output shape before writing code that parses it (it needs human approval, and you cannot preview a tool that is not assigned yet, so scaffold the app first; a minimal scaffold is fine). If that approval is not granted, code defensively against the tool's documented schema instead. After scaffold/edit, call get_app_diagnostics to read the diagnostics from the most recent render of the current version (a render happens when the app is shown inline in chat or at its run page); if the current version has not been rendered yet it returns no_render_observed, and any runtime errors will instead arrive on the user's next message. To share an already-built app so others can run it — at any time, not only right after building — call publish_app to a team or the whole org (it changes the app's scope; team and org targets are role-gated).`;
 
-// Condensed window.archestra surface carried inline in the read_app/scaffold_app
-// results so the authoring model has the SDK contract — and the real storage
-// return shapes — in context before its first edit_app, without loading the full
-// Build App skill (the gap that let a model emit the non-existent
-// archestra.storage.get). The closing line is an escalation pointer: it names
-// what the summary omits so the model knows when to load the full skill.
+// Condensed window.archestra surface carried inline in the scaffold_app (and
+// refine_app) result so the authoring model has the SDK contract — and the real
+// storage return shapes — in context before its first edit_app, without loading
+// the full Build App skill (the gap that let a model emit the non-existent
+// archestra.storage.get). Delivered once at scaffold time rather than repeated
+// on every read_app, which just re-sends the same fixed block. The closing line
+// is an escalation pointer: it names what the summary omits so the model knows
+// when to load the full skill.
 /** @public — surfaced in app tool results (apps.ts) and as capability.sdkSummary. */
 export const ARCHESTRA_APP_SDK_SUMMARY = `window.archestra is injected at render time (await archestra.ready before the first call; every method below is async — await it). Surface:
 - archestra.user — the authenticated viewer {id, name}, a plain property readable after ready.

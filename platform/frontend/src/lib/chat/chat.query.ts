@@ -570,6 +570,12 @@ export function useDeleteConversation() {
         queryKey: ["conversations"],
       });
 
+      // Capture the deleted conversation's project (if any) so onSettled can
+      // also refresh the project page's own conversation list.
+      const projectId = previousQueries
+        .flatMap(([, data]) => data ?? [])
+        .find((c) => c.id === deletedId)?.projectId;
+
       // Optimistically remove the conversation from every cached list
       queryClient.setQueriesData<
         archestraApiTypes.GetChatConversationsResponses["200"]
@@ -577,7 +583,7 @@ export function useDeleteConversation() {
         old ? old.filter((c) => c.id !== deletedId) : old,
       );
 
-      return { previousQueries };
+      return { previousQueries, projectId };
     },
     onError: (_error, _deletedId, context) => {
       // Roll back optimistic removal on failure
@@ -600,9 +606,16 @@ export function useDeleteConversation() {
 
       toast.success("Conversation deleted");
     },
-    onSettled: () => {
+    onSettled: (_data, _error, _deletedId, context) => {
       // Always refetch to ensure server state is in sync
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      // A project chat is also listed on its project page under a separate
+      // query key, which the sidebar invalidation above does not cover.
+      if (context?.projectId) {
+        queryClient.invalidateQueries({
+          queryKey: ["projects", context.projectId, "conversations"],
+        });
+      }
     },
   });
 }

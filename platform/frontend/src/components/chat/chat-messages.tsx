@@ -48,6 +48,7 @@ import {
 } from "@/components/ai-elements/reasoning";
 import { Response } from "@/components/ai-elements/response";
 import {
+  SectionLabel,
   Tool,
   ToolContent,
   ToolErrorDetails,
@@ -100,6 +101,7 @@ import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import { AuthErrorTool, type AuthErrorToolProps } from "./auth-error-tool";
 import {
+  collectSubagentToolCalls,
   extractFileAttachments,
   extractOwnedAppRender,
   filterOptimisticToolCalls,
@@ -107,6 +109,7 @@ import {
   identifyCompactToolGroups,
   isBlankAssistantTextPart,
   resolveRunToolTargetName,
+  type SubagentChildEntry,
 } from "./chat-messages.utils";
 import { CompactToolGroup, type ToolIconMap } from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
@@ -425,6 +428,19 @@ export function ChatMessages({
     [messages],
   );
 
+  // A delegated child agent's tool calls, keyed by the delegation call that
+  // spawned them, collected across the whole conversation so a part's storage
+  // location never affects how it nests. A delegation tool call whose id is a
+  // key here renders its children nested beneath it (recursively).
+  const subagentToolCalls = useMemo(
+    () => collectSubagentToolCalls(messages),
+    [messages],
+  );
+  const subagentParentToolCallIds = useMemo(
+    () => new Set(subagentToolCalls.keys()),
+    [subagentToolCalls],
+  );
+
   if (messages.length === 0 && chatErrors.length === 0) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
     if (isLoadingConversation) {
@@ -597,6 +613,26 @@ export function ChatMessages({
                                     part: entry.part,
                                     toolResultPart: entry.toolResultPart,
                                     errorText: entry.errorText,
+                                    nestedToolCalls:
+                                      subagentParentToolCallIds.has(
+                                        entry.part.toolCallId ?? "",
+                                      ) ? (
+                                        <SubagentToolCalls
+                                          parentToolCallId={
+                                            entry.part.toolCallId ?? ""
+                                          }
+                                          subagentToolCalls={subagentToolCalls}
+                                          isDebugging={isDebugging}
+                                          canExpandToolCalls={
+                                            canExpandToolCalls
+                                          }
+                                          connectedCatalogIds={
+                                            orchestrator.connectedCatalogIds
+                                          }
+                                          getToolShortName={getToolShortName}
+                                          toolIconMap={toolIconMap}
+                                        />
+                                      ) : null,
                                   },
                             )}
                             toolIconMap={toolIconMap}
@@ -1267,8 +1303,8 @@ export function ChatMessages({
                               // when its result lands, which otherwise hides the
                               // input-available -> output-available transition.
                               <MessageTool
-                                part={{ ...part }}
                                 key={partKey}
+                                part={{ ...part }}
                                 toolResultPart={toolResultPart}
                                 toolName={toolName}
                                 agentId={agentId}
@@ -1297,6 +1333,22 @@ export function ChatMessages({
                                       createdAt: new Date().toISOString(),
                                     },
                                   })
+                                }
+                                nestedToolCalls={
+                                  tcId &&
+                                  subagentParentToolCallIds.has(tcId) ? (
+                                    <SubagentToolCalls
+                                      parentToolCallId={tcId}
+                                      subagentToolCalls={subagentToolCalls}
+                                      isDebugging={isDebugging}
+                                      canExpandToolCalls={canExpandToolCalls}
+                                      connectedCatalogIds={
+                                        orchestrator.connectedCatalogIds
+                                      }
+                                      getToolShortName={getToolShortName}
+                                      toolIconMap={toolIconMap}
+                                    />
+                                  ) : null
                                 }
                               />
                             ),
@@ -1506,6 +1558,7 @@ const MessageTool = memo(
     onSendMessage,
     earlyToolUiData,
     toolIconMap,
+    nestedToolCalls,
   }: {
     part: ToolUIPart | DynamicToolUIPart;
     toolResultPart: ToolUIPart | DynamicToolUIPart | null;
@@ -1524,6 +1577,10 @@ const MessageTool = memo(
     getToolShortName: (toolName: string) => ArchestraToolShortName | null;
     onSendMessage?: (text: string) => void;
     toolIconMap?: ToolIconMap;
+    // Delegation cards only: the surfaced subagent tool calls, rendered between
+    // this card's Request and Result so the delegation reads in causal order
+    // (prompt in -> child tools run -> answer out).
+    nestedToolCalls?: React.ReactNode;
     earlyToolUiData?: {
       uiResourceUri: string;
       html?: string;
@@ -1590,10 +1647,12 @@ const MessageTool = memo(
     const displayToolName = approvalDisplay.toolName;
     const displayInput = approvalDisplay.input;
     const hasInput = displayInput && Object.keys(displayInput).length > 0;
+    const hasNestedToolCalls = Boolean(nestedToolCalls);
     const hasContent = Boolean(
       hasInput ||
         errorText ||
         isApprovalRequested ||
+        hasNestedToolCalls ||
         (toolResultPart && Boolean(toolResultPart.output)) ||
         (!toolResultPart && Boolean(part.output)),
     );
@@ -1863,6 +1922,7 @@ const MessageTool = memo(
         />
         <ToolContent forceMount={uiResourceUri ? true : undefined}>
           {hasInput ? <ToolInput input={displayInput} /> : null}
+          {nestedToolCalls}
           {isApprovalRequested &&
             onToolApprovalResponse &&
             "approval" in part &&
@@ -1958,6 +2018,11 @@ const MessageTool = memo(
     );
   },
   (prev, next) =>
+    // Delegation cards carry freshly-built nested subagent content the by-value
+    // checks below can't see; never skip their renders or late-arriving child
+    // tool calls would be dropped.
+    !prev.nestedToolCalls &&
+    !next.nestedToolCalls &&
     // Skip re-render unless identity, state, or UI-relevant data actually changed.
     // Compare by value, not reference: the AI SDK sometimes mutates a tool part
     // in place when its result lands, so render sites pass a shallow copy (see
@@ -2089,6 +2154,102 @@ function getPreviousAssistantSwapBoundaryLabel({
   }
 
   return null;
+}
+
+/** Synthesize a tool UI part from a surfaced subagent call so the existing tool card renders it. */
+function synthesizeSubagentToolPart(
+  entry: SubagentChildEntry,
+): ToolUIPart | DynamicToolUIPart {
+  const state = entry.errorText
+    ? "output-error"
+    : (entry.state ?? "output-available");
+  return {
+    type: `tool-${entry.toolName}`,
+    toolCallId: entry.toolCallId,
+    state,
+    input: entry.input,
+    output: entry.output,
+    ...(entry.errorText ? { errorText: entry.errorText } : {}),
+  } as ToolUIPart;
+}
+
+// Guards against a malformed parent/child map producing unbounded recursion;
+// real toolCallIds are unique, so a well-formed map is always a finite tree.
+const MAX_SUBAGENT_NESTING_DEPTH = 16;
+
+/**
+ * Render a delegation call's surfaced subagent tool calls as an indented rail.
+ * The caller places this between the delegation card's Request and Result, so the
+ * card reads in causal order. Each child reuses the standard tool card; a child
+ * that is itself a delegation (its id has its own children) recurses into that
+ * child's own Request/Result, mirroring the delegation chain. Renders nothing
+ * when the delegation produced no surfaced tool calls.
+ */
+function SubagentToolCalls({
+  parentToolCallId,
+  subagentToolCalls,
+  depth = 0,
+  isDebugging,
+  canExpandToolCalls,
+  connectedCatalogIds,
+  getToolShortName,
+  toolIconMap,
+}: {
+  parentToolCallId: string;
+  subagentToolCalls: Map<string, SubagentChildEntry[]>;
+  depth?: number;
+  isDebugging?: boolean;
+  canExpandToolCalls?: boolean;
+  connectedCatalogIds: ReadonlySet<string>;
+  getToolShortName: (toolName: string) => ArchestraToolShortName | null;
+  toolIconMap?: ToolIconMap;
+}) {
+  const children = subagentToolCalls.get(parentToolCallId);
+  if (!children?.length || depth >= MAX_SUBAGENT_NESTING_DEPTH) {
+    return null;
+  }
+  return (
+    <div className="pt-2 space-y-1.5">
+      <div className="px-3">
+        <SectionLabel accent="bg-violet-400">Tools</SectionLabel>
+      </div>
+      <div className="px-3 space-y-1">
+        {children.map((child) => (
+          /* Display-only: a subagent's calls are completed, autonomous child
+           activity. agentId and the approval/auth/install callbacks are
+           intentionally omitted so an agent-scoped action can't fire against
+           the parent agent (the child ran the tool, not the parent). A child
+           that is itself a delegation nests its own children between its
+           Request and Result, recursing the same layout. */
+          <MessageTool
+            key={child.toolCallId}
+            part={synthesizeSubagentToolPart(child)}
+            toolResultPart={null}
+            toolName={child.toolName}
+            isDebugging={isDebugging}
+            canExpandToolCalls={canExpandToolCalls}
+            connectedCatalogIds={connectedCatalogIds}
+            getToolShortName={getToolShortName}
+            toolIconMap={toolIconMap}
+            nestedToolCalls={
+              subagentToolCalls.has(child.toolCallId) ? (
+                <SubagentToolCalls
+                  parentToolCallId={child.toolCallId}
+                  subagentToolCalls={subagentToolCalls}
+                  depth={depth + 1}
+                  isDebugging={isDebugging}
+                  canExpandToolCalls={canExpandToolCalls}
+                  connectedCatalogIds={connectedCatalogIds}
+                  getToolShortName={getToolShortName}
+                  toolIconMap={toolIconMap}
+                />
+              ) : null
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function renderPartWithUnsafeContextDivider({

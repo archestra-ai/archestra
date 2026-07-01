@@ -7,6 +7,8 @@ import {
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   parseFullToolName,
+  SUBAGENT_TOOL_CALL_PART_TYPE,
+  type SubagentToolCallPartData,
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -393,6 +395,65 @@ export function collectBrowserToolCallIds(params: {
   }
 
   return ids;
+}
+
+/** One tool call a delegated child agent made, ready to render as a tool card. */
+export type SubagentChildEntry = {
+  toolCallId: string;
+  toolName: string;
+  input: unknown;
+  output: unknown;
+  state: string | undefined;
+  errorText: string | undefined;
+};
+
+/**
+ * Collect every subagent tool call in the conversation into a map keyed by the
+ * delegation call that spawned it (`parentToolCallId`). A child whose own
+ * `toolCallId` is itself a key has descendants (a nested delegation), so the
+ * renderer recurses to build an arbitrary-depth tree. Collected across all
+ * messages — not per-message — so where the backend stored a part never affects
+ * how it nests. Deduped by `toolCallId` so a part present both live (streamed)
+ * and persisted (after reload) renders once.
+ */
+export function collectSubagentToolCalls(
+  messages: UIMessage[],
+): Map<string, SubagentChildEntry[]> {
+  const byParent = new Map<string, SubagentChildEntry[]>();
+  const seen = new Set<string>();
+  for (const message of messages) {
+    for (const part of message.parts ?? []) {
+      const candidate = part as { type?: string; data?: unknown };
+      if (candidate.type !== SUBAGENT_TOOL_CALL_PART_TYPE) {
+        continue;
+      }
+      const data = candidate.data as SubagentToolCallPartData | undefined;
+      if (
+        !data ||
+        typeof data.parentToolCallId !== "string" ||
+        typeof data.toolCallId !== "string" ||
+        seen.has(data.toolCallId)
+      ) {
+        continue;
+      }
+      seen.add(data.toolCallId);
+      const entry: SubagentChildEntry = {
+        toolCallId: data.toolCallId,
+        toolName: data.toolName,
+        input: data.input,
+        output: data.output,
+        state: data.state,
+        errorText: data.errorText,
+      };
+      const list = byParent.get(data.parentToolCallId);
+      if (list) {
+        list.push(entry);
+      } else {
+        byParent.set(data.parentToolCallId, [entry]);
+      }
+    }
+  }
+  return byParent;
 }
 
 export function identifyCompactToolGroups(

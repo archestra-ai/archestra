@@ -30,6 +30,7 @@ import {
   useSkill,
   useUpdateSkill,
 } from "@/lib/skills/skill.query";
+import { formatBytes } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { cn } from "@/lib/utils";
 import { composeManifest, parseManifestFields } from "./manifest-compose";
 import { SkillScopeSelector } from "./skill-scope-selector";
@@ -869,12 +870,6 @@ function Marker({ ok }: { ok: boolean }) {
 function approxBase64Bytes(content: string): number {
   // Each 4 chars of base64 encodes 3 bytes; ignore padding for a rough estimate.
   return Math.floor((content.length * 3) / 4);
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function buildTree(

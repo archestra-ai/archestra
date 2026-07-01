@@ -1,0 +1,23 @@
+id = "apps"
+name = "MCP App authoring"
+tasks = ["repo-docs-app", "access-request-app", "standup-notes-app", "keyboard-kanban-app"]
+
+# Authoring an app never registers a tool in the shared catalog (unlike authoring a skill), and each
+# task names its app `<slug>-{{cell}}`, so concurrent lanes can't collide on one backend.
+share_backend = true
+
+# The acme_it synthetic MCP (stateless, fixed content) is registered to every lane's agent; the
+# access-request / kanban apps wire its tools. One shared instance is safe across concurrent lanes.
+fixture_mcp = true
+
+# Archestra built-in app authoring tools, beyond the base sandbox set. The bench force-enables
+# ARCHESTRA_APPS_ENABLED for every env (see build_backend_env), so the platform assigns these to every
+# agent at creation time; listing them here marks them allowed/required so this env's surface
+# assertion treats them as expected rather than a leak.
+tools = ["scaffold_app", "refine_app", "read_app", "edit_app", "validate_app", "list_apps", "render_app", "publish_app"]
+
+# DeepWiki: a public, no-auth remote MCP the repo-docs-app wires into its app. Must list tools without
+# auth or env setup hard-fails naming it.
+[[mcps]]
+name = "deepwiki"
+server_url = "https://mcp.deepwiki.com/mcp"

@@ -1,9 +1,13 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { getArchestraToolShortName } from "@archestra/shared";
+import {
+  getArchestraToolShortName,
+  SUBAGENT_TOOL_CALL_PART_TYPE,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import type { PanelApp } from "./apps-context";
 import {
   collectBrowserToolCallIds,
+  collectSubagentToolCalls,
   deriveAppsFromMessages,
   extractFileAttachments,
   extractOwnedAppRender,
@@ -855,6 +859,56 @@ describe("identifyCompactToolGroups", () => {
     expect(groupMap.get(0)?.entries).toHaveLength(1);
     expect(groupMap.get(4)?.entries).toHaveLength(1);
   });
+
+  it("compacts a delegation call with surfaced subagent children alongside its siblings", () => {
+    const parts = [
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "input-available",
+        input: {},
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "output-available",
+        output: "ok",
+      },
+      {
+        type: "tool-agent__child",
+        toolCallId: "call_p",
+        state: "input-available",
+        input: {},
+      },
+      {
+        type: "tool-agent__child",
+        toolCallId: "call_p",
+        state: "output-available",
+        output: "done",
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_2",
+        state: "input-available",
+        input: {},
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_2",
+        state: "output-available",
+        output: "map",
+      },
+    ] as UIMessage["parts"];
+
+    const { groupMap, consumedIndices } = identifyCompactToolGroups(parts, {
+      getToolShortName: () => null,
+    });
+
+    expect(groupMap.size).toBe(1);
+    expect(groupMap.get(0)?.entries).toHaveLength(3);
+    expect(consumedIndices.has(2)).toBe(true);
+    expect(consumedIndices.has(3)).toBe(true);
+  });
 });
 
 describe("isSupersededRender", () => {
@@ -917,6 +971,107 @@ describe("getAppRenderVerb", () => {
 
   it("returns null for non-app tools", () => {
     expect(getAppRenderVerb("google__search")).toBeNull();
+  });
+});
+
+describe("collectSubagentToolCalls", () => {
+  const subagentPart = (
+    parentToolCallId: string,
+    toolCallId: string,
+    toolName = "web_search",
+  ) =>
+    ({
+      type: SUBAGENT_TOOL_CALL_PART_TYPE,
+      data: {
+        parentToolCallId,
+        toolCallId,
+        toolName,
+        state: "output-available",
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: minimal part stub
+    }) as any;
+
+  const message = (parts: unknown[]): UIMessage =>
+    ({ id: "m", role: "assistant", parts }) as UIMessage;
+
+  it("returns an empty map when no subagent parts exist", () => {
+    const map = collectSubagentToolCalls([
+      message([{ type: "text", text: "hi" }]),
+    ]);
+    expect(map.size).toBe(0);
+  });
+
+  it("groups children by their parent delegation call and preserves the chain (P1->C1,C2; C2->G1)", () => {
+    const map = collectSubagentToolCalls([
+      message([
+        { type: "tool-agent__child", toolCallId: "P1" },
+        subagentPart("P1", "C1", "web_search"),
+        subagentPart("P1", "C2", "agent__grandchild"),
+        subagentPart("C2", "G1", "fetch"),
+      ]),
+    ]);
+
+    expect(map.get("P1")?.map((e) => e.toolCallId)).toEqual(["C1", "C2"]);
+    expect(map.get("C2")?.map((e) => e.toolCallId)).toEqual(["G1"]);
+    // The nested delegation C2 is both a child of P1 and a parent of G1.
+    expect(map.has("C2")).toBe(true);
+    expect(map.get("P1")?.[0]).toMatchObject({
+      toolCallId: "C1",
+      toolName: "web_search",
+      state: "output-available",
+    });
+  });
+
+  it("collects across messages and dedupes a toolCallId present twice (live + persisted)", () => {
+    const map = collectSubagentToolCalls([
+      message([subagentPart("P1", "C1")]),
+      message([subagentPart("P1", "C1")]),
+    ]);
+    expect(map.get("P1")?.length).toBe(1);
+  });
+
+  it("ignores malformed subagent parts (missing ids)", () => {
+    const map = collectSubagentToolCalls([
+      message([
+        {
+          type: SUBAGENT_TOOL_CALL_PART_TYPE,
+          data: { toolName: "x" },
+          // biome-ignore lint/suspicious/noExplicitAny: malformed stub
+        } as any,
+      ]),
+    ]);
+    expect(map.size).toBe(0);
+  });
+
+  it("carries input, output, and errorText onto the collected entry", () => {
+    const richPart = {
+      type: SUBAGENT_TOOL_CALL_PART_TYPE,
+      data: {
+        parentToolCallId: "P1",
+        toolCallId: "C1",
+        toolName: "fetch",
+        input: { url: "x" },
+        output: { status: 200 },
+        errorText: "nope",
+        state: "output-error",
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: minimal part stub
+    } as any;
+    const map = collectSubagentToolCalls([message([richPart])]);
+    expect(map.get("P1")?.[0]).toMatchObject({
+      toolCallId: "C1",
+      input: { url: "x" },
+      output: { status: 200 },
+      errorText: "nope",
+      state: "output-error",
+    });
+  });
+
+  it("skips a message that has no parts without throwing", () => {
+    const map = collectSubagentToolCalls([
+      { id: "m", role: "assistant" } as UIMessage,
+    ]);
+    expect(map.size).toBe(0);
   });
 });
 

@@ -52,6 +52,10 @@ import {
   isApiKeyRequired,
 } from "@/clients/llm-client";
 import {
+  applySubagentToolCallsToMessages,
+  createSubagentToolStreamBridge,
+} from "@/clients/subagent-tool-stream";
+import {
   repeatCeilingStopCondition,
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
@@ -373,6 +377,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the top, Pre/PostToolUse around their tool calls, Stop at the end) and
       // spliced into the assistant message in onFinish.
       const hookRunCollector: CollectedHookRun[] = [];
+      // Surfaces a delegated child agent's tool calls on this conversation: it
+      // streams each one live (once a writer is attached) and collects them for
+      // splicing into the assistant message in onFinish. One instance is shared
+      // down the whole delegation chain.
+      const subagentToolStream = createSubagentToolStreamBridge();
       // The conversation's user id (the sandbox is keyed per org/user/conversation).
       const conversationUserId = conversation.userId;
 
@@ -565,6 +574,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               projectInstructions,
               hookRunCollector,
               elicitation: chatMcpElicitation,
+              subagentToolStream,
               abortSignal: chatAbortController.signal,
             }),
           ),
@@ -732,6 +742,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
               execute: async ({ writer }) => {
                 chatMcpElicitation.setWriter(writer);
+                subagentToolStream.setWriter(writer);
 
                 // Create the LLM model here, inside execute, so a credential
                 // failure (e.g. a per-user provider like GitHub Copilot the user
@@ -1214,9 +1225,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     // Splice the turn's collected hook runs into the assistant
                     // message(s) as inline `data-hook-run` parts before persisting,
                     // so they survive refresh and sit at their lifecycle position.
-                    const messagesToPersist = applyHookRunsToMessages(
-                      finalMessages as unknown as ChatMessage[],
-                      hookRunCollector,
+                    const messagesToPersist = applySubagentToolCallsToMessages(
+                      applyHookRunsToMessages(
+                        finalMessages as unknown as ChatMessage[],
+                        hookRunCollector,
+                      ),
+                      subagentToolStream.collected(),
                     );
 
                     // Only persist if not already persisted by onError

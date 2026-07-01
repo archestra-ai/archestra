@@ -22,6 +22,7 @@ import {
   type ChatToolContext,
   type McpGatewayToken,
 } from "@/clients/chat-tool-builder";
+import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
@@ -740,6 +741,7 @@ export async function getChatMcpTools({
   blockOnApprovalRequired,
   scheduleTriggerRunId,
   hookRunCollector,
+  subagentToolStream,
   repeatTracker,
 }: {
   agentName: string;
@@ -779,6 +781,13 @@ export async function getChatMcpTools({
   scheduleTriggerRunId?: string;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];
+  /**
+   * Bridge that surfaces a delegated child agent's tool calls on the caller's
+   * conversation surface (chat path only). Forwarded into delegation tools so a
+   * child run's tool calls — and any deeper descendant's — surface nested under
+   * the delegation call that spawned them.
+   */
+  subagentToolStream?: SubagentToolStreamBridge;
   /**
    * Per-run repeated-tool-call tracker. Run entrypoints that own a `stopWhen`
    * pass their own instance so the breaker records into the same tracker the
@@ -927,6 +936,7 @@ export async function getChatMcpTools({
       user,
       blockOnApprovalRequired,
       hookRunCollector,
+      subagentToolStream,
       mcpGwToken,
       globalToolPolicy,
       discoveredToolPolicy,

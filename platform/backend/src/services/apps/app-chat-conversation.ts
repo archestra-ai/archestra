@@ -66,6 +66,9 @@ export async function createSeededAppConversation(params: {
       input: { appId: app.id },
       output: buildAppRenderResult(app),
     },
+    // Skip for a brand-new app: its default template already lists these capabilities.
+    greeting:
+      app.latestVersion > 1 ? buildAppOpenedGreeting(app.name) : undefined,
   });
 }
 
@@ -135,8 +138,9 @@ async function seedConversationWithRender(params: {
   agentId?: string;
   title: string;
   part: UIMessage["parts"][number];
+  greeting?: string;
 }): Promise<{ conversationId: string }> {
-  const { userId, organizationId, title, part } = params;
+  const { userId, organizationId, title, part, greeting } = params;
 
   const agentId =
     params.agentId ??
@@ -176,6 +180,19 @@ async function seedConversationWithRender(params: {
     content,
   });
 
+  // Separate message so the render above stays a byte-for-byte model-driven render.
+  if (greeting) {
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        id: generateId(),
+        role: "assistant",
+        parts: [{ type: "text", text: greeting }],
+      } satisfies UIMessage,
+    });
+  }
+
   return { conversationId: conversation.id };
 }
 
@@ -195,4 +212,17 @@ async function resolveDefaultChatAgentId(params: {
     throw new ApiError(500, "Could not resolve a default chat agent.");
   }
   return created;
+}
+
+/** Markdown greeting seeded when an owned app is opened in chat. */
+function buildAppOpenedGreeting(name: string): string {
+  return (
+    `Here's **${name}**, up and running.\n\n` +
+    `It's an MCP app, so it can use:\n` +
+    `- Your connected MCP tools & servers\n` +
+    `- A private + shared data store\n` +
+    `- Built-in AI to summarize & generate\n\n` +
+    `Use it as-is, or tell me what you'd like to change or add ` +
+    `— I'll update it live.`
+  );
 }

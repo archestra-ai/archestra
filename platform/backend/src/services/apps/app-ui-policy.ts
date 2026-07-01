@@ -92,6 +92,20 @@ export async function buildValidatedVersionPayload(params: {
   };
 }
 
+// Document-root probe, mirroring the Rust scanner's HEAD_OR_HTML
+// (app_html.rs): true when the HTML opens a <head> or <html> element. Used to
+// gate an edit that would strip a document root the base version still had — a
+// fragment-from-the-start app (no root to begin with) is unaffected. Kept as the
+// same raw-text regex as the scanner on purpose: its precision (it would also
+// match a `<html>` written inside a comment or string) is exactly the platform's
+// existing notion of "has a document root", so the edit gate and the save-time
+// warning never disagree.
+const HTML_DOCUMENT_ROOT_PATTERN = /<(head|html)[\s>]/i;
+
+export function htmlHasDocumentRoot(html: string): boolean {
+  return HTML_DOCUMENT_ROOT_PATTERN.test(html);
+}
+
 type AppValidationFinding = {
   severity: "error" | "warning";
   message: string;

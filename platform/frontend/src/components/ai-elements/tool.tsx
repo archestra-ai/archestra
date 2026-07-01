@@ -200,7 +200,7 @@ export const ToolInput = ({
   );
 };
 
-const SectionLabel = ({
+export const SectionLabel = ({
   children,
   accent,
 }: {

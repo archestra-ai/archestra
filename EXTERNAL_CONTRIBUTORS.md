@@ -672,3 +672,5 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @ArtiomGusev
 - @1421906110
 - @netovieira
+- @Sakayorii
+- @ghorhh-coder

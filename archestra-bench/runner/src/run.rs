@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use archestra_bench_core::slug;
 use chrono::Utc;
@@ -14,7 +14,7 @@ use tokio::time::{Duration, timeout};
 use tracing::{error, info, warn};
 
 use crate::chat_stream::{ChatRecordKind, ChatRunResult, ChatStreamRecord, apply_chat_event};
-use crate::client::{AgentCreate, EvalClient, FilePart};
+use crate::client::{AgentCreate, ContractError, EvalClient, FilePart};
 use crate::config::types::{EnvConfig, Stage, Task, ToolExposureMode};
 use crate::config::{Lane, load_envs, load_lanes};
 use crate::fixture_mcp::{FIXTURE_MCP_NAME, FixtureMcp};
@@ -53,10 +53,14 @@ const SUBMIT_INSTRUCTION: &str = "When you are done, find a tool to submit your 
 // rather than hunting for a submit tool and looping on the "more steps" rejection.
 const CONTINUE_INSTRUCTION: &str =
     "When you've finished this step, tell me where things stand and wait for my next message.";
-// One-shot follow-up sent when a lane ends its turn without submitting. The nudge runs on the final
-// stage (submission open), so drive_stage still appends SUBMIT_INSTRUCTION; this only calls out the
-// omission.
-const SUBMIT_NUDGE: &str = "You ended your turn without submitting a result. The task is not complete until you submit it.";
+// Follow-up sent when a lane ends its turn without submitting -- whether it solved the task and only
+// reported in chat, or stopped to ask a clarifying question. Voiced as a hands-off user so the latter
+// case gets an answer ("use your judgment, keep going") rather than stalling. Runs on the final stage
+// (submission open), so drive_stage still appends SUBMIT_INSTRUCTION; this stays tool-agnostic.
+const SUBMIT_NUDGE: &str = "I don't have anything to add -- use your best judgment, finish it however you think is best, and submit the result once it's ready.";
+// Upper bound on submit-nudges before the run ends regardless, so a model that keeps asking or looping
+// still terminates.
+const MAX_SUBMIT_NUDGES: usize = 3;
 const STATE_NAME: &str = "state.json";
 const MAX_WORKERS_CAP: usize = 4;
 // Last-resort net for a wedged backend: if the chat stream emits nothing for this long, give up on
@@ -570,6 +574,77 @@ async fn stop_mcps(setups: &[(Lane, String, String, BenchmarkMcp, String)]) {
     }
 }
 
+/// Seed an env's backend-wide defaults — skill defaults on, tool auto-assignment off, the `bench`
+/// team, and every env skill — shared by the shared-backend and isolated-lane setup paths. Returns
+/// the team id. The error is pre-stringified so each caller can route it into its own teardown +
+/// failure-reporting style without re-wrapping (preserving today's raw `e.to_string()` text).
+async fn seed_backend_defaults(client: &EvalClient, env: &EnvConfig) -> Result<String, String> {
+    client
+        .enable_skill_defaults()
+        .await
+        .map_err(|e| e.to_string())?;
+    client
+        .disable_tool_auto_assignment()
+        .await
+        .map_err(|e| e.to_string())?;
+    let team_id = client
+        .create_team("bench")
+        .await
+        .map_err(|e| e.to_string())?;
+    for sref in &env.skills {
+        seed_skill_ref(
+            client,
+            &sref.repo,
+            sref.path.as_deref(),
+            &sref.ref_,
+            sref.cap,
+            "org",
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(team_id)
+}
+
+/// Seed an env's remote MCPs (with lock enforcement) and, when enabled, the harness-owned synthetic
+/// fixture MCP, registering all of them to `agent_ids` — every lane's agent on a shared backend, the
+/// single lane's agent on an isolated one. Returns the started fixture (kept alive and torn down by
+/// the caller) or `None`. On error the fixture this call started is stopped here; the caller still
+/// owns benchmark-MCP and backend teardown. The error is pre-stringified to match today's text.
+async fn seed_env_mcps(
+    client: &EvalClient,
+    env: &EnvConfig,
+    ctx: &RunCtx,
+    agent_ids: &[String],
+) -> Result<Option<FixtureMcp>, String> {
+    if !env.mcps.is_empty() {
+        let registered = seed_mcp_fixtures(client, &env.mcps, "org", Some(agent_ids))
+            .await
+            .map_err(|e| e.to_string())?;
+        mcp_lock::enforce(
+            &ctx.envs_dir,
+            &env.id,
+            &env.mcps,
+            &registered,
+            ctx.update_mcp_lock,
+        )?;
+    }
+
+    if !env.fixture_mcp {
+        return Ok(None);
+    }
+    let fixture = FixtureMcp::start(FIXTURE_MCP_NAME)
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Err(e) =
+        register_remote_mcp(client, fixture.name(), fixture.base_url(), "org", Some(agent_ids)).await
+    {
+        fixture.stop().await;
+        return Err(e.to_string());
+    }
+    Ok(Some(fixture))
+}
+
 /// Boot + seed one shared backend for the env (serial, up front), creating a per-lane agent + benchmark
 /// MCP. Returns the live `Instance` (the caller keeps it alive for the whole run and tears it down at the
 /// end) plus the per-lane setup map. On any setup error the instance is torn down and the whole env is
@@ -608,39 +683,13 @@ async fn setup_shared_env(
         }
     };
 
-    if let Err(e) = client.enable_skill_defaults().await {
-        let _ = instance.shutdown().await;
-        return Err(e.to_string());
-    }
-
-    if let Err(e) = client.disable_tool_auto_assignment().await {
-        let _ = instance.shutdown().await;
-        return Err(e.to_string());
-    }
-
-    let team_id = match client.create_team("bench").await {
+    let team_id = match seed_backend_defaults(&client, env).await {
         Ok(id) => id,
         Err(e) => {
             let _ = instance.shutdown().await;
-            return Err(e.to_string());
+            return Err(e);
         }
     };
-
-    for sref in &env.skills {
-        if let Err(e) = seed_skill_ref(
-            &client,
-            &sref.repo,
-            sref.path.as_deref(),
-            &sref.ref_,
-            sref.cap,
-            "org",
-        )
-        .await
-        {
-            let _ = instance.shutdown().await;
-            return Err(e.to_string());
-        }
-    }
 
     let mut setups: Vec<(Lane, String, String, BenchmarkMcp, String)> = Vec::new();
     for lane in &env_plan.lanes {
@@ -683,61 +732,18 @@ async fn setup_shared_env(
         }
     }
 
-    if !env.mcps.is_empty() {
-        let agent_ids: Vec<String> = setups.iter().map(|(_, id, _, _, _)| id.clone()).collect();
-        let registered = match seed_mcp_fixtures(&client, &env.mcps, "org", Some(&agent_ids)).await
-        {
-            Ok(registered) => registered,
-            Err(e) => {
-                stop_mcps(&setups).await;
-                let _ = instance.shutdown().await;
-                return Err(e.to_string());
-            }
-        };
-        if let Err(e) = mcp_lock::enforce(
-            &ctx.envs_dir,
-            &env.id,
-            &env.mcps,
-            &registered,
-            ctx.update_mcp_lock,
-        ) {
+    let agent_ids: Vec<String> = if env.mcps.is_empty() && !env.fixture_mcp {
+        Vec::new()
+    } else {
+        setups.iter().map(|(_, id, _, _, _)| id.clone()).collect()
+    };
+    let fixture = match seed_env_mcps(&client, env, ctx, &agent_ids).await {
+        Ok(fixture) => fixture,
+        Err(e) => {
             stop_mcps(&setups).await;
             let _ = instance.shutdown().await;
             return Err(e);
         }
-    }
-
-    // One harness-owned synthetic MCP for the whole shared backend: it serves fixed, stateless content
-    // (see fixture_mcp.rs), so a single instance registered to every lane's agent is safe under
-    // concurrency -- mirroring how the public distractor MCPs above are seeded once for all agents.
-    let fixture = if env.fixture_mcp {
-        let agent_ids: Vec<String> = setups.iter().map(|(_, id, _, _, _)| id.clone()).collect();
-        match FixtureMcp::start(FIXTURE_MCP_NAME).await {
-            Ok(fixture) => {
-                if let Err(e) = register_remote_mcp(
-                    &client,
-                    fixture.name(),
-                    fixture.base_url(),
-                    "org",
-                    Some(agent_ids.as_slice()),
-                )
-                .await
-                {
-                    fixture.stop().await;
-                    stop_mcps(&setups).await;
-                    let _ = instance.shutdown().await;
-                    return Err(e.to_string());
-                }
-                Some(fixture)
-            }
-            Err(e) => {
-                stop_mcps(&setups).await;
-                let _ = instance.shutdown().await;
-                return Err(e.to_string());
-            }
-        }
-    } else {
-        None
     };
 
     if let Err(e) = client.warm_user_token().await {
@@ -794,39 +800,13 @@ async fn run_isolated_lane(
         }
     };
 
-    if let Err(e) = client.enable_skill_defaults().await {
-        let _ = instance.shutdown().await;
-        return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
-    }
-
-    if let Err(e) = client.disable_tool_auto_assignment().await {
-        let _ = instance.shutdown().await;
-        return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
-    }
-
-    let team_id = match client.create_team("bench").await {
+    let team_id = match seed_backend_defaults(&client, &env).await {
         Ok(id) => id,
         Err(e) => {
             let _ = instance.shutdown().await;
-            return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
+            return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e);
         }
     };
-
-    for sref in &env.skills {
-        if let Err(e) = seed_skill_ref(
-            &client,
-            &sref.repo,
-            sref.path.as_deref(),
-            &sref.ref_,
-            sref.cap,
-            "org",
-        )
-        .await
-        {
-            let _ = instance.shutdown().await;
-            return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
-        }
-    }
 
     let mcp = match BenchmarkMcp::start(BENCH_MCP_NAME).await {
         Ok(m) => m,
@@ -846,85 +826,14 @@ async fn run_isolated_lane(
         }
     };
 
-    if !env.mcps.is_empty() {
-        let registered = match seed_mcp_fixtures(
-            &client,
-            &env.mcps,
-            "org",
-            Some(std::slice::from_ref(&agent_id)),
-        )
-        .await
-        {
-            Ok(registered) => registered,
-            Err(e) => {
-                mcp.stop().await;
-                let _ = instance.shutdown().await;
-                return infra_results_for_lane(
-                    &env,
-                    &tasks,
-                    &lane,
-                    &ctx,
-                    &progress,
-                    &e.to_string(),
-                );
-            }
-        };
-        if let Err(e) = mcp_lock::enforce(
-            &ctx.envs_dir,
-            &env.id,
-            &env.mcps,
-            &registered,
-            ctx.update_mcp_lock,
-        ) {
+    let fixture_mcp = match seed_env_mcps(&client, &env, &ctx, std::slice::from_ref(&agent_id)).await
+    {
+        Ok(fixture) => fixture,
+        Err(e) => {
             mcp.stop().await;
             let _ = instance.shutdown().await;
             return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e);
         }
-    }
-
-    let fixture_mcp = if env.fixture_mcp {
-        // Isolated-lane fixture: one server per lane, torn down with the lane. Shared-backend envs start
-        // the fixture once in setup_shared_env instead; both are supported.
-        match FixtureMcp::start(FIXTURE_MCP_NAME).await {
-            Ok(fixture) => {
-                if let Err(e) = register_remote_mcp(
-                    &client,
-                    fixture.name(),
-                    fixture.base_url(),
-                    "org",
-                    Some(std::slice::from_ref(&agent_id)),
-                )
-                .await
-                {
-                    fixture.stop().await;
-                    mcp.stop().await;
-                    let _ = instance.shutdown().await;
-                    return infra_results_for_lane(
-                        &env,
-                        &tasks,
-                        &lane,
-                        &ctx,
-                        &progress,
-                        &e.to_string(),
-                    );
-                }
-                Some(fixture)
-            }
-            Err(e) => {
-                mcp.stop().await;
-                let _ = instance.shutdown().await;
-                return infra_results_for_lane(
-                    &env,
-                    &tasks,
-                    &lane,
-                    &ctx,
-                    &progress,
-                    &e.to_string(),
-                );
-            }
-        }
-    } else {
-        None
     };
 
     let results = run_lane(
@@ -1083,6 +992,22 @@ async fn setup_lane_agent(
     Ok((agent_id, submit_tool))
 }
 
+/// Pull a required `id` string from a platform API object. A missing or non-string `id` is a
+/// broken-contract error surfaced loudly, never an empty id silently fed into downstream calls.
+fn require_id(value: &HashMap<String, serde_json::Value>, what: &str) -> Result<String, RunError> {
+    value
+        .get("id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            RunError::Client(
+                ContractError(format!("{what}: API response missing non-empty string `id`"))
+                    .into(),
+            )
+        })
+}
+
 async fn ensure_agent(
     client: &EvalClient,
     name: &str,
@@ -1098,11 +1023,7 @@ async fn ensure_agent(
         .iter()
         .find(|a| a.get("name").and_then(|v| v.as_str()) == Some(name))
     {
-        return Ok(agent
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string());
+        return require_id(agent, "agent");
     }
     let created = client
         .create_agent(&AgentCreate {
@@ -1114,11 +1035,7 @@ async fn ensure_agent(
             teams: vec![team_id.to_string()],
         })
         .await?;
-    Ok(created
-        .get("id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string())
+    require_id(&created, "agent")
 }
 
 async fn setup_agent_tools(
@@ -1230,11 +1147,7 @@ async fn strip_mutating_skill_tools(
         if let Some(name) = name
             && strip.contains(name)
         {
-            let tool_id = tool
-                .get("id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+            let tool_id = require_id(&tool, "agent tool")?;
             client.unassign_tool(agent_id, &tool_id).await?;
         }
     }
@@ -1258,11 +1171,7 @@ async fn resolve_tool_ids(
                 "required tool {exact:?} not found exactly once; is sandbox tooling enabled?"
             )));
         }
-        let id = matches[0]
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let id = require_id(&matches[0], "tool")?;
         resolved.insert(short_name.clone(), id);
     }
     Ok(resolved)
@@ -1646,16 +1555,26 @@ async fn grade_rollout(
             .await;
     }
 
-    // Safety net: a model often solves the task and reports the answer in chat, then ends its turn
-    // without ever calling the submit tool. Prompt it once more whenever the rollout terminated with
-    // nothing submitted, regardless of `finish_reason` -- a voluntary `stop`, a repeat-breaker
-    // `tool-calls` termination, an empty `other`, or a truncated `length` all reach here, and the
-    // weaker-model failure modes (repeat-breaker, empty response) are exactly the ones that most need
-    // the nudge. Bounded to a single extra turn. Hard errors and hit limits are still excluded by
-    // `stage_error.is_none()`, so a rollout that genuinely failed still terminates.
-    if stage_error.is_none() && !bench_mcp.has_submission(rollout_key).await {
+    // Safety net: a capable model often solves the task and reports the answer in chat, or stops to
+    // ask a clarifying question, then ends its turn without ever calling the submit tool. As long as
+    // it stopped voluntarily (clean `stop`) with nothing submitted, re-prompt it as a hands-off user
+    // and let it continue -- bounded to MAX_SUBMIT_NUDGES turns so a model that keeps asking or
+    // refusing still terminates, and only on a clean `stop` so an error/limit still ends the run.
+    let mut nudges_sent = 0usize;
+    loop {
+        let submitted = bench_mcp.has_submission(rollout_key).await;
+        if !should_nudge(
+            run.finish_reason.as_deref(),
+            submitted,
+            stage_error.is_some(),
+            nudges_sent,
+            MAX_SUBMIT_NUDGES,
+        ) {
+            break;
+        }
+        nudges_sent += 1;
         artifacts
-            .append("submit_nudge", serde_json::json!({}))
+            .append("submit_nudge", serde_json::json!({ "attempt": nudges_sent }))
             .await;
         let nudge = Stage {
             text: SUBMIT_NUDGE.to_string(),
@@ -2013,6 +1932,20 @@ fn stage_message(stage_text: &str, submission_open: bool) -> String {
     format!("{stage_text}\n\n{trailer}")
 }
 
+/// Whether to send another submit-nudge. We re-prompt only when the lane voluntarily ended its turn
+/// (`stop`) without submitting and nudges remain; any error/limit or non-`stop` finish ends the run,
+/// and a recorded submission means we're done. Keeps the runaway bound and the clean-exit guards in
+/// one testable place.
+fn should_nudge(
+    finish_reason: Option<&str>,
+    submitted: bool,
+    had_error: bool,
+    nudges_sent: usize,
+    cap: usize,
+) -> bool {
+    !had_error && !submitted && finish_reason == Some("stop") && nudges_sent < cap
+}
+
 async fn drive_stage(
     client: &EvalClient,
     conversation_id: &str,
@@ -2041,6 +1974,11 @@ async fn drive_stage(
     let text = stage_message(&expand_runtime(&stage.text, runtime), submission_open);
     let mut stream_parse_error: Option<String> = None;
     let mut coalescer = StreamCoalescer::new(artifacts);
+    // `apply_chat_event` only ever sets `finish_reason` (on a finish event) and never clears it, so
+    // reset it per turn here -- otherwise a turn that closes without a finish event would retain the
+    // prior turn's value. Keeps the returned `finish_reason` scoped to this turn for the submit-nudge
+    // loop's `stop` guard.
+    run.finish_reason = None;
 
     let mut stream = client
         .stream_chat_records(conversation_id, prior_messages, &text, &files, turn_id)
@@ -2716,12 +2654,15 @@ fn text_block_id(event: &HashMap<String, serde_json::Value>) -> String {
         .to_string()
 }
 
+static RUNTIME_PLACEHOLDER: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"\{\{(cell|agent_id)\}\}").expect("valid regex"));
+
 fn expand_runtime(text: &str, mapping: &HashMap<String, String>) -> String {
-    let re = regex::Regex::new(r"\{\{(cell|agent_id)\}\}").expect("valid regex");
-    re.replace_all(text, |caps: &regex::Captures| {
-        mapping.get(caps[1].trim()).cloned().unwrap_or_default()
-    })
-    .to_string()
+    RUNTIME_PLACEHOLDER
+        .replace_all(text, |caps: &regex::Captures| {
+            mapping.get(caps[1].trim()).cloned().unwrap_or_default()
+        })
+        .to_string()
 }
 
 fn rollout_token(rollout_key: &str, model_name: &str) -> String {
@@ -2933,6 +2874,37 @@ mod tests {
         assert_eq!(msg, format!("do the thing\n\n{CONTINUE_INSTRUCTION}"));
         assert!(!msg.contains(SUBMIT_INSTRUCTION));
         assert!(!msg.to_lowercase().contains("submit"));
+    }
+
+    #[test]
+    fn test_should_nudge_stops_without_submission_under_cap() {
+        // The case the loop exists for: clean stop, nothing submitted, no error, room left.
+        assert!(should_nudge(Some("stop"), false, false, 0, 3));
+        assert!(should_nudge(Some("stop"), false, false, 2, 3));
+    }
+
+    #[test]
+    fn test_should_nudge_false_once_submitted() {
+        assert!(!should_nudge(Some("stop"), true, false, 0, 3));
+    }
+
+    #[test]
+    fn test_should_nudge_false_on_error() {
+        // An error/limit already ended the run; never re-prompt over it.
+        assert!(!should_nudge(Some("stop"), false, true, 0, 3));
+    }
+
+    #[test]
+    fn test_should_nudge_false_on_non_stop_finish() {
+        // Anything other than a voluntary `stop` (length cap, tool-calls, no finish event) ends.
+        assert!(!should_nudge(Some("length"), false, false, 0, 3));
+        assert!(!should_nudge(None, false, false, 0, 3));
+    }
+
+    #[test]
+    fn test_should_nudge_respects_cap() {
+        assert!(!should_nudge(Some("stop"), false, false, 3, 3));
+        assert!(!should_nudge(Some("stop"), false, false, 4, 3));
     }
 
     #[test]

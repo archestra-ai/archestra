@@ -373,7 +373,7 @@ describe("skill tool execution", () => {
     expect(result.isError).toBe(false);
     expect(textOf(result)).toContain('Created skill "research"');
 
-    const skill = await SkillModel.findByName(organizationId, "research");
+    const [skill] = await SkillModel.findAllByName(organizationId, "research");
     expect(skill?.content).toBe("Run the research playbook.");
     expect(skill?.scope).toBe("personal");
     expect(skill?.authorId).toBe(userId);
@@ -393,7 +393,7 @@ describe("skill tool execution", () => {
     );
     expect(result.isError).toBe(false);
 
-    const skill = await SkillModel.findByName(organizationId, "multi");
+    const [skill] = await SkillModel.findAllByName(organizationId, "multi");
     const files = await SkillFileModel.findBySkillId(skill?.id ?? "");
     expect(files.map((f) => `${f.path}:${f.kind}`).sort()).toEqual([
       "references/api.md:reference",
@@ -466,7 +466,10 @@ describe("skill tool execution", () => {
     );
 
     expect(result.isError).toBe(false);
-    const skill = await SkillModel.findByName(organizationId, "pdf-processing");
+    const [skill] = await SkillModel.findAllByName(
+      organizationId,
+      "pdf-processing",
+    );
     expect(skill?.content).toBe("Updated instructions.");
   });
 
@@ -487,7 +490,10 @@ describe("skill tool execution", () => {
     );
     expect(result.isError).toBe(false);
 
-    const skill = await SkillModel.findByName(organizationId, "pdf-processing");
+    const [skill] = await SkillModel.findAllByName(
+      organizationId,
+      "pdf-processing",
+    );
     const files = await SkillFileModel.findBySkillId(skill?.id ?? "");
     expect(files.map((f) => f.path)).toEqual(["references/NEW.md"]);
   });
@@ -508,7 +514,10 @@ describe("skill tool execution", () => {
     );
     expect(result.isError).toBe(false);
 
-    const skill = await SkillModel.findByName(organizationId, "pdf-processing");
+    const [skill] = await SkillModel.findAllByName(
+      organizationId,
+      "pdf-processing",
+    );
     const files = await SkillFileModel.findBySkillId(skill?.id ?? "");
     expect(files.map((f) => f.path)).toEqual(["references/KEEP.md"]);
   });
@@ -572,7 +581,7 @@ describe("skill tool execution", () => {
     );
 
     expect(result.isError).toBe(false);
-    const skill = await SkillModel.findByName(organizationId, "my-skill");
+    const [skill] = await SkillModel.findAllByName(organizationId, "my-skill");
     expect(skill?.content).toBe("Second draft.");
   });
 

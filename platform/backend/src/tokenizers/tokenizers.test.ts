@@ -124,6 +124,22 @@ describe("Tokenizers", () => {
       expect(tokenizer).toBeInstanceOf(TiktokenTokenizer);
     });
 
+    test("should reuse a cached instance across calls for the same provider", () => {
+      // The tiktoken encoding allocated in the constructor holds WASM heap that
+      // is never freed, so getTokenizer must not allocate a new instance per
+      // call. Reuse also keeps the (expensive) encoding init a one-time cost.
+      expect(getTokenizer("openai")).toBe(getTokenizer("openai"));
+      expect(getTokenizer("anthropic")).toBe(getTokenizer("anthropic"));
+    });
+
+    test("should share one tiktoken instance across tiktoken-backed providers", () => {
+      // Every non-anthropic provider maps to the same cl100k_base tokenizer, so
+      // they should all resolve to the single shared instance.
+      expect(getTokenizer("openai")).toBe(getTokenizer("bedrock"));
+      expect(getTokenizer("gemini")).toBe(getTokenizer("cohere"));
+      expect(getTokenizer("openai")).not.toBe(getTokenizer("anthropic"));
+    });
+
     test("should return consistent token counts for same input", () => {
       const anthropicTokenizer = getTokenizer("anthropic");
       const openaiTokenizer = getTokenizer("openai");

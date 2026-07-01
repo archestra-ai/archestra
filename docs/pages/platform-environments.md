@@ -42,7 +42,7 @@ An environment can list the image registries it trusts. If an MCP server's image
 
 ### Use case
 
-Acme wants engineers to install MCP servers only from its own image registry. An admin adds that registry to the environment. Servers from it deploy automatically; anything from another registry waits for admin approval.
+Acme wants engineers to install MCP servers only from its own image registry. An admin sets the environment's trusted list to `registry.acme.com`. Servers built from `registry.acme.com/slack-mcp` or `registry.acme.com/jira-mcp` deploy automatically, but one from `ghcr.io/community/notion-mcp` waits for admin approval.
 
 ![Trusted image registries editor in Settings > Environments](/docs/automated_screenshots/platform-environments_trusted-image-registries.webp)
 

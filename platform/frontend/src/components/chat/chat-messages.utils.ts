@@ -446,11 +446,6 @@ export function identifyCompactToolGroups(
     nonCompactToolNames?: Set<string>;
     getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
     mcpAppToolCallIds?: Set<string>;
-    /**
-     * Delegation tool calls that have surfaced subagent children. Kept out of
-     * compaction so they render as a full card with the children nested beneath.
-     */
-    subagentParentToolCallIds?: Set<string>;
   },
 ): { groupMap: Map<number, CompactToolGroup>; consumedIndices: Set<number> } {
   const groupMap = new Map<number, CompactToolGroup>();
@@ -490,13 +485,6 @@ export function identifyCompactToolGroups(
       continue;
     // Also skip tools identified as MCP Apps via early UI start or earlyToolUiStarts
     if (part.toolCallId && mcpAppCallIds.has(part.toolCallId)) continue;
-    // Keep a delegation call with surfaced subagent children out of compaction
-    // so it renders as a full card with the children nested beneath it.
-    if (
-      part.toolCallId &&
-      options?.subagentParentToolCallIds?.has(part.toolCallId)
-    )
-      continue;
     // Owned-app renders escape compaction by OUTPUT, not name, so a run_tool
     // dispatch targeting create/update/render_app is covered too (its raw name
     // is run_tool, which nonCompactToolNames deliberately does not contain).

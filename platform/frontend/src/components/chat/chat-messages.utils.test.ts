@@ -820,7 +820,7 @@ describe("identifyCompactToolGroups", () => {
     expect(groupMap.get(4)?.entries).toHaveLength(1);
   });
 
-  it("keeps a delegation call with surfaced subagent children out of compaction", () => {
+  it("compacts a delegation call with surfaced subagent children alongside its siblings", () => {
     const parts = [
       {
         type: "tool-google__search",
@@ -860,22 +860,14 @@ describe("identifyCompactToolGroups", () => {
       },
     ] as UIMessage["parts"];
 
-    // Without the flag, the delegation call is compact-eligible and consumed.
-    const withoutFlag = identifyCompactToolGroups(parts, {
+    const { groupMap, consumedIndices } = identifyCompactToolGroups(parts, {
       getToolShortName: () => null,
     });
-    expect(withoutFlag.consumedIndices.has(2)).toBe(true);
-    expect(withoutFlag.consumedIndices.has(3)).toBe(true);
 
-    // Flagged, the delegation call escapes compaction; sibling tools still group.
-    const withFlag = identifyCompactToolGroups(parts, {
-      getToolShortName: () => null,
-      subagentParentToolCallIds: new Set(["call_p"]),
-    });
-    expect(withFlag.consumedIndices.has(2)).toBe(false);
-    expect(withFlag.consumedIndices.has(3)).toBe(false);
-    expect(withFlag.consumedIndices.has(0)).toBe(true);
-    expect(withFlag.consumedIndices.has(4)).toBe(true);
+    expect(groupMap.size).toBe(1);
+    expect(groupMap.get(0)?.entries).toHaveLength(3);
+    expect(consumedIndices.has(2)).toBe(true);
+    expect(consumedIndices.has(3)).toBe(true);
   });
 });
 

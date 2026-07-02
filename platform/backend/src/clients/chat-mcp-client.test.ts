@@ -2148,8 +2148,10 @@ describe("buildArchestraToolOutput", () => {
     });
     await makeAgentTool(owner.id, targetTool.id);
 
-    // A different agent without the tool assigned must not resolve it: the
-    // target lookup is scoped to the caller's agent, so no UI resource attaches.
+    // A different agent without the tool assigned and without dynamic access
+    // (accessAllTools defaults off) cannot reach the tool, so no UI resource
+    // attaches — the assignment-scoped lookup misses and the dynamic fallback
+    // is gated off.
     const otherAgent = await makeAgent();
     const result = await buildArchestraToolOutput({
       response: archestraResponse,
@@ -2159,6 +2161,92 @@ describe("buildArchestraToolOutput", () => {
         tool_args: { elements: "[]" },
       },
       agentId: otherAgent.id,
+    });
+
+    expect(result).toBe("Diagram displayed!");
+  });
+
+  test("attaches the target tool's UI resource for an unassigned tool reached via dynamic access", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    // "All tools" mode: run_tool dispatches to any tool the user can access
+    // without an agent_tools assignment. The UI resource must still attach so
+    // the MCP App renders as an iframe instead of a plain tool-call card.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    });
+    // The org-scoped install that makes the catalog reachable for the user.
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+    const result = await buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    expect(result).toMatchObject({
+      content: "Diagram displayed!",
+      _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } },
+    });
+  });
+
+  test("does not attach the UI resource for an all-tools agent when the target tool is not accessible", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    });
+    // No install (makeMcpServer) for this catalog: the tool is not reachable, so
+    // the dynamic fallback must not attach its UI resource — the boundary the
+    // widening must respect.
+
+    const result = await buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
     });
 
     expect(result).toBe("Diagram displayed!");

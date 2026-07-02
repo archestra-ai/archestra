@@ -26,7 +26,7 @@ import * as oauthRoutes from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { beforeEach, describe, expect, test } from "@/test";
 import { agentOwner, appOwner } from "@/types";
-import mcpClient from "./mcp-client";
+import mcpClient, { type TokenAuthContext } from "./mcp-client";
 
 // Mock the MCP SDK
 const mockCallTool = vi.fn();
@@ -7179,5 +7179,151 @@ describe("connectAndGetTools network egress enforcement", () => {
     expect(result.isError).toBe(true);
     expect(result.error).toContain('not permitted by the "locked" environment');
     expect(mockConnect).not.toHaveBeenCalled();
+  });
+});
+
+describe("pickInstallForCaller (caller-scoped install selection)", () => {
+  // Pins the credential boundary readResource relies on: when a shared catalog
+  // has several installs, connect only to one the caller can actually reach
+  // (own personal → team → org). Never an arbitrary servers[0], which could be
+  // another user's personal install and would read with that user's secrets.
+  const pickInstallForCaller = (
+    servers: unknown[],
+    tokenAuth: TokenAuthContext | undefined,
+  ): Promise<{ id: string } | undefined> =>
+    (
+      mcpClient as unknown as {
+        pickInstallForCaller: (
+          allServers: unknown[],
+          tokenAuth: TokenAuthContext | undefined,
+        ) => Promise<{ id: string } | undefined>;
+      }
+    ).pickInstallForCaller(servers, tokenAuth);
+
+  const userToken = (
+    userId: string,
+    organizationId: string,
+  ): TokenAuthContext => ({
+    tokenId: randomUUID(),
+    teamId: null,
+    isOrganizationToken: false,
+    isUserToken: true,
+    userId,
+    organizationId,
+  });
+
+  test("prefers the caller's own personal install over another user's", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    const other = await makeUser();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    // Another user's install FIRST: the pre-fix servers[0] returned this one.
+    const otherInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: other.id,
+      scope: "personal",
+    });
+    const ownInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: caller.id,
+      scope: "personal",
+    });
+
+    const picked = await pickInstallForCaller(
+      [otherInstall, ownInstall],
+      userToken(caller.id, org.id),
+    );
+
+    expect(picked?.id).toBe(ownInstall.id);
+  });
+
+  test("fails closed when only another user's personal install exists", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    const other = await makeUser();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    const otherInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: other.id,
+      scope: "personal",
+    });
+
+    const picked = await pickInstallForCaller(
+      [otherInstall],
+      userToken(caller.id, org.id),
+    );
+
+    expect(picked).toBeUndefined();
+  });
+
+  test("selects a team install when the caller belongs to that team", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    const other = await makeUser();
+    const team = await makeTeam(org.id, caller.id);
+    await makeTeamMember(team.id, caller.id);
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    // Decoy first, so a naive servers[0] would miss the team install.
+    const otherInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: other.id,
+      scope: "personal",
+    });
+    const teamInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      teamId: team.id,
+      scope: "team",
+    });
+
+    const picked = await pickInstallForCaller(
+      [otherInstall, teamInstall],
+      userToken(caller.id, org.id),
+    );
+
+    expect(picked?.id).toBe(teamInstall.id);
+  });
+
+  test("falls back to an org-scoped install when the caller has no personal or team install", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    const orgInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: null,
+      scope: "org",
+    });
+
+    const picked = await pickInstallForCaller(
+      [orgInstall],
+      userToken(caller.id, org.id),
+    );
+
+    expect(picked?.id).toBe(orgInstall.id);
   });
 });

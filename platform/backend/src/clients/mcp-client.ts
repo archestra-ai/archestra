@@ -3284,7 +3284,11 @@ class McpClient {
       "readResource: Starting resource read",
     );
 
-    const mcpServer = await this.findMcpServerForResource(uri, agentId);
+    const mcpServer = await this.findMcpServerForResource(
+      uri,
+      agentId,
+      tokenAuth,
+    );
 
     if (!mcpServer) {
       logger.error(
@@ -3332,6 +3336,7 @@ class McpClient {
   private async findMcpServerForResource(
     uri: string,
     agentId: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<{
     server: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>;
     catalogItem: NonNullable<
@@ -3342,13 +3347,37 @@ class McpClient {
       agentId,
       uri,
     );
+    let catalogId = matchingTools[0]?.catalogId ?? null;
 
-    if (matchingTools.length > 0 && matchingTools[0].catalogId) {
-      const catalogId = matchingTools[0].catalogId;
+    // Assignment miss: a tool the agent reaches only through dynamic access
+    // ("all tools" mode) has no agent_tools row, so its resource is invisible to
+    // the assignment-scoped lookup above. Fall back to the same user-scoped
+    // resolution run_tool uses — otherwise the MCP App fails to load its HTML
+    // even though the tool ran. Dynamic import avoids a static cycle with
+    // archestra-mcp-server (which reaches this client through run_tool).
+    if (!catalogId && tokenAuth?.userId && tokenAuth.organizationId) {
+      const { resolveDynamicToolByUiResource } = await import(
+        "@/archestra-mcp-server/dynamic-tools"
+      );
+      const dynamicTool = await resolveDynamicToolByUiResource({
+        resourceUri: uri,
+        agentId,
+        userId: tokenAuth.userId,
+        organizationId: tokenAuth.organizationId,
+      });
+      catalogId = dynamicTool?.catalogId ?? null;
+    }
+
+    if (catalogId) {
       const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
       if (catalogItem) {
         const servers = await McpServerModel.findByCatalogId(catalogId);
-        const server = servers[0];
+        // Select the install the caller can actually reach (own → team → org),
+        // the same connection policy tool execution uses — never another user's
+        // personal install of a shared catalog, whose secrets this read would
+        // otherwise connect with. Fail closed when the caller has no accessible
+        // install rather than falling back to an arbitrary one.
+        const server = await this.pickInstallForCaller(servers, tokenAuth);
         if (server) {
           logger.info(
             { uri, agentId, serverId: server.id, serverName: catalogItem.name },
@@ -3418,7 +3447,11 @@ class McpClient {
     _currentResult: ResourceContents,
   ): Promise<void> {
     try {
-      const mcpServer = await this.findMcpServerForResource(uri, agentId);
+      const mcpServer = await this.findMcpServerForResource(
+        uri,
+        agentId,
+        _tokenAuth,
+      );
       if (!mcpServer) {
         logger.debug(
           { uri, agentId },

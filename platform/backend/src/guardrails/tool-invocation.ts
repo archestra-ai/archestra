@@ -46,8 +46,11 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
    */
   enabledToolNames?: Set<string>;
 }): Promise<PolicyBlockResult | null> {
+  // Policy-bypassing built-ins and agent delegation tools are always allowed.
+  // Policy-evaluated built-ins like query_knowledge_sources fall through so
+  // their invocation policies are enforced on the gateway execution path too.
   if (
-    archestraMcpBranding.isToolName(params.toolName) ||
+    archestraMcpBranding.isPolicyBypassedToolName(params.toolName) ||
     isAgentTool(params.toolName)
   ) {
     return null;

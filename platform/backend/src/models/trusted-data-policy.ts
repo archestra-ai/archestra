@@ -422,10 +422,13 @@ class TrustedDataPolicyModel {
       return results;
     }
 
-    // Handle built-in MCP server tools
+    // Handle built-in MCP server tools. Policy-evaluated built-ins like
+    // `query_knowledge_sources` are intentionally excluded from auto-trust:
+    // they return content that can contain prompt injection, so they must be
+    // treated like external tool output for trusted-data evaluation.
     for (let i = 0; i < toolCalls.length; i++) {
       const { toolName } = toolCalls[i];
-      if (archestraMcpBranding.isToolName(toolName)) {
+      if (archestraMcpBranding.isPolicyBypassedToolName(toolName)) {
         results.set(i.toString(), {
           isTrusted: true,
           isBlocked: false,
@@ -435,9 +438,11 @@ class TrustedDataPolicyModel {
       }
     }
 
-    // Get all non-built-in tool names
+    // Get all tool calls subject to policy evaluation: non-built-ins plus
+    // policy-evaluated built-ins like `query_knowledge_sources`.
     const nonArchestraToolCalls = toolCalls.filter(
-      ({ toolName }) => !archestraMcpBranding.isToolName(toolName),
+      ({ toolName }) =>
+        !archestraMcpBranding.isPolicyBypassedToolName(toolName),
     );
 
     if (nonArchestraToolCalls.length === 0) {
@@ -496,8 +501,9 @@ class TrustedDataPolicyModel {
     for (let i = 0; i < toolCalls.length; i++) {
       const { toolName, toolOutput } = toolCalls[i];
 
-      // Skip Archestra tools (already handled)
-      if (archestraMcpBranding.isToolName(toolName)) {
+      // Skip policy-bypassing Archestra tools (already handled above);
+      // policy-evaluated built-ins like `query_knowledge_sources` fall through.
+      if (archestraMcpBranding.isPolicyBypassedToolName(toolName)) {
         continue;
       }
 

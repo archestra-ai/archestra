@@ -254,6 +254,11 @@ export function buildMcpGatewayTool(params: {
               agentId: ctx.agentId,
               userId: ctx.userId,
               organizationId: ctx.organizationId,
+              tokenAuth: buildTokenAuthContext({
+                mcpGwToken: ctx.mcpGwToken,
+                organizationId: ctx.organizationId,
+                userId: ctx.userId,
+              }),
             });
           } else {
             // Execute non-Archestra tools via shared helper with browser sync
@@ -491,6 +496,13 @@ export async function buildArchestraToolOutput(params: {
    */
   userId?: string;
   organizationId?: string;
+  /**
+   * Caller auth used to resolve the concrete install (own→team→org) backing a
+   * run_tool-dispatched external MCP App's UI resource, so its callbacks bind to
+   * that install. Omit when the caller can't reach external UI tools; the app
+   * then renders without a server binding (unchanged legacy behaviour).
+   */
+  tokenAuth?: TokenAuthContext;
 }): Promise<
   | string
   | {
@@ -500,8 +512,15 @@ export async function buildArchestraToolOutput(params: {
       rawContent?: ContentBlock[];
     }
 > {
-  const { response, toolName, toolArguments, agentId, userId, organizationId } =
-    params;
+  const {
+    response,
+    toolName,
+    toolArguments,
+    agentId,
+    userId,
+    organizationId,
+    tokenAuth,
+  } = params;
   // Never stringify an image block into the text summary — its base64 would
   // bloat context and evade the history image-stripper. Images ride rawContent
   // and reach the model as bounded media parts via toModelOutput instead.
@@ -600,9 +619,22 @@ export async function buildArchestraToolOutput(params: {
     return text;
   }
 
+  // Bind the app's callbacks to the concrete install so its SDK `callServerTool`
+  // reaches the originating server (POST /api/mcp/server/:id) rather than the
+  // agent gateway (which rejects the bare tool name). This run_tool path is how
+  // an all-tools agent opens an external app — the tool is unassigned, so only
+  // the dynamic-access resolution above (and this install lookup) can bind it.
+  // Owned-app backings resolve to null and keep their app-id routing.
+  const mcpServerId = await mcpClient
+    .resolveUiAppInstallIdForCaller(resourceUri, agentId, tokenAuth)
+    .catch(() => null);
+
   return {
     content: text,
-    _meta: { ...response._meta, ui: { resourceUri } },
+    _meta: {
+      ...response._meta,
+      ui: { resourceUri, ...(mcpServerId ? { mcpServerId } : {}) },
+    },
     structuredContent: response.structuredContent as
       | Record<string, unknown>
       | undefined,

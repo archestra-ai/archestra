@@ -514,6 +514,149 @@ describe("McpClient", () => {
     });
   });
 
+  describe("resolveUiAppInstallIdForCaller", () => {
+    const callerAuth = (
+      userId: string,
+      organizationId: string,
+    ): TokenAuthContext => ({
+      tokenId: "t",
+      teamId: null,
+      isOrganizationToken: false,
+      isUserToken: true,
+      organizationId,
+      userId,
+    });
+
+    test("returns the caller's install for an external UI resource", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      const install = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "org",
+      });
+      const uri = "ui://excalidraw/mcp-app.html";
+      const tool = await makeTool({
+        name: "excalidraw__create_view",
+        catalogId: catalog.id,
+        meta: { _meta: { ui: { resourceUri: uri } } },
+      });
+      await makeAgentTool(agent.id, tool.id);
+
+      const resolved = await mcpClient.resolveUiAppInstallIdForCaller(
+        uri,
+        agent.id,
+        callerAuth(user.id, org.id),
+      );
+
+      expect(resolved).toBe(install.id);
+    });
+
+    test("returns null for an owned-app backing (renders by app id via render_app)", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        serverType: "app",
+      });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      const uri = "ui://archestra-app/app-1";
+      const tool = await makeTool({
+        name: "my_app-abc123__open",
+        catalogId: catalog.id,
+        meta: { _meta: { ui: { resourceUri: uri } } },
+      });
+      await makeAgentTool(agent.id, tool.id);
+
+      const resolved = await mcpClient.resolveUiAppInstallIdForCaller(
+        uri,
+        agent.id,
+        callerAuth(user.id, org.id),
+      );
+
+      expect(resolved).toBeNull();
+    });
+
+    test("returns null when no tool declares the resource", async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+
+      const resolved = await mcpClient.resolveUiAppInstallIdForCaller(
+        "ui://nonexistent/app.html",
+        agent.id,
+        callerAuth(user.id, org.id),
+      );
+
+      expect(resolved).toBeNull();
+    });
+
+    test("returns null when the catalog has more than one install (pin could diverge)", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      // Two installs for the same catalog: run_tool's credential policy could pin
+      // execution to one while the caller-scoped resolution here picks the other,
+      // so no binding is emitted (callbacks fail cleanly instead of misrouting).
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      const uri = "ui://excalidraw/mcp-app.html";
+      const tool = await makeTool({
+        name: "excalidraw__create_view",
+        catalogId: catalog.id,
+        meta: { _meta: { ui: { resourceUri: uri } } },
+      });
+      await makeAgentTool(agent.id, tool.id);
+
+      const resolved = await mcpClient.resolveUiAppInstallIdForCaller(
+        uri,
+        agent.id,
+        callerAuth(user.id, org.id),
+      );
+
+      expect(resolved).toBeNull();
+    });
+  });
+
   describe("executeToolCallForOwner", () => {
     test("returns error when tool not found for agent", async () => {
       const toolCall = {

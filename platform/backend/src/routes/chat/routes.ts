@@ -620,12 +620,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           user: { id: user.id, email: user.email, name: user.name },
           callback: async () => {
             // Build the model-bound copy of the history: slash-command skill
-            // injection (both org flags must be on — the injected block
+            // injection (requires the org's skill tools — the injected block
             // references load_skill) followed by normalization. The original
             // `messages` stay clean for persistence and the visible bubble.
-            const skillSlashCommandsActive =
-              !!organization?.skillSlashCommandsEnabled &&
-              !!organization?.skillToolsEnabled;
+            const skillSlashCommandsActive = !!organization?.skillToolsEnabled;
             const messagesWithSkill = skillSlashCommandsActive
               ? await injectSkillActivation({
                   messages: messages as ChatMessage[],

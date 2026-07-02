@@ -151,6 +151,7 @@ import { useOrganization } from "@/lib/organization.query";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { useProjectFiles } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
+import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
@@ -163,6 +164,7 @@ import ArchestraPromptInput, {
   type ArchestraPromptInputProps,
 } from "./prompt-input";
 import { resolveSharedConversationForkState } from "./shared-conversation-fork";
+import { buildSkillCommands, resolveUrlSkillAction } from "./skill-commands";
 
 const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
   "runs",
@@ -233,6 +235,10 @@ export function ChatPageContent({
   // Skill invoked via slash command on the first message of a new chat,
   // held until the conversation exists and the message can be sent.
   const pendingSkillRef = useRef<ChatSkillMetadata | undefined>(undefined);
+  // Composer prefill from a `?skillId=` deep link; handed to the composer
+  // once and cleared via onPrefillApplied.
+  const [composerPrefill, setComposerPrefill] = useState<string | null>(null);
+  const urlSkillProcessedRef = useRef(false);
   const pendingInitialSendConversationRef = useRef<string | undefined>(
     undefined,
   );
@@ -462,6 +468,82 @@ export function ChatPageContent({
     pendingPromptRef.current = handoff.prompt || undefined;
     pendingFilesRef.current = drainPendingChatHandoffFiles();
   }, [conversationId]);
+
+  // Resolve a `?skillId=` deep link (from /chat/new) into a composer prefill
+  // with the skill's slash command. The param is transient, same posture as
+  // user_prompt: stripped once processed so a refresh or remount cannot
+  // re-apply it. A combined skillId + user_prompt link is unsupported (no UI
+  // produces it): the auto-send would orphan the prefill, so the skill is
+  // skipped and only the prompt is sent.
+  const urlSkillId = searchParams.get("skillId");
+  const urlSkillWanted = !!urlSkillId && !initialUserPrompt;
+  const urlSkillQuery = useSkill(urlSkillWanted ? urlSkillId : null);
+  const skillToolsEnabled = organization?.skillToolsEnabled ?? false;
+  // Same query the composer's slash-command table is built from (identical
+  // input → shared TanStack cache entry). The prefill token must come from
+  // that table, not be re-derived from the skill name, so slug collisions
+  // resolve to the right skill.
+  const urlSkillCommandsQuery = useSkillsPaginated(
+    { limit: 100 },
+    { enabled: urlSkillWanted && skillToolsEnabled },
+  );
+  useEffect(() => {
+    if (urlSkillProcessedRef.current || !urlSkillId) return;
+    if (!urlSkillWanted) {
+      urlSkillProcessedRef.current = true;
+      clearSkillIdQueryParam({ pathname, router, searchParams });
+      return;
+    }
+    // Wait for the org flag, the skill fetch, and the command table. useSkill
+    // treats a 404 as success with null data (allowNotFound), and a non-404
+    // lands the query in its error state — both settle this effect. An errored
+    // list query settles with no commands, which resolves to "unavailable".
+    if (isOrgLoading) return;
+    if (!urlSkillQuery.isSuccess && !urlSkillQuery.isError) return;
+    if (
+      skillToolsEnabled &&
+      !urlSkillCommandsQuery.isSuccess &&
+      !urlSkillCommandsQuery.isError
+    ) {
+      return;
+    }
+
+    urlSkillProcessedRef.current = true;
+    clearSkillIdQueryParam({ pathname, router, searchParams });
+
+    const action = resolveUrlSkillAction({
+      skill: urlSkillQuery.data ?? null,
+      isError: urlSkillQuery.isError,
+      skillCommands: urlSkillCommandsQuery.data?.data
+        ? buildSkillCommands(urlSkillCommandsQuery.data.data)
+        : [],
+    });
+    if (action.kind === "prefill") {
+      setComposerPrefill(action.text);
+    } else if (action.reason === "unavailable") {
+      toast.error("This skill is not available in chat");
+    } else {
+      toast.error("Skill not found");
+    }
+  }, [
+    urlSkillId,
+    urlSkillWanted,
+    urlSkillQuery.isSuccess,
+    urlSkillQuery.isError,
+    urlSkillQuery.data,
+    urlSkillCommandsQuery.isSuccess,
+    urlSkillCommandsQuery.isError,
+    urlSkillCommandsQuery.data,
+    isOrgLoading,
+    skillToolsEnabled,
+    pathname,
+    router,
+    searchParams,
+  ]);
+
+  const handleComposerPrefillApplied = useCallback(() => {
+    setComposerPrefill(null);
+  }, []);
 
   // Update URL when conversation changes
   const selectConversation = useCallback(
@@ -1475,6 +1557,8 @@ export function ChatPageContent({
       }
     }
 
+    const skillToAttach = options?.skill;
+
     // Attach-once: captured app render diagnostics ride this message's
     // metadata and the store is drained — a regenerate never re-attaches.
     const appDiagnostics = drainAppDiagnostics();
@@ -1483,7 +1567,7 @@ export function ChatPageContent({
       parts: ensureNonEmptyParts(parts),
       metadata: {
         createdAt: new Date().toISOString(),
-        ...(options?.skill ? { skill: options.skill } : {}),
+        ...(skillToAttach ? { skill: skillToAttach } : {}),
         ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
       },
     });
@@ -1860,6 +1944,11 @@ export function ChatPageContent({
     const handoffFilesReady =
       handoffHasAttachments && hasPendingChatHandoffFiles();
     if (!initialUserPrompt && !handoffFilesReady) return;
+
+    // A skill deep link must finish staging before the auto-send fires, else
+    // the first message would miss it. Processing strips skillId from the URL
+    // (success, not-found, and error alike), which re-runs this effect.
+    if (searchParams.get("skillId")) return;
 
     // Skip if conversation already exists
     if (conversationId) return;
@@ -2341,6 +2430,8 @@ export function ChatPageContent({
                               ? conversationPerUserConnect.modelName
                               : undefined
                           }
+                          prefillText={composerPrefill}
+                          onPrefillApplied={handleComposerPrefillApplied}
                         />
                         <div className="text-center">
                           <Version inline />
@@ -2466,6 +2557,8 @@ export function ChatPageContent({
                             ? initialPerUserConnect.modelName
                             : undefined
                         }
+                        prefillText={composerPrefill}
+                        onPrefillApplied={handleComposerPrefillApplied}
                       />
                     </div>
                   </div>
@@ -2598,6 +2691,21 @@ function clearUserPromptQueryParam(params: {
   // The attachments marker is one-shot too: drop it once consumed so a remount
   // can't re-trigger a drain (which would now find an empty store).
   nextSearchParams.delete("attachments");
+  const nextUrl = nextSearchParams.toString()
+    ? `${params.pathname}?${nextSearchParams.toString()}`
+    : params.pathname;
+  params.router.replace(nextUrl);
+}
+
+// skillId is a one-shot deep-link param (same posture as user_prompt): drop it
+// once the skill has been resolved and staged so it is never processed twice.
+function clearSkillIdQueryParam(params: {
+  pathname: string;
+  router: ReturnType<typeof useRouter>;
+  searchParams: URLSearchParams;
+}) {
+  const nextSearchParams = new URLSearchParams(params.searchParams.toString());
+  nextSearchParams.delete("skillId");
   const nextUrl = nextSearchParams.toString()
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;

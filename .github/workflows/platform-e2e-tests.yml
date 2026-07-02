@@ -32,9 +32,21 @@ env:
   MCP_SERVER_BASE_IMAGE_NAME: mcp-server-base
 
 jobs:
-  # Required-check placeholders for ordinary PR updates. These let a single
-  # ruleset require merge-queue-only checks without forcing the full E2E suite
-  # to run on every PR push.
+  # NOTE: there are deliberately NO same-named "placeholder" jobs for the
+  # NON-MATRIX checks below. GitHub treats a SKIPPED check run as satisfying a
+  # required status check, so on plain PR pushes the real jobs (whose `if` is
+  # false) report skipped under their own names and the ruleset is satisfied
+  # without running e2e. Placeholder twins would ALSO report skipped on
+  # merge_group runs — and that skipped twin satisfies the required check even
+  # when the real job FAILS, which let the merge queue merge past days of red
+  # e2e. Do not re-add them.
+  #
+  # The MATRIX build job is the one exception: a skipped matrix job never
+  # expands, so it reports as the literal "Build ${{ matrix.name }} Image" —
+  # the required "Build Platform Image" / "Build MCP Server Base Image"
+  # contexts would wait forever on ordinary PR pushes. Its placeholder is safe
+  # precisely for the same reason: skipped on merge_group, it reports under
+  # the unexpanded name, which cannot mask a real matrix job's failure.
   platform-e2e-build-placeholder:
     name: Build ${{ matrix.name }} Image
     runs-on: ubuntu-latest
@@ -165,14 +177,6 @@ jobs:
           path: /tmp/${{ matrix.tarball-name }}
           retention-days: 1
           compression-level: 0 # Already gzipped
-
-  platform-e2e-tests-placeholder:
-    name: Platform E2E Tests
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
-    steps:
-      - name: Skip full non-quickstart E2E job on ordinary PR updates
-        run: echo "Full non-quickstart E2E runs on merge queue or when the run-e2e label is added."
 
   # E2E tests - runs the generic non-quickstart suites plus the Vault K8s startup
   # coverage against one shared CI deployment in the standard DB secrets mode.
@@ -356,15 +360,6 @@ jobs:
           fi
           echo "All non-quickstart E2E shards passed."
 
-  # Quickstart E2E tests - validates docker run quickstart instructions work correctly
-  # Runs the mcp-install.spec.ts test against the platform started via docker run
-  platform-quickstart-e2e-tests-placeholder:
-    name: Platform E2E Tests (Quickstart)
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
-    steps:
-      - name: Skip quickstart E2E on ordinary PR updates
-        run: echo "Quickstart E2E runs on merge queue or when the run-e2e label is added."
 
   platform-quickstart-e2e-tests:
     name: Platform E2E Tests (Quickstart)
@@ -595,15 +590,6 @@ jobs:
           docker network rm archestra-quickstart-net 2>/dev/null || true
           docker volume rm archestra-ci-postgres-data 2>/dev/null || true
           docker volume rm archestra-ci-app-data 2>/dev/null || true
-
-  # Merge all Playwright reports into a single HTML report
-  platform-e2e-merge-reports-placeholder:
-    name: Merge E2E Test Reports
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
-    steps:
-      - name: Skip report merge on ordinary PR updates
-        run: echo "Merged E2E reports are generated on merge queue or when the run-e2e label is added."
 
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports

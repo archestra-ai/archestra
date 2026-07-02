@@ -184496,6 +184496,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "oauthRefreshErrorDescription": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "oauthRefreshFailedAt": {
                         "nullable": true,
                         "type": "string",
@@ -184594,6 +184598,7 @@
                       "localInstallationError",
                       "oauthRefreshError",
                       "oauthRefreshErrorMessage",
+                      "oauthRefreshErrorDescription",
                       "oauthRefreshFailedAt",
                       "createdAt",
                       "updatedAt"
@@ -184906,21 +184911,6 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "oauthRefreshError": {
-                    "nullable": true,
-                    "type": "string",
-                    "enum": [
-                      "refresh_failed",
-                      "no_refresh_token"
-                    ]
-                  },
-                  "oauthRefreshErrorMessage": {
-                    "nullable": true,
-                    "type": "string"
-                  },
-                  "oauthRefreshFailedAt": {
-                    "nullable": true
-                  },
                   "userId": {
                     "type": "string"
                   },
@@ -185069,6 +185059,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "oauthRefreshErrorDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "oauthRefreshFailedAt": {
                       "nullable": true,
                       "type": "string",
@@ -185167,6 +185161,7 @@
                     "localInstallationError",
                     "oauthRefreshError",
                     "oauthRefreshErrorMessage",
+                    "oauthRefreshErrorDescription",
                     "oauthRefreshFailedAt",
                     "createdAt",
                     "updatedAt"
@@ -185545,6 +185540,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "oauthRefreshErrorDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "oauthRefreshFailedAt": {
                       "nullable": true,
                       "type": "string",
@@ -185643,6 +185642,7 @@
                     "localInstallationError",
                     "oauthRefreshError",
                     "oauthRefreshErrorMessage",
+                    "oauthRefreshErrorDescription",
                     "oauthRefreshFailedAt",
                     "createdAt",
                     "updatedAt"
@@ -186330,6 +186330,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "oauthRefreshErrorDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "oauthRefreshFailedAt": {
                       "nullable": true,
                       "type": "string",
@@ -186428,6 +186432,7 @@
                     "localInstallationError",
                     "oauthRefreshError",
                     "oauthRefreshErrorMessage",
+                    "oauthRefreshErrorDescription",
                     "oauthRefreshFailedAt",
                     "createdAt",
                     "updatedAt"
@@ -187743,6 +187748,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "oauthRefreshErrorDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "oauthRefreshFailedAt": {
                       "nullable": true,
                       "type": "string",
@@ -187841,6 +187850,7 @@
                     "localInstallationError",
                     "oauthRefreshError",
                     "oauthRefreshErrorMessage",
+                    "oauthRefreshErrorDescription",
                     "oauthRefreshFailedAt",
                     "createdAt",
                     "updatedAt"

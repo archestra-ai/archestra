@@ -228,6 +228,36 @@ describe("TaskModel", () => {
       }
     });
 
+    test("decrements each task's own attempt in a mixed batch", async () => {
+      const task1 = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+      });
+      const task2 = await TaskModel.create({
+        taskType: "batch_embedding",
+        payload: { documentIds: ["d1"] },
+      });
+
+      await TaskModel.dequeue();
+      await TaskModel.dequeue();
+      // Simulate a task on a later retry so batch rows carry different attempts
+      await db
+        .update(schema.tasksTable)
+        .set({ attempt: 3 })
+        .where(eq(schema.tasksTable.id, task2.id));
+
+      const released = await TaskModel.releaseToQueue([task1.id, task2.id]);
+      expect(released).toBe(2);
+
+      const rows = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(inArray(schema.tasksTable.id, [task1.id, task2.id]));
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      expect(byId.get(task1.id)?.attempt).toBe(0);
+      expect(byId.get(task2.id)?.attempt).toBe(2);
+    });
+
     test("clamps attempt at 0 when releasing", async () => {
       const task = await TaskModel.create({
         taskType: "connector_sync",

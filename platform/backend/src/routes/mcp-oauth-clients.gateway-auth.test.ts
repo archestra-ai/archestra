@@ -64,6 +64,40 @@ describe("MCP OAuth client gateway authorization", () => {
     expect(result?.userId).toBeUndefined();
   });
 
+  test("authorizes a scoped gateway for a TEAM-visibility-scoped client (scoping is management-plane only)", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    const author = await makeUser();
+    const team = await makeTeam(org.id, author.id);
+    const { oauthClient } = await McpOauthClientModel.create({
+      organizationId: org.id,
+      authorId: author.id,
+      name: "team-scoped service",
+      allowedGatewayIds: [gateway.id],
+      scope: "team",
+      teams: [team.id],
+    });
+    const token = await mintToken({
+      clientId: oauthClient.clientId,
+      referenceClientUuid: oauthClient.id,
+    });
+
+    const result = await validateMCPGatewayToken(gateway.id, token);
+
+    expect(result).not.toBeNull();
+    expect(result?.organizationId).toBe(org.id);
+    expect(result?.isOrganizationToken).toBe(false);
+    expect(result?.isUserToken).toBeUndefined();
+  });
+
   test("rejects a gateway the client is not scoped to", async ({
     makeOrganization,
     makeAgent,

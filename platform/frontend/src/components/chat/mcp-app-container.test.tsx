@@ -83,7 +83,7 @@ import {
   reportAppDiagnostic,
 } from "@/lib/chat/app-diagnostics-store";
 import { useFeature } from "@/lib/config/config.query";
-import { AppsProvider } from "./apps-context";
+import { AppsProvider, useApps } from "./apps-context";
 import { McpAppSection } from "./mcp-app-container";
 
 const mockUseApp = vi.mocked(useApp);
@@ -517,6 +517,71 @@ describe("McpAppSection panel hosting", () => {
     expect(screen.queryByText(/runtime error/i)).not.toBeInTheDocument();
   });
 
+  it("resolves the open app to the latest while the panel hosts, even after an inline collapse", async () => {
+    // Repro: collapsing every inline app sets the open app to null (correct for
+    // the chat stream). Opening the panel afterwards must still host an app —
+    // the Apps tab has no "nothing open" state — so a null collapse falls back
+    // to the latest app while the panel is hosting (portalTarget set).
+    const user = userEvent.setup();
+
+    function Probe() {
+      const { openToolCallId, setOpenToolCallId, setPortalTarget } = useApps();
+      return (
+        <div>
+          <div data-testid="open">{openToolCallId ?? "none"}</div>
+          <button type="button" onClick={() => setOpenToolCallId(null)}>
+            collapse
+          </button>
+          <button
+            type="button"
+            onClick={() => setPortalTarget(document.createElement("div"))}
+          >
+            host panel
+          </button>
+        </div>
+      );
+    }
+
+    await act(async () => {
+      render(
+        <AppsProvider
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "First App",
+              uiResourceUri: "resource://test-server/ui-other",
+              createdAt: 0,
+            },
+            {
+              toolCallId: "tc2",
+              label: "Second App",
+              uiResourceUri: defaultProps.uiResourceUri,
+              createdAt: 1,
+            },
+          ]}
+        >
+          <Probe />
+        </AppsProvider>,
+      );
+    });
+
+    // Untouched → the latest app (tc2) is open.
+    expect(screen.getByTestId("open")).toHaveTextContent("tc2");
+
+    // Collapse all inline apps → nothing open (no panel hosting yet).
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "collapse" }));
+    });
+    expect(screen.getByTestId("open")).toHaveTextContent("none");
+
+    // Opening the panel (portalTarget set) must resolve back to the latest app
+    // rather than leaving the tab blank.
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "host panel" }));
+    });
+    expect(screen.getByTestId("open")).toHaveTextContent("tc2");
+  });
+
   it("collapses a non-open app to a pill while another app is open", async () => {
     const user = userEvent.setup();
 
@@ -790,12 +855,12 @@ describe("McpAppSection owned-app panel chrome", () => {
     const user = userEvent.setup();
     await renderOwnedPanel();
 
-    // Chrome shows a settings gear over the live app; the dialog starts closed.
-    const gear = screen.getByRole("button", { name: /app settings/i });
+    // Chrome shows a Settings button over the live app; the dialog starts closed.
+    const gear = screen.getByRole("button", { name: /^settings$/i });
     expect(document.querySelector("iframe")).toBeInTheDocument();
     expect(screen.queryByTestId("settings-form")).not.toBeInTheDocument();
 
-    // Clicking the gear opens the settings dialog (a modal over the live app).
+    // Clicking it opens the settings dialog (a modal over the live app).
     await act(async () => {
       await user.click(gear);
     });
@@ -808,7 +873,7 @@ describe("McpAppSection owned-app panel chrome", () => {
     });
     expect(screen.queryByTestId("settings-form")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /app settings/i }),
+      screen.getByRole("button", { name: /^settings$/i }),
     ).toBeInTheDocument();
   });
 });

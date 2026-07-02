@@ -3,11 +3,11 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import {
   AppWindow,
-  ExternalLink,
   Loader2,
   MoreHorizontal,
   Server,
   Settings,
+  SquareArrowOutUpRight,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -172,7 +172,7 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link href={`/a/${app.id}`} target="_blank" rel="noreferrer">
-              <ExternalLink className="h-4 w-4" />
+              <SquareArrowOutUpRight className="h-4 w-4" />
               Open in new tab
             </Link>
           </DropdownMenuItem>
@@ -263,7 +263,7 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
       <CardOverflowMenu leading={<ScopeBadge scope={app.scope} hidePersonal />}>
         <DropdownMenuItem asChild>
           <Link href={runHref} target="_blank" rel="noreferrer">
-            <ExternalLink className="h-4 w-4" />
+            <SquareArrowOutUpRight className="h-4 w-4" />
             Open in new tab
           </Link>
         </DropdownMenuItem>

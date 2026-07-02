@@ -116,18 +116,21 @@ export function AppsProvider({
   // from a previous conversation) isn't found and falls through to the latest,
   // so a new render of an owned app takes focus and no reset is needed on switch.
   const openToolCallId = useMemo(() => {
-    if (explicitOpen === null) return null;
-    if (explicitOpen && apps.some((a) => a.toolCallId === explicitOpen)) {
-      return explicitOpen;
-    }
-    return (
+    const latestToolCallId =
       apps.reduce<PanelApp | null>(
         (latest, a) =>
           !latest || a.createdAt >= latest.createdAt ? a : latest,
         null,
-      )?.toolCallId ?? null
-    );
-  }, [explicitOpen, apps]);
+      )?.toolCallId ?? null;
+    // An explicit collapse (null) empties the inline stream, but the panel
+    // always hosts one app when the conversation has any — fall back to the
+    // latest there so the Apps tab never renders blank.
+    if (explicitOpen === null) return portalTarget ? latestToolCallId : null;
+    if (explicitOpen && apps.some((a) => a.toolCallId === explicitOpen)) {
+      return explicitOpen;
+    }
+    return latestToolCallId;
+  }, [explicitOpen, apps, portalTarget]);
 
   // Setting the open app always returns to the live app — the settings form
   // belongs to the app that was open, not the one switched to.

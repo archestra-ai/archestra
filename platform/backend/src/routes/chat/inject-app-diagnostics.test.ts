@@ -1,5 +1,5 @@
 import type { ChatMessage } from "@archestra/shared";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import { injectAppDiagnostics } from "./inject-app-diagnostics";
 
@@ -27,12 +27,11 @@ const diagnosticsMetadata = {
   ],
 };
 
-const originalAppsEnabled = config.apps.enabled;
-beforeAll(() => {
+// Pin the apps flag per TEST, not per file: the shared setup restores the
+// pristine config before and after every test, so a beforeAll-scoped
+// mutation does not survive, and a file must never depend on worker state.
+beforeEach(() => {
   (config.apps as { enabled: boolean }).enabled = true;
-});
-afterAll(() => {
-  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
 });
 
 describe("injectAppDiagnostics", () => {

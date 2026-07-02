@@ -14,17 +14,54 @@ export function buildSkippedAttachmentsNote(
   skipped: SkippedAttachment[],
 ): string {
   if (skipped.length === 0) return "";
-  const items = skipped
-    .map((s) => {
-      const name = s.name ? `"${s.name}"` : "an unnamed file";
-      const size =
-        s.sizeBytes !== undefined ? ` (${formatByteSize(s.sizeBytes)})` : "";
-      return `${name}${size} — ${SKIPPED_REASON_TEXT[s.reason]}`;
-    })
-    .join("; ");
   const count =
     skipped.length === 1 ? "1 file was" : `${skipped.length} files were`;
-  return `\n\n[Note: ${count} attached to this message but could not be shown to you: ${items}. If the user refers to such a file, explain it could not be included (e.g. it was too large) rather than saying you see nothing.]`;
+  return `\n\n[Note: ${count} attached to this message but could not be shown to you: ${formatSkippedItems(skipped)}. If the user refers to such a file, explain it could not be included (e.g. it was too large) rather than saying you see nothing.]`;
+}
+
+/**
+ * Compact single-turn variant of {@link buildSkippedAttachmentsNote} appended
+ * inline to a thread-history line, so the model knows an earlier message had a
+ * file it cannot see. Returns "" when nothing was skipped.
+ */
+export function buildHistorySkippedAttachmentsNote(
+  skipped: SkippedAttachment[],
+): string {
+  if (skipped.length === 0) return "";
+  const count = skipped.length === 1 ? "1 file" : `${skipped.length} files`;
+  return ` [${count} attached to this message could not be shown to you: ${formatSkippedItems(skipped)}]`;
+}
+
+/**
+ * Counting semaphore bounding concurrent async work per process. Waiters are
+ * resumed FIFO; a released permit is handed directly to the next waiter, so
+ * `active` never overshoots `maxConcurrent`. Callers must pair every
+ * `acquire()` with a `release()` in a `finally` block.
+ */
+export class Semaphore {
+  private active = 0;
+  private readonly waiters: Array<() => void> = [];
+
+  constructor(private readonly maxConcurrent: number) {}
+
+  async acquire(): Promise<void> {
+    if (this.active < this.maxConcurrent) {
+      this.active++;
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      this.waiters.push(resolve);
+    });
+  }
+
+  release(): void {
+    const next = this.waiters.shift();
+    if (next) {
+      next();
+    } else {
+      this.active--;
+    }
+  }
 }
 
 /**
@@ -140,6 +177,17 @@ function formatByteSize(bytes: number): string {
   const kb = bytes / 1024;
   if (kb < 1024) return `${Math.round(kb)} KB`;
   return `${(kb / 1024).toFixed(1)} MB`;
+}
+
+function formatSkippedItems(skipped: SkippedAttachment[]): string {
+  return skipped
+    .map((s) => {
+      const name = s.name ? `"${s.name}"` : "an unnamed file";
+      const size =
+        s.sizeBytes !== undefined ? ` (${formatByteSize(s.sizeBytes)})` : "";
+      return `${name}${size} — ${SKIPPED_REASON_TEXT[s.reason]}`;
+    })
+    .join("; ");
 }
 
 const SKIPPED_REASON_TEXT: Record<SkippedAttachment["reason"], string> = {

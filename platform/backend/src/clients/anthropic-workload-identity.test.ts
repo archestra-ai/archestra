@@ -53,6 +53,7 @@ describe("anthropicWorkloadIdentity", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     anthropicWorkloadIdentity.resetForTests();
     config.llm.anthropic.wif = originalWif;
     config.llm.anthropic.baseUrl = originalBaseUrl;

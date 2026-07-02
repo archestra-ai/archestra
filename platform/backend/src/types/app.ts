@@ -268,7 +268,7 @@ export const RefineAppToolSchema = z.strictObject({
           .min(1)
           .optional()
           .describe(
-            "When present, the question is single-select over these options; otherwise it is free-text.",
+            'When present, the question is single-select over these plain-string option labels, e.g. ["Light", "Dark"] — never {label, value} objects; otherwise it is free-text.',
           ),
       }),
     )

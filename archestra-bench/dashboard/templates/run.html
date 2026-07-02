@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ id }} — bench dashboard{% endblock %}
+{% block content %}
+<h1>{{ id }} <span class="badge {{ rubric_badge.class }}">{{ rubric_badge.label }}</span></h1>
+<p class="muted">{{ date }}</p>
+
+{% for w in warnings %}
+<p class="warning">⚠ {{ w }}</p>
+{% endfor %}
+
+<section>
+    <h2>Metrics</h2>
+    <table class="kv">
+        <tbody>
+        {% for row in summary %}
+            <tr><th>{{ row.label }}</th><td>{{ row.value }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+{% if !hacking.is_empty() %}
+<section class="hacking">
+    <h2>Reward hacking suspected</h2>
+    <ul>
+    {% for h in hacking %}
+        <li><a href="{{ h.href }}">{{ h.id }}</a>{% if !h.evidence.is_empty() %} — <em>{{ h.evidence }}</em>{% endif %}</li>
+    {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if has_rubrics %}
+<section>
+    <h2>Rubric averages by lane</h2>
+    <table>
+        <thead>
+            <tr><th>rubric</th>{% for lane in lanes %}<th>{{ lane }}</th>{% endfor %}</tr>
+        </thead>
+        <tbody>
+        {% for row in rubric_rows %}
+            <tr><th>{{ row.label }}</th>{% for v in row.values %}<td>{{ v }}</td>{% endfor %}</tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+
+<section data-signals="{lane: '', outcome: '', mingrade: '', rhonly: false}">
+    <h2>Rollouts</h2>
+    <div class="filters">
+        <label>lane
+            <select data-bind:lane data-on:change="@get('{{ grid_url }}')">
+                <option value="">all</option>
+                {% for lane in lanes %}<option value="{{ lane }}">{{ lane }}</option>{% endfor %}
+            </select>
+        </label>
+        <label>outcome
+            <select data-bind:outcome data-on:change="@get('{{ grid_url }}')">
+                <option value="">all</option>
+                {% for o in outcome_options %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+            </select>
+        </label>
+        <label>min mean grade
+            <select data-bind:mingrade data-on:change="@get('{{ grid_url }}')">
+                <option value="">any</option>
+                <option value="2">at least 2</option>
+                <option value="3">at least 3</option>
+                <option value="4">at least 4</option>
+                <option value="5">exactly 5</option>
+            </select>
+        </label>
+        <label class="check">
+            <input type="checkbox" data-bind:rhonly data-on:change="@get('{{ grid_url }}')">
+            reward-hacking only
+        </label>
+    </div>
+    {{ grid_html|safe }}
+</section>
+{% endblock %}

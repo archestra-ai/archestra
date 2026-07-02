@@ -3,15 +3,7 @@ import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 describe("GET /api/app-templates", () => {
@@ -19,12 +11,11 @@ describe("GET /api/app-templates", () => {
   let organizationId: string;
   let user: User;
 
-  const appsEnabled = config.apps.enabled;
-  beforeAll(() => {
+  // Pin the apps flag per TEST, not per file: the shared setup restores the
+  // pristine config before and after every test, so a beforeAll-scoped
+  // mutation does not survive, and a file must never depend on worker state.
+  beforeEach(() => {
     (config.apps as { enabled: boolean }).enabled = true;
-  });
-  afterAll(() => {
-    (config.apps as { enabled: boolean }).enabled = appsEnabled;
   });
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {

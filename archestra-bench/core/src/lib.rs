@@ -164,6 +164,81 @@ impl RunMeta {
     }
 }
 
+/// A 1..=5 rubric grade in a persisted triage record. Range-validated at the serde boundary via
+/// `try_from`, so an out-of-range grade is a deserialization error and an in-memory `Grade` is
+/// always valid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "u8", into = "u8")]
+pub struct Grade(u8);
+
+impl Grade {
+    pub fn value(self) -> u8 {
+        self.0
+    }
+}
+
+impl TryFrom<u8> for Grade {
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        if (1..=5).contains(&value) {
+            Ok(Grade(value))
+        } else {
+            Err(format!("grade must be an integer 1..=5, got {value}"))
+        }
+    }
+}
+
+impl From<Grade> for u8 {
+    fn from(grade: Grade) -> u8 {
+        grade.0
+    }
+}
+
+impl fmt::Display for Grade {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// One rubric's grade plus the triage model's short justification.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RubricScore {
+    pub grade: Grade,
+    pub comment: String,
+}
+
+/// The four fixed triage rubrics. Struct field order is the persisted JSON key order — the
+/// analyzer's golden fixture and the Node-side parity test depend on it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Rubrics {
+    pub knowledge: RubricScore,
+    pub reasoning: RubricScore,
+    pub instruction_following: RubricScore,
+    pub env_ergonomics: RubricScore,
+}
+
+/// Whether the triage model suspects the agent gamed the verifier, with quoted evidence when it
+/// does. A non-null `evidence` with `suspected: false` is tolerated, not rejected.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RewardHacking {
+    pub suspected: bool,
+    pub evidence: Option<String>,
+}
+
+/// One line of the analyzer's `trajectory_rubrics_<ts>.jsonl`: the model's triage judgment plus the
+/// two pipeline-stamped identity fields. `rollout` and `outcome` come from run metadata, never from
+/// model output. Field order is the persisted JSON key order (see [`Rubrics`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TriageRecord {
+    pub rollout: String,
+    pub outcome: String,
+    pub verdict: String,
+    pub rubrics: Rubrics,
+    pub reward_hacking: RewardHacking,
+    pub observations: Vec<String>,
+}
+
 /// One `kind`-tagged line of a `trajectory.jsonl`. Unrecognised kinds degrade to [`Event::Unknown`]
 /// (forward-compat); known kinds missing a required field are a deserialization error.
 #[derive(Debug, Clone, Deserialize)]
@@ -299,6 +374,35 @@ mod tests {
     }
 
     #[test]
+    fn grade_rejects_out_of_range_values() {
+        assert!(serde_json::from_str::<Grade>("0").is_err());
+        assert!(serde_json::from_str::<Grade>("6").is_err());
+        assert_eq!(serde_json::from_str::<Grade>("1").unwrap().value(), 1);
+        assert_eq!(serde_json::from_str::<Grade>("5").unwrap().value(), 5);
+    }
+
+    #[test]
+    fn triage_record_round_trips_a_jsonl_line_preserving_key_order() {
+        // The exact key order of this line is the persisted contract the golden fixture pins.
+        let line = r#"{"rollout":"basic/pi__glm","outcome":"failed","verdict":"minor friction","rubrics":{"knowledge":{"grade":4,"comment":"k"},"reasoning":{"grade":3,"comment":"r"},"instruction_following":{"grade":5,"comment":"i"},"env_ergonomics":{"grade":2,"comment":"e"}},"reward_hacking":{"suspected":true,"evidence":"quoted"},"observations":["one","two"]}"#;
+        let record: TriageRecord = serde_json::from_str(line).unwrap();
+        assert_eq!(record.rollout, "basic/pi__glm");
+        assert_eq!(record.rubrics.env_ergonomics.grade.value(), 2);
+        assert_eq!(record.reward_hacking.evidence.as_deref(), Some("quoted"));
+        assert_eq!(serde_json::to_string(&record).unwrap(), line);
+        let round: TriageRecord =
+            serde_json::from_str(&serde_json::to_string(&record).unwrap()).unwrap();
+        assert_eq!(round, record);
+    }
+
+    #[test]
+    fn triage_record_rejects_an_out_of_range_nested_grade() {
+        let line = r#"{"rollout":"r","outcome":"failed","verdict":"v","rubrics":{"knowledge":{"grade":0,"comment":"k"},"reasoning":{"grade":3,"comment":"r"},"instruction_following":{"grade":5,"comment":"i"},"env_ergonomics":{"grade":2,"comment":"e"}},"reward_hacking":{"suspected":false,"evidence":null},"observations":[]}"#;
+        let err = serde_json::from_str::<TriageRecord>(line).unwrap_err();
+        assert!(err.to_string().contains("1..=5"));
+    }
+
+    #[test]
     fn event_parses_known_and_unknown_kinds() {
         let tool: Event =
             serde_json::from_str(r#"{"kind":"tool_call","tool_name":"run","input":{"cmd":"ls"}}"#)
@@ -353,6 +457,8 @@ mod tests {
             r#"{"kind":"effective_prompt_error","sequence":4,"error":"context varied"}"#,
         )
         .unwrap();
-        assert!(matches!(parsed, Event::EffectivePromptError { error } if error == "context varied"));
+        assert!(
+            matches!(parsed, Event::EffectivePromptError { error } if error == "context varied")
+        );
     }
 }

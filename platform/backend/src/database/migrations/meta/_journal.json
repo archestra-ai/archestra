@@ -2269,6 +2269,13 @@
       "when": 1782963712998,
       "tag": "0323_parched_trauma",
       "breakpoints": true
+    },
+    {
+      "idx": 324,
+      "version": "7",
+      "when": 1782978649793,
+      "tag": "0324_perfect_deathstrike",
+      "breakpoints": true
     }
   ]
 }

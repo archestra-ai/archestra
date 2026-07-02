@@ -831,6 +831,7 @@ class McpClient {
           await McpServerModel.update(targetMcpServerId, {
             oauthRefreshError: "no_refresh_token",
             oauthRefreshErrorMessage: "no_refresh_token",
+            oauthRefreshErrorDescription: null,
             oauthRefreshFailedAt: new Date(),
           });
           logger.warn(
@@ -2372,6 +2373,7 @@ class McpClient {
     await McpServerModel.update(targetMcpServerId, {
       oauthRefreshError: null,
       oauthRefreshErrorMessage: null,
+      oauthRefreshErrorDescription: null,
       oauthRefreshFailedAt: null,
     });
 

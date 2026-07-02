@@ -526,6 +526,7 @@ export type OAuthRefreshOutcome =
       kind: "terminal";
       category: "refresh_failed" | "no_refresh_token";
       message: string;
+      description?: string;
     }
   | {
       ok: false;
@@ -549,6 +550,63 @@ export function sanitizeOAuthErrorCode(error?: string | null): string {
     return error;
   }
   return "refresh_failed";
+}
+
+// `error_description` is free-form prose (RFC 6749 §5.2 places no shape
+// constraint on it), so unlike `sanitizeOAuthErrorCode` above this can't be a
+// whitelist — the field exists specifically to keep human-readable debugging
+// detail. Instead this blacklists known-dangerous shapes an authorization
+// server (malicious, compromised, or merely careless) could echo back:
+// credential-bearing URLs, tokens/API keys, emails, and HTML. This is
+// defense in depth, not a guarantee — a redacted placeholder can still slip
+// past a pattern we didn't anticipate.
+const OAUTH_ERROR_DESCRIPTION_REDACTED = "[redacted]";
+const OAUTH_ERROR_DESCRIPTION_SCAN_LIMIT = 5_000;
+const OAUTH_ERROR_DESCRIPTION_MAX_LENGTH = 500;
+
+const OAUTH_ERROR_DESCRIPTION_REDACT_PATTERNS: RegExp[] = [
+  // URLs — may carry credentials/tokens in userinfo or the query string.
+  /\b[a-z][a-z0-9+.-]*:\/\/\S+/gi,
+  // JWTs — three dot-separated base64url segments.
+  /\bey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
+  // Well-known API key/token prefixes (Stripe, GitHub, AWS, Slack, OpenAI).
+  /\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{10,}\b/g,
+  /\bgh[opusr]_[A-Za-z0-9]{20,}\b/g,
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g,
+  /\bsk-[A-Za-z0-9]{20,}\b/g,
+  // Email addresses.
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
+  // HTML/script tags — defense in depth if this is ever rendered.
+  /<[^>]*>/g,
+  // Generic high-entropy secret-shaped runs, kept last so the more specific
+  // categories above classify first.
+  /\b[A-Za-z0-9+/_-]{32,}={0,2}\b/g,
+];
+
+export function sanitizeOAuthErrorDescription(
+  raw?: string | null,
+): string | null {
+  // `body` is a `JSON.parse` of an untrusted third-party response with no
+  // runtime schema validation — the `string` type on `error_description` is
+  // a compile-time hint only. A non-string value (number, object, array)
+  // must not reach the string methods below, or the throw gets caught by
+  // `refreshOAuthToken`'s outer catch and misclassified as transient via
+  // `classifyThrownRefreshError`, silently downgrading a genuine terminal
+  // grant rejection to "retry later".
+  if (typeof raw !== "string" || !raw) {
+    return null;
+  }
+
+  // Bound the work done on an adversarial payload before the final length
+  // cap, independent of how much of it we'd keep anyway.
+  let result = raw.slice(0, OAUTH_ERROR_DESCRIPTION_SCAN_LIMIT);
+  for (const pattern of OAUTH_ERROR_DESCRIPTION_REDACT_PATTERNS) {
+    result = result.replace(pattern, OAUTH_ERROR_DESCRIPTION_REDACTED);
+  }
+
+  result = result.trim().slice(0, OAUTH_ERROR_DESCRIPTION_MAX_LENGTH);
+  return result || null;
 }
 
 // OAuth error codes that signal a temporary server condition, not a dead grant
@@ -595,6 +653,8 @@ export function classifyRefreshResponse(params: {
       kind: "terminal",
       category: "refresh_failed",
       message: sanitizeOAuthErrorCode(body.error),
+      description:
+        sanitizeOAuthErrorDescription(body.error_description) ?? undefined,
     };
   }
 
@@ -621,6 +681,7 @@ export function classifyThrownRefreshError(
 export function refreshFailureToServerFields(outcome: OAuthRefreshOutcome): {
   oauthRefreshError: "refresh_failed" | "no_refresh_token";
   oauthRefreshErrorMessage: string;
+  oauthRefreshErrorDescription: string | null;
   oauthRefreshFailedAt: Date;
 } | null {
   if (outcome.ok || outcome.kind !== "terminal") {
@@ -629,6 +690,7 @@ export function refreshFailureToServerFields(outcome: OAuthRefreshOutcome): {
   return {
     oauthRefreshError: outcome.category,
     oauthRefreshErrorMessage: outcome.message,
+    oauthRefreshErrorDescription: outcome.description ?? null,
     oauthRefreshFailedAt: new Date(),
   };
 }

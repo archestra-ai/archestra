@@ -110105,6 +110105,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -110307,6 +110313,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -111048,6 +111055,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -111250,6 +111263,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -111699,6 +111713,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -111890,6 +111910,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -112339,6 +112360,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -112530,6 +112557,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -112854,6 +112882,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -113056,6 +113090,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -113380,6 +113415,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -113582,6 +113623,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -115853,6 +115895,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -116055,6 +116103,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -116379,6 +116428,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -116581,6 +116636,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -116905,6 +116961,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -117107,6 +117169,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -117431,6 +117494,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -117633,6 +117702,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -117957,6 +118027,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -118159,6 +118235,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -118483,6 +118560,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -118685,6 +118768,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -119009,6 +119093,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -119211,6 +119301,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -119535,6 +119626,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -119726,6 +119823,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -120050,6 +120148,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -120241,6 +120345,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -120565,6 +120670,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -120767,6 +120878,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -121091,6 +121203,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -121293,6 +121411,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -121617,6 +121736,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -121819,6 +121944,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -124309,6 +124435,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -124511,6 +124643,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -124835,6 +124968,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -125037,6 +125176,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -125594,6 +125734,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -125796,6 +125942,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -126537,6 +126684,12 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "seq": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -126739,6 +126892,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "seq",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -128562,6 +128716,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -128764,6 +128924,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -129505,6 +129666,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -129707,6 +129874,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -130156,6 +130324,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -130347,6 +130521,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -130796,6 +130971,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -130987,6 +131168,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -131311,6 +131493,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -131513,6 +131701,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -131837,6 +132026,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -132039,6 +132234,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -134310,6 +134506,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -134512,6 +134714,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -134836,6 +135039,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -135038,6 +135247,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -135362,6 +135572,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -135564,6 +135780,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -135888,6 +136105,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -136090,6 +136313,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -136414,6 +136638,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -136616,6 +136846,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -136940,6 +137171,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -137142,6 +137379,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -137466,6 +137704,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -137668,6 +137912,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -137992,6 +138237,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -138183,6 +138434,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -138507,6 +138759,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -138698,6 +138956,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -139022,6 +139281,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -139224,6 +139489,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -139548,6 +139814,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -139750,6 +140022,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -140074,6 +140347,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -140276,6 +140555,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -142766,6 +143046,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -142968,6 +143254,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -143292,6 +143579,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -143494,6 +143787,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -144051,6 +144345,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -144253,6 +144553,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -144994,6 +145295,12 @@
                             "no_tool_results"
                           ]
                         },
+                        "seq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -145196,6 +145503,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "seq",
                         "createdAt"
                       ],
                       "additionalProperties": false

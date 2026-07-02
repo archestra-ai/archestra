@@ -2,8 +2,10 @@ import type {
   InteractionSource,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
+import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  bigint,
   boolean,
   index,
   integer,
@@ -181,6 +183,16 @@ const interactionsTable = pgTable(
     toonTokensAfter: integer("toon_tokens_after"),
     toonCostSavings: numeric("toon_cost_savings", { precision: 13, scale: 10 }),
     toonSkipReason: varchar("toon_skip_reason").$type<ToonSkipReason>(),
+    // Monotonic insertion order for delta chaining: createdAt has finite
+    // precision, and streamed interactions written in the same instant tie —
+    // "latest interaction" picks then become arbitrary and delta chains can
+    // attach to the wrong parent. Sequence default (not identity) so the
+    // migration backfills history in (created_at, id) order and old writers
+    // keep inserting during rollout; NOT NULL deferred per the migration
+    // linter's expand/contract rule.
+    seq: bigint("seq", { mode: "number" }).default(
+      sql`nextval('interactions_seq_seq')`,
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

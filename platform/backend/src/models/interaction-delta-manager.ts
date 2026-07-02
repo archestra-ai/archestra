@@ -343,7 +343,13 @@ class InteractionDeltaManager {
           ),
         ),
       )
-      .orderBy(desc(schema.interactionsTable.createdAt))
+      .orderBy(
+        // seq is tie-proof insertion order; createdAt kept as a fallback for
+        // any pre-backfill edge. Same-instant interactions are routine under
+        // streaming, and a wrong "latest" pick corrupts the delta chain.
+        desc(schema.interactionsTable.seq),
+        desc(schema.interactionsTable.createdAt),
+      )
       .limit(16);
 
     const chosen = candidates.find(

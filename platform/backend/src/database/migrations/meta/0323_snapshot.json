@@ -1,5 +1,5 @@
 {
-  "id": "daabfd39-ea3a-42e9-9b83-f914ca00503e",
+  "id": "5349d325-937a-4bfd-8f82-c61b04917123",
   "prevId": "4aaadceb-9e28-4092-b094-e1f125559b3d",
   "version": "7",
   "dialect": "postgresql",
@@ -6026,6 +6026,13 @@
           "type": "varchar",
           "primaryKey": false,
           "notNull": false
+        },
+        "seq": {
+          "name": "seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "nextval('interactions_seq_seq')"
         },
         "created_at": {
           "name": "created_at",

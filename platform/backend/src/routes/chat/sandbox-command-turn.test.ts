@@ -250,6 +250,60 @@ describe("POST /api/chat sandbox command turn", () => {
     const rows = await MessageModel.findByConversation(conversationId);
     expect(rows).toHaveLength(1);
     expect((rows[0].content as ChatMessage).role).toBe("user");
+
+    // The active run was terminalized: a follow-up send is not 409-blocked.
+    const retry = await postChat({
+      id: conversationId,
+      messages: [markedUserMessage("! echo hi")],
+    });
+    expect(retry.statusCode).toBe(403);
+  });
+
+  test("a runtime failure surfaces as tool output through the real error mapping", async () => {
+    mockRunSandboxCommand.mockRejectedValue(new Error("engine unreachable"));
+
+    const response = await postChat({
+      id: conversationId,
+      messages: [markedUserMessage("! echo hi")],
+    });
+
+    expect(response.statusCode).toBe(200);
+    await vi.waitFor(async () => {
+      const rows = await MessageModel.findByConversation(conversationId);
+      expect(rows).toHaveLength(2);
+    });
+    const assistant = (await MessageModel.findByConversation(conversationId))
+      .map((row) => row.content as ChatMessage)
+      .at(-1);
+    // The runtime error travels the same path as a model-initiated failure:
+    // an isError tool result persisted as readable tool output, not a crash.
+    const toolParts = toolPartsOf(assistant as ChatMessage);
+    expect(toolParts).toHaveLength(1);
+    expect(toolParts[0].state).toBe("output-available");
+    expect(typeof toolParts[0].output).toBe("string");
+  });
+
+  test("a marked message with multiple text parts is not executed", async () => {
+    const response = await postChat({
+      id: conversationId,
+      messages: [
+        {
+          id: "msg-user-1",
+          role: "user",
+          parts: [
+            { type: "text", text: "! echo hi" },
+            { type: "text", text: "&& rm -rf /" },
+          ],
+          metadata: { sandboxCommand: true },
+        },
+      ],
+    });
+
+    // Falls through to the normal LLM path — the composer never produces
+    // multi-text-part messages, so this shape is not a command.
+    expect(response.statusCode).toBe(200);
+    expect(mockRunSandboxCommand).not.toHaveBeenCalled();
+    expect(mockGetChatMcpTools).toHaveBeenCalledTimes(1);
   });
 
   test("a !-prefixed message without the marker goes to the normal LLM path", async () => {
@@ -338,6 +392,7 @@ describe("POST /api/chat sandbox command turn", () => {
         persisted.push(finalMessages);
       },
       onStreamSettled: () => {},
+      buildErrorPayload: ({ mappedError }) => JSON.stringify(mappedError),
     })) as unknown as ReadableStream<Uint8Array>;
 
     const reader = body.getReader();
@@ -382,6 +437,7 @@ describe("POST /api/chat sandbox command turn", () => {
         throw new Error("simulated persistence failure");
       },
       onStreamSettled: () => {},
+      buildErrorPayload: ({ mappedError }) => JSON.stringify(mappedError),
     })) as unknown as ReadableStream<Uint8Array>;
 
     // The command ran and the stream drains to completion — the persistence

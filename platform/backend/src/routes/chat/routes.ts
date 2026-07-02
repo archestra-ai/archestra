@@ -519,6 +519,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Failed to persist user messages early (will retry in onFinish)",
             );
           }
+          const sandboxSlimChatErrorUi =
+            await OrganizationModel.getSlimChatErrorUi(organizationId);
           return await runSandboxCommandTurn({
             command: sandboxCommand.command,
             messages: messages as ChatMessage[],
@@ -555,6 +557,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               removeAbortListeners();
               stopActiveRunPolling();
             },
+            buildErrorPayload: ({ error, mappedError }) =>
+              buildStreamErrorPayload({
+                error,
+                mappedError,
+                conversationId,
+                slimChatErrorUi: sandboxSlimChatErrorUi,
+                stage: "via stream",
+              }),
           });
         }
 

@@ -37,11 +37,15 @@ export function detectSandboxCommand(
   if (!metadata.success || metadata.data.sandboxCommand !== true) {
     return null;
   }
-  const text = (last.parts ?? [])
-    .filter((part) => part.type === "text")
-    .map((part) => part.text ?? "")
-    .join("\n");
-  return parseSandboxCommand(text);
+  // Exactly one text part — the only shape the composer produces (file parts
+  // may accompany it). A multi-text-part message with the marker came from a
+  // non-composer client; treat it as a normal message rather than guessing
+  // how to join the parts into a command.
+  const textParts = (last.parts ?? []).filter((part) => part.type === "text");
+  if (textParts.length !== 1) {
+    return null;
+  }
+  return parseSandboxCommand(textParts[0].text ?? "");
 }
 
 /**
@@ -76,6 +80,14 @@ export async function runSandboxCommandTurn(params: {
   persistTurn: (finalMessages: ChatMessage[]) => Promise<void>;
   /** Detach stop-polling and abort listeners once the stream settles. */
   onStreamSettled: () => void;
+  /**
+   * Serialize a stream error through the route's chat-error pipeline
+   * (persistence, trace correlation, slim-mode sanitization).
+   */
+  buildErrorPayload: (params: {
+    error: unknown;
+    mappedError: ChatErrorResponse;
+  }) => string;
 }): Promise<FastifyReply> {
   const {
     command,
@@ -89,6 +101,7 @@ export async function runSandboxCommandTurn(params: {
     reply,
     persistTurn,
     onStreamSettled,
+    buildErrorPayload,
   } = params;
 
   const available = await isSkillSandboxAvailableForAgent({
@@ -139,31 +152,51 @@ export async function runSandboxCommandTurn(params: {
         return;
       }
 
-      // RBAC and assignment are enforced inside executeArchestraTool; errors
-      // (denials, validation, sandbox runtime failures) come back as isError
-      // results whose text the same output shaping turns into tool output —
-      // exactly what a model-initiated call would persist.
-      const response = await executeArchestraTool(
-        toolName,
-        { command },
-        {
-          agent,
-          conversationId,
-          isolationKey: conversationId,
-          userId,
+      // Heartbeat while the command runs (container materialization + replay
+      // + the command itself can take minutes) so proxies with idle timeouts
+      // don't cut the SSE — same cadence as the LLM path's tool executions.
+      const heartbeatInterval = setInterval(() => {
+        try {
+          writer.write({
+            type: "data-heartbeat",
+            data: { timestamp: Date.now() },
+          });
+        } catch {
+          clearInterval(heartbeatInterval);
+        }
+      }, 5000);
+
+      let response: Awaited<ReturnType<typeof executeArchestraTool>>;
+      let output: Awaited<ReturnType<typeof buildArchestraToolOutput>>;
+      try {
+        // RBAC and assignment are enforced inside executeArchestraTool; errors
+        // (denials, validation, sandbox runtime failures) come back as isError
+        // results whose text the same output shaping turns into tool output —
+        // exactly what a model-initiated call would persist.
+        response = await executeArchestraTool(
+          toolName,
+          { command },
+          {
+            agent,
+            conversationId,
+            isolationKey: conversationId,
+            userId,
+            agentId: agent.id,
+            organizationId,
+            abortSignal: abortController.signal,
+          },
+        );
+        output = await buildArchestraToolOutput({
+          response,
+          toolName,
+          toolArguments: { command },
           agentId: agent.id,
+          userId,
           organizationId,
-          abortSignal: abortController.signal,
-        },
-      );
-      const output = await buildArchestraToolOutput({
-        response,
-        toolName,
-        toolArguments: { command },
-        agentId: agent.id,
-        userId,
-        organizationId,
-      });
+        });
+      } finally {
+        clearInterval(heartbeatInterval);
+      }
 
       logger.info(
         { conversationId, command, isError: response.isError ?? false },
@@ -184,17 +217,26 @@ export async function runSandboxCommandTurn(params: {
         { error, conversationId, command },
         "[Chat] Sandbox command turn failed",
       );
-      return JSON.stringify({
-        code: ChatErrorCode.ServerError,
-        message: `Sandbox command failed: ${activeRunError}`,
-        isRetryable: true,
-      } satisfies ChatErrorResponse);
+      return buildErrorPayload({
+        error,
+        mappedError: {
+          code: ChatErrorCode.Unknown,
+          message: `Sandbox command failed: ${activeRunError}`,
+          isRetryable: true,
+        },
+      });
     },
     onFinish: async ({ messages: finalMessages }) => {
       onStreamSettled();
       try {
         await persistTurn(finalMessages as unknown as ChatMessage[]);
       } catch (error) {
+        // The command already ran and sits in the sandbox replay log; fail the
+        // run so the desync from the visible transcript is at least surfaced
+        // (the user message itself was persisted before execution).
+        activeRunError = `Failed to persist the command result: ${
+          error instanceof Error ? error.message : String(error)
+        }`;
         logger.error(
           { error, conversationId },
           "Failed to persist sandbox command turn",

@@ -17,13 +17,31 @@ type SecretInputProps = Omit<React.ComponentProps<"input">, "type"> & {
 // secret-input.utils.ts for why type="password" must not be used here. Real
 // user-credential fields (login, change password, 2FA) must keep native
 // password inputs instead of this component.
-function SecretInput({ masked = true, className, ...props }: SecretInputProps) {
+// The suppression attributes are spread AFTER {...props} on purpose: a caller
+// must not be able to reintroduce autofill on a secret field.
+function SecretInput({
+  masked = true,
+  className,
+  onCopy,
+  onCut,
+  ...props
+}: SecretInputProps) {
   return (
     <Input
       type="text"
-      {...SECRET_FIELD_SUPPRESSION_PROPS}
       className={cn(masked && "secret-masked", className)}
+      // parity with type="password": a masked value cannot be copied or cut
+      // out of the field (cut would also delete the selection)
+      onCopy={(e) => {
+        if (masked) e.preventDefault();
+        onCopy?.(e);
+      }}
+      onCut={(e) => {
+        if (masked) e.preventDefault();
+        onCut?.(e);
+      }}
       {...props}
+      {...SECRET_FIELD_SUPPRESSION_PROPS}
     />
   );
 }
@@ -31,7 +49,7 @@ function SecretInput({ masked = true, className, ...props }: SecretInputProps) {
 // Textarea for multiline app secrets (PEM keys, secret file contents). These
 // were never visually masked; the point is the suppression attributes.
 function SecretTextarea(props: React.ComponentProps<"textarea">) {
-  return <Textarea {...SECRET_FIELD_SUPPRESSION_PROPS} {...props} />;
+  return <Textarea {...props} {...SECRET_FIELD_SUPPRESSION_PROPS} />;
 }
 
 export { SecretInput, SecretTextarea };

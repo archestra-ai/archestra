@@ -367,6 +367,10 @@ coalesced into message-level records — `assistant_text` / `tool_call` / `tool_
 not the raw per-token SSE chunks), `run.json`,
 `submission.json` (the accepted bytes), `artifact.bin` (a downloaded file artifact, when any),
 `state.json` (the `BENCH_STATE` snapshot, when any), and `verifier.stdout.txt` / `verifier.stderr.txt`.
+Analysis adds `<env>/<task>__<lane>/trajectory.md` (rendered trajectory),
+`trajectory_rubrics_<ts>.jsonl` (per-rollout rubric triage records; `_claude_` variant when produced
+by the Claude-skill pipeline), and the `trajectory_analys{es,is}_<ts>.md` docs. Browse it all locally
+with `archestra-bench dashboard [--experiments-dir <dir>] [--port <port>]`.
 
 ## Prerequisites
 

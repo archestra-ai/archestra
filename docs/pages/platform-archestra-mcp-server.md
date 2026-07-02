@@ -2142,7 +2142,7 @@ Required RBAC permission: `app:update`
 |-----------|------|----------|-------------|
 | `appId` | `string` | Yes | The app id to publish. |
 | `scope` | `"team" \| "org"` | Yes | Publish to specific teams or to the whole organization. Promotes the app out of personal scope. |
-| `teamIds` | `string[]` | No | Target team ids — required when scope is team. |
+| `teams` | `string[]` | No | Target teams, each a team name or team id — required when scope is team. Pass the team name the user gave (e.g. ["Platform"]); no need to look up ids first. |
 
 ##### Output
 

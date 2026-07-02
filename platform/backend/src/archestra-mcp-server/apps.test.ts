@@ -2314,7 +2314,7 @@ describe("publish_app", () => {
     expect((await AppModel.findById(app.id))?.scope).toBe("personal");
   });
 
-  test("publishing to a team requires teamIds", async ({
+  test("publishing to a team requires teams", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -2336,7 +2336,7 @@ describe("publish_app", () => {
 
     const result = await publish({ appId: app.id, scope: "team" }, context);
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("team id");
+    expect((result.content[0] as any).text).toContain("at least one team");
   });
 
   test("an admin publishes to a team and assigns it", async ({
@@ -2364,12 +2364,172 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "team", teamIds: [team.id] },
+      { appId: app.id, scope: "team", teams: [team.id] },
       context,
     );
     expect(result.isError).toBe(false);
     expect(structured(result).scope).toBe("team");
     expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("an admin publishes to a team by its name instead of its id", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamName" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(agent.organizationId, user.id, {
+      name: "Growth Team",
+    });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["Growth Team"] },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(structured(result).scope).toBe("team");
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("team names match case-insensitively when unambiguous", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamNameCI" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(agent.organizationId, user.id, {
+      name: "Platform",
+    });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["platform"] },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("a name and the id of the same team dedupe to one assignment", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamDedupe" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(agent.organizationId, user.id, {
+      name: "Dedupe Team",
+    });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["Dedupe Team", team.id] },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("an ambiguous case-insensitive team name is rejected", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamAmbiguous" });
+    const orgId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, orgId, { role: ADMIN_ROLE_NAME });
+    await makeTeam(orgId, user.id, { name: "Design" });
+    await makeTeam(orgId, user.id, { name: "design" });
+    const app = await makeApp({
+      organizationId: orgId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: orgId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["DESIGN"] },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("ambiguous");
+    expect((await AppModel.findById(app.id))?.scope).toBe("personal");
+  });
+
+  test("rejects a team name that does not exist in the org", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const agent = await makeAgent({ name: "Publish UnknownName" });
+    const orgId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, orgId, { role: ADMIN_ROLE_NAME });
+    const app = await makeApp({
+      organizationId: orgId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: orgId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["No Such Team"] },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("Unknown team");
+    expect((await AppModel.findById(app.id))?.scope).toBe("personal");
   });
 
   // The source-scope gate: a team admin (editor) can see every org app but must
@@ -2396,7 +2556,7 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "team", teamIds: [team.id] },
+      { appId: app.id, scope: "team", teams: [team.id] },
       context,
     );
     expect(result.isError).toBe(true);
@@ -2405,7 +2565,7 @@ describe("publish_app", () => {
     expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([]);
   });
 
-  test("rejects teamIds when publishing to org scope", async ({
+  test("rejects teams when publishing to org scope", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -2429,7 +2589,7 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "org", teamIds: [team.id] },
+      { appId: app.id, scope: "org", teams: [team.id] },
       context,
     );
     expect(result.isError).toBe(true);
@@ -2457,7 +2617,7 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "team", teamIds: [crypto.randomUUID()] },
+      { appId: app.id, scope: "team", teams: [crypto.randomUUID()] },
       context,
     );
     expect(result.isError).toBe(true);

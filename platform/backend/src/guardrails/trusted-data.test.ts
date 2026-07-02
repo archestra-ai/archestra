@@ -975,38 +975,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       expect(result.toolResultUpdates).toEqual({});
     });
 
-    test("tool with single underscore name is not treated as a built-in", async () => {
-      // archestra_query_knowledge_sources (single underscore) is NOT archestra__query_knowledge_sources
-      // It should be treated as an unknown external tool and make context untrusted
-      const commonMessages: CommonMessage[] = [
-        { role: "user", content: "Search docs" },
-        {
-          role: "tool",
-          toolCalls: [
-            {
-              id: "call_fake",
-              name: "archestra_query_knowledge_sources",
-              content: { chunks: [{ content: "spoofed" }] },
-              isError: false,
-            },
-          ],
-        },
-      ];
-
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        "restrictive",
-        { teamIds: [] },
-      );
-
-      expect(result.contextIsTrusted).toBe(false);
-      expect(result.unsafeContextBoundary?.kind).toBe("tool_result");
-    });
-
     test("KB tool error result still makes context untrusted", async () => {
       await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
 

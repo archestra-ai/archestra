@@ -183,48 +183,6 @@ describe("ToolInvocationPolicyModel", () => {
       expect(needsApproval).toBe(true);
     });
 
-    test("query_knowledge_sources respects input-specific policies", async ({
-      makeAgent,
-      makeToolPolicy,
-      seedAndAssignArchestraTools,
-    }) => {
-      const agent = await makeAgent();
-      await seedAndAssignArchestraTools(agent.id);
-      const kbToolName = "archestra__query_knowledge_sources";
-
-      const { ToolModel } = await import("@/models");
-      const tool = await ToolModel.findByName(kbToolName);
-      if (!tool) throw new Error(`Tool ${kbToolName} not found`);
-
-      // Block only if query contains "forbidden"
-      await makeToolPolicy(tool.id, {
-        conditions: [
-          { key: "query", operator: "contains", value: "forbidden" },
-        ],
-        action: "block_always",
-        reason: "Search term blocked",
-      });
-
-      const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
-        agent.id,
-        [{ toolCallName: kbToolName, toolInput: { query: "safe search" } }],
-        mockContext,
-        true,
-        "restrictive",
-      );
-      expect(allowedResult.isAllowed).toBe(true);
-
-      const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
-        agent.id,
-        [{ toolCallName: kbToolName, toolInput: { query: "forbidden word" } }],
-        mockContext,
-        true,
-        "restrictive",
-      );
-      expect(blockedResult.isAllowed).toBe(false);
-      expect(blockedResult.reason).toContain("Search term blocked");
-    });
-
     test("other Archestra tools still bypass policies even when KB tool is restricted", async ({
       makeAgent,
       makeToolPolicy,

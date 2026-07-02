@@ -2,11 +2,10 @@ import { archestraApiSdk } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 import type React from "react";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useCallPolicyMutation, useResultPolicyMutation } from "./policy.query";
 import { handleApiError } from "./utils";
-
-const mockToastSuccess = vi.fn();
 
 vi.mock("@archestra/shared", async () => {
   const actual = await vi.importActual("@archestra/shared");
@@ -21,12 +20,7 @@ vi.mock("@archestra/shared", async () => {
   };
 });
 
-vi.mock("sonner", () => ({
-  toast: {
-    success: (...args: unknown[]) => mockToastSuccess(...args),
-    error: vi.fn(),
-  },
-}));
+vi.mock("sonner");
 
 vi.mock("./utils", async () => {
   const actual = await vi.importActual("./utils");
@@ -78,7 +72,7 @@ describe("policy row update mutations", () => {
     });
 
     expect(mutationResult).toBe(true);
-    expect(mockToastSuccess).toHaveBeenCalledWith("Call policy updated");
+    expect(toast.success).toHaveBeenCalledWith("Call policy updated");
     expect(handleApiError).not.toHaveBeenCalled();
   });
 
@@ -97,7 +91,7 @@ describe("policy row update mutations", () => {
     });
 
     expect(mutationResult).toBe(true);
-    expect(mockToastSuccess).toHaveBeenCalledWith("Result policy updated");
+    expect(toast.success).toHaveBeenCalledWith("Result policy updated");
     expect(handleApiError).not.toHaveBeenCalled();
   });
 });

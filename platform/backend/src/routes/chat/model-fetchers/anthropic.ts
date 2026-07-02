@@ -1,3 +1,4 @@
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import {
   getAzureAiFoundryBearerTokenProvider,
   isAnthropicAzureFoundryEntraIdEnabled,
@@ -52,10 +53,16 @@ async function getAnthropicAuthHeaders(
     return { "x-api-key": apiKey };
   }
 
-  if (!isAnthropicAzureFoundryEntraIdEnabled()) {
-    return { "x-api-key": "" };
+  if (isAnthropicAzureFoundryEntraIdEnabled()) {
+    const tokenProvider = getAzureAiFoundryBearerTokenProvider();
+    return { Authorization: `Bearer ${await tokenProvider()}` };
   }
 
-  const tokenProvider = getAzureAiFoundryBearerTokenProvider();
-  return { Authorization: `Bearer ${await tokenProvider()}` };
+  if (anthropicWorkloadIdentity.isEnabled()) {
+    return {
+      Authorization: `Bearer ${await anthropicWorkloadIdentity.getAccessToken()}`,
+    };
+  }
+
+  return { "x-api-key": "" };
 }

@@ -12,13 +12,23 @@ import {
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
 import OrganizationModel from "./organization";
 import ToolModel from "./tool";
 
 describe("Archestra Tools Dynamic Assignment", () => {
+  // Pin every flag that gates create-time tool assignment. Tests below
+  // assert EXACT assigned-tool sets and toggle individual flags themselves
+  // (with try/finally); trusting the worker baseline for the others let a
+  // rare cross-file ordering surface sandbox/Projects tools in counts that
+  // expected zero — the same class #6156 pinned in tool.test.ts.
+  beforeEach(() => {
+    (config.apps as { enabled: boolean }).enabled = false;
+    (config.skillsSandbox as { enabled: boolean }).enabled = false;
+  });
+
   test("agents get Archestra tools after explicit assignment", async ({
     makeAgent,
     makeKnowledgeBase,

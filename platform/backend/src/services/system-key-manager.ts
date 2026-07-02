@@ -1,4 +1,5 @@
 import type { SupportedProvider } from "@archestra/shared";
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import {
   isAnthropicAzureFoundryEntraIdEnabled,
   isAzureOpenAiEntraIdEnabled,
@@ -67,11 +68,21 @@ class SystemKeyManager {
       },
     },
     {
+      // One entry covers both keyless Anthropic auth methods (Azure Foundry
+      // Entra ID and Workload Identity Federation): system keys are looked up
+      // per provider, so two "anthropic" entries would delete each other's key.
       provider: "anthropic",
-      name: "Anthropic Azure Foundry Entra ID",
+      // Lazy so the created key's name reflects whichever method is actually
+      // active at sync time, not the value captured at class construction.
+      get name() {
+        return anthropicWorkloadIdentity.isEnabled()
+          ? "Anthropic Workload Identity Federation"
+          : "Anthropic Azure Foundry Entra ID";
+      },
       isEnabled: () =>
-        isAnthropicAzureFoundryEntraIdEnabled() &&
-        isAzureAiFoundryBaseUrl(config.llm.anthropic.baseUrl),
+        (isAnthropicAzureFoundryEntraIdEnabled() &&
+          isAzureAiFoundryBaseUrl(config.llm.anthropic.baseUrl)) ||
+        anthropicWorkloadIdentity.isEnabled(),
       customFetch: async () => {
         const models = await fetchAnthropicModels(
           "",

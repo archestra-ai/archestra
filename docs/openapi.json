@@ -93898,6 +93898,9 @@
                         "azureOpenAiEntraIdEnabled": {
                           "type": "boolean"
                         },
+                        "anthropicWifEnabled": {
+                          "type": "boolean"
+                        },
                         "bedrockIamAuthEnabled": {
                           "type": "boolean"
                         },
@@ -93983,6 +93986,7 @@
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",
+                        "anthropicWifEnabled",
                         "bedrockIamAuthEnabled",
                         "geminiVertexAiEnabled",
                         "globalToolPolicy",
@@ -245438,6 +245442,15 @@
             "name": "excludeArchestraTools",
             "required": false,
             "description": "Hide built-in Archestra tools"
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeKnowledgeSourcesTool",
+            "required": false,
+            "description": "Include the built-in query_knowledge_sources tool in global listings (default: hidden)"
           },
           {
             "schema": {

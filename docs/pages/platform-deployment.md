@@ -1007,6 +1007,20 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Uses Azure Identity `DefaultAzureCredential` with token scope `https://ai.azure.com/.default`
   - Claude deployments must already exist in the Azure resource. Microsoft lists additional Claude prerequisites: paid eligible subscription, supported region, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group. Azure also requires Anthropic deployment metadata: `industry`, `organizationName`, and `countryCode`.
 
+- **`ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID`**, **`ARCHESTRA_ANTHROPIC_ORGANIZATION_ID`**, **`ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID`** - Enable keyless Anthropic authentication via [Workload Identity Federation](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation).
+  - All three are required, plus one identity token source (below). A partial configuration logs a warning at startup and disables WIF.
+  - Values come from the federation rule (`fdrl_...`), organization ID, and service account (`svac_...`) created in the Claude Console under **Settings → Workload identity**.
+
+- **`ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE`** - Path to the OIDC identity token file issued by your identity provider (e.g. a Kubernetes projected service-account token).
+  - Example: `/var/run/secrets/anthropic.com/token`
+  - Re-read on every token exchange, so rotated tokens are picked up automatically. Prefer this over the inline variant in production.
+
+- **`ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN`** - Inline OIDC identity token; alternative to `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE`.
+  - Identity tokens are short-lived, so this is mainly useful for testing. The file variant takes precedence when both are set.
+
+- **`ARCHESTRA_ANTHROPIC_WORKSPACE_ID`** - Anthropic workspace ID (`wrkspc_...`) for Workload Identity Federation.
+  - Optional; required only when the federation rule covers more than one workspace.
+
 - **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
   - Default: `https://generativelanguage.googleapis.com`
   - Use this to point to your own proxy or other custom endpoints

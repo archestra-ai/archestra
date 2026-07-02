@@ -11,6 +11,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import { useApps } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
+import { McpAppSection } from "@/components/chat/mcp-app-container";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { ScheduleRunsList } from "@/components/scheduled-tasks/schedule-runs-list";
 import { Button } from "@/components/ui/button";
@@ -175,13 +176,12 @@ export function RightSidePanel({
               hideHeader
             />
           )}
-          {/* Apps tab content: portal target. The app-switcher lives in the
-              hosted card's header (see McpAppCard), so the panel only provides
-              the portal mount + empty state here. */}
+          {/* Apps tab content: renders the open app directly (no portal). The
+              app-switcher lives in the hosted card's header (see McpAppCard). */}
           {resolvedTab === "apps" && (
             <div className="flex flex-col h-full">
               <div ref={portalDivRef} className="flex-1 min-h-0 relative">
-                {apps.length === 0 && (
+                {apps.length === 0 ? (
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-xs text-muted-foreground px-6">
                     <AppWindow className="h-6 w-6 mb-2 opacity-50" />
                     <p className="font-medium">No Apps in this chat</p>
@@ -190,6 +190,8 @@ export function RightSidePanel({
                       here.
                     </p>
                   </div>
+                ) : (
+                  <PanelAppHost agentId={agentId} />
                 )}
               </div>
             </div>
@@ -197,6 +199,35 @@ export function RightSidePanel({
         </div>
       </Tabs>
     </ResizableRightPanel>
+  );
+}
+
+/**
+ * Renders the single open app (`openToolCallId`) directly in the panel — no
+ * portal. Mounts a `surface="panel"` app section from the shared apps list;
+ * switching the open app remounts via the key. The app-endpoint is rebuilt from
+ * the list entry, so owned apps need no extra data and external apps use the
+ * conversation's agent (or their pinned install).
+ */
+function PanelAppHost({ agentId }: { agentId?: string }) {
+  const { apps, openToolCallId } = useApps();
+  const app = apps.find((a) => a.toolCallId === openToolCallId);
+  if (!app) {
+    return null;
+  }
+  return (
+    <McpAppSection
+      key={app.toolCallId}
+      surface="panel"
+      uiResourceUri={app.uiResourceUri}
+      agentId={agentId ?? ""}
+      appId={app.appId ?? undefined}
+      mcpServerId={app.mcpServerId}
+      appName={app.label}
+      appVersion={app.version}
+      toolName={app.toolName ?? ""}
+      toolCallId={app.toolCallId}
+    />
   );
 }
 

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BackendConnectivityStatus } from "./backend-connectivity-status";
 
 // Mock the hooks
@@ -7,19 +7,23 @@ vi.mock("@/lib/config/backend-connectivity", () => ({
   useBackendConnectivity: vi.fn(),
 }));
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Sparky",
-}));
+vi.mock("@/lib/hooks/use-app-name");
 
-vi.mock("next/navigation", () => ({
-  useSearchParams: vi.fn(() => new URLSearchParams()),
-}));
+vi.mock("next/navigation");
 
 import { useSearchParams } from "next/navigation";
 import { useBackendConnectivity } from "@/lib/config/backend-connectivity";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 describe("BackendConnectivityStatus", () => {
   const mockRetry = vi.fn();
+
+  beforeEach(() => {
+    vi.mocked(useAppName).mockReturnValue("Sparky");
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+    );
+  });
 
   it("should render nothing when status is initializing", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({

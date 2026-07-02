@@ -16,7 +16,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
   };
 });
 
-vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock("sonner");
 
 import { ConnectivityProvider, useConnectivity } from "./connectivity";
 

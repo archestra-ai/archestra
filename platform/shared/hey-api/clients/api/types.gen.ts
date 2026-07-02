@@ -26344,6 +26344,7 @@ export type GetConfigResponses = {
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             azureOpenAiEntraIdEnabled: boolean;
+            anthropicWifEnabled: boolean;
             bedrockIamAuthEnabled: boolean;
             geminiVertexAiEnabled: boolean;
             globalToolPolicy: 'permissive' | 'restrictive';
@@ -64478,6 +64479,10 @@ export type GetToolsWithAssignmentsData = {
          * Hide built-in Archestra tools
          */
         excludeArchestraTools?: boolean;
+        /**
+         * Include the built-in query_knowledge_sources tool in global listings (default: hidden)
+         */
+        includeKnowledgeSourcesTool?: boolean;
         limit?: number;
         offset?: number;
     };

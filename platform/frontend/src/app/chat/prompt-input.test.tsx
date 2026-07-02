@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NEW_CHAT_DRAFT_STORAGE_KEY } from "@/lib/chat/chat-utils";
 
 const {
-  mockUseOrganization,
   mockUseChatPlaceholder,
   mockUseSkillsPaginated,
   mockTextInputSetInput,
@@ -12,7 +11,6 @@ const {
   mockControllerState,
   mockFeatureState,
 } = vi.hoisted(() => ({
-  mockUseOrganization: vi.fn(),
   mockUseChatPlaceholder: vi.fn(),
   mockUseSkillsPaginated: vi.fn(),
   mockTextInputSetInput: vi.fn(),
@@ -243,9 +241,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
   useToggleHooksDebug: () => ({ mutate: vi.fn() }),
 }));
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => mockUseOrganization(),
-}));
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
   useChatPlaceholder: (...args: unknown[]) => mockUseChatPlaceholder(...args),
@@ -255,25 +251,14 @@ vi.mock("@/lib/skills/skill.query", () => ({
   useSkillsPaginated: () => mockUseSkillsPaginated(),
 }));
 
-// Mock for useHasPermissions - default to non-admin
-const mockUseHasPermissions = vi.fn().mockReturnValue({
-  data: false,
-  isPending: false,
-  isLoading: false,
-});
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => mockUseHasPermissions(),
-}));
-
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: (flag: string) =>
-    flag === "chatSecretScanEnabled"
-      ? mockFeatureState.chatSecretScanEnabled
-      : undefined,
-}));
+vi.mock("@/lib/config/config.query");
 
 // Import the component after mocks are set up
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
+import { useOrganization } from "@/lib/organization.query";
 import ArchestraPromptInput from "./prompt-input";
 
 describe("ArchestraPromptInput", () => {
@@ -288,10 +273,20 @@ describe("ArchestraPromptInput", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseOrganization.mockReturnValue({
+    vi.mocked(useOrganization).mockReturnValue({
       data: null,
       isLoading: false,
-    });
+    } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+      isLoading: false,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "chatSecretScanEnabled"
+        ? mockFeatureState.chatSecretScanEnabled
+        : undefined,
+    );
     mockUseChatPlaceholder.mockReturnValue({
       placeholder: "Animated placeholder",
       isAnimating: true,
@@ -390,11 +385,11 @@ describe("ArchestraPromptInput", () => {
 
     it("should show settings link in tooltip for admins when file uploads disabled", () => {
       // Mock admin user with agentSettings update permission
-      mockUseHasPermissions.mockReturnValue({
+      vi.mocked(useHasPermissions).mockReturnValue({
         data: true,
         isPending: false,
         isLoading: false,
-      });
+      } as ReturnType<typeof useHasPermissions>);
 
       render(
         <ArchestraPromptInput
@@ -420,11 +415,11 @@ describe("ArchestraPromptInput", () => {
 
     it("should show admin message in tooltip for non-admins when file uploads disabled", () => {
       // Mock non-admin user without agentSettings update permission
-      mockUseHasPermissions.mockReturnValue({
+      vi.mocked(useHasPermissions).mockReturnValue({
         data: false,
         isPending: false,
         isLoading: false,
-      });
+      } as ReturnType<typeof useHasPermissions>);
 
       render(
         <ArchestraPromptInput
@@ -468,11 +463,11 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should render model selector when user has provider settings permission", () => {
-      mockUseHasPermissions.mockReturnValue({
+      vi.mocked(useHasPermissions).mockReturnValue({
         data: true,
         isPending: false,
         isLoading: false,
-      });
+      } as ReturnType<typeof useHasPermissions>);
 
       render(
         <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
@@ -482,13 +477,13 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should keep a single organization placeholder static", () => {
-      mockUseOrganization.mockReturnValue({
+      vi.mocked(useOrganization).mockReturnValue({
         data: {
           chatPlaceholders: ["Ask the support agent"],
           animateChatPlaceholders: true,
         },
         isLoading: false,
-      });
+      } as unknown as ReturnType<typeof useOrganization>);
       mockUseChatPlaceholder.mockReturnValue({
         placeholder: "Ask the support agent",
         isAnimating: false,
@@ -511,13 +506,13 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should keep placeholders static when animation is disabled", () => {
-      mockUseOrganization.mockReturnValue({
+      vi.mocked(useOrganization).mockReturnValue({
         data: {
           chatPlaceholders: ["First placeholder", "Second placeholder"],
           animateChatPlaceholders: false,
         },
         isLoading: false,
-      });
+      } as unknown as ReturnType<typeof useOrganization>);
       mockUseChatPlaceholder.mockReturnValue({
         placeholder: "Second placeholder",
         isAnimating: false,
@@ -772,10 +767,10 @@ describe("ArchestraPromptInput", () => {
     };
 
     beforeEach(() => {
-      mockUseOrganization.mockReturnValue({
+      vi.mocked(useOrganization).mockReturnValue({
         data: { skillSlashCommandsEnabled: true },
         isLoading: false,
-      });
+      } as unknown as ReturnType<typeof useOrganization>);
       mockUseSkillsPaginated.mockReturnValue({
         data: { data: [skill] },
         isLoading: false,

@@ -123,6 +123,7 @@ function AddApiKeyDialog({
   const createMutation = useCreateLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
+  const anthropicWifEnabled = useFeature("anthropicWifEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
 
@@ -150,6 +151,7 @@ function AddApiKeyDialog({
       : isProviderApiKeyOptional({
           provider: formValues.provider,
           azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+          anthropicWifEnabled: anthropicWifEnabled === true,
         }) || formValues.apiKey);
 
   const handleCreate = form.handleSubmit(async (values) => {

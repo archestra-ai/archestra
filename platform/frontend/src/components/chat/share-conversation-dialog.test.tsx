@@ -1,14 +1,15 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useSession } from "@/lib/auth/auth.query";
+import { useOrganizationMembers } from "@/lib/organization.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { ShareConversationDialog } from "./share-conversation-dialog";
 
 const mockShareMutateAsync = vi.fn();
 const mockUnshareMutateAsync = vi.fn();
-const { mockToastSuccess } = vi.hoisted(() => ({
-  mockToastSuccess: vi.fn(),
-}));
 const mockUseConversationShare = vi.fn<
   () => {
     data: {
@@ -36,33 +37,13 @@ vi.mock("@/lib/chat/chat-share.query", () => ({
   })),
 }));
 
-vi.mock("sonner", () => ({
-  toast: {
-    success: mockToastSuccess,
-  },
-}));
+vi.mock("sonner");
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useSession: vi.fn(() => ({
-    data: {
-      user: {
-        id: "current-user-id",
-      },
-    },
-  })),
-}));
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/teams/team.query", () => ({
-  useTeams: vi.fn(() => ({
-    data: [{ id: "team-1", name: "Engineering" }],
-  })),
-}));
+vi.mock("@/lib/teams/team.query");
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganizationMembers: vi.fn(() => ({
-    data: [{ id: "user-1", name: "Taylor", email: "taylor@example.com" }],
-  })),
-}));
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/components/ui/assignment-combobox", () => ({
   AssignmentCombobox: ({
@@ -125,6 +106,19 @@ vi.mock("@/components/visibility-selector", () => ({
 
 describe("ShareConversationDialog", () => {
   beforeEach(() => {
+    vi.mocked(useSession).mockReturnValue({
+      data: {
+        user: {
+          id: "current-user-id",
+        },
+      },
+    } as ReturnType<typeof useSession>);
+    vi.mocked(useTeams).mockReturnValue({
+      data: [{ id: "team-1", name: "Engineering" }],
+    } as unknown as ReturnType<typeof useTeams>);
+    vi.mocked(useOrganizationMembers).mockReturnValue({
+      data: [{ id: "user-1", name: "Taylor", email: "taylor@example.com" }],
+    } as unknown as ReturnType<typeof useOrganizationMembers>);
     mockUseConversationShare.mockReturnValue({
       data: null,
       isLoading: false,
@@ -137,7 +131,7 @@ describe("ShareConversationDialog", () => {
       userIds: [],
     });
     mockUnshareMutateAsync.mockReset();
-    mockToastSuccess.mockReset();
+    vi.mocked(toast.success).mockReset();
     Object.defineProperty(window, "location", {
       value: { origin: "http://localhost:3000" },
       configurable: true,
@@ -200,7 +194,7 @@ describe("ShareConversationDialog", () => {
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
     expect(screen.getByText("http://localhost:3000/chat/conv-1")).toBeVisible();
     expect(writeText).toHaveBeenCalledWith("http://localhost:3000/chat/conv-1");
-    expect(mockToastSuccess).toHaveBeenCalledWith(
+    expect(toast.success).toHaveBeenCalledWith(
       "Chat visibility updated and share link copied",
     );
   });

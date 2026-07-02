@@ -18,6 +18,7 @@ import config, {
   getOtlpAuthHeaders,
   getTrustedOrigins,
   parseActiveChatRunPollIntervalMs,
+  parseAnthropicWifConfig,
   parseAuditLogRetentionDays,
   parseBodyLimit,
   parseCodeRuntimeDaggerRunnerHost,
@@ -1861,5 +1862,58 @@ describe("parseLogFormat", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('Invalid ARCHESTRA_LOGGING_FORMAT value "xml"'),
     );
+  });
+});
+
+describe("parseAnthropicWifConfig", () => {
+  const completeEnv = {
+    federationRuleId: "fdrl_test",
+    organizationId: "00000000-0000-0000-0000-000000000000",
+    serviceAccountId: "svac_test",
+    identityTokenFile: "/var/run/secrets/anthropic.com/token",
+  };
+
+  test("returns null when nothing is set", () => {
+    expect(parseAnthropicWifConfig({})).toBeNull();
+  });
+
+  test("parses a complete configuration with a token file", () => {
+    expect(parseAnthropicWifConfig(completeEnv)).toEqual({
+      federationRuleId: "fdrl_test",
+      organizationId: "00000000-0000-0000-0000-000000000000",
+      serviceAccountId: "svac_test",
+      identityTokenFile: "/var/run/secrets/anthropic.com/token",
+    });
+  });
+
+  test("accepts an inline identity token as the token source", () => {
+    expect(
+      parseAnthropicWifConfig({
+        ...completeEnv,
+        identityTokenFile: undefined,
+        identityToken: "jwt-inline",
+      }),
+    ).toMatchObject({ identityToken: "jwt-inline" });
+  });
+
+  test("includes the optional workspace ID when set", () => {
+    expect(
+      parseAnthropicWifConfig({ ...completeEnv, workspaceId: "wrkspc_test" }),
+    ).toMatchObject({ workspaceId: "wrkspc_test" });
+  });
+
+  test.each([
+    ["federationRuleId", { ...completeEnv, federationRuleId: undefined }],
+    ["organizationId", { ...completeEnv, organizationId: undefined }],
+    ["serviceAccountId", { ...completeEnv, serviceAccountId: undefined }],
+    ["token source", { ...completeEnv, identityTokenFile: undefined }],
+  ])("disables WIF when %s is missing", (_label, env) => {
+    expect(parseAnthropicWifConfig(env)).toBeNull();
+  });
+
+  test("treats whitespace-only values as unset", () => {
+    expect(
+      parseAnthropicWifConfig({ ...completeEnv, federationRuleId: "  " }),
+    ).toBeNull();
   });
 });

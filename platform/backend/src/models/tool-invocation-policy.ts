@@ -232,8 +232,9 @@ class ToolInvocationPolicyModel {
       return false;
     }
 
-    // Archestra tools always bypass policies (consistent with evaluateBatch)
-    if (archestraMcpBranding.isToolName(toolName)) {
+    // Archestra tools always bypass policies (consistent with evaluateBatch),
+    // except policy-evaluated built-ins like query_knowledge_sources
+    if (archestraMcpBranding.isPolicyBypassedToolName(toolName)) {
       return false;
     }
 
@@ -427,10 +428,12 @@ class ToolInvocationPolicyModel {
       return { isAllowed: true, reason: "" };
     }
 
-    // Filter out Archestra tools and agent delegation tools (always allowed)
+    // Filter out policy-bypassing Archestra tools and agent delegation tools
+    // (always allowed). Policy-evaluated built-ins like
+    // query_knowledge_sources are kept and evaluated like external tools.
     const externalToolCalls = toolCalls.filter(
       (tc) =>
-        !archestraMcpBranding.isToolName(tc.toolCallName) &&
+        !archestraMcpBranding.isPolicyBypassedToolName(tc.toolCallName) &&
         !isAgentTool(tc.toolCallName),
     );
 

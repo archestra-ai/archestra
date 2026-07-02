@@ -7,7 +7,11 @@ import {
   hasSsoSignInAttempt,
   recordSsoSignInAttempt,
 } from "@/lib/auth/sso-sign-in-attempt";
-import { usePublicConfig } from "@/lib/config/config.query";
+import {
+  usePublicConfig,
+  usePublicEnterpriseCoreActive,
+} from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { AuthViewWithErrorHandling } from "./auth-view-with-error-handling";
 
 vi.mock("./two-factor-view", () => ({
@@ -27,9 +31,7 @@ vi.mock("@/lib/auth/account.query", () => ({
   }),
 }));
 
-vi.mock("next/navigation", () => ({
-  useSearchParams: vi.fn(),
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/lib/config/config", () => ({
   default: {
@@ -37,18 +39,13 @@ vi.mock("@/lib/config/config", () => ({
   },
 }));
 
-vi.mock("@/lib/config/config.query", () => ({
-  usePublicConfig: vi.fn(),
-  usePublicEnterpriseCoreActive: () => false,
-}));
+vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/auth/identity-provider-read.query", () => ({
   usePublicIdentityProviders: () => ({ data: [] }),
 }));
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Test App",
-}));
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("./sign-out-with-idp-logout", () => ({
   SignOutWithIdpLogout: () => <div data-testid="sign-out" />,
@@ -61,6 +58,8 @@ describe("AuthViewWithErrorHandling", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useAppName).mockReturnValue("Test App");
+    vi.mocked(usePublicEnterpriseCoreActive).mockReturnValue(false);
     mockSignInMutateAsync.mockResolvedValue({
       redirectUrl: "/",
     });

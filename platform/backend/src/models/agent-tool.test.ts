@@ -17,6 +17,7 @@ import AgentToolModel from "./agent-tool";
 const originalAppsEnabled = config.apps.enabled;
 beforeEach(() => {
   (config.apps as { enabled: boolean }).enabled = false;
+  (config.skillsSandbox as { enabled: boolean }).enabled = false;
 });
 afterAll(() => {
   (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;

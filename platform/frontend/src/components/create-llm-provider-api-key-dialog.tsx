@@ -53,6 +53,7 @@ export function CreateLlmProviderApiKeyDialog({
   const { data: existingKeys = [] } = useLlmProviderApiKeys({ enabled: open });
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
+  const anthropicWifEnabled = useFeature("anthropicWifEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
   const { data: canCreateOrgScopedKey } = useHasPermissions({
@@ -79,6 +80,7 @@ export function CreateLlmProviderApiKeyDialog({
   const formValues = form.watch();
   const isValid = getIsCreateFormValid({
     azureOpenAiEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+    anthropicWifEnabled: anthropicWifEnabled === true,
     byosEnabled: Boolean(byosEnabled),
     values: formValues,
   });
@@ -190,10 +192,16 @@ function getDefaultFormValues(params: {
 
 function getIsCreateFormValid(params: {
   azureOpenAiEntraIdEnabled: boolean;
+  anthropicWifEnabled: boolean;
   byosEnabled: boolean;
   values: LlmProviderApiKeyFormValues;
 }) {
-  const { azureOpenAiEntraIdEnabled, byosEnabled, values } = params;
+  const {
+    azureOpenAiEntraIdEnabled,
+    anthropicWifEnabled,
+    byosEnabled,
+    values,
+  } = params;
 
   if (values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4") {
     return Boolean(
@@ -211,6 +219,7 @@ function getIsCreateFormValid(params: {
         : isProviderApiKeyOptional({
             provider: values.provider,
             azureEntraIdEnabled: azureOpenAiEntraIdEnabled,
+            anthropicWifEnabled,
           }) || values.apiKey),
   );
 }

@@ -50,6 +50,7 @@ export function useToolsWithAssignments({
     search?: string;
     origin?: string;
     excludeArchestraTools?: boolean;
+    includeKnowledgeSourcesTool?: boolean;
   };
 }) {
   return useQuery({
@@ -63,6 +64,7 @@ export function useToolsWithAssignments({
         search: filters?.search,
         origin: filters?.origin,
         excludeArchestraTools: filters?.excludeArchestraTools,
+        includeKnowledgeSourcesTool: filters?.includeKnowledgeSourcesTool,
       },
     ],
     queryFn: async () => {
@@ -75,6 +77,7 @@ export function useToolsWithAssignments({
           search: filters?.search,
           origin: filters?.origin,
           excludeArchestraTools: filters?.excludeArchestraTools,
+          includeKnowledgeSourcesTool: filters?.includeKnowledgeSourcesTool,
         },
       });
       throwOnApiError(result.error, { toastOnError: false });

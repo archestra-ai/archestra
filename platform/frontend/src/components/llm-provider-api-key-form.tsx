@@ -5,6 +5,7 @@ import {
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
   isProviderApiKeyOptional,
+  isSelfHostedProvider,
   providerRequiresPerUserCredential,
 } from "@archestra/shared";
 import { Building2, CheckCircle2, Trash2, User, Users } from "lucide-react";
@@ -934,21 +935,14 @@ export function LlmProviderApiKeyForm({
             Override the default API endpoint. Useful for self-hosted or proxy
             setups.
           </p>
-          {isProviderApiKeyOptional({
-            provider,
-            azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
-          }) &&
-            // Docker-localhost hint applies to self-hosted providers only, not
-            // cloud keyless auth (Azure Entra ID, Anthropic WIF).
-            provider !== "azure" &&
-            provider !== "anthropic" && (
-              <p className="text-xs text-muted-foreground">
-                If this app runs in Docker, <code>localhost</code> points at the
-                container, not your host machine. Use{" "}
-                <code>host.docker.internal</code> instead (e.g.{" "}
-                <code>http://host.docker.internal:11434/v1</code>).
-              </p>
-            )}
+          {isSelfHostedProvider(provider) && (
+            <p className="text-xs text-muted-foreground">
+              If this app runs in Docker, <code>localhost</code> points at the
+              container, not your host machine. Use{" "}
+              <code>host.docker.internal</code> instead (e.g.{" "}
+              <code>http://host.docker.internal:11434/v1</code>).
+            </p>
+          )}
           <Input
             id="llm-provider-api-key-base-url"
             type="url"

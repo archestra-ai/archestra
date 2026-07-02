@@ -38,6 +38,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useGithubAppConfigs } from "@/lib/github-app-config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useDiscoverGithubSkills,
   useImportGithubSkills,
@@ -93,6 +94,7 @@ export function ImportSkillsDialog({
   const discover = useDiscoverGithubSkills();
   const importSkills = useImportGithubSkills();
   const { data: githubAppConfigs = [] } = useGithubAppConfigs();
+  const appName = useAppName();
 
   const [repoUrl, setRepoUrl] = useState(initialRepoUrl);
   const [path, setPath] = useState("");
@@ -614,6 +616,15 @@ export function ImportSkillsDialog({
         </div>
       ) : (
         <div className="space-y-6">
+          <div className="flex gap-2.5 rounded-md border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+            <Info className="mt-0.5 size-4 shrink-0" />
+            <p>
+              Importing copies the selected skills into your organization once.{" "}
+              {appName} doesn’t pull from the repo afterward — later changes
+              there won’t appear here, your edits here won’t go back to GitHub,
+              and re-importing skips skills you’ve already imported.
+            </p>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="skill-repo-url">Repository URL</Label>
             <Input

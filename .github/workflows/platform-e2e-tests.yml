@@ -447,6 +447,7 @@ jobs:
             -p 127.0.0.1:3000:3000 \
             -e ARCHESTRA_QUICKSTART=true \
             -e ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest \
+            -e ARCHESTRA_ANALYTICS=disabled \
             -e ARCHESTRA_OPENAI_BASE_URL=http://archestra-wiremock:8080/v1 \
             -e ARCHESTRA_ANTHROPIC_BASE_URL=http://archestra-wiremock:8080 \
             -e ARCHESTRA_GEMINI_BASE_URL=http://archestra-wiremock:8080 \

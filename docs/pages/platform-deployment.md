@@ -892,8 +892,8 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Example: `archestra-prod/`
 
 - **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
-  - Default: `enabled`
-  - Set to `disabled` to opt-out of analytics
+  - Default: `enabled` in production builds (`NODE_ENV=production`, which includes the released Docker images); disabled in development/test environments
+  - Set to `disabled` to opt-out of analytics, or `enabled` to force it on regardless of environment
 
 - **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key used when analytics is enabled.
   - Default: Archestra's hosted PostHog project key

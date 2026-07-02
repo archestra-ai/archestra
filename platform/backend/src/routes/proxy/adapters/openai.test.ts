@@ -237,13 +237,58 @@ describe("OpenAIResponseAdapter", () => {
       expect(adapter.getFinishReasons()).toEqual(["stop"]);
     });
 
-    test("returns empty array when choices is missing (e.g. upstream error body)", () => {
+    test("returns empty array when choices is empty", () => {
       const response = {
-        error: { message: "upstream failure" },
-      } as unknown as OpenAi.Types.ChatCompletionsResponse;
+        ...createMockResponse({ role: "assistant", content: "x" }),
+        choices: [],
+      };
 
       const adapter = openaiAdapterFactory.createResponseAdapter(response);
       expect(adapter.getFinishReasons()).toEqual([]);
+      expect(adapter.getText()).toBe("");
+      expect(adapter.getToolCalls()).toEqual([]);
+      expect(adapter.hasToolCalls()).toBe(false);
+    });
+  });
+
+  describe("responses without choices (upstream error bodies)", () => {
+    test("surfaces the embedded upstream error message and status", () => {
+      const response = {
+        error: { message: "Rate limit exceeded", code: 429 },
+      } as unknown as OpenAi.Types.ChatCompletionsResponse;
+
+      expect(() =>
+        openaiAdapterFactory.createResponseAdapter(response),
+      ).toThrow(
+        expect.objectContaining({
+          statusCode: 429,
+          message: "Rate limit exceeded",
+        }),
+      );
+    });
+
+    test("defaults to 502 with a generic message when no error details exist", () => {
+      const response = {} as unknown as OpenAi.Types.ChatCompletionsResponse;
+
+      expect(() =>
+        openaiAdapterFactory.createResponseAdapter(response),
+      ).toThrow(
+        expect.objectContaining({
+          statusCode: 502,
+          message:
+            "Upstream openai provider returned a response without choices",
+        }),
+      );
+    });
+
+    test("ignores non-HTTP error codes when picking the status", () => {
+      const response = {
+        error: { message: "boom", code: "model_not_found" },
+      } as unknown as OpenAi.Types.ChatCompletionsResponse;
+
+      expect(() =>
+        openaiAdapterFactory.createResponseAdapter(response),
+      ).toThrow(expect.objectContaining({ statusCode: 502 }));
     });
   });
 

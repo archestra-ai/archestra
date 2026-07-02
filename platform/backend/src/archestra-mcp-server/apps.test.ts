@@ -1295,6 +1295,46 @@ describe("get_app_diagnostics", () => {
     expect(structured(result).status).toBe("clean");
   });
 
+  test("an older-version snapshot arriving mid-window extends the wait for the head render", async () => {
+    // First poll sees nothing (short window chosen); an older-version snapshot
+    // then lands, proving a viewer is actively rendering, so the head render
+    // arriving after the short window's original deadline is still captured.
+    const appId = await createApp();
+    // bump the head to version 2 so a version-1 snapshot is stale
+    const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
+    await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: 1,
+        // biome-ignore lint/style/noNonNullAssertion: seeded head exists
+        edits: [{ old_str: seeded!.html, new_str: "<p>v2</p>" }],
+      },
+      context,
+    );
+    const pending = getDiagnostics(appId);
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await AppRenderDiagnosticsModel.record({
+      appId,
+      // biome-ignore lint/style/noNonNullAssertion: set in beforeEach
+      userId: context.userId!,
+      version: 1,
+      entries: [],
+    });
+    // land the head render after the original 3s never-rendered deadline
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    await AppRenderDiagnosticsModel.record({
+      appId,
+      // biome-ignore lint/style/noNonNullAssertion: set in beforeEach
+      userId: context.userId!,
+      version: 2,
+      entries: [],
+    });
+    const result = await pending;
+    expect(structured(result).status).toBe("clean");
+    expect(structured(result).version).toBe(2);
+  });
+
   test("reports clean when the head rendered without diagnostics", async () => {
     const appId = await createApp();
     await AppRenderDiagnosticsModel.record({

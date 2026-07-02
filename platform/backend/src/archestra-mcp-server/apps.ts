@@ -877,7 +877,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_VALIDATE_APP_SHORT_NAME,
     title: "Validate App",
     description:
-      "The pre-publish gate for an app's head version: static structural checks (`findings`, each carrying its own specific message) plus the most recent live-render diagnostics (`live`), with `ok` true when neither reports an error. Run it after editing and fix any error findings with edit_app before publish_app. Live diagnostics exist only once the app has rendered for a viewer, so `live.status` is commonly no_render_observed right after authoring — a clean static pass is enough to proceed, and the result text spells out the findings and the live-render outcome. To re-read render diagnostics on their own without the static gate, use get_app_diagnostics instead.",
+      "The pre-publish gate for an app's head version: static structural checks (`findings`, each carrying its own specific message) plus the most recent live-render diagnostics (`live`), with `ok` true when neither reports an error. Run it after editing and fix any error findings with edit_app before publish_app. Live diagnostics exist only once the app has rendered for a viewer (the call waits briefly for an in-flight render to settle), so `live.status` is commonly no_render_observed right after authoring — a clean static pass is enough to proceed, and the result text spells out the findings and the live-render outcome. To re-read render diagnostics on their own without the static gate, use get_app_diagnostics instead.",
     schema: ValidateAppSchema,
     outputSchema: ValidateAppOutputSchema,
     async handler({ args, context }) {
@@ -1322,7 +1322,12 @@ function applyStrReplaceEdits(
   // laterModified) — so an excerpt built from a span never shows text a later
   // edit removed.
   const spans: AppliedEditSpan[] = [];
-  const applyAt = (start: number, oldLength: number, newStr: string) => {
+  const applyAt = (params: {
+    start: number;
+    oldLength: number;
+    newStr: string;
+  }) => {
+    const { start, oldLength, newStr } = params;
     working =
       working.slice(0, start) + newStr + working.slice(start + oldLength);
     const end = start + newStr.length;
@@ -1357,7 +1362,11 @@ function applyStrReplaceEdits(
       // in a non-whitespace character) stays a hard error below.
       const span = findWhitespaceInsensitiveSpan(working, edit.old_str);
       if (span) {
-        applyAt(span.start, span.end - span.start, edit.new_str);
+        applyAt({
+          start: span.start,
+          oldLength: span.end - span.start,
+          newStr: edit.new_str,
+        });
         return;
       }
       const hint =
@@ -1374,7 +1383,11 @@ function applyStrReplaceEdits(
         `${label}: old_str matched ${count} times; it must match exactly once. Add surrounding context to make it unique.`,
       );
     }
-    applyAt(working.indexOf(edit.old_str), edit.old_str.length, edit.new_str);
+    applyAt({
+      start: working.indexOf(edit.old_str),
+      oldLength: edit.old_str.length,
+      newStr: edit.new_str,
+    });
   });
   return { html: working, spans };
 }
@@ -1614,7 +1627,7 @@ async function waitForHeadRenderSnapshot(params: {
 }): Promise<AppRenderDiagnostics | null> {
   const { appId, userId, head, abortSignal } = params;
   let snapshot = await AppRenderDiagnosticsModel.getForUser(appId, userId);
-  const deadline =
+  let deadline =
     Date.now() +
     (snapshot
       ? GET_APP_DIAGNOSTICS_WAIT_MS
@@ -1625,7 +1638,14 @@ async function waitForHeadRenderSnapshot(params: {
     !abortSignal?.aborted
   ) {
     await delay(GET_APP_DIAGNOSTICS_POLL_MS);
-    snapshot = await AppRenderDiagnosticsModel.getForUser(appId, userId);
+    const next = await AppRenderDiagnosticsModel.getForUser(appId, userId);
+    // A first snapshot arriving mid-window (even of an older version) proves a
+    // viewer is actively rendering, so the short never-rendered window no
+    // longer applies — give the in-flight head render the full settle window.
+    if (next && !snapshot) {
+      deadline = Date.now() + GET_APP_DIAGNOSTICS_WAIT_MS;
+    }
+    snapshot = next;
   }
   return snapshot && snapshot.version >= head ? snapshot : null;
 }

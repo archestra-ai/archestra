@@ -1,27 +1,66 @@
-import { generateText } from "ai";
 import { eq } from "drizzle-orm";
+import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import { beforeEach, describe, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
+import type { PolicyConfig } from "@/types";
 import { resolveBestAvailableLlm } from "@/utils/llm-resolution";
 import { PolicyConfigurationService } from "./policy-configuration";
 
-vi.mock("@/clients/llm-client", () => ({
-  createLLMModel: vi.fn(() => "mocked-model"),
-}));
+// biome-ignore lint/correctness/useHookAtTopLevel: vitest lifecycle helper (per-test MSW server), not a React hook
+const server = useMswServer();
 
-vi.mock("ai", () => ({
-  generateText: vi.fn(),
-  Output: {
-    object: vi.fn((opts) => ({ type: "object", ...opts })),
-  },
-}));
+// Boundary mock: the real `ai` SDK runs generateText (with structured Output)
+// and MSW serves the provider wire responses. The internal seam we keep is the
+// model factory, pointed at a fake base URL the MSW server intercepts.
+const LLM_BASE_URL = "https://llm.test/v1";
+
+vi.mock("@/clients/llm-client", async () => {
+  const { createOpenAI } = await import("@ai-sdk/openai");
+  // Literal (not the module-level const) — this factory is hoisted above it.
+  const model = createOpenAI({
+    baseURL: "https://llm.test/v1",
+    apiKey: "test-key",
+  }).chat("gpt-4o-mini");
+  return {
+    createLLMModel: vi.fn(() => model),
+  };
+});
 
 vi.mock("@/utils/llm-resolution", () => ({
   resolveBestAvailableLlm: vi.fn(),
   resolveConfiguredAgentLlm: vi.fn(),
 }));
+
+// Serves the structured policy analysis as an OpenAI chat completion whose
+// message content is the JSON object the SDK's Output.object parses. Captures
+// the intercepted request body so tests can assert on what was sent.
+function servePolicyAnalysis(config: PolicyConfig): {
+  getRequestBody: () => unknown;
+} {
+  let requestBody: unknown;
+  server.use(
+    http.post(`${LLM_BASE_URL}/chat/completions`, async ({ request }) => {
+      requestBody = await request.json();
+      return HttpResponse.json({
+        id: "chatcmpl-test",
+        created: 0,
+        model: "gpt-4o-mini",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: JSON.stringify(config) },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    }),
+  );
+  return { getRequestBody: () => requestBody };
+}
 
 const MOCK_BUILT_IN_AGENT = {
   systemPrompt:
@@ -128,14 +167,12 @@ describe("PolicyConfigurationService", () => {
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
-      // Mock the generateText call (uses new LLM-facing enum values)
-      vi.mocked(generateText).mockResolvedValue({
-        output: {
-          toolInvocationAction: "allow_when_context_is_sensitive",
-          trustedDataAction: "mark_as_safe",
-          reasoning: "This tool is safe",
-        },
-      } as never);
+      // Serve the analysis (uses new LLM-facing enum values)
+      const analysis = servePolicyAnalysis({
+        toolInvocationAction: "allow_when_context_is_sensitive",
+        trustedDataAction: "mark_as_safe",
+        reasoning: "This tool is safe",
+      });
 
       const result = await service.configurePoliciesForTool({
         toolId: tool.id,
@@ -149,14 +186,15 @@ describe("PolicyConfigurationService", () => {
         reasoning: "This tool is safe",
       });
 
-      // Verify generateText was called
-      expect(generateText).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: "mocked-model",
-          output: expect.any(Object),
-          prompt: expect.any(String),
-        }),
-      );
+      // The analysis request reached the provider: the rendered prompt rode as
+      // a user message and Output.object requested a structured json_schema.
+      const requestBody = analysis.getRequestBody() as {
+        messages: Array<{ role: string; content: string }>;
+        response_format?: { type?: string };
+      };
+      const userMessage = requestBody.messages.find((m) => m.role === "user");
+      expect(typeof userMessage?.content).toBe("string");
+      expect(requestBody.response_format?.type).toBe("json_schema");
 
       // Verify policies were created in the database
       const invocationPolicies = await db
@@ -196,14 +234,12 @@ describe("PolicyConfigurationService", () => {
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
-      // Mock blocking policy response
-      vi.mocked(generateText).mockResolvedValue({
-        output: {
-          toolInvocationAction: "block_always",
-          trustedDataAction: "block_always",
-          reasoning: "This tool is risky",
-        },
-      } as never);
+      // Serve blocking policy response
+      servePolicyAnalysis({
+        toolInvocationAction: "block_always",
+        trustedDataAction: "block_always",
+        reasoning: "This tool is risky",
+      });
 
       await service.configurePoliciesForTool({
         toolId: tool.id,
@@ -239,13 +275,11 @@ describe("PolicyConfigurationService", () => {
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
-      vi.mocked(generateText).mockResolvedValue({
-        output: {
-          toolInvocationAction: "allow_when_context_is_sensitive",
-          trustedDataAction: "sanitize_with_dual_llm",
-          reasoning: "This tool needs sanitization",
-        },
-      } as never);
+      servePolicyAnalysis({
+        toolInvocationAction: "allow_when_context_is_sensitive",
+        trustedDataAction: "sanitize_with_dual_llm",
+        reasoning: "This tool needs sanitization",
+      });
 
       await service.configurePoliciesForTool({
         toolId: tool.id,
@@ -274,13 +308,11 @@ describe("PolicyConfigurationService", () => {
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
-      vi.mocked(generateText).mockResolvedValue({
-        output: {
-          toolInvocationAction: "block_when_context_is_sensitive",
-          trustedDataAction: "mark_as_sensitive",
-          reasoning: "External API that could leak data",
-        },
-      } as never);
+      servePolicyAnalysis({
+        toolInvocationAction: "block_when_context_is_sensitive",
+        trustedDataAction: "mark_as_sensitive",
+        reasoning: "External API that could leak data",
+      });
 
       await service.configurePoliciesForTool({
         toolId: tool.id,
@@ -317,13 +349,11 @@ describe("PolicyConfigurationService", () => {
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
-      vi.mocked(generateText).mockResolvedValue({
-        output: {
-          toolInvocationAction: "require_approval",
-          trustedDataAction: "mark_as_sensitive",
-          reasoning: "Mutating write that needs user confirmation",
-        },
-      } as never);
+      servePolicyAnalysis({
+        toolInvocationAction: "require_approval",
+        trustedDataAction: "mark_as_sensitive",
+        reasoning: "Mutating write that needs user confirmation",
+      });
 
       await service.configurePoliciesForTool({
         toolId: tool.id,

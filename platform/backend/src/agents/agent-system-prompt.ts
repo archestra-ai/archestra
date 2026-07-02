@@ -261,15 +261,19 @@ async function buildProjectMemoryPrompt(params: {
       `When the user asks you to remember something — or states a clearly durable fact, decision, or preference for this project — save it with the \`${saveMemory}\` tool as one short, self-contained entry.`,
     );
   }
-  const editTools = [
-    updateMemory ? `\`${updateMemory}\`` : null,
-    deleteMemory ? `\`${deleteMemory}\`` : null,
-  ]
-    .filter(Boolean)
-    .join(" / ");
-  if (editTools) {
+  // Verbs match the reachable tools: update = correct/consolidate,
+  // delete = forget.
+  if (updateMemory && deleteMemory) {
     guidanceSentences.push(
-      `Use ${editTools} with an entry's id to correct, consolidate, or forget${deleteMemory ? " (always delete when the user asks you to forget)" : ""}.`,
+      `Use \`${updateMemory}\` / \`${deleteMemory}\` with an entry's id to correct, consolidate, or forget (always delete when the user asks you to forget).`,
+    );
+  } else if (updateMemory) {
+    guidanceSentences.push(
+      `Use \`${updateMemory}\` with an entry's id to correct or consolidate it.`,
+    );
+  } else if (deleteMemory) {
+    guidanceSentences.push(
+      `Use \`${deleteMemory}\` with an entry's id to forget stale or superseded entries (always delete when the user asks you to forget).`,
     );
   }
   if (saveMemory) {

@@ -24,6 +24,8 @@ vi.mock("next/navigation");
 vi.mock("@/lib/app.query", () => ({
   useOpenAppInChat: () => ({ mutateAsync: vi.fn() }),
   useOpenExternalAppInChat: () => ({ mutateAsync: openExternalMutate }),
+  // The card hosts the shared AppSettingsDialog, which reads the app by id.
+  useApp: () => ({ data: undefined }),
 }));
 
 vi.mock("@/lib/auth/auth.query");

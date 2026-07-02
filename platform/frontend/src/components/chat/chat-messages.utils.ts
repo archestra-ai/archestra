@@ -270,6 +270,7 @@ export function deriveAppsFromMessages(
           uiResourceUri: outputUri,
           appId: null,
           mcpServerId,
+          toolName: fullToolName,
           version: null,
           createdAt: createdAt ?? 0,
         });
@@ -299,6 +300,7 @@ export function deriveAppsFromMessages(
         label: ownedApp.appName ?? mcpToolLabel(fullToolName),
         uiResourceUri: getArchestraAppResourceUri(ownedApp.appId),
         appId: ownedApp.appId,
+        toolName: fullToolName,
         version: ownedApp.latestVersion,
         createdAt: createdAt ?? 0,
       };

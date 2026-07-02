@@ -23,6 +23,12 @@ export interface PanelApp {
   /** Owned-app id, when this entry is an Archestra-authored app. External MCP-UI tool calls have none. */
   appId?: string | null;
   /**
+   * Full prefixed tool name that produced this render (e.g. "server__tool").
+   * Lets a sidebar-hosted render rebuild the app endpoint (server prefix) without
+   * the originating message part. Always set by `deriveAppsFromMessages`.
+   */
+  toolName?: string;
+  /**
    * Concrete install backing an external app rendered via a server-scoped deep
    * link (apps-page open-in-chat). When set, the chat mounts the resource
    * against this install (`/api/mcp/server/<id>`) instead of the agent gateway.
@@ -38,22 +44,25 @@ export interface PanelApp {
 interface AppsContextValue {
   /** All apps currently mounted in the conversation, in the order they appeared. */
   apps: PanelApp[];
-  /** toolCallId of the app currently displayed in the panel (session-only). */
-  selectedToolCallId: string | null;
   /**
-   * toolCallId of the app actually rendered in the right panel right now, or
-   * null when the panel isn't hosting an app. Single source of truth shared by
-   * the chat stream (marker pressed state) and the panel — it folds together
-   * "panel is on the Apps tab" (`portalTarget`) and `selectedToolCallId`.
+   * toolCallId of the single open app — the one shown either inline in the chat
+   * stream or in the right panel. Every section derives its pressed / inline /
+   * panel state from this one value; opening any app collapses the previous one
+   * to a pill. Defaults to the latest app.
    */
-  panelToolCallId: string | null;
-  /** Update which app the panel displays. */
-  select: (toolCallId: string) => void;
-  /** DOM node where the selected app should portal its content; null when the panel is not on the Apps tab. */
+  openToolCallId: string | null;
+  /**
+   * Set the single open app, or `null` to collapse (nothing open). Pills pass
+   * their toolCallId to open, or `null` when they're already open to toggle
+   * closed. Where the app then shows — inline or the right panel — is derived
+   * from `portalTarget` (whether the Apps tab is hosting), not stored here.
+   */
+  setOpenToolCallId: (toolCallId: string | null) => void;
+  /** Open the right panel on the Apps tab. Call alongside `setOpenToolCallId` to send an app there ("Open in right panel"). */
+  openRightPanel: () => void;
+  /** DOM node where the open app should portal its content; null when the panel is not on the Apps tab. */
   portalTarget: HTMLElement | null;
   setPortalTarget: (el: HTMLElement | null) => void;
-  /** Open the panel on the Apps tab and select this app. Wired by the chat page. */
-  showInPanel: (toolCallId: string) => void;
   /** Close the right panel entirely. Wired by the chat page. */
   closePanel: () => void;
   /**
@@ -69,12 +78,11 @@ const AppsContext = createContext<AppsContextValue | null>(null);
 
 const NOOP_VALUE: AppsContextValue = {
   apps: [],
-  selectedToolCallId: null,
-  panelToolCallId: null,
-  select: () => {},
+  openToolCallId: null,
+  setOpenToolCallId: () => {},
+  openRightPanel: () => {},
   portalTarget: null,
   setPortalTarget: () => {},
-  showInPanel: () => {},
   closePanel: () => {},
   settingsOpen: false,
   setSettingsOpen: () => {},
@@ -88,28 +96,29 @@ export function AppsProvider({
 }: {
   /** Apps for this conversation, derived from its messages by the caller. */
   apps: PanelApp[];
-  /** Called when an app requests to be shown in the panel — wire this to open the panel and switch to the Apps tab. */
-  onShowInPanel?: (toolCallId: string) => void;
+  /** Called to open the right panel on the Apps tab. */
+  onShowInPanel?: () => void;
   /** Called to close the right panel — wire this to collapse the panel. */
   onClosePanel?: () => void;
   children: ReactNode;
 }) {
-  const [explicitSelection, setExplicitSelection] = useState<string | null>(
-    null,
+  // `undefined` = untouched, so the open app defaults to the latest; a string is
+  // an explicit choice; `null` is an explicit collapse (nothing open).
+  const [explicitOpen, setExplicitOpen] = useState<string | null | undefined>(
+    undefined,
   );
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // The panel shows the user's explicit choice while it's still present;
-  // otherwise it defaults to the latest (most recently registered) app. A stale
-  // selection from a previous conversation simply isn't found and falls through
-  // to the latest, so no reset is needed when conversations switch.
-  const selectedToolCallId = useMemo(() => {
-    if (
-      explicitSelection &&
-      apps.some((a) => a.toolCallId === explicitSelection)
-    ) {
-      return explicitSelection;
+  // Resolve the open app: untouched → the latest (most recently registered) app;
+  // an explicit collapse (`null`) → nothing; an explicit choice → that app while
+  // it's still present. A stale choice (a superseded owned-app render, or an id
+  // from a previous conversation) isn't found and falls through to the latest,
+  // so a new render of an owned app takes focus and no reset is needed on switch.
+  const openToolCallId = useMemo(() => {
+    if (explicitOpen === null) return null;
+    if (explicitOpen && apps.some((a) => a.toolCallId === explicitOpen)) {
+      return explicitOpen;
     }
     return (
       apps.reduce<PanelApp | null>(
@@ -118,23 +127,18 @@ export function AppsProvider({
         null,
       )?.toolCallId ?? null
     );
-  }, [explicitSelection, apps]);
+  }, [explicitOpen, apps]);
 
-  // Switching which app the panel shows always returns to the live app — the
-  // settings form belongs to the app that was open, not the one switched to.
-  const select = useCallback((toolCallId: string) => {
-    setExplicitSelection(toolCallId);
+  // Setting the open app always returns to the live app — the settings form
+  // belongs to the app that was open, not the one switched to.
+  const setOpenToolCallId = useCallback((toolCallId: string | null) => {
+    setExplicitOpen(toolCallId);
     setSettingsOpen(false);
   }, []);
 
-  const showInPanel = useCallback(
-    (toolCallId: string) => {
-      setExplicitSelection(toolCallId);
-      setSettingsOpen(false);
-      onShowInPanel?.(toolCallId);
-    },
-    [onShowInPanel],
-  );
+  const openRightPanel = useCallback(() => {
+    onShowInPanel?.();
+  }, [onShowInPanel]);
 
   const closePanel = useCallback(() => {
     setSettingsOpen(false);
@@ -144,24 +148,21 @@ export function AppsProvider({
   const value = useMemo<AppsContextValue>(
     () => ({
       apps,
-      selectedToolCallId,
-      // The panel only hosts an app while it's mounted on the Apps tab
-      // (`portalTarget` set); otherwise nothing is shown there.
-      panelToolCallId: portalTarget ? selectedToolCallId : null,
-      select,
+      openToolCallId,
+      setOpenToolCallId,
+      openRightPanel,
       portalTarget,
       setPortalTarget,
-      showInPanel,
       closePanel,
       settingsOpen,
       setSettingsOpen,
     }),
     [
       apps,
-      selectedToolCallId,
-      select,
+      openToolCallId,
+      setOpenToolCallId,
+      openRightPanel,
       portalTarget,
-      showInPanel,
       closePanel,
       settingsOpen,
     ],

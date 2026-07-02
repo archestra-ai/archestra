@@ -5,7 +5,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Mock heavy dependencies before module import ─────────────────────────────
 
-vi.mock("@modelcontextprotocol/ext-apps/app-bridge", () => ({
+vi.mock("@modelcontextprotocol/ext-apps/app-bridge", async (importActual) => ({
+  // Keep pure helpers (e.g. buildAllowAttribute) real; only stub the stateful
+  // classes the tests need to control.
+  ...(await importActual<
+    typeof import("@modelcontextprotocol/ext-apps/app-bridge")
+  >()),
   AppBridge: vi.fn().mockImplementation(function (
     this: Record<string, unknown>,
   ) {

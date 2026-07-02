@@ -175,18 +175,24 @@ beforeEach(async () => {
 });
 
 /**
- * Clear mocks after each test, and restore the real fetch.
+ * Clear mocks after each test, and restore the real fetch and real timers.
  *
  * Several tests replace `globalThis.fetch` directly (not via vi.stubGlobal,
  * which `unstubGlobals` already handles). A mock left behind — e.g. when an
  * assertion throws before an inline restore — poisons every later file in
  * the worker. This hook is registered before any test-file hooks, so Vitest
  * runs it LAST in the afterEach sequence: it always gets the final word.
+ *
+ * Fake timers leak the same way: neither clearAllMocks nor unstubGlobals
+ * undoes vi.useFakeTimers, and in a shared worker a leaked frozen clock
+ * stalls every later setTimeout and makes DB timestamps collide across
+ * unrelated files. useRealTimers is a no-op when timers are already real.
  */
 const realFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = realFetch;
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 /**

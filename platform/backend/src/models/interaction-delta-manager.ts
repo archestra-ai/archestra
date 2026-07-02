@@ -343,12 +343,13 @@ class InteractionDeltaManager {
           ),
         ),
       )
+      // desc(id) tiebreak: same-instant interactions are common under load,
+      // and new ids are monotonic UUIDv7 — so "most recent candidate" stays
+      // deterministic (and, for fresh rows, truly means insertion order)
+      // instead of flapping between ties across queries.
       .orderBy(
-        // seq is tie-proof insertion order; createdAt kept as a fallback for
-        // any pre-backfill edge. Same-instant interactions are routine under
-        // streaming, and a wrong "latest" pick corrupts the delta chain.
-        desc(schema.interactionsTable.seq),
         desc(schema.interactionsTable.createdAt),
+        desc(schema.interactionsTable.id),
       )
       .limit(16);
 

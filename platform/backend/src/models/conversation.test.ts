@@ -274,24 +274,22 @@ describe("ConversationModel", () => {
       userId: user.id,
       organizationId: org.id,
     });
+
+    // Simulate the collision the wall clock only sometimes produces: the
+    // read watermark sits at (or ahead of) the writer's clock when the next
+    // message lands. touchConversation must push lastMessageAt strictly past
+    // lastReadAt — the old plain-`new Date()` write left the two tied (or
+    // behind), and the strict lastMessageAt > lastReadAt unread check then
+    // silently marked the new message read.
+    await db
+      .update(schema.conversationsTable)
+      .set({ lastReadAt: new Date(Date.now() + 60_000) })
+      .where(eq(schema.conversationsTable.id, conversation.id));
     await MessageModel.create({
       conversationId: conversation.id,
       role: "assistant",
       content: { role: "assistant", parts: [{ type: "text", text: "two" }] },
     });
-
-    // Simulate the timestamp collision the wall clock only sometimes
-    // produces: the read and the newest message land in the same instant.
-    // The sequence watermarks must still classify the message as unread —
-    // the old strictly-greater time comparison silently marked it read.
-    const [row] = await db
-      .select({ lastReadAt: schema.conversationsTable.lastReadAt })
-      .from(schema.conversationsTable)
-      .where(eq(schema.conversationsTable.id, conversation.id));
-    await db
-      .update(schema.conversationsTable)
-      .set({ lastMessageAt: row.lastReadAt ?? new Date() })
-      .where(eq(schema.conversationsTable.id, conversation.id));
 
     const [listed] = await ConversationModel.findAll(user.id, org.id);
     expect(listed.unread).toBe(true);

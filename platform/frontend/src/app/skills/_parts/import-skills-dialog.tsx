@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SecretInput } from "@/components/ui/secret-input";
 import {
   Tooltip,
   TooltipContent,
@@ -670,15 +671,11 @@ export function ImportSkillsDialog({
             }
             patFields={
               <>
-                <Input
+                <SecretInput
                   id="skill-token"
-                  type="password"
                   value={githubToken}
                   onChange={(e) => setGithubToken(e.target.value)}
                   placeholder="ghp_…"
-                  autoComplete="new-password"
-                  data-1p-ignore
-                  data-lpignore="true"
                 />
                 <p className="text-sm text-muted-foreground">
                   Required for private repositories. Used only for this import

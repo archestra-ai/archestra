@@ -94,6 +94,53 @@ export async function resolveDynamicTool(params: {
 }
 
 /**
+ * Resolve the tool that backs an MCP App `ui://` resource when the tool is
+ * reachable only through dynamic access ("all tools" mode) and has no
+ * `agent_tools` assignment — so a resource read can find its catalog/server
+ * without an assignment. Applies the same gates as `resolveDynamicTool` (agent
+ * setting, catalog visibility, per-tool RBAC). Returns null when the strict
+ * assigned-only behavior applies or the resource is not accessible.
+ */
+export async function resolveDynamicToolByUiResource(params: {
+  resourceUri: string;
+  agentId: string;
+  userId?: string;
+  organizationId?: string;
+}): Promise<Tool | null> {
+  const ctx = await dynamicAccessContext(params);
+  if (!ctx) {
+    return null;
+  }
+
+  const accessible = await ToolModel.getMcpToolsAccessibleToUser({
+    userId: ctx.userId,
+    organizationId: ctx.organizationId,
+    environmentId: ctx.agentEnvironmentId,
+    isAdmin: await userIsCatalogAdmin(ctx.userId, ctx.organizationId),
+    uiResourceUri: params.resourceUri,
+  });
+  // A ui:// URI is not globally unique. If it matches tools across more than one
+  // catalog the user can reach, a colliding catalog could serve app HTML in
+  // place of the tool that actually ran — and a resource read carries only the
+  // URI, so it cannot disambiguate. Fail closed rather than guess.
+  const matchedCatalogIds = new Set(accessible.map((t) => t.catalogId));
+  if (matchedCatalogIds.size > 1) {
+    return null;
+  }
+  const tool = accessible[0];
+  if (!tool) {
+    return null;
+  }
+
+  const permitted = await filterToolNamesByPermission(
+    [tool.name],
+    ctx.userId,
+    ctx.organizationId,
+  );
+  return permitted.has(tool.name) ? tool : null;
+}
+
+/**
  * Whether an unassigned Archestra built-in may execute for this agent/user
  * anyway: the sandbox runtime tools when the sandbox runtime is on, the
  * persistent-files (Projects) tools when the Projects feature is on (see

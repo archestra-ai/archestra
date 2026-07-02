@@ -15,6 +15,7 @@ import {
   getUnassignedDiscoverableTools,
   isDynamicallyAvailableArchestraTool,
   resolveDynamicTool,
+  resolveDynamicToolByUiResource,
 } from "./dynamic-tools";
 
 const QUERY_KNOWLEDGE_SOURCES_FULL_NAME = getArchestraToolFullName(
@@ -240,6 +241,151 @@ describe("resolveDynamicTool", () => {
 
     const assigned = await ToolModel.getAssignedToolNames(agent.id);
     expect(assigned.has("github__search_repositories")).toBe(false);
+  });
+});
+
+describe("resolveDynamicToolByUiResource", () => {
+  const RESOURCE_URI = "ui://excalidraw/mcp-app.html";
+  let agent: Agent;
+  let organizationId: string;
+  let userId: string;
+
+  beforeEach(async ({ makeAgent, makeMember, makeOrganization, makeUser }) => {
+    const org = await makeOrganization();
+    organizationId = org.id;
+    const user = await makeUser();
+    userId = user.id;
+    await makeMember(user.id, org.id, { role: "admin" });
+    agent = await makeAgent({
+      name: "Dynamic Agent",
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+  });
+
+  test("resolves each ui:// resource to its own tool, keyed on the exact resourceUri", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    // Two UI tools in the same catalog: resolving each URI must return that
+    // tool, not the other. Asserting BOTH directions discriminates the exact
+    // resourceUri match regardless of row ordering — if the filter ignored the
+    // URI, both resolutions would return the same first-ordered row and one of
+    // these assertions would fail.
+    await makeTool({
+      name: "excalidraw__other_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/other.html" } } },
+    });
+    await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+    const target = await resolveDynamicToolByUiResource({
+      resourceUri: RESOURCE_URI,
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+    expect(target?.name).toBe("excalidraw__create_view");
+    expect(target?.catalogId).toBe(catalog.id);
+
+    const other = await resolveDynamicToolByUiResource({
+      resourceUri: "ui://excalidraw/other.html",
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+    expect(other?.name).toBe("excalidraw__other_view");
+  });
+
+  test("null when the agent's access-all-tools setting is off", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const strictAgent = await makeAgent({
+      name: "Strict Agent",
+      organizationId,
+    });
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+    const tool = await resolveDynamicToolByUiResource({
+      resourceUri: RESOURCE_URI,
+      agentId: strictAgent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tool).toBeNull();
+  });
+
+  test("null when the backing tool is not accessible to the user", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+    // No install (makeMcpServer) → the catalog is not reachable for the user.
+
+    const tool = await resolveDynamicToolByUiResource({
+      resourceUri: RESOURCE_URI,
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tool).toBeNull();
+  });
+
+  test("null (fail closed) when the same ui:// resource is claimed by two accessible catalogs", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    // Two reachable catalogs both advertise the SAME ui:// URI. A resource read
+    // carries only the URI, so the resolver cannot know which server ran the
+    // tool — it must refuse rather than serve HTML from the wrong backend.
+    const catalogA = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalogA.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+    await makeMcpServer({ catalogId: catalogA.id, scope: "org" });
+
+    const catalogB = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({
+      name: "impostor__create_view",
+      catalogId: catalogB.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+    await makeMcpServer({ catalogId: catalogB.id, scope: "org" });
+
+    const tool = await resolveDynamicToolByUiResource({
+      resourceUri: RESOURCE_URI,
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tool).toBeNull();
   });
 });
 

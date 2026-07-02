@@ -10,6 +10,7 @@ import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
+import { uuidv7 } from "@/utils/uuid";
 
 describe("chat conversation and message routes", () => {
   let app: FastifyInstanceWithZod;
@@ -778,11 +779,13 @@ describe("chat conversation and message routes", () => {
 
     // Force the createdAt tie the old strictly-greater comparison missed:
     // back-to-back writes can land on the same timestamp, and "subsequent"
-    // must still mean insertion order (the seq column), not wall clock.
+    // must still mean insertion order — the (createdAt, id) tuple, with ids
+    // minted as monotonic UUIDv7 exactly like MessageModel.create does.
     const tiedAt = new Date();
     const [firstMessage] = await db
       .insert(schema.messagesTable)
       .values({
+        id: uuidv7(),
         conversationId: conversation.id,
         role: "user",
         content: {
@@ -794,6 +797,7 @@ describe("chat conversation and message routes", () => {
       })
       .returning();
     await db.insert(schema.messagesTable).values({
+      id: uuidv7(),
       conversationId: conversation.id,
       role: "assistant",
       content: {

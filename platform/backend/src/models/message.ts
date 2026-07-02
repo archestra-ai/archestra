@@ -1,7 +1,7 @@
-import { and, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { InsertMessage, Message } from "@/types";
-import { isUuid } from "@/utils/uuid";
+import { isUuid, uuidv7 } from "@/utils/uuid";
 
 type DbExecutor =
   | typeof db
@@ -9,8 +9,14 @@ type DbExecutor =
 
 class MessageModel {
   /**
-   * Update the conversation's updatedAt timestamp when messages are added.
-   * This ensures conversations are sorted by latest message activity.
+   * Update the conversation's timestamps when messages are added.
+   *
+   * `lastMessageAt` is forced strictly past `lastReadAt` when the two would
+   * otherwise land on the same millisecond: the unread check is a strict
+   * `lastMessageAt > lastReadAt` comparison, so a message racing markRead
+   * into the same instant would silently read as already-seen. GREATEST with
+   * a 1ms nudge keeps the invariant "written after a read ⇒ unread" without
+   * needing a sequence column.
    */
   private static async touchConversation(
     conversationId: string,
@@ -19,13 +25,7 @@ class MessageModel {
       .update(schema.conversationsTable)
       .set({
         updatedAt: new Date(),
-        lastMessageAt: new Date(),
-        // Tie-proof companion to lastMessageAt: a fresh tick from the shared
-        // message sequence on EVERY touch — new messages and in-place content
-        // updates (tool results) alike — read by the unread predicate.
-        // Timestamps can collide when a read and new activity land in the
-        // same instant; monotonic sequence values cannot.
-        lastMessageSeq: sql`nextval('messages_seq_seq')`,
+        lastMessageAt: sql`GREATEST(${new Date()}::timestamp, ${schema.conversationsTable.lastReadAt} + interval '1 millisecond')`,
       })
       .where(eq(schema.conversationsTable.id, conversationId));
   }
@@ -33,7 +33,10 @@ class MessageModel {
   static async create(data: InsertMessage): Promise<Message> {
     const [message] = await db
       .insert(schema.messagesTable)
-      .values(data)
+      // Monotonic v7 id: with `created_at` at millisecond precision,
+      // back-to-back writes can tie, and every "which message is later?"
+      // question (ordering, delete-subsequent) breaks ties with the id.
+      .values({ id: uuidv7(), ...data })
       .returning();
 
     // Update conversation's updatedAt so it sorts to the top
@@ -50,7 +53,9 @@ class MessageModel {
       return;
     }
 
-    await executor.insert(schema.messagesTable).values(messages);
+    await executor
+      .insert(schema.messagesTable)
+      .values(messages.map((m) => ({ id: uuidv7(), ...m })));
 
     // Update conversation's updatedAt for all affected conversations
     const uniqueConversationIds = [
@@ -66,7 +71,7 @@ class MessageModel {
       .select()
       .from(schema.messagesTable)
       .where(eq(schema.messagesTable.conversationId, conversationId))
-      .orderBy(schema.messagesTable.seq, schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
     return messages;
   }
@@ -237,19 +242,13 @@ class MessageModel {
       throw new Error("Message does not belong to the specified conversation");
     }
 
-    // Delete all messages in this conversation inserted after this message.
-    // seq is the insertion order: createdAt has finite precision and
-    // back-to-back messages can tie, which made the strictly-greater
-    // createdAt comparison silently miss the later one. Rows written before
-    // the seq migration's backfill cannot lack seq, but stay defensive.
+    // Delete all messages in this conversation created after this message
     await db
       .delete(schema.messagesTable)
       .where(
         and(
           eq(schema.messagesTable.conversationId, conversationId),
-          message.seq !== null
-            ? gt(schema.messagesTable.seq, message.seq)
-            : gt(schema.messagesTable.createdAt, message.createdAt),
+          MessageModel.createdAfter(message),
         ),
       );
   }
@@ -304,17 +303,14 @@ class MessageModel {
         .where(eq(schema.messagesTable.id, messageId))
         .returning();
 
-      // Delete subsequent messages if requested. seq comparison, not
-      // createdAt — see deleteSubsequentMessages above for why.
+      // Delete subsequent messages if requested
       if (deleteSubsequent) {
         await tx
           .delete(schema.messagesTable)
           .where(
             and(
               eq(schema.messagesTable.conversationId, message.conversationId),
-              message.seq !== null
-                ? gt(schema.messagesTable.seq, message.seq)
-                : gt(schema.messagesTable.createdAt, message.createdAt),
+              MessageModel.createdAfter(message),
             ),
           );
       }
@@ -327,6 +323,24 @@ class MessageModel {
       return await withDbTransaction(async (tx) => run(tx));
     }
     return await run(executor);
+  }
+
+  /**
+   * Rows that come after `message` in the canonical conversation order,
+   * `(created_at, id)`. A strict `created_at >` comparison alone misses
+   * same-millisecond neighbours (back-to-back writes routinely tie), so
+   * "subsequent" is the tuple comparison that matches exactly what
+   * findByConversation displays. New ids are monotonic UUIDv7, so for
+   * fresh data the id tiebreak IS insertion order.
+   */
+  private static createdAfter(message: Pick<Message, "id" | "createdAt">) {
+    return or(
+      gt(schema.messagesTable.createdAt, message.createdAt),
+      and(
+        eq(schema.messagesTable.createdAt, message.createdAt),
+        gt(schema.messagesTable.id, message.id),
+      ),
+    );
   }
 }
 

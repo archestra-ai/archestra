@@ -64,6 +64,15 @@ export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
     id: true,
     createdAt: true,
     updatedAt: true,
+    // Server-owned OAuth refresh-failure state, written only by the refresh
+    // subsystem (routes/oauth.ts) — a freshly installed server has never
+    // attempted a refresh, and accepting these from install input would let
+    // a caller seed arbitrary (including unsanitized) diagnostic text shown
+    // to other users with access to the install.
+    oauthRefreshError: true,
+    oauthRefreshErrorMessage: true,
+    oauthRefreshErrorDescription: true,
+    oauthRefreshFailedAt: true,
   });
 
 export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)

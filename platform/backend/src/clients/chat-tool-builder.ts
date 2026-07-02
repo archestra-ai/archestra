@@ -28,6 +28,7 @@ import {
   archestraMcpBranding,
   executeArchestraTool,
 } from "@/archestra-mcp-server";
+import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
@@ -251,6 +252,8 @@ export function buildMcpGatewayTool(params: {
               toolName: mcpTool.name,
               toolArguments,
               agentId: ctx.agentId,
+              userId: ctx.userId,
+              organizationId: ctx.organizationId,
             });
           } else {
             // Execute non-Archestra tools via shared helper with browser sync
@@ -471,7 +474,8 @@ function extractModelOutputImages(
  * for the common case; when run_tool dispatched to an interactive tool, returns
  * the rich shape (with `_meta.ui.resourceUri` from the target tool's definition)
  * so the frontend renders the MCP App — mirroring how `executeMcpTool` enriches
- * directly-called tools.
+ * directly-called tools. The target's UI resource is resolved from its
+ * assignment, or (for an "all tools" agent) from the user's dynamic-access set.
  * @public — exported for testability
  */
 export async function buildArchestraToolOutput(params: {
@@ -479,6 +483,14 @@ export async function buildArchestraToolOutput(params: {
   toolName: string;
   toolArguments: unknown;
   agentId: string;
+  /**
+   * Caller identity used to resolve the dispatched target tool's UI resource
+   * when the tool is reachable only through dynamic access ("all tools" mode)
+   * and has no `agent_tools` assignment. Omit for callers that never dispatch
+   * unassigned tools; the resolution then stays assignment-scoped.
+   */
+  userId?: string;
+  organizationId?: string;
 }): Promise<
   | string
   | {
@@ -488,7 +500,8 @@ export async function buildArchestraToolOutput(params: {
       rawContent?: ContentBlock[];
     }
 > {
-  const { response, toolName, toolArguments, agentId } = params;
+  const { response, toolName, toolArguments, agentId, userId, organizationId } =
+    params;
   // Never stringify an image block into the text summary — its base64 would
   // bloat context and evade the history image-stripper. Images ride rawContent
   // and reach the model as bounded media parts via toModelOutput instead.
@@ -542,7 +555,21 @@ export async function buildArchestraToolOutput(params: {
 
   let resourceUri: string | undefined;
   try {
-    const toolDef = await ToolModel.findByNameForAgent(targetToolName, agentId);
+    // Assigned tools resolve directly. A tool the agent reaches only through
+    // dynamic access ("all tools" mode) has no `agent_tools` row, so fall back
+    // to the same user-scoped resolution run_tool used to dispatch it —
+    // otherwise its MCP App UI resource is dropped and the app renders as a
+    // plain tool-call card instead of an iframe.
+    const toolDef =
+      (await ToolModel.findByNameForAgent(targetToolName, agentId)) ??
+      (userId && organizationId
+        ? await resolveDynamicTool({
+            toolName: targetToolName,
+            agentId,
+            userId,
+            organizationId,
+          })
+        : null);
     resourceUri = (
       toolDef?.meta as { _meta?: { ui?: McpUiToolMeta } } | undefined
     )?._meta?.ui?.resourceUri;

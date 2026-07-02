@@ -643,6 +643,12 @@ class ToolModel {
     environmentId: string | null;
     /** Exact-name filter for single-tool resolution (avoids loading the whole corpus). */
     name?: string;
+    /**
+     * Exact MCP App `ui://` resource filter, for resolving which accessible tool
+     * backs a resource read without loading the whole corpus. Matches the same
+     * canonical/legacy meta keys as the external-apps listing.
+     */
+    uiResourceUri?: string;
   }): Promise<Tool[]> {
     const catalogIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
       params.userId,
@@ -681,6 +687,9 @@ class ToolModel {
           toolInEnvironmentPredicate(params.environmentId),
           params.name !== undefined
             ? eq(schema.toolsTable.name, params.name)
+            : undefined,
+          params.uiResourceUri !== undefined
+            ? eq(toolUiResourceUriSql(), params.uiResourceUri)
             : undefined,
         ),
       )

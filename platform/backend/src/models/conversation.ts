@@ -177,6 +177,7 @@ class ConversationModel {
         .orderBy(
           desc(schema.conversationsTable.lastMessageAt),
           schema.messagesTable.createdAt,
+          schema.messagesTable.id,
         )
         .limit(
           ConversationModel.SEARCH_RESULT_LIMIT *
@@ -330,7 +331,7 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, organizationId),
         ),
       )
-      .orderBy(schema.messagesTable.seq, schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
     if (rows.length === 0) {
       return null;
@@ -526,7 +527,7 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, params.organizationId),
         ),
       )
-      .orderBy(schema.messagesTable.seq, schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
     if (rows.length === 0) {
       return null;
@@ -629,11 +630,13 @@ class ConversationModel {
   }): Promise<boolean> {
     const [updated] = await db
       .update(schema.conversationsTable)
-      // lastReadSeq copies the newest-message watermark: "read" means caught
-      // up to everything inserted so far, immune to timestamp ties.
+      // GREATEST: the newest message visible at read time is covered even
+      // when it landed in the same millisecond (or marginally ahead of the
+      // reader's clock) — unread is a strict lastMessageAt > lastReadAt
+      // comparison, so a read must never leave lastReadAt behind
+      // lastMessageAt.
       .set({
-        lastReadAt: new Date(),
-        lastReadSeq: sql`${schema.conversationsTable.lastMessageSeq}`,
+        lastReadAt: sql`GREATEST(${new Date()}::timestamp, ${schema.conversationsTable.lastMessageAt})`,
       })
       .where(
         and(
@@ -730,18 +733,7 @@ function isConversationUnread(conversation: {
   lastMessageAt: Date;
   lastReadAt: Date | null;
   createdAt: Date;
-  lastMessageSeq: number | null;
-  lastReadSeq: number | null;
 }): boolean {
-  // Once a read has recorded a sequence watermark, compare insertion order —
-  // timestamps have finite precision, and a read racing an incoming message
-  // (same instant) must still leave the message unread.
-  if (conversation.lastReadSeq !== null) {
-    return (conversation.lastMessageSeq ?? 0) > conversation.lastReadSeq;
-  }
-  // Never explicitly read (or migrated rows read before any message existed):
-  // keep the creation-time comparison, so a message that landed with the
-  // conversation itself (e.g. you sent it) does not register as unread.
   const lastRead = conversation.lastReadAt ?? conversation.createdAt;
   return conversation.lastMessageAt.getTime() > lastRead.getTime();
 }

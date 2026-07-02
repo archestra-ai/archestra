@@ -1,5 +1,5 @@
 {
-  "id": "5349d325-937a-4bfd-8f82-c61b04917123",
+  "id": "83a879cb-0348-4245-9964-8767d3198db5",
   "prevId": "4aaadceb-9e28-4092-b094-e1f125559b3d",
   "version": "7",
   "dialect": "postgresql",
@@ -4712,18 +4712,6 @@
           "notNull": true,
           "default": "now()"
         },
-        "last_message_seq": {
-          "name": "last_message_seq",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_read_seq": {
-          "name": "last_read_seq",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
         "last_read_at": {
           "name": "last_read_at",
           "type": "timestamp",
@@ -6026,13 +6014,6 @@
           "type": "varchar",
           "primaryKey": false,
           "notNull": false
-        },
-        "seq": {
-          "name": "seq",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "nextval('interactions_seq_seq')"
         },
         "created_at": {
           "name": "created_at",
@@ -8870,6 +8851,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "oauth_refresh_error_description": {
+          "name": "oauth_refresh_error_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "oauth_refresh_failed_at": {
           "name": "oauth_refresh_failed_at",
           "type": "timestamp",
@@ -9309,13 +9296,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "seq": {
-          "name": "seq",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "nextval('messages_seq_seq')"
-        },
         "content": {
           "name": "content",
           "type": "jsonb",
@@ -9342,27 +9322,6 @@
           "columns": [
             {
               "expression": "conversation_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "messages_conversation_id_seq_idx": {
-          "name": "messages_conversation_id_seq_idx",
-          "columns": [
-            {
-              "expression": "conversation_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "seq",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

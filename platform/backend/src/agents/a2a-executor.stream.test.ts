@@ -9,7 +9,7 @@ import { ChatErrorCode } from "@archestra/shared";
 import type { ModelMessage } from "ai";
 import { simulateReadableStream, tool } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
-import { vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import {
   REPEAT_CALL_TERMINATION_CEILING,
@@ -61,6 +61,15 @@ vi.mock("@/clients/mcp-client", () => ({
   default: { closeSession: vi.fn() },
 }));
 
+vi.mock("@/models", async () => {
+  const actual = await vi.importActual<typeof import("@/models")>("@/models");
+  return {
+    ...actual,
+    AgentModel: { findById: vi.fn() },
+    McpServerModel: { getUserPersonalServerForCatalog: vi.fn() },
+  };
+});
+
 vi.mock("@/templating", async () => {
   const actual =
     await vi.importActual<typeof import("@/templating")>("@/templating");
@@ -71,7 +80,7 @@ vi.mock("@/templating", async () => {
   };
 });
 
-import { beforeEach, describe, expect, test } from "@/test";
+import { AgentModel, McpServerModel } from "@/models";
 
 type StreamResult = Extract<
   NonNullable<ConstructorParameters<typeof MockLanguageModelV3>[0]>["doStream"],
@@ -125,9 +134,18 @@ function modelEmitting(...attempts: ModelStreamPart[][]): MockLanguageModelV3 {
   });
 }
 
-// Primes only the non-DB boundaries (LLM selection, model factory, MCP tools).
-// The agent itself is a real row created per test; findById hits real PGlite.
 function primeAgent(model: MockLanguageModelV3) {
+  vi.mocked(AgentModel.findById).mockResolvedValue({
+    id: "agent-child",
+    name: "Child Agent",
+    agentType: "agent",
+    systemPrompt: "Handle the task.",
+    llmApiKeyId: null,
+    modelId: null,
+  } as never);
+  vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
+    null,
+  );
   mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
     chatApiKeyId: "org-key",
     selectedModel: "gemini-2.5-pro",
@@ -146,21 +164,14 @@ describe("executeA2AMessage real stream boundary", () => {
     vi.clearAllMocks();
   });
 
-  test("collects text, finishReason, and the response message from a real stream", async ({
-    makeOrganization,
-    makeUser,
-    makeInternalAgent,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const agent = await makeInternalAgent({ organizationId: org.id });
+  test("collects text, finishReason, and the response message from a real stream", async () => {
     primeAgent(modelEmitting(textChunks("Hello from A2A")));
 
     const result = await executeA2AMessage({
-      agentId: agent.id,
+      agentId: "agent-child",
       message: "Handle this",
-      organizationId: org.id,
-      userId: user.id,
+      organizationId: "org-1",
+      userId: "user-1",
       conversationId: "conv-1",
     });
 
@@ -171,14 +182,7 @@ describe("executeA2AMessage real stream boundary", () => {
     expect(result.usage?.completionTokens).toBe(2);
   });
 
-  test("surfaces the captured provider cause, not a generic NoOutputGeneratedError", async ({
-    makeOrganization,
-    makeUser,
-    makeInternalAgent,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const agent = await makeInternalAgent({ organizationId: org.id });
+  test("surfaces the captured provider cause, not a generic NoOutputGeneratedError", async () => {
     // A provider failure (e.g. billing) makes streamText produce zero output and
     // throw NoOutputGeneratedError; the real cause is only available via the
     // captured onError, which a2a must map into the ProviderError.
@@ -192,10 +196,10 @@ describe("executeA2AMessage real stream boundary", () => {
     );
 
     const error = await executeA2AMessage({
-      agentId: agent.id,
+      agentId: "agent-child",
       message: "Handle this",
-      organizationId: org.id,
-      userId: user.id,
+      organizationId: "org-1",
+      userId: "user-1",
       conversationId: "conv-1",
     }).catch((e: unknown) => e);
 
@@ -203,24 +207,17 @@ describe("executeA2AMessage real stream boundary", () => {
     expect((error as ProviderError).message).toContain("Insufficient credits");
   });
 
-  test("maps an exhausted empty response to a ProviderError EmptyResponse", async ({
-    makeOrganization,
-    makeUser,
-    makeInternalAgent,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const agent = await makeInternalAgent({ organizationId: org.id });
+  test("maps an exhausted empty response to a ProviderError EmptyResponse", async () => {
     // every attempt is content-free, so the recovery loop exhausts and throws
     // EmptyModelResponseError, which a2a maps to the EmptyResponse card.
     const model = modelEmitting(emptyChunks());
     primeAgent(model);
 
     const error = await executeA2AMessage({
-      agentId: agent.id,
+      agentId: "agent-child",
       message: "Handle this",
-      organizationId: org.id,
-      userId: user.id,
+      organizationId: "org-1",
+      userId: "user-1",
       conversationId: "conv-1",
     }).catch((e: unknown) => e);
 
@@ -231,14 +228,7 @@ describe("executeA2AMessage real stream boundary", () => {
     expect(model.doStreamCalls).toHaveLength(3);
   });
 
-  test("trims and retries a context-length rejection on the A2A messages path", async ({
-    makeOrganization,
-    makeUser,
-    makeInternalAgent,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const agent = await makeInternalAgent({ organizationId: org.id });
+  test("trims and retries a context-length rejection on the A2A messages path", async () => {
     const messages: ModelMessage[] = [
       { role: "user", content: "a".repeat(400) },
       { role: "assistant", content: "b".repeat(400) },
@@ -251,10 +241,10 @@ describe("executeA2AMessage real stream boundary", () => {
     primeAgent(model);
 
     const result = await executeA2AMessage({
-      agentId: agent.id,
+      agentId: "agent-child",
       message: "ignored when messages provided",
-      organizationId: org.id,
-      userId: user.id,
+      organizationId: "org-1",
+      userId: "user-1",
       conversationId: "conv-1",
       messages,
     });
@@ -267,14 +257,7 @@ describe("executeA2AMessage real stream boundary", () => {
     expect(result.text).toBe("Recovered after trim");
   });
 
-  test("stops via the repeat-call ceiling and surfaces a termination notice as text", async ({
-    makeOrganization,
-    makeUser,
-    makeInternalAgent,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const agent = await makeInternalAgent({ organizationId: org.id });
+  test("stops via the repeat-call ceiling and surfaces a termination notice as text", async () => {
     // The model repeats the same tool call every step (unique call ids, identical
     // name+args), so the run's tracker streak climbs to the ceiling.
     let step = 0;
@@ -321,10 +304,10 @@ describe("executeA2AMessage real stream boundary", () => {
     );
 
     const result = await executeA2AMessage({
-      agentId: agent.id,
+      agentId: "agent-child",
       message: "Handle this",
-      organizationId: org.id,
-      userId: user.id,
+      organizationId: "org-1",
+      userId: "user-1",
       conversationId: "conv-1",
     });
 

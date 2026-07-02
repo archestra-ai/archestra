@@ -219,12 +219,15 @@ describe("project memory tools", () => {
   test("saving into a full project tells the model to consolidate", async () => {
     const conversation = await projectConversation();
     await db.insert(schema.projectMemoriesTable).values(
-      Array.from({ length: PROJECT_MEMORY_MAX_ENTRIES_PER_PROJECT }, (_, i) => ({
-        projectId: project.id,
-        organizationId,
-        createdByUserId: user.id,
-        content: `memory ${i}`,
-      })),
+      Array.from(
+        { length: PROJECT_MEMORY_MAX_ENTRIES_PER_PROJECT },
+        (_, i) => ({
+          projectId: project.id,
+          organizationId,
+          createdByUserId: user.id,
+          content: `memory ${i}`,
+        }),
+      ),
     );
 
     const result = await executeArchestraTool(

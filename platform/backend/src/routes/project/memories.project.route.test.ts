@@ -157,12 +157,15 @@ describe("/api/projects/:id/memories", () => {
   test("the per-project cap returns 409 with a consolidation hint", async () => {
     const project = await seedProject("full");
     await db.insert(schema.projectMemoriesTable).values(
-      Array.from({ length: PROJECT_MEMORY_MAX_ENTRIES_PER_PROJECT }, (_, i) => ({
-        projectId: project.id,
-        organizationId,
-        createdByUserId: owner.id,
-        content: `memory ${i}`,
-      })),
+      Array.from(
+        { length: PROJECT_MEMORY_MAX_ENTRIES_PER_PROJECT },
+        (_, i) => ({
+          projectId: project.id,
+          organizationId,
+          createdByUserId: owner.id,
+          content: `memory ${i}`,
+        }),
+      ),
     );
 
     const res = await saveMemory(project.id, "one too many");

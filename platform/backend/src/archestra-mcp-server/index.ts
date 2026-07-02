@@ -45,10 +45,6 @@ import {
 } from "./knowledge-management";
 import { toolEntries as limitToolEntries, tools as limitTools } from "./limits";
 import {
-  toolEntries as memoryToolEntries,
-  tools as memoryTools,
-} from "./memory";
-import {
   toolEntries as llmProxyToolEntries,
   tools as llmProxyTools,
 } from "./llm-proxies";
@@ -60,6 +56,10 @@ import {
   toolEntries as mcpServerToolEntries,
   tools as mcpServerTools,
 } from "./mcp-servers";
+import {
+  toolEntries as memoryToolEntries,
+  tools as memoryTools,
+} from "./memory";
 import {
   toolEntries as policyToolEntries,
   tools as policyTools,

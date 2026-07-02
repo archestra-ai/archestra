@@ -10,7 +10,10 @@ import {
 import { describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-async function seed(makeOrganization: () => Promise<{ id: string }>, user: User) {
+async function seed(
+  makeOrganization: () => Promise<{ id: string }>,
+  user: User,
+) {
   const organizationId = (await makeOrganization()).id;
   const project = await ProjectModel.create({
     organizationId,
@@ -98,10 +101,7 @@ describe("ProjectMemoryModel", () => {
       projectId: project.id,
       organizationId,
     });
-    expect(listed.map((memory) => memory.content)).toEqual([
-      "second",
-      "first",
-    ]);
+    expect(listed.map((memory) => memory.content)).toEqual(["second", "first"]);
   });
 
   test("update/delete with a foreign project or org resolve to not-found", async ({
@@ -160,12 +160,15 @@ describe("ProjectMemoryModel", () => {
     // Fill straight through the model-free bulk path — creating 100 entries
     // one lock-transaction at a time is needless test latency.
     await db.insert(schema.projectMemoriesTable).values(
-      Array.from({ length: PROJECT_MEMORY_MAX_ENTRIES_PER_PROJECT }, (_, i) => ({
-        projectId: project.id,
-        organizationId,
-        createdByUserId: user.id,
-        content: `memory ${i}`,
-      })),
+      Array.from(
+        { length: PROJECT_MEMORY_MAX_ENTRIES_PER_PROJECT },
+        (_, i) => ({
+          projectId: project.id,
+          organizationId,
+          createdByUserId: user.id,
+          content: `memory ${i}`,
+        }),
+      ),
     );
 
     await expect(

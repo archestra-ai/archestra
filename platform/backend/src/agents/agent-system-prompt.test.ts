@@ -7,6 +7,7 @@ import {
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_SAVE_MEMORY_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
@@ -446,6 +447,42 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("(no memories saved yet)");
     expect(prompt).toContain(brand(TOOL_SAVE_MEMORY_SHORT_NAME));
     expect(prompt).toContain(brand(TOOL_DELETE_MEMORY_SHORT_NAME));
+  });
+
+  test("run_tool implies memory guidance only when the tools are actually assigned", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    seedAndAssignArchestraTools,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: null,
+      toolExposureMode: "search_and_run_only",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+    const withRunTool: Record<string, Tool> = {
+      [brand(TOOL_RUN_TOOL_SHORT_NAME)]: {} as Tool,
+    };
+    const common = {
+      agent,
+      mcpTools: withRunTool,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+      projectMemories: [],
+    };
+
+    // run_tool exposed, but the memory tools are not assigned to the agent —
+    // dispatch would deny them, so the prompt must not instruct save_memory.
+    const unassigned = await buildAgentSystemPrompt(common);
+    expect(unassigned).toContain(PROJECT_MEMORY_PREFIX);
+    expect(unassigned).not.toContain(brand(TOOL_SAVE_MEMORY_SHORT_NAME));
+
+    // once assigned, the same exposure unlocks the guidance.
+    await seedAndAssignArchestraTools(agent.id);
+    const assigned = await buildAgentSystemPrompt(common);
+    expect(assigned).toContain(brand(TOOL_SAVE_MEMORY_SHORT_NAME));
   });
 
   test("the memory block is capped: older entries are dropped with a note", async ({

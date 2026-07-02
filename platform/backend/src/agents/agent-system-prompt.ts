@@ -18,7 +18,7 @@ import {
 } from "@archestra/shared";
 import type { Tool } from "ai";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { TeamModel, UserModel } from "@/models";
+import { TeamModel, ToolModel, UserModel } from "@/models";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
@@ -132,7 +132,11 @@ export async function buildAgentSystemPrompt(params: {
     : null;
 
   const projectMemoryPrompt = projectMemories
-    ? buildProjectMemoryPrompt(projectMemories, mcpTools)
+    ? await buildProjectMemoryPrompt({
+        memories: projectMemories,
+        mcpTools,
+        agentId,
+      })
     : null;
 
   return (
@@ -194,18 +198,31 @@ async function renderAgentPrompt(params: {
  * frame neutralization), so a stored note cannot close its element and smuggle
  * text outside the reference-data block.
  */
-function buildProjectMemoryPrompt(
-  memories: Array<{ id: string; content: string }>,
-  mcpTools: Record<string, Tool>,
-): string {
+async function buildProjectMemoryPrompt(params: {
+  memories: Array<{ id: string; content: string }>;
+  mcpTools: Record<string, Tool>;
+  agentId: string;
+}): Promise<string> {
+  const { memories, mcpTools, agentId } = params;
   const saveMemory = archestraMcpBranding.getToolName(
     TOOL_SAVE_MEMORY_SHORT_NAME,
   );
-  const canReachMemoryTools =
-    saveMemory in mcpTools ||
-    archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME) in mcpTools;
+  // Reachable when top-level, or via run_tool for a search_and_run_only agent
+  // — but run_tool dispatch still enforces per-agent assignment, so presence
+  // of run_tool alone is not enough: check the actual assignment rather than
+  // instructing the model to call a tool it would be denied.
+  let canReachMemoryTools = saveMemory in mcpTools;
+  if (
+    !canReachMemoryTools &&
+    archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME) in mcpTools
+  ) {
+    const assignedNames = await ToolModel.getMcpToolNamesByAgent(agentId);
+    canReachMemoryTools = assignedNames.includes(saveMemory);
+  }
 
   const entries: string[] = [];
+  // Debit each entry plus its joining newline so the rendered block stays
+  // within the cap exactly, matching the constant's contract.
   let budget = PROJECT_MEMORY_MAX_INJECTED_LENGTH;
   let dropped = 0;
   for (const memory of memories) {
@@ -213,12 +230,12 @@ function buildProjectMemoryPrompt(
     // can never masquerade as an attribute even if that invariant changes.
     const id = memory.id.replace(/["<>&]/g, "");
     const entry = `<memory id="${id}">\n${neutralizeMemoryFrameTags(memory.content)}\n</memory>`;
-    if (entry.length > budget) {
+    if (entry.length + 1 > budget) {
       dropped = memories.length - entries.length;
       break;
     }
     entries.push(entry);
-    budget -= entry.length;
+    budget -= entry.length + 1;
   }
   if (dropped > 0) {
     entries.push(

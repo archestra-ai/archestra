@@ -22,10 +22,17 @@ class ProjectMemoryModel {
     content: string;
   }): Promise<ProjectMemory> {
     return db.transaction(async (tx) => {
+      // org-scoped like every other query here: the service pre-checks access,
+      // but the model must not be usable to write into a foreign org's project.
       const [locked] = await tx
         .select({ id: schema.projectsTable.id })
         .from(schema.projectsTable)
-        .where(eq(schema.projectsTable.id, params.projectId))
+        .where(
+          and(
+            eq(schema.projectsTable.id, params.projectId),
+            eq(schema.projectsTable.organizationId, params.organizationId),
+          ),
+        )
         .for("update");
       if (!locked) throw new ProjectMemoryProjectGoneError();
 
@@ -70,7 +77,13 @@ class ProjectMemoryModel {
           eq(schema.projectMemoriesTable.organizationId, params.organizationId),
         ),
       )
-      .orderBy(desc(schema.projectMemoriesTable.createdAt));
+      // id as tiebreaker: now() is transaction-start time, so same-instant
+      // inserts tie on createdAt and would otherwise order nondeterministically
+      // across the UI, the tool output, and the prompt block.
+      .orderBy(
+        desc(schema.projectMemoriesTable.createdAt),
+        desc(schema.projectMemoriesTable.id),
+      );
     return rows;
   }
 

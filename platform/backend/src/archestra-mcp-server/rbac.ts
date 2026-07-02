@@ -334,9 +334,7 @@ export async function filterToolNamesByPermission(
 }
 
 /** A tool's required permissions as a list ([] = none required). */
-function requiredPermissions(
-  shortName: ArchestraToolShortName,
-): Permission[] {
+function requiredPermissions(shortName: ArchestraToolShortName): Permission[] {
   const perm = TOOL_PERMISSIONS[shortName];
   if (!perm) return [];
   return Array.isArray(perm) ? perm : [perm];

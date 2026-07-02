@@ -29,9 +29,7 @@ const projectMemoriesTable = pgTable(
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
   },
-  (table) => [
-    index("project_memories_project_idx").on(table.projectId),
-  ],
+  (table) => [index("project_memories_project_idx").on(table.projectId)],
 );
 
 export default projectMemoriesTable;

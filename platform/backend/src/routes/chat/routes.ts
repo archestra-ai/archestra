@@ -660,22 +660,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           slimChatErrorUi,
           organization,
         ] = await Promise.all([
-          Promise.all([projectInstructionsPromise, projectMemoriesPromise]).then(
-            ([projectInstructions, projectMemories]) =>
-              buildChatContext({
-                conversationId,
-                agentId,
-                agent,
-                user: { id: user.id, email: user.email, name: user.name },
-                organizationId,
-                hookSessionContext,
-                projectInstructions,
-                projectMemories,
-                hookRunCollector,
-                elicitation: chatMcpElicitation,
-                subagentToolStream,
-                abortSignal: chatAbortController.signal,
-              }),
+          Promise.all([
+            projectInstructionsPromise,
+            projectMemoriesPromise,
+          ]).then(([projectInstructions, projectMemories]) =>
+            buildChatContext({
+              conversationId,
+              agentId,
+              agent,
+              user: { id: user.id, email: user.email, name: user.name },
+              organizationId,
+              hookSessionContext,
+              projectInstructions,
+              projectMemories,
+              hookRunCollector,
+              elicitation: chatMcpElicitation,
+              subagentToolStream,
+              abortSignal: chatAbortController.signal,
+            }),
           ),
           OrganizationModel.getSlimChatErrorUi(organizationId),
           OrganizationModel.getById(organizationId),

@@ -618,12 +618,14 @@ export async function handleLLMProxy<
         `${providerName} request blocked due to token cost limit`,
       );
       // Preserve the proxy-compatible error envelope so chat clients can read
-      // structured limit metadata. Use an Archestra-specific error `type` rather
-      // than the provider-style "rate_limit_exceeded": this block is an Archestra
-      // budget enforcement, not the provider throttling traffic, and labelling it
-      // as a rate limit made clients frame it as "not your usage limit". The
-      // stable `code` keeps backward-compatible structured detection working.
-      return reply.status(429).send({
+      // structured limit metadata. This is Archestra budget enforcement, not the
+      // provider throttling traffic, so it must not look like a rate limit:
+      // a 429 makes every LLM SDK auto-retry a block that cannot clear on retry,
+      // and makes clients frame it as a provider limit ("not your usage limit").
+      // 402 Payment Required is non-retryable in all SDKs and semantically a
+      // budget stop. The Archestra-specific `type` plus the stable `code` keep
+      // structured detection working.
+      return reply.status(402).send({
         error: {
           message: contentMessage,
           type: "usage_limit_exceeded",

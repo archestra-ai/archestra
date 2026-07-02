@@ -246,9 +246,11 @@ describe("mapProviderError - OpenAI", () => {
     });
 
     it("marks usage-limit budget overages from the proxy", () => {
+      // The proxy returns Archestra budget blocks as 402 with type
+      // usage_limit_exceeded (deliberately NOT a 429/rate-limit shape).
       const error = createOpenAIError(
-        429,
-        OpenAIErrorTypes.RATE_LIMIT,
+        402,
+        "usage_limit_exceeded",
         "This request was blocked by Archestra (not the AI provider): the organization-level cost limit has been reached.",
         "token_cost_limit_exceeded",
         undefined,
@@ -259,9 +261,9 @@ describe("mapProviderError - OpenAI", () => {
       );
       const result = mapProviderError(error, "openai");
 
-      // An Archestra budget block is reclassified off the retryable RateLimit
-      // code onto the dedicated, non-retryable UsageLimitExceeded code so the UI
-      // attributes it to Archestra and drops the retry affordance.
+      // An Archestra budget block gets the dedicated, non-retryable
+      // UsageLimitExceeded code so the UI attributes it to Archestra and
+      // drops the retry affordance.
       expect(result.code).toBe(ChatErrorCode.UsageLimitExceeded);
       expect(result.isRetryable).toBe(false);
       expect(result.usageLimitExceeded).toBe(true);

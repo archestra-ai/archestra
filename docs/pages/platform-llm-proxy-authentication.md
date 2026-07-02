@@ -157,6 +157,8 @@ Virtual keys are still the recommended path for generic LLM clients that cannot 
 
 You can edit a client_credentials client later to update its name, allowed LLM proxies, or provider key mappings; edit an authorization_code client to update its redirect URIs. The grant type is fixed at creation. Rotate the client secret when the existing secret needs to be replaced.
 
+Each OAuth client also has a visibility level — **Personal** (only its creator), **Teams** (members of selected teams), or **Organization** — controlling who can see, edit, rotate, and delete it. New clients default to Personal; sharing with teams requires `llmOauthClient:team-admin`, organization-wide visibility requires `llmOauthClient:admin`, and admins see every client regardless. Visibility only governs management access — it does not change which LLM proxies or provider keys the client's tokens can use at runtime.
+
 ### Getting an Access Token
 
 ```bash

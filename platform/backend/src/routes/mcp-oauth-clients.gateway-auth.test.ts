@@ -44,6 +44,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [gateway.id],
     });
@@ -78,6 +79,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [allowedGateway.id],
     });
@@ -103,6 +105,7 @@ describe("MCP OAuth client gateway authorization", () => {
     // The allowedGatewayIds check passes, but the org guard must still reject.
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: clientOrg.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [otherOrgGateway.id],
     });
@@ -122,6 +125,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [gateway.id],
     });
@@ -145,6 +149,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [gateway.id],
     });
@@ -168,6 +173,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [gateway.id],
     });
@@ -190,6 +196,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [gateway.id],
     });
@@ -217,6 +224,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [gateway.id],
     });
@@ -257,6 +265,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: user.id,
       name: "Agentic Chat Server",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],
@@ -302,6 +311,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: user.id,
       name: "Agentic Chat Server",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],
@@ -349,6 +359,7 @@ describe("MCP OAuth client gateway authorization", () => {
     // access.
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: user.id,
       name: "Chat Interface",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],
@@ -398,6 +409,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: user.id,
       name: "Chat Interface",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],

@@ -12,6 +12,7 @@ describe("McpOauthClientModel", () => {
 
     const result = await McpOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedGatewayIds: [gatewayId],
     });
@@ -30,6 +31,7 @@ describe("McpOauthClientModel", () => {
     const organization = await makeOrganization();
     const { oauthClient, clientSecret } = await McpOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [crypto.randomUUID()],
     });
@@ -53,6 +55,7 @@ describe("McpOauthClientModel", () => {
     const organization = await makeOrganization();
     const { oauthClient, clientSecret } = await McpOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [crypto.randomUUID()],
     });
@@ -85,6 +88,7 @@ describe("McpOauthClientModel", () => {
     const organization = await makeOrganization();
     const { oauthClient, clientSecret } = await McpOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [crypto.randomUUID()],
     });
@@ -112,6 +116,7 @@ describe("McpOauthClientModel", () => {
     const orgB = await makeOrganization();
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: orgA.id,
+      authorId: crypto.randomUUID(),
       name: "org-a-service",
       allowedGatewayIds: [crypto.randomUUID()],
     });

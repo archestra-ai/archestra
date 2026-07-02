@@ -49,6 +49,7 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
 
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: org.id,
+      authorId: user.id,
       name: "Agentic Chat Server",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],
@@ -89,6 +90,7 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: org.id,
+      authorId: outsider.id,
       name: "Agentic Chat Server",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],
@@ -139,6 +141,7 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
 
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: org.id,
+      authorId: user.id,
       name: "Chat Interface",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],
@@ -187,6 +190,7 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: org.id,
+      authorId: user.id,
       name: "Chat Interface",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],

@@ -44616,6 +44616,13 @@ export type GetLlmOauthClientsResponses = {
         }>;
         redirectUris: Array<string>;
         disabled: boolean;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        authorName: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -44633,6 +44640,8 @@ export type CreateLlmOauthClientData = {
             providerApiKeyId: string;
         }>;
         redirectUris?: Array<string>;
+        scope?: 'personal' | 'team' | 'org';
+        teams?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -44722,6 +44731,13 @@ export type CreateLlmOauthClientResponses = {
         }>;
         redirectUris: Array<string>;
         disabled: boolean;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        authorName: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         createdAt: string;
         updatedAt: string;
         clientSecret: string;
@@ -44825,6 +44841,8 @@ export type UpdateLlmOauthClientData = {
             providerApiKeyId: string;
         }>;
         redirectUris?: Array<string>;
+        scope?: 'personal' | 'team' | 'org';
+        teams?: Array<string>;
     };
     path: {
         id: string;
@@ -44916,6 +44934,13 @@ export type UpdateLlmOauthClientResponses = {
         }>;
         redirectUris: Array<string>;
         disabled: boolean;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        authorName: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         createdAt: string;
         updatedAt: string;
     };
@@ -45015,6 +45040,13 @@ export type RotateLlmOauthClientSecretResponses = {
         }>;
         redirectUris: Array<string>;
         disabled: boolean;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        authorName: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         createdAt: string;
         updatedAt: string;
         clientSecret: string;
@@ -45835,6 +45867,13 @@ export type GetMcpOauthClientsResponses = {
         allowedGatewayIds: Array<string>;
         redirectUris: Array<string>;
         disabled: boolean;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        authorName: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -45848,6 +45887,8 @@ export type CreateMcpOauthClientData = {
         grantType?: 'client_credentials' | 'authorization_code';
         allowedGatewayIds?: Array<string>;
         redirectUris?: Array<string>;
+        scope?: 'personal' | 'team' | 'org';
+        teams?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -45932,6 +45973,13 @@ export type CreateMcpOauthClientResponses = {
         allowedGatewayIds: Array<string>;
         redirectUris: Array<string>;
         disabled: boolean;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        authorName: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         createdAt: string;
         updatedAt: string;
         clientSecret: string;
@@ -46031,6 +46079,8 @@ export type UpdateMcpOauthClientData = {
         grantType?: 'client_credentials' | 'authorization_code';
         allowedGatewayIds?: Array<string>;
         redirectUris?: Array<string>;
+        scope?: 'personal' | 'team' | 'org';
+        teams?: Array<string>;
     };
     path: {
         id: string;
@@ -46117,6 +46167,13 @@ export type UpdateMcpOauthClientResponses = {
         allowedGatewayIds: Array<string>;
         redirectUris: Array<string>;
         disabled: boolean;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        authorName: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         createdAt: string;
         updatedAt: string;
     };
@@ -46211,6 +46268,13 @@ export type RotateMcpOauthClientSecretResponses = {
         allowedGatewayIds: Array<string>;
         redirectUris: Array<string>;
         disabled: boolean;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        authorName: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         createdAt: string;
         updatedAt: string;
         clientSecret: string;

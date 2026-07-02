@@ -289,6 +289,9 @@ describe("authPlugin integration", () => {
         { agent: ["create"] },
         expect.objectContaining({}),
         undefined,
+        // DB-fresh identity from populateUserInfo, so the permission check
+        // never re-reads the (possibly stale) session cookie.
+        { userId: user.id, organizationId: org.id },
       );
     });
   });

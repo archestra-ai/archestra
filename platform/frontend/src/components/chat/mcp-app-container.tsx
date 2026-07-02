@@ -1,5 +1,5 @@
 import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
-import { AppWindow, MoreVertical, PanelRight, Trash2 } from "lucide-react";
+import { MoreVertical, PanelRight, Trash2 } from "lucide-react";
 import type React from "react";
 import {
   Component,
@@ -13,8 +13,7 @@ import { AppDeleteDialog } from "@/app/apps/_parts/app-delete-dialog";
 import { AppDiagnosticsPanel } from "@/components/chat/app-diagnostics-panel";
 import { useApps } from "@/components/chat/apps-context";
 import {
-  getAppRenderVerb,
-  isSupersededRender,
+  distinctPanelApps,
   mcpToolLabel,
 } from "@/components/chat/chat-messages.utils";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
@@ -190,6 +189,9 @@ export function McpAppSection({
     null,
   );
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // An unavailable (deleted / access-lost) owned app isn't in the registry, so
+  // its pill can't use the shared open state — it toggles its error locally.
+  const [unavailableOpen, setUnavailableOpen] = useState(false);
   const [resourceState, setResourceState] = useState<{
     key: string;
     state: "unknown" | "renderable" | "empty";
@@ -287,44 +289,28 @@ export function McpAppSection({
     return null;
   }
 
-  // A superseded render (a newer render of the same owned app exists in the
-  // conversation) collapses to a compact changelog pill: it's not the live
-  // render, so it never mounts the runtime or its diagnostics. It's never pressed
-  // (the latest render's pill reflects the open state). Clicking it opens the app
-  // inline exactly like any other pill — the context resolves this stale id to
-  // the app's latest render.
-  if (!isPanelSurface && isSupersededRender({ apps, toolCallId, appId })) {
-    // e.g. "Dashboard · v2 · Updated" — the version and verb this render produced.
-    const changelogLabel = [
-      headerName,
-      appVersion ? `v${appVersion}` : null,
-      getAppRenderVerb(toolName),
-    ]
-      .filter(Boolean)
-      .join(" · ");
+  // A deleted (or no-longer-accessible) owned app: it's already dropped from the
+  // panel, so this only shows in the chat stream. It renders as a regular app
+  // pill with a red error dot; expanding it shows the unavailable message styled
+  // as an error instead of mounting the runtime (which would 404).
+  if (ownedAppUnavailable) {
     return (
       <>
         <McpAppMarkerCircle
-          label={changelogLabel}
-          pressed={false}
-          onClick={() => {
-            if (toolCallId) openInline(toolCallId);
-          }}
+          label={headerName}
+          pressed={unavailableOpen}
+          hasError
+          onClick={() => setUnavailableOpen((open) => !open)}
         />
-        {toolDetails ? <div className="w-full">{toolDetails}</div> : null}
+        <div className="flex w-full flex-col items-start gap-2">
+          {toolDetails ? <div className="w-full">{toolDetails}</div> : null}
+          {unavailableOpen ? (
+            <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+              {headerName} app is no longer available
+            </div>
+          ) : null}
+        </div>
       </>
-    );
-  }
-
-  // A deleted (or no-longer-accessible) owned app: it's already dropped from the
-  // panel, so this only shows in the chat stream. Degrade to a small, light pill
-  // instead of mounting the runtime (which would 404) behind browser-like chrome.
-  if (ownedAppUnavailable) {
-    return (
-      <div className="flex w-fit items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1 text-xs text-muted-foreground">
-        <AppWindow className="h-3.5 w-3.5 shrink-0" />
-        <span>{headerName} app is no longer available</span>
-      </div>
     );
   }
 
@@ -373,11 +359,20 @@ export function McpAppSection({
   // settings (owned apps) and a kebab with delete (owned apps). Center is the
   // app name, or an app switcher when the panel hosts several apps.
   const isOwnedInPanel = isPanelSurface && !!appId && !!ownedApp;
+  // The switcher lists one entry per distinct app (the registry keeps every
+  // render). Map the open render — which may be an older one of the same app —
+  // to its distinct representative so it still reads as selected.
+  const switcherApps = distinctPanelApps(apps);
+  const openApp = apps.find((app) => app.toolCallId === openToolCallId);
+  const switcherValue =
+    (openApp?.appId
+      ? switcherApps.find((app) => app.appId === openApp.appId)?.toolCallId
+      : openApp?.toolCallId) ?? openToolCallId;
   const panelCenter =
-    isPanelSurface && apps.length > 1 ? (
+    isPanelSurface && switcherApps.length > 1 ? (
       <McpAppSwitcher
-        value={openToolCallId}
-        options={apps.map((app) => ({
+        value={switcherValue}
+        options={switcherApps.map((app) => ({
           value: app.toolCallId,
           label: app.label,
         }))}
@@ -487,9 +482,7 @@ export function McpAppSection({
   const pressed = isOpen && !shownInSidebar;
   const marker = (
     <McpAppMarkerCircle
-      label={
-        shownInSidebar ? `${headerName} · Shown in right panel` : headerName
-      }
+      label={headerName}
       pressed={pressed}
       hasError={hasRuntimeError}
       onClick={() => {
@@ -503,8 +496,9 @@ export function McpAppSection({
   // Everything under the circle+marker row stacks in one full-width column:
   // tool-call details (above the app), then the inline app card + its
   // "Open in right panel" button, then the diagnostics summary. The inline app
-  // renders only for the open app while it isn't hosted in the sidebar; other
-  // apps show just their pill (one app open at a time).
+  // and its diagnostics render only for the open app while it isn't hosted in
+  // the sidebar; other (closed) apps show just their pill — the error stays
+  // hidden with the iframe (one app open at a time; the pill's red dot remains).
   const belowColumn = (
     <div className="flex w-full flex-col items-start gap-2">
       {toolDetails ? <div className="w-full">{toolDetails}</div> : null}
@@ -527,9 +521,9 @@ export function McpAppSection({
               </Button>
             </div>
           ) : null}
+          {diagnostics}
         </div>
       ) : null}
-      {diagnostics}
     </div>
   );
 

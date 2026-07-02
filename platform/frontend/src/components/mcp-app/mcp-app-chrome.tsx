@@ -269,7 +269,7 @@ export function McpAppMarkerCircle({
   hasError = false,
   onClick,
 }: {
-  /** Tooltip text — the app name (plus optional context like "Shown in right panel"). */
+  /** Tooltip text — the app name. */
   label: string;
   /** Pressed = the app's inline render is expanded under the pill. */
   pressed?: boolean;

@@ -562,23 +562,85 @@ describe("McpAppSection panel hosting", () => {
   });
 });
 
-describe("McpAppSection superseded renders", () => {
+describe("McpAppSection older renders (no suppression)", () => {
   const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearAllAppDiagnostics();
     mockUseApp.mockReturnValue({ data: undefined } as ReturnType<
       typeof useApp
     >);
   });
 
-  it("collapses to a changelog pill when a newer render of the same app exists", async () => {
+  it("hides the diagnostics panel while the app is closed, shows it once opened", async () => {
+    const user = userEvent.setup();
+    reportAppDiagnostic(APP_ID, 1, {
+      type: "csp-violation",
+      message: "script-src blocked eval",
+    });
+
     await act(async () => {
       render(
-        // Registry's latest render of APP_ID is tc2, so the tc1 section below is
-        // superseded and must render the static pill, not a live iframe.
+        // Another app (tc-other) is newest, so it's the default open one and the
+        // rendered APP_ID section (tc1) starts closed.
         <AppsProvider
           apps={[
+            {
+              toolCallId: "tc-other",
+              label: "Other App",
+              uiResourceUri: "resource://test-server/ui-other",
+              createdAt: 1,
+            },
+            {
+              toolCallId: "tc1",
+              label: "Dashboard",
+              uiResourceUri: defaultProps.uiResourceUri,
+              appId: APP_ID,
+              createdAt: 0,
+            },
+          ]}
+        >
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            appName="Dashboard"
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </AppsProvider>,
+      );
+    });
+
+    // Closed: the error is hidden along with the iframe.
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+    expect(screen.queryByText(/runtime error/i)).not.toBeInTheDocument();
+
+    // Opening the pill reveals both the app and its diagnostics.
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    });
+    expect(document.querySelector("iframe")).toBeInTheDocument();
+    expect(screen.getByText(/runtime error/i)).toBeInTheDocument();
+  });
+
+  it("shows an older owned render as a plain pill (app name only) that opens inline on click", async () => {
+    const user = userEvent.setup();
+
+    await act(async () => {
+      render(
+        // Both renders live in the registry (no dedup). tc2 is newest, so it's
+        // the default-open app; the rendered older tc1 section shows just a pill
+        // labelled with the app name — no "· v1 · Updated" changelog text.
+        <AppsProvider
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "Dashboard",
+              uiResourceUri: defaultProps.uiResourceUri,
+              appId: APP_ID,
+              createdAt: 0,
+            },
             {
               toolCallId: "tc2",
               label: "Dashboard",
@@ -601,10 +663,17 @@ describe("McpAppSection superseded renders", () => {
       );
     });
 
-    expect(
-      screen.getByRole("button", { name: /Dashboard · v1 · Updated/ }),
-    ).toBeInTheDocument();
+    // Plain pill, app name only, and not open (tc2 is the default open app).
+    const pill = screen.getByRole("button", { name: "Dashboard" });
+    expect(screen.queryByText(/· Updated/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/v1/)).not.toBeInTheDocument();
     expect(document.querySelector("iframe")).not.toBeInTheDocument();
+
+    // Clicking the older pill opens its app inline (latest version, under it).
+    await act(async () => {
+      await user.click(pill);
+    });
+    expect(document.querySelector("iframe")).toBeInTheDocument();
   });
 
   it("renders the live surface for the latest render of an app", async () => {
@@ -636,6 +705,46 @@ describe("McpAppSection superseded renders", () => {
 
     expect(document.querySelector("iframe")).toBeInTheDocument();
     expect(screen.queryByText(/· Updated/)).not.toBeInTheDocument();
+  });
+});
+
+describe("McpAppSection unavailable owned app", () => {
+  const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // A settled 404: the app was deleted or access was lost.
+    mockUseApp.mockReturnValue({ data: null, isSuccess: true } as ReturnType<
+      typeof useApp
+    >);
+  });
+
+  it("shows a plain pill and reveals the error message only when expanded", async () => {
+    const user = userEvent.setup();
+
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          appId={APP_ID}
+          appName="Dashboard"
+          toolCallId="tc1"
+          preloadedResource={preloadedResource}
+        />,
+      );
+    });
+
+    // Collapsed: just the pill, no error text, and never the runtime (would 404).
+    const pill = screen.getByRole("button", { name: "Dashboard" });
+    expect(screen.queryByText(/no longer available/i)).not.toBeInTheDocument();
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+
+    // Expanding shows the unavailable message; the runtime still never mounts.
+    await act(async () => {
+      await user.click(pill);
+    });
+    expect(screen.getByText(/no longer available/i)).toBeInTheDocument();
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
   });
 });
 

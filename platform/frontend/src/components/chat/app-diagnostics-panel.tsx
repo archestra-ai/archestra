@@ -1,12 +1,7 @@
 "use client";
 
-import { AlertTriangle, ChevronDown } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useSyncExternalStore } from "react";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   getAppDiagnosticCounts,
   getAppDiagnostics,
@@ -16,10 +11,12 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * Collapsible summary of an owned app's latest-render runtime errors / logs,
- * shown below the app in the chat stream. Collapsed it's a one-line count;
- * expanded it lists the actual (untrusted, plain-text) entries plus a note that
- * they're handed to the model on the next message so it can fix them.
+ * Summary of an owned app's latest-render runtime errors / logs, shown below the
+ * app in the chat stream. It's only rendered while the app is open (its errors
+ * hide with the iframe when collapsed), so it lists the actual (untrusted,
+ * plain-text) entries directly — no accordion — plus a note that they're handed
+ * to the model on the next message so it can fix them. Its width matches the app
+ * card and the "Open in right panel" button (`max-w-[80%]`).
  */
 export function AppDiagnosticsPanel({ appId }: { appId: string }) {
   const counts = useSyncExternalStore(
@@ -39,17 +36,17 @@ export function AppDiagnosticsPanel({ appId }: { appId: string }) {
     : `${logCount} ${logCount === 1 ? "log" : "logs"} from this app`;
 
   return (
-    <Collapsible
+    <div
       className={cn(
-        "w-fit max-w-full overflow-hidden rounded-md border text-xs",
+        "w-full max-w-[80%] overflow-hidden rounded-md border text-xs",
         hasErrors
           ? "border-destructive/50 bg-destructive/10"
           : "border-border bg-muted/50",
       )}
     >
-      <CollapsibleTrigger
+      <div
         className={cn(
-          "group/diag flex w-full items-center gap-1.5 px-2 py-1 text-left",
+          "flex w-full items-center gap-1.5 px-2 py-1",
           hasErrors ? "text-destructive" : "text-muted-foreground",
         )}
       >
@@ -60,30 +57,27 @@ export function AppDiagnosticsPanel({ appId }: { appId: string }) {
             · {logCount} {logCount === 1 ? "log" : "logs"}
           </span>
         ) : null}
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform group-data-[state=open]/diag:rotate-180" />
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="flex flex-col gap-2 border-t border-inherit px-2 py-2">
-          <ul className="flex flex-col gap-1">
-            {entries.map((entry) => (
-              <li
-                key={`${entry.type}:${entry.message}`}
-                className={cn(
-                  "break-words font-mono text-[11px] leading-snug",
-                  isErrorDiagnostic(entry.type)
-                    ? "text-destructive"
-                    : "text-muted-foreground",
-                )}
-              >
-                {entry.message}
-              </li>
-            ))}
-          </ul>
-          <p className="text-muted-foreground">
-            Sent to the assistant with your next message so it can fix them.
-          </p>
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+      </div>
+      <div className="flex flex-col gap-2 border-t border-inherit px-2 py-2">
+        <ul className="flex flex-col gap-1">
+          {entries.map((entry) => (
+            <li
+              key={`${entry.type}:${entry.message}`}
+              className={cn(
+                "break-words font-mono text-[11px] leading-snug",
+                isErrorDiagnostic(entry.type)
+                  ? "text-destructive"
+                  : "text-muted-foreground",
+              )}
+            >
+              {entry.message}
+            </li>
+          ))}
+        </ul>
+        <p className="text-muted-foreground">
+          Sent to the assistant with your next message so it can fix them.
+        </p>
+      </div>
+    </div>
   );
 }

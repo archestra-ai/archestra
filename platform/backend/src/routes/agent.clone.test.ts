@@ -3,6 +3,9 @@ import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import {
   getAgentTypePermissionChecker,
+  hasAnyAgentTypeAdminPermission,
+  hasAnyAgentTypeReadPermission,
+  isAgentTypeAdmin,
   requireAgentModifyPermission,
 } from "@/auth";
 import db, { schema } from "@/database";
@@ -12,14 +15,7 @@ import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { type Agent, ApiError, type User } from "@/types";
 
-vi.mock("@/auth", () => ({
-  getAgentTypePermissionChecker: vi.fn(),
-  hasAnyAgentTypeReadPermission: vi.fn().mockResolvedValue(true),
-  requireAgentModifyPermission: vi.fn(),
-  requireAgentTypePermission: vi.fn(),
-  isAgentTypeAdmin: vi.fn().mockResolvedValue(true),
-  hasAnyAgentTypeAdminPermission: vi.fn().mockResolvedValue(true),
-}));
+vi.mock("@/auth");
 
 const mockGetAgentTypePermissionChecker = getAgentTypePermissionChecker as Mock;
 const mockRequireAgentModifyPermission = requireAgentModifyPermission as Mock;
@@ -31,6 +27,10 @@ describe("clone agent route", () => {
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
+
+    vi.mocked(hasAnyAgentTypeReadPermission).mockResolvedValue(true);
+    vi.mocked(isAgentTypeAdmin).mockResolvedValue(true);
+    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(true);
 
     user = await makeUser();
     const organization = await makeOrganization();

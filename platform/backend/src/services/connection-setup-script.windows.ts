@@ -1,4 +1,9 @@
-import { DEFAULT_APP_NAME, VIRTUAL_KEY_HEADER } from "@archestra/shared";
+import {
+  CLAUDE_CODE_CLIENT_ID,
+  DEFAULT_APP_NAME,
+  EXTERNAL_AGENT_ID_HEADER,
+  VIRTUAL_KEY_HEADER,
+} from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
 import type {
   SetupScriptContext,
@@ -21,8 +26,13 @@ import type {
  * - ends with next steps + revocation guidance.
  *
  * Targets Windows PowerShell 5.1 (the OS default) as well as PowerShell 7+: no
- * `-AsHashtable`, ternary, or null-coalescing; native command failures are not
- * promoted to terminating errors so remove-then-add stays idempotent.
+ * `-AsHashtable`, ternary, or null-coalescing. A native command's non-zero exit
+ * is not promoted to a terminating error ($PSNativeCommandUseErrorActionPreference),
+ * but that setting does not cover stderr: under $ErrorActionPreference='Stop'
+ * Windows PowerShell 5.1 turns any native-command stderr line into a terminating
+ * error that 2>$null does not suppress, so the idempotent MCP remove-then-add —
+ * whose remove writes "No MCP server named …" to stderr when the server is not
+ * yet registered — wraps the remove in try/catch to stay idempotent.
  */
 export function renderWindowsSetupScript(ctx: SetupScriptContext): string {
   const sections: string[] = [header(ctx)];
@@ -71,8 +81,11 @@ function psq(value: string): string {
 /**
  * Color setup + logging helpers. Colors are emitted only when NO_COLOR is
  * unset. `Say` marks section headers, `Ok` a success, `Warn`/`Err` advisory
- * and failure lines. Native command failures are demoted so an idempotent
- * remove-then-add never aborts the run.
+ * and failure lines. A native command's non-zero exit is demoted from a
+ * terminating error ($PSNativeCommandUseErrorActionPreference = $false); its
+ * stderr — which $ErrorActionPreference='Stop' still promotes to a terminating
+ * error on Windows PowerShell 5.1, past 2>$null — is instead swallowed per-call
+ * (try/catch around the idempotent MCP remove) so a re-run never aborts.
  */
 const SCRIPT_HELPERS = `$ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -325,7 +338,7 @@ function claudeCodeSections(ctx: SetupScriptContext): string[] {
 
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-claude mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null
+try { claude mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
 claude mcp add --transport http ${psq(ctx.mcp.serverName)} ${psq(ctx.mcp.url)}`);
   }
 
@@ -359,11 +372,14 @@ function claudeAnthropicProxySection(proxy: SetupScriptProxySection): string {
   if (proxy.virtualKey) {
     values.ANTHROPIC_AUTH_TOKEN = proxy.virtualKey;
   }
-  // Passthrough attribution: append the X-Archestra-Virtual-Key header after the
-  // base-URL merge, preserving any custom headers the user already set.
-  const headerAppend = proxy.passthroughVirtualKey
-    ? `\n${claudeCustomHeaderAppendSnippet(`${VIRTUAL_KEY_HEADER}: ${proxy.passthroughVirtualKey}`)}`
-    : "";
+  // Append our custom headers after the base-URL merge, preserving any the user
+  // already set: X-Archestra-Agent-Id (Claude Code attribution, always) and the
+  // X-Archestra-Virtual-Key passthrough header (user attribution, when present).
+  const headerLines = [`${EXTERNAL_AGENT_ID_HEADER}: ${CLAUDE_CODE_CLIENT_ID}`];
+  if (proxy.passthroughVirtualKey) {
+    headerLines.push(`${VIRTUAL_KEY_HEADER}: ${proxy.passthroughVirtualKey}`);
+  }
+  const headerAppend = `\n${claudeCustomHeaderAppendSnippet(headerLines)}`;
   const passthroughNote = proxy.virtualKey
     ? ""
     : `
@@ -378,13 +394,14 @@ ${mergeJsonFileSnippet({
 }
 
 /**
- * Append-merge a single header into env.ANTHROPIC_CUSTOM_HEADERS in
- * settings.json: keep the user's other headers, replace only our line (matched
+ * Append-merge our headers into env.ANTHROPIC_CUSTOM_HEADERS in settings.json:
+ * keep the user's other headers, replace only our lines (matched
  * case-insensitively by header name) so re-runs / key rotation never duplicate
  * or leave a stale token. Runs right after the base-URL merge created the file,
  * so it neither re-creates the dir nor re-takes the backup.
  */
-function claudeCustomHeaderAppendSnippet(headerLine: string): string {
+function claudeCustomHeaderAppendSnippet(headerLines: string[]): string {
+  const psArray = headerLines.map(psq).join(", ");
   return `$arch_hpath = ${CLAUDE_SETTINGS_PATH}
 $arch_hconfig = [pscustomobject]@{}
 if (Test-Path $arch_hpath) {
@@ -393,15 +410,15 @@ if (Test-Path $arch_hpath) {
 }
 if (-not $arch_hconfig.PSObject.Properties['env']) { $arch_hconfig | Add-Member -NotePropertyName 'env' -NotePropertyValue ([pscustomobject]@{}) }
 $arch_henv = $arch_hconfig.env
-$arch_hline = ${psq(headerLine)}
-$arch_hname = ($arch_hline -split ':',2)[0].Trim().ToLower()
+$arch_hnew = @(${psArray})
+$arch_hnames = @($arch_hnew | ForEach-Object { ($_ -split ':',2)[0].Trim().ToLower() })
 $arch_hexisting = ''
 if ($arch_henv.PSObject.Properties['ANTHROPIC_CUSTOM_HEADERS']) { $arch_hexisting = [string]$arch_henv.ANTHROPIC_CUSTOM_HEADERS }
 $arch_hkept = @()
 foreach ($arch_hl in ($arch_hexisting -split "\\r?\\n")) {
-  if ($arch_hl.Trim() -and (($arch_hl -split ':',2)[0].Trim().ToLower() -ne $arch_hname)) { $arch_hkept += $arch_hl }
+  if ($arch_hl.Trim() -and ($arch_hnames -notcontains ($arch_hl -split ':',2)[0].Trim().ToLower())) { $arch_hkept += $arch_hl }
 }
-$arch_hkept += $arch_hline
+$arch_hkept += $arch_hnew
 $arch_hjoined = ($arch_hkept -join "\`n")
 if ($arch_henv.PSObject.Properties['ANTHROPIC_CUSTOM_HEADERS']) { $arch_henv.ANTHROPIC_CUSTOM_HEADERS = $arch_hjoined } else { $arch_henv | Add-Member -NotePropertyName 'ANTHROPIC_CUSTOM_HEADERS' -NotePropertyValue $arch_hjoined }
 $arch_hconfig | ConvertTo-Json -Depth 32 | Set-Content -Path $arch_hpath -Encoding utf8
@@ -443,7 +460,7 @@ function codexSections(ctx: SetupScriptContext): string[] {
 
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null
+try { codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
 codex mcp add ${psq(ctx.mcp.serverName)} --url ${psq(ctx.mcp.url)}`);
   }
 
@@ -508,7 +525,7 @@ function copilotSections(ctx: SetupScriptContext): string[] {
 
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-copilot mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null
+try { copilot mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
 copilot mcp add --transport http ${psq(ctx.mcp.serverName)} ${psq(ctx.mcp.url)}
 copilot mcp get ${psq(ctx.mcp.serverName)}`);
   }

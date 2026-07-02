@@ -2241,6 +2241,48 @@
       "when": 1782826488968,
       "tag": "0319_backfill-conversation-last-read-at",
       "breakpoints": true
+    },
+    {
+      "idx": 320,
+      "version": "7",
+      "when": 1782851902992,
+      "tag": "0320_flip-default-org-theme-to-caffeine",
+      "breakpoints": true
+    },
+    {
+      "idx": 321,
+      "version": "7",
+      "when": 1782904774033,
+      "tag": "0321_backfill-claude-client-external-agent-id",
+      "breakpoints": true
+    },
+    {
+      "idx": 322,
+      "version": "7",
+      "when": 1782908617938,
+      "tag": "0322_perpetual_dreadnoughts",
+      "breakpoints": true
+    },
+    {
+      "idx": 323,
+      "version": "7",
+      "when": 1782990763987,
+      "tag": "0323_happy_namorita",
+      "breakpoints": true
+    },
+    {
+      "idx": 324,
+      "version": "7",
+      "when": 1782994638509,
+      "tag": "0324_melodic_wildside",
+      "breakpoints": true
+    },
+    {
+      "idx": 325,
+      "version": "7",
+      "when": 1783005976344,
+      "tag": "0325_oval_famine",
+      "breakpoints": true
     }
   ]
 }

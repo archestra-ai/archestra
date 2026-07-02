@@ -13,6 +13,7 @@ import pino from "pino";
 import pretty from "pino-pretty";
 import { LOG_FORMAT } from "@/logging/log-format";
 import { LOG_LEVEL } from "@/logging/log-level";
+import { logRingBuffer } from "@/logging/log-ring-buffer";
 import { getActiveSessionId } from "@/observability/request-context";
 
 /**
@@ -63,6 +64,10 @@ function createLogger(): pino.Logger {
     pino.multistream([
       { level: "trace", stream: createStdoutStream() },
       { level: "trace", stream: createOtelLogStream() },
+      // Retain a rolling window of recent records so captured backend
+      // exceptions can carry the log lines that preceded them (see
+      // `log-ring-buffer.ts` and the PostHog error-tracking service).
+      { level: "trace", stream: logRingBuffer.createStream() },
     ]),
   );
 }

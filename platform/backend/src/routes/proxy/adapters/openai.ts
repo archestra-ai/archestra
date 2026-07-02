@@ -1,4 +1,5 @@
 import {
+  ApiError,
   ArchestraInternalErrorCode,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -83,12 +84,16 @@ type OpenAiToolResultContent = string | OpenAiToolResultContentBlock[];
 export class OpenAIEmbeddingRequestAdapter
   implements LLMRequestAdapter<OpenAiEmbeddingRequest, OpenAiMessages>
 {
-  readonly provider = "openai" as const;
+  readonly provider: SupportedProvider;
   private request: OpenAiEmbeddingRequest;
   private modifiedModel: string | null = null;
 
-  constructor(request: OpenAiEmbeddingRequest) {
+  constructor(
+    request: OpenAiEmbeddingRequest,
+    provider: SupportedProvider = "openai",
+  ) {
     this.request = request;
+    this.provider = provider;
   }
 
   getModel(): string {
@@ -172,11 +177,15 @@ export class OpenAIEmbeddingRequestAdapter
 export class OpenAIEmbeddingResponseAdapter
   implements LLMResponseAdapter<OpenAiEmbeddingResponse>
 {
-  readonly provider = "openai" as const;
+  readonly provider: SupportedProvider;
   private response: OpenAiEmbeddingResponse;
 
-  constructor(response: OpenAiEmbeddingResponse) {
+  constructor(
+    response: OpenAiEmbeddingResponse,
+    provider: SupportedProvider = "openai",
+  ) {
     this.response = response;
+    this.provider = provider;
   }
 
   getId(): string {
@@ -224,7 +233,7 @@ export class OpenAIEmbeddingResponseAdapter
 export class OpenAIEmbeddingStreamAdapter
   implements LLMStreamAdapter<never, OpenAiEmbeddingResponse>
 {
-  readonly provider = "openai" as const;
+  readonly provider: SupportedProvider;
   readonly state: StreamAccumulatorState = {
     responseId: "",
     model: "",
@@ -238,6 +247,10 @@ export class OpenAIEmbeddingStreamAdapter
       firstChunkTime: null,
     },
   };
+
+  constructor(provider: SupportedProvider = "openai") {
+    this.provider = provider;
+  }
 
   processChunk(): ChunkProcessingResult {
     throw new Error("OpenAI embeddings do not support streaming.");
@@ -857,6 +870,7 @@ export class OpenAIResponseAdapter
     response: OpenAiResponse,
     provider: SupportedProvider = "openai",
   ) {
+    assertResponseHasChoices(response, provider);
     this.response = response;
     this.provider = provider;
   }
@@ -1574,68 +1588,136 @@ export const openaiAdapterFactory: LLMProvider<
   },
 };
 
-export const openAiEmbeddingsAdapterFactory: LLMProvider<
+type OpenAiEmbeddingsProvider = LLMProvider<
   OpenAiEmbeddingRequest,
   OpenAiEmbeddingResponse,
   OpenAiMessages,
   never,
   OpenAiHeaders
-> = {
-  provider: "openai",
-  interactionType: "openai:embeddings",
+>;
 
-  createRequestAdapter(
-    request: OpenAiEmbeddingRequest,
-  ): LLMRequestAdapter<OpenAiEmbeddingRequest, OpenAiMessages> {
-    return new OpenAIEmbeddingRequestAdapter(request);
-  },
+/**
+ * Build an embeddings adapter for any provider that exposes an OpenAI-compatible
+ * `/embeddings` endpoint (OpenAI itself, Mistral, Azure, Ollama, vLLM, Zhipu AI, …).
+ *
+ * The wire format is identical to OpenAI's, so all request/response handling is
+ * shared; only the provider name (used for observability, metrics, and cost
+ * attribution) and the default base URL differ per provider. The effective base
+ * URL is still overridable per request via the mapped provider key / auth
+ * override in the LLM proxy handler.
+ */
+export function makeOpenAiCompatibleEmbeddingsAdapterFactory(
+  provider: SupportedProvider,
+  getBaseUrl: () => string | undefined,
+): OpenAiEmbeddingsProvider {
+  return {
+    provider,
+    // OpenAI-compatible embeddings share the OpenAI interaction discriminator,
+    // matching the knowledge-base embedding pipeline (getEmbeddingDiscriminator).
+    interactionType: "openai:embeddings",
 
-  createResponseAdapter(
-    response: OpenAiEmbeddingResponse,
-  ): LLMResponseAdapter<OpenAiEmbeddingResponse> {
-    return new OpenAIEmbeddingResponseAdapter(response);
-  },
+    createRequestAdapter(
+      request: OpenAiEmbeddingRequest,
+    ): LLMRequestAdapter<OpenAiEmbeddingRequest, OpenAiMessages> {
+      return new OpenAIEmbeddingRequestAdapter(request, provider);
+    },
 
-  createStreamAdapter(): LLMStreamAdapter<never, OpenAiEmbeddingResponse> {
-    return new OpenAIEmbeddingStreamAdapter();
-  },
+    createResponseAdapter(
+      response: OpenAiEmbeddingResponse,
+    ): LLMResponseAdapter<OpenAiEmbeddingResponse> {
+      return new OpenAIEmbeddingResponseAdapter(response, provider);
+    },
 
-  extractApiKey(headers: OpenAiHeaders): string | undefined {
-    return headers.authorization;
-  },
+    createStreamAdapter(): LLMStreamAdapter<never, OpenAiEmbeddingResponse> {
+      return new OpenAIEmbeddingStreamAdapter(provider);
+    },
 
-  getBaseUrl(): string | undefined {
-    return config.llm.openai.baseUrl;
-  },
+    extractApiKey(headers: OpenAiHeaders): string | undefined {
+      return headers.authorization;
+    },
 
-  spanName: "embedding",
+    getBaseUrl(): string | undefined {
+      return getBaseUrl();
+    },
 
-  createClient(
-    apiKey: string | undefined,
-    options: CreateClientOptions,
-  ): OpenAIProvider {
-    return openaiAdapterFactory.createClient(apiKey, options) as OpenAIProvider;
-  },
+    spanName: "embedding",
 
-  async execute(
-    client: unknown,
-    request: OpenAiEmbeddingRequest,
-  ): Promise<OpenAiEmbeddingResponse> {
-    const openaiClient = client as OpenAIProvider;
-    return openaiClient.embeddings.create(
-      request as Parameters<typeof openaiClient.embeddings.create>[0],
-    ) as Promise<OpenAiEmbeddingResponse>;
-  },
+    createClient(
+      apiKey: string | undefined,
+      options: CreateClientOptions,
+    ): OpenAIProvider {
+      return openaiAdapterFactory.createClient(
+        apiKey,
+        options,
+      ) as OpenAIProvider;
+    },
 
-  async executeStream(): Promise<AsyncIterable<never>> {
-    throw new Error("OpenAI embeddings do not support streaming.");
-  },
+    async execute(
+      client: unknown,
+      request: OpenAiEmbeddingRequest,
+    ): Promise<OpenAiEmbeddingResponse> {
+      const openaiClient = client as OpenAIProvider;
+      return openaiClient.embeddings.create(
+        request as Parameters<typeof openaiClient.embeddings.create>[0],
+      ) as Promise<OpenAiEmbeddingResponse>;
+    },
 
-  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
-    return openaiAdapterFactory.extractInternalCode(error);
-  },
+    async executeStream(): Promise<AsyncIterable<never>> {
+      throw new Error("OpenAI embeddings do not support streaming.");
+    },
 
-  extractErrorMessage(error: unknown): string {
-    return openaiAdapterFactory.extractErrorMessage(error);
-  },
-};
+    extractInternalCode(
+      error: unknown,
+    ): ArchestraInternalErrorCode | undefined {
+      return openaiAdapterFactory.extractInternalCode(error);
+    },
+
+    extractErrorMessage(error: unknown): string {
+      return openaiAdapterFactory.extractErrorMessage(error);
+    },
+  };
+}
+
+export const openAiEmbeddingsAdapterFactory: OpenAiEmbeddingsProvider =
+  makeOpenAiCompatibleEmbeddingsAdapterFactory(
+    "openai",
+    () => config.llm.openai.baseUrl,
+  );
+
+// =============================================================================
+// INTERNAL HELPERS
+// =============================================================================
+
+/**
+ * Some OpenAI-compatible upstreams (LiteLLM, OpenRouter, misconfigured
+ * gateways) return HTTP 200 with an error-shaped body — no `choices` array,
+ * usually an `error` object instead. Downstream code (getText, tool-call
+ * policy evaluation, response serialization) assumes `choices` exists, so
+ * surface the upstream failure as a typed error here instead of crashing with
+ * an opaque TypeError.
+ */
+function assertResponseHasChoices(
+  response: OpenAiResponse,
+  provider: SupportedProvider,
+): void {
+  if (Array.isArray(response?.choices)) return;
+
+  const embeddedError = (
+    response as unknown as {
+      error?: { message?: unknown; code?: unknown; status?: unknown };
+    }
+  )?.error;
+
+  const rawStatus = embeddedError?.status ?? embeddedError?.code;
+  const statusCode =
+    typeof rawStatus === "number" && rawStatus >= 400 && rawStatus <= 599
+      ? rawStatus
+      : 502;
+
+  const upstreamMessage =
+    typeof embeddedError?.message === "string" && embeddedError.message
+      ? embeddedError.message
+      : `Upstream ${provider} provider returned a response without choices`;
+
+  throw new ApiError(statusCode, upstreamMessage);
+}

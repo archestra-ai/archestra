@@ -91,6 +91,10 @@ export function transformFormToApiData(
       .map((scope) => scope.trim())
       .filter((scope) => scope.length > 0);
     const scopesList = parsedScopes;
+    const additionalScopesList = (values.oauthConfig.additional_scopes ?? "")
+      .split(",")
+      .map((scope) => scope.trim())
+      .filter((scope) => scope.length > 0);
 
     // For local servers, use oauthServerUrl; for remote servers, use serverUrl
     const oauthServerUrl =
@@ -141,6 +145,7 @@ export function transformFormToApiData(
             ? []
             : ["read", "write"],
       supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
+      additional_scopes: isClientCredentials ? undefined : additionalScopesList,
     };
 
     // BYOS: Include OAuth client secret vault path and key if set
@@ -320,6 +325,7 @@ export function transformCatalogItemToFormValues(
         resource: string;
         redirect_uris: string;
         scopes: string;
+        additional_scopes: string;
         supports_resource_metadata: boolean;
         grantType: "authorization_code" | "client_credentials";
         authServerUrl?: string;
@@ -344,6 +350,12 @@ export function transformCatalogItemToFormValues(
       resource: item.oauthConfig.resource || "",
       redirect_uris: item.oauthConfig.redirect_uris?.join(", ") || "",
       scopes: item.oauthConfig.scopes?.join(", ") || "",
+      // Undefined means the item predates this field, so show the default
+      // offline_access; an explicit empty array means the user cleared it.
+      additional_scopes:
+        item.oauthConfig.additional_scopes !== undefined
+          ? item.oauthConfig.additional_scopes.join(", ")
+          : "offline_access",
       supports_resource_metadata:
         item.oauthConfig.supports_resource_metadata ?? true,
       grantType: item.oauthConfig.grant_type ?? "authorization_code",
@@ -585,6 +597,9 @@ export function transformExternalCatalogToFormValues(
           ? `${window.location.origin}/oauth-callback`
           : ""),
       scopes: server.oauth_config.scopes?.join(", ") ?? "",
+      // The external catalog manifest does not carry additional_scopes, so
+      // start from the default that requests a refresh token.
+      additional_scopes: "offline_access",
       supports_resource_metadata:
         server.oauth_config.supports_resource_metadata ?? true,
       grantType:
@@ -762,6 +777,7 @@ export function transformExternalCatalogToFormValues(
           ? `${window.location.origin}/oauth-callback`
           : "",
       scopes: "read, write",
+      additional_scopes: "offline_access",
       supports_resource_metadata: true,
       grantType: "authorization_code",
       authServerUrl: "",

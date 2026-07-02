@@ -24,6 +24,7 @@ import {
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LRUCacheManager } from "@/cache-manager";
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import config from "@/config";
 import logger from "@/logging";
@@ -33,6 +34,7 @@ import {
   LimitValidationService,
   LlmProviderApiKeyModel,
   ModelModel,
+  OrganizationModel,
   TeamModel,
   ToolInvocationPolicyModel,
   UserModel,
@@ -121,7 +123,6 @@ export interface LLMProxyContext<TRequest> {
   contextIsTrusted: boolean;
   enabledToolNames: Set<string>;
   globalToolPolicy: "permissive" | "restrictive";
-  discoveredToolPolicy: "relaxed" | "apply_policies";
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
@@ -179,6 +180,20 @@ function getProviderMessagesCount(messages: unknown): number | null {
 }
 
 /**
+ * The subset of a proxied request body we read for session-id and client-app
+ * extraction. Each consumer only touches its own fields (`detectClaudeClientId`
+ * → `system`/`metadata`; `extractSessionInfo` → `metadata`/`user`), so one
+ * shared view keeps the cast in a single place.
+ */
+type RequestBodyForExtraction =
+  | {
+      system?: unknown;
+      metadata?: { user_id?: string | null };
+      user?: string | null;
+    }
+  | undefined;
+
+/**
  * Generic LLM proxy handler that works with any provider through adapters
  */
 export async function handleLLMProxy<
@@ -202,8 +217,13 @@ export async function handleLLMProxy<
     string,
     string | string[] | undefined
   >;
+  const bodyForExtraction = body as RequestBodyForExtraction;
+  // Client-app attribution: the caller-supplied X-Archestra-Agent-Id header (or
+  // X-Archestra-Meta segment 0) wins; otherwise auto-discover a known client
+  // app from the request and record it (Claude clients → "anthropic_claude").
   const externalAgentId =
-    utils.headers.externalAgentId.getExternalAgentId(headersForExtraction);
+    utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
+    utils.headers.clientApp.detectClaudeClientId(bodyForExtraction);
   const executionId =
     utils.headers.executionId.getExecutionId(headersForExtraction);
   const authOverride = (
@@ -229,12 +249,7 @@ export async function handleLLMProxy<
   const { sessionId, sessionSource } =
     utils.headers.sessionId.extractSessionInfo(
       headersForExtraction,
-      body as
-        | {
-            metadata?: { user_id?: string | null };
-            user?: string | null;
-          }
-        | undefined,
+      bodyForExtraction,
     );
 
   // Extract interaction source (chat, chatops, email, etc.)
@@ -602,11 +617,18 @@ export async function handleLLMProxy<
         { resolvedAgentId, reason: "token_cost_limit_exceeded" },
         `${providerName} request blocked due to token cost limit`,
       );
-      // Preserve the proxy-compatible error envelope so chat clients can read structured limit metadata.
-      return reply.status(429).send({
+      // Preserve the proxy-compatible error envelope so chat clients can read
+      // structured limit metadata. This is Archestra budget enforcement, not the
+      // provider throttling traffic, so it must not look like a rate limit:
+      // a 429 makes every LLM SDK auto-retry a block that cannot clear on retry,
+      // and makes clients frame it as a provider limit ("not your usage limit").
+      // 402 Payment Required is non-retryable in all SDKs and semantically a
+      // budget stop. The Archestra-specific `type` plus the stable `code` keep
+      // structured detection working.
+      return reply.status(402).send({
         error: {
           message: contentMessage,
-          type: "rate_limit_exceeded",
+          type: "usage_limit_exceeded",
           code: "token_cost_limit_exceeded",
           usage_limit: limitMetadata
             ? {
@@ -622,6 +644,13 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Limit check passed`,
     );
 
+    // Resolve the agent's organization once. Reused below for the discovered-tool
+    // persist defaults and further down for the global tool policy, so a proxied
+    // request that includes tools no longer reads the organization twice.
+    const organization = await OrganizationModel.getById(
+      resolvedAgent.organizationId,
+    );
+
     // Persist tools declared by client (only for llm_proxy agents)
     if (resolvedAgent.agentType === "llm_proxy") {
       const tools = requestAdapter.getTools();
@@ -630,6 +659,8 @@ export async function handleLLMProxy<
           { toolCount: tools.length },
           `[${providerName}Proxy] Processing tools from request`,
         );
+        // Apply the org's configured default policies to every newly
+        // discovered tool persisted below.
         await utils.tools.persistTools(
           tools.map((t) => ({
             toolName: t.name,
@@ -637,6 +668,13 @@ export async function handleLLMProxy<
             toolDescription: t.description,
           })),
           resolvedAgentId,
+          organization
+            ? {
+                invocationAction:
+                  organization.defaultDiscoveredToolInvocationPolicy,
+                resultAction: organization.defaultDiscoveredToolResultPolicy,
+              }
+            : undefined,
         );
       }
     }
@@ -703,11 +741,10 @@ export async function handleLLMProxy<
       }
     };
 
-    // Get tool policies from organization (with fallback) - globalToolPolicy is
-    // needed for both trusted data and tool invocation; discoveredToolPolicy
-    // governs llm-proxy discovered tools during tool-invocation evaluation.
-    const { globalToolPolicy, discoveredToolPolicy } =
-      await utils.toolInvocation.getToolPolicies(resolvedAgentId);
+    // Global tool policy is an org-level setting; read it from the organization
+    // resolved above (defaults to "permissive" if the org is missing). Needed for
+    // both trusted data and tool invocation enforcement.
+    const globalToolPolicy = organization?.globalToolPolicy ?? "permissive";
 
     // Fetch the agent's teams (with labels) once. Used both for policy
     // evaluation context (trusted data) and for trace span team attributes.
@@ -942,7 +979,6 @@ export async function handleLLMProxy<
       contextIsTrusted,
       enabledToolNames,
       globalToolPolicy,
-      discoveredToolPolicy,
       toonStats,
       toonSkipReason,
       dualLlmAnalyses,
@@ -1051,7 +1087,6 @@ async function handleStreaming<
     contextIsTrusted,
     enabledToolNames,
     globalToolPolicy,
-    discoveredToolPolicy,
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
@@ -1317,7 +1352,6 @@ async function handleStreaming<
         contextIsTrusted,
         enabledToolNames,
         globalToolPolicy,
-        discoveredToolPolicy,
       );
 
       logger.info(
@@ -1515,7 +1549,6 @@ async function handleNonStreaming<
     contextIsTrusted,
     enabledToolNames,
     globalToolPolicy,
-    discoveredToolPolicy,
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
@@ -1672,7 +1705,6 @@ async function handleNonStreaming<
       contextIsTrusted,
       enabledToolNames,
       globalToolPolicy,
-      discoveredToolPolicy,
     );
 
     if (toolInvocationRefusal) {
@@ -1887,6 +1919,7 @@ function shouldUseKeylessProviderApiKey(params: {
   return isProviderApiKeyOptional({
     provider: row.provider,
     azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+    anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
   });
 }
 

@@ -6,12 +6,17 @@ export { cerebrasAdapterFactory } from "./cerebras";
 export { cohereAdapterFactory } from "./cohere";
 export { deepseekAdapterFactory } from "./deepseek";
 export { geminiAdapterFactory } from "./gemini";
+export { geminiEmbeddingsAdapterFactory } from "./gemini-embeddings";
 export { githubCopilotAdapterFactory } from "./github-copilot";
 export { groqAdapterFactory } from "./groq";
 export { minimaxAdapterFactory } from "./minimax";
 export { mistralAdapterFactory } from "./mistral";
 export { ollamaAdapterFactory } from "./ollama";
-export { openAiEmbeddingsAdapterFactory, openaiAdapterFactory } from "./openai";
+export {
+  makeOpenAiCompatibleEmbeddingsAdapterFactory,
+  openAiEmbeddingsAdapterFactory,
+  openaiAdapterFactory,
+} from "./openai";
 export { openAiResponsesAdapterFactory } from "./openai-responses";
 export { openrouterAdapterFactory } from "./openrouter";
 export { perplexityAdapterFactory } from "./perplexity";

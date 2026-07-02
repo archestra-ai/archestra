@@ -41,6 +41,16 @@ export const TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME =
 export const TOOL_GET_MCP_SERVER_LOGS_SHORT_NAME = "get_mcp_server_logs";
 export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME =
   "create_mcp_server_installation_request";
+export const TOOL_CREATE_TEAM_SHORT_NAME = "create_team";
+export const TOOL_GET_TEAM_SHORT_NAME = "get_team";
+export const TOOL_LIST_TEAMS_SHORT_NAME = "list_teams";
+export const TOOL_EDIT_TEAM_SHORT_NAME = "edit_team";
+export const TOOL_DELETE_TEAM_SHORT_NAME = "delete_team";
+export const TOOL_LIST_TEAM_MEMBERS_SHORT_NAME = "list_team_members";
+export const TOOL_ADD_TEAM_MEMBER_SHORT_NAME = "add_team_member";
+export const TOOL_UPDATE_TEAM_MEMBER_ROLE_SHORT_NAME =
+  "update_team_member_role";
+export const TOOL_REMOVE_TEAM_MEMBER_SHORT_NAME = "remove_team_member";
 export const TOOL_CREATE_LIMIT_SHORT_NAME = "create_limit";
 export const TOOL_GET_LIMITS_SHORT_NAME = "get_limits";
 export const TOOL_UPDATE_LIMIT_SHORT_NAME = "update_limit";
@@ -168,6 +178,15 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME,
   TOOL_GET_MCP_SERVER_LOGS_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
+  TOOL_CREATE_TEAM_SHORT_NAME,
+  TOOL_GET_TEAM_SHORT_NAME,
+  TOOL_LIST_TEAMS_SHORT_NAME,
+  TOOL_EDIT_TEAM_SHORT_NAME,
+  TOOL_DELETE_TEAM_SHORT_NAME,
+  TOOL_LIST_TEAM_MEMBERS_SHORT_NAME,
+  TOOL_ADD_TEAM_MEMBER_SHORT_NAME,
+  TOOL_UPDATE_TEAM_MEMBER_ROLE_SHORT_NAME,
+  TOOL_REMOVE_TEAM_MEMBER_SHORT_NAME,
   TOOL_CREATE_LIMIT_SHORT_NAME,
   TOOL_GET_LIMITS_SHORT_NAME,
   TOOL_UPDATE_LIMIT_SHORT_NAME,
@@ -415,6 +434,16 @@ export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_TODO_WRITE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * Built-in tools that do NOT bypass policy evaluation. Most built-ins are
+ * auto-trusted, but these ingest external content (e.g. knowledge-base
+ * documents) that can carry prompt injection, so their invocations and
+ * results are evaluated by tool invocation and trusted data policies just
+ * like external tools.
+ */
+export const POLICY_EVALUATED_ARCHESTRA_TOOL_SHORT_NAMES: ReadonlySet<ArchestraToolShortName> =
+  new Set([TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME]);
 
 /**
  * Agent Skill tools — only assigned to agents once an org admin opts in via

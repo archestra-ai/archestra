@@ -2,15 +2,7 @@ import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 describe("GET /api/apps", () => {
@@ -18,12 +10,11 @@ describe("GET /api/apps", () => {
   let organizationId: string;
   let user: User;
 
-  const appsEnabled = config.apps.enabled;
-  beforeAll(() => {
+  // Pin the apps flag per TEST, not per file: the shared setup restores the
+  // pristine config before and after every test, so a beforeAll-scoped
+  // mutation does not survive, and a file must never depend on worker state.
+  beforeEach(() => {
     (config.apps as { enabled: boolean }).enabled = true;
-  });
-  afterAll(() => {
-    (config.apps as { enabled: boolean }).enabled = appsEnabled;
   });
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
@@ -71,6 +62,31 @@ describe("GET /api/apps", () => {
       owned.id,
     );
     expect(response.json().pagination.total).toBeGreaterThanOrEqual(1);
+  });
+
+  test("includes assigned team names for a team-scoped owned app", async ({
+    makeApp,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, user.id, { name: "London HQ" });
+    await makeTeamMember(team.id, user.id);
+    const owned = await makeApp({
+      organizationId,
+      scope: "team",
+      authorId: user.id,
+      teamIds: [team.id],
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/apps?limit=100&offset=0",
+    });
+    expect(res.statusCode).toBe(200);
+    const item = (res.json().data as Array<Record<string, unknown>>).find(
+      (i) => i.source === "owned" && i.id === owned.id,
+    );
+    expect(item?.teams).toEqual([{ id: team.id, name: "London HQ" }]);
   });
 
   test("lists external UI-providing servers alongside owned apps, with trust disclosure", async ({

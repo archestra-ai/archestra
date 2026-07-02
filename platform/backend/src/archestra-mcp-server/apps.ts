@@ -18,6 +18,7 @@ import { DEFAULT_APP_TEMPLATE_ID, resolveCreateAppHtml } from "@/app-templates";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
+  AgentModel,
   AppAccessModel,
   AppModel,
   AppRenderDiagnosticsModel,
@@ -130,8 +131,16 @@ const EditAppSchema = z.strictObject({
       }),
     )
     .min(1)
+    .optional()
     .describe(
-      "str_replace edits applied in order to the current HTML; the whole edit is atomic (any failure leaves the app unchanged).",
+      "str_replace edits applied in order to the current HTML; the whole edit is atomic (any failure leaves the app unchanged). Pass either edits or replacementHtml, never both.",
+    ),
+  replacementHtml: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "The complete new document, replacing the current HTML outright with no old_str matching — use this for a full rewrite instead of reproducing the whole document as an edit. Pass either edits or replacementHtml, never both.",
     ),
 });
 
@@ -256,6 +265,12 @@ const AppMutationOutputSchema = AppSummaryOutputSchema.extend({
     .optional()
     .describe(
       "The app's assigned tool names after this call (present when the tools param was given).",
+    ),
+  status: z
+    .enum(["ok", "partial"])
+    .optional()
+    .describe(
+      'Absent or "ok" on full success. "partial" means the app was created (see id) but assigning its tools failed — the app exists; assign them with set_app_tools rather than re-scaffolding.',
     ),
 });
 
@@ -410,14 +425,14 @@ const registry = defineArchestraTools([
           await replaceAppToolAssignments(app.id, resolvedTools);
         } catch (error) {
           // Prevalidation makes this a rare race (e.g. a tool deleted
-          // concurrently). The app exists; tell the model how to repair.
+          // concurrently). The app exists, so this is a partial success, not a
+          // failure: return it as such (structured id + status) so the model
+          // repairs the tools instead of assuming nothing was created.
           logger.warn(
             { err: error, appId: app.id },
             "scaffold_app: tool assignment failed after creation",
           );
-          return errorResult(
-            `Created app "${app.name}" (${app.id}), but assigning its tools failed. Delete it and scaffold again with the tools param.`,
-          );
+          return scaffoldPartialToolFailureResult(app, payload.html);
         }
       }
 
@@ -567,7 +582,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_LIST_APPS_SHORT_NAME,
     title: "List Apps",
     description:
-      "List apps visible to the caller, optionally filtered by name.",
+      "List apps visible to the caller, optionally filtered by name — use it to find an app's id. Returns id, name, description, scope, and latest version per app, not the HTML (use read_app) or a render (use render_app).",
     schema: ListAppsSchema,
     outputSchema: z.object({ apps: z.array(AppSummaryOutputSchema) }),
     async handler({ args, context }) {
@@ -599,12 +614,37 @@ const registry = defineArchestraTools([
     shortName: TOOL_RENDER_APP_SHORT_NAME,
     title: "Render App",
     description:
-      "Render an existing app by id, if the caller may view it. Use this when the user asks to open, show, or get back to an app: when called from the chat UI the app is rendered inline in the conversation; its standalone page is /a/<id>.",
+      "Render an existing app by id, if the caller may view it. Use this when the user asks to open, show, or get back to an app: when called from the chat UI the app is rendered inline in the conversation; its standalone page is /a/<id>. This only displays the app — to read its HTML source use read_app, and to check how it rendered (runtime errors / CSP violations) use get_app_diagnostics or validate_app.",
     schema: GetAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
+      }
+      // render_app's effect exists only in Archestra's chat frontend, which
+      // mounts the app from this result; an external MCP host displays nothing
+      // while the result text reads as success. tools/list already hides the
+      // tool from non-chat agents, but sibling tool descriptions name it and
+      // run_tool can still dispatch it — so the handler itself steers external
+      // callers to the app's launch tool, the only path that renders there.
+      // Gateway dispatch always carries an agentId; a context without one is
+      // the internal management-tool convention and stays permitted.
+      if (context.agentId) {
+        const agentType = await AgentModel.getAgentType(context.agentId);
+        // A deleted/missing agent is a distinct failure from a non-chat
+        // connection — surface it as such rather than the steer message, which
+        // would misattribute it to an external-host limitation.
+        if (agentType === null) {
+          return errorResult(`Agent ${context.agentId} not found.`);
+        }
+        if (agentType !== "agent") {
+          return errorResult(
+            "render_app displays an app only inside Archestra's chat UI — on " +
+              "this connection it renders nothing. To open an app here, call " +
+              "the app's own launch tool directly (its name ends in __open); " +
+              "it is in your tool list, keyed by the app's name.",
+          );
+        }
       }
       const loaded = await loadAppForCaller({
         userId: context.userId,
@@ -620,7 +660,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_READ_APP_SHORT_NAME,
     title: "Read App",
     description:
-      "Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. This is the source of truth before edit_app whenever the current HTML is not already in context — read it, then make targeted edits. Defaults to the head version; pass version to read an older one.",
+      "Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. This is the source of truth before edit_app whenever the current HTML is not already in context — read it, then make targeted edits. A successful edit_app already confirms its changes with context excerpts, so re-reading right after one is wasted work — read again only when the next edit needs source outside those excerpts. Defaults to the head version; pass version to read an older one. (render_app displays the app to a viewer; this returns the raw saved source.)",
     schema: ReadAppSchema,
     outputSchema: ReadAppOutputSchema,
     async handler({ args, context }) {
@@ -649,7 +689,7 @@ const registry = defineArchestraTools([
           byteSize,
           html: row.html,
         },
-        `App "${app.name}" (${app.id}) version ${row.version}, ${byteSize} bytes:\n\n${row.html}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+        `App "${app.name}" (${app.id}) version ${row.version}, ${byteSize} bytes:\n\n${row.html}`,
       );
     },
   }),
@@ -657,12 +697,30 @@ const registry = defineArchestraTools([
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
     description:
-      "Build up an app's HTML with str_replace edits — the path for any change, from a one-line tweak to a full rewrite (replace the whole document in a single edit). Read the current HTML with read_app first if it is not already in context, pass that read's version as baseVersion, and supply edits as [{old_str, new_str}] pairs. Each old_str must match the current HTML exactly once (include enough surrounding context to be unique); edits apply in order and the whole call is atomic — any non-match or stale baseVersion leaves the app untouched. A successful edit forks a new immutable version; assigned tools and metadata are unchanged. read_app's result carries the condensed window.archestra SDK surface; for tool-calling apps, the CDN allowlist, or platform theming, load the \"Build App\" skill (in your available skills) for the full authoring playbook.",
+      "The single path for any change to an app's HTML: pass edits for targeted str_replace changes, or replacementHtml to swap in a complete new document (no old_str matching) — one or the other, never both. Read the current HTML with read_app first if it is not already in context, and pass that read's version as baseVersion (see the schema for the str_replace matching and atomicity rules). A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface; for tool-calling apps, the CDN allowlist, or platform theming, load the \"Build App\" skill (in your available skills) for the full authoring playbook.",
     schema: EditAppSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
+      }
+      // Exactly one edit mode, checked before any loading so a malformed call
+      // fails fast with the fix spelled out.
+      if (args.edits !== undefined && args.replacementHtml !== undefined) {
+        return errorResult(
+          "Pass either edits or replacementHtml, not both: edits applies str_replace changes to the current HTML; replacementHtml swaps in the complete new document.",
+        );
+      }
+      const mode =
+        args.replacementHtml !== undefined
+          ? ({ kind: "replacement", html: args.replacementHtml } as const)
+          : args.edits !== undefined
+            ? ({ kind: "edits", edits: args.edits } as const)
+            : null;
+      if (!mode) {
+        return errorResult(
+          "Pass either edits (str_replace changes to the current HTML) or replacementHtml (the complete new document); neither was provided.",
+        );
       }
       const loaded = await loadAppForCaller({
         userId: context.userId,
@@ -694,17 +752,26 @@ const registry = defineArchestraTools([
 
       let version: VersionPayload;
       let warnings: string[];
+      let editedHtml: string;
+      let editSpans: AppliedEditSpan[] = [];
       try {
-        const editedHtml = applyStrReplaceEdits(base.html, args.edits);
+        if (mode.kind === "replacement") {
+          editedHtml = mode.html;
+        } else {
+          const applied = applyStrReplaceEdits(base.html, mode.edits);
+          editedHtml = applied.html;
+          editSpans = applied.spans;
+        }
         // A *partial* edit that strips the document root the base still had
         // (e.g. deletes part of the doc) would otherwise save with only a soft
         // warning and leave the model building on broken HTML — reject it
-        // atomically. A deliberate whole-document replacement (the documented
-        // "full rewrite is one edit replacing the whole document") is allowed
+        // atomically. A deliberate whole-document replacement (replacementHtml,
+        // or the legacy one-edit-replacing-the-whole-document form) is allowed
         // to produce whatever the author intends, and an app that was already
         // a fragment (no root in the base) is unaffected.
         const isWholeDocumentRewrite =
-          args.edits.length === 1 && args.edits[0].old_str === base.html;
+          mode.kind === "replacement" ||
+          (mode.edits.length === 1 && mode.edits[0].old_str === base.html);
         if (
           !isWholeDocumentRewrite &&
           htmlHasDocumentRoot(base.html) &&
@@ -743,8 +810,10 @@ const registry = defineArchestraTools([
         return errorResult(`Failed to edit app ${args.appId}.`);
       }
 
-      const editCount = args.edits.length;
-      const editLabel = `${editCount} edit${editCount === 1 ? "" : "s"}`;
+      const editLabel =
+        mode.kind === "replacement"
+          ? "a full-document replacement"
+          : `${mode.edits.length} edit${mode.edits.length === 1 ? "" : "s"}`;
       // A fork bumps latestVersion off baseVersion (the CAS guaranteed they were
       // equal); when they stay equal the edits netted back to the head bytes and
       // content-hash suppression created no new version — say so plainly.
@@ -756,6 +825,13 @@ const registry = defineArchestraTools([
         warnings.length > 0
           ? `\nValidation warnings (save succeeded; fix via edit_app):\n- ${warnings.join("\n- ")}`
           : "";
+      // The context block lets the model verify str_replace edits landed
+      // without a follow-up read_app. A replacement carries no news (the model
+      // just wrote the document), and an unforked result saved nothing new.
+      const excerptsNote =
+        mode.kind === "edits" && forked
+          ? buildAppliedEditExcerpts(editedHtml, editSpans)
+          : "";
       return structuredSuccessResult(
         {
           id: updated.id,
@@ -765,7 +841,7 @@ const registry = defineArchestraTools([
           latestVersion: updated.latestVersion,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `${summary} Rendered inline when viewed in chat; standalone page: /a/${updated.id}${warningsNote}`,
+        `${summary} Rendered inline when viewed in chat; standalone page: /a/${updated.id}${warningsNote}${excerptsNote}`,
       );
     },
   }),
@@ -827,7 +903,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_VALIDATE_APP_SHORT_NAME,
     title: "Validate App",
     description:
-      "Validate an app's current head version: static structural checks plus the diagnostics from its most recent live render. Static checks flag SDK self-bootstrap, platform script/stylesheet self-loads, and unparseable markup as errors, and a missing document root, <script>/<link> hosts outside the CDN allowlist, or browser-storage use (localStorage/sessionStorage/indexedDB instead of archestra.storage) as warnings. It then reports the head version's live render diagnostics — runtime errors / CSP violations captured the last time it rendered for you (framed as untrusted data), or that no render of this version has been observed yet. Live diagnostics are captured only when the app renders for a viewer — inline in chat or at its run page — so no_render_observed is the normal state right after authoring: a clean static pass (ok: true) is enough to proceed, and any later render diagnostics surface on the next render or via get_app_diagnostics. Fix any errors with edit_app before publishing.",
+      "The pre-publish gate for an app's head version: static structural checks (`findings`, each carrying its own specific message) plus the most recent live-render diagnostics (`live`), with `ok` true when neither reports an error. Run it after editing and fix any error findings with edit_app before publish_app. Live diagnostics exist only once the app has rendered for a viewer (the call waits briefly for an in-flight render to settle), so `live.status` is commonly no_render_observed right after authoring — a clean static pass is enough to proceed, and the result text spells out the findings and the live-render outcome. To re-read render diagnostics on their own without the static gate, use get_app_diagnostics instead.",
     schema: ValidateAppSchema,
     outputSchema: ValidateAppOutputSchema,
     async handler({ args, context }) {
@@ -895,7 +971,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_PUBLISH_APP_SHORT_NAME,
     title: "Publish App",
     description:
-      "Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, with teamIds) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Returns the app's standalone run page. Validate the app first; publishing does not change its HTML.",
+      "Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, with teamIds) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Publishing changes only the app's sharing scope: it does not modify the HTML or re-run validation, so confirm the current version is sound with validate_app (or get_app_diagnostics) beforehand if you need to. Returns the app's standalone run page.",
     schema: PublishAppSchema,
     outputSchema: PublishAppOutputSchema,
     async handler({ args, context }) {
@@ -982,7 +1058,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
     title: "Preview App Tool",
     description:
-      "Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. Use this while authoring to see a tool's actual result shape BEFORE writing app code that parses it — never guess the schema. Requires human approval each call (the tool was granted to the app, not to the agent). Output is framed as untrusted data and capped; an auth_required response passes through unchanged so you see exactly what the app would. This previews assigned MCP tools only — not the App Data Store or other built-ins.",
+      "Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. Use this while authoring to see a tool's actual result shape BEFORE writing app code that parses it — never guess the schema. Requires human approval each call (the tool was granted to the app, not to the agent). Output is framed as untrusted data and capped; an auth_required response is surfaced in that framed output so you see exactly what the app would. This previews assigned MCP tools only — not the App Data Store or other built-ins.",
     schema: PreviewAppToolSchema,
     outputSchema: PreviewAppToolOutputSchema,
     async handler({ args, context }) {
@@ -1073,7 +1149,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
     title: "Get App Diagnostics",
     description:
-      "Check how the app's current version rendered for you. After scaffold_app/edit_app, call this to get the runtime errors and CSP violations the sandboxed render reported, or confirmation it rendered clean. It returns the diagnostics recorded the last time the current version was rendered for you — a render happens when the app is shown inline in chat or at its run page; if the current version has not been rendered yet it waits briefly for one to settle. Returns status `clean` (rendered, no problems), `errors` (captured diagnostics, framed as untrusted data), or `no_render_observed` (no render of the current version has happened for you yet — when that persists, the diagnostics instead arrive on the user's next message).",
+      "Check how the app's current version rendered for you. After an edit_app whose result was shown in chat (or a render_app), call this to get the runtime errors and CSP violations the sandboxed render reported, or confirmation it rendered clean. It returns the diagnostics recorded the last time the current version was rendered for you — a render happens when the app is shown inline in chat or at its run page; the call waits briefly for an in-flight render to settle but never triggers one, so calling it repeatedly cannot produce a render. Returns status `clean` (rendered, no problems), `errors` (captured diagnostics, framed as untrusted data), or `no_render_observed` (no render of the current version has happened for you yet — proceed on a clean validate_app static pass; runtime diagnostics instead arrive on the user's next message).",
     schema: GetAppDiagnosticsSchema,
     outputSchema: GetAppDiagnosticsOutputSchema,
     async handler({ args, context }) {
@@ -1110,7 +1186,7 @@ const registry = defineArchestraTools([
             renderedAt: null,
             screenshot: false,
           },
-          `No render of app "${safeName}" version ${head} has been observed for you yet. Open or re-render the app, then check again.`,
+          `No render of app "${safeName}" version ${head} has been observed for you yet. A render happens only when the app is shown to a viewer (inline in chat or at its run page) — calling this tool again does not trigger one, so do not poll. If validate_app's static pass is clean, proceed; runtime diagnostics arrive on their own once the app next renders.`,
         );
       }
 
@@ -1164,7 +1240,8 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_DELETE_APP_SHORT_NAME,
     title: "Delete App",
-    description: "Soft-delete an app the caller owns or administers.",
+    description:
+      "Soft-delete an app the caller owns or administers, and remove its MCP backing so it is no longer served. Soft delete retains the record, but this is not an authoring undo — to roll back a change, edit_app back to the wanted HTML instead.",
     schema: DeleteAppSchema,
     async handler({ args, context }) {
       if (!context.userId || !context.organizationId) {
@@ -1258,11 +1335,42 @@ async function authorizeModifyApp(params: {
  * throws `ApiError(400)` naming the offending edit, so the whole call fails
  * before any version is created.
  */
+type AppliedEditSpan = { start: number; end: number; laterModified: boolean };
+
 function applyStrReplaceEdits(
   html: string,
   edits: Array<{ old_str: string; new_str: string }>,
-): string {
+): { html: string; spans: AppliedEditSpan[] } {
   let working = html;
+  // One span per applied edit, kept in FINAL-document coordinates: each later
+  // replacement shifts the earlier spans it lands before, and a replacement
+  // that overlaps an earlier span re-points that span at its own region (marked
+  // laterModified) — so an excerpt built from a span never shows text a later
+  // edit removed.
+  const spans: AppliedEditSpan[] = [];
+  const applyAt = (params: {
+    start: number;
+    oldLength: number;
+    newStr: string;
+  }) => {
+    const { start, oldLength, newStr } = params;
+    working =
+      working.slice(0, start) + newStr + working.slice(start + oldLength);
+    const end = start + newStr.length;
+    const delta = newStr.length - oldLength;
+    for (const span of spans) {
+      if (span.end <= start) continue;
+      if (span.start >= start + oldLength) {
+        span.start += delta;
+        span.end += delta;
+      } else {
+        span.laterModified = true;
+        span.start = start;
+        span.end = end;
+      }
+    }
+    spans.push({ start, end, laterModified: false });
+  };
   edits.forEach((edit, index) => {
     const label = `edit ${index + 1}`;
     if (edit.old_str === edit.new_str) {
@@ -1273,6 +1381,20 @@ function applyStrReplaceEdits(
     }
     const count = countOccurrences(working, edit.old_str);
     if (count === 0) {
+      // Formatting drift (a re-indented or re-wrapped copy) is the common cause
+      // of a 0-match. If the text still matches uniquely once whitespace runs
+      // are collapsed, apply the edit at that exact span rather than failing —
+      // the model's intent is unambiguous. A genuine content mismatch (a typo
+      // in a non-whitespace character) stays a hard error below.
+      const span = findWhitespaceInsensitiveSpan(working, edit.old_str);
+      if (span) {
+        applyAt({
+          start: span.start,
+          oldLength: span.end - span.start,
+          newStr: edit.new_str,
+        });
+        return;
+      }
       const hint =
         describeNearMiss(working, edit.old_str) ??
         "Call read_app for the current source.";
@@ -1287,13 +1409,61 @@ function applyStrReplaceEdits(
         `${label}: old_str matched ${count} times; it must match exactly once. Add surrounding context to make it unique.`,
       );
     }
-    const at = working.indexOf(edit.old_str);
-    working =
-      working.slice(0, at) +
-      edit.new_str +
-      working.slice(at + edit.old_str.length);
+    applyAt({
+      start: working.indexOf(edit.old_str),
+      oldLength: edit.old_str.length,
+      newStr: edit.new_str,
+    });
   });
-  return working;
+  return { html: working, spans };
+}
+
+// Bounds for the applied-edit context block on edit_app success: enough to
+// verify a change landed without re-reading the app, small enough to never
+// rival the document itself.
+const EDIT_EXCERPT_CONTEXT_CHARS = 150;
+const EDIT_EXCERPT_SPAN_MAX_CHARS = 600;
+const EDIT_EXCERPT_MAX_EDITS = 5;
+
+/**
+ * Per-edit windows into the final saved document, so the model can verify its
+ * edits without a follow-up read_app. Spans arrive in final-document
+ * coordinates from applyStrReplaceEdits; overlong inserted text is elided in
+ * the middle and window truncation is marked with `…`.
+ */
+function buildAppliedEditExcerpts(
+  html: string,
+  spans: AppliedEditSpan[],
+): string {
+  const shown = spans.slice(0, EDIT_EXCERPT_MAX_EDITS);
+  const blocks = shown.map((span, index) => {
+    const beforeStart = Math.max(0, span.start - EDIT_EXCERPT_CONTEXT_CHARS);
+    const afterEnd = Math.min(
+      html.length,
+      span.end + EDIT_EXCERPT_CONTEXT_CHARS,
+    );
+    const before = `${beforeStart > 0 ? "…" : ""}${html.slice(beforeStart, span.start)}`;
+    const after = `${html.slice(span.end, afterEnd)}${afterEnd < html.length ? "…" : ""}`;
+    const body =
+      span.start === span.end
+        ? "⟦deleted⟧"
+        : capHint(
+            html.slice(span.start, span.end),
+            EDIT_EXCERPT_SPAN_MAX_CHARS,
+          );
+    const notes = [
+      ...(span.start === span.end ? ["deletion point"] : []),
+      ...(span.laterModified ? ["region modified by a later edit"] : []),
+    ];
+    const label = `edit ${index + 1}${notes.length > 0 ? ` (${notes.join("; ")})` : ""}`;
+    return `${label}:\n${before}${body}${after}`;
+  });
+  const omitted = spans.length - shown.length;
+  const omittedNote =
+    omitted > 0
+      ? `\n(+${omitted} more edit${omitted === 1 ? "" : "s"} applied, not shown)`
+      : "";
+  return `\nApplied-edit context (from the saved document — no need to re-read to verify):\n${blocks.join("\n")}${omittedNote}`;
 }
 
 /** Cap a span shown in an error hint, eliding the middle of an overlong one. */
@@ -1330,34 +1500,40 @@ function normalizeWhitespace(s: string): { text: string; map: number[] } {
 }
 
 /**
- * Best-effort, advisory recovery hint when an `old_str` matched 0 times: point
- * the model at the current text it most likely meant, so it copies ground truth
- * instead of replaying a corrupted literal. Never changes match semantics (the
- * edit still requires an exact unique match) — returns a hint sentence or null.
+ * Locate `oldStr` in `haystack` ignoring differences in whitespace runs, so an
+ * edit whose old_str drifted only in indentation or line-wrapping still applies.
+ * Returns the exact original-byte span (the replacement then preserves the real
+ * surrounding text) only when the whitespace-normalized needle matches exactly
+ * once; returns null when it is absent or ambiguous, leaving the strict 0/>1
+ * match errors to fire.
+ */
+function findWhitespaceInsensitiveSpan(
+  haystack: string,
+  oldStr: string,
+): { start: number; end: number } | null {
+  const needle = oldStr.replace(/\s+/g, " ").trim();
+  if (needle.length === 0) return null;
+  const norm = normalizeWhitespace(haystack);
+  const first = norm.text.indexOf(needle);
+  if (first === -1) return null;
+  if (norm.text.indexOf(needle, first + needle.length) !== -1) return null;
+  const start = norm.map[first];
+  const afterIdx = first + needle.length;
+  const end = afterIdx < norm.map.length ? norm.map[afterIdx] : haystack.length;
+  return { start, end };
+}
+
+/**
+ * Best-effort, advisory recovery hint when an `old_str` matched 0 times and was
+ * not whitespace-recoverable either (a genuine content mismatch, not just
+ * reformatting): anchor the model at the nearest ground-truth line so it copies
+ * the real current text instead of replaying a corrupted literal. Never changes
+ * match semantics — returns a hint sentence or null.
  */
 function describeNearMiss(haystack: string, oldStr: string): string | null {
-  // 1. Whitespace-insensitive unique match — the common "reformatted the
-  //    indentation" drift. Collapse both sides, and if the needle then occurs
-  //    exactly once, hand back the exact current bytes of that span to copy.
-  const needle = oldStr.replace(/\s+/g, " ").trim();
-  if (needle.length > 0) {
-    const norm = normalizeWhitespace(haystack);
-    const first = norm.text.indexOf(needle);
-    if (
-      first !== -1 &&
-      norm.text.indexOf(needle, first + needle.length) === -1
-    ) {
-      const startOrig = norm.map[first];
-      const afterIdx = first + needle.length;
-      const endOrig =
-        afterIdx < norm.map.length ? norm.map[afterIdx] : haystack.length;
-      const span = haystack.slice(startOrig, endOrig);
-      return `A unique match exists in the current HTML once whitespace is normalized. Copy this exact current text as old_str:\n${capHint(span)}`;
-    }
-  }
-  // 2. Anchor window — the longest line of old_str that occurs exactly once in
-  //    the current HTML anchors a ±3-line window of ground truth, so a one-char
-  //    drift elsewhere in the block is visible against the real source.
+  // Anchor window — the longest line of old_str that occurs exactly once in
+  // the current HTML anchors a ±3-line window of ground truth, so a one-char
+  // drift elsewhere in the block is visible against the real source.
   const anchors = oldStr
     .split("\n")
     .map((line) => line.trim())
@@ -1450,8 +1626,13 @@ const PREVIEW_OUTPUT_MAX_BYTES = 16_384;
 
 // get_app_diagnostics waits this long for a render of the head to settle,
 // polling at this cadence — well under request timeouts so a single call is
-// definitive without the agent busy-retrying.
+// definitive without the agent busy-retrying. When the app has never rendered
+// for this caller at all, no viewer plausibly has it open, so only a short
+// window is waited (2× the browser's 1.5s render-settle post, covering a first
+// render already in flight) instead of stalling the full window for a render
+// that is not coming.
 const GET_APP_DIAGNOSTICS_WAIT_MS = 10_000;
+const GET_APP_DIAGNOSTICS_NEVER_RENDERED_WAIT_MS = 3_000;
 const GET_APP_DIAGNOSTICS_POLL_MS = 500;
 
 const delay = (ms: number): Promise<void> =>
@@ -1471,15 +1652,26 @@ async function waitForHeadRenderSnapshot(params: {
   abortSignal?: AbortSignal;
 }): Promise<AppRenderDiagnostics | null> {
   const { appId, userId, head, abortSignal } = params;
-  const deadline = Date.now() + GET_APP_DIAGNOSTICS_WAIT_MS;
   let snapshot = await AppRenderDiagnosticsModel.getForUser(appId, userId);
+  let deadline =
+    Date.now() +
+    (snapshot
+      ? GET_APP_DIAGNOSTICS_WAIT_MS
+      : GET_APP_DIAGNOSTICS_NEVER_RENDERED_WAIT_MS);
   while (
     (!snapshot || snapshot.version < head) &&
     Date.now() < deadline &&
     !abortSignal?.aborted
   ) {
     await delay(GET_APP_DIAGNOSTICS_POLL_MS);
-    snapshot = await AppRenderDiagnosticsModel.getForUser(appId, userId);
+    const next = await AppRenderDiagnosticsModel.getForUser(appId, userId);
+    // A first snapshot arriving mid-window (even of an older version) proves a
+    // viewer is actively rendering, so the short never-rendered window no
+    // longer applies — give the in-flight head render the full settle window.
+    if (next && !snapshot) {
+      deadline = Date.now() + GET_APP_DIAGNOSTICS_WAIT_MS;
+    }
+    snapshot = next;
   }
   return snapshot && snapshot.version >= head ? snapshot : null;
 }
@@ -1638,6 +1830,34 @@ async function resolveToolsParam(params: {
     return { ok: false, error: resolution.error.message };
   }
   return { ok: true, tools: resolution.tools };
+}
+
+/**
+ * scaffold_app result for the partial case: the app was created but assigning
+ * its tools failed. A partial success, not an error — the model gets the app id
+ * and a `partial` status so it repairs the tools with set_app_tools instead of
+ * assuming the app was never created (an errorResult here loses both). Carries
+ * the same seeded HTML + SDK summary the success path returns, so the model can
+ * keep building (after repairing tools) without a read_app round-trip.
+ *
+ * @public — exercised by apps.test.ts to pin the partial-success result
+ * contract; the handler above is its only production caller.
+ */
+export function scaffoldPartialToolFailureResult(
+  app: App,
+  seededHtml: string,
+): ReturnType<typeof structuredSuccessResult> {
+  return structuredSuccessResult(
+    {
+      id: app.id,
+      name: app.name,
+      description: app.description,
+      scope: app.scope,
+      latestVersion: app.latestVersion,
+      status: "partial" as const,
+    },
+    `Created app "${app.name}" (${app.id}), but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold), then build it up with edit_app.\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${seededHtml}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+  );
 }
 
 /** Result-text note + structured-output fragment echoing the assignment set. */

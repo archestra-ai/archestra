@@ -8,10 +8,7 @@ import {
 } from "@/lib/auth/oauth.query";
 import { ConsentForm } from "./consent-form";
 
-vi.mock("next/navigation", () => ({
-  useRouter: vi.fn(),
-  useSearchParams: vi.fn(),
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/lib/auth/oauth.query", () => ({
   useOAuthClientInfo: vi.fn(),

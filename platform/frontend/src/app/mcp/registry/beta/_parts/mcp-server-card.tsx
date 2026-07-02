@@ -74,7 +74,7 @@ import {
 } from "../../_parts/uninstall-server-dialog";
 import { useCanReauthenticate } from "../../_parts/use-can-reauthenticate";
 import { CatalogEditNoAccess } from "./edit-catalog-dialog";
-import { useChatWithMcpServer } from "./use-chat-with-mcp-server";
+import { useChatWithCatalogItem } from "./use-chat-with-catalog-item";
 
 export type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -134,7 +134,7 @@ export function McpServerCard({
 }: McpServerCardBaseProps) {
   const isPlaywrightVariant = isBuiltInPlaywright;
 
-  const { startChat, isChatCreating } = useChatWithMcpServer(item);
+  const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
 
   const isByosEnabled = useFeature("byosEnabled");
   const { data: session } = useSession();
@@ -466,7 +466,7 @@ export function McpServerCard({
       size="sm"
       className="flex-1"
       disabled={isChatCreating}
-      onClick={startChat}
+      onClick={() => startChat(item)}
     >
       <MessageSquare className="h-4 w-4" />
       {isChatCreating ? "Creating..." : "Chat"}

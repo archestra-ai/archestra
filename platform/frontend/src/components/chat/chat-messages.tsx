@@ -1,13 +1,16 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
   APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES,
+  ARCHESTRA_MCP_CATALOG_ID,
   type ArchestraToolShortName,
   type archestraApiTypes,
   ChatMessageMetadataSchema,
   getArchestraAppResourceUri,
   getArchestraToolFullName,
   HOOK_RUN_PART_TYPE,
+  isAppRenderingArchestraToolShortName,
   parseFullToolName,
+  type ResourceVisibilityScope,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_AGENT_POKE_PREFIX,
   SWAP_AGENT_POKE_TEXT,
@@ -48,6 +51,7 @@ import {
 } from "@/components/ai-elements/reasoning";
 import { Response } from "@/components/ai-elements/response";
 import {
+  SectionLabel,
   Tool,
   ToolContent,
   ToolErrorDetails,
@@ -100,6 +104,7 @@ import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import { AuthErrorTool, type AuthErrorToolProps } from "./auth-error-tool";
 import {
+  collectSubagentToolCalls,
   extractFileAttachments,
   extractOwnedAppRender,
   filterOptimisticToolCalls,
@@ -107,6 +112,7 @@ import {
   identifyCompactToolGroups,
   isBlankAssistantTextPart,
   resolveRunToolTargetName,
+  type SubagentChildEntry,
 } from "./chat-messages.utils";
 import { CompactToolGroup, type ToolIconMap } from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
@@ -425,6 +431,19 @@ export function ChatMessages({
     [messages],
   );
 
+  // A delegated child agent's tool calls, keyed by the delegation call that
+  // spawned them, collected across the whole conversation so a part's storage
+  // location never affects how it nests. A delegation tool call whose id is a
+  // key here renders its children nested beneath it (recursively).
+  const subagentToolCalls = useMemo(
+    () => collectSubagentToolCalls(messages),
+    [messages],
+  );
+  const subagentParentToolCallIds = useMemo(
+    () => new Set(subagentToolCalls.keys()),
+    [subagentToolCalls],
+  );
+
   if (messages.length === 0 && chatErrors.length === 0) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
     if (isLoadingConversation) {
@@ -467,6 +486,13 @@ export function ChatMessages({
     chatErrors.some(
       (chatError) => chatError.error.message === liveErrorMessage,
     );
+  // Retrying resends the *last* user turn, so only a persisted error with no
+  // message after it (the failed latest turn) may offer a retry — an older error
+  // card between messages would otherwise rerun the wrong turn.
+  const lastMessageTimelineIndex = timelineItems.reduce(
+    (last, item, index) => (item.kind === "message" ? index : last),
+    -1,
+  );
 
   let unsafeContextDividerEmitted = false;
   const claimUnsafeContextDivider = (): boolean => {
@@ -495,7 +521,7 @@ export function ChatMessages({
           {unsafeContextBoundary?.kind === "preexisting_untrusted" && (
             <PreexistingUnsafeContextDivider dividerRef={unsafeBoundaryRef} />
           )}
-          {timelineItems.map((item) => {
+          {timelineItems.map((item, index) => {
             if (item.kind === "chat-error") {
               return (
                 <InlineChatError
@@ -508,7 +534,11 @@ export function ChatMessages({
                   selectedModel={selectedModel}
                   modelSource={modelSource}
                   onProviderConnected={onProviderConnected}
-                  onRetry={onChatErrorRetry}
+                  onRetry={
+                    index > lastMessageTimelineIndex
+                      ? onChatErrorRetry
+                      : undefined
+                  }
                 />
               );
             }
@@ -597,6 +627,26 @@ export function ChatMessages({
                                     part: entry.part,
                                     toolResultPart: entry.toolResultPart,
                                     errorText: entry.errorText,
+                                    nestedToolCalls:
+                                      subagentParentToolCallIds.has(
+                                        entry.part.toolCallId ?? "",
+                                      ) ? (
+                                        <SubagentToolCalls
+                                          parentToolCallId={
+                                            entry.part.toolCallId ?? ""
+                                          }
+                                          subagentToolCalls={subagentToolCalls}
+                                          isDebugging={isDebugging}
+                                          canExpandToolCalls={
+                                            canExpandToolCalls
+                                          }
+                                          connectedCatalogIds={
+                                            orchestrator.connectedCatalogIds
+                                          }
+                                          getToolShortName={getToolShortName}
+                                          toolIconMap={toolIconMap}
+                                        />
+                                      ) : null,
                                   },
                             )}
                             toolIconMap={toolIconMap}
@@ -1267,8 +1317,8 @@ export function ChatMessages({
                               // when its result lands, which otherwise hides the
                               // input-available -> output-available transition.
                               <MessageTool
-                                part={{ ...part }}
                                 key={partKey}
+                                part={{ ...part }}
                                 toolResultPart={toolResultPart}
                                 toolName={toolName}
                                 agentId={agentId}
@@ -1297,6 +1347,22 @@ export function ChatMessages({
                                       createdAt: new Date().toISOString(),
                                     },
                                   })
+                                }
+                                nestedToolCalls={
+                                  tcId &&
+                                  subagentParentToolCallIds.has(tcId) ? (
+                                    <SubagentToolCalls
+                                      parentToolCallId={tcId}
+                                      subagentToolCalls={subagentToolCalls}
+                                      isDebugging={isDebugging}
+                                      canExpandToolCalls={canExpandToolCalls}
+                                      connectedCatalogIds={
+                                        orchestrator.connectedCatalogIds
+                                      }
+                                      getToolShortName={getToolShortName}
+                                      toolIconMap={toolIconMap}
+                                    />
+                                  ) : null
                                 }
                               />
                             ),
@@ -1331,6 +1397,7 @@ export function ChatMessages({
               selectedModel={selectedModel}
               modelSource={modelSource}
               onProviderConnected={onProviderConnected}
+              onRetry={onChatErrorRetry}
             />
           )}
           {pendingToolCalls.map((toolCall) => (
@@ -1506,6 +1573,7 @@ const MessageTool = memo(
     onSendMessage,
     earlyToolUiData,
     toolIconMap,
+    nestedToolCalls,
   }: {
     part: ToolUIPart | DynamicToolUIPart;
     toolResultPart: ToolUIPart | DynamicToolUIPart | null;
@@ -1524,6 +1592,10 @@ const MessageTool = memo(
     getToolShortName: (toolName: string) => ArchestraToolShortName | null;
     onSendMessage?: (text: string) => void;
     toolIconMap?: ToolIconMap;
+    // Delegation cards only: the surfaced subagent tool calls, rendered between
+    // this card's Request and Result so the delegation reads in causal order
+    // (prompt in -> child tools run -> answer out).
+    nestedToolCalls?: React.ReactNode;
     earlyToolUiData?: {
       uiResourceUri: string;
       html?: string;
@@ -1579,6 +1651,16 @@ const MessageTool = memo(
           })
         : null;
 
+    // An owned-app management tool (scaffold/edit/render_app), detected by name
+    // even before its result lands. Lets the still-pending call render as the
+    // same compact Archestra-logo circle as the finished one, instead of the
+    // full-width tool card it would otherwise fall through to.
+    const appMgmtShortName = getToolShortName(mcpAppToolName);
+    const isOwnedAppMgmtTool =
+      appMgmtShortName !== null
+        ? isAppRenderingArchestraToolShortName(appMgmtShortName)
+        : isAppRenderingArchestraToolShortName(mcpAppToolName);
+
     const isApprovalRequested = part.state === "approval-requested";
     const isToolDenied = part.state === "output-denied";
     const approvalDisplay = getApprovalToolDisplay({
@@ -1590,10 +1672,12 @@ const MessageTool = memo(
     const displayToolName = approvalDisplay.toolName;
     const displayInput = approvalDisplay.input;
     const hasInput = displayInput && Object.keys(displayInput).length > 0;
+    const hasNestedToolCalls = Boolean(nestedToolCalls);
     const hasContent = Boolean(
       hasInput ||
         errorText ||
         isApprovalRequested ||
+        hasNestedToolCalls ||
         (toolResultPart && Boolean(toolResultPart.output)) ||
         (!toolResultPart && Boolean(part.output)),
     );
@@ -1729,15 +1813,55 @@ const MessageTool = memo(
       <ToolErrorLogsButton toolName={toolName} />
     ) : null;
 
-    // MCP App tools: compact circle + canvas below (no collapsible wrapper)
-    if ((uiResourceUri || ownedApp) && !isApprovalRequested && !errorText) {
+    // MCP App tools: compact circle + canvas below (no collapsible wrapper).
+    // Owned-app management tools use this compact form even while pending (before
+    // a result identifies the app), so "Edit app" streaming looks like every
+    // other tool call rather than a full-width card.
+    if (
+      (uiResourceUri || ownedApp || isOwnedAppMgmtTool) &&
+      !isApprovalRequested &&
+      !isToolDenied &&
+      !errorText
+    ) {
       const compactState = getCompactToolState({ part, toolResultPart });
       const shortName = parseFullToolName(toolName).toolName.replace(/_/g, " ");
       const iconInfo = toolIconMap?.get(toolName);
+      // Fall back to the Archestra catalog icon for owned-app / archestra tools
+      // whose icon isn't in the map yet (e.g. a still-pending management call).
+      const catalogId =
+        iconInfo?.catalogId ??
+        (appMgmtShortName !== null ? ARCHESTRA_MCP_CATALOG_ID : undefined);
 
+      // Expanded tool-call details (input/output). Handed to McpAppSection so it
+      // can place them above the app in the column below the circle+marker row.
+      const toolDetails = isOpen ? (
+        <Tool defaultOpen={true}>
+          <ToolHeader
+            type={`tool-${displayToolName}`}
+            state={getHeaderState({
+              state: part.state || "input-available",
+              toolResultPart,
+              errorText,
+            })}
+            isCollapsible={!!hasInput}
+          />
+          <ToolContent>
+            {hasInput ? <ToolInput input={displayInput} /> : null}
+            {toolResultPart && (
+              <ToolOutput
+                label="Result"
+                output={mcpOutput?.content ?? toolResultPart.output}
+              />
+            )}
+          </ToolContent>
+        </Tool>
+      ) : undefined;
+
+      // Tool-call circle and the app marker share the flex-wrap row's first line;
+      // the tool details + inline app card stack in a full-width column below.
       return (
         <div className="mb-4">
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-start gap-1.5">
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -1751,10 +1875,10 @@ const MessageTool = memo(
                       !isOpen && "bg-background",
                     )}
                   >
-                    {iconInfo?.icon || iconInfo?.catalogId ? (
+                    {iconInfo?.icon || catalogId ? (
                       <McpCatalogIcon
-                        icon={iconInfo.icon}
-                        catalogId={iconInfo.catalogId}
+                        icon={iconInfo?.icon}
+                        catalogId={catalogId}
                         size={16}
                       />
                     ) : (
@@ -1776,34 +1900,8 @@ const MessageTool = memo(
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          </div>
-          {isOpen && (
-            <div className="mt-2">
-              <Tool defaultOpen={true}>
-                <ToolHeader
-                  type={`tool-${displayToolName}`}
-                  state={getHeaderState({
-                    state: part.state || "input-available",
-                    toolResultPart,
-                    errorText,
-                  })}
-                  isCollapsible={!!hasInput}
-                />
-                <ToolContent>
-                  {hasInput ? <ToolInput input={displayInput} /> : null}
-                  {toolResultPart && (
-                    <ToolOutput
-                      label="Result"
-                      output={mcpOutput?.content ?? toolResultPart.output}
-                    />
-                  )}
-                </ToolContent>
-              </Tool>
-            </div>
-          )}
-          {agentId && (
-            <div className="mt-3">
-              {uiResourceUri ? (
+            {agentId &&
+              (uiResourceUri ? (
                 <McpAppSection
                   uiResourceUri={uiResourceUri}
                   mcpServerId={uiMcpServerId}
@@ -1812,6 +1910,7 @@ const MessageTool = memo(
                   toolCallId={part.toolCallId}
                   toolInput={mcpAppToolInput}
                   rawOutput={mcpOutput}
+                  toolDetails={toolDetails}
                   preloadedResource={
                     earlyToolUiData?.html
                       ? {
@@ -1832,11 +1931,11 @@ const MessageTool = memo(
                   agentId={agentId}
                   toolName={mcpAppToolName}
                   toolCallId={part.toolCallId}
+                  toolDetails={toolDetails}
                   onSendMessage={onSendMessage}
                 />
-              ) : null}
-            </div>
-          )}
+              ) : null)}
+          </div>
         </div>
       );
     }
@@ -1863,6 +1962,7 @@ const MessageTool = memo(
         />
         <ToolContent forceMount={uiResourceUri ? true : undefined}>
           {hasInput ? <ToolInput input={displayInput} /> : null}
+          {nestedToolCalls}
           {isApprovalRequested &&
             onToolApprovalResponse &&
             "approval" in part &&
@@ -1958,6 +2058,11 @@ const MessageTool = memo(
     );
   },
   (prev, next) =>
+    // Delegation cards carry freshly-built nested subagent content the by-value
+    // checks below can't see; never skip their renders or late-arriving child
+    // tool calls would be dropped.
+    !prev.nestedToolCalls &&
+    !next.nestedToolCalls &&
     // Skip re-render unless identity, state, or UI-relevant data actually changed.
     // Compare by value, not reference: the AI SDK sometimes mutates a tool part
     // in place when its result lands, so render sites pass a shallow copy (see
@@ -2089,6 +2194,102 @@ function getPreviousAssistantSwapBoundaryLabel({
   }
 
   return null;
+}
+
+/** Synthesize a tool UI part from a surfaced subagent call so the existing tool card renders it. */
+function synthesizeSubagentToolPart(
+  entry: SubagentChildEntry,
+): ToolUIPart | DynamicToolUIPart {
+  const state = entry.errorText
+    ? "output-error"
+    : (entry.state ?? "output-available");
+  return {
+    type: `tool-${entry.toolName}`,
+    toolCallId: entry.toolCallId,
+    state,
+    input: entry.input,
+    output: entry.output,
+    ...(entry.errorText ? { errorText: entry.errorText } : {}),
+  } as ToolUIPart;
+}
+
+// Guards against a malformed parent/child map producing unbounded recursion;
+// real toolCallIds are unique, so a well-formed map is always a finite tree.
+const MAX_SUBAGENT_NESTING_DEPTH = 16;
+
+/**
+ * Render a delegation call's surfaced subagent tool calls as an indented rail.
+ * The caller places this between the delegation card's Request and Result, so the
+ * card reads in causal order. Each child reuses the standard tool card; a child
+ * that is itself a delegation (its id has its own children) recurses into that
+ * child's own Request/Result, mirroring the delegation chain. Renders nothing
+ * when the delegation produced no surfaced tool calls.
+ */
+function SubagentToolCalls({
+  parentToolCallId,
+  subagentToolCalls,
+  depth = 0,
+  isDebugging,
+  canExpandToolCalls,
+  connectedCatalogIds,
+  getToolShortName,
+  toolIconMap,
+}: {
+  parentToolCallId: string;
+  subagentToolCalls: Map<string, SubagentChildEntry[]>;
+  depth?: number;
+  isDebugging?: boolean;
+  canExpandToolCalls?: boolean;
+  connectedCatalogIds: ReadonlySet<string>;
+  getToolShortName: (toolName: string) => ArchestraToolShortName | null;
+  toolIconMap?: ToolIconMap;
+}) {
+  const children = subagentToolCalls.get(parentToolCallId);
+  if (!children?.length || depth >= MAX_SUBAGENT_NESTING_DEPTH) {
+    return null;
+  }
+  return (
+    <div className="pt-2 space-y-1.5">
+      <div className="px-3">
+        <SectionLabel accent="bg-violet-400">Tools</SectionLabel>
+      </div>
+      <div className="px-3 space-y-1">
+        {children.map((child) => (
+          /* Display-only: a subagent's calls are completed, autonomous child
+           activity. agentId and the approval/auth/install callbacks are
+           intentionally omitted so an agent-scoped action can't fire against
+           the parent agent (the child ran the tool, not the parent). A child
+           that is itself a delegation nests its own children between its
+           Request and Result, recursing the same layout. */
+          <MessageTool
+            key={child.toolCallId}
+            part={synthesizeSubagentToolPart(child)}
+            toolResultPart={null}
+            toolName={child.toolName}
+            isDebugging={isDebugging}
+            canExpandToolCalls={canExpandToolCalls}
+            connectedCatalogIds={connectedCatalogIds}
+            getToolShortName={getToolShortName}
+            toolIconMap={toolIconMap}
+            nestedToolCalls={
+              subagentToolCalls.has(child.toolCallId) ? (
+                <SubagentToolCalls
+                  parentToolCallId={child.toolCallId}
+                  subagentToolCalls={subagentToolCalls}
+                  depth={depth + 1}
+                  isDebugging={isDebugging}
+                  canExpandToolCalls={canExpandToolCalls}
+                  connectedCatalogIds={connectedCatalogIds}
+                  getToolShortName={getToolShortName}
+                  toolIconMap={toolIconMap}
+                />
+              ) : null
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function renderPartWithUnsafeContextDivider({
@@ -2480,6 +2681,50 @@ function isMessagePositionBefore(params: {
   return params.boundaryPartIndex < params.beforePartIndex;
 }
 
+// Names which credential expired on the re-authentication card. The returned
+// subject is grammatically the plural "credentials" so it reads naturally with
+// the "… have expired or are invalid" copy that follows. Falls back to the
+// scope-less "Your credentials" when the resolved scope is unknown (text-parsed
+// errors, or chat history predating the structured field).
+function expiredCredentialSubject(params: {
+  scope?: ResourceVisibilityScope;
+  teamName?: string | null;
+}): React.ReactNode {
+  const { scope, teamName } = params;
+
+  if (scope === "personal") {
+    return (
+      <>
+        Your <span className="font-medium">personal</span> credentials
+      </>
+    );
+  }
+
+  if (scope === "team") {
+    return teamName ? (
+      <>
+        The <span className="font-medium">{teamName}</span> team&rsquo;s
+        credentials
+      </>
+    ) : (
+      <>
+        Your <span className="font-medium">team&rsquo;s</span> credentials
+      </>
+    );
+  }
+
+  if (scope === "org") {
+    return (
+      <>
+        The <span className="font-medium">organization&rsquo;s</span>{" "}
+        credentials
+      </>
+    );
+  }
+
+  return <>Your credentials</>;
+}
+
 function authCardProps(params: {
   toolName: string;
   authState: ToolAuthState | null;
@@ -2510,8 +2755,12 @@ function authCardProps(params: {
         title: "Expired / Invalid Authentication",
         description: (
           <>
-            Your credentials for &ldquo;{displayName}&rdquo; have expired or are
-            invalid. Re-authenticate to continue using this tool.
+            {expiredCredentialSubject({
+              scope: authState.credentialScope,
+              teamName: authState.credentialTeamName,
+            })}{" "}
+            for &ldquo;{displayName}&rdquo; have expired or are invalid.
+            Re-authenticate to continue using this tool.
           </>
         ),
         buttonText: onReauth ? "Re-authenticate" : "Manage credentials",

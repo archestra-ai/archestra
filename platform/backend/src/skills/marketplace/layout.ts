@@ -195,7 +195,16 @@ function resolveResourceFile(params: {
     return null;
   }
   const relPath = path.posix.normalize(file.path.replace(/^\.?\//, ""));
-  if (relPath.startsWith("..") || relPath === "..") {
+  // Reject absolute paths and any `..` traversal *segment*. A substring test
+  // (startsWith("..") / includes("../")) also drops legitimate names that merely
+  // begin with or contain dots, e.g. a "notes.." folder, silently losing the
+  // file — so match whole segments. Split on both separators so a Windows-style
+  // "..\\evil.md" (which materialize.ts later re-splits) is still rejected, not
+  // just POSIX "../"; mirrors the intent of SkillFileInputSchema in ../validation.ts.
+  if (
+    path.posix.isAbsolute(relPath) ||
+    relPath.split(/[/\\]/).some((segment) => segment === "..")
+  ) {
     logger.warn(
       { path: file.path },
       "materialize: skipping file with traversal path",
@@ -209,14 +218,6 @@ function resolveResourceFile(params: {
     logger.warn(
       { path: file.path },
       "materialize: skipping reserved resource path SKILL.md",
-    );
-    return null;
-  }
-  // additional safety: reject any absolute or root-escape after normalization
-  if (path.posix.isAbsolute(relPath) || relPath.includes("../")) {
-    logger.warn(
-      { path: file.path },
-      "materialize: skipping file outside skill root",
     );
     return null;
   }

@@ -259,7 +259,7 @@ impl SandboxBackend for DaggerBackend {
     async fn check_session(&self, traceparent: Option<String>) -> Result<()> {
         attach_trace(traceparent.as_deref());
         // ensure_warm covers the engine-reachable + base-image-buildable invariant.
-        let _ = self.ensure_warm().await?;
+        self.ensure_warm().await?;
         self.client.version().await.map_err(from_sdk)?;
         Ok(())
     }
@@ -1032,10 +1032,6 @@ fn any_exit_opts<'a>() -> ContainerWithExecOpts<'a> {
     }
 }
 
-/// categorise an error returned by the dagger SDK during exec evaluation. SDK
-/// errors with an embedded `exit code: N` come from a container exec that
-/// returned non-zero (kill-by-signal counts here too); everything else is a
-/// real transport/engine failure.
 /// categorise an error returned by the dagger SDK during exec evaluation. an
 /// exec that returned non-zero (kill-by-signal counts here too) becomes a
 /// `CommandFailed`; everything else is a real transport/engine failure, tagged
@@ -1229,6 +1225,45 @@ mod tests {
         path
     }
 
+    /// Spawn a fake-session command, retrying the ETXTBSY fork/exec race: a
+    /// concurrently running test can fork (its own `spawn`) while
+    /// `write_fake_session` still holds this script's fd open for write, and
+    /// the forked child keeps that fd until its exec closes it (O_CLOEXEC) —
+    /// so exec'ing the script transiently fails with "Text file busy".
+    #[cfg(target_os = "linux")]
+    async fn spawn_fake_session(cmd: &mut Command) -> Child {
+        for _ in 0..50 {
+            match cmd.spawn() {
+                Err(err) if err.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+                spawned => return spawned.unwrap(),
+            }
+        }
+        cmd.spawn().unwrap()
+    }
+
+    /// `spawn_and_read_connect_params` on a fake session, retrying the same
+    /// ETXTBSY race as `spawn_fake_session`; the spawn happens inside the
+    /// production function, so the whole call retries with a rebuilt command.
+    #[cfg(target_os = "linux")]
+    async fn connect_fake_session(script: &Path) -> eyre::Result<(ConnectParams, SessionProc)> {
+        let is_etxtbsy = |err: &eyre::Report| {
+            err.downcast_ref::<std::io::Error>()
+                .is_some_and(|io| io.kind() == std::io::ErrorKind::ExecutableFileBusy)
+        };
+        for _ in 0..50 {
+            let cmd = build_session_command(script, Path::new("/"), None);
+            match spawn_and_read_connect_params(cmd).await {
+                Err(err) if is_etxtbsy(&err) => {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+                connected => return connected,
+            }
+        }
+        spawn_and_read_connect_params(build_session_command(script, Path::new("/"), None)).await
+    }
+
     /// True when `pid` is gone from the proc table or is a reaped/zombie corpse.
     #[cfg(target_os = "linux")]
     fn process_finished(pid: u32) -> bool {
@@ -1251,9 +1286,7 @@ mod tests {
         let script = write_fake_session(
             "#!/bin/sh\necho '{\"port\":12345,\"session_token\":\"tok\"}'\nsleep 30\n",
         );
-        let cmd = build_session_command(&script, Path::new("/"), None);
-
-        let (conn, proc) = spawn_and_read_connect_params(cmd).await.unwrap();
+        let (conn, proc) = connect_fake_session(&script).await.unwrap();
         assert_eq!(conn.port, 12345);
         assert_eq!(conn.session_token, "tok");
 
@@ -1267,11 +1300,10 @@ mod tests {
         // a fake session that exits before emitting any ConnectParams; the oneshot
         // sender drops, so the receiver resolves to the "exited" error.
         let script = write_fake_session("#!/bin/sh\nexit 0\n");
-        let cmd = build_session_command(&script, Path::new("/"), None);
 
         // the success arm holds a `SessionProc` (not `Debug`), so match instead
         // of `unwrap_err`.
-        let Err(err) = spawn_and_read_connect_params(cmd).await else {
+        let Err(err) = connect_fake_session(&script).await else {
             panic!("expected an error when the child exits without reporting params");
         };
         assert!(
@@ -1290,7 +1322,7 @@ mod tests {
         let script = write_fake_session("#!/bin/sh\nsleep 120\n");
         let mut cmd = build_session_command(&script, Path::new("/"), None);
 
-        let child = cmd.spawn().unwrap();
+        let child = spawn_fake_session(&mut cmd).await;
         let pid = child.id().expect("a spawned child has a pid");
         assert!(
             !process_finished(pid),
@@ -1327,7 +1359,7 @@ mod tests {
         // orphaned `dagger session` hammering the engine.
         let script = write_fake_session("#!/bin/sh\nsleep 120\n");
         let mut cmd = build_session_command(&script, Path::new("/"), None);
-        let child = cmd.spawn().unwrap();
+        let child = spawn_fake_session(&mut cmd).await;
         let pid = child.id().expect("a spawned child has a pid");
         let proc: SessionProc = child.into();
 
@@ -1350,7 +1382,7 @@ mod tests {
         // wait; shutdown() must still reap the zombie rather than leak it.
         let script = write_fake_session("#!/bin/sh\nexit 0\n");
         let mut cmd = build_session_command(&script, Path::new("/"), None);
-        let child = cmd.spawn().unwrap();
+        let child = spawn_fake_session(&mut cmd).await;
         let pid = child.id().expect("a spawned child has a pid");
         let proc: SessionProc = child.into();
 

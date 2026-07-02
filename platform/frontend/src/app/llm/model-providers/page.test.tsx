@@ -3,7 +3,6 @@
 import { render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockUseHasPermissions = vi.fn();
 const mockUseLlmProviderApiKeys = vi.fn();
 
 vi.mock("next/image", () => ({
@@ -21,9 +20,7 @@ vi.mock("@/components/page-layout", () => ({
   ),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: (...args: unknown[]) => mockUseHasPermissions(...args),
-}));
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useDeleteLlmProviderApiKey: () => ({
@@ -45,9 +42,7 @@ vi.mock("@/lib/llm-oauth-clients.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => ({ data: null }),
-}));
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/virtual-api-keys.query", () => ({
   useAllVirtualApiKeys: () => ({
@@ -59,9 +54,7 @@ vi.mock("@/lib/virtual-api-keys.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: () => false,
-}));
+vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/docs/docs", () => ({
   getFrontendDocsUrl: () => "https://example.com/docs",
@@ -164,11 +157,20 @@ vi.mock("@/components/ui/select", () => ({
   SelectValue: () => null,
 }));
 
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
+import { useOrganization } from "@/lib/organization.query";
 import ApiKeysPage from "./page";
 
 describe("ApiKeysPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useOrganization).mockReturnValue({
+      data: null,
+    } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useFeature).mockReturnValue(
+      false as unknown as ReturnType<typeof useFeature>,
+    );
     mockUseLlmProviderApiKeys.mockReturnValue({
       data: [],
       isPending: false,
@@ -176,10 +178,10 @@ describe("ApiKeysPage", () => {
   });
 
   it("does not query API keys while read permission is still loading", () => {
-    mockUseHasPermissions.mockReturnValue({
+    vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
       isPending: true,
-    });
+    } as unknown as ReturnType<typeof useHasPermissions>);
 
     render(<ApiKeysPage />);
 
@@ -194,10 +196,10 @@ describe("ApiKeysPage", () => {
   });
 
   it("queries API keys after read permission resolves", () => {
-    mockUseHasPermissions.mockReturnValue({
+    vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
-    });
+    } as unknown as ReturnType<typeof useHasPermissions>);
 
     render(<ApiKeysPage />);
 

@@ -1,3 +1,4 @@
+export * as clientApp from "./client-app";
 export * as executionId from "./execution-id";
 export * as externalAgentId from "./external-agent-id";
 export * as metaHeader from "./meta-header";

@@ -1,7 +1,9 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { act, render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { ChatProvider, useGlobalChat } from "./global-chat.context";
 
 type ChatSessionSnapshot = ReturnType<
@@ -11,6 +13,7 @@ type ChatSessionSnapshot = ReturnType<
 const mocks = vi.hoisted(() => ({
   addToolApprovalResponse: vi.fn(),
   addToolResult: vi.fn(),
+  clearChatErrors: vi.fn(),
   clearError: vi.fn(),
   getQueryData: vi.fn(),
   invalidateQueries: vi.fn(),
@@ -21,7 +24,6 @@ const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
   setMessages: vi.fn(),
   stop: vi.fn(),
-  toastError: vi.fn(),
   useChat: vi.fn(),
 }));
 
@@ -34,11 +36,7 @@ vi.mock("ai", () => ({
   lastAssistantMessageIsCompleteWithApprovalResponses: vi.fn(() => true),
 }));
 
-vi.mock("sonner", () => ({
-  toast: {
-    error: mocks.toastError,
-  },
-}));
+vi.mock("sonner");
 
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({
@@ -63,13 +61,18 @@ vi.mock("@/lib/chat/chat.query", () => ({
     isPending: false,
     mutateAsync: mocks.mutateAsync,
   }),
+  useClearChatErrors: () => ({
+    mutateAsync: mocks.clearChatErrors,
+  }),
   useConversation: () => ({ data: conversationMock.data }),
   useConversationUpdatedCacheSync: () => {},
 }));
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Archestra",
-}));
+vi.mock("@/lib/hooks/use-app-name");
+
+beforeEach(() => {
+  vi.mocked(useAppName).mockReturnValue("Archestra");
+});
 
 vi.mock("@/lib/config/config", () => ({
   default: {
@@ -154,6 +157,150 @@ describe("ChatProvider retries", () => {
     });
 
     expect(mocks.regenerate).toHaveBeenCalledTimes(1);
+  });
+
+  const networkError = () =>
+    new Error(
+      JSON.stringify({
+        code: "network_error",
+        isRetryable: true,
+        message: "Connection error. Please check your network and try again.",
+      }),
+    );
+
+  it("auto-retries a structured network_error", async () => {
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    vi.useFakeTimers();
+    act(() => {
+      chatOptions?.onError?.(networkError());
+      vi.advanceTimersByTime(1500);
+    });
+
+    expect(mocks.regenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the stale persisted error card after a network_error retry succeeds", async () => {
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    vi.useFakeTimers();
+    act(() => {
+      chatOptions?.onError?.(networkError());
+      vi.advanceTimersByTime(1500);
+    });
+    expect(mocks.regenerate).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+    await act(async () => {
+      await chatOptions?.onFinish?.({ message: { parts: [] }, isAbort: false });
+    });
+
+    expect(mocks.clearChatErrors).toHaveBeenCalledWith({
+      id: "conversation-1",
+    });
+  });
+
+  it("does not clear persisted errors when a run succeeds after a non-retried error", async () => {
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    // server_error is not silently auto-retried, so it stays terminal and leaves
+    // no pending "clear on retry" intent for the next successful turn.
+    act(() => {
+      chatOptions?.onError?.(
+        new Error(
+          JSON.stringify({
+            code: "server_error",
+            isRetryable: true,
+            message: "The AI provider is experiencing issues.",
+          }),
+        ),
+      );
+    });
+    await act(async () => {
+      await chatOptions?.onFinish?.({ message: { parts: [] }, isAbort: false });
+    });
+
+    expect(mocks.clearChatErrors).not.toHaveBeenCalled();
+  });
+
+  it("does not clear persisted errors on a later success after the retry reattaches with a 204", async () => {
+    let resolveResume: (() => void) | undefined;
+    mocks.resumeStream.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveResume = resolve;
+        }),
+    );
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    // network_error auto-retries; its regenerate re-POSTs into the still-live run
+    // and lands the duplicate-run 409, so the session reattaches via resumeStream.
+    vi.useFakeTimers();
+    act(() => {
+      chatOptions?.onError?.(networkError());
+      chatOptions?.onFinish?.({
+        message: { parts: [] },
+        isAbort: false,
+        isError: true,
+        isDisconnect: true,
+      });
+      vi.advanceTimersByTime(1500);
+    });
+    expect(mocks.regenerate).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      chatOptions?.onError?.(
+        new Error("This conversation already has an active response."),
+      );
+      chatOptions?.onFinish?.({
+        message: { parts: [] },
+        isAbort: false,
+        isError: true,
+        isDisconnect: false,
+      });
+    });
+    expect(mocks.resumeStream).toHaveBeenCalledTimes(1);
+
+    // The run had already finished: resumeStream resolves 204 with no
+    // onFinish/onError, concluding recovery.
+    vi.useRealTimers();
+    await act(async () => {
+      resolveResume?.();
+    });
+
+    // A later unrelated turn succeeds — it must NOT clear the persisted error,
+    // since the reattach already concluded the recovery.
+    mocks.clearChatErrors.mockClear();
+    await act(async () => {
+      await chatOptions?.onFinish?.({ message: { parts: [] }, isAbort: false });
+    });
+
+    expect(mocks.clearChatErrors).not.toHaveBeenCalled();
   });
 
   it("updates live context token estimate from usage and compaction data", async () => {
@@ -439,7 +586,7 @@ describe("ChatProvider retries", () => {
       );
     });
 
-    expect(mocks.toastError).toHaveBeenCalledWith(
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
       "This conversation already has a response in progress. Stop it before sending another message.",
     );
     expect(mocks.regenerate).not.toHaveBeenCalled();
@@ -495,7 +642,7 @@ describe("ChatProvider retries", () => {
     // run via the replay endpoint instead of telling the user to stop a
     // response they cannot see.
     expect(mocks.resumeStream).toHaveBeenCalledTimes(1);
-    expect(mocks.toastError).not.toHaveBeenCalled();
+    expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
   });
 
   it("concludes recovery when the reattach finds the run already finished (204 no-op)", async () => {
@@ -572,7 +719,7 @@ describe("ChatProvider retries", () => {
       );
     });
     expect(mocks.resumeStream).toHaveBeenCalledTimes(1);
-    expect(mocks.toastError).toHaveBeenCalledWith(
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
       "This conversation already has a response in progress. Stop it before sending another message.",
     );
   });

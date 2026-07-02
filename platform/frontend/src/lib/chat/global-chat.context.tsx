@@ -42,11 +42,16 @@ import {
   McpElicitationDialog,
 } from "@/components/chat/mcp-elicitation-dialog";
 import {
+  useClearChatErrors,
   useConversationUpdatedCacheSync,
   useGenerateConversationTitle,
   useResolveChatMcpElicitation,
 } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
+import {
+  isRetryableError,
+  parseStructuredChatError,
+} from "@/lib/chat/chat-retry.utils";
 import {
   pruneEmptyTrailingAssistantMessage,
   restoreRenderableAssistantParts,
@@ -70,13 +75,6 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;
 const AUTO_RETRY_DELAY_MS = 1500;
-/** Network-level errors that never reach the backend */
-const RETRYABLE_CLIENT_ERRORS = [
-  "Failed to fetch",
-  "NetworkError",
-  "No output generated",
-  "network",
-];
 
 export type ContextCompactionState = {
   isCompacting: boolean;
@@ -94,20 +92,6 @@ type ContextCompactionRecord = NonNullable<
 > & {
   updateContextTokens?: boolean;
 };
-
-function isRetryableError(error: Error): boolean {
-  const msg = error.message;
-  // Structured backend chat errors already reached the server and should render
-  // once. Retrying here creates duplicate LLM requests and changes trace IDs.
-  try {
-    JSON.parse(msg);
-    return false;
-  } catch {
-    // not JSON
-  }
-
-  return RETRYABLE_CLIENT_ERRORS.some((p) => msg.includes(p));
-}
 
 function isDuplicateActiveRunError(error: Error): boolean {
   // Match the backend's exact duplicate-run message rather than a bare "409",
@@ -479,6 +463,11 @@ function ChatSessionHook({
   // Auto-retry state for transient errors
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Set while auto-retrying a *structured* (backend-persisted) error, so a
+  // successful retry can wipe the now-stale persisted error card the backend
+  // never clears on its own.
+  const recoveredPersistedErrorRef = useRef(false);
+  const clearChatErrors = useClearChatErrors();
   // Monotonically counts onError invocations. The duplicate-run reattach uses
   // it to detect that nothing happened between calling resumeStream() and its
   // promise resolving — the "run already finished" case, where the reconnect
@@ -582,6 +571,20 @@ function ChatSessionHook({
       // errors.
       if (!isError) {
         setIsRecovering(false);
+        // A structured error we silently auto-retried just succeeded — clear the
+        // stale persisted error card the backend leaves behind (it never clears it
+        // on a new run). Reset the flag first so a re-entrant finish can't double-fire.
+        if (recoveredPersistedErrorRef.current) {
+          recoveredPersistedErrorRef.current = false;
+          try {
+            await clearChatErrors.mutateAsync({ id: conversationId });
+          } catch (error) {
+            console.error(
+              "[ChatSession] Failed to clear stale chat error after retry",
+              error,
+            );
+          }
+        }
       }
 
       // When the user stops mid-tool-call, the assistant message is left with a
@@ -747,6 +750,10 @@ function ChatSessionHook({
             errorSeqRef.current === reattachErrorSeq
           ) {
             setIsRecovering(false);
+            // This reattach ends the recovery without an onFinish/onError, so
+            // drop any pending "clear the persisted error on success" intent —
+            // otherwise it leaks into a later unrelated success.
+            recoveredPersistedErrorRef.current = false;
             // Drop the stale duplicate-run error so the SDK returns to
             // "ready" instead of idling in the suppressed error state.
             clearErrorRef.current?.();
@@ -763,6 +770,10 @@ function ChatSessionHook({
         retryCountRef.current < MAX_AUTO_RETRIES
       ) {
         retryCountRef.current++;
+        // A structured error was persisted by the backend; a successful retry must
+        // clear that stale card (onFinish). Unstructured client errors leave no row.
+        recoveredPersistedErrorRef.current =
+          parseStructuredChatError(chatError.message) !== null;
         console.info(
           `[ChatSession] Auto-retrying (${retryCountRef.current}/${MAX_AUTO_RETRIES})...`,
         );
@@ -783,7 +794,9 @@ function ChatSessionHook({
         return;
       }
 
-      // Terminal: no recovery in flight — surface the error.
+      // Terminal: no recovery in flight — surface the error (and keep its
+      // persisted card, so drop any pending "clear on successful retry" intent).
+      recoveredPersistedErrorRef.current = false;
       setPendingMcpElicitation(null);
       setIsRecovering(false);
     },
@@ -998,6 +1011,9 @@ function ChatSessionHook({
   ) {
     lastUserMessageIdRef.current = lastStableUserMessage.id;
     retryCountRef.current = 0;
+    // A new turn: any pending "clear the prior turn's persisted error on a
+    // successful retry" intent no longer applies to this turn.
+    recoveredPersistedErrorRef.current = false;
   }
 
   useEffect(() => {

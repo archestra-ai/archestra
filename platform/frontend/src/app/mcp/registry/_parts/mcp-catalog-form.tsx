@@ -57,6 +57,7 @@ import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { SecretInput } from "@/components/ui/secret-input";
 import {
   Select,
   SelectContent,
@@ -83,10 +84,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
-import {
-  MCP_CONFIG_AUTOCOMPLETE,
-  MCP_SECRET_AUTOCOMPLETE,
-} from "@/lib/mcp/mcp-form-autocomplete";
+import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
@@ -285,6 +283,7 @@ export function McpCatalogForm({
                 ? `${window.location.origin}/oauth-callback`
                 : "",
             scopes: "read, write",
+            additional_scopes: "offline_access",
             supports_resource_metadata: true,
             grantType: "authorization_code",
             authServerUrl: "",
@@ -1597,9 +1596,7 @@ export function McpCatalogForm({
                             </div>
                             <div className="space-y-1">
                               <Label className="text-xs">Password</Label>
-                              <Input
-                                type="password"
-                                autoComplete={MCP_SECRET_AUTOCOMPLETE}
+                              <SecretInput
                                 placeholder={
                                   mode === "edit" && !watchField("password")
                                     ? "Saved — leave blank to keep"
@@ -1953,13 +1950,9 @@ export function McpCatalogForm({
                                       <FormItem>
                                         <FormLabel>Client Secret</FormLabel>
                                         <FormControl>
-                                          <Input
-                                            type="password"
+                                          <SecretInput
                                             placeholder="your-client-secret (optional)"
                                             className="font-mono"
-                                            autoComplete={
-                                              MCP_SECRET_AUTOCOMPLETE
-                                            }
                                             {...field}
                                           />
                                         </FormControl>
@@ -2042,6 +2035,31 @@ export function McpCatalogForm({
                                       </FormControl>
                                       <FormDescription>
                                         Comma-separated list of OAuth scopes.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name="oauthConfig.additional_scopes"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Additional scopes</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="offline_access"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Always appended on top of the requested
+                                        scopes. offline_access is added by
+                                        default so the provider returns a
+                                        refresh token; clear it for providers
+                                        that reject it (e.g. Google).
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>

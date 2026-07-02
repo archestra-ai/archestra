@@ -75,7 +75,7 @@ import { YamlConfigContent } from "../../_parts/yaml-config-dialog";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import type { CatalogItem } from "../_parts/mcp-server-card";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
-import { useChatWithMcpServer } from "../_parts/use-chat-with-mcp-server";
+import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
 
 type DetailTab =
   | "overview"
@@ -283,14 +283,6 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
     setActiveTab("logs");
   };
 
-  // Chat with the server via a personal agent (same flow as the server card).
-  const { startChat, isChatCreating } = useChatWithMcpServer(item);
-  const showChatButton = shouldShowMcpCardChatButton({
-    toolsCount: tools.length,
-    isBuiltin: variant === "builtin",
-    hasInstallation: allServersForCatalog.length > 0,
-  });
-
   // Install inline on this page (no navigation). The dialog lets the user pick
   // scope/credential; the add-* helpers pre-target a personal/team/org scope.
   const install = useCatalogInstall();
@@ -298,6 +290,16 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
     item.serverType === "local"
       ? install.installLocal(item)
       : install.installRemote(item);
+
+  // "Chat" spins up (or reuses) a personal agent with this catalog's tools —
+  // same flow and visibility gate as the registry card. The gate reads
+  // `item.toolCount` (not the fetched `tools` list) to match the card exactly.
+  const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
+  const showChatButton = shouldShowMcpCardChatButton({
+    toolsCount: item.toolCount ?? 0,
+    isBuiltin: variant === "builtin",
+    hasInstallation: allServersForCatalog.length > 0,
+  });
 
   const [deleteRequested, setDeleteRequested] = useState(false);
   // Recreate the K8s pods with a freshly pulled image (local servers only).
@@ -352,20 +354,20 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          {showChatButton && (
-            <Button
-              variant="outline"
-              disabled={isChatCreating}
-              onClick={startChat}
-            >
-              <MessageSquare className="h-4 w-4" />
-              {isChatCreating ? "Creating..." : "Chat"}
-            </Button>
-          )}
           {!hasPersonalConnection && variant !== "builtin" && (
             <Button variant="outline" onClick={openInstall}>
               <PlugZap className="h-4 w-4" />
               Install
+            </Button>
+          )}
+          {showChatButton && (
+            <Button
+              variant="outline"
+              disabled={isChatCreating}
+              onClick={() => startChat(item)}
+            >
+              <MessageSquare className="h-4 w-4" />
+              {isChatCreating ? "Creating..." : "Chat"}
             </Button>
           )}
           {canModify && (

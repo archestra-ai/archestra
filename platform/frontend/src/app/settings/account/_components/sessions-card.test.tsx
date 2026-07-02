@@ -6,17 +6,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { SessionsCard } from "./sessions-card";
 
-vi.mock("next/navigation", () => ({
-  useRouter: vi.fn(),
-}));
+vi.mock("next/navigation");
 
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    getSession: vi.fn(),
-    listSessions: vi.fn(),
-    revokeSession: vi.fn(),
-  },
-}));
+vi.mock("@/lib/clients/auth/auth-client");
 
 const CHROME_MAC_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";

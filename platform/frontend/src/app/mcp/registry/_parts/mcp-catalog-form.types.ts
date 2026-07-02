@@ -34,6 +34,7 @@ export const oauthConfigSchema = z
     resource: z.string().optional().or(z.literal("")),
     redirect_uris: z.string().optional().or(z.literal("")),
     scopes: z.string().optional().or(z.literal("")),
+    additional_scopes: z.string().optional().or(z.literal("")),
     supports_resource_metadata: z.boolean(),
     authServerUrl: z
       .string()

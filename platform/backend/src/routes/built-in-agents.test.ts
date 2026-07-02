@@ -1,24 +1,17 @@
 import { BUILT_IN_AGENT_IDS, BUILT_IN_AGENT_NAMES } from "@archestra/shared";
-import { vi } from "vitest";
+import { type Mock, vi } from "vitest";
+import {
+  getAgentTypePermissionChecker,
+  hasAnyAgentTypeReadPermission,
+  isAgentTypeAdmin,
+} from "@/auth";
 import { AgentModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-vi.mock("@/auth", () => ({
-  getAgentTypePermissionChecker: vi.fn().mockResolvedValue({
-    require: vi.fn(),
-    isAdmin: vi.fn().mockReturnValue(true),
-    isTeamAdmin: vi.fn().mockReturnValue(true),
-    hasAnyReadPermission: vi.fn().mockReturnValue(true),
-    hasAnyAdminPermission: vi.fn().mockReturnValue(true),
-  }),
-  hasAnyAgentTypeReadPermission: vi.fn().mockResolvedValue(true),
-  requireAgentModifyPermission: vi.fn(),
-  requireAgentTypePermission: vi.fn(),
-  isAgentTypeAdmin: vi.fn().mockResolvedValue(true),
-}));
+vi.mock("@/auth");
 
 describe("built-in agents routes", () => {
   let app: FastifyInstanceWithZod;
@@ -26,6 +19,16 @@ describe("built-in agents routes", () => {
   let organizationId: string;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
+    (getAgentTypePermissionChecker as Mock).mockResolvedValue({
+      require: vi.fn(),
+      isAdmin: vi.fn().mockReturnValue(true),
+      isTeamAdmin: vi.fn().mockReturnValue(true),
+      hasAnyReadPermission: vi.fn().mockReturnValue(true),
+      hasAnyAdminPermission: vi.fn().mockReturnValue(true),
+    });
+    vi.mocked(hasAnyAgentTypeReadPermission).mockResolvedValue(true);
+    vi.mocked(isAgentTypeAdmin).mockResolvedValue(true);
+
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;

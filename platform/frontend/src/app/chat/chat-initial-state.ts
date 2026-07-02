@@ -196,3 +196,36 @@ export function shouldResetInitialChatState(params: {
 }): boolean {
   return !params.routeConversationId && !!params.previousRouteConversationId;
 }
+
+/**
+ * Whether `/chat` is mid-handoff: it arrived carrying a `user_prompt` (or a
+ * stashed-attachments marker whose files are still in memory) and is about to —
+ * or already is — auto-creating a conversation before navigating to
+ * `/chat/<id>`. During this window the centered New Chat splash must not render,
+ * or the empty home flashes before the conversation view mounts.
+ *
+ * Mirrors the auto-send effect's trigger conditions. `autoSendTriggered` (the
+ * effect's ref) keeps it true across the frame where `user_prompt` has been
+ * stripped from the URL but the create mutation has not yet reported pending. A
+ * files-only handoff whose stashed files were lost (e.g. a hard reload) has no
+ * prompt and no pending files, so this stays false and the composer shows.
+ */
+export function isAutoSendHandoffInProgress(params: {
+  conversationId?: string;
+  initialUserPrompt?: string;
+  hasAttachmentsMarker: boolean;
+  hasPendingHandoffFiles: boolean;
+  autoSendTriggered: boolean;
+  isCreatingConversation: boolean;
+}): boolean {
+  if (params.conversationId) {
+    return false;
+  }
+
+  return (
+    Boolean(params.initialUserPrompt) ||
+    (params.hasAttachmentsMarker && params.hasPendingHandoffFiles) ||
+    params.autoSendTriggered ||
+    params.isCreatingConversation
+  );
+}

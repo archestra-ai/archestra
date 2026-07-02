@@ -44,6 +44,7 @@ describe("buildChatContext enabled-tool selection", () => {
       projectInstructions: undefined,
       hookRunCollector: [],
       elicitation: {} as never,
+      subagentToolStream: {} as never,
       abortSignal: new AbortController().signal,
     });
 

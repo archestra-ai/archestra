@@ -25,13 +25,14 @@ const INVITATION_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
  *
  * Handles the race condition where two messages arrive simultaneously for the
  * same unregistered user: catches the unique constraint violation on user.email
- * and falls back to a findByEmail lookup.
+ * and falls back to a findByEmail lookup, returning `invitationId: null` for
+ * that already-existing user so callers suppress the welcome message.
  */
 export async function autoProvisionUser(params: {
   email: string;
   name: string;
   provider: ChatOpsProviderType;
-}): Promise<{ userId: string; invitationId: string }> {
+}): Promise<{ userId: string; invitationId: string | null }> {
   const { email, name, provider } = params;
   const normalizedEmail = email.toLowerCase();
 
@@ -108,7 +109,7 @@ export async function autoProvisionUser(params: {
       );
       const existingUser = await UserModel.findByEmail(normalizedEmail);
       if (existingUser) {
-        return { userId: existingUser.id, invitationId: "" };
+        return { userId: existingUser.id, invitationId: null };
       }
     }
     throw error;

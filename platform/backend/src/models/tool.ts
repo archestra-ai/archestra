@@ -33,7 +33,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -57,8 +57,10 @@ import type {
   SortDirection,
   Tool,
   ToolFilters,
+  ToolInvocation,
   ToolSortBy,
   ToolWithAssignments,
+  TrustedData,
   UpdateTool,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -259,13 +261,24 @@ class ToolModel {
    * Create default policies for a newly created tool:
    * - Default invocation policy: block_when_context_is_untrusted (empty conditions)
    * - Default result policy: mark_as_untrusted (empty conditions)
+   *
+   * `options.invocationAction` / `options.resultAction` override those defaults —
+   * used by the LLM proxy discovery path to honor the org's configured defaults.
+   * When omitted, the original hardcoded defaults are used (MCP/catalog tools are
+   * unaffected).
    */
-  static async createDefaultPolicies(toolId: string): Promise<void> {
+  static async createDefaultPolicies(
+    toolId: string,
+    options?: {
+      invocationAction?: ToolInvocation.ToolInvocationPolicyAction;
+      resultAction?: TrustedData.TrustedDataPolicyAction;
+    },
+  ): Promise<void> {
     // Create default invocation policy
     await ToolInvocationPolicyModel.create({
       toolId,
       conditions: [],
-      action: "block_when_context_is_untrusted",
+      action: options?.invocationAction ?? "block_when_context_is_untrusted",
       reason: null,
     });
 
@@ -273,7 +286,7 @@ class ToolModel {
     await TrustedDataPolicyModel.create({
       toolId,
       conditions: [],
-      action: "mark_as_untrusted",
+      action: options?.resultAction ?? "mark_as_untrusted",
       description: null,
     });
   }
@@ -567,8 +580,15 @@ class ToolModel {
     const tools =
       assignedToolIds.length > 0
         ? await db
-            .select()
+            .select(getTableColumns(schema.toolsTable))
             .from(schema.toolsTable)
+            .leftJoin(
+              schema.agentToolsTable,
+              and(
+                eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+                eq(schema.agentToolsTable.agentId, agentId),
+              ),
+            )
             .where(
               and(
                 inArray(schema.toolsTable.id, assignedToolIds),
@@ -579,7 +599,14 @@ class ToolModel {
                 toolInEnvironmentPredicate(agentEnvironmentId),
               ),
             )
-            .orderBy(desc(schema.toolsTable.createdAt))
+            .orderBy(
+              desc(
+                ToolModel.hasHealthyMcpServerInstall(
+                  schema.agentToolsTable.mcpServerId,
+                ),
+              ),
+              desc(schema.toolsTable.createdAt),
+            )
         : [];
 
     // Auto-inject query_knowledge_sources when the agent has knowledge sources
@@ -616,6 +643,19 @@ class ToolModel {
     environmentId: string | null;
     /** Exact-name filter for single-tool resolution (avoids loading the whole corpus). */
     name?: string;
+    /**
+     * Exact MCP App `ui://` resource filter, for resolving which accessible tool
+     * backs a resource read without loading the whole corpus. Matches the same
+     * canonical/legacy meta keys as the external-apps listing.
+     */
+    uiResourceUri?: string;
+    /**
+     * Restrict to tools carrying any `ui://` resource, for widening a
+     * discovery listing (tools/list) to dynamically-accessible MCP Apps
+     * without loading the whole corpus. Combine with `uiResourceUri` only if
+     * both need to hold; they are independent filters.
+     */
+    requireUiResource?: boolean;
   }): Promise<Tool[]> {
     const catalogIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
       params.userId,
@@ -654,6 +694,12 @@ class ToolModel {
           toolInEnvironmentPredicate(params.environmentId),
           params.name !== undefined
             ? eq(schema.toolsTable.name, params.name)
+            : undefined,
+          params.uiResourceUri !== undefined
+            ? eq(toolUiResourceUriSql(), params.uiResourceUri)
+            : undefined,
+          params.requireUiResource
+            ? isNotNull(toolUiResourceUriSql())
             : undefined,
         ),
       )
@@ -1199,10 +1245,72 @@ class ToolModel {
       );
     }
 
+    // Ensure default policies exist for `query_knowledge_sources`.
+    // Unlike other built-ins, this tool participates in policy evaluation
+    // (its results may contain prompt injection from KB content). We seed
+    // explicit default rows so the /mcp/guardrails UI shows the same
+    // "Sensitive" / "Block when context is untrusted" defaults that admins
+    // can manage. Insert-only — never overwrite user customizations.
+    const knowledgeToolName = archestraMcpBranding.getToolName(
+      TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+    );
+    const knowledgeTool = allCatalogTools.find(
+      (t) => t.name === knowledgeToolName,
+    );
+    if (knowledgeTool) {
+      await ToolModel.ensureKnowledgeSourcesDefaultPolicies(knowledgeTool.id);
+    }
+
     // Names of tools actually inserted on this run — used by callers to trigger
     // one-time backfills when a new built-in tool first appears. Excludes rows the
     // conflict path updated, so a concurrent-seed loser doesn't re-trigger backfills.
     return insertedNames;
+  }
+
+  /**
+   * Insert default tool invocation + trusted data policies for the
+   * `query_knowledge_sources` tool if no default policy row exists yet.
+   * Safe to call repeatedly on startup; never overwrites existing rows.
+   */
+  private static async ensureKnowledgeSourcesDefaultPolicies(
+    toolId: string,
+  ): Promise<void> {
+    const [existingInvocation, existingTrusted] = await Promise.all([
+      db
+        .select({ id: schema.toolInvocationPoliciesTable.id })
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, toolId)),
+      db
+        .select({ id: schema.trustedDataPoliciesTable.id })
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, toolId)),
+    ]);
+
+    if (existingInvocation.length === 0) {
+      // KB query is read-only retrieval — safe to invoke even when context is
+      // already untrusted. The security boundary is enforced on RESULTS via
+      // the trusted-data policy below, which propagates untrusted state to
+      // downstream tools.
+      await ToolInvocationPolicyModel.bulkUpsertDefaultPolicy(
+        [toolId],
+        "allow_when_context_is_untrusted",
+      );
+      logger.info(
+        { toolId },
+        "Seeded default tool invocation policy for query_knowledge_sources",
+      );
+    }
+
+    if (existingTrusted.length === 0) {
+      await TrustedDataPolicyModel.bulkUpsertDefaultPolicy(
+        [toolId],
+        "mark_as_untrusted",
+      );
+      logger.info(
+        { toolId },
+        "Seeded default trusted data policy for query_knowledge_sources",
+      );
+    }
   }
 
   /**
@@ -1576,6 +1684,14 @@ class ToolModel {
           isNotNull(schema.toolsTable.catalogId), // Only MCP tools (have catalogId)
           toolInEnvironmentPredicate(agentEnvironmentId),
         ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.agentToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
       );
 
     return mcpTools;
@@ -1625,6 +1741,14 @@ class ToolModel {
           isNotNull(schema.toolsTable.catalogId),
           toolInEnvironmentPredicate(agentEnvironmentId),
         ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.agentToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
       )
       .limit(1);
 
@@ -1788,6 +1912,14 @@ class ToolModel {
           inArray(schema.toolsTable.name, toolNames),
           isNotNull(schema.toolsTable.catalogId),
         ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.appToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
       );
   }
 
@@ -1823,6 +1955,14 @@ class ToolModel {
           sql`RIGHT(${schema.toolsTable.name}, ${suffix.length}) = ${suffix}`,
           isNotNull(schema.toolsTable.catalogId),
         ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.appToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
       )
       .limit(1);
   }
@@ -2356,6 +2496,11 @@ class ToolModel {
     }>,
     /** @deprecated No longer used. Proxy tools are shared (agentId=NULL). Kept for call-site compatibility. */
     _agentId: string,
+    /** Org-configured defaults applied to each newly discovered tool's policies. */
+    defaults?: {
+      invocationAction?: ToolInvocation.ToolInvocationPolicyAction;
+      resultAction?: TrustedData.TrustedDataPolicyAction;
+    },
   ): Promise<Tool[]> {
     if (tools.length === 0) {
       return [];
@@ -2403,7 +2548,7 @@ class ToolModel {
 
       // Create default policies for newly inserted tools
       for (const tool of insertedTools) {
-        await ToolModel.createDefaultPolicies(tool.id);
+        await ToolModel.createDefaultPolicies(tool.id, defaults);
       }
 
       // If some tools weren't inserted due to conflict, fetch them
@@ -2690,24 +2835,40 @@ class ToolModel {
 
     // Exclude Archestra built-in tools
     if (filters?.excludeArchestraTools) {
+      const brandedKnowledgeToolName = archestraMcpBranding.getToolName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+      );
+
+      // Normally exclude all tools in the Archestra built-in catalog.
+      // However, when explicitly requested, include ONLY the knowledge sources tool.
+      const excludeBuiltInsCondition = filters.includeKnowledgeSourcesTool
+        ? or(
+            isNull(schema.toolsTable.catalogId),
+            ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+            eq(schema.toolsTable.name, brandedKnowledgeToolName),
+          )
+        : or(
+            isNull(schema.toolsTable.catalogId),
+            ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          );
+
       toolWhereConditions.push(
-        or(
-          isNull(schema.toolsTable.catalogId),
-          ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
-        ) ?? isNull(schema.toolsTable.catalogId),
+        excludeBuiltInsCondition ?? isNull(schema.toolsTable.catalogId),
       );
     }
 
-    // Hide knowledge base tool in global tool listings (no agent context).
-    // The tool is only visible when queried per-agent and the agent has a knowledge base assigned.
-    toolWhereConditions.push(
-      ne(
-        schema.toolsTable.name,
-        archestraMcpBranding.getToolName(
-          TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+    // Hide knowledge base tool in global tool listings (no agent context) by default.
+    // Can be explicitly included for guardrails configuration.
+    if (!filters?.includeKnowledgeSourcesTool) {
+      toolWhereConditions.push(
+        ne(
+          schema.toolsTable.name,
+          archestraMcpBranding.getToolName(
+            TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+          ),
         ),
-      ),
-    );
+      );
+    }
 
     // Apply access control filtering for users that are not agent admins
     // Get accessible agent IDs for filtering assignments
@@ -3030,6 +3191,36 @@ class ToolModel {
           "Failed to trigger auto-configure for discovered tools",
         );
       });
+  }
+
+  /**
+   * True when the connection a tool call would actually reach is connected
+   * and authenticated: the assignment's pinned server when it has one (a
+   * static credential pin), otherwise any healthy install of the tool's
+   * catalog item — dynamic resolution defers to the connection policy,
+   * which could reach any of them. Checking catalog-wide health alone would
+   * misrank a static pin to a broken server as healthy whenever the same
+   * catalog item has an unrelated working install elsewhere. Two different
+   * catalog items can produce tool rows with an identical name; ordering by
+   * this expression lets every caller that picks "the" match among
+   * same-named candidates prefer a working connection over one that needs
+   * re-authentication, was never installed, or is pinned to a broken one.
+   */
+  private static hasHealthyMcpServerInstall(
+    assignmentMcpServerId: AnyPgColumn,
+  ) {
+    return sql<boolean>`COALESCE(
+      (SELECT ${schema.mcpServersTable.localInstallationStatus} = 'success'
+         AND ${schema.mcpServersTable.oauthRefreshError} IS NULL
+       FROM ${schema.mcpServersTable}
+       WHERE ${schema.mcpServersTable.id} = ${assignmentMcpServerId}),
+      EXISTS (
+        SELECT 1 FROM ${schema.mcpServersTable}
+        WHERE ${schema.mcpServersTable.catalogId} = ${schema.toolsTable.catalogId}
+          AND ${schema.mcpServersTable.localInstallationStatus} = 'success'
+          AND ${schema.mcpServersTable.oauthRefreshError} IS NULL
+      )
+    )`;
   }
 }
 

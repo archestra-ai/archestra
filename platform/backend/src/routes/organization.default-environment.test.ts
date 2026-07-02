@@ -12,9 +12,7 @@ import { ApiError, type User } from "@/types";
 // `hasPermission` mocked. To exercise the real route -> permission map wiring
 // (and a genuine 403 for a non-permitted member), the hook replicates the
 // middleware's authorization gate using the actual requiredEndpointPermissionsMap.
-vi.mock("@/auth", () => ({
-  hasPermission: vi.fn(),
-}));
+vi.mock("@/auth");
 
 vi.mock("@/k8s/mcp-server-runtime/manager", () => ({
   default: {

@@ -1,0 +1,63 @@
+# The exported .xlsx from the FINAL stage is graded; `report` names it in submit_result.
+artifact_key = "report"
+
+# Stage 1 (chat 1): two PDF card statements are attached; the user asks for an Excel report and to
+# save it for later. Persisting it to the user's files (not just the sandbox) is left for the agent to
+# work out -- the next stage runs in a fresh conversation and can only reach it through persistent
+# storage.
+[[stages]]
+text = """Hey -- I've attached our two March corporate card statements (cards 4471 and 8820). Can you pull every transaction off them into a single Excel expense report for me? One row per transaction, with the date, the merchant, a short description, the category, and the amount. Save it as an .xlsx so I can pick it back up later -- no need to total anything yet."""
+
+  [[stages.files]]
+  src = "card-statement-4471-march.pdf"
+  dest = "/home/sandbox/attachments/card-statement-4471-march.pdf"
+  mime_type = "application/pdf"
+
+  [[stages.files]]
+  src = "card-statement-8820-march.pdf"
+  dest = "/home/sandbox/attachments/card-statement-8820-march.pdf"
+  mime_type = "application/pdf"
+
+# Stage 2 (chat 2): a brand-new conversation with an empty sandbox and no attachments. The March
+# transactions exist only inside the report the agent saved in stage 1, so the agent has to find that
+# report and keep working from it.
+[[stages]]
+new_conversation = true
+text = """Can you pull up my March expense report -- the Excel one you put together from the card statements -- and keep working on it for me? Two things I need:
+
+- add a column that flags whether each expense is reimbursable; treat Travel and Meals as reimbursable and everything else as not, and
+- add a second sheet that totals the amount for each category.
+
+When it's ready, export it with download_file and send it over with submit_result as result = {"report": "<the exported filename>", "category_totals": [{"category": "<name>", "total": <amount>}, ...], "reimbursable_total": <total of the reimbursable expenses>}."""
+
+[result_schema]
+type = "object"
+required = ["report", "category_totals", "reimbursable_total"]
+additionalProperties = false
+
+  [result_schema.properties.report]
+  type = "string"
+  minLength = 1
+
+  [result_schema.properties.reimbursable_total]
+  type = "number"
+  minimum = 0
+
+  [result_schema.properties.category_totals]
+  type = "array"
+  minItems = 1
+
+    [result_schema.properties.category_totals.items]
+    type = "object"
+    required = ["category", "total"]
+    additionalProperties = false
+
+      [result_schema.properties.category_totals.items.properties.category]
+      type = "string"
+      minLength = 1
+
+      [result_schema.properties.category_totals.items.properties.total]
+      type = "number"
+
+[verifier]
+deps = ["openpyxl==3.1.5"]

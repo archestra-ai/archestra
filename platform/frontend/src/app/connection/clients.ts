@@ -1,4 +1,8 @@
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  CLAUDE_CODE_CLIENT_ID,
+  CLAUDE_DESKTOP_CLIENT_ID,
+  type SupportedProvider,
+} from "@archestra/shared";
 
 export interface ClientStep {
   title: string;
@@ -103,6 +107,13 @@ export interface ProxyStep {
    * ANTHROPIC_CUSTOM_HEADERS value for an env block (Claude Code).
    */
   passthroughKeyVariant?: "header" | "env";
+  /**
+   * When set, the passthrough-key reveal also surfaces an X-Archestra-Agent-Id
+   * client-attribution header with this value (e.g. CLAUDE_CODE_CLIENT_ID /
+   * CLAUDE_DESKTOP_CLIENT_ID), folded into the same ANTHROPIC_CUSTOM_HEADERS
+   * value (env) or as its own header row (header).
+   */
+  passthroughKeyAgentId?: string;
 }
 
 export type ProxyInstruction =
@@ -243,6 +254,7 @@ claude`,
               body: "Add ANTHROPIC_CUSTOM_HEADERS to the same env block and set to the value below to authenticate on the LLM Proxy.",
               showPassthroughKey: true,
               passthroughKeyVariant: "env",
+              passthroughKeyAgentId: CLAUDE_CODE_CLIENT_ID,
             },
           ],
         };
@@ -313,8 +325,9 @@ claude`,
           },
           {
             title: "Add your personal auth key header",
-            body: 'In the same form, expand "Custom headers" and add a header with the name and value below to authenticate on the LLM Proxy. This is in addition to the API key above, which Claude Desktop still needs.',
+            body: 'In the same form, expand "Custom headers" and add the headers below to authenticate on the LLM Proxy and attribute the client. This is in addition to the API key above, which Claude Desktop still needs.',
             showPassthroughKey: true,
+            passthroughKeyAgentId: CLAUDE_DESKTOP_CLIENT_ID,
           },
         ],
       }),

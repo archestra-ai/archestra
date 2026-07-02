@@ -55,6 +55,24 @@ class ProcessedEmailModel {
   }
 
   /**
+   * Release the processed-email claim for a messageId.
+   *
+   * Used to undo an optimistic tryMarkAsProcessed() when the agent run fails
+   * transiently, so a provider redelivery can be reprocessed instead of being
+   * deduplicated away and lost forever.
+   *
+   * @param messageId - The email provider's message ID
+   * @returns true if a record was deleted, false if none existed
+   */
+  static async deleteByMessageId(messageId: string): Promise<boolean> {
+    const result = await db
+      .delete(schema.processedEmailsTable)
+      .where(eq(schema.processedEmailsTable.messageId, messageId));
+
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /**
    * Delete old processed email records.
    * Should be called periodically to prevent unbounded table growth.
    *

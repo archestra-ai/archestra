@@ -70,6 +70,34 @@ describe("extractMcpToolError", () => {
     });
   });
 
+  it("preserves the resolved credential scope on an auth_expired error", () => {
+    expect(
+      extractMcpToolError({
+        archestraError: {
+          type: "auth_expired",
+          message: "Expired auth",
+          catalogId: "cat_123",
+          catalogName: "GitHub",
+          serverId: "srv_123",
+          reauthUrl:
+            "http://localhost:3000/mcp/registry?reauth=cat_123&server=srv_123",
+          credentialScope: "team",
+          credentialTeamName: "Platform Team",
+        },
+      }),
+    ).toEqual({
+      type: "auth_expired",
+      message: "Expired auth",
+      catalogId: "cat_123",
+      catalogName: "GitHub",
+      serverId: "srv_123",
+      reauthUrl:
+        "http://localhost:3000/mcp/registry?reauth=cat_123&server=srv_123",
+      credentialScope: "team",
+      credentialTeamName: "Platform Team",
+    });
+  });
+
   it("extracts an assigned-credential-unavailable error", () => {
     expect(
       extractMcpToolError({

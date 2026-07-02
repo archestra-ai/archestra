@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import type { ChatThreadMessageFile, ThreadFileOutcome } from "@/types";
 import MSTeamsProvider from "./ms-teams-provider";
 
 /**
@@ -708,6 +709,187 @@ describe("MSTeamsProvider file attachment downloads", () => {
 });
 
 // =============================================================================
+// downloadFiles — positionally aligned per-file outcomes
+// =============================================================================
+
+describe("MSTeamsProvider.downloadFiles", () => {
+  const MB = 1024 * 1024;
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // History files come with pre-authenticated Azure Blob URLs (allowed host,
+  // no serviceUrl auth needed).
+  function makeFile(name: string): ChatThreadMessageFile {
+    return {
+      url: `https://teams.blob.core.windows.net/files/${name}`,
+      mimetype: "application/pdf",
+      name,
+    };
+  }
+
+  function outcomeName(outcome: ThreadFileOutcome): string | undefined {
+    return outcome.status === "delivered"
+      ? outcome.attachment.name
+      : outcome.skipped.name;
+  }
+
+  test("failed download yields a skipped outcome at its position, others delivered", async () => {
+    const provider = createProvider();
+    const okContent = Buffer.from("pdf bytes");
+
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response("Forbidden", { status: 403 }))
+      .mockResolvedValueOnce(new Response(okContent, { status: 200 }));
+
+    const outcomes = await provider.downloadFiles([
+      makeFile("broken.pdf"),
+      makeFile("fine.pdf"),
+    ]);
+
+    expect(outcomes).toEqual([
+      {
+        status: "skipped",
+        skipped: { name: "broken.pdf", reason: "download_failed" },
+      },
+      {
+        status: "delivered",
+        attachment: {
+          contentType: "application/pdf",
+          contentBase64: okContent.toString("base64"),
+          name: "fine.pdf",
+        },
+      },
+    ]);
+  });
+
+  test("oversized Content-Length yields too_large without buffering the body", async () => {
+    const provider = createProvider();
+    const declaredSize = 11 * MB;
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(Buffer.from("tiny body"), {
+        status: 200,
+        headers: { "content-length": String(declaredSize) },
+      }),
+    );
+
+    const outcomes = await provider.downloadFiles([makeFile("huge.pdf")]);
+
+    expect(outcomes).toEqual([
+      {
+        status: "skipped",
+        skipped: {
+          name: "huge.pdf",
+          sizeBytes: declaredSize,
+          reason: "too_large",
+        },
+      },
+    ]);
+  });
+
+  test("crossing the 25MB total budget skips that file and all remaining files without fetching them", async () => {
+    const provider = createProvider();
+    const nineMb = () => Buffer.alloc(9 * MB, "x");
+
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(nineMb(), { status: 200 }))
+      .mockResolvedValueOnce(new Response(nineMb(), { status: 200 }))
+      .mockResolvedValueOnce(new Response(nineMb(), { status: 200 }));
+
+    const files = [
+      makeFile("f1.pdf"),
+      makeFile("f2.pdf"),
+      makeFile("f3.pdf"), // 9 + 9 + 9 = 27MB > 25MB — crosses the budget
+      makeFile("f4.pdf"), // never downloaded, still gets an outcome
+    ];
+    const outcomes = await provider.downloadFiles(files);
+
+    expect(outcomes).toHaveLength(4);
+    expect(outcomes[0].status).toBe("delivered");
+    expect(outcomes[1].status).toBe("delivered");
+    expect(outcomes[2]).toEqual({
+      status: "skipped",
+      skipped: {
+        name: "f3.pdf",
+        sizeBytes: 9 * MB,
+        reason: "total_limit_reached",
+      },
+    });
+    expect(outcomes[3]).toEqual({
+      status: "skipped",
+      skipped: { name: "f4.pdf", reason: "total_limit_reached" },
+    });
+    // The remaining file after budget exhaustion is not downloaded
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  test("files past the 20-per-message cap are skipped as too_many", async () => {
+    const provider = createProvider();
+
+    // A fresh Response per call — response bodies are single-use
+    vi.mocked(fetch).mockImplementation(async () => {
+      return new Response(Buffer.from("data"), { status: 200 });
+    });
+
+    const files = Array.from({ length: 22 }, (_, i) =>
+      makeFile(`file-${i}.pdf`),
+    );
+    const outcomes = await provider.downloadFiles(files);
+
+    expect(outcomes).toHaveLength(22);
+    for (let i = 0; i < 20; i++) {
+      expect(outcomes[i].status).toBe("delivered");
+    }
+    expect(outcomes[20]).toEqual({
+      status: "skipped",
+      skipped: { name: "file-20.pdf", reason: "too_many" },
+    });
+    expect(outcomes[21]).toEqual({
+      status: "skipped",
+      skipped: { name: "file-21.pdf", reason: "too_many" },
+    });
+    expect(fetch).toHaveBeenCalledTimes(20);
+  });
+
+  test("mixed branches in one call stay positionally aligned with the input", async () => {
+    const provider = createProvider();
+
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(Buffer.from("one"), { status: 200 }))
+      .mockResolvedValueOnce(new Response("Not Found", { status: 404 }))
+      .mockRejectedValueOnce(new Error("Network timeout"))
+      .mockResolvedValueOnce(
+        new Response(Buffer.from("four"), { status: 200 }),
+      );
+
+    const files = [
+      makeFile("delivered-1.pdf"),
+      makeFile("http-error.pdf"),
+      makeFile("network-error.pdf"),
+      makeFile("delivered-2.pdf"),
+    ];
+    const outcomes = await provider.downloadFiles(files);
+
+    expect(outcomes).toHaveLength(files.length);
+    expect(outcomes.map((o) => o.status)).toEqual([
+      "delivered",
+      "skipped",
+      "skipped",
+      "delivered",
+    ]);
+    files.forEach((file, i) => {
+      expect(outcomeName(outcomes[i])).toBe(file.name);
+    });
+  });
+});
+
+// =============================================================================
 // convertToThreadMessages — file metadata
 // =============================================================================
 
@@ -803,6 +985,67 @@ describe("MSTeamsProvider.convertToThreadMessages file metadata", () => {
         url: "https://teams.blob.core.windows.net/img/photo.jpg",
         mimetype: "image/jpeg",
         name: "vacation.jpg",
+      },
+    ]);
+  });
+
+  test("retains a file-only (empty text) history message and exposes its files metadata", () => {
+    const provider = createProvider();
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    const result = (provider as any).convertToThreadMessages(
+      [
+        {
+          id: "msg-1",
+          from: { user: { id: "user-1", displayName: "Alice" } },
+          body: { content: "" },
+          createdDateTime: new Date().toISOString(),
+          attachments: [
+            {
+              contentType: "image/png",
+              contentUrl:
+                "https://teams.blob.core.windows.net/img/screenshot.png",
+              name: "screenshot.png",
+            },
+          ],
+        },
+        {
+          // Empty text AND no files — this one must still be filtered out
+          id: "msg-2",
+          from: { user: { id: "user-1", displayName: "Alice" } },
+          body: { content: "" },
+          createdDateTime: new Date().toISOString(),
+          attachments: [],
+        },
+        {
+          // Empty-text BOT message with a file — still filtered out: the
+          // manager never downloads bot files, so retaining it would render
+          // a turn with no file and no skip note.
+          id: "msg-3",
+          from: { application: { id: "app-id-123", displayName: "Bot" } },
+          body: { content: "" },
+          createdDateTime: new Date().toISOString(),
+          attachments: [
+            {
+              contentType: "application/pdf",
+              contentUrl:
+                "https://teams.blob.core.windows.net/img/bot-report.pdf",
+              name: "bot-report.pdf",
+            },
+          ],
+        },
+      ],
+      undefined,
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].messageId).toBe("msg-1");
+    expect(result[0].text).toBe("");
+    expect(result[0].files).toEqual([
+      {
+        url: "https://teams.blob.core.windows.net/img/screenshot.png",
+        mimetype: "image/png",
+        name: "screenshot.png",
       },
     ]);
   });

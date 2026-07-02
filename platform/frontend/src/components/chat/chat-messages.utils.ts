@@ -2,15 +2,13 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
   getArchestraAppResourceUri,
-  getArchestraToolShortName,
   HOOK_RUN_PART_TYPE,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   parseFullToolName,
-  TOOL_EDIT_APP_SHORT_NAME,
-  TOOL_RENDER_APP_SHORT_NAME,
+  SUBAGENT_TOOL_CALL_PART_TYPE,
+  type SubagentToolCallPartData,
   TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SCAFFOLD_APP_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
@@ -20,6 +18,7 @@ import {
 import type { PanelApp } from "./apps-context";
 import type { FileAttachment } from "./editable-user-message";
 import type { HookRunChipData } from "./hook-run-chip";
+import type { McpToolOutput } from "./mcp-app-container";
 
 export type OptimisticToolCall = {
   toolCallId: string;
@@ -152,52 +151,6 @@ export function extractOwnedAppRender(params: {
 }
 
 /**
- * Whether a render has been superseded by a newer render of the same app in the
- * conversation. Only **owned** apps can be superseded: they dedup by `appId`
- * (see {@link deriveAppsFromMessages}), always showing the latest version, so a
- * render is superseded when the registry's entry for its `appId` is a newer
- * render. **External** MCP-UI renders never supersede one another — each tool
- * call is its own live entry, so this always returns `false` for them (no `appId`).
- *
- * Returns `false` when the registry has no entry for the app yet (e.g. mid-stream
- * before the result is derived) so a freshly arriving render is never wrongly
- * collapsed. Superseded renders show a static changelog pill instead of a live
- * iframe; only the latest render of an owned app stays live.
- */
-export function isSupersededRender(params: {
-  apps: PanelApp[];
-  toolCallId: string | undefined;
-  appId: string | null | undefined;
-}): boolean {
-  if (!params.appId) {
-    return false;
-  }
-
-  const latest = params.apps.find((a) => a.appId === params.appId)?.toolCallId;
-
-  return latest !== undefined && latest !== params.toolCallId;
-}
-
-/**
- * Past-tense verb describing what an owned-app render did, derived from the tool
- * that produced it — used as the trailing label on a superseded render's
- * changelog pill (e.g. "Dashboard · v2 · Updated"). Returns `null` for unknown
- * tools so the pill simply omits the verb.
- */
-export function getAppRenderVerb(toolName: string): string | null {
-  switch (getArchestraToolShortName(toolName, { includeDefaultPrefix: true })) {
-    case TOOL_SCAFFOLD_APP_SHORT_NAME:
-      return "Created";
-    case TOOL_EDIT_APP_SHORT_NAME:
-      return "Updated";
-    case TOOL_RENDER_APP_SHORT_NAME:
-      return "Rendered";
-    default:
-      return null;
-  }
-}
-
-/**
  * Derive the list of MCP Apps for a conversation directly from its messages
  * (plus any early UI-start data from the active stream).
  *
@@ -210,13 +163,13 @@ export function getAppRenderVerb(toolName: string): string | null {
  * refresh reconstructs and never empties because a single section briefly
  * unmounts.
  *
- * Only owned (Archestra-authored) apps are deduped: they use the synthetic
- * `ui://archestra-app/<appId>` URI (version-independent), so every version
- * collapses to a single entry tracking the latest render (its toolCallId and
- * version) and the panel defaults to the newest version. External MCP-UI tool
- * calls never dedup — their result URI can represent entirely different content
- * across calls (e.g. Excalidraw drawing different pictures), so each call is its
- * own entry keyed by its unique toolCallId.
+ * Every render is its own entry (keyed by its unique toolCallId), so each inline
+ * pill — including older renders of the same owned app — stays independently
+ * openable and expands its app under itself. Owned apps always resolve to the
+ * latest version at render time (their runtime endpoint is keyed by `appId`), so
+ * a stale render still shows current content. Display surfaces that must not
+ * repeat an app fold the registry into per-app groups (see `buildAppGroups`)
+ * instead of the registry deduping here.
  */
 
 /**
@@ -238,10 +191,6 @@ export function deriveAppsFromMessages(
 ): PanelApp[] {
   const apps: PanelApp[] = [];
   const seen = new Set<string>();
-  // Maps an owned app's `appId` to its index in `apps`, so a later render of the
-  // same owned app replaces the earlier entry instead of appending a duplicate.
-  // External renders are never deduped.
-  const appIndex = new Map<string, number>();
 
   for (const message of messages) {
     const createdAt = getMessageCreatedAt(message);
@@ -268,6 +217,22 @@ export function deriveAppsFromMessages(
           uiResourceUri: outputUri,
           appId: null,
           mcpServerId,
+          // Unwrap run_tool so the server prefix matches the inline render.
+          toolName: resolveRunToolTargetName(part, fullToolName, {
+            getToolShortName,
+          }),
+          // Seed the panel-hosted iframe with the tool result exactly like the
+          // inline render, so it doesn't re-call its source tool on mount.
+          rawOutput: part.output as McpToolOutput,
+          // Unwrap run_tool's tool_args so the seeded input matches inline.
+          toolInput:
+            getToolShortName(fullToolName) === TOOL_RUN_TOOL_SHORT_NAME
+              ? ((
+                  part.input as
+                    | { tool_args?: Record<string, unknown> }
+                    | undefined
+                )?.tool_args ?? null)
+              : ((part.input as Record<string, unknown> | undefined) ?? null),
           version: null,
           createdAt: createdAt ?? 0,
         });
@@ -275,9 +240,9 @@ export function deriveAppsFromMessages(
         continue;
       }
 
-      // Otherwise it may be an owned-app management result. Owned apps dedup by
-      // `appId` via a synthetic, version-stable URI, so every version collapses
-      // to the latest render.
+      // Otherwise it may be an owned-app management result. Each render is its
+      // own entry so its pill stays independently openable; owned apps resolve
+      // to the latest version at render time via the `appId` runtime endpoint.
       const ownedApp = extractOwnedAppRender({
         toolName: resolveRunToolTargetName(part, fullToolName, {
           getToolShortName,
@@ -292,22 +257,15 @@ export function deriveAppsFromMessages(
 
       seen.add(part.toolCallId);
 
-      const entry: PanelApp = {
+      apps.push({
         toolCallId: part.toolCallId,
         label: ownedApp.appName ?? mcpToolLabel(fullToolName),
         uiResourceUri: getArchestraAppResourceUri(ownedApp.appId),
         appId: ownedApp.appId,
+        toolName: fullToolName,
         version: ownedApp.latestVersion,
         createdAt: createdAt ?? 0,
-      };
-
-      const existing = appIndex.get(ownedApp.appId);
-      if (existing !== undefined) {
-        apps[existing] = entry;
-      } else {
-        appIndex.set(ownedApp.appId, apps.length);
-        apps.push(entry);
-      }
+      });
     }
   }
 
@@ -393,6 +351,65 @@ export function collectBrowserToolCallIds(params: {
   }
 
   return ids;
+}
+
+/** One tool call a delegated child agent made, ready to render as a tool card. */
+export type SubagentChildEntry = {
+  toolCallId: string;
+  toolName: string;
+  input: unknown;
+  output: unknown;
+  state: string | undefined;
+  errorText: string | undefined;
+};
+
+/**
+ * Collect every subagent tool call in the conversation into a map keyed by the
+ * delegation call that spawned it (`parentToolCallId`). A child whose own
+ * `toolCallId` is itself a key has descendants (a nested delegation), so the
+ * renderer recurses to build an arbitrary-depth tree. Collected across all
+ * messages — not per-message — so where the backend stored a part never affects
+ * how it nests. Deduped by `toolCallId` so a part present both live (streamed)
+ * and persisted (after reload) renders once.
+ */
+export function collectSubagentToolCalls(
+  messages: UIMessage[],
+): Map<string, SubagentChildEntry[]> {
+  const byParent = new Map<string, SubagentChildEntry[]>();
+  const seen = new Set<string>();
+  for (const message of messages) {
+    for (const part of message.parts ?? []) {
+      const candidate = part as { type?: string; data?: unknown };
+      if (candidate.type !== SUBAGENT_TOOL_CALL_PART_TYPE) {
+        continue;
+      }
+      const data = candidate.data as SubagentToolCallPartData | undefined;
+      if (
+        !data ||
+        typeof data.parentToolCallId !== "string" ||
+        typeof data.toolCallId !== "string" ||
+        seen.has(data.toolCallId)
+      ) {
+        continue;
+      }
+      seen.add(data.toolCallId);
+      const entry: SubagentChildEntry = {
+        toolCallId: data.toolCallId,
+        toolName: data.toolName,
+        input: data.input,
+        output: data.output,
+        state: data.state,
+        errorText: data.errorText,
+      };
+      const list = byParent.get(data.parentToolCallId);
+      if (list) {
+        list.push(entry);
+      } else {
+        byParent.set(data.parentToolCallId, [entry]);
+      }
+    }
+  }
+  return byParent;
 }
 
 export function identifyCompactToolGroups(

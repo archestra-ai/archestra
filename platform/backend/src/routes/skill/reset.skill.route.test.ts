@@ -6,8 +6,16 @@ import {
   BUILT_IN_SKILLS,
   builtInSkillSourceRef,
 } from "@/skills/built-in-skills";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  useRouteTestApp,
+} from "@/test";
 import type { User } from "@/types";
+import skillRoutes from "./skill.routes";
 
 const [BASE_SKILL] = BUILT_IN_SKILLS;
 
@@ -92,5 +100,38 @@ describe("POST /api/skills/:id/reset", () => {
     });
 
     expect(response.statusCode).toBe(400);
+  });
+});
+
+describe("POST /api/skills/:id/reset — scope visibility", () => {
+  const ctx = useRouteTestApp(skillRoutes);
+
+  test("a skill the caller cannot see returns 404, not a 400 that leaks its type", async ({
+    makeUser,
+  }) => {
+    const author = await makeUser();
+    const skill = await SkillModel.createWithFiles({
+      skill: {
+        organizationId: ctx.organizationId,
+        authorId: author.id,
+        name: "someone-elses-skill",
+        description: "private",
+        content: "# private",
+        metadata: {},
+        sourceType: "manual",
+        scope: "personal",
+      },
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    // request user is neither the author nor an admin, so the skill is not
+    // visible to them: reset must 404 before the sourceType 400 fires.
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: `/api/skills/${skill.id}/reset`,
+    });
+
+    expect(response.statusCode).toBe(404);
   });
 });

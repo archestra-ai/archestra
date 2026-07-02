@@ -21,7 +21,6 @@ import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runti
 import {
   afterAll,
   afterEach,
-  beforeAll,
   beforeEach,
   describe,
   expect,
@@ -808,7 +807,7 @@ describe("run_tool", () => {
     let dynamicAgent: Agent;
     let dynamicContext: ArchestraContext;
 
-    beforeAll(() => {
+    beforeEach(() => {
       (config.skillsSandbox as { enabled: boolean }).enabled = true;
     });
 

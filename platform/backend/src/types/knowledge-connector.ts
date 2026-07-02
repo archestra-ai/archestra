@@ -362,6 +362,10 @@ export const WebCrawlerConfigSchema = z.object({
   batchSize: z.number().int().min(1).max(100).optional(),
   requestDelayMs: z.number().int().min(0).max(10_000).optional(),
   userAgent: z.string().min(1).optional(),
+  // Off by default: the crawler refuses hosts that resolve to private/internal
+  // addresses to guard against SSRF. Enable only for internal sites the
+  // Archestra workers are meant to reach.
+  allowPrivateNetwork: z.boolean().optional(),
 });
 export type WebCrawlerConfig = z.infer<typeof WebCrawlerConfigSchema>;
 

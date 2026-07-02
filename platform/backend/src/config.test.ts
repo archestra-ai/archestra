@@ -18,6 +18,7 @@ import config, {
   getOtlpAuthHeaders,
   getTrustedOrigins,
   parseActiveChatRunPollIntervalMs,
+  parseAnthropicWifConfig,
   parseAuditLogRetentionDays,
   parseBodyLimit,
   parseCodeRuntimeDaggerRunnerHost,
@@ -63,7 +64,9 @@ describe("getAnalyticsConfig", () => {
     process.env = originalEnv;
   });
 
-  test("uses the default PostHog analytics config", () => {
+  test("uses the default PostHog analytics config, enabled in production", () => {
+    process.env.NODE_ENV = "production";
+
     expect(getAnalyticsConfig()).toEqual({
       enabled: true,
       posthog: {
@@ -71,6 +74,26 @@ describe("getAnalyticsConfig", () => {
         host: "https://eu.i.posthog.com",
       },
     });
+  });
+
+  test("defaults to disabled outside production", () => {
+    process.env.NODE_ENV = "development";
+
+    expect(getAnalyticsConfig().enabled).toBe(false);
+  });
+
+  test("explicit ARCHESTRA_ANALYTICS=enabled wins outside production", () => {
+    process.env.NODE_ENV = "development";
+    process.env.ARCHESTRA_ANALYTICS = "enabled";
+
+    expect(getAnalyticsConfig().enabled).toBe(true);
+  });
+
+  test("explicit ARCHESTRA_ANALYTICS=disabled wins in production", () => {
+    process.env.NODE_ENV = "production";
+    process.env.ARCHESTRA_ANALYTICS = "disabled";
+
+    expect(getAnalyticsConfig().enabled).toBe(false);
   });
 
   test("uses custom PostHog analytics env vars", () => {
@@ -1861,5 +1884,58 @@ describe("parseLogFormat", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('Invalid ARCHESTRA_LOGGING_FORMAT value "xml"'),
     );
+  });
+});
+
+describe("parseAnthropicWifConfig", () => {
+  const completeEnv = {
+    federationRuleId: "fdrl_test",
+    organizationId: "00000000-0000-0000-0000-000000000000",
+    serviceAccountId: "svac_test",
+    identityTokenFile: "/var/run/secrets/anthropic.com/token",
+  };
+
+  test("returns null when nothing is set", () => {
+    expect(parseAnthropicWifConfig({})).toBeNull();
+  });
+
+  test("parses a complete configuration with a token file", () => {
+    expect(parseAnthropicWifConfig(completeEnv)).toEqual({
+      federationRuleId: "fdrl_test",
+      organizationId: "00000000-0000-0000-0000-000000000000",
+      serviceAccountId: "svac_test",
+      identityTokenFile: "/var/run/secrets/anthropic.com/token",
+    });
+  });
+
+  test("accepts an inline identity token as the token source", () => {
+    expect(
+      parseAnthropicWifConfig({
+        ...completeEnv,
+        identityTokenFile: undefined,
+        identityToken: "jwt-inline",
+      }),
+    ).toMatchObject({ identityToken: "jwt-inline" });
+  });
+
+  test("includes the optional workspace ID when set", () => {
+    expect(
+      parseAnthropicWifConfig({ ...completeEnv, workspaceId: "wrkspc_test" }),
+    ).toMatchObject({ workspaceId: "wrkspc_test" });
+  });
+
+  test.each([
+    ["federationRuleId", { ...completeEnv, federationRuleId: undefined }],
+    ["organizationId", { ...completeEnv, organizationId: undefined }],
+    ["serviceAccountId", { ...completeEnv, serviceAccountId: undefined }],
+    ["token source", { ...completeEnv, identityTokenFile: undefined }],
+  ])("disables WIF when %s is missing", (_label, env) => {
+    expect(parseAnthropicWifConfig(env)).toBeNull();
+  });
+
+  test("treats whitespace-only values as unset", () => {
+    expect(
+      parseAnthropicWifConfig({ ...completeEnv, federationRuleId: "  " }),
+    ).toBeNull();
   });
 });

@@ -12,28 +12,18 @@
  */
 
 import { vi } from "vitest";
+import { hasPermission } from "@/auth";
 import AuditLogModel from "@/models/audit-log";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type AuditLog, type User } from "@/types";
 
-const { hasPermissionMock } = vi.hoisted(() => ({
-  hasPermissionMock: vi.fn(),
-}));
+vi.mock("@/auth");
 
-vi.mock("@/auth", () => ({
-  hasPermission: hasPermissionMock,
-}));
+const hasPermissionMock = vi.mocked(hasPermission);
 
-vi.mock("@/observability", () => ({
-  initializeObservabilityMetrics: vi.fn(),
-  metrics: {
-    llm: { initializeMetrics: vi.fn() },
-    mcp: { initializeMcpMetrics: vi.fn() },
-    agentExecution: { initializeAgentExecutionMetrics: vi.fn() },
-  },
-}));
+vi.mock("@/observability");
 
 function seedRow(
   organizationId: string,
@@ -87,8 +77,10 @@ describe("GET /api/audit-logs", () => {
     });
 
     // Simulate the permission gate that fastifyAuthPlugin normally provides.
+    // The mock's configured resolution decides the outcome; the permissions
+    // argument is unused, but the real signature requires an object.
     app.addHook("preHandler", async (request) => {
-      const result = await hasPermissionMock(undefined, request.headers);
+      const result = await hasPermissionMock({}, request.headers);
       if (!result?.success) {
         throw new ApiError(403, "Forbidden");
       }

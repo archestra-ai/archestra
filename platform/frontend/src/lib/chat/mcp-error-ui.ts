@@ -4,6 +4,7 @@ import {
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
+  type ResourceVisibilityScope,
 } from "@archestra/shared";
 import type { PolicyDeniedPart } from "@/components/message-thread";
 
@@ -44,6 +45,12 @@ export type ToolAuthState =
       reauthUrl: string;
       catalogId: string | null;
       serverId: string | null;
+      // Which credential expired (personal / team / org) and, for team
+      // credentials, the owning team's name. Absent for text-parsed errors and
+      // for chat history predating the structured field, in which case the card
+      // falls back to generic "Your credentials …" copy.
+      credentialScope?: ResourceVisibilityScope;
+      credentialTeamName?: string | null;
     };
 
 export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
@@ -155,6 +162,8 @@ export function resolveToolAuthState(params: {
       reauthUrl: structuredError.reauthUrl,
       catalogId: structuredError.catalogId,
       serverId: structuredError.serverId,
+      credentialScope: structuredError.credentialScope,
+      credentialTeamName: structuredError.credentialTeamName,
     };
   }
 

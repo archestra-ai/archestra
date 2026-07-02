@@ -14,28 +14,47 @@ let mockTeams: Array<{
 }> = [];
 const mockUpdateLlmSettingsMutateAsync = vi.fn();
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => ({
-    data: mockOrganization,
+vi.mock("@/lib/organization.query");
+vi.mock("@/lib/teams/team.query");
+vi.mock("@/lib/auth/auth.query");
+
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
+import {
+  useOrganization,
+  useUpdateLlmSettings,
+} from "@/lib/organization.query";
+import { useTeams } from "@/lib/teams/team.query";
+
+beforeEach(() => {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
     isPending: false,
-  }),
-  useUpdateLlmSettings: () => ({
+  } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useMissingPermissions).mockReturnValue(
+    [] as unknown as ReturnType<typeof useMissingPermissions>,
+  );
+  vi.mocked(useOrganization).mockImplementation(
+    () =>
+      ({
+        data: mockOrganization,
+        isPending: false,
+      }) as ReturnType<typeof useOrganization>,
+  );
+  vi.mocked(useUpdateLlmSettings).mockReturnValue({
     mutateAsync: mockUpdateLlmSettingsMutateAsync,
     isPending: false,
-  }),
-}));
-
-vi.mock("@/lib/teams/team.query", () => ({
-  useTeams: () => ({
-    data: mockTeams,
-    isPending: false,
-  }),
-}));
-
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: true, isPending: false }),
-  useMissingPermissions: () => [],
-}));
+  } as unknown as ReturnType<typeof useUpdateLlmSettings>);
+  vi.mocked(useTeams).mockImplementation(
+    () =>
+      ({
+        data: mockTeams,
+        isPending: false,
+      }) as ReturnType<typeof useTeams>,
+  );
+});
 
 import LlmSettingsPage from "./page";
 

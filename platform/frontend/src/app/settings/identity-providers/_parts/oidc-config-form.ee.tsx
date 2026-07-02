@@ -21,6 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import {
   Select,
   SelectContent,
@@ -29,7 +30,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
@@ -290,12 +290,7 @@ export function OidcConfigForm({
               <FormItem>
                 <FormLabel>Client Secret</FormLabel>
                 <FormControl>
-                  <Input
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder="your-client-secret"
-                    {...field}
-                  />
+                  <SecretInput placeholder="your-client-secret" {...field} />
                 </FormControl>
                 <FormDescription>
                   The client secret provided by your OIDC provider.
@@ -656,12 +651,7 @@ function EnterpriseManagedCredentialsForm(props: {
             <FormItem>
               <FormLabel>Exchange Client Secret</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder="Optional"
-                  {...field}
-                />
+                <SecretInput placeholder="Optional" {...field} />
               </FormControl>
               <FormDescription>
                 Only used when the exchange endpoint authenticates with a client
@@ -805,7 +795,7 @@ function EnterpriseManagedCredentialsForm(props: {
           <FormItem>
             <FormLabel>Private Key PEM</FormLabel>
             <FormControl>
-              <Textarea
+              <SecretTextarea
                 placeholder="-----BEGIN PRIVATE KEY-----"
                 className="min-h-32 font-mono text-xs"
                 {...field}

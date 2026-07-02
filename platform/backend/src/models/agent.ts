@@ -80,7 +80,7 @@ class AgentModel {
           notDeleted(schema.agentsTable),
         ),
       )
-      .orderBy(desc(schema.agentsTable.createdAt));
+      .orderBy(desc(schema.agentsTable.createdAt), desc(schema.agentsTable.id));
   }
 
   static async activeNameExistsInOrganization(params: {
@@ -568,7 +568,7 @@ class AgentModel {
       .select()
       .from(schema.agentsTable)
       .where(and(...whereConditions))
-      .orderBy(desc(schema.agentsTable.createdAt));
+      .orderBy(desc(schema.agentsTable.createdAt), desc(schema.agentsTable.id));
 
     // Get tools, teams, and labels for all agents
     const agentIds = agents.map((a) => a.id);
@@ -656,7 +656,7 @@ class AgentModel {
       .select()
       .from(schema.agentsTable)
       .where(and(...whereConditions))
-      .orderBy(desc(schema.agentsTable.createdAt));
+      .orderBy(desc(schema.agentsTable.createdAt), desc(schema.agentsTable.id));
 
     const agentIds = agents.map((a) => a.id);
 
@@ -1285,6 +1285,20 @@ class AgentModel {
       .limit(1);
 
     return result?.accessAllTools ?? false;
+  }
+
+  /**
+   * Single-column agentType lookup for per-call dispatch gates, avoiding
+   * findById's multi-table join. Null when the agent is missing or deleted.
+   */
+  static async getAgentType(id: string): Promise<AgentType | null> {
+    const [result] = await db
+      .select({ agentType: schema.agentsTable.agentType })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result?.agentType ?? null;
   }
 
   static async findIdsByOrganizationId(
@@ -2212,6 +2226,12 @@ class AgentModel {
           scope: "personal",
           description: PERSONAL_MCP_GATEWAY_DESCRIPTION,
           isPersonalGateway: true,
+          // The personal gateway defaults to "All" mode so it can reach every
+          // tool the user can access without per-tool assignment. Via the
+          // invariant in AgentModel.create, accessAllTools coerces
+          // toolExposureMode to "search_and_run_only" (the search_tools/run_tool
+          // dispatch surface).
+          accessAllTools: true,
         },
         userId,
       );
@@ -2287,6 +2307,11 @@ class AgentModel {
         agentType: "mcp_gateway" as const,
         scope: "personal" as const,
         isPersonalGateway: true,
+        // Personal gateways default to "All" mode (see ensurePersonalMcpGateway).
+        // This raw INSERT bypasses AgentModel.create, so set both fields here to
+        // preserve the accessAllTools => search_and_run_only invariant.
+        accessAllTools: true,
+        toolExposureMode: "search_and_run_only" as const,
         slug: `my-gateway-${userPart}-${crypto.randomUUID().slice(0, 6)}`,
       };
     });

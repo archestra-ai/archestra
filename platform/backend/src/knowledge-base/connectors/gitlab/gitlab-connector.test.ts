@@ -1,36 +1,173 @@
-import { vi } from "vitest";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { HttpResponse, http } from "msw";
+import { beforeEach, describe, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
 import type { ConnectorSyncBatch } from "@/types";
 import { GitlabConnector } from "./gitlab-connector";
 
-// Mock @gitbeaker/rest SDK
-const mockShowCurrentUser = vi.fn();
-const mockProjectsAll = vi.fn();
-const mockProjectsShow = vi.fn();
-const mockGroupsAllProjects = vi.fn();
-const mockIssuesAll = vi.fn();
-const mockIssueNotesAll = vi.fn();
-const mockMergeRequestsAll = vi.fn();
-const mockMergeRequestNotesAll = vi.fn();
-const mockAllRepositoryTrees = vi.fn();
-const mockRepositoryFilesShow = vi.fn();
+// Wire-level (MSW) mocking: the real @gitbeaker/rest client runs and only the
+// HTTP boundary is faked. gitbeaker uses global fetch, which MSW intercepts.
+// The client is created with `camelize` disabled (the default), so wire
+// responses stay snake_case exactly as the GitLab REST API returns them.
+const GL = "https://gitlab.com";
 
-vi.mock("@gitbeaker/rest", () => ({
-  Gitlab: class MockGitlab {
-    Users = { showCurrentUser: mockShowCurrentUser };
-    Projects = { all: mockProjectsAll, show: mockProjectsShow };
-    Groups = { allProjects: mockGroupsAllProjects };
-    Issues = { all: mockIssuesAll };
-    IssueNotes = { all: mockIssueNotesAll };
-    MergeRequests = { all: mockMergeRequestsAll };
-    MergeRequestNotes = { all: mockMergeRequestNotesAll };
-    Repositories = { allRepositoryTrees: mockAllRepositoryTrees };
-    RepositoryFiles = { show: mockRepositoryFilesShow };
-  },
-}));
+const mockProject = {
+  id: 42,
+  name: "my-project",
+  path_with_namespace: "my-group/my-project",
+  web_url: "https://gitlab.com/my-group/my-project",
+};
 
 describe("GitlabConnector", () => {
+  const server = useMswServer();
   let connector: GitlabConnector;
+
+  // Captured wire traffic, reset per test.
+  const userRequests: URL[] = [];
+  const issuesRequests: URL[] = [];
+  const mrRequests: URL[] = [];
+  const projectsAllRequests: URL[] = [];
+  const groupProjectsRequests: URL[] = [];
+  const treeRequests: URL[] = [];
+  const fileRequests: string[] = [];
+
+  function userHandler(status?: number) {
+    return http.get(`${GL}/api/v4/user`, ({ request }) => {
+      userRequests.push(new URL(request.url));
+      if (status) {
+        return HttpResponse.json({ message: "401 Unauthorized" }, { status });
+      }
+      return HttpResponse.json({ id: 1, username: "test-user" });
+    });
+  }
+
+  function projectShowHandler(project: unknown = mockProject) {
+    return http.get(`${GL}/api/v4/projects/42`, () =>
+      HttpResponse.json(project as Record<string, unknown>),
+    );
+  }
+
+  function projectsAllHandler(projects: unknown[]) {
+    return http.get(`${GL}/api/v4/projects`, ({ request }) => {
+      projectsAllRequests.push(new URL(request.url));
+      return HttpResponse.json(projects);
+    });
+  }
+
+  function groupProjectsHandler(projects: unknown[], groupId = "my-group") {
+    return http.get(
+      `${GL}/api/v4/groups/${groupId}/projects`,
+      ({ request }) => {
+        groupProjectsRequests.push(new URL(request.url));
+        return HttpResponse.json(projects);
+      },
+    );
+  }
+
+  function issuesHandler(pages: unknown[][]) {
+    let call = 0;
+    return http.get(`${GL}/api/v4/projects/42/issues`, ({ request }) => {
+      issuesRequests.push(new URL(request.url));
+      const page = pages[Math.min(call, pages.length - 1)];
+      call += 1;
+      return HttpResponse.json(page);
+    });
+  }
+
+  function issuesErrorHandler(status: number) {
+    return http.get(`${GL}/api/v4/projects/42/issues`, () =>
+      HttpResponse.json({ message: "Request failed" }, { status }),
+    );
+  }
+
+  function mergeRequestsHandler(pages: unknown[][]) {
+    let call = 0;
+    return http.get(
+      `${GL}/api/v4/projects/42/merge_requests`,
+      ({ request }) => {
+        mrRequests.push(new URL(request.url));
+        const page = pages[Math.min(call, pages.length - 1)];
+        call += 1;
+        return HttpResponse.json(page);
+      },
+    );
+  }
+
+  function issueNotesHandler(config?: {
+    notes?: Record<number, unknown[]>;
+    errors?: Record<number, { status: number; message: string }>;
+  }) {
+    return http.get(
+      `${GL}/api/v4/projects/42/issues/:iid/notes`,
+      ({ params }) => {
+        const iid = Number(params.iid);
+        const err = config?.errors?.[iid];
+        if (err) {
+          return HttpResponse.json(
+            { message: err.message },
+            { status: err.status },
+          );
+        }
+        return HttpResponse.json(config?.notes?.[iid] ?? []);
+      },
+    );
+  }
+
+  function mrNotesHandler(config?: {
+    notes?: Record<number, unknown[]>;
+    errors?: Record<number, { status: number; message: string }>;
+  }) {
+    return http.get(
+      `${GL}/api/v4/projects/42/merge_requests/:iid/notes`,
+      ({ params }) => {
+        const iid = Number(params.iid);
+        const err = config?.errors?.[iid];
+        if (err) {
+          return HttpResponse.json(
+            { message: err.message },
+            { status: err.status },
+          );
+        }
+        return HttpResponse.json(config?.notes?.[iid] ?? []);
+      },
+    );
+  }
+
+  function treeHandler(items: unknown[]) {
+    return http.get(
+      `${GL}/api/v4/projects/42/repository/tree`,
+      ({ request }) => {
+        treeRequests.push(new URL(request.url));
+        return HttpResponse.json(items);
+      },
+    );
+  }
+
+  function fileHandler(config: {
+    contents?: Record<string, string>;
+    errors?: Record<string, number>;
+  }) {
+    return http.get(
+      // The client URL-encodes the file path (slashes become %2F), so it is a
+      // single path segment here; MSW decodes the captured param.
+      `${GL}/api/v4/projects/42/repository/files/:filePath`,
+      ({ params }) => {
+        const filePath = String(params.filePath);
+        fileRequests.push(filePath);
+        const errStatus = config.errors?.[filePath];
+        if (errStatus) {
+          return HttpResponse.json(
+            { message: "file error" },
+            { status: errStatus },
+          );
+        }
+        return HttpResponse.json({
+          content: Buffer.from(config.contents?.[filePath] ?? "").toString(
+            "base64",
+          ),
+        });
+      },
+    );
+  }
 
   const validConfig = {
     gitlabUrl: "https://gitlab.com",
@@ -42,12 +179,14 @@ describe("GitlabConnector", () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    userRequests.length = 0;
+    issuesRequests.length = 0;
+    mrRequests.length = 0;
+    projectsAllRequests.length = 0;
+    groupProjectsRequests.length = 0;
+    treeRequests.length = 0;
+    fileRequests.length = 0;
     connector = new GitlabConnector();
-  });
-
-  afterEach(() => {
-    vi.resetAllMocks();
   });
 
   describe("validateConfig", () => {
@@ -112,10 +251,7 @@ describe("GitlabConnector", () => {
 
   describe("testConnection", () => {
     test("returns success when API responds OK", async () => {
-      mockShowCurrentUser.mockResolvedValueOnce({
-        id: 1,
-        username: "test-user",
-      });
+      server.use(userHandler());
 
       const result = await connector.testConnection({
         config: validConfig,
@@ -123,11 +259,11 @@ describe("GitlabConnector", () => {
       });
 
       expect(result).toEqual({ success: true });
-      expect(mockShowCurrentUser).toHaveBeenCalled();
+      expect(userRequests).toHaveLength(1);
     });
 
     test("returns error when API throws", async () => {
-      mockShowCurrentUser.mockRejectedValueOnce(new Error("401 Unauthorized"));
+      server.use(userHandler(401));
 
       const result = await connector.testConnection({
         config: validConfig,
@@ -150,13 +286,6 @@ describe("GitlabConnector", () => {
   });
 
   describe("sync", () => {
-    const mockProject = {
-      id: 42,
-      name: "my-project",
-      path_with_namespace: "my-group/my-project",
-      web_url: "https://gitlab.com/my-group/my-project",
-    };
-
     function makeIssue(
       iid: number,
       title: string,
@@ -192,7 +321,7 @@ describe("GitlabConnector", () => {
     }
 
     beforeEach(() => {
-      mockProjectsShow.mockResolvedValue(mockProject);
+      server.use(projectShowHandler());
     });
 
     test("yields batch of documents from issues", async () => {
@@ -201,11 +330,11 @@ describe("GitlabConnector", () => {
         makeIssue(2, "Second issue"),
       ];
 
-      mockIssuesAll.mockResolvedValueOnce(issues);
-      mockIssueNotesAll.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
-
-      // MR pass
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
+      server.use(
+        issuesHandler([issues]),
+        issueNotesHandler(),
+        mergeRequestsHandler([[]]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -224,17 +353,16 @@ describe("GitlabConnector", () => {
     });
 
     test("yields merge request documents", async () => {
-      // Issues pass
-      mockIssuesAll.mockResolvedValueOnce([]);
-
       const mrs = [
         makeMergeRequest(10, "Feature branch"),
         makeMergeRequest(11, "Bug fix"),
       ];
-      mockMergeRequestsAll.mockResolvedValueOnce(mrs);
-      mockMergeRequestNotesAll
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+
+      server.use(
+        issuesHandler([[]]),
+        mergeRequestsHandler([mrs]),
+        mrNotesHandler(),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -256,24 +384,28 @@ describe("GitlabConnector", () => {
     });
 
     test("includes notes in document content", async () => {
-      mockIssuesAll.mockResolvedValueOnce([makeIssue(1, "Issue with notes")]);
-      mockIssueNotesAll.mockResolvedValueOnce([
-        {
-          body: "This is a comment",
-          author: { username: "reviewer", name: "Reviewer" },
-          created_at: "2024-01-16T12:00:00.000Z",
-          system: false,
-        },
-        {
-          body: "assigned to @reviewer",
-          author: { username: "system", name: "System" },
-          created_at: "2024-01-16T11:00:00.000Z",
-          system: true,
-        },
-      ]);
-
-      // MR pass
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
+      server.use(
+        issuesHandler([[makeIssue(1, "Issue with notes")]]),
+        issueNotesHandler({
+          notes: {
+            1: [
+              {
+                body: "This is a comment",
+                author: { username: "reviewer", name: "Reviewer" },
+                created_at: "2024-01-16T12:00:00.000Z",
+                system: false,
+              },
+              {
+                body: "assigned to @reviewer",
+                author: { username: "system", name: "System" },
+                created_at: "2024-01-16T11:00:00.000Z",
+                system: true,
+              },
+            ],
+          },
+        }),
+        mergeRequestsHandler([[]]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -298,17 +430,11 @@ describe("GitlabConnector", () => {
       );
       const page2Issues = [makeIssue(51, "Issue 51")];
 
-      mockIssuesAll
-        .mockResolvedValueOnce(page1Issues)
-        .mockResolvedValueOnce(page2Issues);
-
-      // Notes for each issue
-      for (let i = 0; i < 51; i++) {
-        mockIssueNotesAll.mockResolvedValueOnce([]);
-      }
-
-      // MR pass
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
+      server.use(
+        issuesHandler([page1Issues, page2Issues]),
+        issueNotesHandler(),
+        mergeRequestsHandler([[]]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -328,8 +454,7 @@ describe("GitlabConnector", () => {
     });
 
     test("incremental sync uses checkpoint timestamp", async () => {
-      mockIssuesAll.mockResolvedValueOnce([]);
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
+      server.use(issuesHandler([[]]), mergeRequestsHandler([[]]));
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -340,10 +465,8 @@ describe("GitlabConnector", () => {
         batches.push(batch);
       }
 
-      expect(mockIssuesAll).toHaveBeenCalledWith(
-        expect.objectContaining({
-          updatedAfter: "2024-01-10T00:00:00.000Z",
-        }),
+      expect(issuesRequests[0].searchParams.get("updated_after")).toBe(
+        "2024-01-10T00:00:00.000Z",
       );
     });
 
@@ -353,11 +476,11 @@ describe("GitlabConnector", () => {
         makeIssue(2, "Skip this", { labels: ["wontfix"] }),
       ];
 
-      mockIssuesAll.mockResolvedValueOnce(issues);
-      mockIssueNotesAll.mockResolvedValueOnce([]);
-
-      // MR pass
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
+      server.use(
+        issuesHandler([issues]),
+        issueNotesHandler(),
+        mergeRequestsHandler([[]]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -377,8 +500,10 @@ describe("GitlabConnector", () => {
 
     test("respects includeIssues=false", async () => {
       // Only MR pass should run
-      mockMergeRequestsAll.mockResolvedValueOnce([makeMergeRequest(1, "A MR")]);
-      mockMergeRequestNotesAll.mockResolvedValueOnce([]);
+      server.use(
+        mergeRequestsHandler([[makeMergeRequest(1, "A MR")]]),
+        mrNotesHandler(),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -393,12 +518,14 @@ describe("GitlabConnector", () => {
       expect(allDocs.every((d) => d.metadata.kind === "merge_request")).toBe(
         true,
       );
-      expect(mockIssuesAll).not.toHaveBeenCalled();
+      expect(issuesRequests).toHaveLength(0);
     });
 
     test("respects includeMergeRequests=false", async () => {
-      mockIssuesAll.mockResolvedValueOnce([makeIssue(1, "An issue")]);
-      mockIssueNotesAll.mockResolvedValueOnce([]);
+      server.use(
+        issuesHandler([[makeIssue(1, "An issue")]]),
+        issueNotesHandler(),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -411,13 +538,15 @@ describe("GitlabConnector", () => {
 
       const allDocs = batches.flatMap((b) => b.documents);
       expect(allDocs.every((d) => d.metadata.kind === "issue")).toBe(true);
-      expect(mockMergeRequestsAll).not.toHaveBeenCalled();
+      expect(mrRequests).toHaveLength(0);
     });
 
     test("builds source URL correctly for issues", async () => {
-      mockIssuesAll.mockResolvedValueOnce([makeIssue(5, "Test issue")]);
-      mockIssueNotesAll.mockResolvedValueOnce([]);
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
+      server.use(
+        issuesHandler([[makeIssue(5, "Test issue")]]),
+        issueNotesHandler(),
+        mergeRequestsHandler([[]]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -434,11 +563,13 @@ describe("GitlabConnector", () => {
     });
 
     test("includes metadata in documents", async () => {
-      mockIssuesAll.mockResolvedValueOnce([
-        makeIssue(1, "Test issue", { labels: ["bug", "urgent"] }),
-      ]);
-      mockIssueNotesAll.mockResolvedValueOnce([]);
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
+      server.use(
+        issuesHandler([
+          [makeIssue(1, "Test issue", { labels: ["bug", "urgent"] })],
+        ]),
+        issueNotesHandler(),
+        mergeRequestsHandler([[]]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -465,14 +596,16 @@ describe("GitlabConnector", () => {
         makeIssue(3, "Third issue"),
       ];
 
-      mockIssuesAll.mockResolvedValueOnce(issues);
-      mockIssueNotesAll
-        .mockResolvedValueOnce([])
-        .mockRejectedValueOnce(new Error("502 Bad Gateway"))
-        .mockResolvedValueOnce([]);
-
-      // MR pass
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
+      server.use(
+        issuesHandler([issues]),
+        issueNotesHandler({
+          // 502 is a gitbeaker retry status; serve the message via a
+          // non-retry status so the failure surfaces immediately with the
+          // expected error string.
+          errors: { 2: { status: 500, message: "502 Bad Gateway" } },
+        }),
+        mergeRequestsHandler([[]]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -497,17 +630,18 @@ describe("GitlabConnector", () => {
     });
 
     test("continues sync when MR note fetch fails", async () => {
-      // Issues pass - empty
-      mockIssuesAll.mockResolvedValueOnce([]);
-
       const mrs = [
         makeMergeRequest(10, "Feature branch"),
         makeMergeRequest(11, "Bug fix"),
       ];
-      mockMergeRequestsAll.mockResolvedValueOnce(mrs);
-      mockMergeRequestNotesAll
-        .mockRejectedValueOnce(new Error("500 Internal Server Error"))
-        .mockResolvedValueOnce([]);
+
+      server.use(
+        issuesHandler([[]]),
+        mergeRequestsHandler([mrs]),
+        mrNotesHandler({
+          errors: { 10: { status: 500, message: "500 Internal Server Error" } },
+        }),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -534,9 +668,7 @@ describe("GitlabConnector", () => {
     });
 
     test("throws on API error", async () => {
-      mockIssuesAll.mockRejectedValueOnce(
-        new Error("Request failed with status code 403"),
-      );
+      server.use(issuesErrorHandler(403));
 
       const generator = connector.sync({
         config: validConfig,
@@ -553,9 +685,11 @@ describe("GitlabConnector", () => {
         groupId: "my-group",
       };
 
-      mockGroupsAllProjects.mockResolvedValueOnce([mockProject]);
-      mockIssuesAll.mockResolvedValueOnce([]);
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
+      server.use(
+        groupProjectsHandler([mockProject]),
+        issuesHandler([[]]),
+        mergeRequestsHandler([[]]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -566,9 +700,11 @@ describe("GitlabConnector", () => {
         batches.push(batch);
       }
 
-      expect(mockGroupsAllProjects).toHaveBeenCalledWith("my-group", {
-        perPage: 100,
-      });
+      expect(groupProjectsRequests).toHaveLength(1);
+      expect(groupProjectsRequests[0].pathname).toBe(
+        "/api/v4/groups/my-group/projects",
+      );
+      expect(groupProjectsRequests[0].searchParams.get("per_page")).toBe("100");
     });
 
     test("fetches member projects when no filter specified", async () => {
@@ -576,9 +712,11 @@ describe("GitlabConnector", () => {
         gitlabUrl: "https://gitlab.com",
       };
 
-      mockProjectsAll.mockResolvedValueOnce([mockProject]);
-      mockIssuesAll.mockResolvedValueOnce([]);
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
+      server.use(
+        projectsAllHandler([mockProject]),
+        issuesHandler([[]]),
+        mergeRequestsHandler([[]]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -589,8 +727,9 @@ describe("GitlabConnector", () => {
         batches.push(batch);
       }
 
-      expect(mockProjectsAll).toHaveBeenCalledWith(
-        expect.objectContaining({ membership: true }),
+      expect(projectsAllRequests).toHaveLength(1);
+      expect(projectsAllRequests[0].searchParams.get("membership")).toBe(
+        "true",
       );
     });
 
@@ -603,9 +742,11 @@ describe("GitlabConnector", () => {
         },
       ];
 
-      mockIssuesAll.mockResolvedValueOnce(issues);
-      mockIssueNotesAll.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
+      server.use(
+        issuesHandler([issues]),
+        issueNotesHandler(),
+        mergeRequestsHandler([[]]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -625,8 +766,7 @@ describe("GitlabConnector", () => {
     });
 
     test("checkpoint preserves previous value when batch has no items", async () => {
-      mockIssuesAll.mockResolvedValueOnce([]);
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
+      server.use(issuesHandler([[]]), mergeRequestsHandler([[]]));
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -648,41 +788,27 @@ describe("GitlabConnector", () => {
   });
 
   describe("markdown file sync", () => {
-    const mockProject = {
-      id: 42,
-      name: "my-project",
-      path_with_namespace: "my-group/my-project",
-      web_url: "https://gitlab.com/my-group/my-project",
-    };
-
     beforeEach(() => {
-      mockProjectsShow.mockResolvedValue(mockProject);
+      server.use(projectShowHandler());
     });
 
     test("fetches and indexes markdown files when includeMarkdownFiles is true", async () => {
-      // Issues pass - empty
-      mockIssuesAll.mockResolvedValueOnce([]);
-      // MR pass - empty
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
-
-      // Markdown: get repo tree
-      mockAllRepositoryTrees.mockResolvedValueOnce([
-        { type: "blob", path: "README.md" },
-        { type: "blob", path: "docs/guide.mdx" },
-        { type: "blob", path: "src/index.ts" },
-        { type: "tree", path: "docs" },
-      ]);
-
-      // Markdown: get file contents
-      mockRepositoryFilesShow
-        .mockResolvedValueOnce({
-          content: Buffer.from("# README\nHello world").toString("base64"),
-        })
-        .mockResolvedValueOnce({
-          content: Buffer.from("# Guide\nSome guide content").toString(
-            "base64",
-          ),
-        });
+      server.use(
+        issuesHandler([[]]),
+        mergeRequestsHandler([[]]),
+        treeHandler([
+          { type: "blob", path: "README.md" },
+          { type: "blob", path: "docs/guide.mdx" },
+          { type: "blob", path: "src/index.ts" },
+          { type: "tree", path: "docs" },
+        ]),
+        fileHandler({
+          contents: {
+            "README.md": "# README\nHello world",
+            "docs/guide.mdx": "# Guide\nSome guide content",
+          },
+        }),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -709,8 +835,7 @@ describe("GitlabConnector", () => {
     });
 
     test("does not fetch markdown files when includeMarkdownFiles is not set", async () => {
-      mockIssuesAll.mockResolvedValueOnce([]);
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
+      server.use(issuesHandler([[]]), mergeRequestsHandler([[]]));
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -721,24 +846,23 @@ describe("GitlabConnector", () => {
         batches.push(batch);
       }
 
-      expect(mockAllRepositoryTrees).not.toHaveBeenCalled();
-      expect(mockRepositoryFilesShow).not.toHaveBeenCalled();
+      expect(treeRequests).toHaveLength(0);
+      expect(fileRequests).toHaveLength(0);
     });
 
     test("continues when file content fetch fails", async () => {
-      mockIssuesAll.mockResolvedValueOnce([]);
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
-
-      mockAllRepositoryTrees.mockResolvedValueOnce([
-        { type: "blob", path: "a.md" },
-        { type: "blob", path: "b.md" },
-      ]);
-
-      mockRepositoryFilesShow
-        .mockRejectedValueOnce(new Error("403 Forbidden"))
-        .mockResolvedValueOnce({
-          content: Buffer.from("# B file").toString("base64"),
-        });
+      server.use(
+        issuesHandler([[]]),
+        mergeRequestsHandler([[]]),
+        treeHandler([
+          { type: "blob", path: "a.md" },
+          { type: "blob", path: "b.md" },
+        ]),
+        fileHandler({
+          contents: { "b.md": "# B file" },
+          errors: { "a.md": 403 },
+        }),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -760,10 +884,11 @@ describe("GitlabConnector", () => {
     });
 
     test("handles empty repo tree gracefully", async () => {
-      mockIssuesAll.mockResolvedValueOnce([]);
-      mockMergeRequestsAll.mockResolvedValueOnce([]);
-
-      mockAllRepositoryTrees.mockResolvedValueOnce([]);
+      server.use(
+        issuesHandler([[]]),
+        mergeRequestsHandler([[]]),
+        treeHandler([]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({

@@ -3,9 +3,13 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { ConnectorSyncBatch } from "@/types";
 import { ServiceNowConnector } from "./servicenow-connector";
 
-// Mock global fetch
+// Mock global fetch. The config's `unstubGlobals` removes stubs after every
+// test, so re-apply before each one; the top-level stub covers import time.
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
+beforeEach(() => {
+  vi.stubGlobal("fetch", mockFetch);
+});
 
 describe("ServiceNowConnector", () => {
   let connector: ServiceNowConnector;

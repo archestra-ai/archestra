@@ -1,8 +1,16 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDefaultEnvironment } from "@/lib/organization.query";
+import {
+  useAssignableTeams,
+  useMyTeams,
+  useTeams,
+} from "@/lib/teams/team.query";
 import { McpCatalogForm } from "./mcp-catalog-form";
 
 const { useIdentityProvidersMock, useK8sImagePullSecretsMock } = vi.hoisted(
@@ -12,15 +20,7 @@ const { useIdentityProvidersMock, useK8sImagePullSecretsMock } = vi.hoisted(
   }),
 );
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: vi.fn((feature: string) => {
-    if (feature === "mcpServerBaseImage") return "";
-    if (feature === "orchestratorK8sRuntime") return true;
-    if (feature === "byosEnabled") return false;
-    return undefined;
-  }),
-  useEnterpriseFeature: vi.fn(() => false),
-}));
+vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/config/config", () => ({
   default: {
@@ -30,19 +30,9 @@ vi.mock("@/lib/config/config", () => ({
   },
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: vi.fn(() => ({ data: true })),
-}));
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/organization.query", () => ({
-  useDefaultEnvironment: vi.fn(() => ({
-    name: "Default",
-    namespace: null,
-    description: null,
-    networkPolicy: null,
-    restricted: false,
-  })),
-}));
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/environment.query", () => ({
   useEnvironments: vi.fn(() => ({
@@ -54,11 +44,7 @@ vi.mock("@/lib/auth/identity-provider-read.query", () => ({
   useIdentityProviders: useIdentityProvidersMock,
 }));
 
-vi.mock("@/lib/teams/team.query", () => ({
-  useTeams: vi.fn(() => ({ data: [] })),
-  useMyTeams: vi.fn(() => ({ data: [] })),
-  useAssignableTeams: vi.fn(() => ({ data: [] })),
-}));
+vi.mock("@/lib/teams/team.query");
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useK8sImagePullSecrets: useK8sImagePullSecretsMock,
@@ -73,9 +59,7 @@ vi.mock("@/lib/docs/docs", () => ({
   getFrontendDocsUrl: vi.fn(() => "https://docs.example.com/mcp-auth"),
 }));
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: vi.fn(() => "Archestra"),
-}));
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/components/agent-icon-picker", () => ({
   AgentIconPicker: () => <div data-testid="agent-icon-picker" />,
@@ -104,6 +88,27 @@ describe("McpCatalogForm enterprise gating", () => {
       if (feature === "byosEnabled") return false;
       return undefined;
     });
+    vi.mocked(useEnterpriseFeature).mockReturnValue(false);
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useDefaultEnvironment).mockReturnValue({
+      name: "Default",
+      namespace: null,
+      description: null,
+      networkPolicy: null,
+      restricted: false,
+    } as ReturnType<typeof useDefaultEnvironment>);
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useMyTeams>);
+    vi.mocked(useAssignableTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useAssignableTeams>);
+    vi.mocked(useAppName).mockReturnValue("Archestra");
     useIdentityProvidersMock.mockReturnValue({ data: [] });
     useK8sImagePullSecretsMock.mockReturnValue({ data: [] });
     global.ResizeObserver = class ResizeObserver {
@@ -259,10 +264,18 @@ describe("McpCatalogForm enterprise gating", () => {
       "autocomplete",
       "off",
     );
-    expect(screen.getByLabelText("Client Secret")).toHaveAttribute(
-      "autocomplete",
-      "new-password",
-    );
+    // SecretInput contract: type="text" (a password type would summon
+    // browser password managers), autofill off, extension opt-outs present
+    const clientSecret = screen.getByLabelText("Client Secret");
+    expect(clientSecret).toHaveAttribute("type", "text");
+    expect(clientSecret).toHaveAttribute("autocomplete", "off");
+    expect(clientSecret).toHaveAttribute("data-1p-ignore");
+    expect(clientSecret).toHaveAttribute("data-lpignore", "true");
+    expect(clientSecret).toHaveAttribute("data-bwignore", "true");
+    expect(clientSecret).toHaveClass("secret-masked");
+    // parity with type="password": the masked value cannot be copied out
+    expect(fireEvent.copy(clientSecret)).toBe(false);
+    expect(fireEvent.cut(clientSecret)).toBe(false);
   });
 
   it("shows a disabled default environment selector when no custom environments are available", () => {

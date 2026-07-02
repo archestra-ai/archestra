@@ -2,34 +2,24 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useTeamLabelKeys,
+  useTeamLabelValues,
+  useTeams,
+} from "@/lib/teams/team.query";
 import { TeamsList } from "./teams-list";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 
-const {
-  mockSetSettingsAction,
-  useHasPermissionsMock,
-  useSessionMock,
-  useTeamsMock,
-  useTeamLabelKeysMock,
-  useTeamLabelValuesMock,
-  queryParamsHolder,
-} = vi.hoisted(() => ({
+const { mockSetSettingsAction, queryParamsHolder } = vi.hoisted(() => ({
   mockSetSettingsAction: vi.fn(),
-  useHasPermissionsMock: vi.fn(),
-  useSessionMock: vi.fn(),
-  useTeamsMock: vi.fn(),
-  useTeamLabelKeysMock: vi.fn(),
-  useTeamLabelValuesMock: vi.fn(),
   queryParamsHolder: { current: new URLSearchParams() },
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
-  usePathname: () => "/settings/teams",
-  useSearchParams: () => new URLSearchParams(),
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/app/settings/layout", () => ({
   useSetSettingsAction: () => mockSetSettingsAction,
@@ -110,10 +100,7 @@ vi.mock("@/components/table-row-actions", () => ({
   ),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: useHasPermissionsMock,
-  useSession: useSessionMock,
-}));
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
   useDataTableQueryParams: () => ({
@@ -122,11 +109,7 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
   }),
 }));
 
-vi.mock("@/lib/teams/team.query", () => ({
-  useTeams: useTeamsMock,
-  useTeamLabelKeys: useTeamLabelKeysMock,
-  useTeamLabelValues: useTeamLabelValuesMock,
-}));
+vi.mock("@/lib/teams/team.query");
 
 vi.mock("./team-management-dialog", () => ({
   TeamManagementDialog: ({
@@ -141,18 +124,38 @@ vi.mock("./team-management-dialog", () => ({
 describe("TeamsList", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useSessionMock.mockReturnValue({ data: { user: { id: "user-1" } } });
-    useHasPermissionsMock.mockImplementation((permissions) => ({
-      data: !permissions.team?.includes("update"),
-    }));
-    useTeamLabelKeysMock.mockReturnValue({ data: [] });
-    useTeamLabelValuesMock.mockReturnValue({ data: [] });
-    useTeamsMock.mockReturnValue({ data: [], isLoading: false });
+    vi.mocked(useRouter).mockReturnValue({
+      replace: vi.fn(),
+      push: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(usePathname).mockReturnValue("/settings/teams");
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1" } },
+    } as ReturnType<typeof useSession>);
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.team?.includes("update"),
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useTeamLabelKeys).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeamLabelKeys>);
+    vi.mocked(useTeamLabelValues).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeamLabelValues>);
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useTeams>);
     queryParamsHolder.current = new URLSearchParams();
   });
 
   it("lets literal team admins edit their team without organization-level team update permission", () => {
-    useTeamsMock.mockReturnValue({
+    vi.mocked(useTeams).mockReturnValue({
       data: [
         makeTeam({
           members: [
@@ -164,7 +167,7 @@ describe("TeamsList", () => {
         }),
       ],
       isLoading: false,
-    });
+    } as unknown as ReturnType<typeof useTeams>);
 
     renderTeamsList();
 
@@ -177,7 +180,7 @@ describe("TeamsList", () => {
   });
 
   it("keeps edit disabled for regular team members without organization-level team update permission", () => {
-    useTeamsMock.mockReturnValue({
+    vi.mocked(useTeams).mockReturnValue({
       data: [
         makeTeam({
           members: [
@@ -189,7 +192,7 @@ describe("TeamsList", () => {
         }),
       ],
       isLoading: false,
-    });
+    } as unknown as ReturnType<typeof useTeams>);
 
     renderTeamsList();
 
@@ -203,7 +206,7 @@ describe("TeamsList", () => {
 
     renderTeamsList();
 
-    expect(useTeamsMock).toHaveBeenCalledWith(
+    expect(useTeams).toHaveBeenCalledWith(
       expect.objectContaining({ name: "platform", labels: "env:prod" }),
     );
   });

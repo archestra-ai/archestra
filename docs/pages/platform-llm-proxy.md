@@ -3,7 +3,7 @@ title: Overview
 category: LLM Proxy
 order: 1
 description: Secure proxy for LLM provider interactions
-lastUpdated: 2025-10-31
+lastUpdated: 2026-07-01
 ---
 
 <!--
@@ -99,7 +99,7 @@ Archestra supports the following custom headers on LLM Proxy requests. All heade
 
 | Header                     | Description                                                                                                                                                                                                                                          | Example Value                          |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `X-Archestra-Agent-Id`     | Client-provided identifier for the calling agent or application. Stored with each interaction and included in Prometheus metrics as the `external_agent_id` label. Useful when multiple applications share the same LLM Proxy.                       | `my-chatbot-prod`                      |
+| `X-Archestra-Agent-Id`     | Identifier for the calling agent or application. Stored with each interaction and included in Prometheus metrics as the `external_agent_id` label. Client-provided when set; if absent, Archestra auto-discovers known clients (Claude Code and Claude Desktop) and records a generic `anthropic_claude` id. Useful when multiple applications share the same LLM Proxy.                       | `my-chatbot-prod`                      |
 | `X-Archestra-User-Id`      | Associates the request with a specific Archestra user. Automatically included when using the built-in Archestra Chat.                                                                                                                                | `123e4567-e89b-12d3-a456-426614174000` |
 | `X-Archestra-Virtual-Key`  | Authenticates the acting Archestra user with a [passthrough virtual key](/docs/platform-llm-proxy-authentication#passthrough-virtual-keys) when the provider credential in `Authorization` is passed straight through. Unlike `X-Archestra-User-Id`, it is authenticated. | `arch_abc123def456...`                 |
 | `X-Archestra-Session-Id`   | Groups related LLM requests into a session - included in [trace attributes](/docs/platform-observability#distributed-tracing) as `gen_ai.conversation.id`.                                                                                           | `session-abc-123`                      |

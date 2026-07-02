@@ -10,8 +10,6 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import oauthRoutes, {
   buildDiscoveryUrls,
-  classifyRefreshResponse,
-  classifyThrownRefreshError,
   discoverOAuthEndpoints,
   discoverScopes,
   generateCodeChallenge,
@@ -19,11 +17,18 @@ import oauthRoutes, {
   getOAuthResource,
   getOAuthResourceUrl,
   getOAuthTokenResource,
-  refreshFailureToServerFields,
   refreshOAuthToken,
   resolveOAuthScopesForAuthorization,
-  sanitizeOAuthErrorCode,
 } from "./oauth";
+
+// Several tests below swap `globalThis.fetch` for a mock and restore it inline
+// after their assertions. If an assertion throws, the inline restore is skipped
+// and the mocked fetch leaks into whatever test file runs next in the worker.
+// This top-level hook guarantees the real fetch is back after every test.
+const realFetch = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = realFetch;
+});
 
 describe("OAuth helper functions", () => {
   describe("generateCodeVerifier", () => {
@@ -476,30 +481,50 @@ describe("OAuth helper functions", () => {
       globalThis.fetch = originalFetch;
     });
 
-    test("requests offline_access so the provider issues a refresh token", async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          authorization_endpoint: "https://example.com/authorize",
-          token_endpoint: "https://example.com/token",
-          scopes_supported: ["api://server/access_as_user"],
-        }),
-      }) as Mock;
+    test("omits offline_access when additional_scopes is empty", async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
+      globalThis.fetch = fetchMock;
+
+      const result = await resolveOAuthScopesForAuthorization({
+        oauthConfig: {
+          server_url: "https://accounts.google.com",
+          supports_resource_metadata: false,
+          scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+          additional_scopes: [],
+        },
+      });
+
+      expect(result.scopesToUse).toEqual([
+        "https://www.googleapis.com/auth/gmail.readonly",
+      ]);
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      globalThis.fetch = originalFetch;
+    });
+
+    test("appends configured additional_scopes verbatim", async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
+      globalThis.fetch = fetchMock;
 
       const result = await resolveOAuthScopesForAuthorization({
         oauthConfig: {
           server_url: "https://example.com",
           supports_resource_metadata: false,
-          scopes: [],
+          scopes: ["read"],
+          additional_scopes: ["offline_access", "custom:scope"],
         },
       });
 
-      expect(result.scopesToUse).toContain("offline_access");
+      expect(result.scopesToUse).toEqual([
+        "read",
+        "offline_access",
+        "custom:scope",
+      ]);
 
       globalThis.fetch = originalFetch;
     });
 
-    test("does not duplicate offline_access when it is already configured", async () => {
+    test("does not duplicate a scope already present", async () => {
       const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
       globalThis.fetch = fetchMock;
 
@@ -512,7 +537,6 @@ describe("OAuth helper functions", () => {
       });
 
       expect(result.scopesToUse).toEqual(["read", "offline_access"]);
-      expect(fetchMock).not.toHaveBeenCalled();
 
       globalThis.fetch = originalFetch;
     });
@@ -972,6 +996,7 @@ describe("OAuth routes", () => {
       kind: "terminal",
       category: "refresh_failed",
       message: "invalid_grant",
+      description: "Token expired or revoked",
     });
     // A rejected grant must not write a token; re-authentication is required.
     expect(updateSpy).not.toHaveBeenCalled();
@@ -1312,189 +1337,5 @@ describe("OAuth dynamic client registration client name", () => {
         config.enterpriseFeatures as { fullWhiteLabeling: boolean }
       ).fullWhiteLabeling = original;
     }
-  });
-});
-
-describe("OAuth refresh-failure classification", () => {
-  describe("classifyRefreshResponse", () => {
-    test("2xx with an access token is a success", () => {
-      expect(
-        classifyRefreshResponse({
-          status: 200,
-          body: { access_token: "at" },
-        }),
-      ).toEqual({ ok: true });
-    });
-
-    test("invalid_grant body is terminal (refresh token revoked/expired)", () => {
-      expect(
-        classifyRefreshResponse({
-          status: 400,
-          body: { error: "invalid_grant", error_description: "expired" },
-        }),
-      ).toEqual({
-        ok: false,
-        kind: "terminal",
-        category: "refresh_failed",
-        message: "invalid_grant",
-      });
-    });
-
-    test("invalid_client at 401 is terminal", () => {
-      expect(
-        classifyRefreshResponse({
-          status: 401,
-          body: { error: "invalid_client" },
-        }),
-      ).toMatchObject({
-        kind: "terminal",
-        category: "refresh_failed",
-        message: "invalid_client",
-      });
-    });
-
-    test("authorization-server 5xx is transient", () => {
-      expect(classifyRefreshResponse({ status: 503, body: null })).toEqual({
-        ok: false,
-        kind: "transient",
-        reason: "server_error",
-      });
-    });
-
-    test("429 rate-limit is transient", () => {
-      expect(classifyRefreshResponse({ status: 429, body: null })).toEqual({
-        ok: false,
-        kind: "transient",
-        reason: "rate_limited",
-      });
-    });
-
-    test("proxy/WAF 4xx without an OAuth error body is transient, not terminal", () => {
-      expect(classifyRefreshResponse({ status: 403, body: null })).toEqual({
-        ok: false,
-        kind: "transient",
-        reason: "unexpected_response",
-      });
-    });
-
-    test("2xx without an access token and without an error is transient (captive portal)", () => {
-      expect(classifyRefreshResponse({ status: 200, body: {} })).toEqual({
-        ok: false,
-        kind: "transient",
-        reason: "unexpected_response",
-      });
-    });
-
-    test("a 5xx is transient even when it carries an OAuth error body (status wins)", () => {
-      expect(
-        classifyRefreshResponse({
-          status: 500,
-          body: { error: "invalid_grant" },
-        }),
-      ).toEqual({ ok: false, kind: "transient", reason: "server_error" });
-    });
-
-    test("a transient OAuth error code at 400 is transient, not a dead grant", () => {
-      expect(
-        classifyRefreshResponse({
-          status: 400,
-          body: { error: "temporarily_unavailable" },
-        }),
-      ).toEqual({ ok: false, kind: "transient", reason: "server_error" });
-    });
-  });
-
-  describe("classifyThrownRefreshError", () => {
-    test("AbortSignal.timeout (TimeoutError) is a transient timeout", () => {
-      const err = new Error("timed out");
-      err.name = "TimeoutError";
-      expect(classifyThrownRefreshError(err)).toEqual({
-        ok: false,
-        kind: "transient",
-        reason: "timeout",
-      });
-    });
-
-    test("AbortError is a transient timeout", () => {
-      const err = new Error("aborted");
-      err.name = "AbortError";
-      expect(classifyThrownRefreshError(err)).toMatchObject({
-        reason: "timeout",
-      });
-    });
-
-    test("any other throw is a transient network error", () => {
-      expect(classifyThrownRefreshError(new Error("ECONNREFUSED"))).toEqual({
-        ok: false,
-        kind: "transient",
-        reason: "network",
-      });
-    });
-  });
-
-  describe("sanitizeOAuthErrorCode", () => {
-    test("passes a well-formed OAuth error code through unchanged", () => {
-      expect(sanitizeOAuthErrorCode("invalid_grant")).toBe("invalid_grant");
-    });
-
-    test("redacts a credential-bearing URL to the generic code", () => {
-      expect(
-        sanitizeOAuthErrorCode(
-          "https://as.example/cb?code=SECRET_AUTH_CODE&access_token=tok",
-        ),
-      ).toBe("refresh_failed");
-    });
-
-    test("redacts free text with spaces / token material", () => {
-      expect(
-        sanitizeOAuthErrorCode("refresh token abc123.def456 was rejected"),
-      ).toBe("refresh_failed");
-    });
-
-    test("falls back to the generic code for empty/missing input", () => {
-      expect(sanitizeOAuthErrorCode(undefined)).toBe("refresh_failed");
-      expect(sanitizeOAuthErrorCode("")).toBe("refresh_failed");
-    });
-  });
-
-  describe("refreshFailureToServerFields", () => {
-    test("a terminal failure maps to the persisted trio", () => {
-      const fields = refreshFailureToServerFields({
-        ok: false,
-        kind: "terminal",
-        category: "refresh_failed",
-        message: "invalid_grant",
-      });
-      expect(fields).not.toBeNull();
-      expect(fields).toMatchObject({
-        oauthRefreshError: "refresh_failed",
-        oauthRefreshErrorMessage: "invalid_grant",
-      });
-      expect(fields?.oauthRefreshFailedAt).toBeInstanceOf(Date);
-    });
-
-    test("a no_refresh_token terminal failure carries its category", () => {
-      const fields = refreshFailureToServerFields({
-        ok: false,
-        kind: "terminal",
-        category: "no_refresh_token",
-        message: "no_refresh_token",
-      });
-      expect(fields?.oauthRefreshError).toBe("no_refresh_token");
-    });
-
-    test("a transient failure persists nothing", () => {
-      expect(
-        refreshFailureToServerFields({
-          ok: false,
-          kind: "transient",
-          reason: "server_error",
-        }),
-      ).toBeNull();
-    });
-
-    test("a success persists nothing", () => {
-      expect(refreshFailureToServerFields({ ok: true })).toBeNull();
-    });
   });
 });

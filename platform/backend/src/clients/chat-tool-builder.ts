@@ -4,6 +4,7 @@
 // execution). Must not import chat-mcp-client.ts (cycle).
 import { randomUUID } from "node:crypto";
 import {
+  extractMcpToolError,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   parseFullToolName,
@@ -27,9 +28,11 @@ import {
   archestraMcpBranding,
   executeArchestraTool,
 } from "@/archestra-mcp-server";
+import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
+import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import type {
   RepeatSeverity,
   ToolCallRepeatTracker,
@@ -45,16 +48,8 @@ import {
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
-import type {
-  DiscoveredToolPolicy,
-  GlobalToolPolicy,
-  UnsafeContextBoundary,
-} from "@/types";
-import {
-  agentOwner,
-  defaultDiscoveredToolPolicy,
-  UNSAFE_CONTEXT_BOUNDARY_REASON,
-} from "@/types";
+import type { GlobalToolPolicy, UnsafeContextBoundary } from "@/types";
+import { agentOwner, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
 export interface McpGatewayToken {
@@ -96,9 +91,15 @@ export interface ChatToolContext {
   blockOnApprovalRequired?: boolean;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];
+  /**
+   * Bridge that surfaces a delegated child agent's tool calls on the caller's
+   * conversation surface (chat path only). Threaded into the child run so its
+   * tool calls — and those of any deeper descendant — appear nested under the
+   * delegation call that spawned them.
+   */
+  subagentToolStream?: SubagentToolStreamBridge;
   mcpGwToken: McpGatewayToken;
   globalToolPolicy: GlobalToolPolicy;
-  discoveredToolPolicy: DiscoveredToolPolicy;
   considerContextUntrusted: boolean;
   /**
    * Per-run guard against the model re-issuing the identical tool call forever.
@@ -251,6 +252,13 @@ export function buildMcpGatewayTool(params: {
               toolName: mcpTool.name,
               toolArguments,
               agentId: ctx.agentId,
+              userId: ctx.userId,
+              organizationId: ctx.organizationId,
+              tokenAuth: buildTokenAuthContext({
+                mcpGwToken: ctx.mcpGwToken,
+                organizationId: ctx.organizationId,
+                userId: ctx.userId,
+              }),
             });
           } else {
             // Execute non-Archestra tools via shared helper with browser sync
@@ -367,6 +375,10 @@ export function buildAgentDelegationTool(params: {
           const response = await executeArchestraTool(agentTool.name, args, {
             ...archestraContext,
             contextIsTrusted: toolExecutionContext.contextIsTrusted,
+            // Surface the child's tool calls on the caller's conversation,
+            // attributed to this delegation call (options.toolCallId).
+            subagentToolStream: ctx.subagentToolStream,
+            currentToolCallId: options.toolCallId,
           });
 
           span.setAttribute(
@@ -467,7 +479,8 @@ function extractModelOutputImages(
  * for the common case; when run_tool dispatched to an interactive tool, returns
  * the rich shape (with `_meta.ui.resourceUri` from the target tool's definition)
  * so the frontend renders the MCP App — mirroring how `executeMcpTool` enriches
- * directly-called tools.
+ * directly-called tools. The target's UI resource is resolved from its
+ * assignment, or (for an "all tools" agent) from the user's dynamic-access set.
  * @public — exported for testability
  */
 export async function buildArchestraToolOutput(params: {
@@ -475,6 +488,21 @@ export async function buildArchestraToolOutput(params: {
   toolName: string;
   toolArguments: unknown;
   agentId: string;
+  /**
+   * Caller identity used to resolve the dispatched target tool's UI resource
+   * when the tool is reachable only through dynamic access ("all tools" mode)
+   * and has no `agent_tools` assignment. Omit for callers that never dispatch
+   * unassigned tools; the resolution then stays assignment-scoped.
+   */
+  userId?: string;
+  organizationId?: string;
+  /**
+   * Caller auth used to resolve the concrete install (own→team→org) backing a
+   * run_tool-dispatched external MCP App's UI resource, so its callbacks bind to
+   * that install. Omit when the caller can't reach external UI tools; the app
+   * then renders without a server binding (unchanged legacy behaviour).
+   */
+  tokenAuth?: TokenAuthContext;
 }): Promise<
   | string
   | {
@@ -484,7 +512,15 @@ export async function buildArchestraToolOutput(params: {
       rawContent?: ContentBlock[];
     }
 > {
-  const { response, toolName, toolArguments, agentId } = params;
+  const {
+    response,
+    toolName,
+    toolArguments,
+    agentId,
+    userId,
+    organizationId,
+    tokenAuth,
+  } = params;
   // Never stringify an image block into the text summary — its base64 would
   // bloat context and evade the history image-stripper. Images ride rawContent
   // and reach the model as bounded media parts via toModelOutput instead.
@@ -538,7 +574,21 @@ export async function buildArchestraToolOutput(params: {
 
   let resourceUri: string | undefined;
   try {
-    const toolDef = await ToolModel.findByNameForAgent(targetToolName, agentId);
+    // Assigned tools resolve directly. A tool the agent reaches only through
+    // dynamic access ("all tools" mode) has no `agent_tools` row, so fall back
+    // to the same user-scoped resolution run_tool used to dispatch it —
+    // otherwise its MCP App UI resource is dropped and the app renders as a
+    // plain tool-call card instead of an iframe.
+    const toolDef =
+      (await ToolModel.findByNameForAgent(targetToolName, agentId)) ??
+      (userId && organizationId
+        ? await resolveDynamicTool({
+            toolName: targetToolName,
+            agentId,
+            userId,
+            organizationId,
+          })
+        : null);
     resourceUri = (
       toolDef?.meta as { _meta?: { ui?: McpUiToolMeta } } | undefined
     )?._meta?.ui?.resourceUri;
@@ -549,12 +599,42 @@ export async function buildArchestraToolOutput(params: {
     );
   }
   if (!resourceUri) {
+    // A dispatched third-party tool with no MCP-App UI. If it returned a
+    // structured Archestra error (e.g. the expired-auth re-auth payload),
+    // preserve `_meta`/`structuredContent` so chat renders the same rich card
+    // as a direct call. The bare-text fallback below strips
+    // `_meta.archestraError`/`structuredContent.archestraError`, degrading the
+    // card to a text-parsed one (which loses e.g. the credential scope). Mirrors
+    // the direct path (executeMcpTool), which keeps these fields on error.
+    if (response.isError && extractMcpToolError(response)) {
+      return {
+        content: text,
+        _meta: response._meta as Record<string, unknown> | undefined,
+        structuredContent: response.structuredContent as
+          | Record<string, unknown>
+          | undefined,
+        rawContent: response.content as ContentBlock[],
+      };
+    }
     return text;
   }
 
+  // Bind the app's callbacks to the concrete install so its SDK `callServerTool`
+  // reaches the originating server (POST /api/mcp/server/:id) rather than the
+  // agent gateway (which rejects the bare tool name). This run_tool path is how
+  // an all-tools agent opens an external app — the tool is unassigned, so only
+  // the dynamic-access resolution above (and this install lookup) can bind it.
+  // Owned-app backings resolve to null and keep their app-id routing.
+  const mcpServerId = await mcpClient
+    .resolveUiAppInstallIdForCaller(resourceUri, agentId, tokenAuth)
+    .catch(() => null);
+
   return {
     content: text,
-    _meta: { ...response._meta, ui: { resourceUri } },
+    _meta: {
+      ...response._meta,
+      ui: { resourceUri, ...(mcpServerId ? { mcpServerId } : {}) },
+    },
     structuredContent: response.structuredContent as
       | Record<string, unknown>
       | undefined,
@@ -611,7 +691,6 @@ function needsApprovalProps(params: {
           externalAgentId: getChatExternalAgentId(),
         },
         ctx.globalToolPolicy,
-        ctx.discoveredToolPolicy,
       );
     },
   };
@@ -649,12 +728,7 @@ async function executeWithToolSpan<R>(params: {
   } = params;
 
   if (ctx.blockOnApprovalRequired) {
-    await throwIfApprovalRequired(
-      toolName,
-      args,
-      ctx.globalToolPolicy,
-      ctx.discoveredToolPolicy,
-    );
+    await throwIfApprovalRequired(toolName, args, ctx.globalToolPolicy);
   }
 
   logger.info(
@@ -1163,12 +1237,6 @@ async function throwIfApprovalRequired(
   toolName: string,
   args: unknown,
   globalToolPolicy: GlobalToolPolicy,
-  // Defaults to the discovered-tool equivalent of globalToolPolicy so callers
-  // that don't distinguish discovered tools keep single-policy behavior; the
-  // chat path passes it explicitly.
-  discoveredToolPolicy: DiscoveredToolPolicy = defaultDiscoveredToolPolicy(
-    globalToolPolicy,
-  ),
 ): Promise<void> {
   const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
   const requiresApproval =
@@ -1180,7 +1248,6 @@ async function throwIfApprovalRequired(
         externalAgentId: getChatExternalAgentId(),
       },
       globalToolPolicy,
-      discoveredToolPolicy,
     );
   if (requiresApproval) {
     throw new Error(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);

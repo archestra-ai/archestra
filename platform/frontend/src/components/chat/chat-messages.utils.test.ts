@@ -1,18 +1,19 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { getArchestraToolShortName } from "@archestra/shared";
+import {
+  getArchestraToolShortName,
+  SUBAGENT_TOOL_CALL_PART_TYPE,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
-import type { PanelApp } from "./apps-context";
 import {
   collectBrowserToolCallIds,
+  collectSubagentToolCalls,
   deriveAppsFromMessages,
   extractFileAttachments,
   extractOwnedAppRender,
   filterOptimisticToolCalls,
-  getAppRenderVerb,
   hasTextPart,
   identifyCompactToolGroups,
   isBlankAssistantTextPart,
-  isSupersededRender,
   mcpToolLabel,
 } from "./chat-messages.utils";
 
@@ -288,6 +289,9 @@ describe("deriveAppsFromMessages", () => {
         uiResourceUri: "ui://pm/board",
         appId: null,
         mcpServerId: null,
+        toolName: "pm__show_board",
+        rawOutput: { _meta: { ui: { resourceUri: "ui://pm/board" } } },
+        toolInput: null,
         version: null,
         createdAt: Date.parse("2026-05-29T18:13:52.000Z"),
       },
@@ -323,10 +327,65 @@ describe("deriveAppsFromMessages", () => {
         uiResourceUri: "ui://pm/board",
         appId: null,
         mcpServerId: "srv-1",
+        toolName: "pm__show_board",
+        rawOutput: {
+          _meta: { ui: { resourceUri: "ui://pm/board", mcpServerId: "srv-1" } },
+        },
+        toolInput: null,
         version: null,
         createdAt: Date.parse("2026-05-29T18:13:52.000Z"),
       },
     ]);
+  });
+
+  it("carries the tool result as rawOutput so a panel render can seed its iframe", () => {
+    const output = {
+      _meta: { ui: { resourceUri: "ui://pm/board" } },
+      structuredContent: { applicants: [{ id: 24 }] },
+    };
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "pm__show_board",
+            toolCallId: "call_1",
+            state: "output-available",
+            input: { limit: 5 },
+            output,
+          },
+        ],
+      },
+    ] as never;
+
+    const apps = deriveAppsFromMessages(messages, {}, getToolShortName);
+    expect(apps[0].rawOutput).toEqual(output);
+    expect(apps[0].toolInput).toEqual({ limit: 5 });
+  });
+
+  it("stores the run_tool-unwrapped target name so the server prefix matches inline", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-archestra__run_tool",
+            toolCallId: "call_1",
+            state: "output-available",
+            input: { tool_name: "pm__show_board", tool_args: { limit: 5 } },
+            output: { _meta: { ui: { resourceUri: "ui://pm/board" } } },
+          },
+        ],
+      },
+    ] as never;
+
+    const apps = deriveAppsFromMessages(messages, {}, getToolShortName);
+    expect(apps[0].toolName).toBe("pm__show_board");
+    // toolInput seeds the target tool's args, not the run_tool wrapper.
+    expect(apps[0].toolInput).toEqual({ limit: 5 });
   });
 
   it("returns an app from early UI-start data before the result arrives", () => {
@@ -364,6 +423,9 @@ describe("deriveAppsFromMessages", () => {
         uiResourceUri: "ui://pm/board",
         appId: null,
         mcpServerId: null,
+        toolName: "pm__show_board",
+        // No result yet (early UI-start), so no seed; the pending input is kept.
+        toolInput: {},
         version: null,
         createdAt: 0,
       },
@@ -436,13 +498,14 @@ describe("deriveAppsFromMessages", () => {
         uiResourceUri:
           "ui://archestra-app/947051c7-ea8e-48ed-8077-a3cc904d9d61",
         appId: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+        toolName: "archestra__edit_app",
         version: 1,
         createdAt: 0,
       },
     ]);
   });
 
-  it("de-dupes owned-app renders by appId, keeping the latest render and version", () => {
+  it("keeps every owned-app render as its own entry (newest last), not deduped", () => {
     const messages = [
       {
         id: "assistant-1",
@@ -484,17 +547,9 @@ describe("deriveAppsFromMessages", () => {
       },
     ] as never;
 
-    expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
-      {
-        toolCallId: "call_v3",
-        label: "To Do App",
-        uiResourceUri:
-          "ui://archestra-app/947051c7-ea8e-48ed-8077-a3cc904d9d61",
-        appId: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
-        version: 3,
-        createdAt: Date.parse("2026-05-29T18:05:00.000Z"),
-      },
-    ]);
+    const apps = deriveAppsFromMessages(messages, {}, getToolShortName);
+    expect(apps.map((a) => a.toolCallId)).toEqual(["call_v1", "call_v3"]);
+    expect(apps.map((a) => a.version)).toEqual([1, 3]);
   });
 
   it("keeps distinct owned apps as separate entries", () => {
@@ -595,6 +650,9 @@ describe("deriveAppsFromMessages", () => {
         uiResourceUri: "ui://pm/board",
         appId: null,
         mcpServerId: null,
+        toolName: "pm__show_board",
+        rawOutput: { _meta: { ui: { resourceUri: "ui://pm/board" } } },
+        toolInput: null,
         version: null,
         createdAt: Date.parse("2026-05-29T18:00:00.000Z"),
       },
@@ -604,6 +662,9 @@ describe("deriveAppsFromMessages", () => {
         uiResourceUri: "ui://pm/board",
         appId: null,
         mcpServerId: null,
+        toolName: "pm__show_board",
+        rawOutput: { _meta: { ui: { resourceUri: "ui://pm/board" } } },
+        toolInput: null,
         version: null,
         createdAt: Date.parse("2026-05-29T18:05:00.000Z"),
       },
@@ -855,68 +916,156 @@ describe("identifyCompactToolGroups", () => {
     expect(groupMap.get(0)?.entries).toHaveLength(1);
     expect(groupMap.get(4)?.entries).toHaveLength(1);
   });
+
+  it("compacts a delegation call with surfaced subagent children alongside its siblings", () => {
+    const parts = [
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "input-available",
+        input: {},
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "output-available",
+        output: "ok",
+      },
+      {
+        type: "tool-agent__child",
+        toolCallId: "call_p",
+        state: "input-available",
+        input: {},
+      },
+      {
+        type: "tool-agent__child",
+        toolCallId: "call_p",
+        state: "output-available",
+        output: "done",
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_2",
+        state: "input-available",
+        input: {},
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_2",
+        state: "output-available",
+        output: "map",
+      },
+    ] as UIMessage["parts"];
+
+    const { groupMap, consumedIndices } = identifyCompactToolGroups(parts, {
+      getToolShortName: () => null,
+    });
+
+    expect(groupMap.size).toBe(1);
+    expect(groupMap.get(0)?.entries).toHaveLength(3);
+    expect(consumedIndices.has(2)).toBe(true);
+    expect(consumedIndices.has(3)).toBe(true);
+  });
 });
 
-describe("isSupersededRender", () => {
-  const app = (
+describe("collectSubagentToolCalls", () => {
+  const subagentPart = (
+    parentToolCallId: string,
     toolCallId: string,
-    uiResourceUri: string,
-    appId: string | null = "app-1",
-  ): PanelApp => ({
-    toolCallId,
-    label: "Dashboard",
-    uiResourceUri,
-    appId,
-    version: 1,
-    createdAt: 0,
+    toolName = "web_search",
+  ) =>
+    ({
+      type: SUBAGENT_TOOL_CALL_PART_TYPE,
+      data: {
+        parentToolCallId,
+        toolCallId,
+        toolName,
+        state: "output-available",
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: minimal part stub
+    }) as any;
+
+  const message = (parts: unknown[]): UIMessage =>
+    ({ id: "m", role: "assistant", parts }) as UIMessage;
+
+  it("returns an empty map when no subagent parts exist", () => {
+    const map = collectSubagentToolCalls([
+      message([{ type: "text", text: "hi" }]),
+    ]);
+    expect(map.size).toBe(0);
   });
 
-  it("returns false for the latest render of an owned app (registry points at it)", () => {
-    const apps = [app("tc2", "ui://app-1")];
-    expect(
-      isSupersededRender({ apps, toolCallId: "tc2", appId: "app-1" }),
-    ).toBe(false);
+  it("groups children by their parent delegation call and preserves the chain (P1->C1,C2; C2->G1)", () => {
+    const map = collectSubagentToolCalls([
+      message([
+        { type: "tool-agent__child", toolCallId: "P1" },
+        subagentPart("P1", "C1", "web_search"),
+        subagentPart("P1", "C2", "agent__grandchild"),
+        subagentPart("C2", "G1", "fetch"),
+      ]),
+    ]);
+
+    expect(map.get("P1")?.map((e) => e.toolCallId)).toEqual(["C1", "C2"]);
+    expect(map.get("C2")?.map((e) => e.toolCallId)).toEqual(["G1"]);
+    // The nested delegation C2 is both a child of P1 and a parent of G1.
+    expect(map.has("C2")).toBe(true);
+    expect(map.get("P1")?.[0]).toMatchObject({
+      toolCallId: "C1",
+      toolName: "web_search",
+      state: "output-available",
+    });
   });
 
-  it("returns true for a prior owned render once a newer render registers", () => {
-    const apps = [app("tc2", "ui://app-1")];
-    expect(
-      isSupersededRender({ apps, toolCallId: "tc1", appId: "app-1" }),
-    ).toBe(true);
+  it("collects across messages and dedupes a toolCallId present twice (live + persisted)", () => {
+    const map = collectSubagentToolCalls([
+      message([subagentPart("P1", "C1")]),
+      message([subagentPart("P1", "C1")]),
+    ]);
+    expect(map.get("P1")?.length).toBe(1);
   });
 
-  it("returns false when the owned app has no registry entry yet (mid-stream)", () => {
-    const apps = [app("tc9", "ui://other-app", "other-app")];
-    expect(
-      isSupersededRender({ apps, toolCallId: "tc1", appId: "app-1" }),
-    ).toBe(false);
+  it("ignores malformed subagent parts (missing ids)", () => {
+    const map = collectSubagentToolCalls([
+      message([
+        {
+          type: SUBAGENT_TOOL_CALL_PART_TYPE,
+          data: { toolName: "x" },
+          // biome-ignore lint/suspicious/noExplicitAny: malformed stub
+        } as any,
+      ]),
+    ]);
+    expect(map.size).toBe(0);
   });
 
-  it("never supersedes external renders sharing a resourceUri", () => {
-    // External renders carry no appId: each tool call is its own live entry,
-    // even when a sibling render holds the same resourceUri.
-    const apps = [
-      app("tc1", "ui://excalidraw", null),
-      app("tc2", "ui://excalidraw", null),
-    ];
-    expect(isSupersededRender({ apps, toolCallId: "tc1", appId: null })).toBe(
-      false,
-    );
-    expect(isSupersededRender({ apps, toolCallId: "tc2", appId: null })).toBe(
-      false,
-    );
+  it("carries input, output, and errorText onto the collected entry", () => {
+    const richPart = {
+      type: SUBAGENT_TOOL_CALL_PART_TYPE,
+      data: {
+        parentToolCallId: "P1",
+        toolCallId: "C1",
+        toolName: "fetch",
+        input: { url: "x" },
+        output: { status: 200 },
+        errorText: "nope",
+        state: "output-error",
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: minimal part stub
+    } as any;
+    const map = collectSubagentToolCalls([message([richPart])]);
+    expect(map.get("P1")?.[0]).toMatchObject({
+      toolCallId: "C1",
+      input: { url: "x" },
+      output: { status: 200 },
+      errorText: "nope",
+      state: "output-error",
+    });
   });
-});
 
-describe("getAppRenderVerb", () => {
-  it("maps each app-rendering tool to its past-tense verb", () => {
-    expect(getAppRenderVerb("archestra__scaffold_app")).toBe("Created");
-    expect(getAppRenderVerb("archestra__edit_app")).toBe("Updated");
-    expect(getAppRenderVerb("archestra__render_app")).toBe("Rendered");
-  });
-
-  it("returns null for non-app tools", () => {
-    expect(getAppRenderVerb("google__search")).toBeNull();
+  it("skips a message that has no parts without throwing", () => {
+    const map = collectSubagentToolCalls([
+      { id: "m", role: "assistant" } as UIMessage,
+    ]);
+    expect(map.size).toBe(0);
   });
 });
 

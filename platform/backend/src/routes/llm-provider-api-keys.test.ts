@@ -12,6 +12,12 @@ vi.mock("@/clients/gemini-client", () => ({
   isVertexAiEnabled: vi.fn(),
 }));
 
+vi.mock("@/clients/anthropic-workload-identity", () => ({
+  anthropicWorkloadIdentity: {
+    isEnabled: vi.fn(() => false),
+  },
+}));
+
 vi.mock("@/clients/azure-openai-credentials", () => ({
   isAnthropicAzureFoundryEntraIdEnabled: vi.fn(() => false),
   isAzureOpenAiEntraIdEnabled: vi.fn(),
@@ -20,10 +26,7 @@ vi.mock("@/clients/azure-openai-credentials", () => ({
 }));
 
 // Mock auth for permission checks
-vi.mock("@/auth", () => ({
-  hasPermission: vi.fn(),
-  userHasPermission: vi.fn(),
-}));
+vi.mock("@/auth");
 
 // Mock testProviderApiKey to avoid external calls
 vi.mock("@/routes/chat/model-fetchers/registry", () => ({
@@ -62,11 +65,15 @@ vi.mock("@/services/model-sync", () => ({
 }));
 
 import { hasPermission, userHasPermission } from "@/auth";
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import { validateProviderAllowed } from "./llm-provider-api-keys";
 
+const mockAnthropicWifIsEnabled = vi.mocked(
+  anthropicWorkloadIdentity.isEnabled,
+);
 const mockIsAzureOpenAiEntraIdEnabled = vi.mocked(isAzureOpenAiEntraIdEnabled);
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
 const mockHasPermission = vi.mocked(hasPermission);
@@ -217,6 +224,7 @@ describe("LLM Provider API Keys CRUD", () => {
     vi.clearAllMocks();
     setupAdminApp();
     mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    mockAnthropicWifIsEnabled.mockReturnValue(false);
 
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -783,6 +791,81 @@ describe("LLM Provider API Keys CRUD", () => {
       "azure",
       "",
       "https://runtime.example.com/openai/v1",
+      null,
+    );
+  });
+
+  test("creates a keyless Anthropic key when Workload Identity Federation is configured", async () => {
+    mockAnthropicWifIsEnabled.mockReturnValue(true);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Anthropic WIF",
+        provider: "anthropic",
+        scope: "personal",
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(200);
+    expect(createResponse.json()).toMatchObject({
+      name: "Anthropic WIF",
+      provider: "anthropic",
+      secretId: null,
+    });
+    // Keyless create must still exercise the WIF token exchange + model listing.
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "anthropic",
+      "",
+      undefined,
+      undefined,
+    );
+  });
+
+  test("rejects keyless Anthropic keys when Workload Identity Federation is not configured", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Anthropic Keyless",
+        provider: "anthropic",
+        scope: "personal",
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(400);
+  });
+
+  test("re-tests keyless Anthropic WIF key when runtime settings change", async () => {
+    mockAnthropicWifIsEnabled.mockReturnValue(true);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Anthropic WIF",
+        provider: "anthropic",
+        scope: "personal",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+    mockTestProviderApiKey.mockClear();
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        baseUrl: "https://api.anthropic.com",
+      },
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "anthropic",
+      "",
+      "https://api.anthropic.com",
       null,
     );
   });

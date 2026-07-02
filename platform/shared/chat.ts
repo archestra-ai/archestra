@@ -174,6 +174,42 @@ export type ChatMessage = {
  */
 export const HOOK_RUN_PART_TYPE = "data-hook-run";
 
+/**
+ * Type of the inline subagent-tool-call part. A `data-*` part: persisted and
+ * rendered in the chat thread (nested under the delegation call that spawned
+ * it), but dropped from the model conversion (`convertToModelMessages`), so the
+ * parent model never sees its subagent's internal tool calls — same class as
+ * `data-hook-run`. Shared so the backend (emit) and frontend (render) agree on
+ * the wire string.
+ */
+export const SUBAGENT_TOOL_CALL_PART_TYPE = "data-subagent-tool-call";
+
+/**
+ * The `data` payload of a {@link SUBAGENT_TOOL_CALL_PART_TYPE} part: one tool
+ * call a delegated child agent made during its run. `parentToolCallId` links it
+ * to the delegation tool call (`agent__<slug>`) that spawned the child; for a
+ * deeper descendant it is the delegation call one level up, so the client
+ * rebuilds an arbitrary-depth tree purely by `toolCallId`→`parentToolCallId`
+ * linkage. `input`/`output` are capped before persistence so a large child
+ * result can't bloat the parent message row.
+ */
+export interface SubagentToolCallPartData {
+  /** The delegation tool call id (`agent__<slug>`) this child call hangs under. */
+  parentToolCallId: string;
+  /** The child tool call's own id (unique — generated per child run). */
+  toolCallId: string;
+  /** The tool the child invoked (e.g. `web_search`, or `agent__<slug>` for a nested delegation). */
+  toolName: string;
+  /** Request arguments, capped. */
+  input?: unknown;
+  /** Terminal tool state, e.g. `output-available` / `output-error`. */
+  state?: string;
+  /** Result, capped. Absent on error. */
+  output?: unknown;
+  /** Error text when the child call failed. */
+  errorText?: string;
+}
+
 // Control/telemetry parts the chat UI skips and providers never see. An
 // assistant turn left with only these (e.g. a `step-start` after a dangling
 // tool call is stripped) renders nothing, so it must not count as content.
@@ -286,6 +322,13 @@ export function hasPersistableAssistantContent(message: {
     // `data-tool-ui-start` marker it needs no pairing, so a turn carrying only
     // hook entries is still persistable rather than dropped as an empty bubble.
     if (part.type === HOOK_RUN_PART_TYPE) {
+      return true;
+    }
+
+    // a subagent tool-call chip is standalone renderable content (rendered
+    // nested under its delegation call); like a hook-run entry it needs no
+    // pairing, so a turn carrying only subagent calls is still persistable.
+    if (part.type === SUBAGENT_TOOL_CALL_PART_TYPE) {
       return true;
     }
 

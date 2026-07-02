@@ -2,15 +2,17 @@ import {
   getArchestraToolFullName,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
   TOOL_LIST_AGENTS_SHORT_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
+  TOOL_WHOAMI_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { AgentTeamModel, OrganizationModel } from "@/models";
+import { AgentTeamModel, OrganizationModel, ToolModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import {
   evaluatePolicies,
+  evaluateSingleMcpToolInvocationPolicy,
   getGlobalToolPolicy,
-  getToolPolicies,
 } from "./tool-invocation";
 
 // ---------------------------------------------------------------------------
@@ -78,33 +80,6 @@ describe("getGlobalToolPolicy", () => {
     const policy = await getGlobalToolPolicy(crypto.randomUUID());
     // Agent has no teams → falls back to first org → default is permissive
     expect(["permissive", "restrictive"]).toContain(policy);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getToolPolicies
-// ---------------------------------------------------------------------------
-describe("getToolPolicies", () => {
-  test("resolves both policies independently from the agent's org", async ({
-    makeAgent,
-    makeOrganization,
-    makeTeam,
-    makeUser,
-  }) => {
-    const org = await makeOrganization({
-      globalToolPolicy: "restrictive",
-      discoveredToolPolicy: "relaxed",
-    });
-    const user = await makeUser();
-    const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ organizationId: org.id });
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
-
-    const policies = await getToolPolicies(agent.id);
-    expect(policies).toEqual({
-      globalToolPolicy: "restrictive",
-      discoveredToolPolicy: "relaxed",
-    });
   });
 });
 
@@ -457,5 +432,98 @@ describe("evaluatePolicies", () => {
     // Condition doesn't match (/tmp/safe.txt doesn't start with /etc/),
     // no default policy, trusted context → allowed
     expect(result).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// evaluateSingleMcpToolInvocationPolicy (MCP Gateway / run_tool execution path)
+// ---------------------------------------------------------------------------
+describe("evaluateSingleMcpToolInvocationPolicy", () => {
+  test("enforces invocation policies for query_knowledge_sources on the gateway path", async ({
+    makeAgent,
+    makeToolPolicy,
+    seedAndAssignArchestraTools,
+  }) => {
+    const agent = await makeAgent();
+    // Permissive mode skips policy evaluation entirely; use restrictive so
+    // the block_always policy below is actually consulted.
+    await OrganizationModel.patch(agent.organizationId, {
+      globalToolPolicy: "restrictive",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const kbToolName = archestraMcpBranding.getToolName(
+      TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+    );
+    const kbTool = await ToolModel.findByName(kbToolName);
+    if (!kbTool) throw new Error(`Tool ${kbToolName} not found`);
+    await makeToolPolicy(kbTool.id, {
+      conditions: [],
+      action: "block_always",
+      reason: "KB access forbidden",
+    });
+
+    const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
+      agentId: agent.id,
+      toolName: kbToolName,
+      toolInput: { query: "secrets" },
+      organizationId: agent.organizationId,
+      contextIsTrusted: true,
+    });
+
+    expect(policyBlock).not.toBeNull();
+    expect(policyBlock?.reason).toContain("KB access forbidden");
+  });
+
+  test("allows query_knowledge_sources with seeded defaults even in untrusted context", async ({
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    const agent = await makeAgent();
+    await OrganizationModel.patch(agent.organizationId, {
+      globalToolPolicy: "restrictive",
+    });
+    // Seeds the default allow_when_context_is_untrusted invocation policy —
+    // without it, restrictive mode + untrusted context would block the call.
+    await seedAndAssignArchestraTools(agent.id);
+
+    const kbToolName = archestraMcpBranding.getToolName(
+      TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+    );
+
+    const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
+      agentId: agent.id,
+      toolName: kbToolName,
+      toolInput: { query: "docs" },
+      organizationId: agent.organizationId,
+      contextIsTrusted: false,
+    });
+
+    expect(policyBlock).toBeNull();
+  });
+
+  test("other built-in tools still bypass policy evaluation on the gateway path", async ({
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    const agent = await makeAgent();
+    await OrganizationModel.patch(agent.organizationId, {
+      globalToolPolicy: "restrictive",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const whoamiToolName = archestraMcpBranding.getToolName(
+      TOOL_WHOAMI_SHORT_NAME,
+    );
+
+    const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
+      agentId: agent.id,
+      toolName: whoamiToolName,
+      toolInput: {},
+      organizationId: agent.organizationId,
+      contextIsTrusted: false,
+    });
+
+    expect(policyBlock).toBeNull();
   });
 });

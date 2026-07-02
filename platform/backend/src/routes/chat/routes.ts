@@ -52,6 +52,10 @@ import {
   isApiKeyRequired,
 } from "@/clients/llm-client";
 import {
+  applySubagentToolCallsToMessages,
+  createSubagentToolStreamBridge,
+} from "@/clients/subagent-tool-stream";
+import {
   repeatCeilingStopCondition,
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
@@ -373,6 +377,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the top, Pre/PostToolUse around their tool calls, Stop at the end) and
       // spliced into the assistant message in onFinish.
       const hookRunCollector: CollectedHookRun[] = [];
+      // Surfaces a delegated child agent's tool calls on this conversation: it
+      // streams each one live (once a writer is attached) and collects them for
+      // splicing into the assistant message in onFinish. One instance is shared
+      // down the whole delegation chain.
+      const subagentToolStream = createSubagentToolStreamBridge();
       // The conversation's user id (the sandbox is keyed per org/user/conversation).
       const conversationUserId = conversation.userId;
 
@@ -565,6 +574,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               projectInstructions,
               hookRunCollector,
               elicitation: chatMcpElicitation,
+              subagentToolStream,
               abortSignal: chatAbortController.signal,
             }),
           ),
@@ -610,12 +620,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           user: { id: user.id, email: user.email, name: user.name },
           callback: async () => {
             // Build the model-bound copy of the history: slash-command skill
-            // injection (both org flags must be on — the injected block
+            // injection (requires the org's skill tools — the injected block
             // references load_skill) followed by normalization. The original
             // `messages` stay clean for persistence and the visible bubble.
-            const skillSlashCommandsActive =
-              !!organization?.skillSlashCommandsEnabled &&
-              !!organization?.skillToolsEnabled;
+            const skillSlashCommandsActive = !!organization?.skillToolsEnabled;
             const messagesWithSkill = skillSlashCommandsActive
               ? await injectSkillActivation({
                   messages: messages as ChatMessage[],
@@ -732,6 +740,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
               execute: async ({ writer }) => {
                 chatMcpElicitation.setWriter(writer);
+                subagentToolStream.setWriter(writer);
 
                 // Create the LLM model here, inside execute, so a credential
                 // failure (e.g. a per-user provider like GitHub Copilot the user
@@ -949,8 +958,26 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         const schema = await inputSchema({
                           toolName: toolCall.toolName,
                         });
+                        // A separate model instance so the re-ask is logged
+                        // under its own interaction source: it carries no
+                        // agent context (no system prompt), and consumers of
+                        // the session's interactions (logs UI, benchmarks)
+                        // must be able to tell it apart from the main turn.
+                        const { model: repairModel } =
+                          await createLLMModelForAgent({
+                            organizationId,
+                            userId: user.id,
+                            agentId,
+                            model: selectedModel,
+                            provider,
+                            conversationId,
+                            externalAgentId,
+                            sessionId: conversationId,
+                            source: "chat:tool_call_repair",
+                            agentLlmApiKeyId: agent.llmApiKeyId,
+                          });
                         const { object } = await generateObject({
-                          model,
+                          model: repairModel,
                           schema: jsonSchema(schema),
                           temperature: 0,
                           abortSignal: chatAbortController.signal,
@@ -1214,9 +1241,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     // Splice the turn's collected hook runs into the assistant
                     // message(s) as inline `data-hook-run` parts before persisting,
                     // so they survive refresh and sit at their lifecycle position.
-                    const messagesToPersist = applyHookRunsToMessages(
-                      finalMessages as unknown as ChatMessage[],
-                      hookRunCollector,
+                    const messagesToPersist = applySubagentToolCallsToMessages(
+                      applyHookRunsToMessages(
+                        finalMessages as unknown as ChatMessage[],
+                        hookRunCollector,
+                      ),
+                      subagentToolStream.collected(),
                     );
 
                     // Only persist if not already persisted by onError

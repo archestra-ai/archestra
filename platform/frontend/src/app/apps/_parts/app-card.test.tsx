@@ -1,7 +1,9 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { AppCard } from "./app-card";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
@@ -17,18 +19,16 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/lib/app.query", () => ({
   useOpenAppInChat: () => ({ mutateAsync: vi.fn() }),
   useOpenExternalAppInChat: () => ({ mutateAsync: openExternalMutate }),
+  // The card hosts the shared AppSettingsDialog, which reads the app by id.
+  useApp: () => ({ data: undefined }),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: true }),
-}));
+vi.mock("@/lib/auth/auth.query");
 
 // Stub the delete dialog so the card test asserts it opens, not its internals.
 vi.mock("./app-delete-dialog", () => ({
@@ -73,6 +73,15 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   ),
 }));
 
+beforeEach(() => {
+  vi.mocked(useRouter).mockReturnValue({
+    push: pushMock,
+  } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+  } as ReturnType<typeof useHasPermissions>);
+});
+
 const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   source: "owned",
   id: "owned-1",
@@ -81,6 +90,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   scope: "org",
   authorId: "user-1",
   latestVersion: 1,
+  teams: [],
   executionModel: "viewer-scoped",
   cspOrigin: "platform-pinned",
 };
@@ -105,12 +115,12 @@ describe("ExternalAppCard", () => {
   });
 
   it("titles the card '<server> / <tool>' (not a slug) with the tool description and scope", () => {
-    render(<AppCard app={externalApp} currentUserId="user-1" />);
+    render(<AppCard app={externalApp} />);
 
     expect(screen.getByText("Archestra PM / show_board")).toBeInTheDocument();
     expect(screen.getByText("Shows the project board")).toBeInTheDocument();
     expect(screen.queryByText(/archestra_pm/)).not.toBeInTheDocument();
-    expect(screen.getByText("MCP server")).toBeInTheDocument();
+    expect(screen.getByLabelText("MCP server app")).toBeInTheDocument();
     // Per-install card carries an icon-only scope pill (label in aria/tooltip)
     // to disambiguate sibling installs.
     expect(screen.getByLabelText("Organization")).toBeInTheDocument();
@@ -118,7 +128,7 @@ describe("ExternalAppCard", () => {
 
   it("opens the install in chat and navigates to the seeded conversation", async () => {
     openExternalMutate.mockResolvedValue({ conversationId: "conv-1" });
-    render(<AppCard app={externalApp} currentUserId="user-1" />);
+    render(<AppCard app={externalApp} />);
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -134,7 +144,7 @@ describe("ExternalAppCard", () => {
   });
 
   it("links 'Open in new tab' to the install-pinned run page and 'Manage MCP server'", () => {
-    render(<AppCard app={externalApp} currentUserId="user-1" />);
+    render(<AppCard app={externalApp} />);
 
     const expectedRun =
       "/apps/catalog/cat-1/run?install=srv-1&resource=ui%3A%2F%2Fpm%2Fboard.html";
@@ -151,9 +161,10 @@ describe("ExternalAppCard", () => {
 
 describe("OwnedAppCard", () => {
   it("exposes a standalone link and a delete action", () => {
-    render(<AppCard app={ownedApp} currentUserId="user-1" />);
+    render(<AppCard app={ownedApp} />);
 
     expect(screen.getByText("My Owned App")).toBeInTheDocument();
+    expect(screen.getByLabelText("MCP app")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /open in new tab/i }),
     ).toHaveAttribute("href", "/a/owned-1");
@@ -163,5 +174,25 @@ describe("OwnedAppCard", () => {
     expect(screen.getByTestId("delete-dialog")).toHaveTextContent(
       "Delete My Owned App",
     );
+  });
+
+  it("folds team names into the scope pill's label", () => {
+    render(
+      <AppCard
+        app={{
+          ...ownedApp,
+          scope: "team",
+          teams: [{ id: "t1", name: "London HQ" }],
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("Team: London HQ")).toBeInTheDocument();
+  });
+
+  it("hides the scope pill for personal apps", () => {
+    render(<AppCard app={{ ...ownedApp, scope: "personal", teams: [] }} />);
+
+    expect(screen.queryByLabelText("Personal")).not.toBeInTheDocument();
   });
 });

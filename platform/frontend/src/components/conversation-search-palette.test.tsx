@@ -8,24 +8,15 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 }));
 
-const {
-  mockRouterPush,
-  mockUsePathname,
-  mockDeleteMutate,
-  mockUseConversations,
-  mockUseFeature,
-} = vi.hoisted(() => ({
-  mockRouterPush: vi.fn(),
-  mockUsePathname: vi.fn(),
-  mockDeleteMutate: vi.fn(),
-  mockUseConversations: vi.fn(),
-  mockUseFeature: vi.fn(),
-}));
+const { mockRouterPush, mockDeleteMutate, mockUseConversations } = vi.hoisted(
+  () => ({
+    mockRouterPush: vi.fn(),
+    mockDeleteMutate: vi.fn(),
+    mockUseConversations: vi.fn(),
+  }),
+);
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockRouterPush }),
-  usePathname: () => mockUsePathname(),
-}));
+vi.mock("next/navigation");
 
 vi.mock("@uidotdev/usehooks", () => ({
   useDebounce: (value: string) => value,
@@ -39,17 +30,9 @@ vi.mock("@/lib/auth/auth.hook", () => ({
   useIsAuthenticated: () => true,
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({
-    data: true,
-    isPending: false,
-    isLoading: false,
-  }),
-}));
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: (flag: string) => mockUseFeature(flag),
-}));
+vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/chat/chat-utils", () => ({
   getConversationDisplayTitle: (title: string | null) =>
@@ -139,8 +122,11 @@ vi.mock("@/components/ui/badge", () => ({
   ),
 }));
 
+import { usePathname, useRouter } from "next/navigation";
 // Import component after mocks
 import { act } from "react";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { ConversationSearchPalette } from "./conversation-search-palette";
 
 describe("ConversationSearchPalette", () => {
@@ -151,8 +137,16 @@ describe("ConversationSearchPalette", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseFeature.mockReturnValue(false);
-    mockUsePathname.mockReturnValue("/chat");
+    vi.mocked(useRouter).mockReturnValue({
+      push: mockRouterPush,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+      isLoading: false,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockReturnValue(false);
+    vi.mocked(usePathname).mockReturnValue("/chat");
     mockUseConversations.mockReturnValue({
       data: [
         {
@@ -204,7 +198,7 @@ describe("ConversationSearchPalette", () => {
       isLoading: false,
       isFetching: false,
     });
-    mockUseFeature.mockReturnValue(false);
+    vi.mocked(useFeature).mockReturnValue(false);
     render(<ConversationSearchPalette {...defaultProps} />);
 
     fireEvent.click(screen.getByText("Connect"));
@@ -218,7 +212,7 @@ describe("ConversationSearchPalette", () => {
       isLoading: false,
       isFetching: false,
     });
-    mockUseFeature.mockReturnValue(true);
+    vi.mocked(useFeature).mockReturnValue(true);
     render(<ConversationSearchPalette {...defaultProps} />);
 
     fireEvent.click(screen.getByText("Connect"));
@@ -232,7 +226,7 @@ describe("ConversationSearchPalette", () => {
       isLoading: false,
       isFetching: false,
     });
-    mockUseFeature.mockReturnValue(true);
+    vi.mocked(useFeature).mockReturnValue(true);
     render(<ConversationSearchPalette {...defaultProps} />);
 
     fireEvent.click(screen.getByText("MCP Registry"));
@@ -267,7 +261,7 @@ describe("ConversationSearchPalette", () => {
   });
 
   it("redirects to /chat when deleting the currently viewed conversation", () => {
-    mockUsePathname.mockReturnValue("/chat/conv-1");
+    vi.mocked(usePathname).mockReturnValue("/chat/conv-1");
 
     render(<ConversationSearchPalette {...defaultProps} />);
 
@@ -293,7 +287,7 @@ describe("ConversationSearchPalette", () => {
   });
 
   it("does not redirect when deleting a conversation that is not currently viewed", () => {
-    mockUsePathname.mockReturnValue("/chat/conv-2");
+    vi.mocked(usePathname).mockReturnValue("/chat/conv-2");
 
     render(<ConversationSearchPalette {...defaultProps} />);
 

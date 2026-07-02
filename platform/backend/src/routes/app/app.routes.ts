@@ -150,6 +150,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         limit: ownedCount,
         offset: 0,
       });
+      const teamsByApp = await AppAccessModel.getTeamDetailsForApps(
+        owned.map((app) => app.id),
+      );
 
       const items: AppListItem[] = [
         ...owned.map((app) => ({
@@ -160,6 +163,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           scope: app.scope,
           authorId: app.authorId,
           latestVersion: app.latestVersion,
+          teams: teamsByApp.get(app.id) ?? [],
           executionModel: "viewer-scoped" as const,
           cspOrigin: "platform-pinned" as const,
         })),

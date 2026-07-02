@@ -24,6 +24,7 @@ import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
+import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import {
   REPEAT_CALL_TERMINATION_NOTICE,
   repeatCeilingStopCondition,
@@ -131,6 +132,20 @@ export interface A2AExecuteParams {
    *    in case of tool invocation approval.
    */
   originalUiMessages?: UIMessage[];
+
+  /**
+   * When set (chat delegation), the child's tool calls are surfaced on the
+   * caller's conversation through this bridge, attributed to
+   * `delegationToolCallId`, and the bridge is forwarded into the child's own
+   * tools so deeper descendants surface too. Absent in headless executions.
+   */
+  subagentToolStream?: SubagentToolStreamBridge;
+  /**
+   * The id of the delegation tool call (`agent__<slug>`) that invoked this
+   * agent. The child's surfaced tool calls hang under it. Set together with
+   * `subagentToolStream`.
+   */
+  delegationToolCallId?: string;
 }
 
 /** @public — exported for testability */
@@ -167,6 +182,8 @@ export async function executeA2AMessage(
     chatOpsThreadId,
     parentContextIsTrusted,
     scheduleTriggerRunId,
+    subagentToolStream,
+    delegationToolCallId,
   } = params;
 
   // Isolation key scoping per-execution state (browser tabs, MCP client
@@ -235,6 +252,9 @@ export async function executeA2AMessage(
       abortSignal,
       blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
+      // Forward the same bridge so a nested delegation's tool calls surface too,
+      // attributed to the nested delegation call (recursion through the chain).
+      subagentToolStream,
       repeatTracker,
     });
 
@@ -439,6 +459,19 @@ export async function executeA2AMessage(
         );
       }
 
+      // Surface this run's tool calls on the caller's conversation, attributed
+      // to the delegation call that invoked this agent. Nested delegations'
+      // tool calls are emitted by their own runs (which share this bridge), so
+      // the whole chain surfaces. The delegation tool's result is unaffected —
+      // it stays the child's final text.
+      if (subagentToolStream && delegationToolCallId) {
+        emitSubagentToolCalls({
+          bridge: subagentToolStream,
+          parentToolCallId: delegationToolCallId,
+          message: responseUiMessage,
+        });
+      }
+
       // The repeat-call ceiling stops the loop on a tool-call step, so the model
       // never took a turn to produce assistant text and `finalText` is empty.
       // Headless callers read only `text`, so surface why the run ended.
@@ -517,6 +550,67 @@ export async function executeA2AMessage(
 type StageAttachmentsFn = (
   attachments: A2AAttachment[],
 ) => Promise<StageResult[]>;
+
+/**
+ * Emit one `data-subagent-tool-call` per tool part in a child run's final
+ * message, attributed to the delegation call that invoked the child. The bridge
+ * caps payloads and streams/collects each call. Skips non-tool parts (text,
+ * reasoning, step markers). A nested delegation call (`agent__<slug>`) is itself
+ * a tool part, so it surfaces here while its own children surface from the
+ * nested run — the client re-nests them by id.
+ * @public — exported for testability
+ */
+export function emitSubagentToolCalls(params: {
+  bridge: SubagentToolStreamBridge;
+  parentToolCallId: string;
+  message: UIMessage;
+}): void {
+  const { bridge, parentToolCallId, message } = params;
+  type ToolPart = {
+    type?: string;
+    toolCallId?: string;
+    toolName?: string;
+    state?: string;
+    input?: unknown;
+    output?: unknown;
+    errorText?: string;
+  };
+  // Collapse to one entry per toolCallId, last-wins: a UIMessage normally holds
+  // a single part per tool call in its terminal state, but if an earlier
+  // (input-available) part and a later (output-available) part for the same id
+  // both appear, the later terminal one must win so the surfaced card shows the
+  // result/error rather than a perpetually-pending call.
+  const byCallId = new Map<string, ToolPart>();
+  for (const rawPart of message.parts ?? []) {
+    const part = rawPart as ToolPart;
+    const type = part.type;
+    if (typeof type !== "string") {
+      continue;
+    }
+    const isToolPart = type.startsWith("tool-") || type === "dynamic-tool";
+    if (!isToolPart || typeof part.toolCallId !== "string") {
+      continue;
+    }
+    byCallId.set(part.toolCallId, part);
+  }
+
+  for (const [toolCallId, part] of byCallId) {
+    const type = part.type as string;
+    const toolName =
+      type === "dynamic-tool"
+        ? (part.toolName ?? "unknown")
+        : type.slice("tool-".length);
+    bridge.emit({
+      parentToolCallId,
+      toolCallId,
+      toolName,
+      ...(part.input !== undefined ? { input: part.input } : {}),
+      ...(part.state !== undefined ? { state: part.state } : {}),
+      ...(part.output !== undefined ? { output: part.output } : {}),
+      ...(part.errorText !== undefined ? { errorText: part.errorText } : {}),
+    });
+  }
+}
 
 /**
  * Build the current user turn's AI SDK content from a text message and optional

@@ -26,7 +26,7 @@ import * as oauthRoutes from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { beforeEach, describe, expect, test } from "@/test";
 import { agentOwner, appOwner } from "@/types";
-import mcpClient from "./mcp-client";
+import mcpClient, { type TokenAuthContext } from "./mcp-client";
 
 // Mock the MCP SDK
 const mockCallTool = vi.fn();
@@ -34,6 +34,7 @@ const mockConnect = vi.fn();
 const mockClose = vi.fn();
 const mockListTools = vi.fn();
 const mockListResources = vi.fn();
+const mockReadResource = vi.fn();
 const mockPing = vi.fn();
 const mockSetRequestHandler = vi.fn();
 const mockSetNotificationHandler = vi.fn();
@@ -46,6 +47,7 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
     this.close = mockClose;
     this.listTools = mockListTools;
     this.listResources = mockListResources;
+    this.readResource = mockReadResource;
     this.ping = mockPing;
     this.setRequestHandler = mockSetRequestHandler;
     this.setNotificationHandler = mockSetNotificationHandler;
@@ -134,6 +136,7 @@ describe("McpClient", () => {
     mockClose.mockReset();
     mockListTools.mockReset();
     mockListResources.mockReset();
+    mockReadResource.mockReset();
     mockPing.mockReset();
     mockSetRequestHandler.mockReset();
     mockSetNotificationHandler.mockReset();
@@ -508,6 +511,149 @@ describe("McpClient", () => {
       expect((row?.toolCall as { name?: string } | null)?.name).toBe(
         openTool.name,
       );
+    });
+  });
+
+  describe("resolveUiAppInstallIdForCaller", () => {
+    const callerAuth = (
+      userId: string,
+      organizationId: string,
+    ): TokenAuthContext => ({
+      tokenId: "t",
+      teamId: null,
+      isOrganizationToken: false,
+      isUserToken: true,
+      organizationId,
+      userId,
+    });
+
+    test("returns the caller's install for an external UI resource", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      const install = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "org",
+      });
+      const uri = "ui://excalidraw/mcp-app.html";
+      const tool = await makeTool({
+        name: "excalidraw__create_view",
+        catalogId: catalog.id,
+        meta: { _meta: { ui: { resourceUri: uri } } },
+      });
+      await makeAgentTool(agent.id, tool.id);
+
+      const resolved = await mcpClient.resolveUiAppInstallIdForCaller(
+        uri,
+        agent.id,
+        callerAuth(user.id, org.id),
+      );
+
+      expect(resolved).toBe(install.id);
+    });
+
+    test("returns null for an owned-app backing (renders by app id via render_app)", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        serverType: "app",
+      });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      const uri = "ui://archestra-app/app-1";
+      const tool = await makeTool({
+        name: "my_app-abc123__open",
+        catalogId: catalog.id,
+        meta: { _meta: { ui: { resourceUri: uri } } },
+      });
+      await makeAgentTool(agent.id, tool.id);
+
+      const resolved = await mcpClient.resolveUiAppInstallIdForCaller(
+        uri,
+        agent.id,
+        callerAuth(user.id, org.id),
+      );
+
+      expect(resolved).toBeNull();
+    });
+
+    test("returns null when no tool declares the resource", async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+
+      const resolved = await mcpClient.resolveUiAppInstallIdForCaller(
+        "ui://nonexistent/app.html",
+        agent.id,
+        callerAuth(user.id, org.id),
+      );
+
+      expect(resolved).toBeNull();
+    });
+
+    test("returns null when the catalog has more than one install (pin could diverge)", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      // Two installs for the same catalog: run_tool's credential policy could pin
+      // execution to one while the caller-scoped resolution here picks the other,
+      // so no binding is emitted (callbacks fail cleanly instead of misrouting).
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      const uri = "ui://excalidraw/mcp-app.html";
+      const tool = await makeTool({
+        name: "excalidraw__create_view",
+        catalogId: catalog.id,
+        meta: { _meta: { ui: { resourceUri: uri } } },
+      });
+      await makeAgentTool(agent.id, tool.id);
+
+      const resolved = await mcpClient.resolveUiAppInstallIdForCaller(
+        uri,
+        agent.id,
+        callerAuth(user.id, org.id),
+      );
+
+      expect(resolved).toBeNull();
     });
   });
 
@@ -988,6 +1134,164 @@ describe("McpClient", () => {
 
         expect(result.isError).toBe(false);
         expect(mockCallTool).toHaveBeenCalledTimes(1);
+      });
+
+      test("no self-service install link when the tool's catalog item is another user's personal server", async ({
+        makeMember,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const owner = await makeUser();
+        await makeMember(owner.id, org.id, { role: "member" });
+        const caller = await makeUser();
+        await makeMember(caller.id, org.id, { role: "member" });
+
+        // A personal-scope catalog item owned by `owner`, invisible to `caller`.
+        const catalogItem = await InternalMcpCatalogModel.create(
+          {
+            name: `personal-${randomUUID().slice(0, 8)}`,
+            serverType: "remote",
+            serverUrl: "https://example.com/mcp",
+            scope: "personal",
+          },
+          { organizationId: org.id, authorId: owner.id },
+        );
+        const tool = await ToolModel.createToolIfNotExists({
+          name: `${catalogItem.name}__do_thing`,
+          description: "Personal-server tool",
+          parameters: {},
+          catalogId: catalogItem.id,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "dynamic",
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_deadend", name: tool.name, arguments: {} },
+          agentOwner(agentId),
+          userToken(caller.id, org.id),
+        );
+
+        expect(result.isError).toBe(true);
+        const archestraError = result?._meta?.archestraError as
+          | { type?: string; action?: string; actionUrl?: string }
+          | undefined;
+        expect(archestraError?.type).toBe("auth_required");
+        // The caller cannot install another user's personal item, so no
+        // self-service install link is offered.
+        expect(archestraError?.actionUrl).toBeUndefined();
+        expect(archestraError?.action).toBeUndefined();
+        expect(result?.error).not.toContain("/mcp/registry?install=");
+        expect(result?.error).not.toMatch(/visit[^.]*https?:\/\//i);
+        // ...and it names a remediation the caller can actually pursue.
+        expect(result?.error).toMatch(/owner|administrator|share/i);
+      });
+
+      test("still offers the install link when the caller can access the catalog (org-scoped, no install yet)", async ({
+        makeMember,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const caller = await makeUser();
+        await makeMember(caller.id, org.id, { role: "member" });
+
+        // An org-scoped catalog item the caller CAN see and install; with no
+        // install yet, the self-service install link is legitimate and MUST be
+        // preserved even though the caller-access check runs (orgId present).
+        const catalogItem = await InternalMcpCatalogModel.create(
+          {
+            name: `org-${randomUUID().slice(0, 8)}`,
+            serverType: "remote",
+            serverUrl: "https://example.com/mcp",
+            scope: "org",
+          },
+          { organizationId: org.id },
+        );
+        const tool = await ToolModel.createToolIfNotExists({
+          name: `${catalogItem.name}__do_thing`,
+          description: "Org-server tool",
+          parameters: {},
+          catalogId: catalogItem.id,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "dynamic",
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_install", name: tool.name, arguments: {} },
+          agentOwner(agentId),
+          userToken(caller.id, org.id),
+        );
+
+        expect(result.isError).toBe(true);
+        const archestraError = result?._meta?.archestraError as
+          | { type?: string; action?: string; actionUrl?: string }
+          | undefined;
+        expect(archestraError?.type).toBe("auth_required");
+        expect(archestraError?.action).toBe("install_mcp_credentials");
+        expect(archestraError?.actionUrl).toContain(
+          `/mcp/registry?install=${catalogItem.id}`,
+        );
+      });
+
+      test("still offers the install link for a team-token caller (fail-open: no user identity to check accessibility against)", async ({
+        makeMember,
+        makeOrganization,
+        makeTeam,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const owner = await makeUser();
+        await makeMember(owner.id, org.id, { role: "member" });
+        const team = await makeTeam(org.id, owner.id);
+
+        // A personal-scope catalog item owned by `owner`. A team token has no
+        // user identity, so accessibility cannot be evaluated for it; the
+        // fail-open MUST keep offering the install link (the caller behind the
+        // token may still be able to act on it). If accessibility were ever
+        // computed for team tokens, this personal item would be inaccessible
+        // and the link would be dropped — so this pin guards the fail-open.
+        const catalogItem = await InternalMcpCatalogModel.create(
+          {
+            name: `personal-${randomUUID().slice(0, 8)}`,
+            serverType: "remote",
+            serverUrl: "https://example.com/mcp",
+            scope: "personal",
+          },
+          { organizationId: org.id, authorId: owner.id },
+        );
+        const tool = await ToolModel.createToolIfNotExists({
+          name: `${catalogItem.name}__do_thing`,
+          description: "Personal-server tool",
+          parameters: {},
+          catalogId: catalogItem.id,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "dynamic",
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_teamtoken", name: tool.name, arguments: {} },
+          agentOwner(agentId),
+          {
+            tokenId: "tok-team",
+            teamId: team.id,
+            isOrganizationToken: false,
+            organizationId: org.id,
+          },
+        );
+
+        expect(result.isError).toBe(true);
+        const archestraError = result?._meta?.archestraError as
+          | { type?: string; action?: string; actionUrl?: string }
+          | undefined;
+        expect(archestraError?.type).toBe("auth_required");
+        expect(archestraError?.action).toBe("install_mcp_credentials");
+        expect(archestraError?.actionUrl).toContain(
+          `/mcp/registry?install=${catalogItem.id}`,
+        );
       });
 
       test("All-tools mode ignores a static assignment pin and uses the server's connection policy", async ({
@@ -3391,6 +3695,7 @@ describe("McpClient", () => {
             kind: "terminal",
             category: "refresh_failed",
             message: "invalid_grant",
+            description: "The refresh token is invalid or has expired",
           });
 
         mockConnect.mockResolvedValue(undefined);
@@ -3422,6 +3727,9 @@ describe("McpClient", () => {
         const row = await McpServerModel.findById(mcpServer.id);
         expect(row?.oauthRefreshError).toBe("refresh_failed");
         expect(row?.oauthRefreshErrorMessage).toBe("invalid_grant");
+        expect(row?.oauthRefreshErrorDescription).toBe(
+          "The refresh token is invalid or has expired",
+        );
         expect(row?.oauthRefreshFailedAt).toBeInstanceOf(Date);
 
         refreshSpy.mockRestore();
@@ -3572,6 +3880,7 @@ describe("McpClient", () => {
         await McpServerModel.update(mcpServer.id, {
           oauthRefreshError: "refresh_failed",
           oauthRefreshErrorMessage: "invalid_grant",
+          oauthRefreshErrorDescription: "The refresh token is invalid",
           oauthRefreshFailedAt: new Date(Date.now() - 60_000),
         });
 
@@ -3631,6 +3940,7 @@ describe("McpClient", () => {
         const row = await McpServerModel.findById(mcpServer.id);
         expect(row?.oauthRefreshError).toBeNull();
         expect(row?.oauthRefreshErrorMessage).toBeNull();
+        expect(row?.oauthRefreshErrorDescription).toBeNull();
         expect(row?.oauthRefreshFailedAt).toBeNull();
 
         refreshSpy.mockRestore();
@@ -4155,8 +4465,179 @@ describe("McpClient", () => {
             catalogName: "github-oauth-server",
             serverId: mcpServer.id,
             reauthUrl: `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
+            // Owner-invoked personal connection → personal credential, no team.
+            credentialScope: "personal",
+            credentialTeamName: null,
           },
         });
+      });
+
+      test("labels the expired-auth error with the owning team for a team-scoped credential", async ({
+        makeUser,
+        makeTeam,
+        makeOrganization,
+      }) => {
+        const org = await makeOrganization();
+        const teamMember = await makeUser({
+          email: "team-expired-member@example.com",
+        });
+        const team = await makeTeam(org.id, teamMember.id, {
+          name: "Platform Team",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "github-team-server",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+          oauthConfig: {
+            name: "GitHub",
+            server_url: "https://api.githubcopilot.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["repo"],
+            default_scopes: ["repo"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          { access_token: "expired-token" },
+          "team-expired-oauth-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "github-team-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          teamId: team.id,
+          scope: "team",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-team-server__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const { UnauthorizedError } = await import(
+          "@modelcontextprotocol/sdk/client/auth.js"
+        );
+        mockCallTool.mockRejectedValueOnce(new UnauthorizedError());
+        mockConnect.mockResolvedValue(undefined);
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_team_expired",
+            name: "github-team-server__list_repos",
+            arguments: {},
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "team-token",
+            teamId: team.id,
+            isOrganizationToken: false,
+            userId: teamMember.id,
+          },
+        );
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?._meta).toMatchObject({
+          archestraError: {
+            type: "auth_expired",
+            serverId: mcpServer.id,
+            credentialScope: "team",
+            credentialTeamName: "Platform Team",
+          },
+        });
+      });
+
+      test("does not label a personal install as the caller's own when the caller is not the owner", async ({
+        makeUser,
+      }) => {
+        const connectionOwner = await makeUser({
+          email: "personal-owner@example.com",
+        });
+        const invokingUser = await makeUser({
+          email: "personal-invoker@example.com",
+        });
+
+        // Non-OAuth (PAT) catalog so no token refresh intercepts the auth-error
+        // tool result before the expired-auth message is built.
+        const catalog = await InternalMcpCatalogModel.create({
+          name: "github-shared-personal",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+        });
+
+        const secret = await secretManager().createSecret(
+          { access_token: "expired-pat" },
+          "shared-personal-secret",
+        );
+
+        // Personal install owned by connectionOwner, statically assigned to the
+        // agent so a different caller routes through it — the retained-assignment
+        // shape the scope helper must not misattribute as the caller's own.
+        const mcpServer = await McpServerModel.create({
+          name: "github-shared-personal",
+          catalogId: catalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: connectionOwner.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-shared-personal__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: catalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        // Tool RESULT (not a thrown error) carrying an auth failure — this path
+        // builds the expired-auth message without the assigned-credential owner
+        // guard that the thrown path has, so the scope helper is what protects
+        // against misattribution here.
+        mockCallTool.mockResolvedValueOnce({
+          isError: true,
+          content: [{ type: "text", text: "401 unauthorized: token expired" }],
+        });
+        mockConnect.mockResolvedValue(undefined);
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_shared_personal",
+            name: "github-shared-personal__list_repos",
+            arguments: {},
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "invoker-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: invokingUser.id,
+          },
+        );
+
+        expect(result).toMatchObject({ isError: true });
+        const archestraError = (
+          result?._meta as { archestraError?: Record<string, unknown> }
+        )?.archestraError;
+        expect(archestraError).toMatchObject({
+          type: "auth_expired",
+          serverId: mcpServer.id,
+        });
+        // Not the caller's own credential → no "Your personal credentials …".
+        expect(archestraError?.credentialScope).toBeUndefined();
+        expect(archestraError?.credentialTeamName).toBeUndefined();
       });
 
       test("records a no_refresh_token state when an OAuth tool call throws UnauthorizedError and no refresh token is stored", async ({
@@ -4231,6 +4712,7 @@ describe("McpClient", () => {
         const row = await McpServerModel.findById(mcpServer.id);
         expect(row?.oauthRefreshError).toBe("no_refresh_token");
         expect(row?.oauthRefreshErrorMessage).toBe("no_refresh_token");
+        expect(row?.oauthRefreshErrorDescription).toBeNull();
         expect(row?.oauthRefreshFailedAt).toBeInstanceOf(Date);
       });
 
@@ -7021,5 +7503,385 @@ describe("connectAndGetTools network egress enforcement", () => {
     expect(result.isError).toBe(true);
     expect(result.error).toContain('not permitted by the "locked" environment');
     expect(mockConnect).not.toHaveBeenCalled();
+  });
+});
+
+describe("pickInstallForCaller (caller-scoped install selection)", () => {
+  // Pins the credential boundary readResource relies on: when a shared catalog
+  // has several installs, connect only to one the caller can actually reach
+  // (own personal → team → org). Never an arbitrary servers[0], which could be
+  // another user's personal install and would read with that user's secrets.
+  const pickInstallForCaller = (
+    servers: unknown[],
+    tokenAuth: TokenAuthContext | undefined,
+  ): Promise<{ id: string } | undefined> =>
+    (
+      mcpClient as unknown as {
+        pickInstallForCaller: (
+          allServers: unknown[],
+          tokenAuth: TokenAuthContext | undefined,
+        ) => Promise<{ id: string } | undefined>;
+      }
+    ).pickInstallForCaller(servers, tokenAuth);
+
+  const userToken = (
+    userId: string,
+    organizationId: string,
+  ): TokenAuthContext => ({
+    tokenId: randomUUID(),
+    teamId: null,
+    isOrganizationToken: false,
+    isUserToken: true,
+    userId,
+    organizationId,
+  });
+
+  test("prefers the caller's own personal install over another user's", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    const other = await makeUser();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    // Another user's install FIRST: the pre-fix servers[0] returned this one.
+    const otherInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: other.id,
+      scope: "personal",
+    });
+    const ownInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: caller.id,
+      scope: "personal",
+    });
+
+    const picked = await pickInstallForCaller(
+      [otherInstall, ownInstall],
+      userToken(caller.id, org.id),
+    );
+
+    expect(picked?.id).toBe(ownInstall.id);
+  });
+
+  test("fails closed when only another user's personal install exists", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    const other = await makeUser();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    const otherInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: other.id,
+      scope: "personal",
+    });
+
+    const picked = await pickInstallForCaller(
+      [otherInstall],
+      userToken(caller.id, org.id),
+    );
+
+    expect(picked).toBeUndefined();
+  });
+
+  test("selects a team install when the caller belongs to that team", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    const other = await makeUser();
+    const team = await makeTeam(org.id, caller.id);
+    await makeTeamMember(team.id, caller.id);
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    // Decoy first, so a naive servers[0] would miss the team install.
+    const otherInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: other.id,
+      scope: "personal",
+    });
+    const teamInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      teamId: team.id,
+      scope: "team",
+    });
+
+    const picked = await pickInstallForCaller(
+      [otherInstall, teamInstall],
+      userToken(caller.id, org.id),
+    );
+
+    expect(picked?.id).toBe(teamInstall.id);
+  });
+
+  test("falls back to an org-scoped install when the caller has no personal or team install", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    const orgInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: null,
+      scope: "org",
+    });
+
+    const picked = await pickInstallForCaller(
+      [orgInstall],
+      userToken(caller.id, org.id),
+    );
+
+    expect(picked?.id).toBe(orgInstall.id);
+  });
+
+  // Team-scoped API tokens (routes/mcp-gateway.ts sets tokenAuth.teamId, no
+  // userId) take the separate `if (tokenAuth?.teamId)` branch — untouched by
+  // every test above, which all use a userId-bearing token.
+  const teamToken = (
+    teamId: string,
+    organizationId: string,
+  ): TokenAuthContext => ({
+    tokenId: randomUUID(),
+    teamId,
+    isOrganizationToken: false,
+    organizationId,
+  });
+
+  test("selects the caller's team install for a team-scoped token (no userId)", async ({
+    makeOrganization,
+    makeTeam,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const creator = await makeUser();
+    const team = await makeTeam(org.id, creator.id);
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    const otherTeam = await makeTeam(org.id, creator.id);
+    const otherTeamInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      teamId: otherTeam.id,
+      scope: "team",
+    });
+    const teamInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      teamId: team.id,
+      scope: "team",
+    });
+
+    const picked = await pickInstallForCaller(
+      [otherTeamInstall, teamInstall],
+      teamToken(team.id, org.id),
+    );
+
+    expect(picked?.id).toBe(teamInstall.id);
+  });
+
+  test("falls back to an org-scoped install for a team-scoped token when the team has no install", async ({
+    makeOrganization,
+    makeTeam,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const creator = await makeUser();
+    const team = await makeTeam(org.id, creator.id);
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    const orgInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: null,
+      scope: "org",
+    });
+
+    const picked = await pickInstallForCaller(
+      [orgInstall],
+      teamToken(team.id, org.id),
+    );
+
+    expect(picked?.id).toBe(orgInstall.id);
+  });
+
+  test("fails closed for a team-scoped token when no team or org install is reachable", async ({
+    makeOrganization,
+    makeTeam,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const creator = await makeUser();
+    const team = await makeTeam(org.id, creator.id);
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    const otherTeam = await makeTeam(org.id, creator.id);
+    const otherTeamInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      teamId: otherTeam.id,
+      scope: "team",
+    });
+
+    const picked = await pickInstallForCaller(
+      [otherTeamInstall],
+      teamToken(team.id, org.id),
+    );
+
+    expect(picked).toBeUndefined();
+  });
+});
+
+describe("readResource (assignment + all-tools dynamic access, end to end)", () => {
+  // Exercises findMcpServerForResource/readResource as assembled, not just its
+  // two sub-components (resolveDynamicToolByUiResource, pickInstallForCaller)
+  // in isolation — through the real assignment lookup, the dynamic-access
+  // fallback, catalog/install resolution, and the actual client.readResource
+  // call, the same path the frontend AppRenderer drives.
+  const RESOURCE_URI = "ui://widget/dashboard.html";
+  const RESOURCE_CONTENTS = {
+    contents: [
+      { uri: RESOURCE_URI, mimeType: "text/html", text: "<html>ok</html>" },
+    ],
+  };
+
+  const dynamicToken = (
+    userId: string,
+    organizationId: string,
+  ): TokenAuthContext => ({
+    tokenId: randomUUID(),
+    teamId: null,
+    isOrganizationToken: false,
+    isUserToken: true,
+    userId,
+    organizationId,
+  });
+
+  test("reads a UI resource for a tool assigned via agent_tools (pre-existing success path)", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const tool = await makeTool({
+      name: "widget__open",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+    await makeAgentTool(agent.id, tool.id, { mcpServerId: server.id });
+
+    mockConnect.mockResolvedValue(undefined);
+    mockReadResource.mockResolvedValueOnce(RESOURCE_CONTENTS);
+
+    // A real caller always carries session tokenAuth; pickInstallForCaller
+    // (the caller-scoped install selector) fails closed without one, even on
+    // this assignment-scoped path — it doesn't only gate the dynamic fallback.
+    const result = await mcpClient.readResource(
+      RESOURCE_URI,
+      agent.id,
+      dynamicToken(user.id, org.id),
+    );
+
+    expect(result).toEqual(RESOURCE_CONTENTS);
+    expect(mockReadResource).toHaveBeenCalledWith({ uri: RESOURCE_URI });
+  });
+
+  test("falls back to dynamic access to read a UI resource for an unassigned tool in all-tools mode", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeAgent,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+    // Deliberately no makeAgentTool — this tool is unassigned and reachable
+    // only through dynamic access.
+    await makeTool({
+      name: "widget__open",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+
+    mockConnect.mockResolvedValue(undefined);
+    mockReadResource.mockResolvedValueOnce(RESOURCE_CONTENTS);
+
+    const result = await mcpClient.readResource(
+      RESOURCE_URI,
+      agent.id,
+      dynamicToken(user.id, org.id),
+    );
+
+    expect(result).toEqual(RESOURCE_CONTENTS);
+    expect(mockReadResource).toHaveBeenCalledWith({ uri: RESOURCE_URI });
+  });
+
+  test("fails closed for an unassigned tool when the agent is not in all-tools mode", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeAgent,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    // accessAllTools defaults off — the dynamic-access fallback must not fire.
+    const agent = await makeAgent({ organizationId: org.id });
+    await makeTool({
+      name: "widget__open",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+
+    await expect(
+      mcpClient.readResource(
+        RESOURCE_URI,
+        agent.id,
+        dynamicToken(user.id, org.id),
+      ),
+    ).rejects.toThrow(/Resource not found/);
+    expect(mockReadResource).not.toHaveBeenCalled();
   });
 });

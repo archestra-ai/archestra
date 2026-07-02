@@ -1,0 +1,9 @@
+{
+  "name": "@archestra/napi-loader",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "files": ["index.cjs", "index.d.ts"]
+}

@@ -8,6 +8,7 @@
 // the external-IdP session token resolver (IdP network call).
 import {
   getArchestraToolFullName,
+  TOOL_GET_AGENT_SHORT_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
 } from "@archestra/shared";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -124,6 +125,7 @@ interface Fixtures {
     toolId: string,
     overrides: Record<string, unknown>,
   ) => Promise<unknown>;
+  seedAndAssignArchestraTools: (agentId: string) => Promise<void>;
 }
 
 // Test-context fixtures, captured once per test (vitest only hands fixtures to
@@ -145,6 +147,7 @@ beforeEach(
     makeInternalMcpCatalog,
     makeTool,
     makeToolPolicy,
+    seedAndAssignArchestraTools,
   }) => {
     f = {
       makeOrganization,
@@ -156,6 +159,7 @@ beforeEach(
       makeInternalMcpCatalog,
       makeTool,
       makeToolPolicy,
+      seedAndAssignArchestraTools,
     };
     vi.restoreAllMocks();
     vi.mocked(mcpClient.executeToolCallForOwner).mockReset();
@@ -699,6 +703,34 @@ describe("getChatMcpTools repeated-call circuit breaker", () => {
     expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(
       MAX_IDENTICAL_TOOL_CALLS,
     );
+  });
+
+  test("an empty-args call repeating a validation error is fast-nudged on the third issue", async () => {
+    // An Archestra tool's validation error is args-deterministic, so the
+    // breaker nudges a step sooner than the generic threshold: the first two
+    // {} calls execute (each returning the actionable Zod error naming the
+    // missing fields), the third identical call is nudged without executing.
+    const toolName = getArchestraToolFullName(TOOL_GET_AGENT_SHORT_NAME);
+    const { agent, baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool(toolName)],
+    });
+    await f.seedAndAssignArchestraTools(agent.id);
+
+    vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
+      decision: "proceed",
+      runs: [],
+    });
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+
+    const first = await tools[toolName].execute?.({}, execOptions("empty-1"));
+    expect(toolResultContent(first)).toContain("Validation error");
+    const second = await tools[toolName].execute?.({}, execOptions("empty-2"));
+    expect(toolResultContent(second)).toContain("Validation error");
+
+    const third = await tools[toolName].execute?.({}, execOptions("empty-3"));
+    expect(toolResultContent(third)).toContain("identical arguments");
+    expect(toolResultContent(third)).not.toContain("Validation error");
   });
 
   test("a different call resets the streak so a repeated call executes again", async () => {

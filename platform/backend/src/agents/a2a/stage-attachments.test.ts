@@ -4,7 +4,14 @@ import config from "@/config";
 import { SkillSandboxModel, SkillSandboxReplayEventModel } from "@/models";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import { stageAttachmentsIntoSandbox } from "./stage-attachments";
 
 // Exercises the real staging path against the test DB: per-execution sandbox
@@ -15,7 +22,7 @@ describe("stageAttachmentsIntoSandbox (integration)", () => {
   const originalDagger = config.daggerRuntime.enabled;
   const isolationKeys: string[] = [];
 
-  beforeAll(() => {
+  beforeEach(() => {
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
     (config.daggerRuntime as { enabled: boolean }).enabled = true;
   });

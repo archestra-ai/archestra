@@ -4,7 +4,12 @@ import { beforeEach, describe, expect, test } from "@/test";
 import { modelFetchers } from "./index";
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+// The shared test setup restores the real fetch after every test, so
+// re-apply the mock before each one.
+vi.stubGlobal("fetch", mockFetch);
+beforeEach(() => {
+  vi.stubGlobal("fetch", mockFetch);
+});
 
 function mockModelsResponse(json: unknown) {
   mockFetch.mockResolvedValueOnce({
@@ -64,6 +69,23 @@ describe("descriptor-table fetchers", () => {
         displayName: "mistral-a",
         provider: "mistral",
         createdAt: new Date(1700000000 * 1000).toISOString(),
+      },
+    ]);
+  });
+
+  test("tolerates a model missing created without crashing (createdAt undefined)", async () => {
+    // A provider response omitting `created` used to reach
+    // `new Date(NaN).toISOString()`, which throws and fails the whole fetch.
+    mockModelsResponse({ data: [{ id: "groq-a" }] });
+
+    const models = await modelFetchers.groq("k");
+
+    expect(models).toEqual([
+      {
+        id: "groq-a",
+        displayName: "groq-a",
+        provider: "groq",
+        createdAt: undefined,
       },
     ]);
   });

@@ -41,6 +41,9 @@ type CompactToolEntry = {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   errorText: string | undefined;
+  /** A delegation call's surfaced subagent tool calls, rendered between its
+   * Request and Result once the circle is expanded. */
+  nestedToolCalls?: React.ReactNode;
 };
 
 type CompactHookEntry = {
@@ -346,7 +349,7 @@ function ExpandedToolCard({
     reason?: string;
   }) => void;
 }) {
-  const { part, toolResultPart, toolName, errorText } = tool;
+  const { part, toolResultPart, toolName, errorText, nestedToolCalls } = tool;
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const isApprovalRequested = part.state === "approval-requested";
 
@@ -369,6 +372,7 @@ function ExpandedToolCard({
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} defaultOpen /> : null}
+        {nestedToolCalls}
         {isApprovalRequested &&
           onToolApprovalResponse &&
           "approval" in part &&

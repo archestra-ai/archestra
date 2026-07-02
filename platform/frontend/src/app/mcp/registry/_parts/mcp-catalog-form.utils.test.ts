@@ -223,6 +223,52 @@ describe("transformFormToApiData", () => {
     });
   });
 
+  it("parses the additional scopes field into an array", () => {
+    const values: McpCatalogFormValues = {
+      name: "Additional Scopes OAuth MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      authMethod: "oauth",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: [],
+      oauthConfig: {
+        client_id: "client-id",
+        client_secret: "client-secret",
+        audience: "",
+        redirect_uris: "https://app.example.com/oauth-callback",
+        scopes: "read",
+        additional_scopes: "offline_access, custom:scope",
+        supports_resource_metadata: false,
+        grantType: "authorization_code",
+        oauthServerUrl: "",
+        authServerUrl: "",
+        authorizationEndpoint: "",
+        wellKnownUrl: "",
+        resourceMetadataUrl: "",
+        tokenEndpoint: "",
+      },
+      enterpriseManagedConfig: null,
+      localConfig: undefined,
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+
+    expect(transformFormToApiData(values).oauthConfig).toMatchObject({
+      scopes: ["read"],
+      additional_scopes: ["offline_access", "custom:scope"],
+    });
+  });
+
   it("treats comma-only scopes input as blank (persists empty scopes with read/write fallback)", () => {
     const values: McpCatalogFormValues = {
       name: "Comma Scope OAuth MCP",

@@ -47,6 +47,7 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
 vi.mock("@/clients/mcp-client", () => ({
   default: {
     executeToolCallForOwner: vi.fn(),
+    resolveUiAppInstallIdForCaller: vi.fn().mockResolvedValue(null),
   },
 }));
 
@@ -62,6 +63,8 @@ vi.mock("@/services/identity-providers/session-token", () => ({
 
 beforeEach(() => {
   vi.mocked(mcpClient.executeToolCallForOwner).mockReset();
+  vi.mocked(mcpClient.resolveUiAppInstallIdForCaller).mockReset();
+  vi.mocked(mcpClient.resolveUiAppInstallIdForCaller).mockResolvedValue(null);
   vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
   vi.mocked(StreamableHTTPClientTransport).mockClear();
 });
@@ -2148,8 +2151,10 @@ describe("buildArchestraToolOutput", () => {
     });
     await makeAgentTool(owner.id, targetTool.id);
 
-    // A different agent without the tool assigned must not resolve it: the
-    // target lookup is scoped to the caller's agent, so no UI resource attaches.
+    // A different agent without the tool assigned and without dynamic access
+    // (accessAllTools defaults off) cannot reach the tool, so no UI resource
+    // attaches — the assignment-scoped lookup misses and the dynamic fallback
+    // is gated off.
     const otherAgent = await makeAgent();
     const result = await buildArchestraToolOutput({
       response: archestraResponse,
@@ -2159,6 +2164,173 @@ describe("buildArchestraToolOutput", () => {
         tool_args: { elements: "[]" },
       },
       agentId: otherAgent.id,
+    });
+
+    expect(result).toBe("Diagram displayed!");
+  });
+
+  test("attaches the target tool's UI resource for an unassigned tool reached via dynamic access", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    // "All tools" mode: run_tool dispatches to any tool the user can access
+    // without an agent_tools assignment. The UI resource must still attach so
+    // the MCP App renders as an iframe instead of a plain tool-call card.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    });
+    // The org-scoped install that makes the catalog reachable for the user.
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+    const result = await buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    expect(result).toMatchObject({
+      content: "Diagram displayed!",
+      _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } },
+    });
+  });
+
+  test("stamps the resolved install id onto the dispatched app's UI so callbacks bind to the server", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+    // The resolver (unit-tested against the DB in mcp-client.test.ts) yields the
+    // caller's install; here we assert buildArchestraToolOutput surfaces it on
+    // _meta.ui.mcpServerId. Without it the app's SDK callServerTool misroutes to
+    // the agent gateway ("No tool named ..."); with it chat mounts callbacks
+    // against POST /api/mcp/server/<install>.
+    vi.mocked(mcpClient.resolveUiAppInstallIdForCaller).mockResolvedValue(
+      "install-123",
+    );
+
+    const result = await buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      _meta: {
+        ui: {
+          resourceUri: "ui://excalidraw/mcp-app.html",
+          mcpServerId: "install-123",
+        },
+      },
+    });
+  });
+
+  test("omits mcpServerId when the resolver returns null (owned-app backing / unreachable install)", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+    // The resolver returns null for owned-app backings (routed by app id via
+    // render_app) and when no install is reachable — the UI must render without
+    // a spurious server binding.
+    vi.mocked(mcpClient.resolveUiAppInstallIdForCaller).mockResolvedValue(null);
+
+    const result = await buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } },
+    });
+    expect(
+      (result as unknown as { _meta: { ui: Record<string, unknown> } })._meta
+        .ui,
+    ).not.toHaveProperty("mcpServerId");
+  });
+
+  test("does not attach the UI resource for an all-tools agent when the target tool is not accessible", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    });
+    // No install (makeMcpServer) for this catalog: the tool is not reachable, so
+    // the dynamic fallback must not attach its UI resource — the boundary the
+    // widening must respect.
+
+    const result = await buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
     });
 
     expect(result).toBe("Diagram displayed!");
@@ -2187,6 +2359,65 @@ describe("buildArchestraToolOutput", () => {
     });
 
     expect(result).toBe("Diagram displayed!");
+  });
+
+  test("preserves a structured auth error (with credential scope) for a run_tool dispatch so chat renders the rich card", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const archestraError = {
+      type: "auth_expired" as const,
+      message: 'Expired or invalid authentication for "GitHub"',
+      catalogId: "cat_1",
+      catalogName: "GitHub",
+      serverId: "srv_1",
+      reauthUrl: "http://localhost:3000/mcp/registry?reauth=cat_1&server=srv_1",
+      credentialScope: "team" as const,
+      credentialTeamName: "Platform Team",
+    };
+
+    const result = await buildArchestraToolOutput({
+      response: {
+        content: [{ type: "text" as const, text: archestraError.message }],
+        isError: true,
+        _meta: { archestraError },
+        structuredContent: { archestraError },
+      },
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: "github__whoami", tool_args: {} },
+      agentId: agent.id,
+    });
+
+    // Rich shape (not a bare string) so extractMcpToolError finds the structured
+    // error and the frontend renders the scoped re-auth card.
+    expect(result).toMatchObject({
+      content: archestraError.message,
+      _meta: {
+        archestraError: {
+          type: "auth_expired",
+          credentialScope: "team",
+          credentialTeamName: "Platform Team",
+        },
+      },
+      structuredContent: { archestraError: { type: "auth_expired" } },
+    });
+  });
+
+  test("still returns plain text for a run_tool dispatch error without a structured Archestra error", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const result = await buildArchestraToolOutput({
+      response: {
+        content: [{ type: "text" as const, text: "Error: rate limited." }],
+        isError: true,
+      },
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: "github__whoami", tool_args: {} },
+      agentId: agent.id,
+    });
+
+    expect(result).toBe("Error: rate limited.");
   });
 });
 

@@ -1,11 +1,18 @@
 {
   "name": "@backend",
-  "version": "1.2.76",
+  "version": "1.2.80",
   "description": "",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
+  "//files": "Scopes what `pnpm deploy` copies into the production image (platform/Dockerfile). Without this, legacy deploy copies the whole package dir (src, test/config files) into the image. @backend is private and never published, so this only affects the deploy/pack file set.",
+  "files": [
+    "dist",
+    "scripts",
+    "drizzle.config.ts",
+    "src/database/migrations"
+  ],
   "scripts": {
     "build": "tsdown && pnpm run sentry:sourcemaps",
     "start": "NODE_ENV=production ./scripts/start-production.sh",
@@ -49,6 +56,7 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@archestra/app-runtime-rs": "workspace:*",
+    "@archestra/image-rs": "workspace:*",
     "@archestra/sandbox-rs": "workspace:*",
     "@archestra/shared": "workspace:*",
     "@aws-crypto/sha256-js": "^5.2.0",
@@ -144,6 +152,7 @@
     "pg": "^8.20.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",
+    "posthog-node": "^5.38.0",
     "prom-client": "^15.1.3",
     "quick-lru": "^7.3.0",
     "safe-regex2": "5.1.0",
@@ -165,6 +174,7 @@
     "@typescript/native-preview": "catalog:",
     "esbuild": "^0.28.1",
     "knip": "^5.85.0",
+    "msw": "^2.14.6",
     "tsdown": "^0.21.0",
     "tsx": "^4.21.0",
     "typescript": "catalog:",

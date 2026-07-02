@@ -6,19 +6,13 @@ import {
 } from "fastify-type-provider-zod";
 import { type Mock, vi } from "vitest";
 import { hasPermission } from "@/auth";
-import {
-  InternalMcpCatalogModel,
-  McpServerModel,
-  OrganizationModel,
-} from "@/models";
+import { InternalMcpCatalogModel } from "@/models";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 
-vi.mock("@/auth", () => ({
-  hasPermission: vi.fn(),
-}));
+vi.mock("@/auth");
 
 // Keep the real diff helpers; stub the pod-recreating reinstall so the
 // approval-triggered cascade is observable without touching Kubernetes.

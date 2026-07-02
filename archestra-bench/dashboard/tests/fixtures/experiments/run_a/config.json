@@ -1,0 +1,10 @@
+{
+  "run_id": "run_a",
+  "environments": [
+    { "id": "basic", "tasks": ["alpha", "beta", "tricky__part"] }
+  ],
+  "lanes": [
+    { "name": "kimi", "provider": "anthropic", "model": "kimi-for-coding" },
+    { "name": "glm", "provider": "anthropic", "model": "glm-5.2" }
+  ]
+}

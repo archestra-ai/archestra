@@ -1,0 +1,1 @@
+{"rollout":"basic/alpha__kimi","outcome":"passed","verdict":"stale record from an older triage pass","rubrics":{"knowledge":{"grade":1,"comment":"old"},"reasoning":{"grade":1,"comment":"old"},"instruction_following":{"grade":1,"comment":"old"},"env_ergonomics":{"grade":1,"comment":"old"}},"reward_hacking":{"suspected":false,"evidence":null},"observations":[]}

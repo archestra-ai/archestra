@@ -1,0 +1,96 @@
+/* dashboard overrides on top of classless PicoCSS */
+
+:root {
+    --grade-1: #dc2626;
+    --grade-2: #ef4444;
+    --grade-3: #f59e0b;
+    --grade-4: #84cc16;
+    --grade-5: #10b981;
+}
+
+.muted {
+    color: var(--pico-muted-color);
+    font-size: 0.9rem;
+}
+
+.warning {
+    color: #b45309;
+    background: rgb(245 158 11 / 0.12);
+    border-left: 4px solid var(--grade-3);
+    padding: 0.4rem 0.8rem;
+    border-radius: 0.25rem;
+}
+
+/* badges (run list + run header) */
+.badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.badge-full { background: var(--grade-5); color: #fff; }
+.badge-partial { background: var(--grade-3); color: #111; }
+.badge-none { background: var(--pico-muted-border-color); color: var(--pico-color); }
+
+/* grade chips: fixed hex backgrounds, so text color is chosen per background luminance
+   and stays readable in both PicoCSS light and dark modes */
+.chip {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.05rem 0.4rem;
+    border-radius: 0.25rem;
+    white-space: nowrap;
+}
+.grade-1 { background: var(--grade-1); color: #fff; }
+.grade-2 { background: var(--grade-2); color: #fff; }
+.grade-3 { background: var(--grade-3); color: #111; }
+.grade-4 { background: var(--grade-4); color: #111; }
+.grade-5 { background: var(--grade-5); color: #fff; }
+.chip-hack { background: var(--grade-1); color: #fff; }
+
+/* outcome badges/cells */
+.outcome-passed { color: var(--grade-5); }
+.outcome-failed { color: var(--grade-1); }
+.outcome-format_failed,
+.outcome-no_submission,
+.outcome-agent_error,
+.outcome-unknown { color: var(--grade-3); }
+.badge.outcome-passed { background: var(--grade-5); color: #fff; }
+.badge.outcome-failed { background: var(--grade-1); color: #fff; }
+.badge.outcome-format_failed,
+.badge.outcome-no_submission,
+.badge.outcome-agent_error,
+.badge.outcome-unknown { background: var(--grade-3); color: #111; }
+
+/* filters */
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: end;
+}
+.filters label { margin: 0; font-size: 0.85rem; }
+.filters select { margin: 0; width: auto; }
+.filters .check { display: flex; align-items: center; gap: 0.4rem; padding-bottom: 0.4rem; }
+
+/* rollout grid */
+.grid-scroll { overflow-x: auto; }
+table.grid { font-size: 0.85rem; }
+table.grid td.cell { white-space: nowrap; }
+table.grid td.cell a { text-decoration: none; }
+table.grid td.cell-empty { color: var(--pico-muted-color); }
+
+/* key/value tables */
+table.kv th { width: 14rem; font-weight: 600; }
+
+/* rendered trajectory */
+.trajectory {
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 1rem;
+}
+.trajectory pre { white-space: pre-wrap; word-break: break-word; }

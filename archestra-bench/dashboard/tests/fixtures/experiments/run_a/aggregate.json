@@ -1,0 +1,8 @@
+{
+  "outcomes": { "passed": 2, "failed": 1 },
+  "passed": 2,
+  "pass_rate": 0.6666666666666666,
+  "avg_turns": 6.0,
+  "avg_tokens": 15000.0,
+  "cost_usd": 0.42
+}

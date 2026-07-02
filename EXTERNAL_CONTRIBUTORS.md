@@ -680,3 +680,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @rwchaneyjr
 - @zbl1998-sdjn
 - @AdarshVerma21
+- @AllaRohith

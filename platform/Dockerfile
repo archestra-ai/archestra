@@ -374,7 +374,12 @@ COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
 COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
 
 # Install production dependencies for both workspaces
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend --filter=@frontend
+# The "..." suffix includes each package's workspace dependencies in the
+# install. Without it pnpm only creates node_modules for @backend/@frontend
+# themselves, and workspace deps' own runtime deps are never linked — the
+# three NAPI crates' index.cjs require @archestra/napi-loader and crash the
+# image with MODULE_NOT_FOUND (first surfaced as 500s on POST /api/apps).
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend... --filter=@frontend...
 
 # CVE-2026-33671: replace Next's bundled picomatch 4.0.3 with 4.0.4 (same as deps stage).
 # Production install refetches next so the patched copy from the builder is not inherited.

@@ -19,12 +19,7 @@ vi.mock("@archestra/shared", () => ({
   LAZY_MODEL_SYNC_STATUS_PENDING: "pending",
 }));
 
-vi.mock("sonner", () => ({
-  toast: {
-    error: vi.fn(),
-    success: vi.fn(),
-  },
-}));
+vi.mock("sonner");
 
 describe("useLlmModels", () => {
   beforeEach(() => {

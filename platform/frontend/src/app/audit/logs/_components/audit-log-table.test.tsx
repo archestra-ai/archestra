@@ -26,11 +26,7 @@ Element.prototype.releasePointerCapture = vi.fn();
 const mockUseAuditLogs = vi.fn();
 const mockUseMembersPaginated = vi.fn();
 
-vi.mock("next/navigation", () => ({
-  useRouter: vi.fn(),
-  usePathname: vi.fn(),
-  useSearchParams: vi.fn(),
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/lib/audit-log/audit-log.query", async () => {
   const actual = await vi.importActual<

@@ -25,21 +25,13 @@ const mockChatState: {
   sessionStatusById: {},
 };
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockRouterPush }),
-  usePathname: () => mockChatState.pathname,
-  useSearchParams: () => ({
-    get: () => null,
-  }),
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/lib/auth/auth.hook", () => ({
   useIsAuthenticated: () => true,
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: true }),
-}));
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/chat/chat-utils", () => ({
   getConversationDisplayTitle: (title: string | null) =>
@@ -95,9 +87,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
   usePinConversation: () => ({ mutate: vi.fn() }),
 }));
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: () => true,
-}));
+vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/projects/projects.query", () => ({
   useProjects: () => ({ data: mockProjects }),
@@ -230,8 +220,25 @@ vi.mock("lucide-react", async (importOriginal) => {
   };
 });
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 // Import after mocks
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { ChatSidebarSection } from "./chat-sidebar-section";
+
+beforeEach(() => {
+  vi.mocked(useRouter).mockReturnValue({
+    push: mockRouterPush,
+  } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(usePathname).mockImplementation(() => mockChatState.pathname);
+  vi.mocked(useSearchParams).mockReturnValue({
+    get: () => null,
+  } as unknown as ReturnType<typeof useSearchParams>);
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+  } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useFeature).mockReturnValue(true);
+});
 
 function makeConv(
   id: string,

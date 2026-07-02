@@ -34,13 +34,9 @@ vi.mock("posthog-js/react", () => ({
   }) => <>{children}</>,
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useSession: vi.fn(),
-}));
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/config/config.query", () => ({
-  usePublicConfig: vi.fn(),
-}));
+vi.mock("@/lib/config/config.query");
 
 describe("PostHogProviderWrapper", () => {
   beforeEach(() => {

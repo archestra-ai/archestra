@@ -1,7 +1,9 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { AppCard } from "./app-card";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
@@ -17,18 +19,14 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/lib/app.query", () => ({
   useOpenAppInChat: () => ({ mutateAsync: vi.fn() }),
   useOpenExternalAppInChat: () => ({ mutateAsync: openExternalMutate }),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: true }),
-}));
+vi.mock("@/lib/auth/auth.query");
 
 // Stub the delete dialog so the card test asserts it opens, not its internals.
 vi.mock("./app-delete-dialog", () => ({
@@ -72,6 +70,15 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     </div>
   ),
 }));
+
+beforeEach(() => {
+  vi.mocked(useRouter).mockReturnValue({
+    push: pushMock,
+  } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+  } as ReturnType<typeof useHasPermissions>);
+});
 
 const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   source: "owned",

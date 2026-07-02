@@ -1,7 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RolePermissionsCard } from "@/components/settings/role-permissions-card";
-import { useSession } from "@/lib/auth/auth.query";
+import { useAllPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useActiveMemberRole,
+  useActiveOrganization,
+} from "@/lib/organization.query";
 
 const mockUpdateNameMutateAsync = vi.fn();
 
@@ -12,28 +16,25 @@ vi.mock("@/lib/auth/account.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useAllPermissions: () => ({
-    data: null,
-    isLoading: false,
-  }),
-  useSession: vi.fn(),
-}));
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/organization.query", () => ({
-  useActiveOrganization: () => ({
-    data: { id: "org-1" },
-  }),
-  useActiveMemberRole: () => ({
-    data: "admin",
-    isLoading: false,
-  }),
-}));
+vi.mock("@/lib/organization.query");
 
 describe("RolePermissionsCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUpdateNameMutateAsync.mockResolvedValue(true);
+    vi.mocked(useAllPermissions).mockReturnValue({
+      data: null,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAllPermissions>);
+    vi.mocked(useActiveOrganization).mockReturnValue({
+      data: { id: "org-1" },
+    } as unknown as ReturnType<typeof useActiveOrganization>);
+    vi.mocked(useActiveMemberRole).mockReturnValue({
+      data: "admin",
+      isLoading: false,
+    } as unknown as ReturnType<typeof useActiveMemberRole>);
     vi.mocked(useSession).mockReturnValue({
       data: {
         user: {

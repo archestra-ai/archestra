@@ -142,6 +142,35 @@ impl RubricKey {
     }
 }
 
+/// Which pipeline produced a rendered reduce-phase report. The Rust analyzer writes
+/// `trajectory_analysis_<ts>.md`; the Claude skill writes `trajectory_analysis_claude_<ts>.md`.
+/// Discriminant order (analyzer, then Claude) is relied on for both slot indexing and render order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReduceSource {
+    Analyzer,
+    Claude,
+}
+
+impl ReduceSource {
+    pub const ALL: [ReduceSource; 2] = [ReduceSource::Analyzer, ReduceSource::Claude];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ReduceSource::Analyzer => "Analyzer report",
+            ReduceSource::Claude => "Claude report",
+        }
+    }
+}
+
+/// A discovered reduce-phase markdown report. Its content quotes untrusted agent/tool output, so the
+/// view renders it through the same neutralizing markdown path as trajectories.
+#[derive(Debug, Clone)]
+pub struct ReduceReport {
+    pub source: ReduceSource,
+    pub filename: String,
+    pub markdown: String,
+}
+
 /// Mean of a triage record's four grades.
 pub fn mean_grade(rubrics: &Rubrics) -> f64 {
     let sum: u32 = RubricKey::ALL
@@ -174,6 +203,9 @@ pub struct Run {
     /// Rubric records keyed by their `rollout` field (same key space as `rollouts`).
     pub rubrics: BTreeMap<String, TriageRecord>,
     pub rubric_status: RubricStatus,
+    /// Latest rendered reduce-phase report per source (analyzer, Claude), in that order. Empty when
+    /// no reduce report has been written for the run yet.
+    pub reports: Vec<ReduceReport>,
     /// Non-fatal problems (malformed rollout dirs, malformed rubric files) surfaced in the UI.
     pub warnings: Vec<String>,
 }
@@ -238,10 +270,20 @@ impl Run {
 
     /// Per-lane average of one rubric over the records present. `None` when a lane has no records.
     pub fn lane_rubric_avg(&self, lane: &str, key: RubricKey) -> Option<f64> {
+        self.rubric_avg_where(key, |r| r.id.lane == lane)
+    }
+
+    /// Overall average of one rubric across every rollout that has a record — the aggregate the
+    /// by-lane table's "avg" column shows. `None` when the run has no rubric records at all.
+    pub fn rubric_avg(&self, key: RubricKey) -> Option<f64> {
+        self.rubric_avg_where(key, |_| true)
+    }
+
+    fn rubric_avg_where(&self, key: RubricKey, pred: impl Fn(&Rollout) -> bool) -> Option<f64> {
         let grades: Vec<f64> = self
             .rollouts
             .values()
-            .filter(|r| r.id.lane == lane)
+            .filter(|r| pred(r))
             .filter_map(|r| self.rubrics.get(&r.id.to_string()))
             .map(|rec| f64::from(rec.rubrics.grade_of(key)))
             .collect();
@@ -273,6 +315,8 @@ pub struct RunListEntry {
     pub counts: OutcomeCounts,
     pub pass_rate: Option<f64>,
     pub rubric_status: RubricStatus,
+    /// Which reduce-phase reports exist for the run, in [`ReduceSource::ALL`] order.
+    pub report_sources: Vec<ReduceSource>,
 }
 
 /// True when the directory looks like a run root (the harness always writes `config.json` first
@@ -305,6 +349,7 @@ pub fn list_runs(experiments_dir: &Path) -> Result<Vec<RunListEntry>> {
             counts: run.counts(),
             pass_rate: run.pass_rate(),
             rubric_status: run.rubric_status,
+            report_sources: run.reports.iter().map(|r| r.source).collect(),
         });
     }
     runs.sort_by(|a, b| b.mtime.cmp(&a.mtime).then_with(|| b.id.cmp(&a.id)));
@@ -343,6 +388,7 @@ fn load_run_dir(dir: &Path, id: &str) -> Result<Run> {
     let aggregate = read_json_lenient::<Aggregate>(&dir.join(AGGREGATE_JSON), &mut warnings);
     let rollouts = discover_rollouts(dir, &mut warnings)?;
     let (rubrics, rubric_file_found) = load_rubrics(dir, &mut warnings)?;
+    let reports = load_reports(dir, &mut warnings)?;
 
     let matched = rollouts.keys().filter(|k| rubrics.contains_key(*k)).count();
     for key in rubrics.keys().filter(|k| !rollouts.contains_key(*k)) {
@@ -368,8 +414,55 @@ fn load_run_dir(dir: &Path, id: &str) -> Result<Run> {
         rollouts,
         rubrics,
         rubric_status,
+        reports,
         warnings,
     })
+}
+
+/// Discover the latest reduce-phase report of each source. "Latest" by the `<ts>` embedded in the
+/// file name (lexical, same convention as [`load_rubrics`], never mtime). Reports are returned in
+/// [`ReduceSource::ALL`] order. An unreadable report is skipped with a warning, not a hard failure.
+fn load_reports(run_dir: &Path, warnings: &mut Vec<String>) -> Result<Vec<ReduceReport>> {
+    let pattern = run_dir.join("trajectory_analysis_*.md");
+    let pattern = pattern.to_string_lossy();
+    // One slot per source, indexed by discriminant; each holds the newest `(ts, path)` seen.
+    let mut latest: [Option<(String, PathBuf)>; ReduceSource::ALL.len()] = [None, None];
+    for entry in glob::glob(&pattern).wrap_err("invalid report glob pattern")? {
+        let path = entry.wrap_err("reading report glob entry")?;
+        let stem = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let source = match stem.contains("_claude_") {
+            true => ReduceSource::Claude,
+            false => ReduceSource::Analyzer,
+        };
+        let ts = stem.rsplit('_').next().unwrap_or_default().to_string();
+        let slot = &mut latest[source as usize];
+        let newer = match slot {
+            Some((best, _)) => ts > *best,
+            None => true,
+        };
+        if newer {
+            *slot = Some((ts, path));
+        }
+    }
+    let mut reports = Vec::new();
+    for (source, slot) in ReduceSource::ALL.into_iter().zip(latest) {
+        let Some((_, path)) = slot else { continue };
+        match std::fs::read_to_string(&path) {
+            Ok(markdown) => reports.push(ReduceReport {
+                source,
+                filename: path
+                    .file_name()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+                markdown,
+            }),
+            Err(err) => warnings.push(format!("unreadable report file {}: {err}", path.display())),
+        }
+    }
+    Ok(reports)
 }
 
 /// Parse an optional JSON artifact; a malformed file degrades to `None` plus a warning instead of

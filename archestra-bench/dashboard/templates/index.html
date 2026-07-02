@@ -2,27 +2,41 @@
 {% block title %}runs — bench dashboard{% endblock %}
 {% block content %}
 <h1>Runs</h1>
-<p class="muted">{{ experiments_dir }}</p>
+<p class="muted path">{{ experiments_dir }}</p>
 {% if runs.is_empty() %}
-<p>No runs found.</p>
+<article class="empty">No runs found in this experiments directory.</article>
 {% else %}
-<table>
+<div class="card table-card">
+<table class="runs">
     <thead>
-        <tr><th>run</th><th>date</th><th>envs</th><th>lanes</th><th>outcomes</th><th>pass rate</th><th>rubrics</th></tr>
+        <tr><th>run</th><th>date</th><th>envs</th><th>lanes</th><th>outcomes</th><th>pass rate</th><th>rubrics</th><th>reports</th></tr>
     </thead>
     <tbody>
     {% for run in runs %}
         <tr>
-            <td><a href="{{ run.href }}">{{ run.id }}</a></td>
-            <td>{{ run.date }}</td>
+            <td><a class="run-link" href="{{ run.href }}">{{ run.id }}</a></td>
+            <td class="muted nowrap">{{ run.date }}</td>
             <td>{{ run.envs }}</td>
             <td>{{ run.lanes }}</td>
-            <td>{{ run.outcomes }}</td>
-            <td>{{ run.pass_rate }}</td>
+            <td class="nowrap">{{ run.outcomes }}</td>
+            <td>
+                {% if run.pass_pct.is_empty() %}<span class="muted">—</span>
+                {% else %}
+                <div class="rate" title="{{ run.pass_rate }}">
+                    <div class="rate-bar"><div class="rate-fill" style="width:{{ run.pass_pct }}%"></div></div>
+                    <span class="rate-val">{{ run.pass_rate }}</span>
+                </div>
+                {% endif %}
+            </td>
             <td><span class="badge {{ run.rubric_badge.class }}">{{ run.rubric_badge.label }}</span></td>
+            <td class="nowrap">
+                {% if run.reports.is_empty() %}<span class="muted">—</span>
+                {% else %}{% for r in run.reports %}<span class="report-chip" title="{{ r.title }}">{{ r.abbr }}</span>{% endfor %}{% endif %}
+            </td>
         </tr>
     {% endfor %}
     </tbody>
 </table>
+</div>
 {% endif %}
 {% endblock %}

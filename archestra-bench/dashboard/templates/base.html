@@ -9,8 +9,12 @@
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-    <header>
-        <nav><a href="/"><strong>archestra-bench</strong></a></nav>
+    <header class="topbar">
+        <a class="brand" href="/">
+            <span class="brand-mark">⬡</span>
+            <span>archestra-bench</span>
+        </a>
+        <span class="brand-sub">trajectory dashboard</span>
     </header>
     <main>
         {% block content %}{% endblock %}

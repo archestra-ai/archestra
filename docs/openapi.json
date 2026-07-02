@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.79"
+    "version": "1.2.80"
   },
   "components": {
     "schemas": {
@@ -1010,6 +1010,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -5306,6 +5307,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -6975,6 +6977,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -8132,6 +8135,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -9289,6 +9293,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -10463,6 +10468,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -11664,6 +11670,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -12835,6 +12842,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -14612,6 +14620,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -16953,6 +16962,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -18254,6 +18264,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -22742,6 +22753,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -24490,6 +24502,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -25700,6 +25713,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -26910,6 +26924,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -28137,6 +28152,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -29391,6 +29407,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -30616,6 +30633,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -32473,6 +32491,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -34924,6 +34943,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -65717,6 +65737,7 @@
                                 ]
                               },
                               "annotations": {
+                                "nullable": true,
                                 "type": "array",
                                 "items": {}
                               },
@@ -67413,6 +67434,7 @@
                                 ]
                               },
                               "annotations": {
+                                "nullable": true,
                                 "type": "array",
                                 "items": {}
                               },
@@ -103465,6 +103487,7 @@
                                 ]
                               },
                               "annotations": {
+                                "nullable": true,
                                 "type": "array",
                                 "items": {}
                               },
@@ -104909,6 +104932,7 @@
                                 ]
                               },
                               "annotations": {
+                                "nullable": true,
                                 "type": "array",
                                 "items": {}
                               },
@@ -123780,6 +123804,7 @@
                                                   ]
                                                 },
                                                 "annotations": {
+                                                  "nullable": true,
                                                   "type": "array",
                                                   "items": {}
                                                 },
@@ -125060,6 +125085,7 @@
                                                   ]
                                                 },
                                                 "annotations": {
+                                                  "nullable": true,
                                                   "type": "array",
                                                   "items": {}
                                                 },
@@ -142237,6 +142263,7 @@
                                             ]
                                           },
                                           "annotations": {
+                                            "nullable": true,
                                             "type": "array",
                                             "items": {}
                                           },
@@ -143517,6 +143544,7 @@
                                             ]
                                           },
                                           "annotations": {
+                                            "nullable": true,
                                             "type": "array",
                                             "items": {}
                                           },
@@ -204229,9 +204257,6 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
-                    },
-                    "skillSlashCommandsEnabled": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -204294,8 +204319,7 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled",
-                    "skillSlashCommandsEnabled"
+                    "skillToolsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -205189,9 +205213,6 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
-                    },
-                    "skillSlashCommandsEnabled": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -205254,8 +205275,7 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled",
-                    "skillSlashCommandsEnabled"
+                    "skillToolsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -206442,9 +206462,6 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
-                    },
-                    "skillSlashCommandsEnabled": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -206507,8 +206524,7 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled",
-                    "skillSlashCommandsEnabled"
+                    "skillToolsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -207260,9 +207276,6 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
-                    },
-                    "skillSlashCommandsEnabled": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -207325,8 +207338,7 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled",
-                    "skillSlashCommandsEnabled"
+                    "skillToolsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -207601,9 +207613,6 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "skillSlashCommandsEnabled": {
-                    "type": "boolean"
                   }
                 }
               }
@@ -208089,9 +208098,6 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
-                    },
-                    "skillSlashCommandsEnabled": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -208154,8 +208160,7 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled",
-                    "skillSlashCommandsEnabled"
+                    "skillToolsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -208990,9 +208995,6 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
-                    },
-                    "skillSlashCommandsEnabled": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -209055,8 +209057,7 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled",
-                    "skillSlashCommandsEnabled"
+                    "skillToolsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -209872,9 +209873,6 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
-                    },
-                    "skillSlashCommandsEnabled": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -209937,8 +209935,7 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled",
-                    "skillSlashCommandsEnabled"
+                    "skillToolsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -210688,9 +210685,6 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
-                    },
-                    "skillSlashCommandsEnabled": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -210753,8 +210747,7 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled",
-                    "skillSlashCommandsEnabled"
+                    "skillToolsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -211517,9 +211510,6 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
-                    },
-                    "skillSlashCommandsEnabled": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -211582,8 +211572,7 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled",
-                    "skillSlashCommandsEnabled"
+                    "skillToolsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -212313,9 +212302,6 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
-                    },
-                    "skillSlashCommandsEnabled": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -212378,8 +212364,7 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled",
-                    "skillSlashCommandsEnabled"
+                    "skillToolsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -213422,9 +213407,6 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
-                    },
-                    "skillSlashCommandsEnabled": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -213487,8 +213469,7 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled",
-                    "skillSlashCommandsEnabled"
+                    "skillToolsEnabled"
                   ],
                   "additionalProperties": false
                 }

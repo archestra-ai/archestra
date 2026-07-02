@@ -1,8 +1,10 @@
 # trajectory-analyzer
 
-Map-reduce analysis of archestra-bench trajectories. Each rollout's `trajectory.jsonl` is summarized by
-a one-shot LLM call (map), then a repo-grounded [`nitpicker-agent`](https://github.com/arsenyinfo/nitpicker)
-turns the summaries plus run metrics into a recommendations report (reduce).
+Map-reduce analysis of archestra-bench trajectories. Each rollout's `trajectory.jsonl` is triaged by
+a one-shot LLM call (map) into a structured judgment — four rubric grades (knowledge, reasoning,
+instruction_following, env_ergonomics; 1–5 with a comment each), a reward-hacking flag, a verdict, and
+evidence observations — then a repo-grounded [`nitpicker-agent`](https://github.com/arsenyinfo/nitpicker)
+turns the rendered triages plus run metrics into a recommendations report (reduce).
 
 The benchmarked model is fixed and out of our control; the report targets the surfaces we own — task
 prompts, JSON result schemas, verifiers, env/skill configuration, the MCP tool surface, and the harness.
@@ -43,6 +45,13 @@ is not a TTY (piped or CI) the live bars are hidden and the status lines (rollou
 report path) fall back to plain stderr. Set `RUST_LOG=info` to also surface the agent's internal logs.
 
 Each rollout's rendered trajectory (the exact markdown fed to the map phase) is written next to its
-source as `<env>/<task>__<lane>/trajectory.md`. The map output is then written to
-`<run-dir>/trajectory_analyses_<ts>.md` before the reduce phase starts, so a reduce failure never
-discards the per-rollout summaries.
+source as `<env>/<task>__<lane>/trajectory.md`. The structured triage records are written to
+`<run-dir>/trajectory_rubrics_<ts>.jsonl` (one record per line, failures first; rollouts whose map
+call failed are absent) and the markdown rendered from them to `<run-dir>/trajectory_analyses_<ts>.md`,
+both before the reduce phase starts, so a reduce failure never discards the per-rollout triages.
+The Claude-skill pipeline (`.claude/skills/archestra-dev-bench-analysis`) emits the same record shape
+as `trajectory_rubrics_claude_<ts>.jsonl`; a golden fixture under `tests/fixtures/triage_golden/`
+pins the two renderers to byte-identical output.
+
+Browse runs and rubric records interactively with `archestra-bench dashboard
+[--experiments-dir <dir>] [--port <port>]` — a local, read-only web UI over `experiments/`.

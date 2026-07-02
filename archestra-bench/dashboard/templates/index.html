@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}runs — bench dashboard{% endblock %}
+{% block content %}
+<h1>Runs</h1>
+<p class="muted">{{ experiments_dir }}</p>
+{% if runs.is_empty() %}
+<p>No runs found.</p>
+{% else %}
+<table>
+    <thead>
+        <tr><th>run</th><th>date</th><th>envs</th><th>lanes</th><th>outcomes</th><th>pass rate</th><th>rubrics</th></tr>
+    </thead>
+    <tbody>
+    {% for run in runs %}
+        <tr>
+            <td><a href="{{ run.href }}">{{ run.id }}</a></td>
+            <td>{{ run.date }}</td>
+            <td>{{ run.envs }}</td>
+            <td>{{ run.lanes }}</td>
+            <td>{{ run.outcomes }}</td>
+            <td>{{ run.pass_rate }}</td>
+            <td><span class="badge {{ run.rubric_badge.class }}">{{ run.rubric_badge.label }}</span></td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+{% endblock %}

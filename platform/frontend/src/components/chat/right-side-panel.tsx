@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  AppWindow,
-  CalendarClock,
-  FileText,
-  Globe,
-  PanelRightClose,
-} from "lucide-react";
+import { AppWindow } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { useApps } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
@@ -14,8 +8,6 @@ import { ConversationFilesPanel } from "@/components/chat/conversation-files-pan
 import { McpAppSection } from "@/components/chat/mcp-app-container";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { ScheduleRunsList } from "@/components/scheduled-tasks/schedule-runs-list";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useScheduleTrigger } from "@/lib/schedule-trigger.query";
 
 export type RightPanelTab = "runs" | "files" | "browser" | "apps";
@@ -23,7 +15,6 @@ export type RightPanelTab = "runs" | "files" | "browser" | "apps";
 interface RightSidePanelProps {
   isOpen: boolean;
   activeTab: RightPanelTab;
-  onTabChange: (tab: RightPanelTab) => void;
   onClose: () => void;
   canShowBrowser: boolean;
 
@@ -56,7 +47,6 @@ interface RightSidePanelProps {
 export function RightSidePanel({
   isOpen,
   activeTab,
-  onTabChange,
   onClose,
   canShowBrowser,
   scheduledRun,
@@ -88,116 +78,73 @@ export function RightSidePanel({
     };
   }, [isOpen, resolvedTab, setPortalTarget]);
 
+  // Collapsing the panel drops the owned-app settings form so it reopens on the
+  // live app, not the form. The tab strip (in the header) now drives collapse,
+  // so reset here whenever the panel closes, regardless of how.
+  useEffect(() => {
+    if (!isOpen) {
+      setSettingsOpen(false);
+    }
+  }, [isOpen, setSettingsOpen]);
+
   if (!isOpen) {
     return null;
   }
 
+  // Content only — the Files/Browser/Apps/Runs tab strip lives in the header's
+  // top bar now, so the panel just renders the selected tab's content.
   return (
     <ResizableRightPanel>
-      <Tabs
-        value={resolvedTab}
-        onValueChange={(value) => onTabChange(value as RightPanelTab)}
-        className="flex-1 min-h-0 flex flex-col gap-0"
-      >
-        <div className="flex items-center gap-2 border-b px-2 py-2">
-          {/* Tabs take the remaining space and scroll horizontally when the
-              panel is too narrow, so the action buttons on the right are never
-              clipped. */}
-          <div className="min-w-0 flex-1 overflow-x-auto">
-            <TabsList className="h-8 w-max">
-              {scheduledRun && (
-                <TabsTrigger value="runs" className="text-xs px-3">
-                  <CalendarClock className="h-3 w-3" />
-                  Runs
-                </TabsTrigger>
+      <div className="flex-1 min-h-0 overflow-hidden relative">
+        {resolvedTab === "runs" && scheduledRun && (
+          <RunsPanel
+            triggerId={scheduledRun.triggerId}
+            currentRunId={scheduledRun.runId}
+            projectId={projectId ?? null}
+          />
+        )}
+        {resolvedTab === "files" && (
+          <ConversationFilesPanel
+            key={conversationId ?? "none"}
+            conversationId={conversationId}
+            artifact={artifact}
+            projectId={projectId}
+            onClose={onClose}
+          />
+        )}
+        {resolvedTab === "browser" && canShowBrowser && (
+          <BrowserPanel
+            isOpen
+            onClose={onClose}
+            conversationId={conversationId}
+            agentId={agentId}
+            onCreateConversationWithUrl={onCreateConversationWithUrl}
+            isCreatingConversation={isCreatingConversation}
+            initialNavigateUrl={initialNavigateUrl}
+            onInitialNavigateComplete={onInitialNavigateComplete}
+            hideHeader
+          />
+        )}
+        {/* Apps tab content: renders the open app directly (no portal). The
+            app-switcher lives in the hosted card's header (see McpAppCard). */}
+        {resolvedTab === "apps" && (
+          <div className="flex flex-col h-full">
+            <div ref={portalDivRef} className="flex-1 min-h-0 relative">
+              {apps.length === 0 ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-xs text-muted-foreground px-6">
+                  <AppWindow className="h-6 w-6 mb-2 opacity-50" />
+                  <p className="font-medium">No Apps in this chat</p>
+                  <p className="mt-1">
+                    Apps from tool calls in this conversation will appear here.
+                  </p>
+                </div>
+              ) : (
+                <PanelAppHost agentId={agentId} />
               )}
-              <TabsTrigger value="files" className="text-xs px-3">
-                <FileText className="h-3 w-3" />
-                Files
-              </TabsTrigger>
-              {canShowBrowser && (
-                <TabsTrigger value="browser" className="text-xs px-3">
-                  <Globe className="h-3 w-3" />
-                  Browser
-                </TabsTrigger>
-              )}
-              <TabsTrigger value="apps" className="text-xs px-3">
-                <AppWindow className="h-3 w-3" />
-                Apps
-              </TabsTrigger>
-            </TabsList>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => {
-                // Collapsing the panel drops the owned-app settings form so it
-                // reopens on the live app, not the form.
-                setSettingsOpen(false);
-                onClose();
-              }}
-              title="Close panel"
-            >
-              <PanelRightClose className="h-4 w-4" />
-              <span className="sr-only">Close panel</span>
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-hidden relative">
-          {resolvedTab === "runs" && scheduledRun && (
-            <RunsPanel
-              triggerId={scheduledRun.triggerId}
-              currentRunId={scheduledRun.runId}
-              projectId={projectId ?? null}
-            />
-          )}
-          {resolvedTab === "files" && (
-            <ConversationFilesPanel
-              key={conversationId ?? "none"}
-              conversationId={conversationId}
-              artifact={artifact}
-              projectId={projectId}
-              onClose={onClose}
-            />
-          )}
-          {resolvedTab === "browser" && canShowBrowser && (
-            <BrowserPanel
-              isOpen
-              onClose={onClose}
-              conversationId={conversationId}
-              agentId={agentId}
-              onCreateConversationWithUrl={onCreateConversationWithUrl}
-              isCreatingConversation={isCreatingConversation}
-              initialNavigateUrl={initialNavigateUrl}
-              onInitialNavigateComplete={onInitialNavigateComplete}
-              hideHeader
-            />
-          )}
-          {/* Apps tab content: renders the open app directly (no portal). The
-              app-switcher lives in the hosted card's header (see McpAppCard). */}
-          {resolvedTab === "apps" && (
-            <div className="flex flex-col h-full">
-              <div ref={portalDivRef} className="flex-1 min-h-0 relative">
-                {apps.length === 0 ? (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-xs text-muted-foreground px-6">
-                    <AppWindow className="h-6 w-6 mb-2 opacity-50" />
-                    <p className="font-medium">No Apps in this chat</p>
-                    <p className="mt-1">
-                      Apps from tool calls in this conversation will appear
-                      here.
-                    </p>
-                  </div>
-                ) : (
-                  <PanelAppHost agentId={agentId} />
-                )}
-              </div>
             </div>
-          )}
-        </div>
-      </Tabs>
+          </div>
+        )}
+      </div>
     </ResizableRightPanel>
   );
 }

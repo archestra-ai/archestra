@@ -881,17 +881,30 @@ export function parseCommaSeparatedList(value: string): string[] {
 }
 
 /** @public — exported for testability */
-export const getAnalyticsConfig = () => ({
-  enabled: process.env.ARCHESTRA_ANALYTICS !== "disabled",
-  posthog: {
-    key:
-      process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||
-      DEFAULT_POSTHOG_KEY,
-    host:
-      process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST?.trim() ||
-      DEFAULT_POSTHOG_HOST,
-  },
-});
+export const getAnalyticsConfig = () => {
+  const analyticsEnv = process.env.ARCHESTRA_ANALYTICS?.trim();
+  // Evaluated at call time (not the module-level `isProduction`) so tests can
+  // exercise both environments.
+  const isProductionEnv = ["production", "prod"].includes(
+    process.env.NODE_ENV?.toLowerCase() ?? "",
+  );
+  return {
+    // Analytics (PostHog product analytics, instance heartbeats, and backend
+    // error tracking) defaults to on only in production builds. Local dev and
+    // test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't "production")
+    // stay silent unless ARCHESTRA_ANALYTICS is explicitly set, which always
+    // wins in both directions ("disabled" → off, any other value → on).
+    enabled: analyticsEnv ? analyticsEnv !== "disabled" : isProductionEnv,
+    posthog: {
+      key:
+        process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||
+        DEFAULT_POSTHOG_KEY,
+      host:
+        process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST?.trim() ||
+        DEFAULT_POSTHOG_HOST,
+    },
+  };
+};
 
 const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
@@ -1632,6 +1645,19 @@ const config = {
     // Optional reserved domain for a stable public URL across restarts. Without
     // it ngrok assigns an ephemeral domain that rotates on each restart.
     domain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
+  },
+  chatops: {
+    // Per-process cap on concurrent chatops file downloads + image shrinking.
+    // Chatops events are acked to the provider before processing, so an OOM
+    // during a burst of attachment-heavy messages means silent message loss —
+    // this bounds the transient memory (JS buffer + native copy + decode
+    // alloc) a burst can hold. 4 matches libuv's default threadpool, which
+    // already serializes the native image decodes. Currently gates Slack only:
+    // MS Teams has no image-shrink path and enforces a flat 10 MB per-file cap.
+    maxConcurrentFileTransfers: parsePositiveInt(
+      process.env.ARCHESTRA_CHATOPS_MAX_CONCURRENT_FILE_TRANSFERS,
+      4,
+    ),
   },
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,

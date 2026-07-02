@@ -892,8 +892,8 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Example: `archestra-prod/`
 
 - **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
-  - Default: `enabled`
-  - Set to `disabled` to opt-out of analytics
+  - Default: `enabled` in production builds (`NODE_ENV=production`, which includes the released Docker images); disabled in development/test environments
+  - Set to `disabled` to opt-out of analytics, or `enabled` to force it on regardless of environment
 
 - **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key used when analytics is enabled.
   - Default: Archestra's hosted PostHog project key
@@ -1409,6 +1409,13 @@ See [Slack](/docs/platform-slack) for setup instructions.
   - Required for the default socket mode
   - Starts with `xapp-`
   - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
+
+#### Attachment processing
+
+- **`ARCHESTRA_CHATOPS_MAX_CONCURRENT_FILE_TRANSFERS`** - Per-process cap on concurrent chatops attachment downloads and image shrinking.
+  - Default: `4`
+  - Bounds the transient memory a burst of attachment-heavy messages can hold; lower it on memory-constrained deployments
+  - Currently applies to Slack downloads only; MS Teams has no image-shrink path and enforces a flat 10 MB per-file cap instead
 
 ### Knowledge Base Configuration
 

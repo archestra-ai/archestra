@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.2.80](https://github.com/archestra-ai/archestra/compare/platform-v1.2.79...platform-v1.2.80) (2026-07-02)
+
+
+### Features
+
+* **apps:** validate_app SDK-call lint + authoring description/skill refinement ([#6135](https://github.com/archestra-ai/archestra/issues/6135)) ([d119088](https://github.com/archestra-ai/archestra/commit/d119088305661778a555e7df3304b7c8c18e4429))
+* **frontend:** keep password managers off app-secret fields via SecretInput/SecretTextarea ([#6178](https://github.com/archestra-ai/archestra/issues/6178)) ([9d6afaf](https://github.com/archestra-ai/archestra/commit/9d6afaf070cfe567233bc2e502df63363162bab7))
+* **llm:** Anthropic Workload Identity Federation (keyless auth) ([#6147](https://github.com/archestra-ai/archestra/issues/6147)) ([7e89ff4](https://github.com/archestra-ai/archestra/commit/7e89ff4f0a9f3452a46d037ac0d0c7d289223b6f))
+* show OAuth refresh error details in the MCP connections dialog ([#6170](https://github.com/archestra-ai/archestra/issues/6170)) ([5da79c7](https://github.com/archestra-ai/archestra/commit/5da79c7c444f7d853a60dceb27c8ca8e734925ce))
+* treat `query_knowledge_sources` results as sensitive by default ([#4404](https://github.com/archestra-ai/archestra/issues/4404)) ([bfe4dc8](https://github.com/archestra-ai/archestra/commit/bfe4dc888c9d2b5ffaf876b79896572a256b3558))
+
+
+### Bug Fixes
+
+* **apps:** multiple UX improvements and bugfixes ([#6163](https://github.com/archestra-ai/archestra/issues/6163)) ([310d76b](https://github.com/archestra-ai/archestra/commit/310d76b852094d916035328de45bd66422d60ab2))
+* **auth:** evaluate RBAC from the database, not the session cookie cache ([#6181](https://github.com/archestra-ai/archestra/issues/6181)) ([b79be91](https://github.com/archestra-ai/archestra/commit/b79be9162583674ab6069de349cd930394d41513))
+* **backend-tests:** close the shared-worker cross-file leak vectors behind shard flakiness ([#6185](https://github.com/archestra-ai/archestra/issues/6185)) ([7b826f6](https://github.com/archestra-ai/archestra/commit/7b826f605ca987278564edaf6d9e684132d7a259))
+* **backend:** capture pristine test config at setup-module scope ([#6156](https://github.com/archestra-ai/archestra/issues/6156)) ([e49e53a](https://github.com/archestra-ai/archestra/commit/e49e53a3d943b0b4e8f18eb35adc099aa6e5ad7f))
+* **backend:** deterministic message/interaction ordering without a table migration ([#6172](https://github.com/archestra-ai/archestra/issues/6172)) ([31ee5ae](https://github.com/archestra-ai/archestra/commit/31ee5aec1ce53c239e90869f353e284dced1af90))
+* **backend:** pin tool-gating flags in tool-archestra-assignment tests ([#6162](https://github.com/archestra-ai/archestra/issues/6162)) ([1763d64](https://github.com/archestra-ai/archestra/commit/1763d648db2dcb2c4eefae37e2d6dce28f33ad2c))
+* **backend:** reduce agent friction in app-authoring MCP tools ([#6171](https://github.com/archestra-ai/archestra/issues/6171)) ([707a4e8](https://github.com/archestra-ai/archestra/commit/707a4e840b1cb42ce59099f5efe5675c55b34763))
+* **docker:** install workspace deps' runtime deps in the production image ([#6152](https://github.com/archestra-ai/archestra/issues/6152)) ([b5d4800](https://github.com/archestra-ai/archestra/commit/b5d4800b696e8c05ac60f59feb68c1370885067d))
+* **frontend:** warn before discarding unsaved changes in form dialogs ([#6125](https://github.com/archestra-ai/archestra/issues/6125)) ([96fb45a](https://github.com/archestra-ai/archestra/commit/96fb45ab7465ecb0af59ccd0373a9775f69836b3))
+* **hotifx:** revert failing interactions table migration ([#6165](https://github.com/archestra-ai/archestra/issues/6165)) ([0773240](https://github.com/archestra-ai/archestra/commit/0773240758a392152e5bccb538ccfb6762026b52))
+* **mcp:** render MCP App UI resources reached via all-tools dynamic access ([#6164](https://github.com/archestra-ai/archestra/issues/6164)) ([5b3ce22](https://github.com/archestra-ai/archestra/commit/5b3ce22e3b94d65d304c326ae2f2a45b26083770))
+
+
+### Performance Improvements
+
+* **backend:** vitest isolate:false split + sharded CI + boundary-mocked test suite ([#6145](https://github.com/archestra-ai/archestra/issues/6145)) ([00ed826](https://github.com/archestra-ai/archestra/commit/00ed826362e332720c71b956dc9f3ec3d9697940))
+
+
+### Code Refactoring
+
+* **frontend:** dedupe test mocks into Jest-style __mocks__ canonical mocks ([#6154](https://github.com/archestra-ai/archestra/issues/6154)) ([6f0e225](https://github.com/archestra-ai/archestra/commit/6f0e225dc957c599ba5da09a0a447f127a2b339f))
+
 ## [1.2.79](https://github.com/archestra-ai/archestra/compare/platform-v1.2.78...platform-v1.2.79) (2026-07-01)
 
 

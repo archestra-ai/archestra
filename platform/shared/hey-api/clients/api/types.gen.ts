@@ -309,7 +309,7 @@ export type OpenAiChatCompletionResponseInput = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -1811,7 +1811,7 @@ export type CerebrasChatCompletionResponseInput = {
             content?: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             function_call?: {
                 arguments: string;
@@ -2276,7 +2276,7 @@ export type MistralChatCompletionResponseInput = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -2633,7 +2633,7 @@ export type PerplexityChatCompletionResponseInput = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -2990,7 +2990,7 @@ export type GroqChatCompletionResponseInput = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -3351,7 +3351,7 @@ export type OpenrouterChatCompletionResponseInput = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -3689,7 +3689,7 @@ export type VllmChatCompletionResponseInput = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             function_call?: {
                 arguments: string;
@@ -4014,7 +4014,7 @@ export type OllamaChatCompletionResponseInput = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             function_call?: {
                 arguments: string;
@@ -4532,7 +4532,7 @@ export type DeepSeekChatCompletionResponseInput = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -5245,7 +5245,7 @@ export type XaiChatCompletionResponseInput = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -5623,7 +5623,7 @@ export type OpenAiChatCompletionResponse = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -7125,7 +7125,7 @@ export type CerebrasChatCompletionResponse = {
             content?: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             function_call?: {
                 arguments: string;
@@ -7590,7 +7590,7 @@ export type MistralChatCompletionResponse = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -7947,7 +7947,7 @@ export type PerplexityChatCompletionResponse = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -8304,7 +8304,7 @@ export type GroqChatCompletionResponse = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -8665,7 +8665,7 @@ export type OpenrouterChatCompletionResponse = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -9003,7 +9003,7 @@ export type VllmChatCompletionResponse = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             function_call?: {
                 arguments: string;
@@ -9328,7 +9328,7 @@ export type OllamaChatCompletionResponse = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             function_call?: {
                 arguments: string;
@@ -9846,7 +9846,7 @@ export type DeepSeekChatCompletionResponse = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -10559,7 +10559,7 @@ export type XaiChatCompletionResponse = {
             content: string | null;
             refusal?: string | null;
             role: 'assistant';
-            annotations?: Array<unknown>;
+            annotations?: Array<unknown> | null;
             audio?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -18946,7 +18946,7 @@ export type AzureChatCompletionsWithDefaultAgentResponses = {
                 content: string | null;
                 refusal?: string | null;
                 role: 'assistant';
-                annotations?: Array<unknown>;
+                annotations?: Array<unknown> | null;
                 audio?: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -19446,7 +19446,7 @@ export type AzureChatCompletionsWithAgentResponses = {
                 content: string | null;
                 refusal?: string | null;
                 role: 'assistant';
-                annotations?: Array<unknown>;
+                annotations?: Array<unknown> | null;
                 audio?: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -29220,7 +29220,7 @@ export type GithubCopilotChatCompletionsWithDefaultAgentResponses = {
                 content: string | null;
                 refusal?: string | null;
                 role: 'assistant';
-                annotations?: Array<unknown>;
+                annotations?: Array<unknown> | null;
                 audio?: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -29667,7 +29667,7 @@ export type GithubCopilotChatCompletionsWithAgentResponses = {
                 content: string | null;
                 refusal?: string | null;
                 role: 'assistant';
-                annotations?: Array<unknown>;
+                annotations?: Array<unknown> | null;
                 audio?: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -33787,7 +33787,7 @@ export type GetInteractionsResponses = {
                         content: string | null;
                         refusal?: string | null;
                         role: 'assistant';
-                        annotations?: Array<unknown>;
+                        annotations?: Array<unknown> | null;
                         audio?: unknown;
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -34020,7 +34020,7 @@ export type GetInteractionsResponses = {
                         content: string | null;
                         refusal?: string | null;
                         role: 'assistant';
-                        annotations?: Array<unknown>;
+                        annotations?: Array<unknown> | null;
                         audio?: unknown;
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -37424,7 +37424,7 @@ export type GetInteractionResponses = {
                     content: string | null;
                     refusal?: string | null;
                     role: 'assistant';
-                    annotations?: Array<unknown>;
+                    annotations?: Array<unknown> | null;
                     audio?: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -37657,7 +37657,7 @@ export type GetInteractionResponses = {
                     content: string | null;
                     refusal?: string | null;
                     role: 'assistant';
-                    annotations?: Array<unknown>;
+                    annotations?: Array<unknown> | null;
                     audio?: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
@@ -53514,7 +53514,6 @@ export type GetOrganizationResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -53810,7 +53809,6 @@ export type UpdateAppearanceSettingsResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -53980,7 +53978,6 @@ export type UpdateSecuritySettingsResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -54147,7 +54144,6 @@ export type UpdateLlmSettingsResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -54158,7 +54154,6 @@ export type UpdateAgentSettingsData = {
         defaultModelId?: string | null;
         defaultLlmApiKeyId?: string | null;
         defaultAgentId?: string | null;
-        skillSlashCommandsEnabled?: boolean;
     };
     path?: never;
     query?: never;
@@ -54316,7 +54311,6 @@ export type UpdateAgentSettingsResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -54495,7 +54489,6 @@ export type UpdateConnectionSettingsResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -54672,7 +54665,6 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -54839,7 +54831,6 @@ export type UpdateAuthSettingsResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -55008,7 +54999,6 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -55172,7 +55162,6 @@ export type DropEmbeddingConfigResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -55425,7 +55414,6 @@ export type CompleteOnboardingResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 

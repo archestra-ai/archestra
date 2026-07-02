@@ -19,9 +19,19 @@ vi.mock("@archestra/image-rs", () => ({
   shrinkImageToFit: vi.fn(),
 }));
 
+// The file-transfer semaphore is a module-level const sized from config at
+// import time, so a runtime config mutation can't reach it. Pin a small
+// deterministic limit for the concurrency tests below.
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    chatops: { maxConcurrentFileTransfers: 2 },
+  }),
+);
+
 import { shrinkImageToFit } from "@archestra/image-rs";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import { markChannelThreadActive } from "./channel-activation";
+import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
 import SlackProvider from "./slack-provider";
 
 // =============================================================================
@@ -2407,7 +2417,7 @@ describe("SlackProvider file attachment downloads", () => {
     ]);
   });
 
-  test("returns no attachments when client is null", async () => {
+  test("returns no outcomes when client is null", async () => {
     const provider = new SlackProvider({
       enabled: true,
       botToken: "xoxb-test",
@@ -2416,8 +2426,8 @@ describe("SlackProvider file attachment downloads", () => {
     });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
     (provider as any).botUserId = "UBOT123";
-    // client is null (not initialized) — but parseWebhookNotification returns null
-    // because client check is further up; test downloadSlackFiles directly
+    // client is null (not initialized) — downloadSlackFiles bails with []
+    // (the current-message path treats it as "no attachments").
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
     const result = await (provider as any).downloadSlackFiles([
       {
@@ -2429,8 +2439,335 @@ describe("SlackProvider file attachment downloads", () => {
       },
     ]);
 
-    expect(result).toEqual({ attachments: [], skipped: [] });
+    expect(result).toEqual([]);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("file-only DM on an uninitialized provider (client null) is dropped", async () => {
+    // Regression: with no client the files can neither be delivered nor
+    // recorded as skipped, so a text-less non-mention message stays a blank
+    // turn and must be dropped — same behavior as before the outcome rework.
+    const provider = new SlackProvider({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: SIGNING_SECRET,
+      appId: "A12345",
+    });
+
+    const payload = makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel: "D_UNINITIALIZED",
+        channel_type: "im",
+        text: "",
+        files: [
+          {
+            id: "F1",
+            name: "orphan.png",
+            mimetype: "image/png",
+            size: 100,
+            url_private: "https://files.slack.com/f1",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// downloadFiles — positional outcome contract
+// =============================================================================
+
+describe("SlackProvider.downloadFiles", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("returns exactly one outcome per input file, positionally aligned across mixed branches", async () => {
+    const provider = createProvider();
+    const cap = CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENTS_PER_MESSAGE;
+
+    // cap+1 files: index 1 too large by metadata, index 2 fails to download,
+    // index `cap` is over the per-message cap, everything else delivers.
+    const files = Array.from({ length: cap + 1 }, (_, i) => ({
+      url: `https://files.slack.com/${i === 2 ? "fail" : "ok"}-${i}`,
+      mimetype: "application/octet-stream",
+      name: `file-${i}.bin`,
+      size: i === 1 ? CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE + 1 : 4,
+    }));
+
+    vi.mocked(fetch).mockImplementation(async (url) =>
+      String(url).includes("fail")
+        ? new Response(null, { status: 404 })
+        : new Response(Buffer.from("data"), { status: 200 }),
+    );
+
+    const outcomes = await provider.downloadFiles(files);
+
+    expect(outcomes).toHaveLength(files.length);
+    // outcomes[i] describes files[i] regardless of branch.
+    outcomes.forEach((outcome, i) => {
+      const name =
+        outcome.status === "delivered"
+          ? outcome.attachment.name
+          : outcome.skipped.name;
+      expect(name).toBe(files[i].name);
+    });
+    expect(outcomes[1]).toEqual({
+      status: "skipped",
+      skipped: {
+        name: "file-1.bin",
+        sizeBytes: CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE + 1,
+        reason: "too_large",
+      },
+    });
+    expect(outcomes[2]).toEqual({
+      status: "skipped",
+      skipped: { name: "file-2.bin", sizeBytes: 4, reason: "download_failed" },
+    });
+    // The over-cap skip sits at ITS input position (the end), after the
+    // in-range skips — input order, not "too_many first".
+    expect(outcomes[cap]).toEqual({
+      status: "skipped",
+      skipped: { name: `file-${cap}.bin`, sizeBytes: 4, reason: "too_many" },
+    });
+    const deliveredIndexes = outcomes.flatMap((o, i) =>
+      o.status === "delivered" ? [i] : [],
+    );
+    expect(deliveredIndexes).toEqual(
+      Array.from({ length: cap + 1 }, (_, i) => i).filter(
+        (i) => i !== 1 && i !== 2 && i !== cap,
+      ),
+    );
+  });
+
+  test("uninitialized client yields one download_failed skip per input file", async () => {
+    const provider = new SlackProvider({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: SIGNING_SECRET,
+      appId: "A12345",
+    });
+
+    const outcomes = await provider.downloadFiles([
+      {
+        url: "https://files.slack.com/a",
+        mimetype: "image/png",
+        name: "a.png",
+        size: 10,
+      },
+      {
+        url: "https://files.slack.com/b",
+        mimetype: "application/pdf",
+        name: "b.pdf",
+        size: 20,
+      },
+    ]);
+
+    expect(outcomes).toEqual([
+      {
+        status: "skipped",
+        skipped: { name: "a.png", sizeBytes: 10, reason: "download_failed" },
+      },
+      {
+        status: "skipped",
+        skipped: { name: "b.pdf", sizeBytes: 20, reason: "download_failed" },
+      },
+    ]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// File transfer concurrency (module-level semaphore, limit pinned to 2 via
+// the @/config mock at the top of this file)
+// =============================================================================
+
+describe("SlackProvider file transfer concurrency", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("caps concurrent downloads at the configured limit", async () => {
+    const provider = createProvider();
+    const resolvers: Array<(response: Response) => void> = [];
+    vi.mocked(fetch).mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+
+    const downloads = [0, 1, 2, 3].map((i) =>
+      provider.downloadFiles([
+        {
+          url: `https://files.slack.com/concurrent-${i}`,
+          mimetype: "text/plain",
+          name: `concurrent-${i}.txt`,
+          size: 5,
+        },
+      ]),
+    );
+
+    // Only 2 permits exist, so only 2 downloads may reach fetch...
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    // ...and no third may start while both permits are held.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    // Releasing the first wave lets the remaining two proceed.
+    for (const resolve of resolvers.splice(0)) {
+      resolve(new Response(Buffer.from("x"), { status: 200 }));
+    }
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(4));
+    for (const resolve of resolvers.splice(0)) {
+      resolve(new Response(Buffer.from("x"), { status: 200 }));
+    }
+
+    const outcomes = (await Promise.all(downloads)).flat();
+    expect(outcomes).toHaveLength(4);
+    expect(outcomes.every((o) => o.status === "delivered")).toBe(true);
+  });
+
+  test("releases the permit when reading the response body fails", async () => {
+    const provider = createProvider();
+    // A response whose body read rejects mid-transfer. Two failing files —
+    // enough to exhaust both permits if the error path leaked them.
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      arrayBuffer: () => Promise.reject(new Error("stream reset")),
+    } as unknown as Response);
+
+    const failed = await provider.downloadFiles([
+      {
+        url: "https://files.slack.com/broken-1",
+        mimetype: "text/plain",
+        name: "broken-1.txt",
+        size: 5,
+      },
+      {
+        url: "https://files.slack.com/broken-2",
+        mimetype: "text/plain",
+        name: "broken-2.txt",
+        size: 5,
+      },
+    ]);
+    expect(failed).toEqual([
+      {
+        status: "skipped",
+        skipped: {
+          name: "broken-1.txt",
+          sizeBytes: 5,
+          reason: "download_failed",
+        },
+      },
+      {
+        status: "skipped",
+        skipped: {
+          name: "broken-2.txt",
+          sizeBytes: 5,
+          reason: "download_failed",
+        },
+      },
+    ]);
+
+    // If a permit leaked, this await would hang and time the test out.
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(Buffer.from("ok"), { status: 200 }),
+    );
+    const followUp = await provider.downloadFiles([
+      {
+        url: "https://files.slack.com/after-error",
+        mimetype: "text/plain",
+        name: "after-error.txt",
+        size: 2,
+      },
+    ]);
+    expect(followUp).toEqual([
+      {
+        status: "delivered",
+        attachment: expect.objectContaining({ name: "after-error.txt" }),
+      },
+    ]);
+  });
+
+  test("releases the permit when an oversized image cannot be shrunk", async () => {
+    const provider = createProvider();
+    const oversized = Buffer.alloc(4 * 1024 * 1024, 1); // > 3.75MB inline limit
+
+    vi.mocked(fetch).mockImplementation(
+      async () => new Response(oversized, { status: 200 }),
+    );
+    vi.mocked(shrinkImageToFit).mockResolvedValue(null);
+
+    // Two unshrinkable images — enough to exhaust both permits if leaked.
+    const skippedOutcomes = await provider.downloadFiles([
+      {
+        url: "https://files.slack.com/huge-1.png",
+        mimetype: "image/png",
+        name: "huge-1.png",
+        size: oversized.length,
+      },
+      {
+        url: "https://files.slack.com/huge-2.png",
+        mimetype: "image/png",
+        name: "huge-2.png",
+        size: oversized.length,
+      },
+    ]);
+    expect(skippedOutcomes).toEqual([
+      {
+        status: "skipped",
+        skipped: {
+          name: "huge-1.png",
+          sizeBytes: oversized.length,
+          reason: "too_large",
+        },
+      },
+      {
+        status: "skipped",
+        skipped: {
+          name: "huge-2.png",
+          sizeBytes: oversized.length,
+          reason: "too_large",
+        },
+      },
+    ]);
+
+    // If a permit leaked, this await would hang and time the test out.
+    vi.mocked(fetch).mockImplementation(
+      async () => new Response(Buffer.from("ok"), { status: 200 }),
+    );
+    const followUp = await provider.downloadFiles([
+      {
+        url: "https://files.slack.com/after-shrink",
+        mimetype: "text/plain",
+        name: "after-shrink.txt",
+        size: 2,
+      },
+    ]);
+    expect(followUp).toEqual([
+      {
+        status: "delivered",
+        attachment: expect.objectContaining({ name: "after-shrink.txt" }),
+      },
+    ]);
   });
 });
 
@@ -2538,6 +2875,84 @@ describe("SlackProvider.getThreadHistory file metadata", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].files).toBeUndefined();
+  });
+
+  test("retains a text-less message that carries a downloadable file", async () => {
+    const provider = createProvider();
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = {
+      conversations: {
+        replies: vi.fn().mockResolvedValue({
+          messages: [
+            {
+              ts: "1000.001",
+              user: "U_ALICE",
+              text: "look at this",
+            },
+            {
+              // A screenshot posted alone: no text, one downloadable file.
+              ts: "1000.002",
+              user: "U_ALICE",
+              text: "",
+              files: [
+                {
+                  id: "F_SHOT",
+                  name: "screenshot.png",
+                  mimetype: "image/png",
+                  size: 4096,
+                  url_private_download:
+                    "https://files.slack.com/files-pri/T123/screenshot.png",
+                },
+              ],
+            },
+            {
+              // Text-less AND file-less — still filtered out.
+              ts: "1000.003",
+              user: "U_ALICE",
+              text: "",
+            },
+            {
+              // Text-less BOT message with a file — still filtered out: the
+              // manager never downloads bot files, so retaining it would
+              // render a turn with no file and no skip note.
+              ts: "1000.004",
+              bot_id: "B_OTHER",
+              text: "",
+              files: [
+                {
+                  id: "F_BOT",
+                  name: "bot-report.pdf",
+                  mimetype: "application/pdf",
+                  size: 2048,
+                  url_private_download:
+                    "https://files.slack.com/files-pri/T123/bot-report.pdf",
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    };
+
+    const result = await provider.getThreadHistory({
+      channelId: "C_TEST",
+      workspaceId: "T_TEST",
+      threadId: "1000.001",
+    });
+
+    expect(result).toHaveLength(2);
+    const fileTurn = result[1];
+    expect(fileTurn.messageId).toBe("1000.002");
+    expect(fileTurn.text).toBe("");
+    expect(fileTurn.files).toEqual([
+      {
+        url: "https://files.slack.com/files-pri/T123/screenshot.png",
+        mimetype: "image/png",
+        name: "screenshot.png",
+        size: 4096,
+      },
+    ]);
   });
 });
 

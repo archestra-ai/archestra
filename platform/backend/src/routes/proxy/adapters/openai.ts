@@ -1,4 +1,5 @@
 import {
+  ApiError,
   ArchestraInternalErrorCode,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -869,6 +870,7 @@ export class OpenAIResponseAdapter
     response: OpenAiResponse,
     provider: SupportedProvider = "openai",
   ) {
+    assertResponseHasChoices(response, provider);
     this.response = response;
     this.provider = provider;
   }
@@ -1681,3 +1683,41 @@ export const openAiEmbeddingsAdapterFactory: OpenAiEmbeddingsProvider =
     "openai",
     () => config.llm.openai.baseUrl,
   );
+
+// =============================================================================
+// INTERNAL HELPERS
+// =============================================================================
+
+/**
+ * Some OpenAI-compatible upstreams (LiteLLM, OpenRouter, misconfigured
+ * gateways) return HTTP 200 with an error-shaped body — no `choices` array,
+ * usually an `error` object instead. Downstream code (getText, tool-call
+ * policy evaluation, response serialization) assumes `choices` exists, so
+ * surface the upstream failure as a typed error here instead of crashing with
+ * an opaque TypeError.
+ */
+function assertResponseHasChoices(
+  response: OpenAiResponse,
+  provider: SupportedProvider,
+): void {
+  if (Array.isArray(response?.choices)) return;
+
+  const embeddedError = (
+    response as unknown as {
+      error?: { message?: unknown; code?: unknown; status?: unknown };
+    }
+  )?.error;
+
+  const rawStatus = embeddedError?.status ?? embeddedError?.code;
+  const statusCode =
+    typeof rawStatus === "number" && rawStatus >= 400 && rawStatus <= 599
+      ? rawStatus
+      : 502;
+
+  const upstreamMessage =
+    typeof embeddedError?.message === "string" && embeddedError.message
+      ? embeddedError.message
+      : `Upstream ${provider} provider returned a response without choices`;
+
+  throw new ApiError(statusCode, upstreamMessage);
+}

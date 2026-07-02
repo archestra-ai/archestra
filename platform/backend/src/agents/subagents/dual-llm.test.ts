@@ -1,21 +1,65 @@
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
-import { generateObject, generateText } from "ai";
+import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import AgentModel from "@/models/agent";
 import { beforeEach, describe, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
 import type { InsertAgent } from "@/types";
 import { resolveBestAvailableLlm } from "@/utils/llm-resolution";
 import { DualLlmSubagent } from "./dual-llm";
 
-vi.mock("ai", () => ({
-  generateObject: vi.fn(),
-  generateText: vi.fn(),
-}));
+// biome-ignore lint/correctness/useHookAtTopLevel: vitest lifecycle helper (per-test MSW server), not a React hook
+const server = useMswServer();
 
-vi.mock("@/clients/llm-client", () => ({
-  createDirectLLMModel: vi.fn(() => "mocked-model"),
-  resolveProviderApiKey: vi.fn(),
-}));
+// Boundary mock: the real `ai` SDK runs generateText/generateObject and MSW
+// serves the provider wire responses. The only internal seam we keep is the
+// model factory, pointed at a fake base URL the MSW server intercepts.
+const LLM_BASE_URL = "https://llm.test/v1";
+
+vi.mock("@/clients/llm-client", async () => {
+  const { createOpenAI } = await import("@ai-sdk/openai");
+  // Literal (not the module-level const) — this factory is hoisted above it.
+  const model = createOpenAI({
+    baseURL: "https://llm.test/v1",
+    apiKey: "test-key",
+  }).chat("gpt-4o-mini");
+  return {
+    createDirectLLMModel: vi.fn(() => model),
+    resolveProviderApiKey: vi.fn(),
+  };
+});
+
+// Minimal OpenAI chat-completions body the @ai-sdk/openai provider accepts.
+function chatCompletion(content: string) {
+  return HttpResponse.json({
+    id: "chatcmpl-test",
+    created: 0,
+    model: "gpt-4o-mini",
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content },
+        finish_reason: "stop",
+      },
+    ],
+    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+  });
+}
+
+// The prompt built by dual-llm rides in the trailing user message.
+function lastUserPrompt(body: {
+  messages: Array<{ role: string; content: string }>;
+}): string {
+  const userMessages = body.messages.filter((m) => m.role === "user");
+  return userMessages.at(-1)?.content ?? "";
+}
+
+// generateObject requests a json_schema response_format; generateText does not.
+function isObjectRequest(body: {
+  response_format?: { type?: string };
+}): boolean {
+  return body.response_format?.type === "json_schema";
+}
 
 vi.mock("@/utils/llm-resolution", () => ({
   resolveBestAvailableLlm: vi.fn(),
@@ -111,16 +155,37 @@ describe("DualLlmSubagent", () => {
       return null;
     });
 
-    vi.mocked(generateText)
-      .mockResolvedValueOnce({
-        text: "QUESTION: What kind of data is present?\nOPTIONS:\n0: email metadata\n1: source code\n2: not determinable",
-      } as never)
-      .mockResolvedValueOnce({ text: "DONE" } as never)
-      .mockResolvedValueOnce({ text: "Safe summary" } as never);
+    const textPrompts: string[] = [];
+    let objectRequestCount = 0;
+    server.use(
+      http.post(`${LLM_BASE_URL}/chat/completions`, async ({ request }) => {
+        const body = (await request.json()) as {
+          messages: Array<{ role: string; content: string }>;
+          response_format?: { type?: string };
+        };
 
-    vi.mocked(generateObject).mockResolvedValue({
-      object: { answer: 0 },
-    } as never);
+        // Quarantine agent's answer runs through generateObject.
+        if (isObjectRequest(body)) {
+          objectRequestCount += 1;
+          return chatCompletion(JSON.stringify({ answer: 0 }));
+        }
+
+        const prompt = lastUserPrompt(body);
+        textPrompts.push(prompt);
+        if (prompt.includes("SUMMARY MODE")) {
+          return chatCompletion("Safe summary");
+        }
+        // First question round proposes a question; the second signals DONE.
+        const questionRounds = textPrompts.filter((p) =>
+          p.includes("QUESTION MODE"),
+        ).length;
+        return questionRounds === 1
+          ? chatCompletion(
+              "QUESTION: What kind of data is present?\nOPTIONS:\n0: email metadata\n1: source code\n2: not determinable",
+            )
+          : chatCompletion("DONE");
+      }),
+    );
 
     const subagent = await DualLlmSubagent.create({
       dualLlmParams: {
@@ -135,8 +200,10 @@ describe("DualLlmSubagent", () => {
     const progress = vi.fn();
     const result = await subagent.processWithMainAgent(progress);
 
-    expect(generateText).toHaveBeenCalledTimes(3);
-    expect(generateObject).toHaveBeenCalledTimes(1);
+    // Three text generations (two question rounds + final summary) and one
+    // structured answer from the quarantine agent.
+    expect(textPrompts).toHaveLength(3);
+    expect(objectRequestCount).toBe(1);
     expect(progress).toHaveBeenCalledWith({
       question: "What kind of data is present?",
       options: ["email metadata", "source code", "not determinable"],
@@ -190,11 +257,27 @@ describe("DualLlmSubagent", () => {
       return null;
     });
 
-    vi.mocked(generateText)
-      .mockResolvedValueOnce({
-        text: "The task is DONE once we verify the data.",
-      } as never)
-      .mockResolvedValueOnce({ text: "Safe summary" } as never);
+    let objectRequestCount = 0;
+    const textPrompts: string[] = [];
+    server.use(
+      http.post(`${LLM_BASE_URL}/chat/completions`, async ({ request }) => {
+        const body = (await request.json()) as {
+          messages: Array<{ role: string; content: string }>;
+          response_format?: { type?: string };
+        };
+        if (isObjectRequest(body)) {
+          objectRequestCount += 1;
+          return chatCompletion(JSON.stringify({ answer: 0 }));
+        }
+        const prompt = lastUserPrompt(body);
+        textPrompts.push(prompt);
+        // Incidental "DONE" inside prose is not a terminal signal; the malformed
+        // question ends the round and the summary is produced next.
+        return prompt.includes("SUMMARY MODE")
+          ? chatCompletion("Safe summary")
+          : chatCompletion("The task is DONE once we verify the data.");
+      }),
+    );
 
     const subagent = await DualLlmSubagent.create({
       dualLlmParams: {
@@ -208,7 +291,7 @@ describe("DualLlmSubagent", () => {
 
     const result = await subagent.processWithMainAgent();
 
-    expect(generateObject).not.toHaveBeenCalled();
+    expect(objectRequestCount).toBe(0);
     expect(result).toEqual({
       toolCallId: "tool-call-1",
       conversations: [

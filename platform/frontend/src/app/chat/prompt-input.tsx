@@ -105,6 +105,13 @@ export interface ArchestraPromptInputProps
   onCompactConversation?: () => Promise<void> | void;
   /** Whether Playwright setup overlay is visible (for showing Playwright install dialog) */
   isPlaywrightSetupVisible: boolean;
+  /**
+   * One-shot composer prefill (e.g. a skill slash command from a deep link).
+   * Applied to the controller-owned input, then acknowledged via
+   * onPrefillApplied so the owner can clear it and it is never re-applied.
+   */
+  prefillText?: string | null;
+  onPrefillApplied?: () => void;
 }
 
 type SlashCommand = {
@@ -156,6 +163,8 @@ const PromptInputContent = ({
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   sandboxAvailable,
+  prefillText,
+  onPrefillApplied,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
   sandboxAvailable: boolean;
@@ -187,8 +196,9 @@ const PromptInputContent = ({
     placeholders: orgData?.chatPlaceholders,
   });
 
-  // Skills exposed as slash commands, gated by the org flag.
-  const skillSlashCommandsEnabled = orgData?.skillSlashCommandsEnabled ?? false;
+  // Skills exposed as slash commands whenever the org's skill tools are on —
+  // the same flag that gates the backend's activation injection.
+  const skillSlashCommandsEnabled = orgData?.skillToolsEnabled ?? false;
   const { data: skillsData } = useSkillsPaginated(
     { limit: 100 },
     { enabled: skillSlashCommandsEnabled },
@@ -276,6 +286,22 @@ const PromptInputContent = ({
       localStorage.removeItem(storageKey);
     }
   }, [controller.textInput.value, storageKey]);
+
+  // Apply a one-shot prefill from the page (e.g. a skill deep link). The
+  // controller stays the single owner of the input value — the page hands the
+  // text over once and clears its request via onPrefillApplied, so editing or
+  // deleting the text afterwards behaves exactly like typed input.
+  useEffect(() => {
+    if (prefillText == null) return;
+    controller.textInput.setInput(prefillText);
+    onPrefillApplied?.();
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [
+    prefillText,
+    onPrefillApplied,
+    controller.textInput.setInput,
+    textareaRef,
+  ]);
 
   // Handle speech transcription by updating controller state
   const handleTranscriptionChange = useCallback(
@@ -741,6 +767,8 @@ const ArchestraPromptInput = ({
   onResetModelOverride,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
+  prefillText,
+  onPrefillApplied,
 }: ArchestraPromptInputProps) => {
   const { data: activeAgent } = useProfile(agentId);
   const sandboxAvailable = activeAgent?.sandboxAvailable ?? false;
@@ -833,6 +861,8 @@ const ArchestraPromptInput = ({
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}
           sandboxAvailable={sandboxAvailable}
+          prefillText={prefillText}
+          onPrefillApplied={onPrefillApplied}
         />
       </PromptInputProvider>
     </div>

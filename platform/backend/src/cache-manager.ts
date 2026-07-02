@@ -307,7 +307,7 @@ class CacheManager {
   async wrap<T>(
     key: AllowedCacheKey,
     fnc: () => Promise<T>,
-    { ttl }: { ttl?: number; refreshThreshold?: number } = {},
+    { ttl }: { ttl?: number } = {},
   ): Promise<T> {
     const cached = await this.get<T>(key);
     if (cached !== undefined) {
@@ -437,7 +437,9 @@ export class LRUCacheManager<T = unknown> {
    * Check if a key exists in the cache (and is not expired).
    */
   has(key: string): boolean {
-    const entry = this.lruStore.get(key);
+    // peek, not get: a pure existence check must not promote the entry's
+    // recency, or has()-only keys outlive keys that are actually read.
+    const entry = this.lruStore.peek(key);
     if (!entry) {
       return false;
     }

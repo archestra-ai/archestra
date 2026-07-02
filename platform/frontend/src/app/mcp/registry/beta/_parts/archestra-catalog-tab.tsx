@@ -370,7 +370,6 @@ function ServerCard({
             <Button variant="outline" size="sm" asChild className="flex-1">
               <Link
                 href={`/mcp/registry/beta/catalog/${encodeURIComponent(server.name)}`}
-                target="_blank"
               >
                 <Info className="h-4 w-4 mr-1" />
                 Details

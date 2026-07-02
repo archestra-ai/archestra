@@ -12,6 +12,34 @@ import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 type McpCatalogApiData =
   archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
 
+// Parses the Arguments textarea input into a string array. Supports the
+// original one-arg-per-line format as well as a pasted JSON array (the
+// format most MCP server catalogs show their args in), so users can
+// copy-paste configs without reformatting them by hand.
+export function parseArgumentsInput(input?: string): string[] {
+  const trimmed = input?.trim() ?? "";
+  if (!trimmed) return [];
+
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((arg) => typeof arg === "string")
+      ) {
+        return parsed.map((arg) => arg.trim()).filter((arg) => arg.length > 0);
+      }
+    } catch {
+      // Not valid JSON - fall through to newline parsing below.
+    }
+  }
+
+  return trimmed
+    .split("\n")
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0);
+}
+
 // Transform function to convert form values to API format
 export function transformFormToApiData(
   values: McpCatalogFormValues,
@@ -35,12 +63,7 @@ export function transformFormToApiData(
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
     // Parse arguments string into array
-    const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
-      : [];
+    const argumentsArray = parseArgumentsInput(values.localConfig.arguments);
 
     data.localConfig = {
       command: values.localConfig.command || undefined,

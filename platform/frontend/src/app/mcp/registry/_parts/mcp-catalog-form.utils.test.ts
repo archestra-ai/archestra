@@ -1,10 +1,43 @@
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import {
   buildCloneFormValues,
+  parseArgumentsInput,
   transformCatalogItemToFormValues,
   transformExternalCatalogToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+
+describe("parseArgumentsInput", () => {
+  it("returns an empty array for empty input", () => {
+    expect(parseArgumentsInput()).toEqual([]);
+    expect(parseArgumentsInput("")).toEqual([]);
+    expect(parseArgumentsInput("   ")).toEqual([]);
+  });
+
+  it("splits one-arg-per-line input, trimming and dropping blank lines", () => {
+    expect(parseArgumentsInput("-y\n  pulumi-mcp  \n\n--verbose")).toEqual([
+      "-y",
+      "pulumi-mcp",
+      "--verbose",
+    ]);
+  });
+
+  it("parses a pasted JSON array of strings", () => {
+    expect(parseArgumentsInput('["-y", "pulumi-mcp", "--verbose"]')).toEqual([
+      "-y",
+      "pulumi-mcp",
+      "--verbose",
+    ]);
+  });
+
+  it("falls back to line parsing when the JSON array contains non-strings", () => {
+    expect(parseArgumentsInput('["-y", 42]')).toEqual(['["-y", 42]']);
+  });
+
+  it("falls back to line parsing for malformed JSON-looking input", () => {
+    expect(parseArgumentsInput("[not valid json")).toEqual(["[not valid json"]);
+  });
+});
 
 describe("transformFormToApiData", () => {
   it("maps custom auth and additional headers into userConfig", () => {

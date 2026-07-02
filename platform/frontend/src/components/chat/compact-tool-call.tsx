@@ -29,6 +29,7 @@ import {
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils";
+import { resolveRunToolTargetName } from "./chat-messages.utils";
 import { HookRunChip, type HookRunChipData } from "./hook-run-chip";
 import { SkillPill } from "./skill-pill";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -304,14 +305,24 @@ export function CompactToolGroup({
               />
             );
           }
-          const iconInfo = toolIconMap?.get(entry.toolName);
+          // A run_tool dispatch belongs visually to its *target* tool: unwrap
+          // so the circle shows the underlying MCP server's icon (and tooltip
+          // name) instead of the generic Archestra built-in icon.
+          const displayToolName = resolveRunToolTargetName(
+            entry.part,
+            entry.toolName,
+            { getToolShortName },
+          );
+          const iconInfo = toolIconMap?.get(displayToolName);
           const fallbackCatalogId =
             iconInfo?.catalogId ??
-            (isToolName(entry.toolName) ? ARCHESTRA_MCP_CATALOG_ID : undefined);
+            (isToolName(displayToolName)
+              ? ARCHESTRA_MCP_CATALOG_ID
+              : undefined);
           return (
             <CompactCircle
               key={entry.key}
-              toolName={entry.toolName}
+              toolName={displayToolName}
               state={state}
               isExpanded={expandedKey === entry.key}
               isExpandable={canExpandToolCalls}

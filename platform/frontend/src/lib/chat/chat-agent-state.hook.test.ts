@@ -198,8 +198,6 @@ function makeConversation(
     userId: "user-1",
     organizationId: "org-1",
     agentId: "agent-a",
-    lastMessageSeq: null,
-    lastReadSeq: null,
     chatApiKeyId: null,
     title: "Test",
     selectedModel: "gpt-4o",

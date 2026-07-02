@@ -1,9 +1,15 @@
-import { createOpenAI } from "@ai-sdk/openai";
-import { HttpResponse, http } from "msw";
 import { describe, expect, it, vi } from "vitest";
-import { useMswServer } from "@/test/msw";
 
-const TEST_BASE_URL = "https://llm.test/v1";
+const mockGenerateText = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({
+    text: "rephrased query text",
+    usage: { promptTokens: 10, completionTokens: 5 },
+  }),
+);
+
+vi.mock("ai", () => ({
+  generateText: mockGenerateText,
+}));
 
 const mockResolveRerankerConfig = vi.hoisted(() => vi.fn());
 vi.mock("./kb-llm-client", () => ({
@@ -19,65 +25,13 @@ vi.mock("./kb-interaction", () => ({
 
 import { expandQuery } from "./query-expansion";
 
-let server: ReturnType<typeof useMswServer>;
-
 const MOCK_RERANKER_CONFIG = {
-  llmModel: createOpenAI({
-    baseURL: TEST_BASE_URL,
-    apiKey: "test-key",
-  }).chat("gpt-4o-mini"),
+  llmModel: {},
   modelName: "gpt-4o-mini",
   provider: "openai",
 };
 
-function chatCompletion(content: string) {
-  return HttpResponse.json({
-    id: "chatcmpl-test",
-    object: "chat.completion",
-    created: 0,
-    model: "gpt-4o-mini",
-    choices: [
-      {
-        index: 0,
-        message: { role: "assistant", content },
-        finish_reason: "stop",
-      },
-    ],
-    usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-  });
-}
-
-// expandQuery fires the semantic-rephrase and keyword-expansion calls in
-// parallel, so the handler routes by system prompt instead of call order (the
-// old sequential mockResolvedValueOnce ordering). Each side takes either the
-// text the provider should return, or `{ fail: true }` for a non-retryable
-// error (replaces the old rejected generateText mock).
-function serveExpansion(opts: {
-  semantic: string | { fail: true };
-  keyword: string | { fail: true };
-}) {
-  server.use(
-    http.post(`${TEST_BASE_URL}/chat/completions`, async ({ request }) => {
-      const body = (await request.json()) as {
-        messages: Array<{ role: string; content: string }>;
-      };
-      const system =
-        body.messages.find((m) => m.role === "system")?.content ?? "";
-      const spec = system.includes("BM25") ? opts.keyword : opts.semantic;
-      if (typeof spec !== "string") {
-        return HttpResponse.json(
-          { error: { message: "LLM error" } },
-          { status: 400 },
-        );
-      }
-      return chatCompletion(spec);
-    }),
-  );
-}
-
 describe("expandQuery", () => {
-  server = useMswServer();
-
   it("returns single query when no reranker config", async () => {
     mockResolveRerankerConfig.mockResolvedValue(null);
 
@@ -94,9 +48,15 @@ describe("expandQuery", () => {
   it("returns expanded queries on success", async () => {
     mockResolveRerankerConfig.mockResolvedValue(MOCK_RERANKER_CONFIG);
 
-    serveExpansion({
-      semantic: "improved semantic query",
-      keyword: "keyword one\nkeyword two\nkeyword three",
+    // First call: semantic rephrase
+    mockGenerateText.mockResolvedValueOnce({
+      text: "improved semantic query",
+      usage: { promptTokens: 10, completionTokens: 5 },
+    });
+    // Second call: keyword expansion
+    mockGenerateText.mockResolvedValueOnce({
+      text: "keyword one\nkeyword two\nkeyword three",
+      usage: { promptTokens: 10, completionTokens: 8 },
     });
 
     const result = await expandQuery({
@@ -135,11 +95,15 @@ describe("expandQuery", () => {
   it("deduplicates queries case-insensitively and sums weights", async () => {
     mockResolveRerankerConfig.mockResolvedValue(MOCK_RERANKER_CONFIG);
 
-    serveExpansion({
-      // Semantic rephrase returns same as original (case-insensitive)
-      semantic: "Test Query",
-      // Keywords include a duplicate
-      keyword: "unique keyword\ntest query",
+    // Semantic rephrase returns same as original (case-insensitive)
+    mockGenerateText.mockResolvedValueOnce({
+      text: "Test Query",
+      usage: { promptTokens: 10, completionTokens: 5 },
+    });
+    // Keywords include a duplicate
+    mockGenerateText.mockResolvedValueOnce({
+      text: "unique keyword\ntest query",
+      usage: { promptTokens: 10, completionTokens: 5 },
     });
 
     const result = await expandQuery({
@@ -161,11 +125,12 @@ describe("expandQuery", () => {
   it("handles semantic rephrase failure gracefully", async () => {
     mockResolveRerankerConfig.mockResolvedValue(MOCK_RERANKER_CONFIG);
 
-    serveExpansion({
-      // Semantic rephrase fails
-      semantic: { fail: true },
-      // Keywords succeed
-      keyword: "keyword one\nkeyword two",
+    // Semantic rephrase fails
+    mockGenerateText.mockRejectedValueOnce(new Error("LLM error"));
+    // Keywords succeed
+    mockGenerateText.mockResolvedValueOnce({
+      text: "keyword one\nkeyword two",
+      usage: { promptTokens: 10, completionTokens: 5 },
     });
 
     const result = await expandQuery({
@@ -182,12 +147,13 @@ describe("expandQuery", () => {
   it("handles keyword expansion failure gracefully", async () => {
     mockResolveRerankerConfig.mockResolvedValue(MOCK_RERANKER_CONFIG);
 
-    serveExpansion({
-      // Semantic rephrase succeeds
-      semantic: "rephrased query",
-      // Keywords fail
-      keyword: { fail: true },
+    // Semantic rephrase succeeds
+    mockGenerateText.mockResolvedValueOnce({
+      text: "rephrased query",
+      usage: { promptTokens: 10, completionTokens: 5 },
     });
+    // Keywords fail
+    mockGenerateText.mockRejectedValueOnce(new Error("LLM error"));
 
     const result = await expandQuery({
       queryText: "test query",
@@ -203,9 +169,13 @@ describe("expandQuery", () => {
   it("caps keyword queries at 3", async () => {
     mockResolveRerankerConfig.mockResolvedValue(MOCK_RERANKER_CONFIG);
 
-    serveExpansion({
-      semantic: "rephrased",
-      keyword: "kw1\nkw2\nkw3\nkw4\nkw5",
+    mockGenerateText.mockResolvedValueOnce({
+      text: "rephrased",
+      usage: { promptTokens: 10, completionTokens: 5 },
+    });
+    mockGenerateText.mockResolvedValueOnce({
+      text: "kw1\nkw2\nkw3\nkw4\nkw5",
+      usage: { promptTokens: 10, completionTokens: 10 },
     });
 
     const result = await expandQuery({
@@ -220,9 +190,13 @@ describe("expandQuery", () => {
   it("handles empty semantic rephrase response", async () => {
     mockResolveRerankerConfig.mockResolvedValue(MOCK_RERANKER_CONFIG);
 
-    serveExpansion({
-      semantic: "",
-      keyword: "keyword one",
+    mockGenerateText.mockResolvedValueOnce({
+      text: "",
+      usage: { promptTokens: 10, completionTokens: 0 },
+    });
+    mockGenerateText.mockResolvedValueOnce({
+      text: "keyword one",
+      usage: { promptTokens: 10, completionTokens: 3 },
     });
 
     const result = await expandQuery({
@@ -239,9 +213,13 @@ describe("expandQuery", () => {
   it("filters empty lines from keyword response", async () => {
     mockResolveRerankerConfig.mockResolvedValue(MOCK_RERANKER_CONFIG);
 
-    serveExpansion({
-      semantic: "rephrased",
-      keyword: "kw1\n\n  \nkw2\n",
+    mockGenerateText.mockResolvedValueOnce({
+      text: "rephrased",
+      usage: { promptTokens: 10, completionTokens: 5 },
+    });
+    mockGenerateText.mockResolvedValueOnce({
+      text: "kw1\n\n  \nkw2\n",
+      usage: { promptTokens: 10, completionTokens: 5 },
     });
 
     const result = await expandQuery({

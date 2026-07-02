@@ -430,10 +430,23 @@ export async function createAgentServer(
         // "disabled"), and executeToolCallForOwner (which only accepts an
         // unassigned tool via a pre-resolved availableTool). A no-op for
         // assigned tools; policies still evaluate the dynamic tool itself.
-        const dynamicTool =
+        //
+        // Fetch the agent's assigned names once (all-tools agents only): they
+        // gate the dynamic lookup — an already-assigned name is reachable
+        // without it, so skip the heavier resolveDynamicTool — and feed the
+        // invocation-policy enabled-tools filter below, so neither path
+        // re-queries assignments.
+        const assignedToolNames =
           !isArchestraTool &&
           !isAgentDelegationTool &&
           agent.accessAllTools &&
+          tokenAuth?.userId &&
+          tokenAuth.organizationId
+            ? await ToolModel.getAssignedToolNames(agent.id)
+            : null;
+        const dynamicTool =
+          assignedToolNames &&
+          !assignedToolNames.has(name) &&
           tokenAuth?.userId &&
           tokenAuth.organizationId
             ? await resolveDynamicTool({
@@ -459,12 +472,10 @@ export async function createAgentServer(
           toolInput: args ?? {},
           organizationId: tokenAuth?.organizationId,
           contextIsTrusted,
-          ...(availableTool && {
-            enabledToolNames: new Set([
-              ...(await ToolModel.getAssignedToolNames(agent.id)),
-              name,
-            ]),
-          }),
+          ...(availableTool &&
+            assignedToolNames && {
+              enabledToolNames: new Set([...assignedToolNames, name]),
+            }),
         });
         if (policyBlock) {
           return {

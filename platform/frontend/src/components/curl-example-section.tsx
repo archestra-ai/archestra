@@ -88,11 +88,15 @@ export function CurlExampleSection({
     try {
       let tokenValue = tokenForDisplay;
 
-      if (isPersonalTokenSelected || hasAdminPermission) {
+      if (
+        isPersonalTokenSelected ||
+        (hasAdminPermission && selectedTeamToken)
+      ) {
         const fetched = await fetchToken();
-        if (fetched) {
-          tokenValue = fetched;
-        }
+        // The displayed token is masked here; abort rather than copy the mask
+        // under a success toast (the mutation already surfaced the error).
+        if (!fetched) return;
+        tokenValue = fetched;
       }
 
       const codeWithRealToken = code.replace(tokenForDisplay, tokenValue);
@@ -110,6 +114,7 @@ export function CurlExampleSection({
     tokenForDisplay,
     isPersonalTokenSelected,
     hasAdminPermission,
+    selectedTeamToken,
     fetchToken,
   ]);
 

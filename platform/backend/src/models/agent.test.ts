@@ -2,7 +2,6 @@ import {
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
   PLAYWRIGHT_MCP_CATALOG_ID,
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
@@ -1965,7 +1964,6 @@ describe("AgentModel", () => {
 
       // Verify the agent does not have auto-assigned Archestra tools
       const toolNames = agent.tools.map((t) => t.name);
-      expect(toolNames).not.toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
       expect(toolNames).not.toContain(TOOL_TODO_WRITE_FULL_NAME);
     });
   });

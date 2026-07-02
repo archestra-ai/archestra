@@ -13,7 +13,6 @@ import {
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   stripDanglingToolCalls,
-  TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
   TOOL_SWAP_AGENT_SHORT_NAME,
@@ -854,16 +853,6 @@ function ChatSessionHook({
       // agent selector may not reflect a newly created/swapped-to agent yet.
       if (toolShortName === TOOL_CREATE_AGENT_SHORT_NAME) {
         queryClient.invalidateQueries({ queryKey: ["agents"] });
-      }
-
-      // Detect artifact_write tool and invalidate conversation to fetch updated artifact
-      if (toolShortName === TOOL_ARTIFACT_WRITE_SHORT_NAME) {
-        // Small delay to ensure backend has saved the artifact
-        setTimeout(() => {
-          queryClient.invalidateQueries({
-            queryKey: ["conversation", conversationId],
-          });
-        }, 500);
       }
     },
     onData: (dataPart) => {

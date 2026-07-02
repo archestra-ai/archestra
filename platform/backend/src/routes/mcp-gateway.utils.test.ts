@@ -8,8 +8,10 @@ import {
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_UPDATE_SKILL_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
@@ -2301,6 +2303,149 @@ describe("createAgentServer tools/list", () => {
     } finally {
       executeToolCallForOwnerSpy.mockRestore();
     }
+  });
+
+  // render_app's effect exists only inside Archestra's own chat (the chat
+  // frontend mounts the app from the tool result); on an external MCP host it
+  // renders nothing while its result text reads as success, so models on
+  // external connections keep picking it over the app's own __open launch
+  // tool — the only path that actually renders there. Gateway-type agents are
+  // the external connection surface, chat agents keep the tool.
+  test("hides render_app from an mcp_gateway agent's tools/list but keeps it for chat agents", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeMember,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    // Admin token: permission-gated Archestra tools (the app authoring
+    // surface) are RBAC-filtered out entirely without a user context, which
+    // would make the render_app absence assertion pass vacuously.
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const renderAppName = archestraMcpBranding.getToolName(
+      TOOL_RENDER_APP_SHORT_NAME,
+    );
+    const scaffoldAppName = archestraMcpBranding.getToolName(
+      TOOL_SCAFFOLD_APP_SHORT_NAME,
+    );
+
+    const gatewayAgent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await seedAndAssignArchestraTools(gatewayAgent.id);
+    // makeAgent defaults to agentType "mcp_gateway"; the chat shape must be
+    // explicit or this pin compares two gateway agents.
+    const chatAgent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+    });
+    await seedAndAssignArchestraTools(chatAgent.id);
+
+    const listFor = async (agentId: string) => {
+      const { server } = await createAgentServer(agentId, {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      });
+      const listToolsHandler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestListToolsHandler>;
+        }
+      )._requestHandlers.get("tools/list");
+      if (!listToolsHandler) {
+        throw new Error("Expected tools/list handler to be registered");
+      }
+      const response = await listToolsHandler({
+        method: "tools/list",
+        params: {},
+      });
+      return new Set(response.tools.map((tool) => tool.name));
+    };
+
+    const gatewayNames = await listFor(gatewayAgent.id);
+    expect(gatewayNames.has(renderAppName)).toBe(false);
+    // Only render_app is chat-locked; the rest of the authoring surface
+    // (scaffold/read/edit/validate) works from external clients and stays.
+    expect(gatewayNames.has(scaffoldAppName)).toBe(true);
+
+    const chatNames = await listFor(chatAgent.id);
+    expect(chatNames.has(renderAppName)).toBe(true);
+  });
+
+  // The list exclusion above is not enough on its own: sibling tool
+  // descriptions name render_app and run_tool can still dispatch it by name,
+  // so the handler itself must refuse non-chat callers and point at the app's
+  // launch tool — otherwise external models keep "succeeding" with a result
+  // that renders nothing.
+  test("render_app called on a non-chat agent returns a steer to the app launch tool", async ({
+    makeAgent,
+    makeApp,
+    makeOrganization,
+    makeUser,
+    makeMember,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const app = await makeApp({
+      organizationId: org.id,
+      authorId: user.id,
+      scope: "org",
+    });
+
+    const callRenderApp = async (agentId: string) => {
+      const { server } = await createAgentServer(agentId, {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      });
+      const callToolHandler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+      if (!callToolHandler) {
+        throw new Error("Expected tools/call handler to be registered");
+      }
+      return callToolHandler(
+        {
+          method: "tools/call",
+          params: {
+            name: archestraMcpBranding.getToolName(TOOL_RENDER_APP_SHORT_NAME),
+            arguments: { appId: app.id },
+          },
+        },
+        { sendRequest: vi.fn() },
+      );
+    };
+
+    const gatewayAgent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await seedAndAssignArchestraTools(gatewayAgent.id);
+    const gatewayResponse = await callRenderApp(gatewayAgent.id);
+    expect(gatewayResponse.isError).toBe(true);
+    expect(gatewayResponse.content[0]?.text).toContain("__open");
+
+    const chatAgent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+    });
+    await seedAndAssignArchestraTools(chatAgent.id);
+    const chatResponse = await callRenderApp(chatAgent.id);
+    expect(chatResponse.isError).not.toBe(true);
+    expect(chatResponse.structuredContent).toMatchObject({ id: app.id });
   });
 
   test("adds assigned MCP server context to search_tools description", async ({

@@ -13,6 +13,7 @@ import {
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -244,10 +245,27 @@ export async function createAgentServer(
       tokenAuth?.userId,
       tokenAuth?.organizationId,
     );
-    const permittedTools = filterExposedTools({
+    const exposureFiltered = filterExposedTools({
       toolExposureMode: agent.toolExposureMode ?? "full",
       tools: candidateTools.filter((t) => permittedNames.has(t.name)),
     });
+    // render_app renders only inside Archestra's own chat (the chat frontend
+    // mounts the app from the tool result); on an external MCP host it renders
+    // nothing while its result text reads as success, so models keep picking
+    // it over the app's own __open launch tool — the only path that renders
+    // there. Only chat ("agent"-type) agents keep the tool: every other agent
+    // type (mcp_gateway, legacy profile) is an external connection surface.
+    // The rest of the authoring surface (scaffold/read/edit/validate) works
+    // from external clients and stays. The render_app handler itself steers
+    // external callers the same way, since run_tool can still dispatch it.
+    const permittedTools =
+      agent.agentType !== "agent"
+        ? exposureFiltered.filter(
+            (tool) =>
+              archestraMcpBranding.getToolShortName(tool.name) !==
+              TOOL_RENDER_APP_SHORT_NAME,
+          )
+        : exposureFiltered;
 
     // Resolve the backing catalogs of the assigned tools once: their names feed
     // both the search_tools description and the app launch-tool titles below.

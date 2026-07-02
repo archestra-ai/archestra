@@ -10,6 +10,7 @@ import {
   MicIcon,
   PaperclipIcon,
   Plus,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -50,6 +51,7 @@ import {
   RightSidePanel,
 } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
+import { SkillPill } from "@/components/chat/skill-pill";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
 import { LoadingSpinner } from "@/components/loading";
@@ -243,8 +245,18 @@ export function ChatPageContent({
   // skill of its own, and cleared only once it has been attached. It
   // deliberately survives an agent switch on the new-chat screen — skills are
   // agent-agnostic, so the deep-linked skill attaches to the first message of
-  // whichever agent the user ends up sending with.
+  // whichever agent the user ends up sending with. The ref is the submit-time
+  // source of truth; the state mirror renders the dismissible composer pill.
   const pendingUrlSkillRef = useRef<ChatSkillMetadata | null>(null);
+  const [pendingUrlSkill, setPendingUrlSkill] =
+    useState<ChatSkillMetadata | null>(null);
+  const stagePendingUrlSkill = useCallback(
+    (skill: ChatSkillMetadata | null) => {
+      pendingUrlSkillRef.current = skill;
+      setPendingUrlSkill(skill);
+    },
+    [],
+  );
   // Composer prefill from a `?skillId=` deep link when slash commands are
   // enabled; handed to the composer once and cleared via onPrefillApplied.
   const [composerPrefill, setComposerPrefill] = useState<string | null>(null);
@@ -530,7 +542,7 @@ export function ChatPageContent({
     if (action.kind === "prefill") {
       setComposerPrefill(action.text);
     } else if (action.kind === "stage") {
-      pendingUrlSkillRef.current = action.skill;
+      stagePendingUrlSkill(action.skill);
     }
   }, [
     urlSkillId,
@@ -542,6 +554,7 @@ export function ChatPageContent({
     urlSkillCommandsQuery.data,
     isOrgLoading,
     urlSkillWantsPrefill,
+    stagePendingUrlSkill,
     pathname,
     router,
     searchParams,
@@ -1382,7 +1395,7 @@ export function ChatPageContent({
     pendingPromptRef.current = undefined;
     pendingFilesRef.current = [];
     pendingSkillRef.current = undefined;
-    pendingUrlSkillRef.current = null;
+    stagePendingUrlSkill(null);
 
     const parts: ChatMessagePart[] = [];
 
@@ -1417,6 +1430,7 @@ export function ChatPageContent({
     messages.length,
     sendMessage,
     setMessages,
+    stagePendingUrlSkill,
     status,
   ]);
 
@@ -1584,8 +1598,30 @@ export function ChatPageContent({
       },
     });
     // Cleared only after the send above attached it (or a typed command won).
-    pendingUrlSkillRef.current = null;
+    stagePendingUrlSkill(null);
   };
+
+  // Visible affordance for a skill staged from a `?skillId=` deep link (slash
+  // commands off): without it nothing hints at the skill until the first
+  // message is sent. Dismissing detaches the skill.
+  const pendingUrlSkillBanner = pendingUrlSkill ? (
+    <div className="flex items-center gap-2">
+      <SkillPill skillName={pendingUrlSkill.name} />
+      <span className="text-xs text-muted-foreground">
+        will be used with your next message
+      </span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6"
+        aria-label="Remove skill"
+        onClick={() => stagePendingUrlSkill(null)}
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  ) : null;
 
   const isBrowserPanelVisible = isBrowserPanelOpen && !isPlaywrightSetupVisible;
   const isRightPanelOpen =
@@ -2399,6 +2435,7 @@ export function ChatPageContent({
                   activeAgentId && (
                     <div className="sticky bottom-0 bg-background border-t p-4">
                       <div className="max-w-4xl mx-auto space-y-3">
+                        {pendingUrlSkillBanner}
                         <ArchestraPromptInput
                           onSubmit={handleSubmit}
                           status={status}
@@ -2530,6 +2567,9 @@ export function ChatPageContent({
                       );
                     })()}
                     <div className="w-full max-w-4xl">
+                      {pendingUrlSkillBanner && (
+                        <div className="mb-2">{pendingUrlSkillBanner}</div>
+                      )}
                       <ArchestraPromptInput
                         onSubmit={handleInitialSubmit}
                         status={

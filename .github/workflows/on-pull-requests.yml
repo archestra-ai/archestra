@@ -287,6 +287,15 @@ jobs:
       - name: Verify no immature dependencies
         run: pnpm install --fix-lockfile --lockfile-only --ignore-scripts
 
+      # Fork PRs run without turbo remote caching (secrets are withheld), so
+      # the Rust NAPI crate builds below actually invoke cargo. Sync the
+      # pinned toolchain (rust-toolchain.toml) serially first — otherwise
+      # turbo's parallel crate builds each trigger a concurrent rustup
+      # download of the same components, which races and fails with
+      # "could not rename downloaded file".
+      - name: Setup Rust
+        run: rustup show
+
       # Backend unit tests run in the parallel sharded "Backend Unit Tests"
       # jobs below; here the backend runs check:commit (same checks minus
       # vitest) so this job stops being serialized behind the largest suite.
@@ -457,6 +466,15 @@ jobs:
         uses: ./.github/actions/setup-env
         with:
           working-directory: ./platform
+
+      # Fork PRs run without turbo remote caching (secrets are withheld), so
+      # the NAPI crate builds below actually invoke cargo. Sync the pinned
+      # toolchain (rust-toolchain.toml) serially first — otherwise turbo's
+      # parallel crate builds each trigger a concurrent rustup download of
+      # the same components, which races and fails with "could not rename
+      # downloaded file".
+      - name: Setup Rust
+        run: rustup show
 
       # Tests load the Rust NAPI bindings (@archestra/app-runtime-rs etc.),
       # which `turbo check:ci` builds implicitly via the task graph. Running

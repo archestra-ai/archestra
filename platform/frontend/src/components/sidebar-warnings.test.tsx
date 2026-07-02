@@ -1,24 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Controllable mock return values
-const mockUseSession = vi.fn();
-const mockUseDefaultCredentialsEnabled = vi.fn();
-const mockUseHasPermissions = vi.fn();
-const mockUseFeature = vi.fn();
-const mockUseDisableBasicAuth = vi.fn();
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useDefaultCredentialsEnabled: (...args: unknown[]) =>
-    mockUseDefaultCredentialsEnabled(...args),
-  useHasPermissions: (...args: unknown[]) => mockUseHasPermissions(...args),
-  useSession: (...args: unknown[]) => mockUseSession(...args),
-}));
-
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: (...args: unknown[]) => mockUseFeature(...args),
-  useDisableBasicAuth: (...args: unknown[]) => mockUseDisableBasicAuth(...args),
-}));
+vi.mock("@/lib/config/config.query");
 
 vi.mock("@archestra/shared", () => ({
   DEFAULT_ADMIN_EMAIL: "admin@example.com",
@@ -34,6 +19,12 @@ vi.mock("@/components/default-credentials-warning", () => ({
   ),
 }));
 
+import {
+  useDefaultCredentialsEnabled,
+  useHasPermissions,
+  useSession,
+} from "@/lib/auth/auth.query";
+import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { SidebarWarnings } from "./sidebar-warnings";
 
 describe("SidebarWarnings", () => {
@@ -41,21 +32,25 @@ describe("SidebarWarnings", () => {
     vi.clearAllMocks();
 
     // Default: no session, no warnings, has both org and agent settings update permission
-    mockUseSession.mockReturnValue({ data: null });
-    mockUseDefaultCredentialsEnabled.mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
+      data: null,
+    } as unknown as ReturnType<typeof useSession>);
+    vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
       data: false,
       isLoading: false,
-    });
-    mockUseFeature.mockReturnValue("strict");
-    mockUseDisableBasicAuth.mockReturnValue(false);
-    mockUseHasPermissions.mockImplementation((permissions) => {
+    } as unknown as ReturnType<typeof useDefaultCredentialsEnabled>);
+    vi.mocked(useFeature).mockReturnValue(
+      "strict" as ReturnType<typeof useFeature>,
+    );
+    vi.mocked(useDisableBasicAuth).mockReturnValue(false);
+    vi.mocked(useHasPermissions).mockImplementation((permissions) => {
       if ("organization" in (permissions as Record<string, unknown>)) {
-        return { data: true };
+        return { data: true } as ReturnType<typeof useHasPermissions>;
       }
       if ("agentSettings" in (permissions as Record<string, unknown>)) {
-        return { data: true };
+        return { data: true } as ReturnType<typeof useHasPermissions>;
       }
-      return { data: false };
+      return { data: false } as ReturnType<typeof useHasPermissions>;
     });
   });
 
@@ -65,29 +60,31 @@ describe("SidebarWarnings", () => {
   });
 
   it("renders nothing while loading credentials", () => {
-    mockUseDefaultCredentialsEnabled.mockReturnValue({
+    vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
       data: undefined,
       isLoading: true,
-    });
+    } as unknown as ReturnType<typeof useDefaultCredentialsEnabled>);
     const { container } = render(<SidebarWarnings />);
     expect(container.firstChild).toBeNull();
   });
 
   it("renders nothing while loading features", () => {
-    mockUseSession.mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: { user: { email: "admin@example.com" } },
-    });
-    mockUseFeature.mockReturnValue(undefined);
+    } as unknown as ReturnType<typeof useSession>);
+    vi.mocked(useFeature).mockReturnValue(undefined);
     const { container } = render(<SidebarWarnings />);
     expect(container.firstChild).toBeNull();
   });
 
   describe("security engine warning", () => {
     it("shows slim inline warning inside alert box with Fix link", () => {
-      mockUseSession.mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: { user: { email: "other@example.com" } },
-      });
-      mockUseFeature.mockReturnValue("permissive");
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(useFeature).mockReturnValue(
+        "permissive" as ReturnType<typeof useFeature>,
+      );
 
       render(<SidebarWarnings />);
 
@@ -99,18 +96,24 @@ describe("SidebarWarnings", () => {
     });
 
     it("does not show when no session exists", () => {
-      mockUseSession.mockReturnValue({ data: null });
-      mockUseFeature.mockReturnValue("permissive");
+      vi.mocked(useSession).mockReturnValue({
+        data: null,
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(useFeature).mockReturnValue(
+        "permissive" as ReturnType<typeof useFeature>,
+      );
 
       const { container } = render(<SidebarWarnings />);
       expect(container.firstChild).toBeNull();
     });
 
     it("does not show when policy is not permissive", () => {
-      mockUseSession.mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: { user: { email: "user@example.com" } },
-      });
-      mockUseFeature.mockReturnValue("strict");
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(useFeature).mockReturnValue(
+        "strict" as ReturnType<typeof useFeature>,
+      );
 
       const { container } = render(<SidebarWarnings />);
       expect(container.firstChild).toBeNull();
@@ -119,13 +122,13 @@ describe("SidebarWarnings", () => {
 
   describe("default credentials warning", () => {
     it("renders DefaultCredentialsWarning with slim prop", () => {
-      mockUseSession.mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: { user: { email: "admin@example.com" } },
-      });
-      mockUseDefaultCredentialsEnabled.mockReturnValue({
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
         data: true,
         isLoading: false,
-      });
+      } as unknown as ReturnType<typeof useDefaultCredentialsEnabled>);
 
       render(<SidebarWarnings />);
 
@@ -135,27 +138,27 @@ describe("SidebarWarnings", () => {
     });
 
     it("does not show for non-admin users", () => {
-      mockUseSession.mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: { user: { email: "other@example.com" } },
-      });
-      mockUseDefaultCredentialsEnabled.mockReturnValue({
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
         data: true,
         isLoading: false,
-      });
+      } as unknown as ReturnType<typeof useDefaultCredentialsEnabled>);
 
       const { container } = render(<SidebarWarnings />);
       expect(container.firstChild).toBeNull();
     });
 
     it("does not show when basic auth is disabled", () => {
-      mockUseDisableBasicAuth.mockReturnValue(true);
-      mockUseSession.mockReturnValue({
+      vi.mocked(useDisableBasicAuth).mockReturnValue(true);
+      vi.mocked(useSession).mockReturnValue({
         data: { user: { email: "admin@example.com" } },
-      });
-      mockUseDefaultCredentialsEnabled.mockReturnValue({
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
         data: true,
         isLoading: false,
-      });
+      } as unknown as ReturnType<typeof useDefaultCredentialsEnabled>);
 
       render(<SidebarWarnings />);
       expect(
@@ -164,13 +167,13 @@ describe("SidebarWarnings", () => {
     });
 
     it("does not show when credentials are not default", () => {
-      mockUseSession.mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: { user: { email: "admin@example.com" } },
-      });
-      mockUseDefaultCredentialsEnabled.mockReturnValue({
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
         data: false,
         isLoading: false,
-      });
+      } as unknown as ReturnType<typeof useDefaultCredentialsEnabled>);
 
       const { container } = render(<SidebarWarnings />);
       expect(container.firstChild).toBeNull();
@@ -179,14 +182,16 @@ describe("SidebarWarnings", () => {
 
   describe("both warnings", () => {
     it("shows both warnings inside a single alert box without accordion", () => {
-      mockUseSession.mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: { user: { email: "admin@example.com" } },
-      });
-      mockUseDefaultCredentialsEnabled.mockReturnValue({
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
         data: true,
         isLoading: false,
-      });
-      mockUseFeature.mockReturnValue("permissive");
+      } as unknown as ReturnType<typeof useDefaultCredentialsEnabled>);
+      vi.mocked(useFeature).mockReturnValue(
+        "permissive" as ReturnType<typeof useFeature>,
+      );
 
       render(<SidebarWarnings />);
 
@@ -202,21 +207,21 @@ describe("SidebarWarnings", () => {
 
   describe("permission gating", () => {
     it("hides default credentials warning when user lacks organization:update permission", () => {
-      mockUseSession.mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: { user: { email: "admin@example.com" } },
-      });
-      mockUseDefaultCredentialsEnabled.mockReturnValue({
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
         data: true,
         isLoading: false,
-      });
-      mockUseHasPermissions.mockImplementation((permissions) => {
+      } as unknown as ReturnType<typeof useDefaultCredentialsEnabled>);
+      vi.mocked(useHasPermissions).mockImplementation((permissions) => {
         if ("organization" in (permissions as Record<string, unknown>)) {
-          return { data: false };
+          return { data: false } as ReturnType<typeof useHasPermissions>;
         }
         if ("agentSettings" in (permissions as Record<string, unknown>)) {
-          return { data: true };
+          return { data: true } as ReturnType<typeof useHasPermissions>;
         }
-        return { data: false };
+        return { data: false } as ReturnType<typeof useHasPermissions>;
       });
 
       const { container } = render(<SidebarWarnings />);
@@ -227,18 +232,20 @@ describe("SidebarWarnings", () => {
     });
 
     it("hides security engine warning when user lacks agentSettings:update permission", () => {
-      mockUseSession.mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: { user: { email: "other@example.com" } },
-      });
-      mockUseFeature.mockReturnValue("permissive");
-      mockUseHasPermissions.mockImplementation((permissions) => {
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(useFeature).mockReturnValue(
+        "permissive" as ReturnType<typeof useFeature>,
+      );
+      vi.mocked(useHasPermissions).mockImplementation((permissions) => {
         if ("organization" in (permissions as Record<string, unknown>)) {
-          return { data: true };
+          return { data: true } as ReturnType<typeof useHasPermissions>;
         }
         if ("agentSettings" in (permissions as Record<string, unknown>)) {
-          return { data: false };
+          return { data: false } as ReturnType<typeof useHasPermissions>;
         }
-        return { data: false };
+        return { data: false } as ReturnType<typeof useHasPermissions>;
       });
 
       const { container } = render(<SidebarWarnings />);
@@ -247,15 +254,19 @@ describe("SidebarWarnings", () => {
     });
 
     it("hides both warnings when user lacks agentSettings:update permission", () => {
-      mockUseSession.mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: { user: { email: "admin@example.com" } },
-      });
-      mockUseDefaultCredentialsEnabled.mockReturnValue({
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
         data: true,
         isLoading: false,
-      });
-      mockUseFeature.mockReturnValue("permissive");
-      mockUseHasPermissions.mockImplementation(() => ({ data: false }));
+      } as unknown as ReturnType<typeof useDefaultCredentialsEnabled>);
+      vi.mocked(useFeature).mockReturnValue(
+        "permissive" as ReturnType<typeof useFeature>,
+      );
+      vi.mocked(useHasPermissions).mockImplementation(
+        () => ({ data: false }) as ReturnType<typeof useHasPermissions>,
+      );
 
       const { container } = render(<SidebarWarnings />);
       expect(container.firstChild).toBeNull();

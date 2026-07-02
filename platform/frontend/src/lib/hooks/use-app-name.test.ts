@@ -1,31 +1,33 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useAppearanceSettings } from "@/lib/organization.query";
 
-const { mockUseAppearanceSettings, mockUseTheme } = vi.hoisted(() => ({
-  mockUseAppearanceSettings: vi.fn(),
+const { mockUseTheme } = vi.hoisted(() => ({
   mockUseTheme: vi.fn(),
 }));
 
-vi.mock("@/lib/organization.query", () => ({
-  useAppearanceSettings: () => mockUseAppearanceSettings(),
-}));
+vi.mock("@/lib/organization.query");
 
 vi.mock("next-themes", () => ({
   useTheme: () => mockUseTheme(),
 }));
+
+function mockAppearance(data: unknown) {
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data,
+  } as unknown as ReturnType<typeof useAppearanceSettings>);
+}
 
 import { useAppIconLogo, useAppName } from "./use-app-name";
 
 describe("useAppName", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseAppearanceSettings.mockReturnValue({ data: null });
+    mockAppearance(null);
   });
 
   it("uses the public appearance app name when available", () => {
-    mockUseAppearanceSettings.mockReturnValue({
-      data: { appName: "Sparky" },
-    });
+    mockAppearance({ appName: "Sparky" });
 
     const { result } = renderHook(() => useAppName());
 
@@ -42,14 +44,12 @@ describe("useAppName", () => {
 describe("useAppIconLogo", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseAppearanceSettings.mockReturnValue({ data: null });
+    mockAppearance(null);
     mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
   });
 
   it("uses the public appearance icon logo when available", () => {
-    mockUseAppearanceSettings.mockReturnValue({
-      data: { iconLogo: "data:image/png;base64,appearance" },
-    });
+    mockAppearance({ iconLogo: "data:image/png;base64,appearance" });
 
     const { result } = renderHook(() => useAppIconLogo());
 
@@ -64,11 +64,9 @@ describe("useAppIconLogo", () => {
 
   it("uses the dark icon logo in dark mode when available", () => {
     mockUseTheme.mockReturnValue({ resolvedTheme: "dark" });
-    mockUseAppearanceSettings.mockReturnValue({
-      data: {
-        iconLogo: "data:image/png;base64,light",
-        iconLogoDark: "data:image/svg+xml;base64,dark",
-      },
+    mockAppearance({
+      iconLogo: "data:image/png;base64,light",
+      iconLogoDark: "data:image/svg+xml;base64,dark",
     });
 
     const { result } = renderHook(() => useAppIconLogo());
@@ -78,8 +76,9 @@ describe("useAppIconLogo", () => {
 
   it("falls back to the light icon logo in dark mode when no dark variant is set", () => {
     mockUseTheme.mockReturnValue({ resolvedTheme: "dark" });
-    mockUseAppearanceSettings.mockReturnValue({
-      data: { iconLogo: "data:image/png;base64,light", iconLogoDark: null },
+    mockAppearance({
+      iconLogo: "data:image/png;base64,light",
+      iconLogoDark: null,
     });
 
     const { result } = renderHook(() => useAppIconLogo());

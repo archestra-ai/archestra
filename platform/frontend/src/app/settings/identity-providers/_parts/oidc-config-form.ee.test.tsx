@@ -7,9 +7,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { useForm } from "react-hook-form";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { OidcConfigForm } from "./oidc-config-form.ee";
 
 vi.mock("./role-mapping-form.ee", () => ({
@@ -20,15 +21,17 @@ vi.mock("./team-sync-config-form.ee", () => ({
   TeamSyncConfigForm: () => <div>Team Sync</div>,
 }));
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Archestra",
-}));
+vi.mock("@/lib/hooks/use-app-name");
 
 global.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}
   disconnect() {}
 } as unknown as typeof ResizeObserver;
+
+beforeEach(() => {
+  vi.mocked(useAppName).mockReturnValue("Archestra");
+});
 
 function TestWrapper({
   onSubmit,

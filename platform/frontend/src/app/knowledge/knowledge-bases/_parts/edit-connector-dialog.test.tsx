@@ -54,9 +54,9 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/teams/team.query", () => ({
-  useTeams: () => ({ data: [] }),
-}));
+vi.mock("@/lib/teams/team.query");
+
+import { useTeams } from "@/lib/teams/team.query";
 
 type ConnectorFixture = Parameters<typeof EditConnectorDialog>[0]["connector"];
 
@@ -105,6 +105,9 @@ function renderDialog(connector: ConnectorFixture = makeAsanaConnector()) {
 describe("EditConnectorDialog - Asana", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
   });
 
   it("submits array fields as arrays when the user does not edit them", async () => {

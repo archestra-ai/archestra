@@ -1,16 +1,19 @@
 import type { ContextWindowBreakdown } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   ContextWindowDialog,
   ContextWindowPanel,
 } from "./context-window-panel";
 
 // useAppName is used inside ContextWindowDialog for the empty-state copy
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Archestra",
-}));
+vi.mock("@/lib/hooks/use-app-name");
+
+beforeEach(() => {
+  vi.mocked(useAppName).mockReturnValue("Archestra");
+});
 
 // ============================================================================
 // Fixtures

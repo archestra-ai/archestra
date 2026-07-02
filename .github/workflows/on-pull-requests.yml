@@ -282,31 +282,6 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Setup Rust
-        run: |
-          rustup show
-          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
-
-      - name: Install Rust musl toolchain dependencies
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-
-      - name: Verify Dagger version sync
-        run: ./scripts/check-dagger-version-sync.sh
-
-      - name: Rust musl checks
-        working-directory: ./platform/archestra-rs
-        env:
-          CC_x86_64_unknown_linux_musl: musl-gcc
-        run: |
-          cargo check --workspace --locked --target x86_64-unknown-linux-musl
-
-      - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
-
-      - name: Rust dependency policy
-        working-directory: ./platform/archestra-rs
-        run: cargo deny check --config deny.toml advisories bans licenses sources
-
       # setup-env uses --frozen-lockfile, which skips minimum-release-age checks.
       # --fix-lockfile re-resolves and fails on immature deps (ERR_PNPM_NO_MATURE_MATCHING_VERSION).
       - name: Verify no immature dependencies
@@ -401,6 +376,51 @@ jobs:
           fi
 
           echo "✅ All validation checks passed"
+
+  # Rust toolchain checks, split out of the lint job so cargo work runs in
+  # parallel with the pnpm work instead of serializing ~1.5-2 min ahead of it.
+  # Needs no pnpm/setup-env: the Dagger sync script is pure shell and cargo
+  # operates on the committed lockfile.
+  platform-rust-checks:
+    name: Platform Rust Checks
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./platform
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Rust
+        run: |
+          rustup show
+          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+
+      - name: Install Rust musl toolchain dependencies
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Verify Dagger version sync
+        run: ./scripts/check-dagger-version-sync.sh
+
+      - name: Rust musl checks
+        working-directory: ./platform/archestra-rs
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+        run: |
+          cargo check --workspace --locked --target x86_64-unknown-linux-musl
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: Rust dependency policy
+        working-directory: ./platform/archestra-rs
+        run: cargo deny check --config deny.toml advisories bans licenses sources
 
   # Backend unit tests, sharded across parallel runners. Vitest's --shard
   # slices the file list deterministically (SHA1 of each path), so the four

@@ -3,9 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useSession } from "@/lib/auth/auth.query";
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useSession: vi.fn(),
-}));
+vi.mock("@/lib/auth/auth.query");
 
 type Session = ReturnType<typeof useSession>;
 

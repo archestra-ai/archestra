@@ -177,6 +177,13 @@ RUN set -eux; \
 FROM base AS builder-base
 WORKDIR /app
 
+# Install the Rust toolchain used to compile the N-API addons during `pnpm build`.
+# Kept ABOVE the node_modules/source COPYs so this layer depends only on `base` and
+# stays cache-stable across ordinary source changes. When it lived below the COPYs
+# the ~12s apk install re-ran on every source-changing build because the preceding
+# COPY layers were invalidated.
+RUN apk add --no-cache build-base cargo rust
+
 # Version arg for Sentry release tracking
 ARG VERSION=dev
 
@@ -202,9 +209,6 @@ COPY archestra-rs/app-runtime-core ./archestra-rs/app-runtime-core
 COPY archestra-rs/app-runtime-rs ./archestra-rs/app-runtime-rs
 COPY archestra-rs/image-core ./archestra-rs/image-core
 COPY archestra-rs/image-rs ./archestra-rs/image-rs
-
-# Build the Rust N-API skill sandbox addon during the JS workspace build.
-RUN apk add --no-cache build-base cargo rust
 
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -370,7 +374,12 @@ COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
 COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
 
 # Install production dependencies for both workspaces
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend --filter=@frontend
+# The "..." suffix includes each package's workspace dependencies in the
+# install. Without it pnpm only creates node_modules for @backend/@frontend
+# themselves, and workspace deps' own runtime deps are never linked — the
+# three NAPI crates' index.cjs require @archestra/napi-loader and crash the
+# image with MODULE_NOT_FOUND (first surfaced as 500s on POST /api/apps).
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend... --filter=@frontend...
 
 # CVE-2026-33671: replace Next's bundled picomatch 4.0.3 with 4.0.4 (same as deps stage).
 # Production install refetches next so the patched copy from the builder is not inherited.

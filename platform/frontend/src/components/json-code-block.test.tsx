@@ -37,12 +37,7 @@ vi.mock("react-syntax-highlighter/dist/esm/styles/prism", () => ({
   oneLight: {},
 }));
 
-vi.mock("sonner", () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock("sonner");
 
 import { JsonCodeBlock } from "./json-code-block";
 

@@ -1,12 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetConnectorDocuments = vi.fn();
 const mockGetConnectorDocument = vi.fn();
 const mockDeleteConnectorDocument = vi.fn();
 const mockHandleApiError = vi.fn();
-const mockToastSuccess = vi.fn();
 
 vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
@@ -23,11 +23,7 @@ vi.mock("@/lib/utils", () => ({
   handleApiError: (...args: unknown[]) => mockHandleApiError(...args),
 }));
 
-vi.mock("sonner", () => ({
-  toast: {
-    success: (...args: unknown[]) => mockToastSuccess(...args),
-  },
-}));
+vi.mock("sonner");
 
 import {
   useConnectorDocument,
@@ -185,8 +181,6 @@ describe("kb-document query hooks", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["connectors", "connector-1"],
     });
-    expect(mockToastSuccess).toHaveBeenCalledWith(
-      "Document deleted successfully",
-    );
+    expect(toast.success).toHaveBeenCalledWith("Document deleted successfully");
   });
 });

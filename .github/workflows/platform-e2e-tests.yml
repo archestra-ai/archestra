@@ -85,11 +85,9 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Setup environment
-        if: ${{ matrix.use-build-action }}
-        uses: ./.github/actions/setup-env
-        with:
-          working-directory: ./platform
+      # NOTE: the Platform image build is fully self-contained inside Docker, so it does
+      # not need a host-side `pnpm install` / node toolchain. (The MCP Server Base leg
+      # sets use-build-action: false and never ran this step.)
 
       - name: Build Platform image
         if: ${{ matrix.use-build-action && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
@@ -98,6 +96,10 @@ jobs:
           context: ${{ matrix.context }}
           load: "true"
           tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
+          # E2E image consumed only by CI shards — skip SLSA provenance attestation to
+          # trim export time and keep a plain single-manifest image. (Published release
+          # images keep provenance via build-native-multi-arch-image.yml's default.)
+          provenance: "false"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
@@ -115,6 +117,10 @@ jobs:
           context: ${{ matrix.context }}
           push: "true"
           tags: ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}
+          # E2E image consumed only by CI shards — skip SLSA provenance attestation to
+          # trim export time and keep a plain single-manifest image. (Published release
+          # images keep provenance via build-native-multi-arch-image.yml's default.)
+          provenance: "false"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 

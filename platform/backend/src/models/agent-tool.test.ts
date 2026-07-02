@@ -3,7 +3,7 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
-import { afterAll, beforeAll } from "vitest";
+import { afterAll } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";

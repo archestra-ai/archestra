@@ -33,6 +33,10 @@ inputs:
     description: "Optional Dockerfile target stage"
     required: false
     default: ""
+  provenance:
+    description: "SLSA provenance attestation. Empty preserves buildx defaults (on for pushes); set 'false' to skip for images that are not published."
+    required: false
+    default: ""
   version:
     description: "Version to pass as VERSION build arg"
     required: false
@@ -139,6 +143,7 @@ runs:
         tags: ${{ inputs.tags }}
         outputs: ${{ inputs.outputs }}
         target: ${{ inputs.target }}
+        provenance: ${{ inputs.provenance }}
         network: host
         build-args: ${{ inputs.version != '' && format('VERSION={0}', inputs.version) || '' }}
         secrets: ${{ steps.prepare-secrets.outputs.value }}

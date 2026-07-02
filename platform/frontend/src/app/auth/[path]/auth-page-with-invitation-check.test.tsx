@@ -4,13 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useInvitationCheck } from "@/lib/auth/invitation.query";
 import { useBackendConnectivity } from "@/lib/config/backend-connectivity";
 import { usePublicConfig } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { AuthPageWithInvitationCheck } from "./auth-page-with-invitation-check";
 
 // Mock Next.js navigation
-vi.mock("next/navigation", () => ({
-  useRouter: vi.fn(),
-  useSearchParams: vi.fn(),
-}));
+vi.mock("next/navigation");
 
 // Mock invitation query
 vi.mock("@/lib/auth/invitation.query", () => ({
@@ -22,13 +20,9 @@ vi.mock("@/lib/config/backend-connectivity", () => ({
   useBackendConnectivity: vi.fn(),
 }));
 
-vi.mock("@/lib/config/config.query", () => ({
-  usePublicConfig: vi.fn(),
-}));
+vi.mock("@/lib/config/config.query");
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Sparky",
-}));
+vi.mock("@/lib/hooks/use-app-name");
 
 // Mock AuthViewWithErrorHandling
 vi.mock("@/app/auth/_components/auth-view-with-error-handling", () => ({
@@ -70,6 +64,7 @@ const mockRetry = vi.fn();
 describe("AuthPageWithInvitationCheck", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useAppName).mockReturnValue("Sparky");
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
       replace: mockRouterReplace,

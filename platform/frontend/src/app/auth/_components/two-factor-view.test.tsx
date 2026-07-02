@@ -13,17 +13,9 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 };
 
-vi.mock("next/navigation", () => ({
-  useSearchParams: vi.fn(),
-}));
+vi.mock("next/navigation");
 
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    twoFactor: {
-      verifyTotp: vi.fn(),
-    },
-  },
-}));
+vi.mock("@/lib/clients/auth/auth-client");
 
 function renderView() {
   const queryClient = new QueryClient({

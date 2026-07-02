@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useOrganization } from "@/lib/organization.query";
 import MessageThread, { type PartialUIMessage } from "./message-thread";
 
 vi.mock("@/components/ai-elements/conversation", () => ({
@@ -87,9 +88,13 @@ vi.mock("@/components/divider", () => ({
   default: () => null,
 }));
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => ({ data: null }),
-}));
+vi.mock("@/lib/organization.query");
+
+beforeEach(() => {
+  vi.mocked(useOrganization).mockReturnValue({
+    data: null,
+  } as unknown as ReturnType<typeof useOrganization>);
+});
 
 describe("MessageThread", () => {
   it("renders the swap-agent divider instead of the raw swap tool box", () => {

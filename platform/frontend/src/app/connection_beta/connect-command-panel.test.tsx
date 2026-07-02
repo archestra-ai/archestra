@@ -1,16 +1,15 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
 
-const { createSetupMock, fetchSkillsMock, hasPermissionsMock } = vi.hoisted(
-  () => ({
-    createSetupMock: vi.fn(),
-    fetchSkillsMock: vi.fn(),
-    hasPermissionsMock: vi.fn(),
-  }),
-);
+const { createSetupMock, fetchSkillsMock } = vi.hoisted(() => ({
+  createSetupMock: vi.fn(),
+  fetchSkillsMock: vi.fn(),
+}));
 
 vi.mock("@/lib/connection-setup.query", () => ({
   useCreateConnectionSetup: () => ({
@@ -24,13 +23,9 @@ vi.mock("./skills-marketplace-step", () => ({
   useTotalSkillCount: () => ({ data: 2 }),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => hasPermissionsMock(),
-}));
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: () => true,
-}));
+vi.mock("@/lib/config/config.query");
 
 const { availableKeysMock, createKeyMock } = vi.hoisted(() => ({
   availableKeysMock: vi.fn(),
@@ -94,7 +89,10 @@ function renderPanel(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  hasPermissionsMock.mockReturnValue({ data: true });
+  vi.mocked(useFeature).mockReturnValue(true);
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+  } as ReturnType<typeof useHasPermissions>);
   availableKeysMock.mockReturnValue({
     data: [{ provider: "anthropic" }, { provider: "bedrock" }],
   });
@@ -225,7 +223,9 @@ describe("ConnectCommandPanel", () => {
   });
 
   it("skips skills entirely for non-admin users", async () => {
-    hasPermissionsMock.mockReturnValue({ data: false });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
     renderPanel();
 
     await waitFor(() =>

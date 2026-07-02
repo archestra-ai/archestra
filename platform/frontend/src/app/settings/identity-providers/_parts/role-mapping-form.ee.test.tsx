@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useForm } from "react-hook-form";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import { RoleMappingForm } from "./role-mapping-form.ee";
@@ -34,13 +34,9 @@ vi.mock("@/lib/role.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/organization.query", () => ({
-  useAppearanceSettings: () => ({
-    data: {
-      appName: "Spark",
-    },
-  }),
-}));
+vi.mock("@/lib/organization.query");
+
+import { useAppearanceSettings } from "@/lib/organization.query";
 
 vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
   useIdentityProviderLatestIdTokenClaims: () => ({
@@ -114,6 +110,12 @@ function getDeleteButtons() {
     .getAllByRole("button", { name: "" })
     .filter((btn) => btn.querySelector("svg.lucide-trash-2") !== null);
 }
+
+beforeEach(() => {
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data: { appName: "Spark" },
+  } as unknown as ReturnType<typeof useAppearanceSettings>);
+});
 
 describe("RoleMappingForm", () => {
   it("shows the template debugger without token claims", async () => {

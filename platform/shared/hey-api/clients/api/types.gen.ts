@@ -44367,6 +44367,7 @@ export type GetModelsWithApiKeysResponses = {
         modelId: string;
         description: string | null;
         contextLength: number | null;
+        outputLength: number | null;
         inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities: Array<'text' | 'image' | 'audio'> | null;
         supportsToolCalling: boolean | null;
@@ -44499,6 +44500,7 @@ export type UpdateModelResponses = {
         modelId: string;
         description: string | null;
         contextLength: number | null;
+        outputLength: number | null;
         inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities: Array<'text' | 'image' | 'audio'> | null;
         supportsToolCalling: boolean | null;

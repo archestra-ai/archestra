@@ -137,7 +137,9 @@ jobs:
           fetch-depth: 1
 
       - name: Enforce image pinning and download verification policy
-        run: python3 .github/scripts/check-supply-chain-policy.py
+        run: |
+          python3 -m unittest discover -s .github/scripts -p "test_*.py"
+          python3 .github/scripts/check-supply-chain-policy.py
 
   docs-image-policy:
     name: Docs Image Policy

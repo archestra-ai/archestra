@@ -1092,9 +1092,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 }
 
-                // Cap output tokens at the model's real ceiling (or a safe
-                // fallback), instead of the ~4096 SDK default that truncates
-                // large tool-call payloads and final submission turns.
+                // Request the model's real output ceiling (clamped by the
+                // operator ceiling), or a safe fallback when it is unknown.
+                // Without this, providers that inject a small default max
+                // (e.g. Anthropic's ~4096) truncated large tool-call payloads
+                // and final submission turns.
                 streamTextConfig.maxOutputTokens = resolveAgentMaxOutputTokens({
                   outputLength: modelRow?.outputLength ?? null,
                   ceiling: config.chat.maxOutputTokensCeiling,

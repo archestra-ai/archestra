@@ -446,9 +446,11 @@ export const parseChatMaxOutputTokens = (
     return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
   }
 
-  const parsed = Number.parseInt(value, 10);
+  // Number() (not parseInt) so trailing garbage ("32768abc") and fractions
+  // ("1.5") are rejected rather than silently truncated to a tiny cap.
+  const parsed = Number(value);
   if (
-    Number.isNaN(parsed) ||
+    !Number.isInteger(parsed) ||
     parsed < 1 ||
     parsed > MAX_CHAT_MAX_OUTPUT_TOKENS
   ) {

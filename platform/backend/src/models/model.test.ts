@@ -324,12 +324,14 @@ describe("ModelModel", () => {
 
       expect(updated.id).toBe(initial.id);
       expect(updated.description).toBe("Updated description");
-      // contextLength, outputLength, inputModalities, supportsToolCalling are NOT
-      // updated on conflict to preserve user-edited values
+      // contextLength, inputModalities, supportsToolCalling are NOT updated on
+      // conflict to preserve user-edited values
       expect(updated.contextLength).toBe(128000);
-      expect(updated.outputLength).toBe(16384);
       expect(updated.inputModalities).toEqual(["text"]);
       expect(updated.supportsToolCalling).toBe(false);
+      // outputLength is not user-editable and tracks the provider cap, so a
+      // fresh synced value overwrites the previous one.
+      expect(updated.outputLength).toBe(32000);
     });
   });
 
@@ -459,7 +461,7 @@ describe("ModelModel", () => {
       expect(updated?.supportsToolCalling).toBe(false);
     });
 
-    test("backfills a null outputLength but preserves an existing non-null one", async () => {
+    test("updates outputLength to the freshly synced cap, keeping it only when the sync omits it", async () => {
       const base = (modelId: string, outputLength: number | null) => ({
         externalId: `openai/${modelId}`,
         provider: "openai" as const,
@@ -476,24 +478,31 @@ describe("ModelModel", () => {
       });
 
       await ModelModel.bulkUpsert([
-        base("cap-known", 16384),
+        base("cap-lowered", 64000),
         base("cap-null", null),
+        base("cap-cleared", 16384),
       ]);
       await ModelModel.bulkUpsert([
-        base("cap-known", 64000),
-        base("cap-null", 8192),
+        base("cap-lowered", 4096), // provider corrected the cap downward
+        base("cap-null", 8192), // backfills the previously-null cap
+        base("cap-cleared", null), // sync omits it → last known value kept
       ]);
 
-      const known = await ModelModel.findByProviderAndModelId(
+      const lowered = await ModelModel.findByProviderAndModelId(
         "openai",
-        "cap-known",
+        "cap-lowered",
       );
       const filled = await ModelModel.findByProviderAndModelId(
         "openai",
         "cap-null",
       );
-      expect(known?.outputLength).toBe(16384);
+      const cleared = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "cap-cleared",
+      );
+      expect(lowered?.outputLength).toBe(4096);
       expect(filled?.outputLength).toBe(8192);
+      expect(cleared?.outputLength).toBe(16384);
     });
 
     test("preserves manual embedding dimension overrides on non-full sync", async () => {

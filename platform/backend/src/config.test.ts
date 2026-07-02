@@ -859,6 +859,16 @@ describe("parseChatMaxOutputTokens", () => {
     );
   });
 
+  test("should reject fractional and trailing-garbage values instead of truncating", () => {
+    expect(parseChatMaxOutputTokens("1.5")).toBe(32768);
+    expect(parseChatMaxOutputTokens("32768abc")).toBe(32768);
+    expect(parseChatMaxOutputTokens("Infinity")).toBe(32768);
+  });
+
+  test("should accept scientific notation for an integer value", () => {
+    expect(parseChatMaxOutputTokens("1e6")).toBe(1000000);
+  });
+
   test("should return default and warn for zero and out-of-range", () => {
     expect(parseChatMaxOutputTokens("0")).toBe(32768);
     expect(parseChatMaxOutputTokens("1000001")).toBe(32768);

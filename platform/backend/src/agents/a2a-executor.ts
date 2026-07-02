@@ -372,8 +372,10 @@ export async function executeA2AMessage(
         repeatCeilingStopCondition(repeatTracker),
       ],
       abortSignal,
-      // Cap output tokens at the model's real ceiling (or a safe fallback),
-      // instead of the ~4096 SDK default that truncates large tool-call payloads.
+      // Request the model's real output ceiling (clamped by the operator
+      // ceiling), or a safe fallback when unknown. Without this, providers that
+      // inject a small default max (e.g. Anthropic's ~4096) truncated large
+      // tool-call payloads.
       maxOutputTokens: resolveAgentMaxOutputTokens({
         outputLength: modelRow?.outputLength ?? null,
         ceiling: config.chat.maxOutputTokensCeiling,

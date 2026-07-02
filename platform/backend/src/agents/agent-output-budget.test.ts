@@ -32,7 +32,7 @@ describe("resolveAgentMaxOutputTokens", () => {
   });
 
   test("treats invalid outputLength as unknown", () => {
-    for (const bad of [0, -1, 1.5, Number.NaN]) {
+    for (const bad of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(resolveAgentMaxOutputTokens({ outputLength: bad, ceiling })).toBe(
         UNKNOWN_MODEL_OUTPUT_TOKENS,
       );

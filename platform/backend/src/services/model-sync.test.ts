@@ -8,10 +8,16 @@ import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
 import { afterEach, describe, expect, test } from "@/test";
-import { modelSyncService, resolveModelCapabilities } from "./model-sync";
+import {
+  buildModelsToUpsert,
+  modelSyncService,
+  resolveModelCapabilities,
+} from "./model-sync";
 
-// Mock the models.dev client to avoid external API calls
-vi.mock("@/clients/models-dev-client", () => ({
+// Mock only the network boundary (the client singleton's fetch); keep the real
+// pure helpers (sanitizeOutputLimit, modelsDevCostToPerToken) that the SUT uses.
+vi.mock("@/clients/models-dev-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/clients/models-dev-client")>()),
   modelsDevClient: {
     fetchModelsFromApi: vi.fn().mockResolvedValue({}),
   },
@@ -305,6 +311,35 @@ describe("ModelSyncService", () => {
     expect(capabilities.inputModalities).toEqual(["text", "image"]);
     expect(capabilities.outputModalities).toEqual([]);
     expect(capabilities.supportsToolCalling).toBe(false);
+  });
+
+  test("persists a sanitized outputLength from the models.dev limit.output", () => {
+    const [good, bad] = buildModelsToUpsert({
+      provider: "openai",
+      models: [{ id: "gpt-4o" }, { id: "gpt-legacy" }],
+      modelsDevData: {
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          models: {
+            "gpt-4o": {
+              id: "gpt-4o",
+              name: "GPT-4o",
+              limit: { context: 128000, output: 16384 },
+            },
+            "gpt-legacy": {
+              id: "gpt-legacy",
+              name: "GPT Legacy",
+              limit: { context: 8192, output: 0 },
+            },
+          },
+        },
+      },
+    });
+
+    expect(good.outputLength).toBe(16384);
+    // A non-positive/garbage limit.output is dropped to null by sanitizeOutputLimit.
+    expect(bad.outputLength).toBeNull();
   });
 
   test("prefers fetcher capabilities over models.dev with per-field fallthrough", () => {

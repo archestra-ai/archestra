@@ -280,6 +280,7 @@ describe("ModelsDevClient", () => {
       expect(sanitizeOutputLimit(-100)).toBeNull();
       expect(sanitizeOutputLimit(1.5)).toBeNull();
       expect(sanitizeOutputLimit(Number.NaN)).toBeNull();
+      expect(sanitizeOutputLimit(Number.POSITIVE_INFINITY)).toBeNull();
       expect(sanitizeOutputLimit(null)).toBeNull();
       expect(sanitizeOutputLimit(undefined)).toBeNull();
     });

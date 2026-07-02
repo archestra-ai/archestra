@@ -2262,6 +2262,13 @@
       "when": 1782908617938,
       "tag": "0322_perpetual_dreadnoughts",
       "breakpoints": true
+    },
+    {
+      "idx": 323,
+      "version": "7",
+      "when": 1782990763987,
+      "tag": "0323_happy_namorita",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,7 @@ import {
 import { format } from "date-fns";
 import {
   AlertTriangle,
+  Info,
   KeyRound,
   Plus,
   RefreshCw,
@@ -31,6 +32,11 @@ import {
   DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -703,15 +709,39 @@ function ConnectionsTable({
                   </TooltipProvider>
                 )}
                 {isOAuthServer && server.oauthRefreshError && (
-                  <p
-                    className="mb-2 break-words text-[11px] leading-tight text-destructive"
+                  <div
+                    className="mb-2 flex items-start gap-1 text-[11px] leading-tight text-destructive"
                     data-testid="oauth-reauth-detail"
                   >
-                    {formatOAuthFailureDetail(
-                      server.oauthRefreshErrorMessage,
-                      server.oauthRefreshFailedAt,
+                    <p className="min-w-0 break-words">
+                      {formatOAuthFailureDetail(
+                        server.oauthRefreshErrorMessage,
+                        server.oauthRefreshFailedAt,
+                      )}
+                    </p>
+                    {server.oauthRefreshErrorDescription && (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="h-4 w-4 shrink-0 text-muted-foreground hover:text-foreground"
+                            aria-label="Show OAuth error details"
+                            data-testid="oauth-reauth-detail-info"
+                          >
+                            <Info className="h-3 w-3" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          align="start"
+                          className="w-80 whitespace-pre-wrap break-words text-xs"
+                        >
+                          {server.oauthRefreshErrorDescription}
+                        </PopoverContent>
+                      </Popover>
                     )}
-                  </p>
+                  </div>
                 )}
                 <TooltipProvider>
                   <Tooltip>

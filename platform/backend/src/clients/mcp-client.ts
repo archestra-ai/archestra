@@ -46,13 +46,7 @@ import {
   ToolModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
-import {
-  classifyThrownRefreshError,
-  discoverOAuthEndpoints,
-  type OAuthRefreshOutcome,
-  refreshFailureToServerFields,
-  refreshOAuthToken,
-} from "@/routes/oauth";
+import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "@/services/environments/remote-server-network-policy";
 import {
@@ -60,6 +54,11 @@ import {
   resolveEnterpriseTransportCredential,
 } from "@/services/identity-providers/enterprise-managed/broker";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
+import {
+  classifyThrownRefreshError,
+  type OAuthRefreshOutcome,
+  refreshFailureToServerFields,
+} from "@/services/oauth-refresh-classification";
 import type {
   Tool as CatalogTool,
   CommonMcpToolDefinition,
@@ -831,6 +830,7 @@ class McpClient {
           await McpServerModel.update(targetMcpServerId, {
             oauthRefreshError: "no_refresh_token",
             oauthRefreshErrorMessage: "no_refresh_token",
+            oauthRefreshErrorDescription: null,
             oauthRefreshFailedAt: new Date(),
           });
           logger.warn(
@@ -2372,6 +2372,7 @@ class McpClient {
     await McpServerModel.update(targetMcpServerId, {
       oauthRefreshError: null,
       oauthRefreshErrorMessage: null,
+      oauthRefreshErrorDescription: null,
       oauthRefreshFailedAt: null,
     });
 

@@ -1313,6 +1313,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         secretId: newSecretId,
         oauthRefreshError: null,
         oauthRefreshErrorMessage: null,
+        oauthRefreshErrorDescription: null,
         oauthRefreshFailedAt: null,
       });
 

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SecretInput } from "@/components/ui/secret-input";
 import {
   Select,
   SelectContent,
@@ -21,10 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  MCP_CONFIG_AUTOCOMPLETE,
-  MCP_SECRET_AUTOCOMPLETE,
-} from "@/lib/mcp/mcp-form-autocomplete";
+import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -422,20 +420,15 @@ function StaticValueEditor({
   return (
     <div className="space-y-2">
       <Label htmlFor="env-var-value">Value</Label>
-      <Input
+      <SecretInput
         id="env-var-value"
-        type={draft.type === "secret" ? "password" : "text"}
+        masked={draft.type === "secret"}
         inputMode={draft.type === "number" ? "numeric" : undefined}
         value={draft.value}
         onChange={(e) => onValueChange(e.target.value)}
         placeholder={hasStoredSecret ? "••••••••" : "your-value"}
         className="font-mono"
         aria-invalid={valueError ? true : undefined}
-        autoComplete={
-          draft.type === "secret"
-            ? MCP_SECRET_AUTOCOMPLETE
-            : MCP_CONFIG_AUTOCOMPLETE
-        }
       />
       {valueError && <p className="text-xs text-destructive">{valueError}</p>}
       {hasStoredSecret && (

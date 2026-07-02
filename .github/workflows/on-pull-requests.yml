@@ -467,21 +467,24 @@ jobs:
         with:
           working-directory: ./platform
 
-      # Fork PRs run without turbo remote caching (secrets are withheld), so
-      # the NAPI crate builds below actually invoke cargo. Sync the pinned
-      # toolchain (rust-toolchain.toml) serially first — otherwise turbo's
-      # parallel crate builds each trigger a concurrent rustup download of
-      # the same components, which races and fails with "could not rename
-      # downloaded file".
-      - name: Setup Rust
-        run: rustup show
-
       # Tests load the Rust NAPI bindings (@archestra/app-runtime-rs etc.),
       # which `turbo check:ci` builds implicitly via the task graph. Running
       # vitest directly skips that, so build backend's workspace deps here —
-      # turbo remote caching makes this seconds on a cache hit.
+      # turbo remote caching makes this seconds on a cache hit, and on a hit
+      # no cargo runs, so the pinned Rust toolchain isn't needed at all
+      # (an unconditional `rustup show` cost ~10s per shard). On a miss
+      # (fork PRs run without cache secrets, so cargo really builds), turbo's
+      # parallel crate builds each trigger a concurrent rustup download of
+      # the same toolchain, which races and fails with "could not rename
+      # downloaded file" — so on failure, sync the toolchain serially and
+      # retry once.
       - name: Build backend workspace dependencies
-        run: pnpm exec turbo build --filter="@backend^..."
+        run: |
+          pnpm exec turbo build --filter="@backend^..." || {
+            echo "Build failed — syncing pinned Rust toolchain and retrying once..."
+            rustup show
+            pnpm exec turbo build --filter="@backend^..."
+          }
 
       # --no-memory-protection-keys: V8's PKU-backed JIT-page tracking
       # (ThreadIsolation) intermittently dies with a fatal

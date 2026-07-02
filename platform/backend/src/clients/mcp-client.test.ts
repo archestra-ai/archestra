@@ -34,6 +34,7 @@ const mockConnect = vi.fn();
 const mockClose = vi.fn();
 const mockListTools = vi.fn();
 const mockListResources = vi.fn();
+const mockReadResource = vi.fn();
 const mockPing = vi.fn();
 const mockSetRequestHandler = vi.fn();
 const mockSetNotificationHandler = vi.fn();
@@ -46,6 +47,7 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
     this.close = mockClose;
     this.listTools = mockListTools;
     this.listResources = mockListResources;
+    this.readResource = mockReadResource;
     this.ping = mockPing;
     this.setRequestHandler = mockSetRequestHandler;
     this.setNotificationHandler = mockSetNotificationHandler;
@@ -134,6 +136,7 @@ describe("McpClient", () => {
     mockClose.mockReset();
     mockListTools.mockReset();
     mockListResources.mockReset();
+    mockReadResource.mockReset();
     mockPing.mockReset();
     mockSetRequestHandler.mockReset();
     mockSetNotificationHandler.mockReset();
@@ -3549,6 +3552,7 @@ describe("McpClient", () => {
             kind: "terminal",
             category: "refresh_failed",
             message: "invalid_grant",
+            description: "The refresh token is invalid or has expired",
           });
 
         mockConnect.mockResolvedValue(undefined);
@@ -3580,6 +3584,9 @@ describe("McpClient", () => {
         const row = await McpServerModel.findById(mcpServer.id);
         expect(row?.oauthRefreshError).toBe("refresh_failed");
         expect(row?.oauthRefreshErrorMessage).toBe("invalid_grant");
+        expect(row?.oauthRefreshErrorDescription).toBe(
+          "The refresh token is invalid or has expired",
+        );
         expect(row?.oauthRefreshFailedAt).toBeInstanceOf(Date);
 
         refreshSpy.mockRestore();
@@ -3730,6 +3737,7 @@ describe("McpClient", () => {
         await McpServerModel.update(mcpServer.id, {
           oauthRefreshError: "refresh_failed",
           oauthRefreshErrorMessage: "invalid_grant",
+          oauthRefreshErrorDescription: "The refresh token is invalid",
           oauthRefreshFailedAt: new Date(Date.now() - 60_000),
         });
 
@@ -3789,6 +3797,7 @@ describe("McpClient", () => {
         const row = await McpServerModel.findById(mcpServer.id);
         expect(row?.oauthRefreshError).toBeNull();
         expect(row?.oauthRefreshErrorMessage).toBeNull();
+        expect(row?.oauthRefreshErrorDescription).toBeNull();
         expect(row?.oauthRefreshFailedAt).toBeNull();
 
         refreshSpy.mockRestore();
@@ -4560,6 +4569,7 @@ describe("McpClient", () => {
         const row = await McpServerModel.findById(mcpServer.id);
         expect(row?.oauthRefreshError).toBe("no_refresh_token");
         expect(row?.oauthRefreshErrorMessage).toBe("no_refresh_token");
+        expect(row?.oauthRefreshErrorDescription).toBeNull();
         expect(row?.oauthRefreshFailedAt).toBeInstanceOf(Date);
       });
 
@@ -7496,5 +7506,239 @@ describe("pickInstallForCaller (caller-scoped install selection)", () => {
     );
 
     expect(picked?.id).toBe(orgInstall.id);
+  });
+
+  // Team-scoped API tokens (routes/mcp-gateway.ts sets tokenAuth.teamId, no
+  // userId) take the separate `if (tokenAuth?.teamId)` branch — untouched by
+  // every test above, which all use a userId-bearing token.
+  const teamToken = (
+    teamId: string,
+    organizationId: string,
+  ): TokenAuthContext => ({
+    tokenId: randomUUID(),
+    teamId,
+    isOrganizationToken: false,
+    organizationId,
+  });
+
+  test("selects the caller's team install for a team-scoped token (no userId)", async ({
+    makeOrganization,
+    makeTeam,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const creator = await makeUser();
+    const team = await makeTeam(org.id, creator.id);
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    const otherTeam = await makeTeam(org.id, creator.id);
+    const otherTeamInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      teamId: otherTeam.id,
+      scope: "team",
+    });
+    const teamInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      teamId: team.id,
+      scope: "team",
+    });
+
+    const picked = await pickInstallForCaller(
+      [otherTeamInstall, teamInstall],
+      teamToken(team.id, org.id),
+    );
+
+    expect(picked?.id).toBe(teamInstall.id);
+  });
+
+  test("falls back to an org-scoped install for a team-scoped token when the team has no install", async ({
+    makeOrganization,
+    makeTeam,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const creator = await makeUser();
+    const team = await makeTeam(org.id, creator.id);
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    const orgInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: null,
+      scope: "org",
+    });
+
+    const picked = await pickInstallForCaller(
+      [orgInstall],
+      teamToken(team.id, org.id),
+    );
+
+    expect(picked?.id).toBe(orgInstall.id);
+  });
+
+  test("fails closed for a team-scoped token when no team or org install is reachable", async ({
+    makeOrganization,
+    makeTeam,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const creator = await makeUser();
+    const team = await makeTeam(org.id, creator.id);
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    const otherTeam = await makeTeam(org.id, creator.id);
+    const otherTeamInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      teamId: otherTeam.id,
+      scope: "team",
+    });
+
+    const picked = await pickInstallForCaller(
+      [otherTeamInstall],
+      teamToken(team.id, org.id),
+    );
+
+    expect(picked).toBeUndefined();
+  });
+});
+
+describe("readResource (assignment + all-tools dynamic access, end to end)", () => {
+  // Exercises findMcpServerForResource/readResource as assembled, not just its
+  // two sub-components (resolveDynamicToolByUiResource, pickInstallForCaller)
+  // in isolation — through the real assignment lookup, the dynamic-access
+  // fallback, catalog/install resolution, and the actual client.readResource
+  // call, the same path the frontend AppRenderer drives.
+  const RESOURCE_URI = "ui://widget/dashboard.html";
+  const RESOURCE_CONTENTS = {
+    contents: [
+      { uri: RESOURCE_URI, mimeType: "text/html", text: "<html>ok</html>" },
+    ],
+  };
+
+  const dynamicToken = (
+    userId: string,
+    organizationId: string,
+  ): TokenAuthContext => ({
+    tokenId: randomUUID(),
+    teamId: null,
+    isOrganizationToken: false,
+    isUserToken: true,
+    userId,
+    organizationId,
+  });
+
+  test("reads a UI resource for a tool assigned via agent_tools (pre-existing success path)", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const tool = await makeTool({
+      name: "widget__open",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+    await makeAgentTool(agent.id, tool.id, { mcpServerId: server.id });
+
+    mockConnect.mockResolvedValue(undefined);
+    mockReadResource.mockResolvedValueOnce(RESOURCE_CONTENTS);
+
+    // A real caller always carries session tokenAuth; pickInstallForCaller
+    // (the caller-scoped install selector) fails closed without one, even on
+    // this assignment-scoped path — it doesn't only gate the dynamic fallback.
+    const result = await mcpClient.readResource(
+      RESOURCE_URI,
+      agent.id,
+      dynamicToken(user.id, org.id),
+    );
+
+    expect(result).toEqual(RESOURCE_CONTENTS);
+    expect(mockReadResource).toHaveBeenCalledWith({ uri: RESOURCE_URI });
+  });
+
+  test("falls back to dynamic access to read a UI resource for an unassigned tool in all-tools mode", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeAgent,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+    // Deliberately no makeAgentTool — this tool is unassigned and reachable
+    // only through dynamic access.
+    await makeTool({
+      name: "widget__open",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+
+    mockConnect.mockResolvedValue(undefined);
+    mockReadResource.mockResolvedValueOnce(RESOURCE_CONTENTS);
+
+    const result = await mcpClient.readResource(
+      RESOURCE_URI,
+      agent.id,
+      dynamicToken(user.id, org.id),
+    );
+
+    expect(result).toEqual(RESOURCE_CONTENTS);
+    expect(mockReadResource).toHaveBeenCalledWith({ uri: RESOURCE_URI });
+  });
+
+  test("fails closed for an unassigned tool when the agent is not in all-tools mode", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeAgent,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    // accessAllTools defaults off — the dynamic-access fallback must not fire.
+    const agent = await makeAgent({ organizationId: org.id });
+    await makeTool({
+      name: "widget__open",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+
+    await expect(
+      mcpClient.readResource(
+        RESOURCE_URI,
+        agent.id,
+        dynamicToken(user.id, org.id),
+      ),
+    ).rejects.toThrow(/Resource not found/);
+    expect(mockReadResource).not.toHaveBeenCalled();
   });
 });

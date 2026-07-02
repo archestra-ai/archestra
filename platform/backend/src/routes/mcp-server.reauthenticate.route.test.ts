@@ -100,6 +100,7 @@ describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
     await McpServerModel.update(server.id, {
       oauthRefreshError: "refresh_failed",
       oauthRefreshErrorMessage: "invalid_grant",
+      oauthRefreshErrorDescription: "The refresh token is invalid",
       oauthRefreshFailedAt: new Date(Date.now() - 60_000),
     });
 
@@ -114,6 +115,7 @@ describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
     expect(row?.secretId).toBe(newSecret.id);
     expect(row?.oauthRefreshError).toBeNull();
     expect(row?.oauthRefreshErrorMessage).toBeNull();
+    expect(row?.oauthRefreshErrorDescription).toBeNull();
     expect(row?.oauthRefreshFailedAt).toBeNull();
   });
 

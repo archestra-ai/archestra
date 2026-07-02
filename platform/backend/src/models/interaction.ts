@@ -44,7 +44,7 @@ import {
   InteractionAuthMethodSchema,
   normalizeInteractionResponse,
 } from "@/types";
-import { isUuid } from "@/utils/uuid";
+import { isUuid, uuidv7 } from "@/utils/uuid";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import ConversationChatErrorModel from "./conversation-chat-error";
@@ -339,7 +339,9 @@ class InteractionModel {
 
     const [interaction] = await db
       .insert(schema.interactionsTable)
-      .values(values)
+      // Monotonic v7 id: created_at ties happen under load, and the delta
+      // manager's "most recent interaction" lookup breaks ties with the id.
+      .values({ id: uuidv7(), ...values })
       .returning();
 
     if (tip) {
@@ -620,7 +622,10 @@ class InteractionModel {
           ...(whereClauses ?? []),
         ),
       )
-      .orderBy(asc(schema.interactionsTable.createdAt));
+      .orderBy(
+        asc(schema.interactionsTable.createdAt),
+        asc(schema.interactionsTable.id),
+      );
 
     return withReconstructedRequests(rows);
   }

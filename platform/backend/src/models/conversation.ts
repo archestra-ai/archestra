@@ -330,7 +330,7 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, organizationId),
         ),
       )
-      .orderBy(schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.seq, schema.messagesTable.createdAt);
 
     if (rows.length === 0) {
       return null;
@@ -526,7 +526,7 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, params.organizationId),
         ),
       )
-      .orderBy(schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.seq, schema.messagesTable.createdAt);
 
     if (rows.length === 0) {
       return null;

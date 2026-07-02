@@ -234,7 +234,7 @@ class ConversationShareModel {
         eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
       )
       .where(eq(schema.conversationsTable.id, share.conversationId))
-      .orderBy(schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.seq, schema.messagesTable.createdAt);
 
     if (rows.length === 0) return null;
 

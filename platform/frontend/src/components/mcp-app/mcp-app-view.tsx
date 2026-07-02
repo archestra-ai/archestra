@@ -714,6 +714,30 @@ export const McpAppRuntime = function McpAppRuntime({
 
 const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
 const SANDBOX_READY_TIMEOUT = 10_000;
+
+/**
+ * Build the Permissions-Policy `allow` attribute from declared app permissions.
+ * Mirrors the inner-frame mapping in static/mcp-sandbox-proxy.html — powerful
+ * features must be delegated on EVERY iframe in the chain, so the outer proxy
+ * frame needs the same `allow` string the inner frame gets.
+ */
+function buildSandboxAllowAttribute(
+  permissions: McpUiResourcePermissions | undefined,
+): string {
+  if (!permissions) {
+    return "";
+  }
+
+  const allowList: string[] = [];
+
+  if (permissions.camera) allowList.push("camera");
+  if (permissions.microphone) allowList.push("microphone");
+  if (permissions.geolocation) allowList.push("geolocation");
+  if (permissions.clipboardWrite) allowList.push("clipboard-write");
+
+  return allowList.join("; ");
+}
+
 // Coalesce a burst of render errors into one early server post.
 const RENDER_DIAGNOSTIC_POST_DEBOUNCE_MS = 400;
 // Settle window after a resource becomes renderable before posting the snapshot
@@ -796,6 +820,13 @@ function SandboxIframe({
   // Read inside the (effect-bound) size handler; a ref keeps the latest cap
   // without re-binding onsizechange on every cap change.
   const maxHeightRef = useRef(maxHeight);
+  // Permissions-Policy delegation for the outer proxy iframe. Derived to a
+  // stable primitive so it can gate the iframe-creation effect without the raw
+  // `permissions` object (new reference each render) forcing needless remounts.
+  const allowAttribute = useMemo(
+    () => buildSandboxAllowAttribute(permissions),
+    [permissions],
+  );
 
   useEffect(() => {
     onSizeChangedRef.current = onSizeChanged;
@@ -825,6 +856,22 @@ function SandboxIframe({
         ? "allow-scripts allow-same-origin allow-forms allow-popups"
         : "allow-scripts allow-forms allow-popups",
     );
+
+    // Delegate declared Permissions-Policy features (camera/mic/geo/clipboard)
+    // to the proxy frame so it can pass them on to the inner app frame — without
+    // this the inner frame's `allow` is inert. Powerful features cannot be
+    // delegated to an opaque origin, so they only take effect on a dedicated
+    // sandbox origin; warn rather than fail silently otherwise.
+    if (allowAttribute) {
+      iframe.setAttribute("allow", allowAttribute);
+      if (!useDedicatedOrigin) {
+        console.warn(
+          `MCP App requested permissions (${allowAttribute}) but the sandbox runs on an opaque origin; ` +
+            "browser Permissions-Policy cannot grant them. Configure a dedicated sandbox origin (mcpSandboxDomain).",
+        );
+      }
+    }
+
     iframe.src = sandboxUrl.href;
     iframeRef.current = iframe;
 
@@ -910,7 +957,13 @@ function SandboxIframe({
       setConnectedBridge((current) => (current === appBridge ? null : current));
       setInitialized(false);
     };
-  }, [sandboxUrl.href, sandboxUrl.origin, appBridge, useDedicatedOrigin]);
+  }, [
+    sandboxUrl.href,
+    sandboxUrl.origin,
+    appBridge,
+    useDedicatedOrigin,
+    allowAttribute,
+  ]);
 
   // Set up size change and initialized handlers
   useEffect(() => {

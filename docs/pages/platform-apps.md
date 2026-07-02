@@ -83,6 +83,10 @@ Tool calls run **as the viewing user**: the platform resolves the MCP server and
 
 Apps are MCP wrappers, and their CSP is not author-controlled: every owned app renders under one platform-pinned policy. Direct network access is blocked entirely (`connect-src 'none'`) — `fetch`, XHR, and WebSockets to external APIs fail, so assigned MCP tools (governed, authed, audited) are the only data egress. The single external allowance is static assets: scripts, styles, fonts, and images may load from a hardcoded CDN allowlist (`cdn.jsdelivr.net`, `unpkg.com`, `cdnjs.cloudflare.com`, `fonts.googleapis.com`, `fonts.gstatic.com`) so apps can use client-side libraries. Note the trust implication: a CDN-loaded script runs inside the app and can call its assigned tools as the viewer — prefer pinned versions of well-known packages. A future release may make the allowlist configurable per organization.
 
+## Device permissions
+
+An app can declare `camera`, `microphone`, `geolocation`, or `clipboardWrite` in its UI permissions to reach the matching browser API; each is delegated to the sandbox via Permissions-Policy and still prompts the viewer for consent at first use. These features require the sandbox to run on a dedicated origin (a configured sandbox domain, or the `localhost`/`127.0.0.1` split in local dev). On the same-origin fallback the sandbox is an opaque origin, which browsers cannot grant powerful features to, so these requests are blocked regardless of the declaration.
+
 ## Shared-app trust boundary
 
 A shared (team or org) app is author-written HTML executing in a viewer's browser. The viewer is protected by three layers: the HTML runs in an isolated sandbox iframe; its network access is blocked by the platform CSP (MCP tools are the only data path); and every tool and data-store call is gated by the **viewing** user's RBAC, not the author's. Note the converse too: the app's code sees the viewer's id and display name (`archestra.user`), and tool calls it makes run with the viewer's credentials. Share apps only with people you would grant the app's tool and data access.

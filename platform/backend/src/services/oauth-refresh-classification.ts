@@ -109,8 +109,11 @@ export function sanitizeOAuthErrorDescription(
   return result || null;
 }
 
-// OAuth error codes that signal a temporary server condition, not a dead grant
-// (RFC 6749 §4.1.2.1). Some authorization servers return these on a 400.
+// OAuth error codes that signal a temporary server condition, not a dead grant.
+// RFC 6749 defines these for the authorization endpoint (§4.1.2.1); the token
+// endpoint's own set (§5.2) does not include them. Some authorization servers
+// nonetheless return them from the token endpoint on a 400, so we treat them
+// as transient rather than a revoked grant.
 const TRANSIENT_OAUTH_ERRORS = new Set([
   "temporarily_unavailable",
   "server_error",

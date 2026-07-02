@@ -483,11 +483,19 @@ jobs:
       - name: Build backend workspace dependencies
         run: pnpm exec turbo build --filter="@backend^..."
 
+      # --no-memory-protection-keys: V8's PKU-backed JIT-page tracking
+      # (ThreadIsolation) intermittently dies with a fatal
+      # "Check failed: jit_page.has_value()" when WASM (PGlite) runs across
+      # vitest worker threads. The hardware feature only exists on these
+      # Linux runners' CPUs — dev machines never hit it. PKU is a
+      # defense-in-depth hardening for JIT pages, not a correctness feature,
+      # so disabling it for the test run is safe. NODE_OPTIONS disallows the
+      # flag, hence invoking the vitest entry through node directly.
       - name: Run backend unit tests (shard ${{ matrix.shard }} of 4)
         working-directory: ./platform/backend
         env:
           SHARD: ${{ matrix.shard }}
-        run: pnpm exec vitest run --shard="${SHARD}/4"
+        run: node --no-memory-protection-keys node_modules/vitest/vitest.mjs run --shard="${SHARD}/4"
 
   # Stable-named gate over the shard matrix so branch protection / merge queue
   # can require a single check ("Backend Unit Tests") regardless of shard count.

@@ -322,11 +322,13 @@ function ServerCard({
   userAllowedToCreateCatalogItem: boolean;
 }) {
   // Where the server comes from: hosted remote endpoint, or a GitHub-sourced
-  // community server the org hosts itself.
+  // server the org hosts itself. GitHub-sourced servers are community-built
+  // unless they live in the official modelcontextprotocol org.
+  const isOfficialSource = server.github_info?.owner === "modelcontextprotocol";
   const sourceBadges =
     server.server.type === "remote"
       ? ["Remote"]
-      : server.github_info
+      : server.github_info && !isOfficialSource
         ? ["Self-hosted", "Community"]
         : ["Self-hosted"];
   const docsUrl = server.homepage || server.documentation;
@@ -389,7 +391,7 @@ function ServerCard({
             </Button>
           )}
           <Button
-            variant="ghost"
+            variant={isInCatalog ? "ghost" : "default"}
             size="icon"
             className="h-8 w-8"
             disabled={isInCatalog}

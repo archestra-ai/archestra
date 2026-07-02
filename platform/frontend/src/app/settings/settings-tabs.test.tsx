@@ -5,11 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useSettingsTabs } from "./settings-tabs";
 
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    getSession: vi.fn(),
-  },
-}));
+vi.mock("@/lib/clients/auth/auth-client");
 
 let mockPermissions: Permissions = {};
 

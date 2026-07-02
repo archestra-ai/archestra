@@ -2,20 +2,11 @@ import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockSession = vi.fn();
-const mockMyTeams = vi.fn();
-const mockHasPermissions = vi.fn();
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/teams/team.query");
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useSession: () => mockSession(),
-  useHasPermissions: (perm: { mcpServerInstallation?: string[] }) =>
-    mockHasPermissions(perm),
-}));
-
-vi.mock("@/lib/teams/team.query", () => ({
-  useMyTeams: () => mockMyTeams(),
-}));
-
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { useCanReauthenticate } from "./use-can-reauthenticate";
 
 const CURRENT_USER = "user-self";
@@ -35,17 +26,21 @@ function setup({
     members?: Array<{ userId: string; role: string }>;
   }>;
 }) {
-  mockSession.mockReturnValue({ data: { user: { id: CURRENT_USER } } });
-  mockMyTeams.mockReturnValue({ data: teams ?? [] });
-  mockHasPermissions.mockImplementation(
-    (perm: { mcpServerInstallation?: string[] }) => {
-      const actions = perm.mcpServerInstallation ?? [];
-      if (actions.includes("create")) return { data: create };
-      if (actions.includes("update")) return { data: update };
-      if (actions.includes("admin")) return { data: admin };
-      return { data: false };
-    },
-  );
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: CURRENT_USER } },
+  } as ReturnType<typeof useSession>);
+  vi.mocked(useMyTeams).mockReturnValue({
+    data: teams ?? [],
+  } as unknown as ReturnType<typeof useMyTeams>);
+  vi.mocked(useHasPermissions).mockImplementation(((perm: {
+    mcpServerInstallation?: string[];
+  }) => {
+    const actions = perm.mcpServerInstallation ?? [];
+    if (actions.includes("create")) return { data: create };
+    if (actions.includes("update")) return { data: update };
+    if (actions.includes("admin")) return { data: admin };
+    return { data: false };
+  }) as unknown as typeof useHasPermissions);
   return renderHook(() => useCanReauthenticate()).result.current;
 }
 

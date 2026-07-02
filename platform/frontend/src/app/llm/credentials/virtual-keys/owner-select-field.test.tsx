@@ -4,12 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const useMembersPaginated = vi.fn();
 
-vi.mock("@/lib/auth/auth.query", () => {
-  // Stable reference, like the real TanStack Query session, so the component's
-  // accumulator effect doesn't re-run every render.
-  const session = { data: { user: { id: "u-self" } } };
-  return { useSession: () => session };
-});
+// Stable reference, like the real TanStack Query session, so the component's
+// accumulator effect doesn't re-run every render.
+const mockSession = { data: { user: { id: "u-self" } } };
+
+vi.mock("@/lib/auth/auth.query");
+
+import { useSession } from "@/lib/auth/auth.query";
 
 vi.mock("@/lib/member.query", () => ({
   useMembersPaginated: (...args: unknown[]) => useMembersPaginated(...args),
@@ -38,6 +39,9 @@ describe("shouldShowOwnerField", () => {
 
 describe("OwnerSelectField", () => {
   beforeEach(() => {
+    vi.mocked(useSession).mockReturnValue(
+      mockSession as unknown as ReturnType<typeof useSession>,
+    );
     useMembersPaginated.mockReset();
     useMembersPaginated.mockReturnValue({
       data: { data: MEMBERS },

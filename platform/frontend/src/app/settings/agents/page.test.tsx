@@ -139,24 +139,14 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 
 const mutateAsync = vi.fn();
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => ({
-    data: mockOrganization,
-  }),
-  useAppearanceSettings: () => ({
-    data: {
-      appName: "Spark",
-    },
-  }),
-  useUpdateAgentSettings: () => ({
-    mutateAsync,
-    isPending: false,
-  }),
-  useUpdateSecuritySettings: () => ({
-    mutateAsync,
-    isPending: false,
-  }),
-}));
+vi.mock("@/lib/organization.query");
+
+import {
+  useAppearanceSettings,
+  useOrganization,
+  useUpdateAgentSettings,
+  useUpdateSecuritySettings,
+} from "@/lib/organization.query";
 
 import AgentSettingsPage from "./page";
 
@@ -191,6 +181,21 @@ beforeEach(() => {
     },
   ];
   mockAgents = [];
+
+  vi.mocked(useOrganization).mockReturnValue({
+    data: mockOrganization,
+  } as unknown as ReturnType<typeof useOrganization>);
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data: { appName: "Spark" },
+  } as unknown as ReturnType<typeof useAppearanceSettings>);
+  vi.mocked(useUpdateAgentSettings).mockReturnValue({
+    mutateAsync,
+    isPending: false,
+  } as unknown as ReturnType<typeof useUpdateAgentSettings>);
+  vi.mocked(useUpdateSecuritySettings).mockReturnValue({
+    mutateAsync,
+    isPending: false,
+  } as unknown as ReturnType<typeof useUpdateSecuritySettings>);
 });
 
 describe("AgentSettingsPage", () => {

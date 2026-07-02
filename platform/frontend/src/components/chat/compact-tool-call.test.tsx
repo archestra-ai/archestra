@@ -1,3 +1,4 @@
+import { TOOL_RUN_TOOL_SHORT_NAME } from "@archestra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -50,6 +51,85 @@ describe("CompactToolGroup", () => {
               toolCallId: "call-1",
               input: {},
               output: { ok: true },
+            },
+            toolResultPart: null,
+            errorText: undefined,
+          },
+        ]}
+        toolIconMap={new Map()}
+      />,
+    );
+
+    expect(screen.getByTestId("mcp-catalog-icon")).toHaveTextContent(
+      "00000000-0000-4000-8000-000000000001",
+    );
+  });
+
+  it("shows the target tool's server icon for a run_tool dispatch", () => {
+    mockIsToolName.mockImplementation((toolName: string) =>
+      toolName.startsWith("archestra__"),
+    );
+    mockGetToolShortName.mockImplementation((toolName: string) =>
+      toolName === "archestra__run_tool" ? TOOL_RUN_TOOL_SHORT_NAME : null,
+    );
+
+    render(
+      <CompactToolGroup
+        tools={[
+          {
+            kind: "tool",
+            key: "tool-1",
+            toolName: "archestra__run_tool",
+            part: {
+              type: "tool-archestra__run_tool",
+              state: "output-available",
+              toolCallId: "call-1",
+              input: {
+                tool_name: "context7__resolve-library-id",
+                tool_args: { libraryName: "react" },
+              },
+              output: { ok: true },
+            },
+            toolResultPart: null,
+            errorText: undefined,
+          },
+        ]}
+        toolIconMap={
+          new Map([
+            [
+              "context7__resolve-library-id",
+              { icon: "data:image/png;base64,x", catalogId: "catalog-ctx7" },
+            ],
+          ])
+        }
+      />,
+    );
+
+    expect(screen.getByTestId("mcp-catalog-icon")).toHaveTextContent(
+      "catalog-ctx7",
+    );
+  });
+
+  it("keeps the built-in icon for a run_tool call whose target is not known yet", () => {
+    mockIsToolName.mockImplementation((toolName: string) =>
+      toolName.startsWith("archestra__"),
+    );
+    mockGetToolShortName.mockImplementation((toolName: string) =>
+      toolName === "archestra__run_tool" ? TOOL_RUN_TOOL_SHORT_NAME : null,
+    );
+
+    render(
+      <CompactToolGroup
+        tools={[
+          {
+            kind: "tool",
+            key: "tool-1",
+            toolName: "archestra__run_tool",
+            part: {
+              type: "tool-archestra__run_tool",
+              state: "input-streaming",
+              toolCallId: "call-1",
+              input: {},
             },
             toolResultPart: null,
             errorText: undefined,

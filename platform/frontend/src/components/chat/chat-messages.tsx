@@ -1775,8 +1775,12 @@ const MessageTool = memo(
     }
 
     if (authToolBody) {
-      const shortName = parseFullToolName(toolName).toolName.replace(/_/g, " ");
-      const iconInfo = toolIconMap?.get(toolName);
+      // Unwrap run_tool so the circle carries the target tool's server icon.
+      const shortName = parseFullToolName(mcpAppToolName).toolName.replace(
+        /_/g,
+        " ",
+      );
+      const iconInfo = toolIconMap?.get(mcpAppToolName);
 
       return (
         <div className="mb-1">
@@ -1824,8 +1828,12 @@ const MessageTool = memo(
       !errorText
     ) {
       const compactState = getCompactToolState({ part, toolResultPart });
-      const shortName = parseFullToolName(toolName).toolName.replace(/_/g, " ");
-      const iconInfo = toolIconMap?.get(toolName);
+      // Unwrap run_tool so the circle carries the target tool's server icon.
+      const shortName = parseFullToolName(mcpAppToolName).toolName.replace(
+        /_/g,
+        " ",
+      );
+      const iconInfo = toolIconMap?.get(mcpAppToolName);
       // Fall back to the Archestra catalog icon for owned-app / archestra tools
       // whose icon isn't in the map yet (e.g. a still-pending management call).
       const catalogId =

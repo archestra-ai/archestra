@@ -1745,6 +1745,9 @@ export function unwrapToolResultForPreview(result: CommonToolResult): string {
     }
     return JSON.stringify(text);
   }
+  // Same untrusted-input rule as the SDK: only a strict type/subtype mimeType
+  // and base64-alphabet data may enter the data URL, so nothing quote-bearing
+  // can reach an attribute an app interpolates.
   const media = (Array.isArray(result.content) ? result.content : [])
     .filter(
       (part): part is { type: "image" | "audio"; mimeType: string } =>
@@ -1752,8 +1755,10 @@ export function unwrapToolResultForPreview(result: CommonToolResult): string {
         typeof part === "object" &&
         ((part as { type?: unknown }).type === "image" ||
           (part as { type?: unknown }).type === "audio") &&
+        typeof (part as { data?: unknown }).data === "string" &&
+        /^[A-Za-z0-9+/=]+$/.test((part as { data: string }).data) &&
         typeof (part as { mimeType?: unknown }).mimeType === "string" &&
-        typeof (part as { data?: unknown }).data === "string",
+        /^[\w.+-]+\/[\w.+-]+$/.test((part as { mimeType: string }).mimeType),
     )
     .map((part) => ({
       type: part.type,

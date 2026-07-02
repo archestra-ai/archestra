@@ -197,6 +197,21 @@ describe("Apps SDK runtime", () => {
     calls.pop();
   });
 
+  test("tools.call drops media blocks whose mimeType or data could break out of a data URL", async () => {
+    results.push({
+      content: [
+        {
+          type: "image",
+          data: "aGk=",
+          mimeType: 'image/png" onerror="alert(1)',
+        },
+        { type: "image", data: 'aGk="><script>', mimeType: "image/png" },
+      ],
+    });
+    expect(await archestra.tools.call("t", {})).toBeNull();
+    calls.pop();
+  });
+
   test("tools.call resolves null when the result has no text, structured, or media data", async () => {
     results.push({ content: [] });
     expect(await archestra.tools.call("t", {})).toBeNull();

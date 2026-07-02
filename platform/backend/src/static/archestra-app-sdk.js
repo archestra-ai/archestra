@@ -285,13 +285,18 @@
         return text;
       }
     }
+    // Tool results are untrusted: only a strict type/subtype mimeType and
+    // base64-alphabet data may enter the data URL, so a malicious block can
+    // never smuggle quotes/markup into an attribute an app interpolates.
     const media = (result.content || [])
       .filter(
         (c) =>
           c &&
           (c.type === "image" || c.type === "audio") &&
-          c.data &&
-          c.mimeType,
+          typeof c.data === "string" &&
+          /^[A-Za-z0-9+/=]+$/.test(c.data) &&
+          typeof c.mimeType === "string" &&
+          /^[\w.+-]+\/[\w.+-]+$/.test(c.mimeType),
       )
       .map((c) => ({
         type: c.type,

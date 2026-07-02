@@ -1322,6 +1322,23 @@ describe("unwrapToolResultForPreview (SDK tools.call parity)", () => {
     );
   });
 
+  test("media blocks with unsafe mimeType or non-base64 data are dropped", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({
+          content: [
+            {
+              type: "image",
+              data: "aGk=",
+              mimeType: 'image/png" onerror="alert(1)',
+            },
+            { type: "image", data: 'aGk="><script>', mimeType: "image/png" },
+          ],
+        }),
+      ),
+    ).toBe("null");
+  });
+
   test("no text, structured, or media data serializes as null", () => {
     expect(unwrapToolResultForPreview(envelope({ content: [] }))).toBe("null");
   });

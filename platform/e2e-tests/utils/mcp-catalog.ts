@@ -254,6 +254,72 @@ export async function ensureInternalDevTestServerCatalogItem(
   return { id: created.id, name: created.name };
 }
 
+/**
+ * Fixture server for the app SDK `tools.call` unwrapping contract: its single
+ * tool returns a JSON object serialized into a text content block (no
+ * structuredContent), which the SDK must resolve as the parsed value.
+ */
+export async function ensureAppSdkJsonTestServerCatalogItem(
+  request: APIRequestContext,
+): Promise<{ id: string; name: string }> {
+  const existing = await findCatalogItem(
+    request,
+    APP_SDK_JSON_CATALOG_ITEM_NAME,
+  );
+  if (existing) {
+    return existing;
+  }
+
+  const response = await request.post(
+    getE2eRequestUrl("/api/internal_mcp_catalog"),
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Origin: UI_BASE_URL,
+      },
+      data: {
+        name: APP_SDK_JSON_CATALOG_ITEM_NAME,
+        description:
+          "Test MCP server for e2e tests. Has one tool that returns a JSON task list serialized into a text content block.",
+        serverType: "local",
+        localConfig: {
+          command: "sh",
+          arguments: ["-c", appSdkJsonServerCommand],
+          transportType: "stdio",
+          environment: [],
+        },
+      },
+    },
+  );
+
+  if (!response.ok()) {
+    throw new Error(
+      `Failed to create ${APP_SDK_JSON_CATALOG_ITEM_NAME} catalog item: ${response.status()} ${await response.text()}`,
+    );
+  }
+
+  const created = await response.json();
+  return { id: created.id, name: created.name };
+}
+
+export const APP_SDK_JSON_SERVER_TOOL_NAME = "get_tasks";
+
+const appSdkJsonFixtureTasks = [
+  { id: 1, title: "triage inbox" },
+  { id: 2, title: "review pull request" },
+  { id: 3, title: "publish release" },
+];
+
+export const APP_SDK_JSON_SERVER_TASK_COUNT = appSdkJsonFixtureTasks.length;
+
+const APP_SDK_JSON_CATALOG_ITEM_NAME = "e2e-app-sdk-json-server";
+
+// Single-line script, same shape/escaping as `testMcpServerCommand` in
+// @archestra/shared/test-mcp-server (arguments are newline-separated in the UI).
+const appSdkJsonServerScript = `const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js'); const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js'); const server = new McpServer({ name: '${APP_SDK_JSON_CATALOG_ITEM_NAME}', version: '1.0.0' }); server.tool('${APP_SDK_JSON_SERVER_TOOL_NAME}', 'Returns the fixture task list as JSON serialized into a text content block', {}, async () => ({ content: [{ type: 'text', text: ${JSON.stringify(JSON.stringify({ tasks: appSdkJsonFixtureTasks }))} }] })); const transport = new StdioServerTransport(); server.connect(transport);`;
+
+const appSdkJsonServerCommand = `npm install --silent @modelcontextprotocol/sdk && node -e '${appSdkJsonServerScript.replace(/'/g, "'\"'\"'")}'`;
+
 function extractCatalogItems(
   data: unknown,
 ): Array<{ id: string; name: string }> {

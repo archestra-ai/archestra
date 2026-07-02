@@ -120,18 +120,69 @@ describe("Apps SDK runtime", () => {
     });
   });
 
-  test("tools.call resolves with the full result on success", async () => {
-    const result = {
-      content: [{ type: "text", text: "ok" }],
-      structuredContent: { papers: [] },
-    };
-    results.push(result);
-    expect(await archestra.tools.call("hf__paper_search", { q: "x" })).toEqual(
-      result,
-    );
+  test("tools.call resolves with structuredContent when present, over text", async () => {
+    results.push({
+      content: [{ type: "text", text: '{"other": true}' }],
+      structuredContent: { papers: [{ id: 1 }] },
+    });
+    expect(await archestra.tools.call("hf__paper_search", { q: "x" })).toEqual({
+      papers: [{ id: 1 }],
+    });
     expect(calls.pop()).toEqual({
       name: "hf__paper_search",
       arguments: { q: "x" },
+    });
+  });
+
+  test("tools.call parses JSON-as-text results, joining text blocks", async () => {
+    results.push({
+      content: [
+        { type: "text", text: '{"tasks": [' },
+        { type: "text", text: '{"id": 7}]}' },
+      ],
+    });
+    expect(await archestra.tools.call("t", {})).toEqual({
+      tasks: [{ id: 7 }],
+    });
+    calls.pop();
+  });
+
+  test("tools.call passes non-JSON text through as the string", async () => {
+    results.push({ content: [{ type: "text", text: "plain answer" }] });
+    expect(await archestra.tools.call("t", {})).toBe("plain answer");
+    calls.pop();
+  });
+
+  test("tools.call resolves null when the result has no text or structured data", async () => {
+    results.push({ content: [{ type: "image", data: "aGk=" }] });
+    expect(await archestra.tools.call("t", {})).toBeNull();
+    calls.pop();
+  });
+
+  test("tools.callRaw resolves with the full result envelope on success", async () => {
+    const result = {
+      content: [{ type: "text", text: "ok" }],
+      structuredContent: { papers: [] },
+      _meta: { trace: "abc" },
+    };
+    results.push(result);
+    expect(
+      await archestra.tools.callRaw("hf__paper_search", { q: "x" }),
+    ).toEqual(result);
+    expect(calls.pop()).toEqual({
+      name: "hf__paper_search",
+      arguments: { q: "x" },
+    });
+  });
+
+  test("tools.callRaw keeps the typed error channel on isError results", async () => {
+    results.push({
+      isError: true,
+      content: [{ type: "text", text: "boom" }],
+    });
+    await expect(archestra.tools.callRaw("t", {})).rejects.toMatchObject({
+      code: "tool_error",
+      message: "boom",
     });
   });
 

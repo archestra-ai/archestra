@@ -17,8 +17,14 @@
  *                                     on a usage limit or { code: "llm_unavailable" } otherwise
  *   archestra.llm.prompt`...`       — tagged-template prompt builder (pure string, no round-trip)
  *   archestra.tools.call(name,args) — call an assigned tool with the viewer's credentials;
- *                                     throws { code: "auth_required", url } when the
- *                                     upstream MCP server needs (re)authentication
+ *                                     resolves with the tool's data unwrapped from the MCP
+ *                                     envelope (structuredContent when the tool provides it,
+ *                                     else JSON parsed from its text output, else the raw
+ *                                     text, else null); throws { code: "auth_required", url }
+ *                                     when the upstream MCP server needs (re)authentication
+ *   archestra.tools.callRaw(name,args) — same call, resolving with the full MCP result
+ *                                     envelope ({ content, structuredContent?, _meta? })
+ *                                     for non-text content blocks and _meta
  *   archestra.tools.list()          — the app's assigned tools (name/description/inputSchema)
  *   archestra.ui.openLink(url) / archestra.ui.requestDisplayMode(mode)
  *   archestra.context               — { appId, version } of the running app (sync)
@@ -201,8 +207,10 @@
     null;
 
   /**
-   * Call a tool and resolve with its result. Tool-level failures throw —
-   * apps handle one error channel instead of checking isError:
+   * Call a tool and resolve with the raw MCP result envelope. Internal raw
+   * path — the storage/llm wrappers and tools.callRaw read the envelope
+   * directly; tools.call unwraps it (see unwrapToolResult). Tool-level
+   * failures throw — apps handle one error channel instead of checking isError:
    * - upstream MCP needs (re)auth → { code: "auth_required", url } so the app
    *   can render a "Connect" link (the user authenticates in the registry UI);
    * - any other tool error → { code: "tool_error" } with the error text.
@@ -258,6 +266,25 @@
       );
     }
     return result;
+  };
+
+  // Unwrap a successful envelope into the data an app actually wants:
+  // structuredContent when it is a non-null object, else JSON parsed from the
+  // joined text blocks, else the raw text, else null (no SDK-unwrappable
+  // text/structured data — e.g. image/resource-only content; use callRaw).
+  // Mirrored server-side by unwrapToolResultForPreview in
+  // archestra-mcp-server/apps.ts (this file is injected browser JS, so the
+  // two implementations cannot share code) — keep them in step.
+  const unwrapToolResult = (result) => {
+    const sc = result.structuredContent;
+    if (sc && typeof sc === "object") return sc;
+    const text = textOf(result);
+    if (!text.trim()) return null;
+    try {
+      return JSON.parse(text.trim());
+    } catch {
+      return text;
+    }
   };
 
   // Each value is an entry { value, revision, owner }: revision powers optimistic
@@ -333,7 +360,8 @@
       prompt: llmPrompt,
     }),
     tools: Object.freeze({
-      call: callTool,
+      call: async (name, args) => unwrapToolResult(await callTool(name, args)),
+      callRaw: callTool,
       // assigned-tool descriptors embedded at serve time (already filtered to
       // what the app may call); async to allow a live listing later without an
       // API break

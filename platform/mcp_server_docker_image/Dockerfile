@@ -42,17 +42,10 @@ RUN uv pip sync \
 # Node.js stage
 FROM ${NODE_IMAGE} AS node-builder
 
-# Upgrade npm to a version whose bundled dependencies already include the tar/minimatch fixes
-# Upgrade bundled picomatch to patch CVE-2026-33671 (ReDoS) after installing npm.
-# npm ships tinyglobby with picomatch 4.0.3 pinned in its bundle; overwriting with
-# 4.0.4 is safe since the API is compatible.
-RUN npm install -g npm@11.12.1 && \
-    cd /usr/local/lib/node_modules/npm/node_modules/tinyglobby/node_modules && \
-    rm -rf picomatch && \
-    npm pack picomatch@4.0.4 && \
-    tar -xzf picomatch-4.0.4.tgz && \
-    mv package picomatch && \
-    rm picomatch-4.0.4.tgz
+# Upgrade npm to a version whose bundled dependencies already include the fixes for
+# tar/minimatch, picomatch CVE-2026-33671 (ReDoS; bundle ships picomatch 4.0.4)
+# and sigstore CVE-2026-48815 (improper signature verification; fixed in sigstore 4.1.1).
+RUN npm install -g npm@11.17.0
 
 WORKDIR /opt/node-deps
 

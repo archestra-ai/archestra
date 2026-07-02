@@ -120,7 +120,7 @@ A valid passthrough key authenticates the user at the proxy, but it does not by 
 
 ### Configuring Claude Code and Claude Desktop
 
-The in-app Connection page wires this header up per platform (macOS, Linux, Windows). For Claude Code's subscription passthrough, the one-command setup provisions a passthrough key and merges it into `~/.claude/settings.json`:
+The in-app Connection page wires this header up per platform (macOS, Linux, Windows). For Claude Code passthrough — a Claude subscription on the Anthropic provider, or your own AWS credentials on the Bedrock provider — the one-command setup provisions a passthrough key and merges it into `~/.claude/settings.json`:
 
 ```json
 {
@@ -131,7 +131,7 @@ The in-app Connection page wires this header up per platform (macOS, Linux, Wind
 }
 ```
 
-`ANTHROPIC_CUSTOM_HEADERS` takes `Name: Value` pairs (newline-separated for several). Leave `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_API_KEY` unset so the Claude subscription still authenticates the upstream call — the header only authenticates an Archestra user on an LLM Proxy.
+`ANTHROPIC_CUSTOM_HEADERS` takes `Name: Value` pairs (newline-separated for several) and applies to the Bedrock transport too, so the same headers attribute requests routed through a Bedrock proxy. Leave `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_API_KEY` unset so the Claude subscription still authenticates the upstream call — the header only authenticates an Archestra user on an LLM Proxy.
 
 The setup always adds `X-Archestra-Agent-Id` too — a non-secret client identifier (`anthropic_claude_code` for Claude Code, `anthropic_claude_desktop` for Claude Desktop) that attributes each proxied request to the client app in the LLM logs. It rides alongside the passthrough key but is independent of it, so it is present even when no passthrough key is provisioned.
 

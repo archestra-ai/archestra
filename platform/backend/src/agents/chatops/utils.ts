@@ -147,6 +147,16 @@ export function formatApprovalToolArgs(
 }
 
 /**
+ * Whether an error message reads like an LLM provider rejecting the API key —
+ * e.g. Anthropic's 401 body "invalid x-api-key", OpenAI's "Incorrect API key
+ * provided", Gemini's "API key not valid". Used to swap the generic chatops
+ * error reply for one that explains which key was used and where to fix it.
+ */
+export function isLlmProviderAuthError(message: string): boolean {
+  return LLM_AUTH_ERROR_PATTERN.test(message);
+}
+
+/**
  * Extract a human-readable error message from an unknown error value.
  */
 export function errorMessage(error: unknown): string {
@@ -189,6 +199,15 @@ function formatSkippedItems(skipped: SkippedAttachment[]): string {
     })
     .join("; ");
 }
+
+/**
+ * Provider-agnostic auth-failure phrases. Deliberately narrow — a false
+ * positive would tell the user to fix an API key that is fine — so bare
+ * "unauthorized"/"401" (which also appear in tool and gateway errors) are
+ * excluded in favor of phrases the LLM providers actually return.
+ */
+const LLM_AUTH_ERROR_PATTERN =
+  /invalid x-api-key|invalid[ _]api[ _]key|incorrect api key|api key not valid|api key expired|authentication[ _]error|authentication failed/i;
 
 const SKIPPED_REASON_TEXT: Record<SkippedAttachment["reason"], string> = {
   too_large: "too large",

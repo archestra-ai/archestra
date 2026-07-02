@@ -135,3 +135,7 @@ Files exceeding these limits are silently skipped.
 
 **No thread history**
 - Ensure `ChannelMessage.Read.Group` and `ChatMessage.Read.Chat` RSC permissions are in your manifest. Reinstall the app after updating the manifest. The team owner must consent to the permissions when adding the app.
+
+**"The LLM provider rejected the API key"**
+- The bot resolves its model and API key the same way in-app chat does: the key selected in chat, then the agent's configured key, then personal → team → organization keys. The error reply names the key and model that were used.
+- Update or replace that key on the Model Providers page (`/llm/model-providers`), or select a different key in chat, then retry.

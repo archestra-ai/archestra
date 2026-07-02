@@ -120,19 +120,102 @@ describe("Apps SDK runtime", () => {
     });
   });
 
-  test("tools.call resolves with the full result on success", async () => {
-    const result = {
-      content: [{ type: "text", text: "ok" }],
-      structuredContent: { papers: [] },
-    };
-    results.push(result);
-    expect(await archestra.tools.call("hf__paper_search", { q: "x" })).toEqual(
-      result,
-    );
+  test("tools.call resolves with structuredContent when present, over text", async () => {
+    results.push({
+      content: [{ type: "text", text: '{"other": true}' }],
+      structuredContent: { papers: [{ id: 1 }] },
+    });
+    expect(await archestra.tools.call("hf__paper_search", { q: "x" })).toEqual({
+      papers: [{ id: 1 }],
+    });
     expect(calls.pop()).toEqual({
       name: "hf__paper_search",
       arguments: { q: "x" },
     });
+  });
+
+  test("tools.call parses JSON-as-text results, joining text blocks", async () => {
+    results.push({
+      content: [
+        { type: "text", text: '{"tasks": [' },
+        { type: "text", text: '{"id": 7}]}' },
+      ],
+    });
+    expect(await archestra.tools.call("t", {})).toEqual({
+      tasks: [{ id: 7 }],
+    });
+    calls.pop();
+  });
+
+  test("tools.call parses JSON scalars and arrays in text, not just objects", async () => {
+    results.push({ content: [{ type: "text", text: '[{"id": 1}]' }] });
+    expect(await archestra.tools.call("t", {})).toEqual([{ id: 1 }]);
+    calls.pop();
+    results.push({ content: [{ type: "text", text: "false" }] });
+    expect(await archestra.tools.call("t", {})).toBe(false);
+    calls.pop();
+  });
+
+  test("tools.call falls back to the joined string when text blocks are separate JSON documents", async () => {
+    results.push({
+      content: [
+        { type: "text", text: '{"a": 1}' },
+        { type: "text", text: '{"b": 2}' },
+      ],
+    });
+    expect(await archestra.tools.call("t", {})).toBe('{"a": 1}\n{"b": 2}');
+    calls.pop();
+  });
+
+  test("tools.call passes non-JSON text through as the string", async () => {
+    results.push({ content: [{ type: "text", text: "plain answer" }] });
+    expect(await archestra.tools.call("t", {})).toBe("plain answer");
+    calls.pop();
+  });
+
+  test("tools.call normalizes image/audio-only results into media data URLs", async () => {
+    results.push({
+      content: [
+        { type: "image", data: "aGk=", mimeType: "image/png" },
+        { type: "audio", data: "c28=", mimeType: "audio/mpeg" },
+      ],
+    });
+    expect(await archestra.tools.call("t", {})).toEqual({
+      media: [
+        {
+          type: "image",
+          mimeType: "image/png",
+          dataUrl: "data:image/png;base64,aGk=",
+        },
+        {
+          type: "audio",
+          mimeType: "audio/mpeg",
+          dataUrl: "data:audio/mpeg;base64,c28=",
+        },
+      ],
+    });
+    calls.pop();
+  });
+
+  test("tools.call drops media blocks whose mimeType or data could break out of a data URL", async () => {
+    results.push({
+      content: [
+        {
+          type: "image",
+          data: "aGk=",
+          mimeType: 'image/png" onerror="alert(1)',
+        },
+        { type: "image", data: 'aGk="><script>', mimeType: "image/png" },
+      ],
+    });
+    expect(await archestra.tools.call("t", {})).toBeNull();
+    calls.pop();
+  });
+
+  test("tools.call resolves null when the result has no text, structured, or media data", async () => {
+    results.push({ content: [] });
+    expect(await archestra.tools.call("t", {})).toBeNull();
+    calls.pop();
   });
 
   test("auth_required surfaces as a typed error with the action url", async () => {

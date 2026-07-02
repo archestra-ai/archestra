@@ -2171,7 +2171,7 @@ Required RBAC permission: `app:update`
 | `toolName` | `string` | Yes |  |
 | `isError` | `boolean` | Yes |  |
 | `truncated` | `boolean` | Yes |  |
-| `output` | `string` | Yes | The tool's output, framed as untrusted data. |
+| `output` | `string` | Yes | The JSON-serialized value archestra.tools.call resolves with for this result, framed as untrusted data (media dataUrls are elided). |
 
 #### get_app_diagnostics
 

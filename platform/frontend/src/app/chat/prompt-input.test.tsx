@@ -19,12 +19,15 @@ const {
   mockFeatureState: { chatSecretScanEnabled: false },
 }));
 
-// Mock ResizeObserver which is used by Radix UI components
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+// Mock ResizeObserver (used by Radix UI components and the prompt input's
+// toolbar-collapse hook). Must be a real constructor so `new ResizeObserver()`
+// works. jsdom reports 0 widths, so the hook measures nothing and leaves the
+// toolbar in its full (expanded) layout — which is what these tests exercise.
+global.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 
 // Mock window.matchMedia for useIsMobile hook
 Object.defineProperty(window, "matchMedia", {

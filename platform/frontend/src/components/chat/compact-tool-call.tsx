@@ -119,30 +119,29 @@ function CompactCircle({
 }
 
 /**
- * Variant of CompactCircle for `archestra__load_skill` calls. Same chrome as
- * the circle (32px tall, rounded-full, bordered) but the pill extends
- * horizontally to surface the skill name inline. The pill itself does NOT
- * expand the tool-call detail card on click — only the skill name navigates
- * to the Skills list (filtered by name) and only when the user has
- * `skill:read`.
+ * Variant of CompactCircle for `archestra__load_skill` activation calls (no
+ * `path`). Same chrome as the circle (32px tall, rounded-full, bordered) but
+ * the pill extends horizontally to surface the skill name inline. The pill
+ * itself does NOT expand the tool-call detail card on click — only the skill
+ * name navigates to the Skills list (filtered by name) and only when the user
+ * has `skill:read`. A `load_skill` call with a `path` reads a bundled file from
+ * an already-loaded skill; that's not a skill trigger, so it renders as a plain
+ * tool circle instead of this pill (#6184).
  */
 function ToolCallSkillPill({
   toolName,
   skillName,
-  skillPath,
   state,
 }: {
   toolName: string;
   skillName: string | null;
-  skillPath: string | null;
   state: "running" | "completed" | "error";
 }) {
   const tooltipLabel = (() => {
     const base = skillName ? `Skill: ${skillName}` : "Loading skill";
-    const withPath = skillPath ? `${base} → ${skillPath}` : base;
-    if (state === "running") return `${withPath} (running)`;
-    if (state === "error") return `${withPath} (error)`;
-    return withPath;
+    if (state === "running") return `${base} (running)`;
+    if (state === "error") return `${base} (error)`;
+    return base;
   })();
 
   return (
@@ -287,23 +286,28 @@ export function CompactToolGroup({
               name?: unknown;
               path?: unknown;
             };
-            const skillName =
-              typeof input.name === "string" && input.name.length > 0
-                ? input.name
-                : null;
+            // A `load_skill` call with a `path` reads a bundled file from an
+            // already-loaded skill — a sub-action, not a new skill trigger.
+            // Only activation calls (no path) get the "Skill:" pill; file reads
+            // fall through to the normal tool circle below (#6184).
             const skillPath =
               typeof input.path === "string" && input.path.length > 0
                 ? input.path
                 : null;
-            return (
-              <ToolCallSkillPill
-                key={entry.key}
-                toolName={entry.toolName}
-                skillName={skillName}
-                skillPath={skillPath}
-                state={state}
-              />
-            );
+            if (!skillPath) {
+              const skillName =
+                typeof input.name === "string" && input.name.length > 0
+                  ? input.name
+                  : null;
+              return (
+                <ToolCallSkillPill
+                  key={entry.key}
+                  toolName={entry.toolName}
+                  skillName={skillName}
+                  state={state}
+                />
+              );
+            }
           }
           // A run_tool dispatch belongs visually to its *target* tool: unwrap
           // so the circle shows the underlying MCP server's icon (and tooltip

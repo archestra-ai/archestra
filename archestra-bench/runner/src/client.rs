@@ -419,7 +419,8 @@ impl EvalClient {
     }
 
     /// Create a project. Files produced in its conversations are owned by the project rather than the
-    /// author, so lanes sharing one backend stay isolated even when they save identically named files.
+    /// author; the bench creates one per rollout, so concurrent lanes and successive tasks never
+    /// collide on identically named files, and a rollout's stages share one file namespace.
     pub async fn create_project(&self, name: &str) -> Result<String, ClientError> {
         let body = require_dict(
             self.request(

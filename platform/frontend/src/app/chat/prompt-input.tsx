@@ -44,6 +44,7 @@ import {
   migrateLegacyNewChatDraft,
 } from "@/lib/chat/chat-utils";
 import { useFeature } from "@/lib/config/config.query";
+import { useToolbarCollapse } from "@/lib/hooks/use-toolbar-collapse";
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
@@ -73,7 +74,10 @@ function formatBytes(bytes: number): string {
 }
 
 export interface ArchestraPromptInputProps
-  extends Omit<ChatPromptInputToolsProps, "textareaRef"> {
+  extends Omit<
+    ChatPromptInputToolsProps,
+    "textareaRef" | "isNarrow" | "toolbarRef"
+  > {
   /**
    * Handle a submit. The textarea and the saved draft are cleared only when
    * this resolves/returns without throwing. Throw (or reject) to reject the
@@ -172,6 +176,20 @@ const PromptInputContent = ({
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
+
+  // Collapse the toolbar based on whether its inline controls actually fit —
+  // measured on the footer, not the viewport — so it reacts when the right-side
+  // panel squeezes the input while the window stays wide, and only collapses
+  // when the controls genuinely no longer fit.
+  const footerRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const trailingRef = useRef<HTMLDivElement>(null);
+  const isNarrow = useToolbarCollapse({
+    availableRef: footerRef,
+    contentRef: toolbarRef,
+    trailingRef,
+  });
+
   const commandItemRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const [dismissedSlashCommandValue, setDismissedSlashCommandValue] = useState<
@@ -683,8 +701,10 @@ const PromptInputContent = ({
             />
           )}
         </PromptInputBody>
-        <PromptInputFooter>
+        <PromptInputFooter ref={footerRef}>
           <ChatPromptInputTools
+            isNarrow={isNarrow}
+            toolbarRef={toolbarRef}
             selectedModel={selectedModel}
             onModelChange={onModelChange}
             conversationId={conversationId}
@@ -712,7 +732,7 @@ const PromptInputContent = ({
             contextWindow={contextWindow}
             lastCompaction={lastCompaction}
           />
-          <div className="flex items-center gap-2">
+          <div ref={trailingRef} className="flex items-center gap-2">
             <PromptInputSpeechButton
               textareaRef={textareaRef}
               onTranscriptionChange={handleTranscriptionChange}

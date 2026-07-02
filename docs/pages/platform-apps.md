@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-06-10
+lastUpdated: 2026-07-02
 ---
 
 <!--
@@ -41,10 +41,10 @@ The SDK:
 - `archestra.user` — the authenticated viewer as `{ id, name }`. There is no login flow to build: whoever is signed in and opens the app *is* the user.
 - `archestra.storage.user.get(key)` / `set(key, value)` / `list()` / `delete(key)` — persistent storage **private to each viewer** (favorites, drafts, settings). The right default for almost all app state. Values are plain JSON: pass objects directly to `set` and `get` returns exactly what was stored (`null` when absent) — no `JSON.stringify`/`JSON.parse` round-trip. Top-level `null` itself is not storable (`set` rejects it; `delete` clears a key). `list()` returns `[{ key, value }]` entries, not an array of keys.
 - `archestra.storage.shared.*` — same methods against one store **shared by every user of the app** (leaderboards, collaborative lists).
-- `archestra.tools.call(name, args)` — call an assigned tool **as the viewing user, with their existing MCP credentials** (see Tools below). When the tool's server still needs connecting, the call rejects with a typed `{ code: "auth_required", url }` error the app can render as a link.
+- `archestra.tools.call(name, args)` — call an assigned tool **as the viewing user, with their existing MCP credentials** (see Tools below). Resolves with the tool's data directly: `structuredContent` when the tool provides it, else JSON parsed from its text output, else the raw text, else `{ media: [{ type, mimeType, dataUrl }] }` for image/audio-only results (the `dataUrl` drops straight into an `img`/`audio` src), else `null`. When the tool's server still needs connecting, the call rejects with a typed `{ code: "auth_required", url }` error the app can render as a link.
 - `archestra.tools.list()` — the app's assigned tools with their schemas.
 - `archestra.llm.complete(prompt, { system, jsonMode })` — run **one** host LLM completion as the viewer and resolve to the model's text, for summarizing, classifying, extracting, or generating over data the app already has. The model is the organization's configured one (the app cannot choose it); the call runs through the LLM proxy so it counts against the viewer's usage limits and is recorded like any other interaction. `jsonMode` steers the model to return a single JSON value (the app still `JSON.parse`s it). It rejects with a typed `{ code: "llm_quota" }` when limits are reached, or `{ code: "llm_unavailable" }` otherwise. It is **not** a data source — it cannot fetch anything; all external data still comes through assigned tools. `archestra.llm.prompt\`…\`` is a tagged-template helper that builds a prompt string.
-- `archestra.ui.openLink(url)`, `archestra.ui.requestDisplayMode(mode)`, `archestra.chat.sendMessage(text)` — host features: open an external link, switch inline/fullscreen, inject a user message into the conversation.
+- `archestra.ui.openLink(url)`, `archestra.ui.requestDisplayMode(mode)` — host features: open an external link, switch inline/fullscreen.
 - `archestra.ready` — a promise resolving when the host connection is up.
 
 All methods are async and usable immediately — the SDK connects to the host on load. Saves also validate structure softly: a document without `<head>`/`<html>` saves with a warning returned in the response.

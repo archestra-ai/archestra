@@ -1,6 +1,10 @@
-import { TOOL_RUN_TOOL_SHORT_NAME } from "@archestra/shared";
+import {
+  TOOL_LOAD_SKILL_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
+} from "@archestra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 
 const mockIsToolName = vi.fn();
 const mockGetToolShortName = vi.fn();
@@ -11,6 +15,8 @@ vi.mock("@/lib/mcp/archestra-mcp-server", () => ({
     getToolShortName: mockGetToolShortName,
   }),
 }));
+
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/components/mcp-catalog-icon", () => ({
   McpCatalogIcon: ({
@@ -24,6 +30,25 @@ vi.mock("@/components/mcp-catalog-icon", () => ({
 
 import { CompactToolGroup } from "./compact-tool-call";
 
+const LOAD_SKILL_TOOL_NAME = "archestra__load_skill";
+
+function loadSkillEntry(input: Record<string, unknown>) {
+  return {
+    kind: "tool" as const,
+    key: "load-skill-1",
+    toolName: LOAD_SKILL_TOOL_NAME,
+    part: {
+      type: `tool-${LOAD_SKILL_TOOL_NAME}`,
+      state: "output-available",
+      toolCallId: "call-1",
+      input,
+      output: { ok: true },
+    } as never,
+    toolResultPart: null,
+    errorText: undefined,
+  };
+}
+
 describe("CompactToolGroup", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -31,6 +56,36 @@ describe("CompactToolGroup", () => {
     // the default code path. Tests that exercise the SkillPill branch can
     // override per-call.
     mockGetToolShortName.mockReturnValue(null);
+    vi.mocked(useHasPermissions).mockReturnValue({ data: false } as never);
+  });
+
+  it("renders a Skill pill for a load_skill activation (no path)", () => {
+    mockGetToolShortName.mockReturnValue(TOOL_LOAD_SKILL_SHORT_NAME);
+
+    render(
+      <CompactToolGroup tools={[loadSkillEntry({ name: "Build App" })]} />,
+    );
+
+    expect(screen.getByText("Skill:")).toBeInTheDocument();
+    expect(screen.getByText("Build App")).toBeInTheDocument();
+  });
+
+  it("renders a plain tool circle, not a Skill pill, for a load_skill file read (with path)", () => {
+    // Reading a bundled file (name + path) is a sub-action of an already-loaded
+    // skill, not a second trigger — it must not paint another "Skill:" pill.
+    mockGetToolShortName.mockReturnValue(TOOL_LOAD_SKILL_SHORT_NAME);
+    mockIsToolName.mockReturnValue(true);
+
+    render(
+      <CompactToolGroup
+        tools={[
+          loadSkillEntry({ name: "Build App", path: "references/api.md" }),
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText("Skill:")).not.toBeInTheDocument();
+    expect(screen.getByTestId("mcp-catalog-icon")).toBeInTheDocument();
   });
 
   it("keeps the built-in MCP icon when the icon map temporarily lacks built-in tool metadata", () => {

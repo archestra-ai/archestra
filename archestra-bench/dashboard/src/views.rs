@@ -12,7 +12,9 @@ use serde::Deserialize;
 
 use archestra_bench_core::{Outcome, RolloutId, TriageRecord};
 
-use crate::load::{Rollout, RubricKey, RubricStatus, Run, RunListEntry, mean_grade};
+use crate::load::{
+    ReduceSource, Rollout, RubricKey, RubricStatus, Run, RunListEntry, mean_grade,
+};
 
 /// Everything outside `[A-Za-z0-9._-]` is percent-encoded, including `/` — rollout ids travel as a
 /// single opaque path segment.
@@ -84,6 +86,25 @@ impl RubricBadge {
 // GET /
 // ---------------------------------------------------------------------------
 
+/// A short abbreviation chip for a reduce report present on a run (A = analyzer, C = Claude).
+pub struct ReportChip {
+    pub abbr: &'static str,
+    pub title: String,
+}
+
+impl ReportChip {
+    fn of(source: ReduceSource) -> Self {
+        let abbr = match source {
+            ReduceSource::Analyzer => "A",
+            ReduceSource::Claude => "C",
+        };
+        ReportChip {
+            abbr,
+            title: source.label().to_string(),
+        }
+    }
+}
+
 pub struct RunRow {
     pub id: String,
     pub href: String,
@@ -92,7 +113,10 @@ pub struct RunRow {
     pub lanes: String,
     pub outcomes: String,
     pub pass_rate: String,
+    /// Integer percent (`"0".."100"`) for the pass-rate bar width; empty when the rate is unknown.
+    pub pass_pct: String,
     pub rubric_badge: RubricBadge,
+    pub reports: Vec<ReportChip>,
 }
 
 #[derive(Template)]
@@ -123,7 +147,12 @@ pub fn build_index(experiments_dir: &Path, entries: Vec<RunListEntry>) -> IndexT
                 lanes: e.lanes.join(", "),
                 outcomes,
                 pass_rate: fmt_rate(e.pass_rate),
+                pass_pct: e
+                    .pass_rate
+                    .map(|r| format!("{:.0}", r * 100.0))
+                    .unwrap_or_default(),
                 rubric_badge: RubricBadge::from_status(e.rubric_status),
+                reports: e.report_sources.iter().copied().map(ReportChip::of).collect(),
                 id: e.id,
             }
         })
@@ -185,6 +214,9 @@ pub struct GridCell {
 pub struct GridRow {
     pub label: String,
     pub cells: Vec<Option<GridCell>>,
+    /// Mean of this task's graded cells across the shown lanes; empty when none carry a grade.
+    pub avg_text: String,
+    pub avg_class: String,
 }
 
 pub struct GridView {
@@ -220,6 +252,7 @@ pub fn build_grid(run: &Run, filters: &GridFilters) -> GridView {
     let mut rows = Vec::new();
     for (env, task) in row_keys {
         let mut cells = Vec::with_capacity(lanes.len());
+        let mut grades: Vec<f64> = Vec::new();
         for lane in &lanes {
             let key = RolloutId {
                 env: env.clone(),
@@ -227,20 +260,31 @@ pub fn build_grid(run: &Run, filters: &GridFilters) -> GridView {
                 lane: lane.clone(),
             }
             .to_string();
-            let cell = run
+            let rollout = run
                 .rollouts
                 .get(&key)
-                .filter(|r| cell_matches(r, run.rubrics.get(&key), filters))
-                .map(|r| make_cell(run, r));
-            if cell.is_some() {
+                .filter(|r| cell_matches(r, run.rubrics.get(&key), filters));
+            if rollout.is_some() {
                 shown += 1;
+                if let Some(rec) = run.rubrics.get(&key) {
+                    grades.push(mean_grade(&rec.rubrics));
+                }
             }
-            cells.push(cell);
+            cells.push(rollout.map(|r| make_cell(run, r)));
         }
         if cells.iter().any(Option::is_some) {
+            let (avg_text, avg_class) = match grades.len() {
+                0 => (String::new(), String::new()),
+                n => {
+                    let avg = grades.iter().sum::<f64>() / n as f64;
+                    (format!("{avg:.1}"), grade_class(avg))
+                }
+            };
             rows.push(GridRow {
                 label: format!("{env}/{task}"),
                 cells,
+                avg_text,
+                avg_class,
             });
         }
     }
@@ -310,15 +354,30 @@ pub struct SummaryRow {
     pub value: String,
 }
 
+/// One outcome tally rendered as a colored pill on the run page.
+pub struct OutcomePill {
+    pub label: &'static str,
+    pub count: u64,
+    pub class: String,
+}
+
 pub struct RubricAvgRow {
     pub label: String,
     pub values: Vec<String>,
+    /// Average of this rubric across all lanes (over every rollout with a record).
+    pub avg: String,
 }
 
 pub struct HackRow {
     pub id: String,
     pub href: String,
     pub evidence: String,
+}
+
+pub struct ReportView {
+    pub label: String,
+    pub filename: String,
+    pub html: String,
 }
 
 #[derive(Template)]
@@ -328,10 +387,12 @@ pub struct RunTemplate {
     pub date: String,
     pub warnings: Vec<String>,
     pub summary: Vec<SummaryRow>,
+    pub outcome_pills: Vec<OutcomePill>,
     pub rubric_badge: RubricBadge,
     pub lanes: Vec<String>,
     pub has_rubrics: bool,
     pub rubric_rows: Vec<RubricAvgRow>,
+    pub reports: Vec<ReportView>,
     pub hacking: Vec<HackRow>,
     pub outcome_options: Vec<&'static str>,
     pub grid_url: String,
@@ -349,18 +410,22 @@ pub fn build_run(run: &Run, grid_html: String) -> RunTemplate {
             label: "pass rate".to_string(),
             value: fmt_rate(run.pass_rate()),
         },
-        SummaryRow {
-            label: "outcomes".to_string(),
-            value: format!(
-                "passed {} · failed {} · format_failed {} · no_submission {} · agent_error {}",
-                counts.passed,
-                counts.failed,
-                counts.format_failed,
-                counts.no_submission,
-                counts.agent_error
-            ),
-        },
     ];
+    let outcome_pills = [
+        ("passed", counts.passed),
+        ("failed", counts.failed),
+        ("format_failed", counts.format_failed),
+        ("no_submission", counts.no_submission),
+        ("agent_error", counts.agent_error),
+    ]
+    .into_iter()
+    .filter(|(_, count)| *count > 0)
+    .map(|(label, count)| OutcomePill {
+        label,
+        count,
+        class: format!("outcome-{label}"),
+    })
+    .collect();
     if let Some(agg) = &run.aggregate {
         if let Some(turns) = agg.avg_turns {
             summary.push(SummaryRow {
@@ -384,17 +449,29 @@ pub fn build_run(run: &Run, grid_html: String) -> RunTemplate {
 
     let lanes = run.lane_names();
     let has_rubrics = !matches!(run.rubric_status, RubricStatus::None);
+    let fmt_avg = |v: Option<f64>| match v {
+        Some(avg) => format!("{avg:.1}"),
+        None => "—".to_string(),
+    };
     let rubric_rows = RubricKey::ALL
         .iter()
         .map(|key| RubricAvgRow {
             label: key.label().to_string(),
             values: lanes
                 .iter()
-                .map(|lane| match run.lane_rubric_avg(lane, *key) {
-                    Some(avg) => format!("{avg:.1}"),
-                    None => "—".to_string(),
-                })
+                .map(|lane| fmt_avg(run.lane_rubric_avg(lane, *key)))
                 .collect(),
+            avg: fmt_avg(run.rubric_avg(*key)),
+        })
+        .collect();
+
+    let reports = run
+        .reports
+        .iter()
+        .map(|r| ReportView {
+            label: r.source.label().to_string(),
+            filename: r.filename.clone(),
+            html: render_markdown(&r.markdown),
         })
         .collect();
 
@@ -405,10 +482,12 @@ pub fn build_run(run: &Run, grid_html: String) -> RunTemplate {
         date: fmt_time(run.mtime),
         warnings: run.warnings.clone(),
         summary,
+        outcome_pills,
         rubric_badge: RubricBadge::from_status(run.rubric_status),
         lanes,
         has_rubrics,
         rubric_rows,
+        reports,
         hacking,
         outcome_options: ALL_OUTCOMES.iter().map(|o| o.value()).collect(),
         grid_url: format!("/runs/{}/grid", encode_segment(&run.id)),

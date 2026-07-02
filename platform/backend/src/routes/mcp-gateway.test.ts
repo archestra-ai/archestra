@@ -16,7 +16,6 @@ import {
   TOOL_READ_APP_SHORT_NAME,
   TOOL_READ_FILE_FULL_NAME,
   TOOL_REFINE_APP_SHORT_NAME,
-  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SAVE_FILE_FULL_NAME,
@@ -1141,7 +1140,8 @@ describe("MCP Gateway (stateless mode)", () => {
           getArchestraToolFullName(TOOL_VALIDATE_APP_SHORT_NAME),
           getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
           getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_RENDER_APP_SHORT_NAME),
+          // render_app is deliberately absent: it renders only inside
+          // Archestra's own chat, so gateway-type agents don't list it.
           getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
         ].sort(),
       );

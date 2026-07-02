@@ -958,8 +958,26 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         const schema = await inputSchema({
                           toolName: toolCall.toolName,
                         });
+                        // A separate model instance so the re-ask is logged
+                        // under its own interaction source: it carries no
+                        // agent context (no system prompt), and consumers of
+                        // the session's interactions (logs UI, benchmarks)
+                        // must be able to tell it apart from the main turn.
+                        const { model: repairModel } =
+                          await createLLMModelForAgent({
+                            organizationId,
+                            userId: user.id,
+                            agentId,
+                            model: selectedModel,
+                            provider,
+                            conversationId,
+                            externalAgentId,
+                            sessionId: conversationId,
+                            source: "chat:tool_call_repair",
+                            agentLlmApiKeyId: agent.llmApiKeyId,
+                          });
                         const { object } = await generateObject({
-                          model,
+                          model: repairModel,
                           schema: jsonSchema(schema),
                           temperature: 0,
                           abortSignal: chatAbortController.signal,

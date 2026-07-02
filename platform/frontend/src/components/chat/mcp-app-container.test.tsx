@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -462,6 +462,22 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
     const bridge = await renderReadyApp(2000, { panel: true });
     expect(lastGuestContainerDimensions(bridge)).toEqual({});
   });
+
+  it("seeds the panel-hosted guest with the tool result (parity with inline)", async () => {
+    // Regression from #6163 (portal removal): the fresh panel iframe must be
+    // seeded with the tool result — otherwise an app that renders from the
+    // pushed result re-calls its source tool live, which 404s for tools that
+    // aren't directly listed on the gateway.
+    const bridge = await renderReadyApp(2000, { panel: true });
+    await act(async () => {
+      bridge.oninitialized();
+    });
+    expect(bridge.sendToolResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: [{ type: "text", text: "some result" }],
+      }),
+    );
+  });
 });
 
 describe("McpAppSection panel hosting", () => {
@@ -517,20 +533,25 @@ describe("McpAppSection panel hosting", () => {
     expect(screen.queryByText(/runtime error/i)).not.toBeInTheDocument();
   });
 
-  it("resolves the open app to the latest while the panel hosts, even after an inline collapse", async () => {
-    // Repro: collapsing every inline app sets the open app to null (correct for
-    // the chat stream). Opening the panel afterwards must still host an app —
-    // the Apps tab has no "nothing open" state — so a null collapse falls back
-    // to the latest app while the panel is hosting (portalTarget set).
+  it("keeps the panel resolved to a single app even after every inline app is collapsed", async () => {
+    // The Apps tab has no "nothing open" state: the panel must always host one
+    // app. Collapsing every inline app must not blank it — it falls back to the
+    // latest app.
     const user = userEvent.setup();
 
     function Probe() {
-      const { openToolCallId, setOpenToolCallId, setPortalTarget } = useApps();
+      const { panelToolCallId, toggleAppOpen, setPortalTarget } = useApps();
       return (
         <div>
-          <div data-testid="open">{openToolCallId ?? "none"}</div>
-          <button type="button" onClick={() => setOpenToolCallId(null)}>
-            collapse
+          <div data-testid="panel">{panelToolCallId ?? "none"}</div>
+          <button
+            type="button"
+            onClick={() => {
+              toggleAppOpen("tc1");
+              toggleAppOpen("tc2");
+            }}
+          >
+            collapse all
           </button>
           <button
             type="button"
@@ -565,30 +586,88 @@ describe("McpAppSection panel hosting", () => {
       );
     });
 
-    // Untouched → the latest app (tc2) is open.
-    expect(screen.getByTestId("open")).toHaveTextContent("tc2");
+    // Untouched → the latest app (tc2) is the panel's app.
+    expect(screen.getByTestId("panel")).toHaveTextContent("tc2");
 
-    // Collapse all inline apps → nothing open (no panel hosting yet).
+    // Collapsing every inline app must not blank the panel — it stays on tc2.
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: "collapse" }));
+      await user.click(screen.getByRole("button", { name: "collapse all" }));
     });
-    expect(screen.getByTestId("open")).toHaveTextContent("none");
+    expect(screen.getByTestId("panel")).toHaveTextContent("tc2");
 
-    // Opening the panel (portalTarget set) must resolve back to the latest app
-    // rather than leaving the tab blank.
+    // Hosting the panel keeps it on that single app.
     await act(async () => {
       await user.click(screen.getByRole("button", { name: "host panel" }));
     });
-    expect(screen.getByTestId("open")).toHaveTextContent("tc2");
+    expect(screen.getByTestId("panel")).toHaveTextContent("tc2");
   });
 
-  it("collapses a non-open app to a pill while another app is open", async () => {
+  it("hosts the picked render in the panel after collapsing every app", async () => {
+    // With no explicit panel pick and every app collapsed, the panel falls back
+    // to the group's active render — honoring an older-render pick — rather than
+    // the raw latest render.
+    const user = userEvent.setup();
+
+    function Probe() {
+      const { panelToolCallId, toggleAppOpen } = useApps();
+      return (
+        <div>
+          <div data-testid="panel">{panelToolCallId ?? "none"}</div>
+          <button type="button" onClick={() => toggleAppOpen("tc1")}>
+            toggle tc1
+          </button>
+        </div>
+      );
+    }
+
+    await act(async () => {
+      render(
+        <AppsProvider
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "Dashboard",
+              uiResourceUri: defaultProps.uiResourceUri,
+              appId: APP_ID,
+              createdAt: 0,
+            },
+            {
+              toolCallId: "tc2",
+              label: "Dashboard",
+              uiResourceUri: defaultProps.uiResourceUri,
+              appId: APP_ID,
+              createdAt: 1,
+            },
+          ]}
+        >
+          <Probe />
+        </AppsProvider>,
+      );
+    });
+
+    // Untouched → the latest render (tc2) is active and hosted.
+    expect(screen.getByTestId("panel")).toHaveTextContent("tc2");
+
+    // Picking the older render tc1 makes it active and hosted.
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "toggle tc1" }));
+    });
+    expect(screen.getByTestId("panel")).toHaveTextContent("tc1");
+
+    // Collapsing the app (second toggle) keeps the panel on the picked render.
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "toggle tc1" }));
+    });
+    expect(screen.getByTestId("panel")).toHaveTextContent("tc1");
+  });
+
+  it("expands each app inline by default and toggles just that app with its pill", async () => {
     const user = userEvent.setup();
 
     await act(async () => {
       render(
-        // tc1 is the latest (greatest createdAt), so it's the default open app;
-        // the rendered tc2 section is not open and collapses to a pill.
+        // Every app expands inline by default, so the rendered tc2 section shows
+        // its live app immediately rather than only when it is the latest.
         <AppsProvider
           apps={[
             {
@@ -615,11 +694,17 @@ describe("McpAppSection panel hosting", () => {
       );
     });
 
-    // One app open at a time: tc2 shows only its pill, no live iframe.
-    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+    // Open by default: the live iframe is mounted.
+    expect(document.querySelector("iframe")).toBeInTheDocument();
     const pill = screen.getByRole("button", { name: /get-data/i });
 
-    // Clicking the pill opens tc2 inline.
+    // Clicking the pill collapses just this app.
+    await act(async () => {
+      await user.click(pill);
+    });
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+
+    // Clicking again reopens it.
     await act(async () => {
       await user.click(pill);
     });
@@ -638,7 +723,7 @@ describe("McpAppSection older renders (no suppression)", () => {
     >);
   });
 
-  it("hides the diagnostics panel while the app is closed, shows it once opened", async () => {
+  it("shows the diagnostics panel while the app is open and hides it once collapsed", async () => {
     const user = userEvent.setup();
     reportAppDiagnostic(APP_ID, 1, {
       type: "csp-violation",
@@ -647,16 +732,8 @@ describe("McpAppSection older renders (no suppression)", () => {
 
     await act(async () => {
       render(
-        // Another app (tc-other) is newest, so it's the default open one and the
-        // rendered APP_ID section (tc1) starts closed.
         <AppsProvider
           apps={[
-            {
-              toolCallId: "tc-other",
-              label: "Other App",
-              uiResourceUri: "resource://test-server/ui-other",
-              createdAt: 1,
-            },
             {
               toolCallId: "tc1",
               label: "Dashboard",
@@ -677,16 +754,16 @@ describe("McpAppSection older renders (no suppression)", () => {
       );
     });
 
-    // Closed: the error is hidden along with the iframe.
-    expect(document.querySelector("iframe")).not.toBeInTheDocument();
-    expect(screen.queryByText(/runtime error/i)).not.toBeInTheDocument();
+    // Open by default: both the app and its diagnostics are visible.
+    expect(document.querySelector("iframe")).toBeInTheDocument();
+    expect(screen.getByText(/runtime error/i)).toBeInTheDocument();
 
-    // Opening the pill reveals both the app and its diagnostics.
+    // Collapsing the app hides the error along with the iframe.
     await act(async () => {
       await user.click(screen.getByRole("button", { name: "Dashboard" }));
     });
-    expect(document.querySelector("iframe")).toBeInTheDocument();
-    expect(screen.getByText(/runtime error/i)).toBeInTheDocument();
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+    expect(screen.queryByText(/runtime error/i)).not.toBeInTheDocument();
   });
 
   it("shows an older owned render as a plain pill (app name only) that opens inline on click", async () => {
@@ -770,6 +847,88 @@ describe("McpAppSection older renders (no suppression)", () => {
 
     expect(document.querySelector("iframe")).toBeInTheDocument();
     expect(screen.queryByText(/· Updated/)).not.toBeInTheDocument();
+  });
+});
+
+describe("McpAppSection multi-open", () => {
+  const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearAllAppDiagnostics();
+    mockUseApp.mockReturnValue({ data: undefined } as ReturnType<
+      typeof useApp
+    >);
+  });
+
+  it("shows one instance of a repeated owned app and moves it to the clicked render", async () => {
+    const user = userEvent.setup();
+    const apps = [
+      {
+        toolCallId: "tc1",
+        label: "Dashboard",
+        uiResourceUri: defaultProps.uiResourceUri,
+        appId: APP_ID,
+        createdAt: 0,
+      },
+      {
+        toolCallId: "tc2",
+        label: "Dashboard",
+        uiResourceUri: defaultProps.uiResourceUri,
+        appId: APP_ID,
+        createdAt: 1,
+      },
+    ];
+
+    await act(async () => {
+      render(
+        <AppsProvider apps={apps}>
+          <div data-testid="sec-tc1">
+            <McpAppSection
+              {...defaultProps}
+              appId={APP_ID}
+              appName="Dashboard"
+              toolName="archestra__edit_app"
+              toolCallId="tc1"
+              preloadedResource={preloadedResource}
+            />
+          </div>
+          <div data-testid="sec-tc2">
+            <McpAppSection
+              {...defaultProps}
+              appId={APP_ID}
+              appName="Dashboard"
+              toolName="archestra__edit_app"
+              toolCallId="tc2"
+              preloadedResource={preloadedResource}
+            />
+          </div>
+        </AppsProvider>,
+      );
+    });
+
+    // The latest render (tc2) shows the single live instance; the older is a pill.
+    expect(document.querySelectorAll("iframe")).toHaveLength(1);
+    expect(
+      screen.getByTestId("sec-tc2").querySelector("iframe"),
+    ).toBeInTheDocument();
+
+    // Clicking the older render's pill moves the single instance under it and
+    // collapses the newer one — still exactly one open.
+    await act(async () => {
+      await user.click(
+        within(screen.getByTestId("sec-tc1")).getByRole("button", {
+          name: "Dashboard",
+        }),
+      );
+    });
+    expect(document.querySelectorAll("iframe")).toHaveLength(1);
+    expect(
+      screen.getByTestId("sec-tc1").querySelector("iframe"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("sec-tc2").querySelector("iframe"),
+    ).not.toBeInTheDocument();
   });
 });
 

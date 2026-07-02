@@ -193,8 +193,11 @@ export function McpAppSection({
     resourceState.key === resourceKey ? resourceState.state : "unknown";
 
   const {
-    openToolCallId,
-    setOpenToolCallId,
+    isAppOpen,
+    toggleAppOpen,
+    panelToolCallId,
+    setPanelApp,
+    canonicalToolCallId,
     openRightPanel,
     closePanel,
     portalTarget,
@@ -214,15 +217,20 @@ export function McpAppSection({
 
   const headerName = ownedApp?.name || appName || mcpToolLabel(toolName);
   const isPanelSurface = surface === "panel";
-  // This render is the single open app (`openToolCallId`). An app without a
-  // toolCallId isn't in the registry (can't be selected), so it stands alone and
-  // is always "open". The panel surface only ever renders the open app.
-  const isOpen = isPanelSurface || !toolCallId || openToolCallId === toolCallId;
-  // The open app is hosted in the right-panel sidebar when the Apps tab is open
-  // (`portalTarget` set): a separate `surface="panel"` instance renders it there,
-  // so the inline stream shows just a marker. On the panel surface itself this is
-  // effectively "this is that render".
-  const shownInSidebar = isOpen && !!portalTarget;
+  const standalone = !toolCallId;
+  const canonicalId = toolCallId ? canonicalToolCallId(toolCallId) : undefined;
+  // Expanded inline when the panel isn't hosting and this render is standalone or
+  // the open canonical one. Multiple apps can be expanded at once.
+  const expandedInline =
+    !isPanelSurface &&
+    !portalTarget &&
+    (standalone || (!!toolCallId && isAppOpen(toolCallId)));
+  // This render is the one hosted in the right panel; inline collapses to a marker.
+  const isPanelFocused =
+    !isPanelSurface &&
+    !!portalTarget &&
+    !!canonicalId &&
+    panelToolCallId === canonicalId;
 
   // Reconstruct McpCallToolResult for AppFrame. Owned apps get none — the
   // management tool's result is not app data.
@@ -238,17 +246,10 @@ export function McpAppSection({
     };
   }, [rawOutput, appId]);
 
-  // A pill opens its app inline: set it open and always close the right panel so
-  // the app lands inline rather than in the panel.
-  const openInline = (id: string) => {
-    setOpenToolCallId(id);
-    closePanel();
-  };
-
   const handleShowInPanel = () => {
     if (!toolCallId) return;
     setDisplayMode("inline"); // panel is the app's frame — never fullscreen there
-    setOpenToolCallId(toolCallId);
+    setPanelApp(toolCallId);
     openRightPanel();
   };
 
@@ -409,12 +410,9 @@ export function McpAppSection({
   // inside the height-constrained panel (item 3).
   const diagnostics = appId ? <AppDiagnosticsPanel appId={appId} /> : null;
 
-  // The app marker is always a top-level flex item, so it sits on the same row
-  // as the host tool-call circle. Pressed = this app is the open one and shown
-  // inline; it reads unpressed while the app lives in the right panel or while
-  // another app is open. A red dot flags a runtime error. Clicking toggles: open
-  // this app, or collapse it when it's already open inline (pressed).
-  const pressed = isOpen && !shownInSidebar;
+  // The marker sits on the host tool-call circle's row. Pressed = expanded inline;
+  // a red dot flags a runtime error. Clicking toggles this app's inline render.
+  const pressed = expandedInline;
   const marker = (
     <McpAppMarkerCircle
       label={headerName}
@@ -422,31 +420,24 @@ export function McpAppSection({
       hasError={hasRuntimeError}
       onClick={() => {
         if (!toolCallId) return;
-        // With the panel open, pills are the app selector: clicking another
-        // app's pill retargets the panel to it, and clicking the app already in
-        // the panel closes it. With no panel open, toggle the inline render.
+        // With the panel open, pills select the hosted app; otherwise they toggle
+        // this app's inline render, leaving other open apps alone.
         if (portalTarget) {
-          if (shownInSidebar) closePanel();
-          else setOpenToolCallId(toolCallId);
-        } else if (pressed) {
-          setOpenToolCallId(null);
+          if (isPanelFocused) closePanel();
+          else setPanelApp(toolCallId);
         } else {
-          openInline(toolCallId);
+          toggleAppOpen(toolCallId);
         }
       }}
     />
   );
 
-  // Everything under the circle+marker row stacks in one full-width column:
-  // tool-call details (above the app), then the inline app card + its
-  // "Open in right panel" button, then the diagnostics summary. The inline app
-  // and its diagnostics render only for the open app while it isn't hosted in
-  // the sidebar; other (closed) apps show just their pill — the error stays
-  // hidden with the iframe (one app open at a time; the pill's red dot remains).
+  // Under the marker row: tool-call details, then (only while expanded inline) the
+  // app card, its "Open in right panel" button, and the diagnostics summary.
   const belowColumn = (
     <div className="flex w-full flex-col items-start gap-2">
       {toolDetails ? <div className="w-full">{toolDetails}</div> : null}
-      {isOpen && !shownInSidebar ? (
+      {expandedInline ? (
         <div className="flex w-full flex-col items-start gap-2">
           {liveSurface}
           {toolCallId && displayMode !== "fullscreen" ? (

@@ -199,6 +199,22 @@ const interactionsTable = pgTable(
     createdAtIdx: index("interactions_created_at_idx").on(
       table.createdAt.desc(),
     ),
+    // Covering index for the cost-statistics aggregations (StatisticsModel):
+    // they filter on created_at and only read these numeric/model columns, so
+    // an index-only scan avoids fetching scattered heap pages of a table whose
+    // rows are dominated by large TOASTed JSONB payloads.
+    statisticsCoveringIdx: index("interactions_statistics_covering_idx").on(
+      table.createdAt,
+      table.profileId,
+      table.model,
+      table.inputTokens,
+      table.outputTokens,
+      table.cacheReadTokens,
+      table.cost,
+      table.baselineCost,
+      table.toonCostSavings,
+      table.cacheSavings,
+    ),
     profileCreatedAtIdx: index("interactions_profile_created_at_idx").on(
       table.profileId,
       table.createdAt.desc(),

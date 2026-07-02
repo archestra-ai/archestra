@@ -18,6 +18,7 @@ import { DEFAULT_APP_TEMPLATE_ID, resolveCreateAppHtml } from "@/app-templates";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
+  AgentModel,
   AppAccessModel,
   AppModel,
   AppRenderDiagnosticsModel,
@@ -619,6 +620,31 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
+      }
+      // render_app's effect exists only in Archestra's chat frontend, which
+      // mounts the app from this result; an external MCP host displays nothing
+      // while the result text reads as success. tools/list already hides the
+      // tool from non-chat agents, but sibling tool descriptions name it and
+      // run_tool can still dispatch it — so the handler itself steers external
+      // callers to the app's launch tool, the only path that renders there.
+      // Gateway dispatch always carries an agentId; a context without one is
+      // the internal management-tool convention and stays permitted.
+      if (context.agentId) {
+        const agentType = await AgentModel.getAgentType(context.agentId);
+        // A deleted/missing agent is a distinct failure from a non-chat
+        // connection — surface it as such rather than the steer message, which
+        // would misattribute it to an external-host limitation.
+        if (agentType === null) {
+          return errorResult(`Agent ${context.agentId} not found.`);
+        }
+        if (agentType !== "agent") {
+          return errorResult(
+            "render_app displays an app only inside Archestra's chat UI — on " +
+              "this connection it renders nothing. To open an app here, call " +
+              "the app's own launch tool directly (its name ends in __open); " +
+              "it is in your tool list, keyed by the app's name.",
+          );
+        }
       }
       const loaded = await loadAppForCaller({
         userId: context.userId,

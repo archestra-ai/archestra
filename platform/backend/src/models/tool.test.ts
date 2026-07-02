@@ -3057,6 +3057,84 @@ describe("ToolModel", () => {
       expect(catalog?.requiresAuth).toBe(metadata.requiresAuth);
     });
 
+    test("seeds default invocation + trusted data policies for query_knowledge_sources", async () => {
+      const catalogId = randomUUID();
+      archestraMcpBranding.syncFromOrganization(null);
+
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const [kbTool] = await db
+        .select({ id: schema.toolsTable.id })
+        .from(schema.toolsTable)
+        .where(
+          eq(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME),
+        );
+      expect(kbTool).toBeDefined();
+
+      const invocationPolicies = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, kbTool.id));
+      const trustedDataPolicies = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, kbTool.id));
+
+      expect(invocationPolicies).toHaveLength(1);
+      expect(invocationPolicies[0].conditions).toEqual([]);
+      expect(invocationPolicies[0].action).toBe(
+        "allow_when_context_is_untrusted",
+      );
+
+      expect(trustedDataPolicies).toHaveLength(1);
+      expect(trustedDataPolicies[0].conditions).toEqual([]);
+      expect(trustedDataPolicies[0].action).toBe("mark_as_untrusted");
+    });
+
+    test("does not overwrite admin-customized policies for query_knowledge_sources on reseed", async () => {
+      const catalogId = randomUUID();
+      archestraMcpBranding.syncFromOrganization(null);
+
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const [kbTool] = await db
+        .select({ id: schema.toolsTable.id })
+        .from(schema.toolsTable)
+        .where(
+          eq(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME),
+        );
+
+      // Admin changes both policies via the UI.
+      await db
+        .update(schema.toolInvocationPoliciesTable)
+        .set({ action: "block_when_context_is_untrusted" })
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, kbTool.id));
+      await db
+        .update(schema.trustedDataPoliciesTable)
+        .set({ action: "mark_as_trusted" })
+        .where(eq(schema.trustedDataPoliciesTable.toolId, kbTool.id));
+
+      // Re-seed (simulates a server restart).
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const invocationPolicies = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, kbTool.id));
+      const trustedDataPolicies = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, kbTool.id));
+
+      expect(invocationPolicies).toHaveLength(1);
+      expect(invocationPolicies[0].action).toBe(
+        "block_when_context_is_untrusted",
+      );
+
+      expect(trustedDataPolicies).toHaveLength(1);
+      expect(trustedDataPolicies[0].action).toBe("mark_as_trusted");
+    });
+
     test("rebrands built-in catalog metadata and tool names on sync for white-labeled orgs", async ({
       makeOrganization,
     }) => {
@@ -3490,6 +3568,101 @@ describe("ToolModel", () => {
               fullWhiteLabeling: true,
             }),
         ),
+      ).toBe(false);
+    });
+
+    test("includes the white-labeled knowledge tool when explicitly requested", async ({
+      makeOrganization,
+      makeAgent,
+      makeAgentTool,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      await ToolModel.syncArchestraBuiltInCatalog({
+        organization: { appName: "Acme Copilot", iconLogo: null },
+      });
+
+      const agent = await makeAgent({ organizationId: org.id });
+      const brandedKbToolName = getArchestraToolFullName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+        {
+          appName: "Acme Copilot",
+          fullWhiteLabeling: true,
+        },
+      );
+
+      const [kbTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.name, brandedKbToolName));
+
+      expect(kbTool).toBeDefined();
+      await makeAgentTool(agent.id, kbTool?.id);
+
+      const result = await ToolModel.findAllWithAssignments({
+        filters: {
+          excludeArchestraTools: true,
+          includeKnowledgeSourcesTool: true,
+        },
+      });
+
+      expect(result.data.some((tool) => tool.name === brandedKbToolName)).toBe(
+        true,
+      );
+    });
+
+    test("includeKnowledgeSourcesTool does not leak other built-in tools", async ({
+      makeOrganization,
+      makeAgent,
+      makeAgentTool,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      await ToolModel.syncArchestraBuiltInCatalog({
+        organization: { appName: "Acme Copilot", iconLogo: null },
+      });
+
+      const agent = await makeAgent({ organizationId: org.id });
+
+      // Assign a few built-in tools to the agent
+      const brandedKbToolName = getArchestraToolFullName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+        { appName: "Acme Copilot", fullWhiteLabeling: true },
+      );
+      const brandedArtifactToolName = getArchestraToolFullName(
+        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+        { appName: "Acme Copilot", fullWhiteLabeling: true },
+      );
+
+      const [kbTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.name, brandedKbToolName));
+      const [artifactTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.name, brandedArtifactToolName));
+
+      expect(kbTool).toBeDefined();
+      expect(artifactTool).toBeDefined();
+      await makeAgentTool(agent.id, kbTool?.id);
+      await makeAgentTool(agent.id, artifactTool?.id);
+
+      const result = await ToolModel.findAllWithAssignments({
+        filters: {
+          excludeArchestraTools: true,
+          includeKnowledgeSourcesTool: true,
+        },
+      });
+
+      // KB tool should be present
+      expect(result.data.some((tool) => tool.name === brandedKbToolName)).toBe(
+        true,
+      );
+
+      // Other built-in tools must NOT be present
+      expect(
+        result.data.some((tool) => tool.name === brandedArtifactToolName),
       ).toBe(false);
     });
   });

@@ -56,10 +56,7 @@ jobs:
             dockerfile: ./platform/mcp_server_docker_image/Dockerfile
             local-tag-prefix: mcp-server-base
             use-build-action: false
-            # TEMPORARY: scan runs but does not block merges. Alpine 3.23 has not
-            # yet backported the curl fix for HIGH CVE-2026-3805 (only in edge as
-            # 8.20.0-r1). Restore "true" once 3.23 ships curl >= 8.19.0-r0.
-            scan-exit-code: "false"
+            scan-exit-code: "true"
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

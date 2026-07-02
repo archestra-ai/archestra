@@ -60,4 +60,6 @@ Connectors pull data from external tools (Jira, Confluence, GitHub, etc.) and fe
 
 Once assigned, the agent gains a `query_knowledge_sources` tool that searches across everything attached to it and pulls back the most relevant documents to answer the user's question.
 
+The output of `query_knowledge_sources` is treated as sensitive by default, which can impact the ability to use subsequent tools. See [Archestra MCP Server](/docs/platform-archestra-mcp-server#auth), and [AI Tool Guardrails](/docs/platform-ai-tool-guardrails), for more details.
+
 ![Selecting Knowledge Bases and connectors on an agent](/docs/automated_screenshots/platform-knowledge-bases_assign-to-agent.webp)

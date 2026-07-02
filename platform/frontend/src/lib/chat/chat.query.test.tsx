@@ -356,6 +356,8 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     userId: "user-1",
     organizationId: "org-1",
     agentId: "agent-a",
+    lastMessageSeq: null,
+    lastReadSeq: null,
     chatApiKeyId: "key-openai",
     title: "Test",
     selectedModel: "gpt-4o",

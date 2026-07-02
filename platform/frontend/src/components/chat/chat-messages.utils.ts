@@ -18,6 +18,7 @@ import {
 import type { PanelApp } from "./apps-context";
 import type { FileAttachment } from "./editable-user-message";
 import type { HookRunChipData } from "./hook-run-chip";
+import type { McpToolOutput } from "./mcp-app-container";
 
 export type OptimisticToolCall = {
   toolCallId: string;
@@ -245,7 +246,22 @@ export function deriveAppsFromMessages(
           uiResourceUri: outputUri,
           appId: null,
           mcpServerId,
-          toolName: fullToolName,
+          // Unwrap run_tool so the server prefix matches the inline render.
+          toolName: resolveRunToolTargetName(part, fullToolName, {
+            getToolShortName,
+          }),
+          // Seed the panel-hosted iframe with the tool result exactly like the
+          // inline render, so it doesn't re-call its source tool on mount.
+          rawOutput: part.output as McpToolOutput,
+          // Unwrap run_tool's tool_args so the seeded input matches inline.
+          toolInput:
+            getToolShortName(fullToolName) === TOOL_RUN_TOOL_SHORT_NAME
+              ? ((
+                  part.input as
+                    | { tool_args?: Record<string, unknown> }
+                    | undefined
+                )?.tool_args ?? null)
+              : ((part.input as Record<string, unknown> | undefined) ?? null),
           version: null,
           createdAt: createdAt ?? 0,
         });

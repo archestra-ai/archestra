@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import {
   AppWindow,
@@ -6,19 +6,19 @@ import {
   FileText,
   Globe,
   PanelRightClose,
-} from "lucide-react";
-import { useEffect, useLayoutEffect, useRef } from "react";
-import { useApps } from "@/components/chat/apps-context";
-import { BrowserPanel } from "@/components/chat/browser-panel";
-import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
-import { McpAppSection } from "@/components/chat/mcp-app-container";
-import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
-import { ScheduleRunsList } from "@/components/scheduled-tasks/schedule-runs-list";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useScheduleTrigger } from "@/lib/schedule-trigger.query";
+} from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useApps } from '@/components/chat/apps-context';
+import { BrowserPanel } from '@/components/chat/browser-panel';
+import { ConversationFilesPanel } from '@/components/chat/conversation-files-panel';
+import { McpAppSection } from '@/components/chat/mcp-app-container';
+import { ResizableRightPanel } from '@/components/chat/resizable-right-panel';
+import { ScheduleRunsList } from '@/components/scheduled-tasks/schedule-runs-list';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useScheduleTrigger } from '@/lib/schedule-trigger.query';
 
-export type RightPanelTab = "runs" | "files" | "browser" | "apps";
+export type RightPanelTab = 'runs' | 'files' | 'browser' | 'apps';
 
 interface RightSidePanelProps {
   isOpen: boolean;
@@ -73,15 +73,15 @@ export function RightSidePanel({
   const portalDivRef = useRef<HTMLDivElement | null>(null);
 
   let resolvedTab: RightPanelTab = activeTab;
-  if (resolvedTab === "browser" && !canShowBrowser) resolvedTab = "files";
+  if (resolvedTab === 'browser' && !canShowBrowser) resolvedTab = 'files';
   // The Runs tab only exists for scheduled-run chats; fall back otherwise.
-  if (resolvedTab === "runs" && !scheduledRun) resolvedTab = "files";
+  if (resolvedTab === 'runs' && !scheduledRun) resolvedTab = 'files';
 
   // Activate the portal target only while the Apps tab is showing — when the
   // user switches to artifact/browser or closes the panel, the app falls back
   // to inline rendering in the chat.
   useEffect(() => {
-    const shouldHostApp = isOpen && resolvedTab === "apps";
+    const shouldHostApp = isOpen && resolvedTab === 'apps';
     setPortalTarget(shouldHostApp ? portalDivRef.current : null);
     return () => {
       setPortalTarget(null);
@@ -147,23 +147,23 @@ export function RightSidePanel({
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden relative">
-          {resolvedTab === "runs" && scheduledRun && (
+          {resolvedTab === 'runs' && scheduledRun && (
             <RunsPanel
               triggerId={scheduledRun.triggerId}
               currentRunId={scheduledRun.runId}
               projectId={projectId ?? null}
             />
           )}
-          {resolvedTab === "files" && (
+          {resolvedTab === 'files' && (
             <ConversationFilesPanel
-              key={conversationId ?? "none"}
+              key={conversationId ?? 'none'}
               conversationId={conversationId}
               artifact={artifact}
               projectId={projectId}
               onClose={onClose}
             />
           )}
-          {resolvedTab === "browser" && canShowBrowser && (
+          {resolvedTab === 'browser' && canShowBrowser && (
             <BrowserPanel
               isOpen
               onClose={onClose}
@@ -178,7 +178,7 @@ export function RightSidePanel({
           )}
           {/* Apps tab content: renders the open app directly (no portal). The
               app-switcher lives in the hosted card's header (see McpAppCard). */}
-          {resolvedTab === "apps" && (
+          {resolvedTab === 'apps' && (
             <div className="flex flex-col h-full">
               <div ref={portalDivRef} className="flex-1 min-h-0 relative">
                 {apps.length === 0 ? (
@@ -215,18 +215,27 @@ function PanelAppHost({ agentId }: { agentId?: string }) {
   if (!app) {
     return null;
   }
+
+  // An external app drives the agent gateway; mounting a fresh iframe against an
+  // empty agent (`/api/mcp/`) would 404, so bail like the inline render's guard.
+  if (!app.appId && !app.mcpServerId && !agentId) {
+    return null;
+  }
+
   return (
     <McpAppSection
       key={app.toolCallId}
       surface="panel"
       uiResourceUri={app.uiResourceUri}
-      agentId={agentId ?? ""}
+      agentId={agentId ?? ''}
       appId={app.appId ?? undefined}
       mcpServerId={app.mcpServerId}
       appName={app.label}
       appVersion={app.version}
-      toolName={app.toolName ?? ""}
+      toolName={app.toolName ?? ''}
       toolCallId={app.toolCallId}
+      rawOutput={app.rawOutput ?? undefined}
+      toolInput={app.toolInput ?? undefined}
     />
   );
 }
@@ -288,7 +297,7 @@ function RunsPanel({
       className="flex h-full flex-col overflow-y-auto p-3"
     >
       <div className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Runs · {trigger?.name ?? "Schedule"}
+        Runs · {trigger?.name ?? 'Schedule'}
       </div>
       <ScheduleRunsList triggerId={triggerId} currentRunId={currentRunId} />
     </div>

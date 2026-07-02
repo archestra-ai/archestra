@@ -462,6 +462,22 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
     const bridge = await renderReadyApp(2000, { panel: true });
     expect(lastGuestContainerDimensions(bridge)).toEqual({});
   });
+
+  it("seeds the panel-hosted guest with the tool result (parity with inline)", async () => {
+    // Regression from #6163 (portal removal): the fresh panel iframe must be
+    // seeded with the tool result — otherwise an app that renders from the
+    // pushed result re-calls its source tool live, which 404s for tools that
+    // aren't directly listed on the gateway.
+    const bridge = await renderReadyApp(2000, { panel: true });
+    await act(async () => {
+      bridge.oninitialized();
+    });
+    expect(bridge.sendToolResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: [{ type: "text", text: "some result" }],
+      }),
+    );
+  });
 });
 
 describe("McpAppSection panel hosting", () => {

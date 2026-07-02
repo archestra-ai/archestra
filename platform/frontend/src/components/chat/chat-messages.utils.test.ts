@@ -292,6 +292,8 @@ describe("deriveAppsFromMessages", () => {
         appId: null,
         mcpServerId: null,
         toolName: "pm__show_board",
+        rawOutput: { _meta: { ui: { resourceUri: "ui://pm/board" } } },
+        toolInput: null,
         version: null,
         createdAt: Date.parse("2026-05-29T18:13:52.000Z"),
       },
@@ -328,10 +330,64 @@ describe("deriveAppsFromMessages", () => {
         appId: null,
         mcpServerId: "srv-1",
         toolName: "pm__show_board",
+        rawOutput: {
+          _meta: { ui: { resourceUri: "ui://pm/board", mcpServerId: "srv-1" } },
+        },
+        toolInput: null,
         version: null,
         createdAt: Date.parse("2026-05-29T18:13:52.000Z"),
       },
     ]);
+  });
+
+  it("carries the tool result as rawOutput so a panel render can seed its iframe", () => {
+    const output = {
+      _meta: { ui: { resourceUri: "ui://pm/board" } },
+      structuredContent: { applicants: [{ id: 24 }] },
+    };
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "pm__show_board",
+            toolCallId: "call_1",
+            state: "output-available",
+            input: { limit: 5 },
+            output,
+          },
+        ],
+      },
+    ] as never;
+
+    const apps = deriveAppsFromMessages(messages, {}, getToolShortName);
+    expect(apps[0].rawOutput).toEqual(output);
+    expect(apps[0].toolInput).toEqual({ limit: 5 });
+  });
+
+  it("stores the run_tool-unwrapped target name so the server prefix matches inline", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-archestra__run_tool",
+            toolCallId: "call_1",
+            state: "output-available",
+            input: { tool_name: "pm__show_board", tool_args: { limit: 5 } },
+            output: { _meta: { ui: { resourceUri: "ui://pm/board" } } },
+          },
+        ],
+      },
+    ] as never;
+
+    const apps = deriveAppsFromMessages(messages, {}, getToolShortName);
+    expect(apps[0].toolName).toBe("pm__show_board");
+    // toolInput seeds the target tool's args, not the run_tool wrapper.
+    expect(apps[0].toolInput).toEqual({ limit: 5 });
   });
 
   it("returns an app from early UI-start data before the result arrives", () => {
@@ -370,6 +426,8 @@ describe("deriveAppsFromMessages", () => {
         appId: null,
         mcpServerId: null,
         toolName: "pm__show_board",
+        // No result yet (early UI-start), so no seed; the pending input is kept.
+        toolInput: {},
         version: null,
         createdAt: 0,
       },
@@ -595,6 +653,8 @@ describe("deriveAppsFromMessages", () => {
         appId: null,
         mcpServerId: null,
         toolName: "pm__show_board",
+        rawOutput: { _meta: { ui: { resourceUri: "ui://pm/board" } } },
+        toolInput: null,
         version: null,
         createdAt: Date.parse("2026-05-29T18:00:00.000Z"),
       },
@@ -605,6 +665,8 @@ describe("deriveAppsFromMessages", () => {
         appId: null,
         mcpServerId: null,
         toolName: "pm__show_board",
+        rawOutput: { _meta: { ui: { resourceUri: "ui://pm/board" } } },
+        toolInput: null,
         version: null,
         createdAt: Date.parse("2026-05-29T18:05:00.000Z"),
       },

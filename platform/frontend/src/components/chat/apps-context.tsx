@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import type { McpToolOutput } from "./mcp-app-container";
 
 export interface PanelApp {
   toolCallId: string;
@@ -37,6 +38,14 @@ export interface PanelApp {
   mcpServerId?: string | null;
   /** Latest owned-app version this entry shows. */
   version?: number | null;
+  /**
+   * External MCP-UI tool result, so a panel-hosted render can seed its iframe
+   * (`sendToolResult`) exactly like the inline render instead of re-calling the
+   * source tool. Owned apps have none (their management result is not app data).
+   */
+  rawOutput?: McpToolOutput | null;
+  /** Tool input for the iframe; best-effort — only present on same-part results. */
+  toolInput?: Record<string, unknown> | null;
   /** Timestamp (ms) when the app first registered — used to order entries and default to the latest. */
   createdAt: number;
 }

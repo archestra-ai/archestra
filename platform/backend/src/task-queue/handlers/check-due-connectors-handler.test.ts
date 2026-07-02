@@ -1,28 +1,19 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
-
-const mockFindAllEnabled = vi.hoisted(() => vi.fn().mockResolvedValue([]));
-const mockFindAllWithStatus = vi.hoisted(() => vi.fn().mockResolvedValue([]));
-const mockConnectorUpdate = vi.hoisted(() => vi.fn().mockResolvedValue(null));
-const mockHasPendingOrProcessing = vi.hoisted(() =>
-  vi.fn().mockResolvedValue(false),
-);
-const mockHasActiveRun = vi.hoisted(() => vi.fn().mockResolvedValue(false));
-vi.mock("@/models", () => ({
-  KnowledgeBaseConnectorModel: {
-    findAllEnabled: mockFindAllEnabled,
-    findAllWithStatus: mockFindAllWithStatus,
-    update: mockConnectorUpdate,
-  },
-  TaskModel: { hasPendingOrProcessing: mockHasPendingOrProcessing },
-  ConnectorRunModel: { hasActiveRun: mockHasActiveRun },
-}));
+import { vi } from "vitest";
 
 const mockEnqueue = vi.hoisted(() => vi.fn().mockResolvedValue("task-id"));
 vi.mock("@/task-queue", () => ({
   taskQueueService: { enqueue: mockEnqueue },
 }));
 
+import {
+  ConnectorRunModel,
+  KnowledgeBaseConnectorModel,
+  TaskModel,
+} from "@/models";
+import { beforeEach, describe, expect, test } from "@/test";
 import { handleCheckDueConnectors } from "./check-due-connectors-handler";
+
+const PAST = () => new Date(Date.now() - 120_000);
 
 describe("handleCheckDueConnectors", () => {
   beforeEach(() => {
@@ -30,112 +21,173 @@ describe("handleCheckDueConnectors", () => {
   });
 
   test("does nothing when no connectors are enabled", async () => {
-    mockFindAllEnabled.mockResolvedValue([]);
+    await handleCheckDueConnectors();
+
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
+  test("skips connectors without a schedule", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    // Empty schedule means "no cron" — the column is NOT NULL, so "" is the
+    // real-world representation of an unscheduled connector.
+    await makeKnowledgeBaseConnector(kb.id, org.id, {
+      schedule: "",
+      enabled: true,
+    });
 
     await handleCheckDueConnectors();
 
     expect(mockEnqueue).not.toHaveBeenCalled();
   });
 
-  test("skips connectors without a schedule", async () => {
-    mockFindAllEnabled.mockResolvedValue([
-      { id: "conn-1", schedule: null, lastSyncAt: null },
-    ]);
-
-    await handleCheckDueConnectors();
-
-    expect(mockEnqueue).not.toHaveBeenCalled();
-  });
-
-  test("enqueues connector sync when cron is due", async () => {
-    const pastDate = new Date(Date.now() - 120_000);
-    mockFindAllEnabled.mockResolvedValue([
-      {
-        id: "conn-1",
-        schedule: "* * * * *", // every minute
-        lastSyncAt: pastDate,
-      },
-    ]);
-    mockHasPendingOrProcessing.mockResolvedValue(false);
+  test("enqueues connector sync when cron is due", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      schedule: "* * * * *",
+      enabled: true,
+    });
+    await KnowledgeBaseConnectorModel.update(connector.id, {
+      lastSyncAt: PAST(),
+    });
 
     await handleCheckDueConnectors();
 
     expect(mockEnqueue).toHaveBeenCalledWith({
       taskType: "connector_sync",
-      payload: { connectorId: "conn-1" },
+      payload: { connectorId: connector.id },
     });
   });
 
-  test("does not enqueue when a pending/processing task already exists", async () => {
-    const pastDate = new Date(Date.now() - 120_000);
-    mockFindAllEnabled.mockResolvedValue([
-      {
-        id: "conn-1",
-        schedule: "* * * * *",
-        lastSyncAt: pastDate,
-      },
-    ]);
-    mockHasPendingOrProcessing.mockResolvedValue(true);
+  test("does not enqueue when a pending/processing task already exists", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      schedule: "* * * * *",
+      enabled: true,
+    });
+    await KnowledgeBaseConnectorModel.update(connector.id, {
+      lastSyncAt: PAST(),
+    });
+    await TaskModel.create({
+      taskType: "connector_sync",
+      payload: { connectorId: connector.id },
+      status: "pending",
+    });
 
     await handleCheckDueConnectors();
 
     expect(mockEnqueue).not.toHaveBeenCalled();
   });
 
-  test("continues processing other connectors when one fails", async () => {
-    const pastDate = new Date(Date.now() - 120_000);
-    mockFindAllEnabled.mockResolvedValue([
-      {
-        id: "conn-bad",
-        schedule: "INVALID_CRON",
-        lastSyncAt: pastDate,
-      },
-      {
-        id: "conn-good",
-        schedule: "* * * * *",
-        lastSyncAt: pastDate,
-      },
-    ]);
-    mockHasPendingOrProcessing.mockResolvedValue(false);
+  test("continues processing other connectors when one fails", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const bad = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      schedule: "INVALID_CRON",
+      enabled: true,
+    });
+    await KnowledgeBaseConnectorModel.update(bad.id, { lastSyncAt: PAST() });
+    const good = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      schedule: "* * * * *",
+      enabled: true,
+    });
+    await KnowledgeBaseConnectorModel.update(good.id, { lastSyncAt: PAST() });
 
     await handleCheckDueConnectors();
 
-    // The good connector should still be enqueued despite the bad one failing
+    // The good connector is still enqueued despite the bad one throwing.
     expect(mockEnqueue).toHaveBeenCalledWith({
       taskType: "connector_sync",
-      payload: { connectorId: "conn-good" },
+      payload: { connectorId: good.id },
     });
   });
 
-  test("resets orphaned running status to failed when no task or run exists", async () => {
-    mockFindAllWithStatus.mockResolvedValue([{ id: "conn-orphan" }]);
-    mockHasPendingOrProcessing.mockResolvedValue(false);
-    mockHasActiveRun.mockResolvedValue(false);
-
-    await handleCheckDueConnectors();
-
-    expect(mockConnectorUpdate).toHaveBeenCalledWith("conn-orphan", {
-      lastSyncStatus: "failed",
-      lastSyncError: "Sync task was lost",
+  test("resets orphaned running status to failed when no task or run exists", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      enabled: false,
     });
-  });
-
-  test("does not reset running status when a pending task exists", async () => {
-    mockFindAllWithStatus.mockResolvedValue([{ id: "conn-pending" }]);
-    mockHasPendingOrProcessing.mockResolvedValue(true);
+    await KnowledgeBaseConnectorModel.update(connector.id, {
+      lastSyncStatus: "running",
+    });
 
     await handleCheckDueConnectors();
 
-    expect(mockConnectorUpdate).not.toHaveBeenCalled();
+    const updated = await KnowledgeBaseConnectorModel.findById(connector.id);
+    expect(updated?.lastSyncStatus).toBe("failed");
+    expect(updated?.lastSyncError).toBe("Sync task was lost");
   });
 
-  test("does not reset running status when an active run exists", async () => {
-    mockFindAllWithStatus.mockResolvedValue([{ id: "conn-active" }]);
-    mockHasPendingOrProcessing.mockResolvedValue(false);
-    mockHasActiveRun.mockResolvedValue(true);
+  test("does not reset running status when a pending task exists", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      enabled: false,
+    });
+    await KnowledgeBaseConnectorModel.update(connector.id, {
+      lastSyncStatus: "running",
+    });
+    await TaskModel.create({
+      taskType: "connector_sync",
+      payload: { connectorId: connector.id },
+      status: "pending",
+    });
 
     await handleCheckDueConnectors();
 
-    expect(mockConnectorUpdate).not.toHaveBeenCalled();
+    const updated = await KnowledgeBaseConnectorModel.findById(connector.id);
+    expect(updated?.lastSyncStatus).toBe("running");
+  });
+
+  test("does not reset running status when an active run exists", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      enabled: false,
+    });
+    await KnowledgeBaseConnectorModel.update(connector.id, {
+      lastSyncStatus: "running",
+    });
+    await ConnectorRunModel.create({
+      connectorId: connector.id,
+      status: "running",
+      startedAt: new Date(),
+    });
+
+    await handleCheckDueConnectors();
+
+    const updated = await KnowledgeBaseConnectorModel.findById(connector.id);
+    expect(updated?.lastSyncStatus).toBe("running");
   });
 });

@@ -948,6 +948,25 @@ describe("read_app / edit_app", () => {
     expect(text).toContain("<p>OMEGA</p>");
   });
 
+  test("a later length-changing edit shifts an earlier excerpt to its final position", async () => {
+    // Edit 1 lands AFTER edit 2's region in the document, and edit 2 changes
+    // length — edit 1's recorded span must shift by the delta or its excerpt
+    // slices the wrong region of the final document. Spacers keep the two
+    // context windows from overlapping, so a wrong position is visible.
+    const spacer = `<i>${"x".repeat(400)}</i>`;
+    const { appId, version } = await scaffoldWithHtml(
+      `<html><head></head><body><p>alpha</p>${spacer}<p>omega</p></body></html>`,
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "omega", new_str: "OMEGA" },
+      { old_str: "alpha", new_str: "a-much-longer-alpha-heading" },
+    ]);
+    expect(result.isError).toBe(false);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("<p>OMEGA</p>");
+    expect(text).toContain("<p>a-much-longer-alpha-heading</p>");
+  });
+
   test("a chained overwrite excerpt shows the final text, never the overwritten intermediate", async () => {
     const { appId, version } = await scaffoldWithHtml(
       "<html><head></head><body><p>foo</p></body></html>",
@@ -1264,7 +1283,7 @@ describe("get_app_diagnostics", () => {
   test("captures a first render that lands during the settle window", async () => {
     const appId = await createApp();
     const pending = getDiagnostics(appId);
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    await new Promise((resolve) => setTimeout(resolve, 400));
     await AppRenderDiagnosticsModel.record({
       appId,
       // biome-ignore lint/style/noNonNullAssertion: set in beforeEach

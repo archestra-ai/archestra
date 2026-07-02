@@ -1,0 +1,123 @@
+name: Warm E2E Image Caches
+
+# The e2e environment caches four static images as tarballs (kindest/node and
+# the three MCP dependency servers). Merge-queue runs execute on ephemeral
+# gh-readonly-queue refs, and Actions cache scoping means caches SAVED there
+# are never restorable by later runs — only main-scoped caches are. Without
+# this job every queue entry cache-misses all four images (~60-80s of pulls
+# per shard, measured). Warming from main makes those caches actually
+# readable on the hot path.
+#
+# Keys here MUST stay byte-identical to the consumers:
+# - .github/actions/install-kind-cluster/action.yml (kindest-node-*)
+# - .github/actions/setup-archestra-platform/action.yml (mcp-*-server-*)
+
+on:
+  schedule:
+    # Daily, before European working hours; re-warms after any LRU eviction.
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      # The image versions (and therefore the cache keys) are defined here —
+      # re-warm immediately when either changes so the first queue entry
+      # after a version bump already hits.
+      - ".github/actions/install-kind-cluster/action.yml"
+      - ".github/actions/setup-archestra-platform/action.yml"
+      - ".github/workflows/warm-e2e-image-caches.yml"
+
+permissions: {}
+
+concurrency:
+  group: warm-e2e-image-caches
+  cancel-in-progress: false
+
+jobs:
+  warm-image-caches:
+    name: Warm E2E Image Caches
+    # Same arch as the e2e runners (X64) so ${{ runner.arch }} in the keys
+    # matches; a small runner suffices — this job only pulls and saves.
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Cache Kind node image
+        id: cache-kind-node
+        uses: ./.github/actions/github-cache
+        with:
+          path: /tmp/kindest-node.tar
+          key: kindest-node-v1.34.3-${{ runner.arch }}
+
+      - name: Cache MCP example OAuth server image
+        id: cache-oauth-image
+        uses: ./.github/actions/github-cache
+        with:
+          path: /tmp/mcp-oauth-server.tar
+          key: mcp-oauth-server-0.0.1-${{ runner.arch }}
+
+      - name: Cache MCP JWKS server image
+        id: cache-jwks-image
+        uses: ./.github/actions/github-cache
+        with:
+          path: /tmp/mcp-jwks-server.tar
+          key: mcp-jwks-server-0.0.3-${{ runner.arch }}
+
+      - name: Cache MCP ID-JAG server image
+        id: cache-id-jag-image
+        uses: ./.github/actions/github-cache
+        with:
+          path: /tmp/mcp-id-jag-server.tar
+          key: mcp-id-jag-server-0.0.4-${{ runner.arch }}
+
+      # Pull and tarball whichever images missed; the cache action's post
+      # step uploads them with main-branch scope, which is what makes them
+      # visible to merge-queue and PR runs. All-hit runs are near-free.
+      - name: Pull and save missed images
+        env:
+          KIND_HIT: ${{ steps.cache-kind-node.outputs.cache-hit }}
+          OAUTH_HIT: ${{ steps.cache-oauth-image.outputs.cache-hit }}
+          JWKS_HIT: ${{ steps.cache-jwks-image.outputs.cache-hit }}
+          ID_JAG_HIT: ${{ steps.cache-id-jag-image.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+
+          # save_image <cache-hit> <image-ref> <tarball-path>
+          save_image() {
+            local hit="$1" image="$2" tarball="$3"
+            if [ "${hit}" = "true" ]; then
+              echo "Cache already warm for ${image}"
+              return 0
+            fi
+            echo "Pulling ${image}..."
+            docker pull "${image}"
+            docker save "${image}" > "${tarball}"
+          }
+
+          PIDS=()
+          save_image "${KIND_HIT}" "kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48" /tmp/kindest-node.tar &
+          PIDS+=($!)
+          save_image "${OAUTH_HIT}" "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1" /tmp/mcp-oauth-server.tar &
+          PIDS+=($!)
+          save_image "${JWKS_HIT}" "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3" /tmp/mcp-jwks-server.tar &
+          PIDS+=($!)
+          save_image "${ID_JAG_HIT}" "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4" /tmp/mcp-id-jag-server.tar &
+          PIDS+=($!)
+
+          FAILED=0
+          for pid in "${PIDS[@]}"; do
+            wait "$pid" || FAILED=1
+          done
+          if [ "$FAILED" = "1" ]; then
+            echo "::error::One or more image pulls failed"
+            exit 1
+          fi
+          echo "All e2e image caches warm."

@@ -157,11 +157,11 @@ export function trimMessagesToTokenLimit(params: {
         : ({ role: last.role, content: text.slice(0, keep) } as ModelMessage);
   }
 
-  const result: ModelMessage[] = [
+  const result: ModelMessage[] = dropOrphanedToolResults([
     ...system,
     ...middle,
     ...(trimmedLast ? [trimmedLast] : []),
-  ];
+  ]);
 
   if (result.length < messages.length || trimmedLast !== last) {
     result.unshift({
@@ -171,5 +171,45 @@ export function trimMessagesToTokenLimit(params: {
     });
   }
 
+  return result;
+}
+
+// =============================================================================
+// INTERNAL
+// =============================================================================
+
+/**
+ * Dropping a middle assistant message can orphan the tool message carrying its
+ * tool results; providers reject a tool result without the matching tool call,
+ * which would make the trimmed retry fail on a validation error instead of the
+ * context limit. Drop orphaned tool-result parts (and tool messages left
+ * empty) so the trimmed payload stays valid.
+ */
+function dropOrphanedToolResults(messages: ModelMessage[]): ModelMessage[] {
+  const toolCallIds = new Set<string>();
+  const result: ModelMessage[] = [];
+  for (const message of messages) {
+    if (message.role === "assistant" && Array.isArray(message.content)) {
+      for (const part of message.content) {
+        if (part.type === "tool-call") toolCallIds.add(part.toolCallId);
+      }
+      result.push(message);
+      continue;
+    }
+    if (message.role === "tool" && Array.isArray(message.content)) {
+      const content = message.content.filter(
+        (part) =>
+          part.type !== "tool-result" || toolCallIds.has(part.toolCallId),
+      );
+      if (content.length === 0) continue;
+      result.push(
+        content.length === message.content.length
+          ? message
+          : ({ ...message, content } as ModelMessage),
+      );
+      continue;
+    }
+    result.push(message);
+  }
   return result;
 }

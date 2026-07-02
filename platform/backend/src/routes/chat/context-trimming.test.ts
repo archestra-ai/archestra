@@ -219,6 +219,56 @@ describe("trimMessagesToTokenLimit", () => {
     expect(trimmed[trimmed.length - 1].content).toBe("c".repeat(100));
   });
 
+  test("drops tool results orphaned by trimming their assistant tool call", () => {
+    // The oldest (assistant tool-call) message gets dropped by the budget;
+    // its tool-result message must go with it or providers reject the payload.
+    const assistantToolCall = {
+      role: "assistant",
+      content: [
+        { type: "text", text: "x".repeat(300) },
+        {
+          type: "tool-call",
+          toolCallId: "call_1",
+          toolName: "search",
+          input: {},
+        },
+      ],
+    } as ModelMessage;
+    const toolResult = {
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: "call_1",
+          toolName: "search",
+          output: { type: "text", value: "result" },
+        },
+      ],
+    } as ModelMessage;
+    const messages = [
+      assistantToolCall,
+      toolResult,
+      msg("user", "z".repeat(100)),
+    ];
+    // 300-char budget: dropping the ~410-char assistant message brings the
+    // total under budget while the small tool result itself survives — only
+    // the orphan cleanup removes it.
+    const result = trimMessagesToTokenLimit({ messages, maxTokens: 75 });
+    expect(result.some((m) => m === assistantToolCall)).toBe(false);
+    expect(
+      result.some(
+        (m) =>
+          m.role === "tool" &&
+          Array.isArray(m.content) &&
+          m.content.some(
+            (part) =>
+              part.type === "tool-result" && part.toolCallId === "call_1",
+          ),
+      ),
+    ).toBe(false);
+    expect(result[result.length - 1].content).toBe("z".repeat(100));
+  });
+
   test("never returns undefined entries when only system messages exist", () => {
     const messages = [
       msg("system", "x".repeat(200)),

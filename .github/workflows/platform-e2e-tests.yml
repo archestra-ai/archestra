@@ -32,13 +32,32 @@ env:
   MCP_SERVER_BASE_IMAGE_NAME: mcp-server-base
 
 jobs:
-  # NOTE: there are deliberately NO same-named "placeholder" jobs for ordinary
-  # PR updates. GitHub treats a SKIPPED check run as satisfying a required
-  # status check, so on plain PR pushes the real jobs below (whose `if` is
-  # false) report skipped and the ruleset is satisfied without running e2e.
-  # Placeholder twins would ALSO report skipped on merge_group runs — and that
-  # skipped twin satisfies the required check even when the real job FAILS,
-  # which let the merge queue merge past days of red e2e. Do not re-add them.
+  # NOTE: there are deliberately NO same-named "placeholder" jobs for the
+  # NON-MATRIX checks below. GitHub treats a SKIPPED check run as satisfying a
+  # required status check, so on plain PR pushes the real jobs (whose `if` is
+  # false) report skipped under their own names and the ruleset is satisfied
+  # without running e2e. Placeholder twins would ALSO report skipped on
+  # merge_group runs — and that skipped twin satisfies the required check even
+  # when the real job FAILS, which let the merge queue merge past days of red
+  # e2e. Do not re-add them.
+  #
+  # The MATRIX build job is the one exception: a skipped matrix job never
+  # expands, so it reports as the literal "Build ${{ matrix.name }} Image" —
+  # the required "Build Platform Image" / "Build MCP Server Base Image"
+  # contexts would wait forever on ordinary PR pushes. Its placeholder is safe
+  # precisely for the same reason: skipped on merge_group, it reports under
+  # the unexpanded name, which cannot mask a real matrix job's failure.
+  platform-e2e-build-placeholder:
+    name: Build ${{ matrix.name }} Image
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [Platform, MCP Server Base]
+    steps:
+      - name: Skip full image build on ordinary PR updates
+        run: echo "Full E2E image builds run on merge queue or when the run-e2e label is added."
 
   # Build Docker images for e2e tests (platform and MCP server base).
   # Trusted PRs and merge queue runs push the platform image to Artifact Registry so

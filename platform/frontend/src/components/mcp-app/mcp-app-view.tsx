@@ -14,6 +14,7 @@ import type {
 } from "@modelcontextprotocol/ext-apps";
 import {
   AppBridge,
+  buildAllowAttribute,
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
 import { useTheme } from "next-themes";
@@ -715,29 +716,6 @@ export const McpAppRuntime = function McpAppRuntime({
 const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
 const SANDBOX_READY_TIMEOUT = 10_000;
 
-/**
- * Build the Permissions-Policy `allow` attribute from declared app permissions.
- * Mirrors the inner-frame mapping in static/mcp-sandbox-proxy.html — powerful
- * features must be delegated on EVERY iframe in the chain, so the outer proxy
- * frame needs the same `allow` string the inner frame gets.
- */
-function buildSandboxAllowAttribute(
-  permissions: McpUiResourcePermissions | undefined,
-): string {
-  if (!permissions) {
-    return "";
-  }
-
-  const allowList: string[] = [];
-
-  if (permissions.camera) allowList.push("camera");
-  if (permissions.microphone) allowList.push("microphone");
-  if (permissions.geolocation) allowList.push("geolocation");
-  if (permissions.clipboardWrite) allowList.push("clipboard-write");
-
-  return allowList.join("; ");
-}
-
 // Coalesce a burst of render errors into one early server post.
 const RENDER_DIAGNOSTIC_POST_DEBOUNCE_MS = 400;
 // Settle window after a resource becomes renderable before posting the snapshot
@@ -820,11 +798,14 @@ function SandboxIframe({
   // Read inside the (effect-bound) size handler; a ref keeps the latest cap
   // without re-binding onsizechange on every cap change.
   const maxHeightRef = useRef(maxHeight);
-  // Permissions-Policy delegation for the outer proxy iframe. Derived to a
-  // stable primitive so it can gate the iframe-creation effect without the raw
-  // `permissions` object (new reference each render) forcing needless remounts.
+  // Permissions-Policy delegation for the outer proxy iframe. The inner app
+  // frame is delegated the same way inside the sandbox proxy; both reuse the
+  // library's mapping so a feature must be granted on EVERY frame in the chain.
+  // Derived to a stable primitive so it can gate the iframe-creation effect
+  // without the raw `permissions` object (new reference each render) forcing
+  // needless remounts.
   const allowAttribute = useMemo(
-    () => buildSandboxAllowAttribute(permissions),
+    () => buildAllowAttribute(permissions),
     [permissions],
   );
 

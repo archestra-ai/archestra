@@ -769,17 +769,22 @@ class SlackProvider implements ChatOpsProvider {
       // Trim to the requested limit
       const trimmedMessages = allMessages.slice(0, limit);
 
-      // Keep text-less messages that carry downloadable files: a screenshot
-      // posted alone is a turn the model must know about — its file is either
-      // delivered or surfaced as skipped by the manager.
+      // Keep text-less USER messages that carry downloadable files: a
+      // screenshot posted alone is a turn the model must know about — its
+      // file is either delivered or surfaced as skipped by the manager. Bot
+      // file-only messages stay filtered: the manager never downloads bot
+      // files, so retaining them would render a turn with no file and no
+      // skip note.
       const filtered = trimmedMessages.filter(
         (msg) =>
           msg.ts &&
           msg.ts !== params.excludeMessageId &&
           (msg.text ||
-            (msg.files as SlackFile[] | undefined)?.some(
-              (f) => f.url_private_download || f.url_private,
-            )),
+            (!msg.bot_id &&
+              msg.user !== this.botUserId &&
+              (msg.files as SlackFile[] | undefined)?.some(
+                (f) => f.url_private_download || f.url_private,
+              ))),
       );
 
       // Batch-resolve unique non-bot user IDs to display names
@@ -2359,10 +2364,6 @@ function hardSplitOversizedParagraph(text: string): string[] {
 }
 
 /**
- * Check whether a URL points to a known Slack file-hosting domain.
- * Prevents leaking the bot token to arbitrary URLs via SSRF.
- */
-/**
  * Per-process (deliberately not per provider instance) bound on concurrent
  * Slack file downloads + image shrinks — the memory-heavy section of
  * attachment processing. See config.chatops.maxConcurrentFileTransfers.
@@ -2371,6 +2372,10 @@ const slackFileTransferSemaphore = new Semaphore(
   config.chatops.maxConcurrentFileTransfers,
 );
 
+/**
+ * Check whether a URL points to a known Slack file-hosting domain.
+ * Prevents leaking the bot token to arbitrary URLs via SSRF.
+ */
 function isSlackFileUrl(url: string): boolean {
   try {
     const hostname = new URL(url).hostname;

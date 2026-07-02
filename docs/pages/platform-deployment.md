@@ -1415,6 +1415,7 @@ See [Slack](/docs/platform-slack) for setup instructions.
 - **`ARCHESTRA_CHATOPS_MAX_CONCURRENT_FILE_TRANSFERS`** - Per-process cap on concurrent chatops attachment downloads and image shrinking.
   - Default: `4`
   - Bounds the transient memory a burst of attachment-heavy messages can hold; lower it on memory-constrained deployments
+  - Currently applies to Slack downloads only; MS Teams has no image-shrink path and enforces a flat 10 MB per-file cap instead
 
 ### Knowledge Base Configuration
 

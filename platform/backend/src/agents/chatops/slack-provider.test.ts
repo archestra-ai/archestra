@@ -2912,6 +2912,24 @@ describe("SlackProvider.getThreadHistory file metadata", () => {
               user: "U_ALICE",
               text: "",
             },
+            {
+              // Text-less BOT message with a file — still filtered out: the
+              // manager never downloads bot files, so retaining it would
+              // render a turn with no file and no skip note.
+              ts: "1000.004",
+              bot_id: "B_OTHER",
+              text: "",
+              files: [
+                {
+                  id: "F_BOT",
+                  name: "bot-report.pdf",
+                  mimetype: "application/pdf",
+                  size: 2048,
+                  url_private_download:
+                    "https://files.slack.com/files-pri/T123/bot-report.pdf",
+                },
+              ],
+            },
           ],
         }),
       },

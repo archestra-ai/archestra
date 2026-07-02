@@ -2714,8 +2714,8 @@ describe("ChatOpsManager attachment passthrough", () => {
       expect.objectContaining({ name: "deck.pdf" }),
     ]);
 
-    // Re-run the same thread with everything delivered: the only structural
-    // difference must be the single trailing guidance line that skips add.
+    // Re-run the same thread with everything delivered: skips must not add
+    // or remove any lines — the note attaches to an existing turn.
     mockProvider.downloadFiles = async () => [
       { status: "delivered", attachment: deliveredDeck },
       { status: "delivered", attachment: deliveredSheet },
@@ -2730,7 +2730,7 @@ describe("ChatOpsManager attachment passthrough", () => {
       provider: mockProvider,
     });
     const noSkipRunLines = executorSpy.mock.calls[1][0].message.split("\n");
-    expect(skipRunLines.length).toBe(noSkipRunLines.length + 1);
+    expect(skipRunLines.length).toBe(noSkipRunLines.length);
   });
 
   test("leaves history lines untouched when every file is delivered", async ({
@@ -2932,10 +2932,16 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
     expect(result.success).toBe(true);
 
-    const fileOnlyLine = 'Alice: [sent an attachment: "photo.png"]';
-    expect(executorSpy.mock.calls[0][0].message.split("\n")).toContain(
-      fileOnlyLine,
-    );
+    // The file-only turn renders as an Alice line naming its attachment
+    // (sender and file name are data, not pinned wording; capture the line
+    // instead of hardcoding the prose around them).
+    const fileOnlyLine = executorSpy.mock.calls[0][0].message
+      .split("\n")
+      .find(
+        (line: string) =>
+          line.startsWith("Alice:") && line.includes("photo.png"),
+      );
+    expect(fileOnlyLine).toBeDefined();
 
     // When the provider skips that file, the note lands on the same line.
     const skippedPhoto: SkippedAttachment = {

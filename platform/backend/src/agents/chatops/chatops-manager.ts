@@ -1246,11 +1246,6 @@ export class ChatOpsManager {
             line + buildHistorySkippedAttachmentsNote(skips);
         }
       }
-      if (skippedByTurn.size > 0) {
-        contextMessages.push(
-          "[Some earlier attachments could not be shown to you. If the user refers to one, explain it could not be included rather than saying you see nothing.]",
-        );
-      }
 
       return { contextMessages, historyAttachments };
     } catch (error) {

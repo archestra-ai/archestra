@@ -1732,11 +1732,15 @@ class MSTeamsProvider implements ChatOpsProvider {
             ...(files.length > 0 && { files }),
           };
         })
-        // Keep text-less messages that carry files: a screenshot posted alone
-        // is a turn the model must know about — its file is either delivered or
-        // surfaced as skipped by the manager.
+        // Keep text-less USER messages that carry files: a screenshot posted
+        // alone is a turn the model must know about — its file is either
+        // delivered or surfaced as skipped by the manager. Bot file-only
+        // messages stay filtered: the manager never downloads bot files, so
+        // retaining them would render a turn with no file and no skip note.
         .filter(
-          (msg) => msg.text.trim().length > 0 || (msg.files?.length ?? 0) > 0,
+          (msg) =>
+            msg.text.trim().length > 0 ||
+            (!msg.isFromBot && (msg.files?.length ?? 0) > 0),
         )
         .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
     );

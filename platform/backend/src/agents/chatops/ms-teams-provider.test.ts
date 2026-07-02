@@ -1017,6 +1017,23 @@ describe("MSTeamsProvider.convertToThreadMessages file metadata", () => {
           createdDateTime: new Date().toISOString(),
           attachments: [],
         },
+        {
+          // Empty-text BOT message with a file — still filtered out: the
+          // manager never downloads bot files, so retaining it would render
+          // a turn with no file and no skip note.
+          id: "msg-3",
+          from: { application: { id: "app-id-123", displayName: "Bot" } },
+          body: { content: "" },
+          createdDateTime: new Date().toISOString(),
+          attachments: [
+            {
+              contentType: "application/pdf",
+              contentUrl:
+                "https://teams.blob.core.windows.net/img/bot-report.pdf",
+              name: "bot-report.pdf",
+            },
+          ],
+        },
       ],
       undefined,
     );

@@ -31,7 +31,7 @@ jobs:
 
       - name: Generate a token
         id: generate-token
-        uses: ./.github/actions/generate-release-token
+        uses: ./.github/actions/github-app-token
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}

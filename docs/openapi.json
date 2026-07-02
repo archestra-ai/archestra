@@ -77062,6 +77062,18 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "lastMessageSeq": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "lastReadSeq": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -77393,6 +77405,8 @@
                       "origin",
                       "pinnedAt",
                       "lastMessageAt",
+                      "lastMessageSeq",
+                      "lastReadSeq",
                       "createdAt",
                       "updatedAt",
                       "agent",
@@ -77824,6 +77838,18 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lastReadSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -78155,6 +78181,8 @@
                     "origin",
                     "pinnedAt",
                     "lastMessageAt",
+                    "lastMessageSeq",
+                    "lastReadSeq",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -78557,6 +78585,18 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lastReadSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -78888,6 +78928,8 @@
                     "origin",
                     "pinnedAt",
                     "lastMessageAt",
+                    "lastMessageSeq",
+                    "lastReadSeq",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -79331,6 +79373,18 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lastReadSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -79662,6 +79716,8 @@
                     "origin",
                     "pinnedAt",
                     "lastMessageAt",
+                    "lastMessageSeq",
+                    "lastReadSeq",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -81841,6 +81897,18 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lastReadSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -82172,6 +82240,8 @@
                     "origin",
                     "pinnedAt",
                     "lastMessageAt",
+                    "lastMessageSeq",
+                    "lastReadSeq",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -83217,6 +83287,18 @@
                           "type": "string",
                           "format": "date-time"
                         },
+                        "lastMessageSeq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "lastReadSeq": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -83548,6 +83630,8 @@
                         "origin",
                         "pinnedAt",
                         "lastMessageAt",
+                        "lastMessageSeq",
+                        "lastReadSeq",
                         "createdAt",
                         "updatedAt",
                         "agent",
@@ -84906,6 +84990,18 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lastReadSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -85240,6 +85336,8 @@
                     "origin",
                     "pinnedAt",
                     "lastMessageAt",
+                    "lastMessageSeq",
+                    "lastReadSeq",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -85663,6 +85761,18 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lastReadSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -85994,6 +86104,8 @@
                     "origin",
                     "pinnedAt",
                     "lastMessageAt",
+                    "lastMessageSeq",
+                    "lastReadSeq",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -86412,6 +86524,18 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lastReadSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -86743,6 +86867,8 @@
                     "origin",
                     "pinnedAt",
                     "lastMessageAt",
+                    "lastMessageSeq",
+                    "lastReadSeq",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -87171,6 +87297,18 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lastReadSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -87502,6 +87640,8 @@
                     "origin",
                     "pinnedAt",
                     "lastMessageAt",
+                    "lastMessageSeq",
+                    "lastReadSeq",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -224154,6 +224294,18 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lastReadSeq": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -224485,6 +224637,8 @@
                     "origin",
                     "pinnedAt",
                     "lastMessageAt",
+                    "lastMessageSeq",
+                    "lastReadSeq",
                     "createdAt",
                     "updatedAt",
                     "agent",

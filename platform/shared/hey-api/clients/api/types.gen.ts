@@ -22014,6 +22014,8 @@ export type GetChatConversationsResponses = {
         origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
+        lastMessageSeq: number | null;
+        lastReadSeq: number | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -22177,6 +22179,8 @@ export type CreateChatConversationResponses = {
         origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
+        lastMessageSeq: number | null;
+        lastReadSeq: number | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -22421,6 +22425,8 @@ export type GetChatConversationResponses = {
         origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
+        lastMessageSeq: number | null;
+        lastReadSeq: number | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -22587,6 +22593,8 @@ export type UpdateChatConversationResponses = {
         origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
+        lastMessageSeq: number | null;
+        lastReadSeq: number | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -23186,6 +23194,8 @@ export type ForkChatConversationResponses = {
         origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
+        lastMessageSeq: number | null;
+        lastReadSeq: number | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -23534,6 +23544,8 @@ export type CompactChatConversationResponses = {
             origin: 'user' | 'schedule_trigger';
             pinnedAt: string | null;
             lastMessageAt: string;
+            lastMessageSeq: number | null;
+            lastReadSeq: number | null;
             createdAt: string;
             updatedAt: string;
             agent: {
@@ -23967,6 +23979,8 @@ export type GetSharedConversationResponses = {
         origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
+        lastMessageSeq: number | null;
+        lastReadSeq: number | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -24129,6 +24143,8 @@ export type ForkSharedConversationResponses = {
         origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
+        lastMessageSeq: number | null;
+        lastReadSeq: number | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -24293,6 +24309,8 @@ export type GenerateChatConversationTitleResponses = {
         origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
+        lastMessageSeq: number | null;
+        lastReadSeq: number | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -24456,6 +24474,8 @@ export type UpdateChatMessageResponses = {
         origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
+        lastMessageSeq: number | null;
+        lastReadSeq: number | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -58484,6 +58504,8 @@ export type CreateScheduleTriggerRunConversationResponses = {
         origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
+        lastMessageSeq: number | null;
+        lastReadSeq: number | null;
         createdAt: string;
         updatedAt: string;
         agent: {

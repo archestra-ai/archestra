@@ -101,6 +101,10 @@ class AnthropicWorkloadIdentityClient {
     }
 
     const assertion = await readIdentityToken(wif);
+    // The exchange targets the configured Anthropic base URL (matching the
+    // official SDK's oidcFederationProvider({ baseURL }) behavior) so it can be
+    // routed through a proxy. WIF and the Azure Foundry base URL never collide:
+    // the Foundry Entra ID path is checked before WIF in every call site.
     const response = await fetch(
       `${normalizeBaseUrl(config.llm.anthropic.baseUrl)}/v1/oauth/token`,
       {

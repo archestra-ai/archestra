@@ -459,6 +459,11 @@ export interface AnthropicWifConfig {
   serviceAccountId: string;
   workspaceId?: string;
   identityTokenFile?: string;
+  /**
+   * Inline identity token (a JWT). Held in the config singleton, so prefer
+   * `identityTokenFile` in production — only the path is stored, not the secret,
+   * and the file is re-read on every exchange to pick up rotation.
+   */
   identityToken?: string;
 }
 

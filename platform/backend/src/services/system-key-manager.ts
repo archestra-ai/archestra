@@ -72,9 +72,13 @@ class SystemKeyManager {
       // Entra ID and Workload Identity Federation): system keys are looked up
       // per provider, so two "anthropic" entries would delete each other's key.
       provider: "anthropic",
-      name: anthropicWorkloadIdentity.isEnabled()
-        ? "Anthropic Workload Identity Federation"
-        : "Anthropic Azure Foundry Entra ID",
+      // Lazy so the created key's name reflects whichever method is actually
+      // active at sync time, not the value captured at class construction.
+      get name() {
+        return anthropicWorkloadIdentity.isEnabled()
+          ? "Anthropic Workload Identity Federation"
+          : "Anthropic Azure Foundry Entra ID";
+      },
       isEnabled: () =>
         (isAnthropicAzureFoundryEntraIdEnabled() &&
           isAzureAiFoundryBaseUrl(config.llm.anthropic.baseUrl)) ||

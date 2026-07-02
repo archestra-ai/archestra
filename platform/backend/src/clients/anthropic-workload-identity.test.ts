@@ -2,20 +2,12 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import type { AnthropicWifConfig } from "@/config";
-
-const mockConfig = vi.hoisted(() => ({
-  llm: {
-    anthropic: {
-      baseUrl: "https://api.anthropic.com",
-      wif: null as AnthropicWifConfig | null,
-    },
-  },
-}));
-
-vi.mock("@/config", () => ({ default: mockConfig }));
-
+import config, { type AnthropicWifConfig } from "@/config";
 import { anthropicWorkloadIdentity } from "./anthropic-workload-identity";
+
+// No module mocks: the WIF client reads config and hits the network at runtime,
+// so we mutate the real config and stub the fetch/env boundary — which keeps
+// this file in the fast (shared-worker) vitest project.
 
 const WIF_CONFIG: AnthropicWifConfig = {
   federationRuleId: "fdrl_test",
@@ -24,6 +16,9 @@ const WIF_CONFIG: AnthropicWifConfig = {
   workspaceId: "wrkspc_test",
   identityToken: "jwt-inline",
 };
+
+const originalWif = config.llm.anthropic.wif;
+const originalBaseUrl = config.llm.anthropic.baseUrl;
 
 function tokenResponse(accessToken: string, expiresIn = 3600): Response {
   return new Response(
@@ -37,30 +32,30 @@ function tokenResponse(accessToken: string, expiresIn = 3600): Response {
   );
 }
 
-describe("anthropicWorkloadIdentity", () => {
-  const originalStaticEnv = {
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-    ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN,
-  };
+/** Stub global fetch and return the mock for assertions. */
+function stubFetch(
+  impl: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+) {
+  const fetchMock = vi.fn(impl);
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
 
+describe("anthropicWorkloadIdentity", () => {
   beforeEach(() => {
     anthropicWorkloadIdentity.resetForTests();
-    mockConfig.llm.anthropic.baseUrl = "https://api.anthropic.com";
-    mockConfig.llm.anthropic.wif = { ...WIF_CONFIG };
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_AUTH_TOKEN;
+    config.llm.anthropic.baseUrl = "https://api.anthropic.com";
+    config.llm.anthropic.wif = { ...WIF_CONFIG };
+    // Static SDK env credentials shadow WIF; ensure they're absent by default
+    // (a real ANTHROPIC_API_KEY may be present in the dev .env).
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("ANTHROPIC_AUTH_TOKEN", "");
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
-    vi.useRealTimers();
-    for (const [key, value] of Object.entries(originalStaticEnv)) {
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    }
+    anthropicWorkloadIdentity.resetForTests();
+    config.llm.anthropic.wif = originalWif;
+    config.llm.anthropic.baseUrl = originalBaseUrl;
   });
 
   describe("isEnabled", () => {
@@ -69,21 +64,24 @@ describe("anthropicWorkloadIdentity", () => {
     });
 
     test("disabled when WIF is not configured", () => {
-      mockConfig.llm.anthropic.wif = null;
+      config.llm.anthropic.wif = null;
       expect(anthropicWorkloadIdentity.isEnabled()).toBe(false);
     });
 
-    test("shadowed by static SDK env credentials (documented precedence)", () => {
-      process.env.ANTHROPIC_API_KEY = "sk-ant-static";
+    test.each([
+      ["ANTHROPIC_API_KEY", "sk-ant-static"],
+      ["ANTHROPIC_AUTH_TOKEN", "auth-token"],
+    ])("shadowed by static SDK credential %s (documented precedence)", (envVar, value) => {
+      vi.stubEnv(envVar, value);
       expect(anthropicWorkloadIdentity.isEnabled()).toBe(false);
     });
   });
 
   describe("getAccessToken", () => {
     test("exchanges the identity token via the RFC 7523 jwt-bearer grant", async () => {
-      const fetchMock = vi
-        .spyOn(globalThis, "fetch")
-        .mockResolvedValue(tokenResponse("sk-ant-oat01-test"));
+      const fetchMock = stubFetch(async () =>
+        tokenResponse("sk-ant-oat01-test"),
+      );
 
       await expect(anthropicWorkloadIdentity.getAccessToken()).resolves.toBe(
         "sk-ant-oat01-test",
@@ -107,10 +105,10 @@ describe("anthropicWorkloadIdentity", () => {
     });
 
     test("omits workspace_id when not configured", async () => {
-      mockConfig.llm.anthropic.wif = { ...WIF_CONFIG, workspaceId: undefined };
-      const fetchMock = vi
-        .spyOn(globalThis, "fetch")
-        .mockResolvedValue(tokenResponse("sk-ant-oat01-test"));
+      config.llm.anthropic.wif = { ...WIF_CONFIG, workspaceId: undefined };
+      const fetchMock = stubFetch(async () =>
+        tokenResponse("sk-ant-oat01-test"),
+      );
 
       await anthropicWorkloadIdentity.getAccessToken();
 
@@ -119,9 +117,9 @@ describe("anthropicWorkloadIdentity", () => {
     });
 
     test("caches the token until the advisory refresh window", async () => {
-      const fetchMock = vi
-        .spyOn(globalThis, "fetch")
-        .mockResolvedValue(tokenResponse("sk-ant-oat01-cached"));
+      const fetchMock = stubFetch(async () =>
+        tokenResponse("sk-ant-oat01-cached"),
+      );
 
       await anthropicWorkloadIdentity.getAccessToken();
       await anthropicWorkloadIdentity.getAccessToken();
@@ -130,9 +128,9 @@ describe("anthropicWorkloadIdentity", () => {
     });
 
     test("deduplicates concurrent exchanges", async () => {
-      const fetchMock = vi
-        .spyOn(globalThis, "fetch")
-        .mockResolvedValue(tokenResponse("sk-ant-oat01-dedup"));
+      const fetchMock = stubFetch(async () =>
+        tokenResponse("sk-ant-oat01-dedup"),
+      );
 
       await Promise.all([
         anthropicWorkloadIdentity.getAccessToken(),
@@ -145,16 +143,18 @@ describe("anthropicWorkloadIdentity", () => {
 
     test("re-exchanges inside the advisory window and serves the cached token if the exchange fails", async () => {
       vi.useFakeTimers();
-      const fetchMock = vi
-        .spyOn(globalThis, "fetch")
-        .mockResolvedValue(tokenResponse("sk-ant-oat01-first", 3600));
+      let fail = false;
+      stubFetch(async () => {
+        if (fail) throw new Error("token endpoint unreachable");
+        return tokenResponse("sk-ant-oat01-first", 3600);
+      });
 
       await anthropicWorkloadIdentity.getAccessToken();
 
       // Inside the advisory window (120s before expiry) but outside the
       // mandatory window (30s): a failed refresh falls back to the cache.
       vi.setSystemTime(Date.now() + (3600 - 60) * 1000);
-      fetchMock.mockRejectedValue(new Error("token endpoint unreachable"));
+      fail = true;
 
       await expect(anthropicWorkloadIdentity.getAccessToken()).resolves.toBe(
         "sk-ant-oat01-first",
@@ -163,14 +163,16 @@ describe("anthropicWorkloadIdentity", () => {
 
     test("fails hard inside the mandatory refresh window", async () => {
       vi.useFakeTimers();
-      const fetchMock = vi
-        .spyOn(globalThis, "fetch")
-        .mockResolvedValue(tokenResponse("sk-ant-oat01-first", 3600));
+      let fail = false;
+      stubFetch(async () => {
+        if (fail) throw new Error("token endpoint unreachable");
+        return tokenResponse("sk-ant-oat01-first", 3600);
+      });
 
       await anthropicWorkloadIdentity.getAccessToken();
 
       vi.setSystemTime(Date.now() + (3600 - 10) * 1000);
-      fetchMock.mockRejectedValue(new Error("token endpoint unreachable"));
+      fail = true;
 
       await expect(anthropicWorkloadIdentity.getAccessToken()).rejects.toThrow(
         "token endpoint unreachable",
@@ -182,16 +184,14 @@ describe("anthropicWorkloadIdentity", () => {
       const dir = await mkdtemp(join(tmpdir(), "anthropic-wif-"));
       const tokenFile = join(dir, "token.jwt");
       await writeFile(tokenFile, "jwt-generation-1\n", "utf8");
-      mockConfig.llm.anthropic.wif = {
+      config.llm.anthropic.wif = {
         ...WIF_CONFIG,
         identityToken: undefined,
         identityTokenFile: tokenFile,
       };
-      const fetchMock = vi
-        .spyOn(globalThis, "fetch")
-        .mockImplementation(async () =>
-          tokenResponse("sk-ant-oat01-file", 3600),
-        );
+      const fetchMock = stubFetch(async () =>
+        tokenResponse("sk-ant-oat01-file", 3600),
+      );
 
       await anthropicWorkloadIdentity.getAccessToken();
       await writeFile(tokenFile, "jwt-generation-2\n", "utf8");
@@ -207,11 +207,12 @@ describe("anthropicWorkloadIdentity", () => {
     });
 
     test("surfaces non-OK exchange responses with the request id", async () => {
-      vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response("{}", {
-          status: 403,
-          headers: { "request-id": "req_123" },
-        }),
+      stubFetch(
+        async () =>
+          new Response("{}", {
+            status: 403,
+            headers: { "request-id": "req_123" },
+          }),
       );
 
       await expect(anthropicWorkloadIdentity.getAccessToken()).rejects.toThrow(
@@ -220,10 +221,11 @@ describe("anthropicWorkloadIdentity", () => {
     });
 
     test("rejects token responses without a usable access token", async () => {
-      vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(JSON.stringify({ access_token: "", expires_in: 3600 }), {
-          status: 200,
-        }),
+      stubFetch(
+        async () =>
+          new Response(JSON.stringify({ access_token: "", expires_in: 3600 }), {
+            status: 200,
+          }),
       );
 
       await expect(anthropicWorkloadIdentity.getAccessToken()).rejects.toThrow(
@@ -234,9 +236,7 @@ describe("anthropicWorkloadIdentity", () => {
 
   describe("createFetch", () => {
     test("injects the federated bearer token and strips x-api-key", async () => {
-      vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        tokenResponse("sk-ant-oat01-wrapped"),
-      );
+      stubFetch(async () => tokenResponse("sk-ant-oat01-wrapped"));
       const providerFetch = vi.fn().mockResolvedValue(new Response("{}"));
       const wrappedFetch = anthropicWorkloadIdentity.createFetch(
         providerFetch as typeof fetch,

@@ -1,4 +1,4 @@
-import { and, isNull, not, type SQL } from "drizzle-orm";
+import { and, isNull, not, type SQL, sql } from "drizzle-orm";
 import type { PgTable, PgUpdateSetSource } from "drizzle-orm/pg-core";
 import type db from "@/database";
 import type { Transaction } from "@/database";
@@ -60,6 +60,11 @@ export async function hardDelete<T extends PgTable>(
 ): Promise<number> {
   if (!where) throw new Error("hardDelete requires a where clause");
 
-  const rows = await executor.delete(table).where(where).returning();
+  // Constant projection: the rows are only counted, so don't ship every
+  // column of every deleted row back over the wire.
+  const rows = await executor
+    .delete(table)
+    .where(where)
+    .returning({ _: sql`1` });
   return rows.length;
 }

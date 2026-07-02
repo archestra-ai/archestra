@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectorDocumentsTable } from "./connector-documents-table";
 
@@ -8,11 +9,7 @@ const mockUpdateQueryParams = vi.fn();
 const mockDeleteMutateAsync = vi.fn();
 const mockPush = vi.fn();
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
-  useSearchParams: () => new URLSearchParams(""),
-  usePathname: () => "/knowledge/connectors/connector-1",
-}));
+vi.mock("next/navigation");
 
 const mockDocument = {
   id: "doc-1",
@@ -84,6 +81,13 @@ vi.mock("@/lib/knowledge/kb-document.query", () => ({
 describe("ConnectorDocumentsTable", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useRouter).mockReturnValue({
+      push: mockPush,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("") as unknown as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(usePathname).mockReturnValue("/knowledge/connectors/connector-1");
     mockDeleteMutateAsync.mockResolvedValue({ success: true });
   });
 

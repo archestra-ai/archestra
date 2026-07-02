@@ -9,18 +9,10 @@ import { usePublicEnterpriseCoreActive } from "@/lib/config/config.query";
 import { IdentityProviderSelector } from "./identity-provider-selector.ee";
 
 // Mock next/navigation
-vi.mock("next/navigation", () => ({
-  useSearchParams: vi.fn(),
-}));
+vi.mock("next/navigation");
 
 // Mock auth client
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    signIn: {
-      sso: vi.fn(),
-    },
-  },
-}));
+vi.mock("@/lib/clients/auth/auth-client");
 
 // Mock identity providers query
 vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
@@ -28,9 +20,7 @@ vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
 }));
 
 // Mock the runtime public-config hook the selector now reads from.
-vi.mock("@/lib/config/config.query", () => ({
-  usePublicEnterpriseCoreActive: vi.fn(() => true),
-}));
+vi.mock("@/lib/config/config.query");
 
 // Mock identity provider icons to avoid Next.js Image issues
 vi.mock("./identity-provider-icons.ee", () => ({

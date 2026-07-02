@@ -57,7 +57,7 @@ export type ArchestraMcpServerManifest = {
     display_name: string;
     instructions?: string;
     readme: string | null;
-    category: 'Aggregators' | 'Art & Culture' | 'Healthcare' | 'Browser Automation' | 'Cloud' | 'Development' | 'CLI Tools' | 'Communication' | 'Data' | 'Logistics' | 'Data Science' | 'IoT' | 'File Management' | 'Finance' | 'Gaming' | 'Knowledge' | 'Location' | 'Marketing' | 'Monitoring' | 'Media' | 'AI Tools' | 'Search' | 'Security' | 'Social Media' | 'Sports' | 'Support' | 'Translation' | 'Audio' | 'Travel' | 'Messengers' | 'Email' | 'CRM' | 'Enterprise' | 'Job Search' | 'Local files' | 'General' | null;
+    category: 'Aggregators' | 'Art & Culture' | 'Healthcare' | 'Browser Automation' | 'Cloud' | 'Development' | 'CLI Tools' | 'Communication' | 'Data' | 'Logistics' | 'Data Science' | 'IoT' | 'File Management' | 'Finance' | 'Gaming' | 'Knowledge' | 'Location' | 'Marketing' | 'Monitoring' | 'Media' | 'AI Tools' | 'Search' | 'Security' | 'Social Media' | 'Sports' | 'Support' | 'Translation' | 'Audio' | 'Travel' | 'Messengers' | 'Email' | 'CRM' | 'Enterprise' | 'Job Search' | 'Local files' | 'General' | 'MCP Apps Demo' | null;
     quality_score: number | null;
     archestra_config?: {
         client_config_permutations: {
@@ -177,7 +177,7 @@ export type SearchMcpServerCatalogData = {
         /**
          * Filter by category
          */
-        category?: 'Aggregators' | 'Art & Culture' | 'Healthcare' | 'Browser Automation' | 'Cloud' | 'Development' | 'CLI Tools' | 'Communication' | 'Data' | 'Logistics' | 'Data Science' | 'IoT' | 'File Management' | 'Finance' | 'Gaming' | 'Knowledge' | 'Location' | 'Marketing' | 'Monitoring' | 'Media' | 'AI Tools' | 'Search' | 'Security' | 'Social Media' | 'Sports' | 'Support' | 'Translation' | 'Audio' | 'Travel' | 'Messengers' | 'Email' | 'CRM' | 'Enterprise' | 'Job Search' | 'Local files' | 'General';
+        category?: 'Aggregators' | 'Art & Culture' | 'Healthcare' | 'Browser Automation' | 'Cloud' | 'Development' | 'CLI Tools' | 'Communication' | 'Data' | 'Logistics' | 'Data Science' | 'IoT' | 'File Management' | 'Finance' | 'Gaming' | 'Knowledge' | 'Location' | 'Marketing' | 'Monitoring' | 'Media' | 'AI Tools' | 'Search' | 'Security' | 'Social Media' | 'Sports' | 'Support' | 'Translation' | 'Audio' | 'Travel' | 'Messengers' | 'Email' | 'CRM' | 'Enterprise' | 'Job Search' | 'Local files' | 'General' | 'MCP Apps Demo';
         /**
          * Filter by programming language
          */
@@ -297,7 +297,7 @@ export type GetMcpServerCategoriesResponses = {
      * Successful response
      */
     200: {
-        categories: Array<'Aggregators' | 'Art & Culture' | 'Healthcare' | 'Browser Automation' | 'Cloud' | 'Development' | 'CLI Tools' | 'Communication' | 'Data' | 'Logistics' | 'Data Science' | 'IoT' | 'File Management' | 'Finance' | 'Gaming' | 'Knowledge' | 'Location' | 'Marketing' | 'Monitoring' | 'Media' | 'AI Tools' | 'Search' | 'Security' | 'Social Media' | 'Sports' | 'Support' | 'Translation' | 'Audio' | 'Travel' | 'Messengers' | 'Email' | 'CRM' | 'Enterprise' | 'Job Search' | 'Local files' | 'General'>;
+        categories: Array<'Aggregators' | 'Art & Culture' | 'Healthcare' | 'Browser Automation' | 'Cloud' | 'Development' | 'CLI Tools' | 'Communication' | 'Data' | 'Logistics' | 'Data Science' | 'IoT' | 'File Management' | 'Finance' | 'Gaming' | 'Knowledge' | 'Location' | 'Marketing' | 'Monitoring' | 'Media' | 'AI Tools' | 'Search' | 'Security' | 'Social Media' | 'Sports' | 'Support' | 'Translation' | 'Audio' | 'Travel' | 'Messengers' | 'Email' | 'CRM' | 'Enterprise' | 'Job Search' | 'Local files' | 'General' | 'MCP Apps Demo'>;
     };
 };
 

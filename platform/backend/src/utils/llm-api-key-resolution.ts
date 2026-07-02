@@ -3,6 +3,7 @@ import {
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { getProviderEnvApiKey } from "@/config";
 import { LlmProviderApiKeyModel, TeamModel } from "@/models";
@@ -79,6 +80,7 @@ export async function resolveProviderApiKey(params: {
       isProviderApiKeyOptional({
         provider,
         azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+        anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
       })
     ) {
       return {

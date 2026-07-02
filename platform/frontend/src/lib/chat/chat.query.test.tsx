@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 import { handleApiError } from "@/lib/utils";
@@ -32,10 +33,7 @@ vi.mock("@archestra/shared", () => ({
   PLAYWRIGHT_MCP_SERVER_NAME: "playwright-mcp",
 }));
 
-const mockPathname = { value: "/chat" };
-vi.mock("next/navigation", () => ({
-  usePathname: () => mockPathname.value,
-}));
+vi.mock("next/navigation");
 
 const wsHandlers: Record<string, (msg: unknown) => void> = {};
 vi.mock("@/lib/websocket/websocket", () => ({
@@ -410,7 +408,7 @@ describe("conversation read-state hooks", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockPathname.value = "/chat";
+    vi.mocked(usePathname).mockReturnValue("/chat");
     for (const key of Object.keys(wsHandlers)) delete wsHandlers[key];
     vi.mocked(archestraApiSdk.markChatConversationRead).mockResolvedValue({
       data: { success: true },
@@ -441,7 +439,7 @@ describe("conversation read-state hooks", () => {
   });
 
   it("useKeepViewedConversationRead marks the viewed unread conversation read", async () => {
-    mockPathname.value = "/chat/c1";
+    vi.mocked(usePathname).mockReturnValue("/chat/c1");
     renderWithSeed(
       () => useKeepViewedConversationRead(),
       seededList({ id: "c1", unread: true }),
@@ -455,7 +453,7 @@ describe("conversation read-state hooks", () => {
   });
 
   it("useKeepViewedConversationRead does not mark an already-read viewed conversation", async () => {
-    mockPathname.value = "/chat/c1";
+    vi.mocked(usePathname).mockReturnValue("/chat/c1");
     renderWithSeed(
       () => useKeepViewedConversationRead(),
       seededList({ id: "c1", unread: false }),
@@ -466,7 +464,7 @@ describe("conversation read-state hooks", () => {
   });
 
   it("useKeepViewedConversationRead does not mark read off a conversation route", async () => {
-    mockPathname.value = "/chat";
+    vi.mocked(usePathname).mockReturnValue("/chat");
     renderWithSeed(
       () => useKeepViewedConversationRead(),
       seededList({ id: "c1", unread: true }),

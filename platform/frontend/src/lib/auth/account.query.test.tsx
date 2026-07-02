@@ -6,18 +6,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useChangeAccountPasswordMutation } from "./account.query";
 
-vi.mock("sonner", () => ({
-  toast: {
-    error: vi.fn(),
-    success: vi.fn(),
-  },
-}));
+vi.mock("sonner");
 
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    changePassword: vi.fn(),
-  },
-}));
+vi.mock("@/lib/clients/auth/auth-client");
 
 describe("useChangeAccountPasswordMutation", () => {
   beforeEach(() => {

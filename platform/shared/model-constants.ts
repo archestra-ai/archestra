@@ -132,19 +132,36 @@ export function providerRequiresPerUserCredential(
 export function isProviderApiKeyOptional(params: {
   provider: SupportedProvider;
   azureEntraIdEnabled?: boolean;
+  anthropicWifEnabled?: boolean;
 }): boolean {
   return (
     PROVIDERS_WITH_OPTIONAL_API_KEY.has(params.provider) ||
-    (params.provider === "azure" && params.azureEntraIdEnabled === true)
+    (params.provider === "azure" && params.azureEntraIdEnabled === true) ||
+    (params.provider === "anthropic" && params.anthropicWifEnabled === true)
   );
+}
+
+/**
+ * Self-hosted providers whose endpoint typically points at a localhost / in-cluster
+ * URL — the only ones the Docker-localhost connection hint applies to. This is the
+ * *unconditional* optional-key set (Ollama, vLLM): cloud keyless providers (Azure
+ * Entra ID, Anthropic WIF) are optional only via runtime flags, so they are excluded
+ * automatically without a per-provider denylist.
+ */
+export function isSelfHostedProvider(provider: SupportedProvider): boolean {
+  return PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider);
 }
 
 export function getProvidersWithOptionalApiKey(params?: {
   azureEntraIdEnabled?: boolean;
+  anthropicWifEnabled?: boolean;
 }): SupportedProvider[] {
   const providers = [...PROVIDERS_WITH_OPTIONAL_API_KEY];
   if (params?.azureEntraIdEnabled === true) {
     providers.push("azure");
+  }
+  if (params?.anthropicWifEnabled === true) {
+    providers.push("anthropic");
   }
   return providers;
 }

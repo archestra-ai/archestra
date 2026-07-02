@@ -9,6 +9,12 @@ export const hasPermission = async (
   permissions: Permissions,
   requestHeaders: IncomingHttpHeaders,
   serviceAccount?: SelectServiceAccount,
+  /**
+   * DB-fresh caller identity (request.user.id / request.organizationId) when
+   * the auth middleware already resolved it — skips re-deriving the identity
+   * from the session.
+   */
+  userContext?: { userId: string; organizationId: string },
 ): Promise<{ success: boolean; error: Error | null }> => {
   const headers = new Headers(requestHeaders as HeadersInit);
   logger.trace(
@@ -24,11 +30,31 @@ export const hasPermission = async (
       });
     }
 
-    const result = await betterAuth.api.hasPermission({
-      headers,
-      body: {
-        permissions,
-      },
+    // Authorization is evaluated against the database (member role + custom
+    // roles), NOT via better-auth's session-resolved hasPermission: the
+    // session cookie cache (see session.cookieCache in better-auth config)
+    // can carry a stale activeOrganizationId snapshot — e.g. a session
+    // created by sign-up-with-invitation caches `null` until the TTL lapses,
+    // denying every org-scoped request for that window. The cookie is only
+    // trusted for IDENTITY (user id, which sign-in/sign-up always rewrite);
+    // role and organization come from the DB on every check, matching the
+    // request.organizationId the route handler will execute under.
+    if (userContext) {
+      return await checkUserPermissions({ ...userContext, permissions });
+    }
+
+    const session = await betterAuth.api.getSession({ headers });
+    if (!session?.user?.id) {
+      throw new Error("No session");
+    }
+    const { organizationId } = await UserModel.getById(session.user.id);
+    if (!organizationId) {
+      return { success: false, error: new Error("Forbidden") };
+    }
+    const result = await checkUserPermissions({
+      userId: session.user.id,
+      organizationId,
+      permissions,
     });
     logger.trace(
       { success: result.success },
@@ -140,9 +166,21 @@ async function checkApiKeyPermissions(params: {
     return { success: false, error: new Error("Forbidden") };
   }
 
-  const userPermissions = await UserModel.getUserPermissions(
-    apiKeyUserId,
+  return checkUserPermissions({
+    userId: apiKeyUserId,
     organizationId,
+    permissions: params.permissions,
+  });
+}
+
+async function checkUserPermissions(params: {
+  userId: string;
+  organizationId: string;
+  permissions: Permissions;
+}): Promise<{ success: boolean; error: Error | null }> {
+  const userPermissions = await UserModel.getUserPermissions(
+    params.userId,
+    params.organizationId,
   );
   const hasAllPermissions = hasRequiredPermissions(
     userPermissions,

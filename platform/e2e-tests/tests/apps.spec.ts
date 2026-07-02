@@ -1,12 +1,38 @@
 import { goToPage } from "../fixtures";
 import { expect, test } from "./api-fixtures";
 
-// Seed an app from the default template, open /a/:id, and assert through
-// the nested sandbox frames (host page → sandbox proxy iframe → inner app
-// iframe) that the app reaches "Ready." — which the template only shows after
+// Seed an app, publish a minimal SDK-probe version, open /a/:id, and assert
+// through the nested sandbox frames (host page → sandbox proxy iframe → inner
+// app iframe) that the app reaches "Ready." — which the probe only shows after
 // the injected runtime bridge connected the guest SDK and completed a
 // data-store read round-trip. This is the end-to-end proof of the serve-time
-// bridge injection in a real browser.
+// bridge injection in a real browser. (The default template used to carry this
+// probe itself; since #6019 it is a pure-UI empty state with no SDK calls, so
+// the test publishes its own probe html.)
+const SDK_PROBE_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>e2e SDK probe</title></head>
+<body>
+  <h1 id="greeting">Connecting…</h1>
+  <p id="status">Waiting for the runtime bridge…</p>
+  <script>
+    (async () => {
+      const greeting = document.getElementById("greeting");
+      const status = document.getElementById("status");
+      try {
+        if (window.archestra && window.archestra.user && window.archestra.user.name) {
+          greeting.textContent = "Hello, " + window.archestra.user.name;
+        }
+        await window.archestra.storage.user.get("e2e-probe");
+        status.textContent = "Ready.";
+      } catch (err) {
+        status.textContent = "Bridge failed: " + (err && err.message ? err.message : String(err));
+      }
+    })();
+  </script>
+</body>
+</html>`;
+
 test("create an app from a template and run it standalone", async ({
   page,
   request,
@@ -39,6 +65,15 @@ test("create an app from a template and run it standalone", async ({
   const app = (await createRes.json()) as { id: string };
 
   try {
+    // Publish the SDK probe as the app's html (forks a new version).
+    const patchRes = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: `/api/apps/${app.id}`,
+      data: { html: SDK_PROBE_HTML },
+    });
+    expect(patchRes.ok()).toBeTruthy();
+
     await goToPage(page, `/a/${app.id}`);
     // The standalone runtime is chromeless: the app name is the browser tab
     // title, not on-page text.
@@ -49,8 +84,8 @@ test("create an app from a template and run it standalone", async ({
     await expect(appFrame.getByText("Ready.")).toBeVisible({
       timeout: 20_000,
     });
-    // auto-auth: the SDK bootstrap carries the viewer identity and the default
-    // template personalizes its heading from archestra.user.name
+    // auto-auth: the SDK bootstrap carries the viewer identity and the probe
+    // personalizes its heading from archestra.user.name
     await expect(
       appFrame.getByRole("heading", { name: /^Hello, / }),
     ).toBeVisible();

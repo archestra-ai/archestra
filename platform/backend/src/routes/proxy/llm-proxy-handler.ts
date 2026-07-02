@@ -24,6 +24,7 @@ import {
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LRUCacheManager } from "@/cache-manager";
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import config from "@/config";
 import logger from "@/logging";
@@ -1911,6 +1912,7 @@ function shouldUseKeylessProviderApiKey(params: {
   return isProviderApiKeyOptional({
     provider: row.provider,
     azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+    anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
   });
 }
 

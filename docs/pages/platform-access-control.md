@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-06-30
+lastUpdated: 2026-07-02
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -76,6 +76,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Chat Agent Picker | `enable` |
 | Chat Provider Settings | `enable` |
 | Chat Expand Tool Calls | `enable` |
+| Onboarding | `read`, `update` |
 
 ### Member
 
@@ -109,6 +110,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Chat Agent Picker | `enable` |
 | Chat Provider Settings | `enable` |
 | Chat Expand Tool Calls | `enable` |
+| Onboarding | `read`, `update` |
 
 
 ## Custom Roles
@@ -235,6 +237,8 @@ The following table lists all available permissions that can be assigned to cust
 | `member:create` | Add new members to the organization |
 | `member:update` | Change member roles and settings |
 | `member:delete` | Remove members from the organization |
+| `onboarding:read` | View your own onboarding progress |
+| `onboarding:update` | Update your own onboarding progress |
 | `optimizationRule:read` | View optimization rules |
 | `optimizationRule:create` | Create new optimization rules |
 | `optimizationRule:update` | Modify optimization rules |

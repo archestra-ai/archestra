@@ -1,5 +1,6 @@
-import { vi } from "vitest";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { HttpResponse, http } from "msw";
+import { beforeEach, describe, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
 import type { ConnectorSyncBatch } from "@/types";
 import {
   extractTextFromAdf,
@@ -7,31 +8,68 @@ import {
   JiraConnector,
 } from "./jira-connector";
 
-// Mock jira.js SDK
-const mockGetCurrentUser = vi.fn();
-const mockEnhancedSearchPost = vi.fn();
-const mockSearchForIssuesUsingJql = vi.fn();
-const mockSearchForIssuesUsingJqlPost = vi.fn();
-const capturedConfigs: { type: string; config: Record<string, unknown> }[] = [];
-
-vi.mock("jira.js", () => ({
-  ClientType: { Version2: "Version2", Version3: "Version3" },
-  // biome-ignore lint/suspicious/noExplicitAny: mock factory
-  createClient: (type: any, config: any) => {
-    capturedConfigs.push({ type, config });
-    return {
-      myself: { getCurrentUser: mockGetCurrentUser },
-      issueSearch: {
-        searchForIssuesUsingJqlEnhancedSearchPost: mockEnhancedSearchPost,
-        searchForIssuesUsingJql: mockSearchForIssuesUsingJql,
-        searchForIssuesUsingJqlPost: mockSearchForIssuesUsingJqlPost,
-      },
-    };
-  },
-}));
+// Wire-level (MSW) mocking: the real jira.js client runs and only the HTTP
+// boundary is faked. jira.js uses axios under the hood, which MSW intercepts.
+const CLOUD_HOST = "https://mysite.atlassian.net";
+const SERVER_HOST = "https://jira.mycompany.com";
+const COMPANY_HOST = "https://mycompany.atlassian.net";
 
 describe("JiraConnector", () => {
+  const server = useMswServer();
   let connector: JiraConnector;
+
+  // Captured wire traffic, reset per test.
+  const myselfHeaders: Headers[] = [];
+  const enhancedSearchBodies: Array<Record<string, unknown>> = [];
+  const v2SearchBodies: Array<Record<string, unknown>> = [];
+
+  function myselfHandler(opts: {
+    version: 2 | 3;
+    host: string;
+    status?: number;
+  }) {
+    return http.get(
+      `${opts.host}/rest/api/${opts.version}/myself`,
+      ({ request }) => {
+        myselfHeaders.push(request.headers);
+        if (opts.status) {
+          return HttpResponse.json(
+            { errorMessages: ["Unauthorized"] },
+            { status: opts.status },
+          );
+        }
+        return HttpResponse.json({ displayName: "Test User", active: true });
+      },
+    );
+  }
+
+  function enhancedSearchHandler(pages: unknown[], host = CLOUD_HOST) {
+    let call = 0;
+    return http.post(`${host}/rest/api/3/search/jql`, async ({ request }) => {
+      enhancedSearchBodies.push(
+        (await request.json()) as Record<string, unknown>,
+      );
+      const page = pages[Math.min(call, pages.length - 1)];
+      call += 1;
+      return HttpResponse.json(page as Record<string, unknown>);
+    });
+  }
+
+  function enhancedSearchErrorHandler(status: number, host = CLOUD_HOST) {
+    return http.post(`${host}/rest/api/3/search/jql`, () =>
+      HttpResponse.json({ errorMessages: ["Bad Request"] }, { status }),
+    );
+  }
+
+  function v2SearchHandler(pages: unknown[], host = SERVER_HOST) {
+    let call = 0;
+    return http.post(`${host}/rest/api/2/search`, async ({ request }) => {
+      v2SearchBodies.push((await request.json()) as Record<string, unknown>);
+      const page = pages[Math.min(call, pages.length - 1)];
+      call += 1;
+      return HttpResponse.json(page as Record<string, unknown>);
+    });
+  }
 
   const validConfig = {
     jiraBaseUrl: "https://mysite.atlassian.net",
@@ -45,13 +83,10 @@ describe("JiraConnector", () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    capturedConfigs.length = 0;
+    myselfHeaders.length = 0;
+    enhancedSearchBodies.length = 0;
+    v2SearchBodies.length = 0;
     connector = new JiraConnector();
-  });
-
-  afterEach(() => {
-    vi.resetAllMocks();
   });
 
   describe("validateConfig", () => {
@@ -102,10 +137,7 @@ describe("JiraConnector", () => {
 
   describe("testConnection", () => {
     test("returns success when API responds OK", async () => {
-      mockGetCurrentUser.mockResolvedValueOnce({
-        displayName: "Test User",
-        active: true,
-      });
+      server.use(myselfHandler({ version: 3, host: CLOUD_HOST }));
 
       const result = await connector.testConnection({
         config: validConfig,
@@ -113,25 +145,23 @@ describe("JiraConnector", () => {
       });
 
       expect(result).toEqual({ success: true });
-      expect(mockGetCurrentUser).toHaveBeenCalled();
+      expect(myselfHeaders).toHaveLength(1);
     });
 
     test("returns success for server instances", async () => {
-      mockGetCurrentUser.mockResolvedValueOnce({
-        displayName: "Test User",
-      });
+      server.use(myselfHandler({ version: 2, host: SERVER_HOST }));
 
       const result = await connector.testConnection({
-        config: { ...validConfig, isCloud: false },
+        config: { ...validConfig, jiraBaseUrl: SERVER_HOST, isCloud: false },
         credentials,
       });
 
       expect(result).toEqual({ success: true });
-      expect(mockGetCurrentUser).toHaveBeenCalled();
+      expect(myselfHeaders).toHaveLength(1);
     });
 
     test("returns error when API throws", async () => {
-      mockGetCurrentUser.mockRejectedValueOnce(new Error("401 Unauthorized"));
+      server.use(myselfHandler({ version: 3, host: CLOUD_HOST, status: 401 }));
 
       const result = await connector.testConnection({
         config: validConfig,
@@ -153,65 +183,51 @@ describe("JiraConnector", () => {
     });
 
     test("uses basic auth for server when email is provided", async () => {
-      mockGetCurrentUser.mockResolvedValueOnce({ displayName: "User" });
+      server.use(myselfHandler({ version: 2, host: SERVER_HOST }));
 
       await connector.testConnection({
-        config: { ...validConfig, isCloud: false },
+        config: { ...validConfig, jiraBaseUrl: SERVER_HOST, isCloud: false },
         credentials: { email: "admin", apiToken: "password123" },
       });
 
-      const serverConfig = capturedConfigs.find(
-        (c) => c.type === "Version2",
-      )?.config;
-      expect(serverConfig?.authentication).toEqual({
-        basic: { email: "admin", apiToken: "password123" },
-      });
+      const expected = `Basic ${Buffer.from("admin:password123").toString("base64")}`;
+      expect(myselfHeaders[0].get("authorization")).toBe(expected);
     });
 
     test("uses oauth2 (PAT) auth for server when email is not provided", async () => {
-      mockGetCurrentUser.mockResolvedValueOnce({ displayName: "User" });
+      server.use(myselfHandler({ version: 2, host: SERVER_HOST }));
 
       await connector.testConnection({
-        config: { ...validConfig, isCloud: false },
+        config: { ...validConfig, jiraBaseUrl: SERVER_HOST, isCloud: false },
         credentials: { apiToken: "pat-token-value" },
       });
 
-      const serverConfig = capturedConfigs.find(
-        (c) => c.type === "Version2",
-      )?.config;
-      expect(serverConfig?.authentication).toEqual({
-        oauth2: { accessToken: "pat-token-value" },
-      });
+      expect(myselfHeaders[0].get("authorization")).toBe(
+        "Bearer pat-token-value",
+      );
     });
 
     test("sets noCheckAtlassianToken for server instances", async () => {
-      mockGetCurrentUser.mockResolvedValueOnce({ displayName: "User" });
+      server.use(myselfHandler({ version: 2, host: SERVER_HOST }));
 
       await connector.testConnection({
-        config: { ...validConfig, isCloud: false },
+        config: { ...validConfig, jiraBaseUrl: SERVER_HOST, isCloud: false },
         credentials: { apiToken: "pat-token" },
       });
 
-      const serverConfig = capturedConfigs.find(
-        (c) => c.type === "Version2",
-      )?.config;
-      expect(serverConfig?.noCheckAtlassianToken).toBe(true);
+      expect(myselfHeaders[0].get("x-atlassian-token")).toBe("no-check");
     });
 
     test("uses basic auth for cloud instances", async () => {
-      mockGetCurrentUser.mockResolvedValueOnce({ displayName: "User" });
+      server.use(myselfHandler({ version: 3, host: CLOUD_HOST }));
 
       await connector.testConnection({
         config: validConfig,
         credentials,
       });
 
-      const cloudConfig = capturedConfigs.find(
-        (c) => c.type === "Version3",
-      )?.config;
-      expect(cloudConfig?.authentication).toEqual({
-        basic: { email: "user@example.com", apiToken: "test-api-token" },
-      });
+      const expected = `Basic ${Buffer.from("user@example.com:test-api-token").toString("base64")}`;
+      expect(myselfHeaders[0].get("authorization")).toBe(expected);
     });
   });
 
@@ -256,10 +272,7 @@ describe("JiraConnector", () => {
         makeIssue("PROJ-2", "Second issue"),
       ];
 
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues,
-        nextPageToken: null,
-      });
+      server.use(enhancedSearchHandler([{ issues, nextPageToken: null }]));
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -279,10 +292,7 @@ describe("JiraConnector", () => {
     });
 
     test("passes JQL and fields to search", async () => {
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues: [],
-        nextPageToken: null,
-      });
+      server.use(enhancedSearchHandler([{ issues: [], nextPageToken: null }]));
 
       const batches = [];
       for await (const batch of connector.sync({
@@ -293,7 +303,7 @@ describe("JiraConnector", () => {
         batches.push(batch);
       }
 
-      expect(mockEnhancedSearchPost).toHaveBeenCalledWith(
+      expect(enhancedSearchBodies[0]).toEqual(
         expect.objectContaining({
           jql: expect.stringContaining('project = "PROJ"'),
           fields: expect.arrayContaining(["summary", "description"]),
@@ -303,10 +313,7 @@ describe("JiraConnector", () => {
     });
 
     test("builds project IN JQL for multiple project keys", async () => {
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues: [],
-        nextPageToken: null,
-      });
+      server.use(enhancedSearchHandler([{ issues: [], nextPageToken: null }]));
 
       const batches = [];
       for await (const batch of connector.sync({
@@ -320,7 +327,7 @@ describe("JiraConnector", () => {
         batches.push(batch);
       }
 
-      expect(mockEnhancedSearchPost).toHaveBeenCalledWith(
+      expect(enhancedSearchBodies[0]).toEqual(
         expect.objectContaining({
           jql: expect.stringContaining('project IN ("ENG", "OPS")'),
         }),
@@ -333,15 +340,12 @@ describe("JiraConnector", () => {
       );
       const page2Issues = [makeIssue("PROJ-51", "Issue 51")];
 
-      mockEnhancedSearchPost
-        .mockResolvedValueOnce({
-          issues: page1Issues,
-          nextPageToken: "next-page-token",
-        })
-        .mockResolvedValueOnce({
-          issues: page2Issues,
-          nextPageToken: null,
-        });
+      server.use(
+        enhancedSearchHandler([
+          { issues: page1Issues, nextPageToken: "next-page-token" },
+          { issues: page2Issues, nextPageToken: null },
+        ]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -359,17 +363,14 @@ describe("JiraConnector", () => {
       expect(batches[1].hasMore).toBe(false);
 
       // Second call should include the nextPageToken
-      expect(mockEnhancedSearchPost).toHaveBeenCalledTimes(2);
-      expect(mockEnhancedSearchPost.mock.calls[1][0]).toEqual(
+      expect(enhancedSearchBodies).toHaveLength(2);
+      expect(enhancedSearchBodies[1]).toEqual(
         expect.objectContaining({ nextPageToken: "next-page-token" }),
       );
     });
 
     test("incremental sync with old checkpoint (no lastRawUpdatedAt) applies 14-hour safety buffer", async () => {
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues: [],
-        nextPageToken: null,
-      });
+      server.use(enhancedSearchHandler([{ issues: [], nextPageToken: null }]));
 
       const batches = [];
       for await (const batch of connector.sync({
@@ -381,15 +382,13 @@ describe("JiraConnector", () => {
       }
 
       // 2024-01-10T00:00Z minus 14 hours = 2024-01-09T10:00Z
-      const callArgs = mockEnhancedSearchPost.mock.calls[0][0];
-      expect(callArgs.jql).toContain('updated >= "2024/01/09 10:00"');
+      expect(enhancedSearchBodies[0].jql).toContain(
+        'updated >= "2024/01/09 10:00"',
+      );
     });
 
     test("incremental sync with lastRawUpdatedAt uses local date extraction", async () => {
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues: [],
-        nextPageToken: null,
-      });
+      server.use(enhancedSearchHandler([{ issues: [], nextPageToken: null }]));
 
       const batches = [];
       for await (const batch of connector.sync({
@@ -405,8 +404,9 @@ describe("JiraConnector", () => {
       }
 
       // Should extract local components from raw timestamp (11:30 EDT), NOT convert from UTC
-      const callArgs = mockEnhancedSearchPost.mock.calls[0][0];
-      expect(callArgs.jql).toContain('updated >= "2024/06/20 11:30"');
+      expect(enhancedSearchBodies[0].jql).toContain(
+        'updated >= "2024/06/20 11:30"',
+      );
     });
 
     test("skips issues with labels in labelsToSkip", async () => {
@@ -421,10 +421,7 @@ describe("JiraConnector", () => {
         },
       ];
 
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues,
-        nextPageToken: null,
-      });
+      server.use(enhancedSearchHandler([{ issues, nextPageToken: null }]));
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -462,10 +459,9 @@ describe("JiraConnector", () => {
         ],
       };
 
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues: [issue],
-        nextPageToken: null,
-      });
+      server.use(
+        enhancedSearchHandler([{ issues: [issue], nextPageToken: null }]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -485,10 +481,11 @@ describe("JiraConnector", () => {
     });
 
     test("builds source URL correctly", async () => {
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues: [makeIssue("PROJ-1", "Test issue")],
-        nextPageToken: null,
-      });
+      server.use(
+        enhancedSearchHandler([
+          { issues: [makeIssue("PROJ-1", "Test issue")], nextPageToken: null },
+        ]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -505,10 +502,11 @@ describe("JiraConnector", () => {
     });
 
     test("includes metadata in documents", async () => {
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues: [makeIssue("PROJ-1", "Test issue")],
-        nextPageToken: null,
-      });
+      server.use(
+        enhancedSearchHandler([
+          { issues: [makeIssue("PROJ-1", "Test issue")], nextPageToken: null },
+        ]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -550,10 +548,7 @@ describe("JiraConnector", () => {
         },
       ];
 
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues,
-        nextPageToken: null,
-      });
+      server.use(enhancedSearchHandler([{ issues, nextPageToken: null }]));
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -577,10 +572,7 @@ describe("JiraConnector", () => {
     });
 
     test("checkpoint preserves previous value when batch has no issues", async () => {
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues: [],
-        nextPageToken: null,
-      });
+      server.use(enhancedSearchHandler([{ issues: [], nextPageToken: null }]));
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -622,10 +614,21 @@ describe("JiraConnector", () => {
         },
       ];
 
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues: firstSyncIssues,
-        nextPageToken: null,
-      });
+      // Second sync: an issue was updated at 12:05 (after last issue's 12:00 timestamp)
+      const updatedIssue = {
+        ...makeIssue("PROJ-1", "Issue 1 - updated"),
+        fields: {
+          ...makeIssue("PROJ-1", "Issue 1 - updated").fields,
+          updated: "2024-06-20T12:05:00.000Z",
+        },
+      };
+
+      server.use(
+        enhancedSearchHandler([
+          { issues: firstSyncIssues, nextPageToken: null },
+          { issues: [updatedIssue], nextPageToken: null },
+        ]),
+      );
 
       const firstBatches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -638,20 +641,6 @@ describe("JiraConnector", () => {
 
       const savedCheckpoint = firstBatches[0].checkpoint;
 
-      // Second sync: an issue was updated at 12:05 (after last issue's 12:00 timestamp)
-      const updatedIssue = {
-        ...makeIssue("PROJ-1", "Issue 1 - updated"),
-        fields: {
-          ...makeIssue("PROJ-1", "Issue 1 - updated").fields,
-          updated: "2024-06-20T12:05:00.000Z",
-        },
-      };
-
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues: [updatedIssue],
-        nextPageToken: null,
-      });
-
       const secondBatches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: validConfig,
@@ -662,8 +651,9 @@ describe("JiraConnector", () => {
       }
 
       // The JQL should use the last issue's updated timestamp
-      const jql = mockEnhancedSearchPost.mock.calls[1][0].jql;
-      expect(jql).toContain('updated >= "2024/06/20 12:00"');
+      expect(enhancedSearchBodies[1].jql).toContain(
+        'updated >= "2024/06/20 12:00"',
+      );
 
       // Should find the updated issue
       expect(secondBatches[0].documents).toHaveLength(1);
@@ -671,9 +661,7 @@ describe("JiraConnector", () => {
     });
 
     test("throws on search API error", async () => {
-      mockEnhancedSearchPost.mockRejectedValueOnce(
-        new Error("Request failed with status code 400"),
-      );
+      server.use(enhancedSearchErrorHandler(400));
 
       const generator = connector.sync({
         config: validConfig,
@@ -715,12 +703,16 @@ describe("JiraConnector", () => {
     }
 
     test("uses searchForIssuesUsingJqlPost instead of enhanced search", async () => {
-      mockSearchForIssuesUsingJqlPost.mockResolvedValueOnce({
-        issues: [makeIssue("SRV-1", "Server issue")],
-        startAt: 0,
-        maxResults: 50,
-        total: 1,
-      });
+      server.use(
+        v2SearchHandler([
+          {
+            issues: [makeIssue("SRV-1", "Server issue")],
+            startAt: 0,
+            maxResults: 50,
+            total: 1,
+          },
+        ]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -731,8 +723,8 @@ describe("JiraConnector", () => {
         batches.push(batch);
       }
 
-      expect(mockSearchForIssuesUsingJqlPost).toHaveBeenCalledTimes(1);
-      expect(mockEnhancedSearchPost).not.toHaveBeenCalled();
+      expect(v2SearchBodies).toHaveLength(1);
+      expect(enhancedSearchBodies).toHaveLength(0);
       expect(batches).toHaveLength(1);
       expect(batches[0].documents).toHaveLength(1);
       expect(batches[0].documents[0].id).toBe("SRV-1");
@@ -744,19 +736,22 @@ describe("JiraConnector", () => {
       );
       const page2Issues = [makeIssue("SRV-51", "Issue 51")];
 
-      mockSearchForIssuesUsingJqlPost
-        .mockResolvedValueOnce({
-          issues: page1Issues,
-          startAt: 0,
-          maxResults: 50,
-          total: 51,
-        })
-        .mockResolvedValueOnce({
-          issues: page2Issues,
-          startAt: 50,
-          maxResults: 50,
-          total: 51,
-        });
+      server.use(
+        v2SearchHandler([
+          {
+            issues: page1Issues,
+            startAt: 0,
+            maxResults: 50,
+            total: 51,
+          },
+          {
+            issues: page2Issues,
+            startAt: 50,
+            maxResults: 50,
+            total: 51,
+          },
+        ]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -774,19 +769,23 @@ describe("JiraConnector", () => {
       expect(batches[1].hasMore).toBe(false);
 
       // Second call should use startAt=50
-      expect(mockSearchForIssuesUsingJqlPost).toHaveBeenCalledTimes(2);
-      expect(mockSearchForIssuesUsingJqlPost.mock.calls[1][0]).toEqual(
+      expect(v2SearchBodies).toHaveLength(2);
+      expect(v2SearchBodies[1]).toEqual(
         expect.objectContaining({ startAt: 50, maxResults: 50 }),
       );
     });
 
     test("stops when fewer results than BATCH_SIZE returned", async () => {
-      mockSearchForIssuesUsingJqlPost.mockResolvedValueOnce({
-        issues: [makeIssue("SRV-1", "Only issue")],
-        startAt: 0,
-        maxResults: 50,
-        total: 1,
-      });
+      server.use(
+        v2SearchHandler([
+          {
+            issues: [makeIssue("SRV-1", "Only issue")],
+            startAt: 0,
+            maxResults: 50,
+            total: 1,
+          },
+        ]),
+      );
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -799,7 +798,7 @@ describe("JiraConnector", () => {
 
       expect(batches).toHaveLength(1);
       expect(batches[0].hasMore).toBe(false);
-      expect(mockSearchForIssuesUsingJqlPost).toHaveBeenCalledTimes(1);
+      expect(v2SearchBodies).toHaveLength(1);
     });
   });
 
@@ -839,11 +838,17 @@ describe("JiraConnector", () => {
         };
       }
 
-      // Test with trailing slash
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues: [makeIssue("PROJ-1")],
-        nextPageToken: null,
-      });
+      // Both configs normalize to the same host, so one handler serves both
+      // syncs (each consumes one queued response).
+      server.use(
+        enhancedSearchHandler(
+          [
+            { issues: [makeIssue("PROJ-1")], nextPageToken: null },
+            { issues: [makeIssue("PROJ-1")], nextPageToken: null },
+          ],
+          COMPANY_HOST,
+        ),
+      );
 
       const batchesWithSlash: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
@@ -857,12 +862,6 @@ describe("JiraConnector", () => {
       })) {
         batchesWithSlash.push(batch);
       }
-
-      // Test without trailing slash
-      mockEnhancedSearchPost.mockResolvedValueOnce({
-        issues: [makeIssue("PROJ-1")],
-        nextPageToken: null,
-      });
 
       const batchesWithoutSlash: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({

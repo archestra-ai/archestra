@@ -37,6 +37,7 @@ export function makeConfig(
       byosEnabled: false,
       byosVaultKvVersion: "1",
       azureOpenAiEntraIdEnabled: false,
+      anthropicWifEnabled: false,
       bedrockIamAuthEnabled: false,
       geminiVertexAiEnabled: false,
       globalToolPolicy: "permissive",

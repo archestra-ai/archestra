@@ -1,10 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { CreateLlmProviderApiKeyDialog } from "./create-llm-provider-api-key-dialog";
 
 const mutateAsync = vi.fn();
-const hasPermissions = vi.fn(() => ({ data: true }));
 
 vi.mock("@/components/llm-provider-api-key-form", () => ({
   LLM_PROVIDER_API_KEY_PLACEHOLDER: "••••••••••••••••",
@@ -32,20 +33,19 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: () => false,
-}));
+vi.mock("@/lib/config/config.query");
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => hasPermissions(),
-}));
+vi.mock("@/lib/auth/auth.query");
 
 describe("CreateLlmProviderApiKeyDialog", () => {
   beforeEach(() => {
     mutateAsync.mockReset();
     mutateAsync.mockResolvedValue({});
-    hasPermissions.mockReset();
-    hasPermissions.mockReturnValue({ data: false });
+    vi.mocked(useFeature).mockReturnValue(false);
+    vi.mocked(useHasPermissions).mockReset();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
   });
 
   it("submits the shared create API key flow and closes on success", async () => {
@@ -104,7 +104,9 @@ describe("CreateLlmProviderApiKeyDialog", () => {
   });
 
   it("defaults the scope to org when the user has llmProviderApiKey:admin", async () => {
-    hasPermissions.mockReturnValue({ data: true });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
     const user = userEvent.setup();
 
     render(

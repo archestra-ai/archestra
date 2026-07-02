@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-05-31
+lastUpdated: 2026-07-01
 ---
 
 <!--
@@ -25,9 +25,9 @@ The model router exposes one OpenAI-compatible interface for models across confi
 - **Responses API** (`/responses`) for text requests across model-router-compatible providers
 - **Chat Completions API** (`/chat/completions`) for text chat requests across model-router-compatible providers
 - **Models API** (`/models`) for provider-qualified chat and embedding model IDs
-- **Embeddings API** (`/embeddings`) for OpenAI embedding models only
+- **Embeddings API** (`/embeddings`) for embedding models across supported providers
 
-> ⚠️ Embeddings support for other providers is tracked in [GitHub Issue #5174](https://github.com/archestra-ai/archestra/issues/5174).
+Embedding models use the same provider-qualified IDs as chat models (for example `openai:text-embedding-3-small` or `gemini:gemini-embedding-001`). Anthropic, Bedrock, and Cohere have no compatible embeddings API and return `501 Not Implemented`.
 
 ### Model Router Connection Details
 
@@ -88,6 +88,14 @@ Azure requires Anthropic deployment metadata when creating Claude deployments: `
 
 See Microsoft's [Claude on Foundry guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) for the Azure endpoint and authentication details.
 
+### Workload Identity Federation (keyless)
+
+Archestra can authenticate to the Anthropic API without a static API key using [Workload Identity Federation](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation): it exchanges a short-lived OIDC identity token from your identity provider (Kubernetes, AWS, GCP, Entra ID, GitHub Actions, and others) for an Anthropic access token and sends it as `Authorization: Bearer` upstream. Tokens are cached and refreshed automatically before expiry.
+
+Configure a federation issuer, service account, and federation rule in the Claude Console (**Settings → Workload identity**), then set the `ARCHESTRA_ANTHROPIC_*` WIF environment variables — see [Environment Variables](/docs/platform-deployment#environment-variables) in the deployment docs. When configured, Archestra creates an "Anthropic Workload Identity Federation" system key automatically and syncs the available Claude models; users can also create Anthropic provider keys without entering an API key.
+
+Note: the SDK-standard `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` environment variables take precedence over federation if present in the backend environment, matching Anthropic's documented credential precedence.
+
 ## Google Gemini
 
 Archestra supports both the [Google AI Studio](https://ai.google.dev/) (Gemini Developer API) and [Vertex AI](https://cloud.google.com/vertex-ai) implementations of the Gemini API.
@@ -96,6 +104,7 @@ Archestra supports both the [Google AI Studio](https://ai.google.dev/) (Gemini D
 
 - **Generate Content API** (`:generateContent`)
 - **Stream Generate Content API** (`:streamGenerateContent`)
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible
 
 ### Gemini Connection Details
 
@@ -295,6 +304,7 @@ Dynamic-pricing routers (`openrouter/auto`) report no fixed per-token price, so 
 ### Supported Mistral APIs
 
 - **Chat Completions API** (`/chat/completions`)
+- **Embeddings API** (`/embeddings`)
 
 ### Mistral Connection Details
 
@@ -342,6 +352,7 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 ### Supported vLLM APIs
 
 - **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible
 
 ### vLLM Connection Details
 
@@ -376,6 +387,7 @@ The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environm
 ### Supported Ollama APIs
 
 - **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible
 
 ### Ollama Connection Details
 
@@ -411,6 +423,7 @@ The default base URL is `http://localhost:11434/v1`. Override it per-key in the 
 ### Supported Zhipu AI APIs
 
 - **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible
 
 ### Zhipu AI Connection Details
 
@@ -715,6 +728,7 @@ Known region prefixes: `us`, `eu`, `ap`, `global`.
 
 - Chat Completions (streaming and non-streaming)
 - Responses API (streaming and non-streaming)
+- Embeddings API (`/embeddings`) - OpenAI-compatible
 
 ### Azure AI Foundry Connection Details
 

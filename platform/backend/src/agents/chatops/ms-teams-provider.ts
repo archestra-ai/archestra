@@ -38,6 +38,8 @@ import type {
   DiscoveredChannel,
   IncomingChatMessage,
   MsTeamsDbConfig,
+  SkippedAttachment,
+  ThreadFileOutcome,
   ThreadHistoryParams,
   UpdateApprovalRequestOptions,
 } from "@/types";
@@ -279,10 +281,15 @@ class MSTeamsProvider implements ChatOpsProvider {
     const teamData = activity.channelData?.team;
     const workspaceId = teamData?.aadGroupId || teamData?.id || null;
 
-    // Download file attachments (skip Adaptive Cards and other non-file attachments)
-    const attachments = await this.downloadTeamsAttachments(
-      activity.attachments,
+    // Download file attachments (skip Adaptive Cards and other non-file
+    // attachments). Current-message drops are intentionally not surfaced for
+    // Teams (unlike Slack) — only the delivered attachments are used.
+    const fileOutcomes = await this.downloadTeamsFiles(
+      filterTeamsFileAttachments(activity.attachments),
       activity.serviceUrl,
+    );
+    const attachments = fileOutcomes.flatMap((o) =>
+      o.status === "delivered" ? [o.attachment] : [],
     );
 
     // A file-only message (empty text) is kept only when a file actually
@@ -1285,70 +1292,72 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   async downloadFiles(
     files: ChatThreadMessageFile[],
-  ): Promise<
-    Array<{ contentType: string; contentBase64: string; name?: string }>
-  > {
-    // Convert ChatThreadMessageFile[] to the format downloadTeamsAttachments expects
-    const teamsAttachments = files.map((f) => ({
-      contentType: f.mimetype,
-      contentUrl: f.url,
-      name: f.name,
-    }));
+  ): Promise<ThreadFileOutcome[]> {
     // No serviceUrl for history messages — Azure Blob URLs are pre-authenticated
-    return this.downloadTeamsAttachments(teamsAttachments);
+    return this.downloadTeamsFiles(
+      files.map((f) => ({
+        contentType: f.mimetype,
+        contentUrl: f.url,
+        name: f.name,
+        size: f.size,
+      })),
+    );
   }
 
   // ===========================================================================
   // Private Methods
 
   /**
-   * Download file attachments from a Teams activity and convert to A2AAttachment format.
-   * Skips Adaptive Cards and other non-file content types.
+   * Download Teams file attachments and convert to A2AAttachment format.
+   *
+   * Returns exactly one outcome per input file, positionally aligned with
+   * `files` — the delivered attachment or the reason it was dropped — so
+   * callers can attribute every skip to the message the file came from.
    *
    * Authentication: Files uploaded directly in Teams chat use pre-authenticated Azure
    * Blob Storage URLs. Files shared from SharePoint/OneDrive may require a Bearer token.
    * When the contentUrl hostname matches the Bot Framework serviceUrl, we authenticate
    * using client credentials (appId/appSecret) to obtain a Bot Connector token.
    */
-  private async downloadTeamsAttachments(
-    attachments?: Array<{
-      contentType?: string;
-      contentUrl?: string;
-      content?: string;
-      name?: string;
-    }>,
+  private async downloadTeamsFiles(
+    files: TeamsFileAttachment[],
     serviceUrl?: string,
-  ): Promise<
-    Array<{ contentType: string; contentBase64: string; name?: string }>
-  > {
-    if (!attachments || attachments.length === 0) return [];
+  ): Promise<ThreadFileOutcome[]> {
+    if (files.length === 0) return [];
 
-    // Filter to only file/image attachments (skip Adaptive Cards, hero cards, etc.)
-    const fileAttachments = attachments.filter(
-      (a) =>
-        a.contentUrl &&
-        a.contentType &&
-        !a.contentType.startsWith("application/vnd.microsoft.card."),
-    );
-
-    if (fileAttachments.length === 0) return [];
-
-    const toProcess = fileAttachments.slice(
-      0,
-      CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENTS_PER_MESSAGE,
-    );
-    const results: Array<{
-      contentType: string;
-      contentBase64: string;
-      name?: string;
-    }> = [];
+    const outcomes: ThreadFileOutcome[] = [];
+    const skip = (skipped: SkippedAttachment): void => {
+      outcomes.push({ status: "skipped", skipped });
+    };
     let totalSize = 0;
+    let deliveredCount = 0;
+    // Once the combined budget is spent, every remaining file is recorded as
+    // over-budget rather than silently dropped (the old code `break`-ed here).
+    let budgetExhausted = false;
 
     // Lazily obtain a Bot Connector token when needed for authenticated downloads
     let botToken: string | null = null;
 
-    for (const attachment of toProcess) {
-      if (!attachment.contentUrl || !attachment.contentType) continue;
+    for (const [index, attachment] of files.entries()) {
+      // Anything past the per-message cap is dropped from processing; record
+      // it rather than letting it vanish silently.
+      if (index >= CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENTS_PER_MESSAGE) {
+        skip({
+          name: attachment.name,
+          sizeBytes: attachment.size,
+          reason: "too_many",
+        });
+        continue;
+      }
+
+      if (budgetExhausted) {
+        skip({
+          name: attachment.name,
+          sizeBytes: attachment.size,
+          reason: "total_limit_reached",
+        });
+        continue;
+      }
 
       // SSRF protection: only allow downloads from known Microsoft domains
       if (!isAllowedTeamsFileHost(attachment.contentUrl, serviceUrl)) {
@@ -1359,6 +1368,11 @@ class MSTeamsProvider implements ChatOpsProvider {
           },
           "[MSTeamsProvider] Skipping attachment from unexpected domain",
         );
+        skip({
+          name: attachment.name,
+          sizeBytes: attachment.size,
+          reason: "download_failed",
+        });
         continue;
       }
 
@@ -1388,6 +1402,11 @@ class MSTeamsProvider implements ChatOpsProvider {
             },
             "[MSTeamsProvider] Failed to download attachment",
           );
+          skip({
+            name: attachment.name,
+            sizeBytes: attachment.size,
+            reason: "download_failed",
+          });
           continue;
         }
 
@@ -1404,6 +1423,11 @@ class MSTeamsProvider implements ChatOpsProvider {
             { name: attachment.name, contentLength },
             "[MSTeamsProvider] Skipping oversized attachment (Content-Length)",
           );
+          skip({
+            name: attachment.name,
+            sizeBytes: attachment.size || contentLength,
+            reason: "too_large",
+          });
           continue;
         }
 
@@ -1419,6 +1443,11 @@ class MSTeamsProvider implements ChatOpsProvider {
             },
             "[MSTeamsProvider] Skipping attachment exceeding size limit",
           );
+          skip({
+            name: attachment.name,
+            sizeBytes: buffer.length,
+            reason: "too_large",
+          });
           continue;
         }
 
@@ -1436,10 +1465,17 @@ class MSTeamsProvider implements ChatOpsProvider {
             },
             "[MSTeamsProvider] Total attachments size limit reached",
           );
-          break;
+          skip({
+            name: attachment.name,
+            sizeBytes: buffer.length,
+            reason: "total_limit_reached",
+          });
+          budgetExhausted = true;
+          continue;
         }
 
         totalSize += buffer.length;
+        deliveredCount++;
         // Resolve content type: prefer HTTP header when specific, fall back to
         // attachment metadata, and detect from magic bytes as last resort when
         // both are generic (e.g. "application/octet-stream" or "image/*").
@@ -1449,13 +1485,16 @@ class MSTeamsProvider implements ChatOpsProvider {
           !ct || ct === "application/octet-stream" || ct.includes("*");
         const resolvedContentType = !isGenericContentType(httpContentType)
           ? httpContentType
-          : !isGenericContentType(attachment.contentType ?? "")
-            ? (attachment.contentType as string)
+          : !isGenericContentType(attachment.contentType)
+            ? attachment.contentType
             : detectImageType(buffer);
-        results.push({
-          contentType: resolvedContentType,
-          contentBase64: buffer.toString("base64"),
-          name: attachment.name,
+        outcomes.push({
+          status: "delivered",
+          attachment: {
+            contentType: resolvedContentType,
+            contentBase64: buffer.toString("base64"),
+            name: attachment.name,
+          },
         });
 
         logger.debug(
@@ -1471,21 +1510,26 @@ class MSTeamsProvider implements ChatOpsProvider {
           { name: attachment.name, error: errorMessage(error) },
           "[MSTeamsProvider] Error downloading attachment",
         );
+        skip({
+          name: attachment.name,
+          sizeBytes: attachment.size,
+          reason: "download_failed",
+        });
       }
     }
 
-    if (results.length > 0) {
+    if (deliveredCount > 0) {
       logger.info(
         {
-          fileCount: results.length,
+          fileCount: deliveredCount,
           totalSize,
-          originalCount: attachments.length,
+          originalCount: files.length,
         },
         "[MSTeamsProvider] Downloaded attachments from Teams message",
       );
     }
 
-    return results;
+    return outcomes;
   }
 
   /**
@@ -1647,48 +1691,59 @@ class MSTeamsProvider implements ChatOpsProvider {
   ): ChatThreadMessage[] {
     const botAppId = this.config.appId;
 
-    return messages
-      .filter((msg) => msg.id && msg.id !== excludeMessageId)
-      .map((msg) => {
-        const isUserMessage = Boolean(msg.from?.user);
+    return (
+      messages
+        .filter((msg) => msg.id && msg.id !== excludeMessageId)
+        .map((msg) => {
+          const isUserMessage = Boolean(msg.from?.user);
 
-        // Extract file attachment metadata from Graph API ChatMessage.attachments
-        const files: ChatThreadMessageFile[] = (msg.attachments ?? [])
-          .filter(
-            (a) =>
-              a.contentUrl &&
-              a.contentType &&
-              !a.contentType.startsWith("application/vnd.microsoft.card."),
-          )
-          .map((a) => ({
-            url: a.contentUrl as string,
-            mimetype: a.contentType as string,
-            name: a.name ?? undefined,
-          }));
+          // Extract file attachment metadata from Graph API ChatMessage.attachments
+          const files: ChatThreadMessageFile[] = (msg.attachments ?? [])
+            .filter(
+              (a) =>
+                a.contentUrl &&
+                a.contentType &&
+                !a.contentType.startsWith("application/vnd.microsoft.card."),
+            )
+            .map((a) => ({
+              url: a.contentUrl as string,
+              mimetype: a.contentType as string,
+              name: a.name ?? undefined,
+            }));
 
-        return {
-          messageId: msg.id as string,
-          senderId: isUserMessage
-            ? msg.from?.user?.id || "unknown"
-            : msg.from?.application?.id || "unknown",
-          senderName: isUserMessage
-            ? msg.from?.user?.displayName || "Unknown"
-            : msg.from?.application?.displayName || "App",
-          text: extractMessageText(
-            msg.body?.content ?? undefined,
-            msg.attachments ?? undefined,
-          ),
-          timestamp: msg.createdDateTime
-            ? new Date(msg.createdDateTime)
-            : new Date(),
-          isFromBot:
-            msg.from?.user?.id === botAppId ||
-            msg.from?.application?.id === botAppId,
-          ...(files.length > 0 && { files }),
-        };
-      })
-      .filter((msg) => msg.text.trim().length > 0)
-      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+          return {
+            messageId: msg.id as string,
+            senderId: isUserMessage
+              ? msg.from?.user?.id || "unknown"
+              : msg.from?.application?.id || "unknown",
+            senderName: isUserMessage
+              ? msg.from?.user?.displayName || "Unknown"
+              : msg.from?.application?.displayName || "App",
+            text: extractMessageText(
+              msg.body?.content ?? undefined,
+              msg.attachments ?? undefined,
+            ),
+            timestamp: msg.createdDateTime
+              ? new Date(msg.createdDateTime)
+              : new Date(),
+            isFromBot:
+              msg.from?.user?.id === botAppId ||
+              msg.from?.application?.id === botAppId,
+            ...(files.length > 0 && { files }),
+          };
+        })
+        // Keep text-less USER messages that carry files: a screenshot posted
+        // alone is a turn the model must know about — its file is either
+        // delivered or surfaced as skipped by the manager. Bot file-only
+        // messages stay filtered: the manager never downloads bot files, so
+        // retaining them would render a turn with no file and no skip note.
+        .filter(
+          (msg) =>
+            msg.text.trim().length > 0 ||
+            (!msg.isFromBot && (msg.files?.length ?? 0) > 0),
+        )
+        .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+    );
   }
 }
 
@@ -1697,6 +1752,35 @@ export default MSTeamsProvider;
 // =============================================================================
 // Internal Helpers
 // =============================================================================
+
+/** A Teams attachment that points at a downloadable file (not a card). */
+interface TeamsFileAttachment {
+  contentType: string;
+  contentUrl: string;
+  name?: string;
+  size?: number;
+}
+
+/**
+ * Keep only file/image attachments (skip Adaptive Cards, hero cards, and
+ * entries without a download URL).
+ */
+function filterTeamsFileAttachments(
+  attachments?: Array<{
+    contentType?: string;
+    contentUrl?: string;
+    content?: string;
+    name?: string;
+  }>,
+): TeamsFileAttachment[] {
+  return (attachments ?? []).flatMap((a) =>
+    a.contentUrl &&
+    a.contentType &&
+    !a.contentType.startsWith("application/vnd.microsoft.card.")
+      ? [{ contentType: a.contentType, contentUrl: a.contentUrl, name: a.name }]
+      : [],
+  );
+}
 
 function cleanBotMention(text: string, botName?: string): string {
   let cleaned = text.replace(/<at>.*?<\/at>/gi, "").trim();

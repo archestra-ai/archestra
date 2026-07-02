@@ -453,6 +453,78 @@ export const parseDatabaseStatementTimeoutMillis = (
 };
 
 /** @public — exported for testability */
+export interface AnthropicWifConfig {
+  federationRuleId: string;
+  organizationId: string;
+  serviceAccountId: string;
+  workspaceId?: string;
+  identityTokenFile?: string;
+  /**
+   * Inline identity token (a JWT). Held in the config singleton, so prefer
+   * `identityTokenFile` in production — only the path is stored, not the secret,
+   * and the file is re-read on every exchange to pick up rotation.
+   */
+  identityToken?: string;
+}
+
+/**
+ * Parse Anthropic Workload Identity Federation (keyless auth) configuration.
+ * Enabled only when the federation rule ID, organization ID, service account
+ * ID, and an identity token source are all present; a partial configuration
+ * logs a warning and disables WIF rather than failing at request time.
+ *
+ * @public — exported for testability
+ */
+export const parseAnthropicWifConfig = (env: {
+  federationRuleId?: string | undefined;
+  organizationId?: string | undefined;
+  serviceAccountId?: string | undefined;
+  workspaceId?: string | undefined;
+  identityTokenFile?: string | undefined;
+  identityToken?: string | undefined;
+}): AnthropicWifConfig | null => {
+  const federationRuleId = env.federationRuleId?.trim();
+  const organizationId = env.organizationId?.trim();
+  const serviceAccountId = env.serviceAccountId?.trim();
+  const workspaceId = env.workspaceId?.trim();
+  const identityTokenFile = env.identityTokenFile?.trim();
+  const identityToken = env.identityToken?.trim();
+
+  const anySet = Boolean(
+    federationRuleId ||
+      organizationId ||
+      serviceAccountId ||
+      workspaceId ||
+      identityTokenFile ||
+      identityToken,
+  );
+  if (!anySet) {
+    return null;
+  }
+
+  if (
+    !federationRuleId ||
+    !organizationId ||
+    !serviceAccountId ||
+    !(identityTokenFile || identityToken)
+  ) {
+    logger.warn(
+      "Anthropic Workload Identity Federation is partially configured and will be disabled. Set ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID, ARCHESTRA_ANTHROPIC_ORGANIZATION_ID, ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID, and one of ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE or ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN.",
+    );
+    return null;
+  }
+
+  return {
+    federationRuleId,
+    organizationId,
+    serviceAccountId,
+    ...(workspaceId ? { workspaceId } : {}),
+    ...(identityTokenFile ? { identityTokenFile } : {}),
+    ...(identityToken ? { identityToken } : {}),
+  };
+};
+
+/** @public — exported for testability */
 export const parseMetricsPort = (envValue?: string | undefined): number => {
   const value = envValue?.trim();
   if (!value) {
@@ -1061,6 +1133,15 @@ const config = {
       azureFoundryEntraIdEnabled:
         process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED ===
         "true",
+      // Workload Identity Federation (keyless upstream auth); null when not configured.
+      wif: parseAnthropicWifConfig({
+        federationRuleId: process.env.ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID,
+        organizationId: process.env.ARCHESTRA_ANTHROPIC_ORGANIZATION_ID,
+        serviceAccountId: process.env.ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID,
+        workspaceId: process.env.ARCHESTRA_ANTHROPIC_WORKSPACE_ID,
+        identityTokenFile: process.env.ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE,
+        identityToken: process.env.ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN,
+      }),
     },
     gemini: {
       baseUrl:
@@ -1551,6 +1632,19 @@ const config = {
     // Optional reserved domain for a stable public URL across restarts. Without
     // it ngrok assigns an ephemeral domain that rotates on each restart.
     domain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
+  },
+  chatops: {
+    // Per-process cap on concurrent chatops file downloads + image shrinking.
+    // Chatops events are acked to the provider before processing, so an OOM
+    // during a burst of attachment-heavy messages means silent message loss —
+    // this bounds the transient memory (JS buffer + native copy + decode
+    // alloc) a burst can hold. 4 matches libuv's default threadpool, which
+    // already serializes the native image decodes. Currently gates Slack only:
+    // MS Teams has no image-shrink path and enforces a flat 10 MB per-file cap.
+    maxConcurrentFileTransfers: parsePositiveInt(
+      process.env.ARCHESTRA_CHATOPS_MAX_CONCURRENT_FILE_TRANSFERS,
+      4,
+    ),
   },
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,

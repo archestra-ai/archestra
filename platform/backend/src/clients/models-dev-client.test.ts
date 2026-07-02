@@ -11,37 +11,19 @@ const { mockFetch } = vi.hoisted(() => ({
   mockFetch: vi.fn(),
 }));
 
-// Mock global fetch
+// Mock global fetch. The config's `unstubGlobals` removes stubs after every
+// test, so re-apply before each one; the top-level stub covers import time.
 vi.stubGlobal("fetch", mockFetch);
+beforeEach(() => {
+  vi.stubGlobal("fetch", mockFetch);
+});
 
 // Import after mock is defined
 import { modelsDevClient } from "./models-dev-client";
 
-// Mock the cache manager to avoid "CacheManager: Not started" errors
-vi.mock("@/cache-manager", () => {
-  class MockLRUCacheManager {
-    get() {
-      return undefined;
-    }
-    set() {}
-    delete() {
-      return true;
-    }
-    has() {
-      return false;
-    }
-    clear() {}
-  }
-
-  return {
-    CacheKey: { ModelsDevSync: "models-dev-sync" },
-    cacheManager: {
-      get: vi.fn().mockResolvedValue(undefined),
-      set: vi.fn().mockResolvedValue(undefined),
-    },
-    LRUCacheManager: MockLRUCacheManager,
-  };
-});
+// The canonical Map-backed fake from src/__mocks__/cache-manager.ts avoids
+// "CacheManager: Not started" errors; the store resets before every test.
+vi.mock("@/cache-manager");
 
 /**
  * Helper to create a mock models.dev model object

@@ -36,6 +36,9 @@ enum Cmd {
     /// Render a finished run's trajectories and print a JSON manifest (metrics + per-rollout
     /// summary + trajectory.md paths) for external analysis tooling. No LLM, no API key.
     Prepare(PrepareArgs),
+    /// Serve a local read-only dashboard over an experiments dir (run list, rubric grids,
+    /// rollout details). No LLM, no API key.
+    Dashboard(DashboardArgs),
 }
 
 /// Flags shared by `benchmark` and `full` — what to run and where. Flattened into both so the two can
@@ -146,6 +149,17 @@ struct PrepareArgs {
     run_dir: PathBuf,
 }
 
+#[derive(Args, Debug)]
+struct DashboardArgs {
+    #[arg(
+        long,
+        help = "Experiments dir to browse (default: <git toplevel>/archestra-bench/experiments, or ./experiments outside a repo)"
+    )]
+    experiments_dir: Option<PathBuf>,
+    #[arg(long, default_value_t = 8000, help = "Port to listen on")]
+    port: u16,
+}
+
 fn default_bench_dir() -> &'static str {
     // CARGO_MANIFEST_DIR is archestra-bench/cli; the benchmark root is its parent.
     concat!(env!("CARGO_MANIFEST_DIR"), "/..")
@@ -160,6 +174,7 @@ async fn main() -> ExitCode {
     // wants a quiet default. `RUST_LOG` overrides either.
     let default_filter = match &cli.cmd {
         Cmd::Analyze(_) | Cmd::Prepare(_) => "warn",
+        Cmd::Dashboard(_) => "info,tower_http=info",
         _ => "info,rmcp=warn,nitpicker_agent=warn",
     };
     init_tracing(default_filter);
@@ -169,6 +184,7 @@ async fn main() -> ExitCode {
         Cmd::Analyze(a) => run_analyze(a).await,
         Cmd::Full(a) => run_full(a).await,
         Cmd::Prepare(a) => run_prepare(a),
+        Cmd::Dashboard(a) => run_dashboard(a).await,
     }
 }
 
@@ -238,6 +254,24 @@ fn run_prepare(a: PrepareArgs) -> ExitCode {
         }
         Err(e) => {
             eprintln!("✗ prepare failed to serialize manifest: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Serve the local dashboard until interrupted. Blocking by design: the process *is* the server.
+async fn run_dashboard(a: DashboardArgs) -> ExitCode {
+    let experiments_dir = a
+        .experiments_dir
+        .unwrap_or_else(bench_dashboard::default_experiments_dir);
+    let cfg = bench_dashboard::DashboardConfig {
+        experiments_dir,
+        port: a.port,
+    };
+    match bench_dashboard::serve(cfg).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("✗ dashboard failed: {e:#}");
             ExitCode::FAILURE
         }
     }

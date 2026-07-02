@@ -155,6 +155,26 @@ export function isScheduleTriggerRunActive(
   return status === "running";
 }
 
+/**
+ * Decides how the chat pane should present a conversation that backs a scheduled
+ * run. A run's transcript is only persisted once it completes, so while it is
+ * still running the chat must show an in-progress placeholder and hide the
+ * composer instead of a blank thread. `context` is the schedule context read
+ * from the chat URL (null for an ordinary chat); `runStatus` is the pinned run's
+ * status (undefined until it loads).
+ */
+export function getScheduledRunChatState(params: {
+  context: { triggerId: string; runId: string | null } | null;
+  runStatus: ScheduleTriggerRunStatus | null | undefined;
+}): { isScheduledRunChat: boolean; isRunInProgress: boolean } {
+  const isScheduledRunChat = params.context !== null;
+  const isRunInProgress =
+    isScheduledRunChat &&
+    params.context?.runId != null &&
+    isScheduleTriggerRunActive(params.runStatus);
+  return { isScheduledRunChat, isRunInProgress };
+}
+
 export function getRunNowTrackingState(params: {
   activeMutationTriggerId: string | null;
   currentTriggerId: string;

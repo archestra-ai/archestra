@@ -134,44 +134,58 @@ runs:
         path: /tmp/mcp-id-jag-server.tar
         key: mcp-id-jag-server-0.0.4-${{ runner.arch }}
 
-    - name: Pull MCP example OAuth server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-oauth-image.outputs.cache-hit != 'true' }}
+    # Fetch all three MCP dependency images concurrently. On a cache hit we
+    # `docker load` the tarball; on a miss we pull from the registry and save the
+    # tarball for the actions/cache post-job upload. These pulls previously ran as
+    # three serial steps (~45s wall-clock on a cold cache); doing them in parallel
+    # collapses that to the slowest single image (~25s).
+    - name: Fetch MCP dependency images (parallel)
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
       shell: bash
+      env:
+        OAUTH_CACHE_HIT: ${{ steps.cache-oauth-image.outputs.cache-hit }}
+        JWKS_CACHE_HIT: ${{ steps.cache-jwks-image.outputs.cache-hit }}
+        ID_JAG_CACHE_HIT: ${{ steps.cache-id-jag-image.outputs.cache-hit }}
       run: |
         MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
-        docker pull "${MCP_OAUTH_IMAGE}"
-        docker save "${MCP_OAUTH_IMAGE}" > /tmp/mcp-oauth-server.tar
-
-    - name: Pull MCP JWKS server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-jwks-image.outputs.cache-hit != 'true' }}
-      shell: bash
-      run: |
         MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
-        docker pull "${MCP_JWKS_IMAGE}"
-        docker save "${MCP_JWKS_IMAGE}" > /tmp/mcp-jwks-server.tar
-
-    - name: Pull MCP ID-JAG server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-id-jag-image.outputs.cache-hit != 'true' }}
-      shell: bash
-      run: |
         MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
-        docker pull "${MCP_ID_JAG_IMAGE}"
-        docker save "${MCP_ID_JAG_IMAGE}" > /tmp/mcp-id-jag-server.tar
 
-    - name: Load cached MCP example OAuth server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-oauth-image.outputs.cache-hit == 'true' }}
-      shell: bash
-      run: docker load < /tmp/mcp-oauth-server.tar
+        # fetch_image <cache-hit> <image-ref> <tarball-path>
+        # Loads from the cached tarball on a hit, otherwise pulls and re-saves it.
+        fetch_image() {
+          local cache_hit="$1" image="$2" tarball="$3"
+          if [ "${cache_hit}" = "true" ]; then
+            echo "Loading cached image ${image} from ${tarball}..."
+            docker load < "${tarball}"
+          else
+            echo "Pulling image ${image}..."
+            docker pull "${image}"
+            docker save "${image}" > "${tarball}"
+          fi
+        }
 
-    - name: Load cached MCP JWKS server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-jwks-image.outputs.cache-hit == 'true' }}
-      shell: bash
-      run: docker load < /tmp/mcp-jwks-server.tar
+        PIDS=()
+        fetch_image "${OAUTH_CACHE_HIT}" "${MCP_OAUTH_IMAGE}" /tmp/mcp-oauth-server.tar &
+        PIDS+=($!)
+        fetch_image "${JWKS_CACHE_HIT}" "${MCP_JWKS_IMAGE}" /tmp/mcp-jwks-server.tar &
+        PIDS+=($!)
+        fetch_image "${ID_JAG_CACHE_HIT}" "${MCP_ID_JAG_IMAGE}" /tmp/mcp-id-jag-server.tar &
+        PIDS+=($!)
 
-    - name: Load cached MCP ID-JAG server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-id-jag-image.outputs.cache-hit == 'true' }}
-      shell: bash
-      run: docker load < /tmp/mcp-id-jag-server.tar
+        echo "Waiting for all MCP dependency image fetches to complete..."
+        FAILED=0
+        for pid in "${PIDS[@]}"; do
+          if ! wait "$pid"; then
+            FAILED=1
+          fi
+        done
+
+        if [ "$FAILED" -ne 0 ]; then
+          echo "One or more MCP dependency image fetches failed"
+          exit 1
+        fi
+        echo "All MCP dependency images fetched successfully"
 
     - name: Load all images into Kind in parallel
       shell: bash

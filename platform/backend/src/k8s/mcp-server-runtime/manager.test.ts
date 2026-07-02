@@ -2,7 +2,6 @@ import * as fs from "node:fs";
 import { PassThrough } from "node:stream";
 import * as k8s from "@kubernetes/client-node";
 import { vi } from "vitest";
-import type * as originalConfigModule from "@/config";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { McpServer, NetworkPolicy } from "@/types";
 
@@ -56,21 +55,17 @@ vi.mock("@kubernetes/client-node", () => {
 });
 
 // Mock the dependencies before importing the manager
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-      orchestrator: {
-        kubernetes: {
-          namespace: "test-namespace",
-          kubeconfig: undefined,
-          loadKubeconfigFromCurrentCluster: false,
-        },
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    orchestrator: {
+      kubernetes: {
+        namespace: "test-namespace",
+        kubeconfig: undefined,
+        loadKubeconfigFromCurrentCluster: false,
       },
     },
-  };
-});
+  }),
+);
 
 // Track K8sDeployment constructor calls and method invocations
 const mockCreateK8sSecret = vi.fn().mockResolvedValue(undefined);

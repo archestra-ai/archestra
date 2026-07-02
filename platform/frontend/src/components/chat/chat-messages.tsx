@@ -1,12 +1,14 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
   APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES,
+  ARCHESTRA_MCP_CATALOG_ID,
   type ArchestraToolShortName,
   type archestraApiTypes,
   ChatMessageMetadataSchema,
   getArchestraAppResourceUri,
   getArchestraToolFullName,
   HOOK_RUN_PART_TYPE,
+  isAppRenderingArchestraToolShortName,
   parseFullToolName,
   type ResourceVisibilityScope,
   SWAP_AGENT_FAILED_POKE_TEXT,
@@ -1649,6 +1651,16 @@ const MessageTool = memo(
           })
         : null;
 
+    // An owned-app management tool (scaffold/edit/render_app), detected by name
+    // even before its result lands. Lets the still-pending call render as the
+    // same compact Archestra-logo circle as the finished one, instead of the
+    // full-width tool card it would otherwise fall through to.
+    const appMgmtShortName = getToolShortName(mcpAppToolName);
+    const isOwnedAppMgmtTool =
+      appMgmtShortName !== null
+        ? isAppRenderingArchestraToolShortName(appMgmtShortName)
+        : isAppRenderingArchestraToolShortName(mcpAppToolName);
+
     const isApprovalRequested = part.state === "approval-requested";
     const isToolDenied = part.state === "output-denied";
     const approvalDisplay = getApprovalToolDisplay({
@@ -1801,15 +1813,55 @@ const MessageTool = memo(
       <ToolErrorLogsButton toolName={toolName} />
     ) : null;
 
-    // MCP App tools: compact circle + canvas below (no collapsible wrapper)
-    if ((uiResourceUri || ownedApp) && !isApprovalRequested && !errorText) {
+    // MCP App tools: compact circle + canvas below (no collapsible wrapper).
+    // Owned-app management tools use this compact form even while pending (before
+    // a result identifies the app), so "Edit app" streaming looks like every
+    // other tool call rather than a full-width card.
+    if (
+      (uiResourceUri || ownedApp || isOwnedAppMgmtTool) &&
+      !isApprovalRequested &&
+      !isToolDenied &&
+      !errorText
+    ) {
       const compactState = getCompactToolState({ part, toolResultPart });
       const shortName = parseFullToolName(toolName).toolName.replace(/_/g, " ");
       const iconInfo = toolIconMap?.get(toolName);
+      // Fall back to the Archestra catalog icon for owned-app / archestra tools
+      // whose icon isn't in the map yet (e.g. a still-pending management call).
+      const catalogId =
+        iconInfo?.catalogId ??
+        (appMgmtShortName !== null ? ARCHESTRA_MCP_CATALOG_ID : undefined);
 
+      // Expanded tool-call details (input/output). Handed to McpAppSection so it
+      // can place them above the app in the column below the circle+marker row.
+      const toolDetails = isOpen ? (
+        <Tool defaultOpen={true}>
+          <ToolHeader
+            type={`tool-${displayToolName}`}
+            state={getHeaderState({
+              state: part.state || "input-available",
+              toolResultPart,
+              errorText,
+            })}
+            isCollapsible={!!hasInput}
+          />
+          <ToolContent>
+            {hasInput ? <ToolInput input={displayInput} /> : null}
+            {toolResultPart && (
+              <ToolOutput
+                label="Result"
+                output={mcpOutput?.content ?? toolResultPart.output}
+              />
+            )}
+          </ToolContent>
+        </Tool>
+      ) : undefined;
+
+      // Tool-call circle and the app marker share the flex-wrap row's first line;
+      // the tool details + inline app card stack in a full-width column below.
       return (
         <div className="mb-4">
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-start gap-1.5">
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -1823,10 +1875,10 @@ const MessageTool = memo(
                       !isOpen && "bg-background",
                     )}
                   >
-                    {iconInfo?.icon || iconInfo?.catalogId ? (
+                    {iconInfo?.icon || catalogId ? (
                       <McpCatalogIcon
-                        icon={iconInfo.icon}
-                        catalogId={iconInfo.catalogId}
+                        icon={iconInfo?.icon}
+                        catalogId={catalogId}
                         size={16}
                       />
                     ) : (
@@ -1848,34 +1900,8 @@ const MessageTool = memo(
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          </div>
-          {isOpen && (
-            <div className="mt-2">
-              <Tool defaultOpen={true}>
-                <ToolHeader
-                  type={`tool-${displayToolName}`}
-                  state={getHeaderState({
-                    state: part.state || "input-available",
-                    toolResultPart,
-                    errorText,
-                  })}
-                  isCollapsible={!!hasInput}
-                />
-                <ToolContent>
-                  {hasInput ? <ToolInput input={displayInput} /> : null}
-                  {toolResultPart && (
-                    <ToolOutput
-                      label="Result"
-                      output={mcpOutput?.content ?? toolResultPart.output}
-                    />
-                  )}
-                </ToolContent>
-              </Tool>
-            </div>
-          )}
-          {agentId && (
-            <div className="mt-3">
-              {uiResourceUri ? (
+            {agentId &&
+              (uiResourceUri ? (
                 <McpAppSection
                   uiResourceUri={uiResourceUri}
                   mcpServerId={uiMcpServerId}
@@ -1884,6 +1910,7 @@ const MessageTool = memo(
                   toolCallId={part.toolCallId}
                   toolInput={mcpAppToolInput}
                   rawOutput={mcpOutput}
+                  toolDetails={toolDetails}
                   preloadedResource={
                     earlyToolUiData?.html
                       ? {
@@ -1904,11 +1931,11 @@ const MessageTool = memo(
                   agentId={agentId}
                   toolName={mcpAppToolName}
                   toolCallId={part.toolCallId}
+                  toolDetails={toolDetails}
                   onSendMessage={onSendMessage}
                 />
-              ) : null}
-            </div>
-          )}
+              ) : null)}
+          </div>
         </div>
       );
     }

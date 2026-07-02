@@ -3,15 +3,17 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import {
   AppWindow,
-  ExternalLink,
   Loader2,
   MoreHorizontal,
   Server,
+  Settings,
+  SquareArrowOutUpRight,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { ScopeBadge } from "@/components/scope-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -130,6 +132,7 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
   // the card unmounts mid-navigation, so it never resets; only a failure does.
   const [isOpening, setIsOpening] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const handleOpen = async () => {
     setIsOpening(true);
@@ -163,9 +166,13 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
             />
           }
         >
+          <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
+            <Settings className="h-4 w-4" />
+            Settings
+          </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link href={`/a/${app.id}`} target="_blank" rel="noreferrer">
-              <ExternalLink className="h-4 w-4" />
+              <SquareArrowOutUpRight className="h-4 w-4" />
               Open in new tab
             </Link>
           </DropdownMenuItem>
@@ -174,10 +181,7 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"
-                onSelect={(e) => {
-                  e.preventDefault();
-                  setDeleteOpen(true);
-                }}
+                onSelect={() => setDeleteOpen(true)}
               >
                 <Trash2 className="h-4 w-4" />
                 Delete
@@ -204,6 +208,12 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
         app={{ id: app.id, name: app.name }}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
+      />
+
+      <AppSettingsDialog
+        appId={app.id}
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
       />
     </>
   );
@@ -253,7 +263,7 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
       <CardOverflowMenu leading={<ScopeBadge scope={app.scope} hidePersonal />}>
         <DropdownMenuItem asChild>
           <Link href={runHref} target="_blank" rel="noreferrer">
-            <ExternalLink className="h-4 w-4" />
+            <SquareArrowOutUpRight className="h-4 w-4" />
             Open in new tab
           </Link>
         </DropdownMenuItem>

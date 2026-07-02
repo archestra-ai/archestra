@@ -1,14 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 
-const { mockGetLlmProviderApiKeys, mockToastError, mockHasPermissions } =
-  vi.hoisted(() => ({
-    mockGetLlmProviderApiKeys: vi.fn(),
-    mockToastError: vi.fn(),
-    mockHasPermissions: vi.fn(),
-  }));
+const { mockGetLlmProviderApiKeys } = vi.hoisted(() => ({
+  mockGetLlmProviderApiKeys: vi.fn(),
+}));
 
 vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@archestra/shared")>();
@@ -22,13 +21,9 @@ vi.mock("@archestra/shared", async (importOriginal) => {
   };
 });
 
-vi.mock("sonner", () => ({
-  toast: { error: mockToastError, success: vi.fn() },
-}));
+vi.mock("sonner");
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => mockHasPermissions(),
-}));
+vi.mock("@/lib/auth/auth.query");
 
 import {
   useHasAnyApiKey,
@@ -63,7 +58,7 @@ describe("useLlmProviderApiKeys", () => {
     // branch on to show the load-error state.
     expect(result.current.isLoadingError).toBe(true);
     expect(result.current.data).toBeUndefined();
-    expect(mockToastError).toHaveBeenCalledTimes(1);
+    expect(toast.error).toHaveBeenCalledTimes(1);
   });
 
   it("does not toast on failure when toastOnError is false", async () => {
@@ -77,7 +72,7 @@ describe("useLlmProviderApiKeys", () => {
     );
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(mockToastError).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it("returns the keys on success without an error", async () => {
@@ -96,7 +91,9 @@ describe("useLlmProviderApiKeys", () => {
 describe("useHasAnyApiKey", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockHasPermissions.mockReturnValue({ data: true });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as unknown as ReturnType<typeof useHasPermissions>);
   });
 
   it("reports a load error when the first keys fetch fails", async () => {
@@ -111,7 +108,9 @@ describe("useHasAnyApiKey", () => {
   });
 
   it("does not run the query or report a load error without read permission", async () => {
-    mockHasPermissions.mockReturnValue({ data: false });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
 
     const { result } = renderHook(() => useHasAnyApiKey(), { wrapper });
 

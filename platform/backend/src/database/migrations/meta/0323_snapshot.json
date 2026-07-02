@@ -1,5 +1,5 @@
 {
-  "id": "e03fbb2e-87ac-4791-b0fc-06883cc64291",
+  "id": "83a879cb-0348-4245-9964-8767d3198db5",
   "prevId": "4aaadceb-9e28-4092-b094-e1f125559b3d",
   "version": "7",
   "dialect": "postgresql",
@@ -8851,6 +8851,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "oauth_refresh_error_description": {
+          "name": "oauth_refresh_error_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "oauth_refresh_failed_at": {
           "name": "oauth_refresh_failed_at",
           "type": "timestamp",
@@ -10099,65 +10105,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.onboarding_survey_submissions": {
-      "name": "onboarding_survey_submissions",
-      "schema": "",
-      "columns": {
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "submitted_by_user_id": {
-          "name": "submitted_by_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "onboarding_survey_submissions_organization_id_organization_id_fk": {
-          "name": "onboarding_survey_submissions_organization_id_organization_id_fk",
-          "tableFrom": "onboarding_survey_submissions",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "onboarding_survey_submissions_submitted_by_user_id_user_id_fk": {
-          "name": "onboarding_survey_submissions_submitted_by_user_id_user_id_fk",
-          "tableFrom": "onboarding_survey_submissions",
-          "tableTo": "user",
-          "columnsFrom": [
-            "submitted_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -14889,60 +14836,6 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.user_onboarding_steps": {
-      "name": "user_onboarding_steps",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "step_key": {
-          "name": "step_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "user_onboarding_steps_user_id_user_id_fk": {
-          "name": "user_onboarding_steps_user_id_user_id_fk",
-          "tableFrom": "user_onboarding_steps",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "user_onboarding_steps_user_id_step_key_pk": {
-          "name": "user_onboarding_steps_user_id_step_key_pk",
-          "columns": [
-            "user_id",
-            "step_key"
-          ]
-        }
-      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

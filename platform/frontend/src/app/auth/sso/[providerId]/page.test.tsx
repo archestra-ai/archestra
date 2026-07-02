@@ -11,22 +11,13 @@ import {
 import { authClient } from "@/lib/clients/auth/auth-client";
 import IdpInitiatedSsoPage from "./page";
 
-vi.mock("next/navigation", () => ({
-  useParams: vi.fn(),
-  useSearchParams: vi.fn(),
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/components/app-logo", () => ({
   AppLogo: () => <div data-testid="app-logo" />,
 }));
 
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    signIn: {
-      sso: vi.fn(),
-    },
-  },
-}));
+vi.mock("@/lib/clients/auth/auth-client");
 
 vi.mock("@/lib/auth/linked-idp", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth/linked-idp")>();

@@ -349,7 +349,13 @@ export function getDefaultConnectorConfig(
     onedrive: { type, userIds: "", recursive: true },
     outline: { type, outlineUrl: "https://app.getoutline.com" },
     salesforce: { type, loginUrl: "https://login.salesforce.com" },
-    web_crawler: { type, maxPages: 250, maxDepth: 3, batchSize: 25 },
+    web_crawler: {
+      type,
+      maxPages: 250,
+      maxDepth: 3,
+      batchSize: 25,
+      allowPrivateNetwork: false,
+    },
     perforce: { type },
   };
 
@@ -914,7 +920,30 @@ const INLINE_CONFIG_FIELDS: Record<
     </>
   ),
   outline: () => <></>,
-  web_crawler: () => <></>,
+  web_crawler: ({ form }) => (
+    <FormField
+      control={form.control}
+      name="config.allowPrivateNetwork"
+      render={({ field }) => (
+        <FormItem className="flex items-center justify-between rounded-lg border p-3">
+          <div className="space-y-0.5">
+            <FormLabel>Allow internal network addresses</FormLabel>
+            <FormDescription>
+              By default the crawler refuses hosts that resolve to private or
+              internal addresses. Enable to crawl an internal site reachable
+              from the workers.
+            </FormDescription>
+          </div>
+          <FormControl>
+            <Switch
+              checked={(field.value as boolean) ?? false}
+              onCheckedChange={field.onChange}
+            />
+          </FormControl>
+        </FormItem>
+      )}
+    />
+  ),
   salesforce: ({ form, mode }) => (
     <FormField
       control={form.control}

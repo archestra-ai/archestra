@@ -7,18 +7,14 @@ vi.mock("@azure/identity", () => ({
   getBearerTokenProvider: vi.fn(() => async () => "token"),
 }));
 
-vi.mock("@/config", () => ({
-  default: {
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
     llm: {
-      azure: {
-        entraIdEnabled: true,
-      },
-      anthropic: {
-        azureFoundryEntraIdEnabled: true,
-      },
+      azure: { entraIdEnabled: true },
+      anthropic: { azureFoundryEntraIdEnabled: true },
     },
-  },
-}));
+  }),
+);
 
 import { getBearerTokenProvider } from "@azure/identity";
 import {

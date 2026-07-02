@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useFeature } from "@/lib/config/config.query";
 import { OAuthConfirmationDialog } from "./oauth-confirmation-dialog";
 
 // Simulate a catalog item that is already installed everywhere the caller can
@@ -25,13 +26,12 @@ vi.mock(
   }),
 );
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: () => false,
-}));
+vi.mock("@/lib/config/config.query");
 
 describe("OAuthConfirmationDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useFeature).mockReturnValue(false);
   });
 
   it("blocks installing a server that is already installed everywhere", () => {

@@ -24,6 +24,7 @@ import {
 import { context, propagation } from "@opentelemetry/api";
 import type { streamText } from "ai";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   createAzureFetchWithApiVersion,
@@ -262,6 +263,8 @@ export async function createLLMModelForAgent(params: {
   const isOllama = provider === "ollama";
   const isAzureWithEntra =
     provider === "azure" && isAzureOpenAiEntraIdEnabled();
+  const isAnthropicWithWif =
+    provider === "anthropic" && anthropicWorkloadIdentity.isEnabled();
 
   logger.info(
     {
@@ -272,6 +275,7 @@ export async function createLLMModelForAgent(params: {
       isVllm,
       isOllama,
       isAzureWithEntra,
+      isAnthropicWithWif,
     },
     "Using LLM provider API key",
   );
@@ -282,7 +286,8 @@ export async function createLLMModelForAgent(params: {
     !isBedrockWithIamAuth &&
     !isVllm &&
     !isOllama &&
-    !isAzureWithEntra
+    !isAzureWithEntra &&
+    !isAnthropicWithWif
   ) {
     // Per-user providers (GitHub Copilot) need the acting user's own linked
     // account; surface a typed error so callers can prompt them to connect

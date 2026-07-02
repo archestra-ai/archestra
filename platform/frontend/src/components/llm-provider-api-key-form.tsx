@@ -5,6 +5,7 @@ import {
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
   isProviderApiKeyOptional,
+  isSelfHostedProvider,
   providerRequiresPerUserCredential,
 } from "@archestra/shared";
 import { Building2, CheckCircle2, Trash2, User, Users } from "lucide-react";
@@ -25,6 +26,7 @@ import { LlmProviderSelectItems } from "./llm-provider-select-items";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { SecretInput } from "./ui/secret-input";
 import {
   Select,
   SelectContent,
@@ -318,6 +320,7 @@ export function LlmProviderApiKeyForm({
   const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
+  const anthropicWifEnabled = useFeature("anthropicWifEnabled");
   const { data: providerBaseUrls } = useProviderBaseUrls();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: isLlmProviderApiKeyAdmin } = useHasPermissions({
@@ -727,6 +730,7 @@ export function LlmProviderApiKeyForm({
                     {isProviderApiKeyOptional({
                       provider,
                       azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+                      anthropicWifEnabled: anthropicWifEnabled === true,
                     }) ? (
                       <span className="font-normal text-muted-foreground">
                         (optional)
@@ -745,14 +749,10 @@ export function LlmProviderApiKeyForm({
                     </p>
                   )}
                   <div className="relative">
-                    <Input
+                    <SecretInput
                       id="llm-provider-api-key-value"
-                      type="password"
                       placeholder={providerConfig.placeholder}
                       disabled={isPending}
-                      autoComplete="new-password"
-                      data-1p-ignore
-                      data-lpignore="true"
                       className={
                         showConfiguredStyling ? "border-green-500 pr-10" : ""
                       }
@@ -784,11 +784,9 @@ export function LlmProviderApiKeyForm({
                   <Label htmlFor="llm-provider-aws-access-key-id">
                     Access Key ID
                   </Label>
-                  <Input
+                  <SecretInput
                     id="llm-provider-aws-access-key-id"
-                    type="password"
                     placeholder="AKIA..."
-                    autoComplete="off"
                     disabled={isPending}
                     {...form.register("awsAccessKeyId")}
                   />
@@ -797,11 +795,9 @@ export function LlmProviderApiKeyForm({
                   <Label htmlFor="llm-provider-aws-secret-access-key">
                     Secret Access Key
                   </Label>
-                  <Input
+                  <SecretInput
                     id="llm-provider-aws-secret-access-key"
-                    type="password"
                     placeholder="••••••••"
-                    autoComplete="off"
                     disabled={isPending}
                     {...form.register("awsSecretAccessKey")}
                   />
@@ -813,11 +809,9 @@ export function LlmProviderApiKeyForm({
                       (optional)
                     </span>
                   </Label>
-                  <Input
+                  <SecretInput
                     id="llm-provider-aws-session-token"
-                    type="password"
                     placeholder="Required for temporary credentials (STS / AssumeRole)"
-                    autoComplete="off"
                     disabled={isPending}
                     {...form.register("awsSessionToken")}
                   />
@@ -932,18 +926,14 @@ export function LlmProviderApiKeyForm({
             Override the default API endpoint. Useful for self-hosted or proxy
             setups.
           </p>
-          {isProviderApiKeyOptional({
-            provider,
-            azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
-          }) &&
-            provider !== "azure" && (
-              <p className="text-xs text-muted-foreground">
-                If this app runs in Docker, <code>localhost</code> points at the
-                container, not your host machine. Use{" "}
-                <code>host.docker.internal</code> instead (e.g.{" "}
-                <code>http://host.docker.internal:11434/v1</code>).
-              </p>
-            )}
+          {isSelfHostedProvider(provider) && (
+            <p className="text-xs text-muted-foreground">
+              If this app runs in Docker, <code>localhost</code> points at the
+              container, not your host machine. Use{" "}
+              <code>host.docker.internal</code> instead (e.g.{" "}
+              <code>http://host.docker.internal:11434/v1</code>).
+            </p>
+          )}
           <Input
             id="llm-provider-api-key-base-url"
             type="url"

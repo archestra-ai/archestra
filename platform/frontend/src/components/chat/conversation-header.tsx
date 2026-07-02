@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import {
+  CalendarClock,
   Download,
   FileText,
   FolderPlus,
@@ -25,6 +26,7 @@ import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
 import { useProject } from "@/lib/projects/projects.query";
+import { useScheduleTrigger } from "@/lib/schedule-trigger.query";
 import { cn } from "@/lib/utils";
 import type { RightPanelTab } from "./right-side-panel";
 
@@ -52,6 +54,11 @@ interface ConversationHeaderProps {
   isShared: boolean;
   /** Whether this chat is eligible to be turned into a project. */
   canCreateProject: boolean;
+  /**
+   * When this chat was opened from a scheduled task, its trigger id — renders a
+   * non-clickable "scheduled task" breadcrumb segment for orientation.
+   */
+  scheduleTriggerId?: string | null;
   onShare: () => void;
   onExportMarkdown: () => void;
   onCreateProject: () => void;
@@ -66,6 +73,7 @@ export function ConversationHeader({
   canManageShare,
   isShared,
   canCreateProject,
+  scheduleTriggerId,
   onShare,
   onExportMarkdown,
   onCreateProject,
@@ -98,6 +106,11 @@ export function ConversationHeader({
                   project. Hidden for viewers without project access. */}
               {conversation.projectId && (
                 <ProjectTitlePrefix projectId={conversation.projectId} />
+              )}
+              {/* Non-clickable "scheduled task" segment (orientation only) when
+                  this chat was opened from a schedule's run. */}
+              {scheduleTriggerId && (
+                <ScheduledTaskPrefix triggerId={scheduleTriggerId} />
               )}
               {/* Skip TruncatedTooltip while the title animates: its resize
                   measurement re-renders on every TypingText tick, which loops
@@ -224,6 +237,32 @@ export function ConversationHeader({
  * the sidebar; renders nothing while loading or when the viewer can't read the
  * project (the query resolves to null on a not-found, so no error surfaces).
  */
+// A non-clickable breadcrumb segment naming the schedule this chat's run belongs
+// to (calendar glyph + schedule name), for orientation only. Mirrors
+// ProjectTitlePrefix but is a plain span — no navigation.
+function ScheduledTaskPrefix({ triggerId }: { triggerId: string }) {
+  const { data: trigger } = useScheduleTrigger(triggerId);
+
+  if (!trigger) {
+    return null;
+  }
+
+  return (
+    <>
+      <span
+        title={`Scheduled task: ${trigger.name}`}
+        className="flex items-center gap-1 min-w-0 max-w-[180px] text-base font-normal text-muted-foreground cursor-default"
+      >
+        <CalendarClock className="h-4 w-4 shrink-0" aria-hidden />
+        <span className="truncate">{trigger.name}</span>
+      </span>
+      <span className="text-muted-foreground/50 select-none" aria-hidden="true">
+        /
+      </span>
+    </>
+  );
+}
+
 function ProjectTitlePrefix({ projectId }: { projectId: string }) {
   const { data: project } = useProject(projectId);
 

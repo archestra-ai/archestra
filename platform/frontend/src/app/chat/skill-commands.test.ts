@@ -3,6 +3,7 @@ import {
   buildSkillCommands,
   isDebugCommand,
   parseSkillCommand,
+  resolveUrlSkillAction,
   skillCommandValue,
 } from "./skill-commands";
 
@@ -81,5 +82,66 @@ describe("parseSkillCommand", () => {
   it("returns null for unknown tokens and plain text", () => {
     expect(parseSkillCommand("/unknown hello", commands)).toBeNull();
     expect(parseSkillCommand("just a message", commands)).toBeNull();
+  });
+});
+
+describe("resolveUrlSkillAction", () => {
+  const skill = { id: "s1", name: "Deep Research" };
+  const skillCommands = buildSkillCommands([
+    { id: "s1", name: "Deep Research", description: "" },
+  ]);
+
+  it("prefills the slash command with a trailing space", () => {
+    expect(
+      resolveUrlSkillAction({
+        skill,
+        isError: false,
+        skillCommands,
+      }),
+    ).toEqual({ kind: "prefill", text: "/deep-research " });
+  });
+
+  it("prefills the collision-disambiguated token, not the raw slug, for a colliding skill", () => {
+    const colliding = buildSkillCommands([
+      { id: "s1", name: "PDF Tools", description: "" },
+      { id: "s2", name: "pdf-tools", description: "" },
+    ]);
+    expect(
+      resolveUrlSkillAction({
+        skill: { id: "s2", name: "pdf-tools" },
+        isError: false,
+        skillCommands: colliding,
+      }),
+    ).toEqual({ kind: "prefill", text: "/pdf-tools-2 " });
+  });
+
+  it("reports 'unavailable' when the skill is missing from the command table", () => {
+    expect(
+      resolveUrlSkillAction({
+        skill: { id: "s-not-listed", name: "Hidden Skill" },
+        isError: false,
+        skillCommands,
+      }),
+    ).toEqual({ kind: "none", reason: "unavailable" });
+  });
+
+  it("reports 'not_found' when the skill does not resolve", () => {
+    expect(
+      resolveUrlSkillAction({
+        skill: null,
+        isError: false,
+        skillCommands,
+      }),
+    ).toEqual({ kind: "none", reason: "not_found" });
+  });
+
+  it("reports 'error' when the skill fetch errored", () => {
+    expect(
+      resolveUrlSkillAction({
+        skill: null,
+        isError: true,
+        skillCommands,
+      }),
+    ).toEqual({ kind: "none", reason: "error" });
   });
 });

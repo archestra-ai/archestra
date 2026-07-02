@@ -1,4 +1,4 @@
-import { hasArchestraTokenPrefix } from "@archestra/shared";
+import { hasArchestraTokenPrefix, RouteId } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -9,8 +9,10 @@ import {
   constructResponseSchema,
   ErrorResponsesSchema,
   Gemini,
+  OpenAi,
   UuidIdSchema,
 } from "@/types";
+import { geminiEmbeddingsAdapterFactory } from "../adapters";
 import {
   type GeminiRequestWithModel,
   geminiAdapterFactory,
@@ -45,6 +47,76 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     rewritePrefix: "/v1",
     preHandler: createGeminiProxyPreHandler(),
   });
+
+  const EMBEDDINGS_SUFFIX = "/embeddings";
+
+  /**
+   * OpenAI-compatible embeddings endpoint (default agent).
+   *
+   * Accepts an OpenAI-shaped embeddings request and translates it to Gemini's
+   * native `embedContent` API, returning an OpenAI-shaped response. This lets
+   * OpenAI SDK clients call Gemini embeddings without using Gemini's native
+   * `models/{model}:embedContent` route (still reachable via the proxy above).
+   */
+  fastify.post(
+    `${API_PREFIX}${EMBEDDINGS_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.GeminiEmbeddingsWithDefaultAgent,
+        description: "Create embeddings with Gemini (uses default agent)",
+        tags: ["LLM Proxy"],
+        body: OpenAi.API.EmbeddingRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        { url: request.url },
+        "[UnifiedProxy] Handling Gemini embeddings request (default agent)",
+      );
+      return handleLLMProxy(
+        request.body as OpenAi.Types.EmbeddingRequest,
+        request,
+        reply,
+        geminiEmbeddingsAdapterFactory,
+      );
+    },
+  );
+
+  /**
+   * OpenAI-compatible embeddings endpoint (specific agent).
+   */
+  fastify.post(
+    `${API_PREFIX}/:agentId${EMBEDDINGS_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.GeminiEmbeddingsWithAgent,
+        description: "Create embeddings with Gemini for a specific agent",
+        tags: ["LLM Proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        body: OpenAi.API.EmbeddingRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        { url: request.url, agentId: request.params.agentId },
+        "[UnifiedProxy] Handling Gemini embeddings request (with agent)",
+      );
+      return handleLLMProxy(
+        request.body as OpenAi.Types.EmbeddingRequest,
+        request,
+        reply,
+        geminiEmbeddingsAdapterFactory,
+      );
+    },
+  );
 
   /**
    * Generate route endpoint pattern for Gemini

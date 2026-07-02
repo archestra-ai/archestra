@@ -949,22 +949,24 @@ describe("read_app / edit_app", () => {
   });
 
   test("a later length-changing edit shifts an earlier excerpt to its final position", async () => {
-    // Edit 1 lands AFTER edit 2's region in the document, and edit 2 changes
-    // length — edit 1's recorded span must shift by the delta or its excerpt
-    // slices the wrong region of the final document. Spacers keep the two
-    // context windows from overlapping, so a wrong position is visible.
-    const spacer = `<i>${"x".repeat(400)}</i>`;
+    // Edit 1 lands AFTER edit 2's region in the document, and edit 2 grows the
+    // document by more than the excerpt context window — if edit 1's recorded
+    // span is not shifted by that delta, its window slices a region entirely
+    // before the real <p>OMEGA</p> and the assertion fails. Spacers keep the
+    // two context windows from overlapping.
+    const spacer = `<i>${"x".repeat(600)}</i>`;
+    const grown = `long-${"a".repeat(500)}`;
     const { appId, version } = await scaffoldWithHtml(
       `<html><head></head><body><p>alpha</p>${spacer}<p>omega</p></body></html>`,
     );
     const result = await editApp(appId, version, [
       { old_str: "omega", new_str: "OMEGA" },
-      { old_str: "alpha", new_str: "a-much-longer-alpha-heading" },
+      { old_str: "alpha", new_str: grown },
     ]);
     expect(result.isError).toBe(false);
     const text = (result.content[0] as any).text as string;
     expect(text).toContain("<p>OMEGA</p>");
-    expect(text).toContain("<p>a-much-longer-alpha-heading</p>");
+    expect(text).toContain(`<p>${grown}</p>`);
   });
 
   test("a chained overwrite excerpt shows the final text, never the overwritten intermediate", async () => {
@@ -1312,27 +1314,48 @@ describe("get_app_diagnostics", () => {
       },
       context,
     );
-    const pending = getDiagnostics(appId);
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
-    await AppRenderDiagnosticsModel.record({
-      appId,
-      // biome-ignore lint/style/noNonNullAssertion: set in beforeEach
-      userId: context.userId!,
-      version: 1,
-      entries: [],
+    // Pass-through spy purely for synchronization: the stale snapshot must be
+    // recorded only after the tool's initial (empty) read, or the test would
+    // exercise the ordinary 10s stale-snapshot window instead of the extension.
+    const realGetForUser = AppRenderDiagnosticsModel.getForUser.bind(
+      AppRenderDiagnosticsModel,
+    );
+    let signalFirstRead = () => {};
+    const firstRead = new Promise<void>((resolve) => {
+      signalFirstRead = resolve;
     });
-    // land the head render after the original 3s never-rendered deadline
-    await new Promise((resolve) => setTimeout(resolve, 3_000));
-    await AppRenderDiagnosticsModel.record({
-      appId,
-      // biome-ignore lint/style/noNonNullAssertion: set in beforeEach
-      userId: context.userId!,
-      version: 2,
-      entries: [],
-    });
-    const result = await pending;
-    expect(structured(result).status).toBe("clean");
-    expect(structured(result).version).toBe(2);
+    const spy = vi
+      .spyOn(AppRenderDiagnosticsModel, "getForUser")
+      .mockImplementation(async (appIdArg, userIdArg) => {
+        const row = await realGetForUser(appIdArg, userIdArg);
+        signalFirstRead();
+        return row;
+      });
+    try {
+      const pending = getDiagnostics(appId);
+      await firstRead;
+      await AppRenderDiagnosticsModel.record({
+        appId,
+        // biome-ignore lint/style/noNonNullAssertion: set in beforeEach
+        userId: context.userId!,
+        version: 1,
+        entries: [],
+      });
+      // land the head render after the original 3s never-rendered deadline
+      await new Promise((resolve) => setTimeout(resolve, 3_500));
+      await AppRenderDiagnosticsModel.record({
+        appId,
+        // biome-ignore lint/style/noNonNullAssertion: set in beforeEach
+        userId: context.userId!,
+        version: 2,
+        entries: [],
+      });
+      const result = await pending;
+      expect(structured(result).status).toBe("clean");
+      expect(structured(result).version).toBe(2);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   test("reports clean when the head rendered without diagnostics", async () => {

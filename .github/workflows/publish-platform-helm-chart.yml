@@ -60,11 +60,11 @@ jobs:
           IMAGE_TAG: ${{ inputs.version }}
           ARCHESTRA_ANALYTICS: disabled
         run: |
-          helm package . --version $IMAGE_TAG --app-version $IMAGE_TAG
+          helm package . --version "$IMAGE_TAG" --app-version "$IMAGE_TAG"
 
       - name: helm push
         if: inputs.push_chart
         env:
           IMAGE_TAG: ${{ inputs.version }}
         run: |
-          helm push archestra-platform-$IMAGE_TAG.tgz oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts
+          helm push "archestra-platform-${IMAGE_TAG}.tgz" oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts

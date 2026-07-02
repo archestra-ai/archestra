@@ -6,14 +6,20 @@ import {
   E2eTestId,
 } from "@archestra/shared";
 
-import { BookOpen, Github, Info, Loader2, Search } from "lucide-react";
-import Link from "next/link";
+import {
+  BookOpen,
+  Check,
+  Loader2,
+  Plus,
+  Search,
+  Server as ServerIcon,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { DebouncedInput } from "@/components/debounced-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -32,7 +38,6 @@ import type { SelectedCategory } from "../../_parts/CatalogFilters";
 import type { McpCatalogFormValues } from "../../_parts/mcp-catalog-form.types";
 import { transformExternalCatalogToFormValues } from "../../_parts/mcp-catalog-form.utils";
 import { RequestInstallationDialog } from "../../_parts/request-installation-dialog";
-import { TransportBadges } from "../../_parts/transport-badges";
 
 // "mcp-apps-demo" is a pseudo-type: demo servers are marked with the
 // MCP_APPS_DEMO_CATEGORY catalog category, hidden from every other type view,
@@ -44,8 +49,8 @@ type ServerType = "all" | "remote" | "local" | "mcp-apps-demo";
 // selectable category.
 const MCP_APPS_DEMO_CATEGORY = "MCP Apps Demo";
 
-// Typed to accept a plain string so it composes with the generated category
-// union (which does not yet include the demo category) without casts.
+// Typed to accept a plain string so it composes with both the generated
+// category union and the server manifest's nullable category without casts.
 const isDemoCategory = (category: string | null | undefined) =>
   category === MCP_APPS_DEMO_CATEGORY;
 
@@ -81,11 +86,10 @@ export function ArchestraCatalogTab({
 
   // Use server-side search and category filtering. The demo pseudo-type maps
   // onto its backend category so filtering happens server-side — a client-only
-  // filter would miss demo servers beyond the first page. The cast bridges the
-  // generated category union, which predates the demo category.
-  const effectiveCategory =
+  // filter would miss demo servers beyond the first page.
+  const effectiveCategory: SelectedCategory =
     filters.type === "mcp-apps-demo"
-      ? (MCP_APPS_DEMO_CATEGORY as SelectedCategory)
+      ? MCP_APPS_DEMO_CATEGORY
       : filters.category;
   const {
     data,
@@ -204,7 +208,7 @@ export function ArchestraCatalogTab({
       </div>
 
       {isLoading && (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-3">
           {Array.from(
             { length: 4 },
             (_, i) => `skeleton-${i}-${Date.now()}`,
@@ -251,7 +255,7 @@ export function ArchestraCatalogTab({
             </div>
           ) : (
             <>
-              <div className="grid gap-4 md:grid-cols-2 overflow-y-auto">
+              <div className="grid gap-4 md:grid-cols-3 overflow-y-auto">
                 {filteredServers.map((server) => (
                   <ServerCard
                     key={server.name}
@@ -316,109 +320,95 @@ function ServerCard({
   isInCatalog: boolean;
   userAllowedToCreateCatalogItem: boolean;
 }) {
-  return (
-    <Card className="flex flex-col">
-      <CardHeader>
-        <div className="flex items-start">
-          <div className="flex items-start gap-2 flex-1 min-w-0">
-            {server.icon && (
-              <img
-                src={server.icon}
-                alt={`${server.name} icon`}
-                className="w-8 h-8 rounded flex-shrink-0 mt-0.5"
-              />
-            )}
-            <CardTitle className="text-base">
-              <TruncatedText
-                message={server.display_name || server.name}
-                maxLength={40}
-              />
-            </CardTitle>
-          </div>
-          <div className="flex flex-wrap gap-1 items-center flex-shrink-0 mt-1">
-            {server.category && (
-              <Badge variant="outline" className="text-xs">
-                {server.category}
-              </Badge>
-            )}
-            {server.oauth_config && !server.oauth_config.requires_proxy && (
-              <Badge variant="secondary" className="text-xs">
-                OAuth
-              </Badge>
-            )}
-          </div>
-        </div>
-        {server.display_name && server.display_name !== server.name && (
-          <p className="text-xs text-muted-foreground font-mono">
-            {server.name}
-          </p>
-        )}
-        <TransportBadges
-          isRemote={server.server.type === "remote"}
-          className="mt-1"
-        />
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col space-y-3">
-        {server.description && (
-          <p className="text-sm text-muted-foreground line-clamp-2">
-            {server.description}
-          </p>
-        )}
+  // Where the server comes from: hosted remote endpoint, or a GitHub-sourced
+  // community server the org hosts itself.
+  const sourceBadges =
+    server.server.type === "remote"
+      ? ["Remote"]
+      : server.github_info
+        ? ["Self-hosted", "Community"]
+        : ["Self-hosted"];
+  const docsUrl = server.homepage || server.documentation;
 
-        <div className="flex flex-col gap-2 mt-auto pt-3 justify-end">
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" asChild className="flex-1">
-              <Link
-                href={`/mcp/registry/beta/catalog/${encodeURIComponent(server.name)}`}
+  return (
+    <Card className="gap-2 rounded-xl p-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
+          {server.icon ? (
+            <img
+              src={server.icon}
+              alt={`${server.name} icon`}
+              className="h-6 w-6 rounded"
+            />
+          ) : (
+            <ServerIcon className="h-5 w-5 text-muted-foreground" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <span className="block truncate font-semibold">
+            <TruncatedText
+              message={server.display_name || server.name}
+              maxLength={40}
+            />
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center">
+          {docsUrl && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground"
+              asChild
+            >
+              <a
+                href={docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Docs"
               >
-                <Info className="h-4 w-4 mr-1" />
-                Details
-              </Link>
+                <BookOpen className="h-4 w-4" />
+              </a>
             </Button>
-            {server.github_info?.url && (
-              <Button variant="outline" size="sm" asChild className="flex-1">
-                <a
-                  href={server.github_info.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Github className="h-4 w-4 mr-1" />
-                  Code
-                </a>
-              </Button>
-            )}
-            {(server.homepage || server.documentation) && (
-              <Button variant="outline" size="sm" asChild className="flex-1">
-                <a
-                  href={server.homepage || server.documentation}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <BookOpen className="h-4 w-4 mr-1" />
-                  Docs
-                </a>
-              </Button>
-            )}
-          </div>
+          )}
           <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            disabled={isInCatalog}
+            title={
+              isInCatalog
+                ? "Added"
+                : userAllowedToCreateCatalogItem
+                  ? "Use as template"
+                  : "Request to add to internal registry"
+            }
             onClick={() =>
               userAllowedToCreateCatalogItem
                 ? onSelectServer(server)
                 : onRequestInstallation(server)
             }
-            disabled={isInCatalog}
-            size="sm"
-            className="w-full"
             data-testid={E2eTestId.AddCatalogItemButton}
           >
-            {isInCatalog
-              ? "Added"
-              : userAllowedToCreateCatalogItem
-                ? "Use as Template"
-                : "Request to add to internal registry"}
+            {isInCatalog ? (
+              <Check className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
           </Button>
         </div>
-      </CardContent>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {sourceBadges.map((badge) => (
+          <Badge key={badge} variant="secondary" className="text-xs">
+            {badge}
+          </Badge>
+        ))}
+      </div>
+      {server.description && (
+        <p className="text-sm text-muted-foreground line-clamp-2">
+          {server.description}
+        </p>
+      )}
     </Card>
   );
 }

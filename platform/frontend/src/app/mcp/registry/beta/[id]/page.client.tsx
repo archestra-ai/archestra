@@ -9,6 +9,7 @@ import {
 import {
   ArrowLeft,
   Copy,
+  MessageSquare,
   MoreHorizontal,
   PackageX,
   Pencil,
@@ -62,6 +63,7 @@ import { useDefaultEnvironment } from "@/lib/organization.query";
 import { cn, formatDate } from "@/lib/utils";
 import { useCanModifyCatalogItem } from "../../_parts/catalog-edit-access";
 import { resolveCatalogEnvironmentLabel } from "../../_parts/catalog-environment-label";
+import { shouldShowMcpCardChatButton } from "../../_parts/chat-button-visibility";
 import { DeleteCatalogDialog } from "../../_parts/delete-catalog-dialog";
 import {
   computeDeploymentStatusSummary,
@@ -73,6 +75,7 @@ import { YamlConfigContent } from "../../_parts/yaml-config-dialog";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import type { CatalogItem } from "../_parts/mcp-server-card";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
+import { useChatWithMcpServer } from "../_parts/use-chat-with-mcp-server";
 
 type DetailTab =
   | "overview"
@@ -280,6 +283,14 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
     setActiveTab("logs");
   };
 
+  // Chat with the server via a personal agent (same flow as the server card).
+  const { startChat, isChatCreating } = useChatWithMcpServer(item);
+  const showChatButton = shouldShowMcpCardChatButton({
+    toolsCount: tools.length,
+    isBuiltin: variant === "builtin",
+    hasInstallation: allServersForCatalog.length > 0,
+  });
+
   // Install inline on this page (no navigation). The dialog lets the user pick
   // scope/credential; the add-* helpers pre-target a personal/team/org scope.
   const install = useCatalogInstall();
@@ -341,6 +352,16 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          {showChatButton && (
+            <Button
+              variant="outline"
+              disabled={isChatCreating}
+              onClick={startChat}
+            >
+              <MessageSquare className="h-4 w-4" />
+              {isChatCreating ? "Creating..." : "Chat"}
+            </Button>
+          )}
           {!hasPersonalConnection && variant !== "builtin" && (
             <Button variant="outline" onClick={openInstall}>
               <PlugZap className="h-4 w-4" />

@@ -14,6 +14,7 @@ import type {
 } from "@modelcontextprotocol/ext-apps";
 import {
   AppBridge,
+  buildAllowAttribute,
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
 import { useTheme } from "next-themes";
@@ -65,28 +66,6 @@ const SCREENSHOT_DATA_URL_PREFIX = /^data:image\/(png|jpeg|webp);base64,/;
 /** Default pre-report iframe height on surfaces that supply no inline ceiling
  * (standalone run page, app preview) — those fill their own layout instead. */
 const UNCAPPED_INITIAL_HEIGHT = 600;
-
-/**
- * Build the iframe `allow` (Permissions Policy) attribute from the app's
- * requested permissions. This MUST be applied to the outer sandbox-proxy
- * iframe as well as the inner app iframe (built in mcp-sandbox-proxy.html):
- * Permissions Policy only delegates a feature to a descendant frame when every
- * frame in the chain grants it, so omitting it here blocks the feature before
- * it can reach the app (e.g. getUserMedia throws SecurityError). Kept in sync
- * with buildAllowAttribute() in mcp-sandbox-proxy.html and the allowed keys in
- * services/apps/app-ui-policy.ts.
- */
-function buildIframeAllowAttribute(
-  permissions: McpUiResourcePermissions | undefined,
-): string {
-  if (!permissions) return "";
-  const allowList: string[] = [];
-  if (permissions.camera) allowList.push("camera");
-  if (permissions.microphone) allowList.push("microphone");
-  if (permissions.geolocation) allowList.push("geolocation");
-  if (permissions.clipboardWrite) allowList.push("clipboard-write");
-  return allowList.join("; ");
-}
 
 /** The `containerDimensions` hint sent to the guest: an honest inline ceiling,
  * or `{}` when uncapped (fullscreen, or a surface that supplies no ceiling). */
@@ -819,11 +798,13 @@ function SandboxIframe({
   // without re-binding onsizechange on every cap change.
   const maxHeightRef = useRef(maxHeight);
   // The Permissions Policy `allow` value for the outer proxy iframe, derived
-  // from the app's requested permissions. Unlike the height refs above this is
-  // a genuine effect dependency: a permission change must rebuild the frame so
-  // the new `allow` takes effect, so it is read directly and listed in the
-  // create-iframe effect's deps.
-  const allowAttribute = buildIframeAllowAttribute(permissions);
+  // from the app's requested permissions via the SDK's mapping (the same one
+  // mcp-sandbox-proxy.html applies to the inner app frame). Unlike the height
+  // refs above this is a genuine effect dependency: a permission change must
+  // rebuild the frame so the new `allow` takes effect, so it is read directly
+  // and listed in the create-iframe effect's deps (a string, so re-deriving it
+  // each render never retriggers the effect spuriously).
+  const allowAttribute = buildAllowAttribute(permissions);
 
   useEffect(() => {
     onSizeChangedRef.current = onSizeChanged;
@@ -861,6 +842,16 @@ function SandboxIframe({
     // it. Empty string → attribute omitted (no extra features granted).
     if (allowAttribute) {
       iframe.setAttribute("allow", allowAttribute);
+      if (!useDedicatedOrigin) {
+        // Browsers refuse to delegate powerful features to an opaque origin,
+        // so on the same-origin fallback the declaration is inert no matter
+        // what `allow` says. Surface that instead of failing silently.
+        console.warn(
+          `MCP App requested permissions (${allowAttribute}) but the sandbox is running on an opaque origin, ` +
+            "so the browser cannot grant them. Configure a dedicated sandbox origin " +
+            "(ARCHESTRA_MCP_SANDBOX_DOMAIN) to enable these features.",
+        );
+      }
     }
     iframe.src = sandboxUrl.href;
     iframeRef.current = iframe;

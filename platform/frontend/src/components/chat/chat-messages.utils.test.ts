@@ -4,12 +4,10 @@ import {
   SUBAGENT_TOOL_CALL_PART_TYPE,
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
-import type { PanelApp } from "./apps-context";
 import {
   collectBrowserToolCallIds,
   collectSubagentToolCalls,
   deriveAppsFromMessages,
-  distinctPanelApps,
   extractFileAttachments,
   extractOwnedAppRender,
   filterOptimisticToolCalls,
@@ -967,41 +965,6 @@ describe("identifyCompactToolGroups", () => {
     expect(groupMap.get(0)?.entries).toHaveLength(3);
     expect(consumedIndices.has(2)).toBe(true);
     expect(consumedIndices.has(3)).toBe(true);
-  });
-});
-
-describe("distinctPanelApps", () => {
-  const app = (
-    toolCallId: string,
-    appId: string | null,
-    createdAt: number,
-  ): PanelApp => ({
-    toolCallId,
-    label: appId ? "Dashboard" : "Excalidraw",
-    uiResourceUri: appId ? `ui://archestra-app/${appId}` : "ui://excalidraw",
-    appId,
-    version: 1,
-    createdAt,
-  });
-
-  it("collapses owned renders by appId, keeping the latest by createdAt", () => {
-    const apps = [
-      app("tc1", "app-1", 0),
-      app("tc2", "app-1", 10),
-      app("tc3", "app-2", 5),
-    ];
-    expect(distinctPanelApps(apps).map((a) => a.toolCallId)).toEqual([
-      "tc2",
-      "tc3",
-    ]);
-  });
-
-  it("keeps every external render (no appId) as its own entry", () => {
-    const apps = [app("tc1", null, 0), app("tc2", null, 10)];
-    expect(distinctPanelApps(apps).map((a) => a.toolCallId)).toEqual([
-      "tc1",
-      "tc2",
-    ]);
   });
 });
 

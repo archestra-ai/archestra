@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { buildAppGroups } from "./apps-context.utils";
 import type { McpToolOutput } from "./mcp-app-container";
 
 export interface PanelApp {
@@ -113,86 +114,58 @@ export function AppsProvider({
   onClosePanel?: () => void;
   children: ReactNode;
 }) {
-  // Apps the user explicitly collapsed, keyed per app (see `openKeyByToolCallId`).
+  // Apps the user explicitly collapsed, keyed per app (an `AppGroup.key`).
   // Everything expands by default, so a new app auto-opens by being absent here.
   const [closedKeys, setClosedKeys] = useState<ReadonlySet<string>>(EMPTY_SET);
-  // Which render of an owned app is the visible one (appId → toolCallId); absent
-  // → the latest. Clicking an older owned pill points it here.
-  const [activeOwnedRender, setActiveOwnedRender] =
+  // Which render of an owned app the user picked as visible (appId → toolCallId);
+  // absent → the latest. Clicking an older owned pill points it here.
+  const [pickedOwnedRender, setPickedOwnedRender] =
     useState<ReadonlyMap<string, string>>(EMPTY_MAP);
   // Explicit right-panel pick; null falls back to the latest still-open app.
   const [explicitPanelId, setExplicitPanelId] = useState<string | null>(null);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Per render: its canonical (visible) render — the user-picked owned render
-  // while present, else the latest — and its open-state key (appId for owned so
-  // renders share one open state, else toolCallId).
-  const { canonicalByToolCallId, openKeyByToolCallId } = useMemo(() => {
-    const latestOwned = new Map<string, PanelApp>();
-    for (const a of apps) {
-      if (!a.appId) continue;
-      const cur = latestOwned.get(a.appId);
-      if (!cur || a.createdAt >= cur.createdAt) latestOwned.set(a.appId, a);
-    }
-    const canonicalForApp = new Map<string, string>();
-    for (const [appId, latest] of latestOwned) {
-      const picked = activeOwnedRender.get(appId);
-      const pickedPresent = apps.some(
-        (a) => a.toolCallId === picked && a.appId === appId,
-      );
-      canonicalForApp.set(
-        appId,
-        pickedPresent && picked ? picked : latest.toolCallId,
-      );
-    }
-    const canonical = new Map<string, string>();
-    const openKey = new Map<string, string>();
-    for (const a of apps) {
-      canonical.set(
-        a.toolCallId,
-        a.appId ? (canonicalForApp.get(a.appId) ?? a.toolCallId) : a.toolCallId,
-      );
-      openKey.set(a.toolCallId, a.appId ?? a.toolCallId);
-    }
-    return { canonicalByToolCallId: canonical, openKeyByToolCallId: openKey };
-  }, [apps, activeOwnedRender]);
+  // One group per app: owned renders fold into a shared group with a single
+  // visible `activeRender` (the user's pick while present, else the latest);
+  // external renders are singleton groups. `groupByToolCallId` maps any render to
+  // its group so every callback below is an O(1) lookup instead of a scan.
+  const { groupByToolCallId } = useMemo(
+    () => buildAppGroups(apps, pickedOwnedRender),
+    [apps, pickedOwnedRender],
+  );
 
+  // The visible (canonical) render for an app: its group's active render. An
+  // unknown id (e.g. a render not yet in `apps`) is its own canonical render.
   const canonicalToolCallId = useCallback(
-    (id: string) => canonicalByToolCallId.get(id) ?? id,
-    [canonicalByToolCallId],
+    (id: string) => groupByToolCallId.get(id)?.activeRender.toolCallId ?? id,
+    [groupByToolCallId],
   );
 
-  const latestToolCallId = useMemo(
-    () =>
-      apps.reduce<PanelApp | null>(
-        (latest, a) =>
-          !latest || a.createdAt >= latest.createdAt ? a : latest,
-        null,
-      )?.toolCallId ?? null,
-    [apps],
-  );
-
-  // Open when this is the canonical render and its app isn't collapsed.
+  // Open when this is the group's active render and the group isn't collapsed.
+  // An unknown id is treated as its own default-open singleton.
   const isAppOpen = useCallback(
-    (id: string) =>
-      canonicalToolCallId(id) === id &&
-      !closedKeys.has(openKeyByToolCallId.get(id) ?? id),
-    [canonicalToolCallId, closedKeys, openKeyByToolCallId],
+    (id: string) => {
+      const group = groupByToolCallId.get(id);
+      if (!group) return !closedKeys.has(id);
+      return group.activeRender.toolCallId === id && !closedKeys.has(group.key);
+    },
+    [groupByToolCallId, closedKeys],
   );
 
   // Collapse when this render is the visible, open one; otherwise make it the
   // visible render (moving an owned dup here) and open the app.
   const toggleAppOpen = useCallback(
     (id: string) => {
-      const key = openKeyByToolCallId.get(id) ?? id;
-      const visibleHere = canonicalToolCallId(id) === id;
-      const appId = apps.find((a) => a.toolCallId === id)?.appId ?? null;
+      const group = groupByToolCallId.get(id);
+      const key = group?.key ?? id;
+      const appId = group?.appId ?? null;
+      const visibleHere = (group?.activeRender.toolCallId ?? id) === id;
       if (visibleHere && !closedKeys.has(key)) {
         setClosedKeys((prev) => new Set(prev).add(key));
       } else {
         if (appId) {
-          setActiveOwnedRender((prev) => new Map(prev).set(appId, id));
+          setPickedOwnedRender((prev) => new Map(prev).set(appId, id));
         }
         setClosedKeys((prev) => {
           if (!prev.has(key)) return prev;
@@ -203,7 +176,7 @@ export function AppsProvider({
       }
       setSettingsOpen(false);
     },
-    [apps, canonicalToolCallId, closedKeys, openKeyByToolCallId],
+    [groupByToolCallId, closedKeys],
   );
 
   // Switching the panel app drops the previous app's settings form.
@@ -215,33 +188,32 @@ export function AppsProvider({
     [canonicalToolCallId],
   );
 
-  // One hosted app, never blank: explicit pick, else latest still-open, else latest.
+  // One hosted app, never blank: explicit pick, else latest still-open active
+  // render, else the latest active render overall.
   const panelToolCallId = useMemo(() => {
-    if (explicitPanelId && apps.some((a) => a.toolCallId === explicitPanelId)) {
+    if (explicitPanelId && groupByToolCallId.has(explicitPanelId)) {
       return explicitPanelId;
     }
-    const latestOpen = apps
-      .filter(
-        (a) =>
-          canonicalByToolCallId.get(a.toolCallId) === a.toolCallId &&
-          !closedKeys.has(
-            openKeyByToolCallId.get(a.toolCallId) ?? a.toolCallId,
-          ),
-      )
-      .reduce<PanelApp | null>(
-        (latest, a) =>
-          !latest || a.createdAt >= latest.createdAt ? a : latest,
-        null,
-      )?.toolCallId;
-    return latestOpen ?? latestToolCallId;
-  }, [
-    explicitPanelId,
-    apps,
-    closedKeys,
-    canonicalByToolCallId,
-    openKeyByToolCallId,
-    latestToolCallId,
-  ]);
+    const isActive = (a: PanelApp) =>
+      groupByToolCallId.get(a.toolCallId)?.activeRender.toolCallId ===
+      a.toolCallId;
+    const latestBy = (predicate: (a: PanelApp) => boolean) =>
+      apps
+        .filter(predicate)
+        .reduce<PanelApp | null>(
+          (latest, a) =>
+            !latest || a.createdAt >= latest.createdAt ? a : latest,
+          null,
+        )?.toolCallId ?? null;
+    const latestOpen = latestBy(
+      (a) =>
+        isActive(a) &&
+        !closedKeys.has(
+          groupByToolCallId.get(a.toolCallId)?.key ?? a.toolCallId,
+        ),
+    );
+    return latestOpen ?? latestBy(isActive);
+  }, [explicitPanelId, apps, closedKeys, groupByToolCallId]);
 
   const openRightPanel = useCallback(() => {
     onShowInPanel?.();

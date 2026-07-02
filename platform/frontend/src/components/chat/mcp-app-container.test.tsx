@@ -602,6 +602,65 @@ describe("McpAppSection panel hosting", () => {
     expect(screen.getByTestId("panel")).toHaveTextContent("tc2");
   });
 
+  it("hosts the picked render in the panel after collapsing every app", async () => {
+    // With no explicit panel pick and every app collapsed, the panel falls back
+    // to the group's active render — honoring an older-render pick — rather than
+    // the raw latest render.
+    const user = userEvent.setup();
+
+    function Probe() {
+      const { panelToolCallId, toggleAppOpen } = useApps();
+      return (
+        <div>
+          <div data-testid="panel">{panelToolCallId ?? "none"}</div>
+          <button type="button" onClick={() => toggleAppOpen("tc1")}>
+            toggle tc1
+          </button>
+        </div>
+      );
+    }
+
+    await act(async () => {
+      render(
+        <AppsProvider
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "Dashboard",
+              uiResourceUri: defaultProps.uiResourceUri,
+              appId: APP_ID,
+              createdAt: 0,
+            },
+            {
+              toolCallId: "tc2",
+              label: "Dashboard",
+              uiResourceUri: defaultProps.uiResourceUri,
+              appId: APP_ID,
+              createdAt: 1,
+            },
+          ]}
+        >
+          <Probe />
+        </AppsProvider>,
+      );
+    });
+
+    // Untouched → the latest render (tc2) is active and hosted.
+    expect(screen.getByTestId("panel")).toHaveTextContent("tc2");
+
+    // Picking the older render tc1 makes it active and hosted.
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "toggle tc1" }));
+    });
+    expect(screen.getByTestId("panel")).toHaveTextContent("tc1");
+
+    // Collapsing the app (second toggle) keeps the panel on the picked render.
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "toggle tc1" }));
+    });
+    expect(screen.getByTestId("panel")).toHaveTextContent("tc1");
+  });
+
   it("expands each app inline by default and toggles just that app with its pill", async () => {
     const user = userEvent.setup();
 

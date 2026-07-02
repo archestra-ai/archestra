@@ -17,7 +17,16 @@ class MessageModel {
   ): Promise<void> {
     await db
       .update(schema.conversationsTable)
-      .set({ updatedAt: new Date(), lastMessageAt: new Date() })
+      .set({
+        updatedAt: new Date(),
+        lastMessageAt: new Date(),
+        // Tie-proof companion to lastMessageAt: a fresh tick from the shared
+        // message sequence on EVERY touch — new messages and in-place content
+        // updates (tool results) alike — read by the unread predicate.
+        // Timestamps can collide when a read and new activity land in the
+        // same instant; monotonic sequence values cannot.
+        lastMessageSeq: sql`nextval('messages_seq_seq')`,
+      })
       .where(eq(schema.conversationsTable.id, conversationId));
   }
 

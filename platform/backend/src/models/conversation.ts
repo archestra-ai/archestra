@@ -629,7 +629,12 @@ class ConversationModel {
   }): Promise<boolean> {
     const [updated] = await db
       .update(schema.conversationsTable)
-      .set({ lastReadAt: new Date() })
+      // lastReadSeq copies the newest-message watermark: "read" means caught
+      // up to everything inserted so far, immune to timestamp ties.
+      .set({
+        lastReadAt: new Date(),
+        lastReadSeq: sql`${schema.conversationsTable.lastMessageSeq}`,
+      })
       .where(
         and(
           eq(schema.conversationsTable.id, params.id),
@@ -725,7 +730,18 @@ function isConversationUnread(conversation: {
   lastMessageAt: Date;
   lastReadAt: Date | null;
   createdAt: Date;
+  lastMessageSeq: number | null;
+  lastReadSeq: number | null;
 }): boolean {
+  // Once a read has recorded a sequence watermark, compare insertion order —
+  // timestamps have finite precision, and a read racing an incoming message
+  // (same instant) must still leave the message unread.
+  if (conversation.lastReadSeq !== null) {
+    return (conversation.lastMessageSeq ?? 0) > conversation.lastReadSeq;
+  }
+  // Never explicitly read (or migrated rows read before any message existed):
+  // keep the creation-time comparison, so a message that landed with the
+  // conversation itself (e.g. you sent it) does not register as unread.
   const lastRead = conversation.lastReadAt ?? conversation.createdAt;
   return conversation.lastMessageAt.getTime() > lastRead.getTime();
 }

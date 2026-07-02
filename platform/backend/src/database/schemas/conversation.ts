@@ -1,5 +1,6 @@
 import type { SupportedProvider } from "@archestra/shared";
 import {
+  bigint,
   boolean,
   jsonb,
   pgTable,
@@ -70,6 +71,13 @@ const conversationsTable = pgTable("conversations", {
   lastMessageAt: timestamp("last_message_at", { mode: "date" })
     .notNull()
     .defaultNow(),
+  // Insertion-order watermarks mirroring lastMessageAt/lastReadAt. Timestamps
+  // have finite precision — a read and an incoming message can land in the
+  // same instant — so unread detection compares these tie-proof sequence
+  // values (messages.seq) once a read has recorded one. Nullable: NOT NULL
+  // would break older writers mid-rollout (migration linter contract rule).
+  lastMessageSeq: bigint("last_message_seq", { mode: "number" }),
+  lastReadSeq: bigint("last_read_seq", { mode: "number" }),
   /**
    * When the owner last viewed this conversation. Drives the sidebar
    * new-messages indicator: unread = lastMessageAt > lastReadAt. Null means

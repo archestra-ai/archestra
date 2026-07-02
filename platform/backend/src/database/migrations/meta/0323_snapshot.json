@@ -1,5 +1,5 @@
 {
-  "id": "d000f45a-f36e-4a9d-b7e3-5921f8a38da9",
+  "id": "daabfd39-ea3a-42e9-9b83-f914ca00503e",
   "prevId": "4aaadceb-9e28-4092-b094-e1f125559b3d",
   "version": "7",
   "dialect": "postgresql",
@@ -4711,6 +4711,18 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "last_message_seq": {
+          "name": "last_message_seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_read_seq": {
+          "name": "last_read_seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
         },
         "last_read_at": {
           "name": "last_read_at",

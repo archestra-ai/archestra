@@ -690,6 +690,29 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(mockStreamText.mock.calls[0]?.[0].temperature).toBe(0);
   });
 
+  test("caps output tokens at the unknown-model budget when the model is unsynced", async () => {
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    // No models row is seeded, so the model's real cap is unknown and the turn
+    // falls back to the unknown-model budget (still clamped by the ceiling).
+    expect(mockStreamText.mock.calls[0]?.[0].maxOutputTokens).toBe(8192);
+  });
+
   test("omits temperature from streamText when none is provided", async () => {
     mockStreamText.mockClear();
 

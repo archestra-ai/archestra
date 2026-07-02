@@ -397,6 +397,16 @@ const registry = defineArchestraTools([
         });
       } catch (error) {
         if (isUniqueConstraintError(error)) {
+          const existingId = await AppModel.findIdByOrgAuthorName({
+            organizationId,
+            authorId: userId,
+            name: appName,
+          });
+          if (existingId) {
+            return errorResult(
+              `An app named "${args.name}" already exists (id ${existingId}). Edit it with edit_app on that id — do not re-scaffold.`,
+            );
+          }
           return errorResult(`You already have an app named "${args.name}".`);
         }
         throw error;

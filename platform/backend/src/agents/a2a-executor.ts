@@ -17,6 +17,7 @@ import {
   stepCountIs,
   type streamText,
 } from "ai";
+import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
@@ -371,6 +372,12 @@ export async function executeA2AMessage(
         repeatCeilingStopCondition(repeatTracker),
       ],
       abortSignal,
+      // Cap output tokens at the model's real ceiling (or a safe fallback),
+      // instead of the ~4096 SDK default that truncates large tool-call payloads.
+      maxOutputTokens: resolveAgentMaxOutputTokens({
+        outputLength: modelRow?.outputLength ?? null,
+        ceiling: config.chat.maxOutputTokensCeiling,
+      }),
     };
     const currentTurn: { role: "user"; content: UserContent } | null =
       userContent !== null

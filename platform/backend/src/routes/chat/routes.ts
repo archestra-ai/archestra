@@ -32,6 +32,7 @@ import {
 } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
@@ -1090,6 +1091,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     },
                   };
                 }
+
+                // Cap output tokens at the model's real ceiling (or a safe
+                // fallback), instead of the ~4096 SDK default that truncates
+                // large tool-call payloads and final submission turns.
+                streamTextConfig.maxOutputTokens = resolveAgentMaxOutputTokens({
+                  outputLength: modelRow?.outputLength ?? null,
+                  ceiling: config.chat.maxOutputTokensCeiling,
+                });
 
                 const { result } = await runAgentStream({
                   config: streamTextConfig,

@@ -339,12 +339,15 @@ describe("app tool execution", () => {
   });
 
   test("scaffold reports a name conflict cleanly", async () => {
-    await scaffold({ name: "Dup", scope: "org" });
+    const first = await scaffold({ name: "Dup", scope: "org" });
+    const firstId = structured(first).id as string;
     const second = await scaffold({ name: "Dup", scope: "org" });
     expect(second.isError).toBe(true);
-    expect((second.content[0] as any).text).toContain(
-      "already have an app named",
-    );
+    const text = (second.content[0] as any).text as string;
+    // The duplicate error names the existing app and points at edit_app so the
+    // model stops re-scaffolding.
+    expect(text).toContain(firstId);
+    expect(text).toContain("edit_app");
   });
 
   test("scaffold rejects team scope", async () => {

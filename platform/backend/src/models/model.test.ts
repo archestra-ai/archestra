@@ -297,6 +297,7 @@ describe("ModelModel", () => {
         modelId: "gpt-4o-mini",
         description: "Initial description",
         contextLength: 128000,
+        outputLength: 16384,
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: false,
@@ -312,6 +313,7 @@ describe("ModelModel", () => {
         modelId: "gpt-4o-mini",
         description: "Updated description",
         contextLength: 256000,
+        outputLength: 32000,
         inputModalities: ["text", "image"],
         outputModalities: ["text"],
         supportsToolCalling: true,
@@ -322,9 +324,10 @@ describe("ModelModel", () => {
 
       expect(updated.id).toBe(initial.id);
       expect(updated.description).toBe("Updated description");
-      // contextLength, inputModalities, supportsToolCalling are NOT updated on conflict
-      // to preserve user-edited values
+      // contextLength, outputLength, inputModalities, supportsToolCalling are NOT
+      // updated on conflict to preserve user-edited values
       expect(updated.contextLength).toBe(128000);
+      expect(updated.outputLength).toBe(16384);
       expect(updated.inputModalities).toEqual(["text"]);
       expect(updated.supportsToolCalling).toBe(false);
     });
@@ -456,6 +459,43 @@ describe("ModelModel", () => {
       expect(updated?.supportsToolCalling).toBe(false);
     });
 
+    test("backfills a null outputLength but preserves an existing non-null one", async () => {
+      const base = (modelId: string, outputLength: number | null) => ({
+        externalId: `openai/${modelId}`,
+        provider: "openai" as const,
+        modelId,
+        description: modelId,
+        contextLength: 128000,
+        outputLength,
+        inputModalities: ["text" as const],
+        outputModalities: ["text" as const],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        lastSyncedAt: new Date(),
+      });
+
+      await ModelModel.bulkUpsert([
+        base("cap-known", 16384),
+        base("cap-null", null),
+      ]);
+      await ModelModel.bulkUpsert([
+        base("cap-known", 64000),
+        base("cap-null", 8192),
+      ]);
+
+      const known = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "cap-known",
+      );
+      const filled = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "cap-null",
+      );
+      expect(known?.outputLength).toBe(16384);
+      expect(filled?.outputLength).toBe(8192);
+    });
+
     test("preserves manual embedding dimension overrides on non-full sync", async () => {
       const [created] = await ModelModel.bulkUpsert([
         {
@@ -498,6 +538,34 @@ describe("ModelModel", () => {
         "custom-embed-toggle",
       );
       expect(updated?.embeddingDimensions).toBe(1536);
+    });
+  });
+
+  describe("bulkUpsertFull", () => {
+    test("overwrites an existing outputLength with the provider value", async () => {
+      const model = {
+        externalId: "openai/full-refresh",
+        provider: "openai" as const,
+        modelId: "full-refresh",
+        description: "Full Refresh",
+        contextLength: 128000,
+        outputLength: 16384,
+        inputModalities: ["text" as const],
+        outputModalities: ["text" as const],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        lastSyncedAt: new Date(),
+      };
+
+      await ModelModel.bulkUpsert([model]);
+      await ModelModel.bulkUpsertFull([{ ...model, outputLength: 64000 }]);
+
+      const refreshed = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "full-refresh",
+      );
+      expect(refreshed?.outputLength).toBe(64000);
     });
   });
 

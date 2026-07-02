@@ -2,6 +2,7 @@ import { TOOL_LOAD_SKILL_FULL_NAME } from "@archestra/shared";
 import { NoSuchToolError, type UIMessage } from "ai";
 import { describe, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
+import ModelModel from "@/models/model";
 import { expect, test } from "@/test";
 import type { StageResult } from "./a2a/stage-attachments";
 import {
@@ -614,6 +615,68 @@ describe("executeA2AMessage current turn assembly", () => {
 
     const config = mockStreamText.mock.calls[0]?.[0];
     expect(config.messages).toEqual(history);
+  });
+
+  test("caps output tokens at the model's real ceiling, clamped by the operator ceiling", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-sonnet-4-6",
+      provider: "anthropic",
+      modelId: "claude-sonnet-4-6",
+      description: "Claude Sonnet 4.6",
+      contextLength: 200000,
+      outputLength: 64000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      lastSyncedAt: new Date(),
+    });
+    primeStreamMocks();
+
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "current question",
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    const config = mockStreamText.mock.calls[0]?.[0];
+    expect(config.maxOutputTokens).toBe(32768);
+  });
+
+  test("falls back to the unknown-model output budget when no model row exists", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    primeStreamMocks();
+
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "current question",
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    const config = mockStreamText.mock.calls[0]?.[0];
+    expect(config.maxOutputTokens).toBe(8192);
   });
 });
 

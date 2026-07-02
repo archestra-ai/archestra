@@ -291,6 +291,7 @@ describe("ModelSyncService", () => {
       capabilities: {
         description: "Gemini Embedding 2 Preview",
         contextLength: null,
+        outputLength: null,
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: true,
@@ -313,6 +314,7 @@ describe("ModelSyncService", () => {
       capabilities: {
         description: "DeepSeek V3.1",
         contextLength: 32000,
+        outputLength: 16384,
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: false,
@@ -337,6 +339,8 @@ describe("ModelSyncService", () => {
     // models.dev still fills fields the fetcher does not carry.
     expect(capabilities.description).toBe("DeepSeek V3.1");
     expect(capabilities.inputModalities).toEqual(["text"]);
+    // outputLength has no fetcher tier, so the models.dev value flows through.
+    expect(capabilities.outputLength).toBe(16384);
   });
 
   test("persists fetcher pricing so :free models sync as zero-priced", async ({

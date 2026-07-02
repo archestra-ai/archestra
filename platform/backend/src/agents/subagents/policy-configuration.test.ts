@@ -374,6 +374,34 @@ describe("PolicyConfigurationService", () => {
     });
   });
 
+  describe("configurePoliciesForToolWithTimeout", () => {
+    test("clears the timeout timer when auto-configure finishes first", async ({
+      makeOrganization,
+      makeTool,
+    }) => {
+      vi.useFakeTimers();
+      try {
+        const org = await makeOrganization();
+        const tool = await makeTool();
+        vi.spyOn(service, "configurePoliciesForTool").mockResolvedValue({
+          success: true,
+        });
+
+        const before = vi.getTimerCount();
+        const result = await service.configurePoliciesForToolWithTimeout({
+          toolId: tool.id,
+          organizationId: org.id,
+        });
+
+        expect(result.success).toBe(true);
+        // The 20s timeout must not stay pending after the race settles
+        expect(vi.getTimerCount()).toBe(before);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe("configurePoliciesForTools", () => {
     test("returns error for all tools when service not available", async ({
       makeOrganization,

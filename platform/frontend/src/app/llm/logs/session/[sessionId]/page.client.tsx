@@ -370,12 +370,19 @@ export default function SessionDetailPage({
                       </Badge>
                     </TableCell>
                     <TableCell className="overflow-hidden">
-                      <Badge
-                        variant="secondary"
-                        className="text-xs max-w-full inline-flex truncate"
-                      >
-                        {dynamicInteraction.modelName}
-                      </Badge>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge
+                          variant="secondary"
+                          className="text-xs max-w-full inline-flex truncate"
+                        >
+                          {dynamicInteraction.modelName}
+                        </Badge>
+                        {dynamicInteraction.hasErrorResponse() && (
+                          <Badge variant="destructive" className="text-xs">
+                            Error
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="font-mono text-xs">
                       <TooltipProvider>

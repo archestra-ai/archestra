@@ -371,6 +371,25 @@ describe("McpClient", () => {
     expect(mockListResources).toHaveBeenCalledTimes(1);
   });
 
+  test("connectAndGetTools closes the client when tool discovery fails", async () => {
+    // Non-method-not-found error: discovery rethrows instead of falling back
+    mockListTools.mockRejectedValueOnce(new Error("tools/list exploded"));
+
+    const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+    if (!catalogItem) throw new Error("expected catalog item");
+
+    await expect(
+      mcpClient.connectAndGetTools({
+        catalogItem,
+        mcpServerId,
+        secrets: { access_token: "resource-token" },
+      }),
+    ).rejects.toThrow("Failed to connect to MCP server");
+
+    // The failed attempt must not leak its client/transport
+    expect(mockClose).toHaveBeenCalledTimes(1);
+  });
+
   describe("executeToolCallForOwner (app owner)", () => {
     test("executes an app-assigned tool and persists an app-owned audit row", async ({
       makeApp,

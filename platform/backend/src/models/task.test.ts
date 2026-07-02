@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import TaskModel from "./task";
@@ -217,6 +217,38 @@ describe("TaskModel", () => {
 
       const released = await TaskModel.releaseToQueue([task1.id, task2.id]);
       expect(released).toBe(2);
+
+      const rows = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(inArray(schema.tasksTable.id, [task1.id, task2.id]));
+      for (const row of rows) {
+        expect(row.status).toBe("pending");
+        expect(row.attempt).toBe(0);
+      }
+    });
+
+    test("clamps attempt at 0 when releasing", async () => {
+      const task = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+      });
+      await TaskModel.dequeue();
+      // Force the edge: a processing task whose attempt is already 0
+      await db
+        .update(schema.tasksTable)
+        .set({ attempt: 0 })
+        .where(eq(schema.tasksTable.id, task.id));
+
+      const released = await TaskModel.releaseToQueue([task.id]);
+      expect(released).toBe(1);
+
+      const [updated] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, task.id));
+      expect(updated.attempt).toBe(0);
+      expect(updated.status).toBe("pending");
     });
   });
 

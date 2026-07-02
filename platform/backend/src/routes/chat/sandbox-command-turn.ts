@@ -55,10 +55,12 @@ export function detectSandboxCommand(
  * is available, but availability is re-checked here — a forged or stale marker
  * gets an error, never a silent fallback to the LLM.
  *
- * Deliberately skipped relative to a model turn: chat lifecycle hooks
- * (Pre/PostToolUse — the user, not the model, initiated this call) and the
- * LLM-facing context build. The active-run lifecycle, stop semantics, stream
- * replay, and persistence shape all match a normal turn.
+ * Deliberately skipped relative to a model turn: Pre/PostToolUse hooks (the
+ * user, not the model, initiated this call) and the LLM-facing context build.
+ * SessionStart hooks still fire at the route level on a first turn — the
+ * session genuinely starts — and their runs are spliced into the persisted
+ * turn by the caller. The active-run lifecycle, stop semantics, stream replay,
+ * and persistence shape all match a normal turn.
  */
 export async function runSandboxCommandTurn(params: {
   command: string;

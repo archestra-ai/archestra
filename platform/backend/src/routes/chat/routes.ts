@@ -502,9 +502,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // A `!`-prefixed sandbox command turn: execute run_command directly
         // and stream/persist the result as a normal tool part — no LLM call,
-        // so none of the context/tool building below runs.
+        // so none of the context/tool building below runs. Re-sending a
+        // transcript that ends at a stored `!` message re-executes it — the
+        // same "sending a turn runs it" semantics regenerate relies on.
         const sandboxCommand = detectSandboxCommand(messages as ChatMessage[]);
         if (sandboxCommand) {
+          // Persist the user message before execution (mirrors the LLM path's
+          // early persist): the command lands in the sandbox replay log the
+          // moment it runs, so the transcript must already show it even if
+          // final persistence fails or the process dies mid-turn.
+          try {
+            await persistNewMessages(conversationId, messages, "earlyUserMsg");
+          } catch (error) {
+            logger.warn(
+              { error, conversationId },
+              "Failed to persist user messages early (will retry in onFinish)",
+            );
+          }
           return await runSandboxCommandTurn({
             command: sandboxCommand.command,
             messages: messages as ChatMessage[],
@@ -516,16 +530,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             abortController: chatAbortController,
             reply,
             persistTurn: async (finalMessages) => {
+              // SessionStart hook runs (fired above on the first turn) are
+              // spliced into the assistant message exactly like the LLM path,
+              // so hook activity stays visible on a `!` first turn.
+              const messagesToPersist = applyHookRunsToMessages(
+                finalMessages,
+                hookRunCollector,
+              );
               if (trigger === "regenerate-message") {
                 await persistRegeneratedTurn({
                   conversationId,
                   requestMessages: messages,
-                  finalMessages,
+                  finalMessages: messagesToPersist,
                 });
               } else {
                 await persistNewMessages(
                   conversationId,
-                  finalMessages,
+                  messagesToPersist,
                   "onFinish",
                 );
               }

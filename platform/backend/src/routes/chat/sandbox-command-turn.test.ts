@@ -244,8 +244,12 @@ describe("POST /api/chat sandbox command turn", () => {
 
     expect(response.statusCode).toBe(403);
     expect(mockGetChatMcpTools).not.toHaveBeenCalled();
+    expect(mockRunSandboxCommand).not.toHaveBeenCalled();
+    // The user message persists (early persist runs before the availability
+    // check), but no command ran and no assistant turn exists.
     const rows = await MessageModel.findByConversation(conversationId);
-    expect(rows).toHaveLength(0);
+    expect(rows).toHaveLength(1);
+    expect((rows[0].content as ChatMessage).role).toBe("user");
   });
 
   test("a !-prefixed message without the marker goes to the normal LLM path", async () => {
@@ -347,6 +351,51 @@ describe("POST /api/chat sandbox command turn", () => {
     const toolParts = toolPartsOf(assistant as ChatMessage);
     expect(toolParts).toHaveLength(1);
     expect(toolParts[0].state).toBe("output-error");
+  });
+
+  test("a persistence failure after execution is contained: the stream still completes", async () => {
+    const activeRun = await activeChatRunService.createRun({
+      conversationId,
+      userId: user.id,
+      organizationId,
+    });
+    expect(activeRun).not.toBeNull();
+    if (!activeRun) throw new Error("unreachable");
+
+    const replyStub = {
+      header: () => {},
+      send: (body: ReadableStream<Uint8Array>) => body,
+    };
+
+    const body = (await runSandboxCommandTurn({
+      command: "echo hi",
+      messages: [markedUserMessage("! echo hi") as ChatMessage],
+      conversationId,
+      agent: { id: agentId, name: "Sandbox Agent" },
+      userId: user.id,
+      organizationId,
+      activeRunId: activeRun.id,
+      abortController: new AbortController(),
+      // biome-ignore lint/suspicious/noExplicitAny: minimal reply stub — only header/send are used by the turn
+      reply: replyStub as any,
+      persistTurn: async () => {
+        throw new Error("simulated persistence failure");
+      },
+      onStreamSettled: () => {},
+    })) as unknown as ReadableStream<Uint8Array>;
+
+    // The command ran and the stream drains to completion — the persistence
+    // error is logged, not propagated into the response stream.
+    const chunks: string[] = [];
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+    expect(mockRunSandboxCommand).toHaveBeenCalledTimes(1);
+    expect(chunks.join("")).not.toContain('"type":"error"');
   });
 });
 

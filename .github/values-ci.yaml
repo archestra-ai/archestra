@@ -29,6 +29,22 @@ archestra:
       requests:
         cpu: "500m"
 
+  # CI-only probe tuning. `helm install --atomic --wait` blocks until the platform
+  # pod reports Ready, which is gated by the startup probe completing and then the
+  # readiness probe passing. The chart defaults poll every 10s, so the deploy can
+  # sit idle for most of a probe interval after the app is actually up. Tightening
+  # the interval to 3s (CI only) lets Helm return as soon as the pod is ready.
+  # The total startup budget is preserved (3s * 100 = 300s, vs the chart's
+  # 5 + 30*10 = 305s), so a slow first-boot migration on a fresh CI database is
+  # still tolerated — only the polling granularity changes.
+  probes:
+    startup:
+      initialDelaySeconds: 2
+      periodSeconds: 3
+      failureThreshold: 100
+    readiness:
+      periodSeconds: 3
+
   # Environment variables for e2e testing
   env:
     ENABLE_E2E_TEST_ENDPOINTS: "true"

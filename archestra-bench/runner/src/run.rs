@@ -36,9 +36,10 @@ use crate::verify::{VerifyOutcome, run_verifier};
 // random token (registry names must be unique per backend, and tool auto-assignment is disabled so a
 // lane only ever discovers its own server); isolated lanes own their backend and use the bare name.
 const BENCH_MCP_NAME: &str = "final_answer";
-// Per-lane project name. Each lane gets its own project (distinct id) so file ownership is isolated;
-// the name is neutral and identical across lanes -- like BENCH_MCP_NAME it must not encode lane/model
-// identity or cue the agent it is being evaluated, since it can surface in a file-conflict message.
+// Per-rollout project name. Each rollout gets its own project (distinct id) so file ownership is
+// isolated; the name is neutral and identical across rollouts -- like BENCH_MCP_NAME it must not
+// encode lane/model/task identity or cue the agent it is being evaluated, since it can surface in a
+// file-conflict message.
 const PROJECT_NAME: &str = "Workspace";
 const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
 // Appended to a stage's user message only when submission is open (the final stage; submit_result is
@@ -400,7 +401,6 @@ struct SharedLaneSetup {
     submit_tool: String,
     mcp: BenchmarkMcp,
     resolved: ResolvedModel,
-    project_id: String,
 }
 
 /// One unit of work for a lane: that lane's tasks against a single env. A lane drains its stops serially.
@@ -509,7 +509,6 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
                                 setup.mcp,
                                 setup.submit_tool,
                                 setup.agent_id,
-                                Some(setup.project_id),
                                 ctx.root_run_dir.clone(),
                                 setup.resolved,
                                 progress.clone(),
@@ -568,8 +567,8 @@ fn note(mp: &MultiProgress, msg: impl AsRef<str>) {
 
 /// Cancel the in-process server task of every prepared benchmark MCP — called on a setup-error path so a
 /// partially-prepared env doesn't leak listener tasks for the rest of the run.
-async fn stop_mcps(setups: &[(Lane, String, String, BenchmarkMcp, String)]) {
-    for (_, _, _, mcp, _) in setups {
+async fn stop_mcps(setups: &[(Lane, String, String, BenchmarkMcp)]) {
+    for (_, _, _, mcp) in setups {
         mcp.stop().await;
     }
 }
@@ -691,7 +690,7 @@ async fn setup_shared_env(
         }
     };
 
-    let mut setups: Vec<(Lane, String, String, BenchmarkMcp, String)> = Vec::new();
+    let mut setups: Vec<(Lane, String, String, BenchmarkMcp)> = Vec::new();
     for lane in &env_plan.lanes {
         let token = &uuid::Uuid::new_v4().simple().to_string()[..8];
         let mcp = match BenchmarkMcp::start(format!("{BENCH_MCP_NAME}-{token}")).await {
@@ -704,24 +703,7 @@ async fn setup_shared_env(
         };
         match setup_lane_agent(&client, env, lane, &mcp, &team_id).await {
             Ok((agent_id, submit_tool)) => {
-                // One project per lane so lanes no longer collide on the shared user's
-                // `(user_id, filename)` personal-file index when they save identically named
-                // artifacts. The opaque token keeps the name (and its derived slug) unique per the
-                // projects `(user_id, name)` / `(org, slug)` indexes -- all lanes share one user.
-                // Residual: a lane's tasks share this project, so two tasks emitting the *same*
-                // filename would collide on `(project_id, filename)`; today each task uses a distinct
-                // artifact name, so this does not bite. Revisit (per-rollout project) if that changes.
-                let project_name = format!("{PROJECT_NAME} {token}");
-                let project_id = match client.create_project(&project_name).await {
-                    Ok(id) => id,
-                    Err(e) => {
-                        mcp.stop().await;
-                        stop_mcps(&setups).await;
-                        let _ = instance.shutdown().await;
-                        return Err(e.to_string());
-                    }
-                };
-                setups.push((lane.clone(), agent_id, submit_tool, mcp, project_id));
+                setups.push((lane.clone(), agent_id, submit_tool, mcp));
             }
             Err(e) => {
                 mcp.stop().await;
@@ -735,7 +717,7 @@ async fn setup_shared_env(
     let agent_ids: Vec<String> = if env.mcps.is_empty() && !env.fixture_mcp {
         Vec::new()
     } else {
-        setups.iter().map(|(_, id, _, _, _)| id.clone()).collect()
+        setups.iter().map(|(_, id, _, _)| id.clone()).collect()
     };
     let fixture = match seed_env_mcps(&client, env, ctx, &agent_ids).await {
         Ok(fixture) => fixture,
@@ -752,7 +734,7 @@ async fn setup_shared_env(
 
     let lane_setups = setups
         .into_iter()
-        .map(|(lane, agent_id, submit_tool, mcp, project_id)| {
+        .map(|(lane, agent_id, submit_tool, mcp)| {
             let resolved = resolved[&lane.name].clone();
             (
                 lane.name.clone(),
@@ -762,7 +744,6 @@ async fn setup_shared_env(
                     submit_tool,
                     mcp,
                     resolved,
-                    project_id,
                 },
             )
         })
@@ -844,7 +825,6 @@ async fn run_isolated_lane(
         mcp,
         submit_tool,
         agent_id,
-        None,
         ctx.root_run_dir.clone(),
         resolved,
         progress,
@@ -1228,7 +1208,6 @@ async fn run_lane(
     mcp: BenchmarkMcp,
     submit_tool: String,
     agent_id: String,
-    project_id: Option<String>,
     root_run_dir: PathBuf,
     resolved: ResolvedModel,
     progress: ProgressBar,
@@ -1248,7 +1227,6 @@ async fn run_lane(
             env.platform.tool_exposure_mode,
             &lane,
             &agent_id,
-            project_id.as_deref(),
             &task,
             &resolved,
             &prices,
@@ -1271,7 +1249,6 @@ async fn run_one(
     tool_exposure_mode: ToolExposureMode,
     lane: &Lane,
     agent_id: &str,
-    project_id: Option<&str>,
     task: &Task,
     resolved: &ResolvedModel,
     prices: &PriceBook,
@@ -1341,7 +1318,6 @@ async fn run_one(
         agent_system_prompt,
         lane,
         agent_id,
-        project_id,
         task,
         resolved,
         &artifacts,
@@ -1414,7 +1390,7 @@ async fn open_conversation(
     agent_id: &str,
     title: &str,
     resolved: &ResolvedModel,
-    project_id: Option<&str>,
+    project_id: &str,
     artifacts: &RunArtifacts,
 ) -> Result<String, RunError> {
     let conversation = client
@@ -1423,7 +1399,7 @@ async fn open_conversation(
             Some(title),
             Some(&resolved.model_id),
             Some(&resolved.api_key_id),
-            project_id,
+            Some(project_id),
         )
         .await?;
     let conversation_id = conversation
@@ -1449,7 +1425,6 @@ async fn grade_rollout(
     agent_system_prompt: &str,
     lane: &Lane,
     agent_id: &str,
-    project_id: Option<&str>,
     task: &Task,
     resolved: &ResolvedModel,
     artifacts: &RunArtifacts,
@@ -1462,12 +1437,23 @@ async fn grade_rollout(
         .await
         .map_err(|e| RunError::Mcp(e.to_string()))?;
 
+    // One project per rollout: it is the persistent-file namespace the rollout's conversations
+    // share (a `new_conversation` stage rediscovers exported files through it), and scoping it to
+    // the rollout keeps other tasks' artifacts out of the agent's filename space and out of
+    // artifact resolution. The full-UUID token keeps the name (and its derived slug) unique per
+    // the projects `(user_id, name)` / `(org, slug)` indexes without needing collision retries --
+    // all lanes share one user.
+    let token = uuid::Uuid::new_v4().simple().to_string();
+    let project_id = client
+        .create_project(&format!("{PROJECT_NAME} {token}"))
+        .await?;
+
     let mut conversation_id = open_conversation(
         &client,
         agent_id,
         rollout_key,
         resolved,
-        project_id,
+        &project_id,
         artifacts,
     )
     .await?;
@@ -1515,7 +1501,7 @@ async fn grade_rollout(
                 agent_id,
                 rollout_key,
                 resolved,
-                project_id,
+                &project_id,
                 artifacts,
             )
             .await?;
@@ -2036,6 +2022,25 @@ fn combine_errors(first: Option<String>, second: Option<String>) -> Option<Strin
     }
 }
 
+/// Files named `filename` that the agent exported to persistent storage, as visible from the final
+/// conversation's `/files` payload: its own `generated` files plus the rollout project's
+/// `projectFiles`. A file exported in an earlier stage's conversation and updated in place stays
+/// attributed to that conversation (`generated` there), but reaches the final conversation through
+/// the shared project -- the backend dedupes the two buckets by id, so each file appears in exactly
+/// one. `attachments` are harness-staged inputs, never a deliverable.
+fn named_exported_files(
+    files: &HashMap<String, serde_json::Value>,
+    filename: &str,
+) -> Vec<serde_json::Value> {
+    ["generated", "projectFiles"]
+        .iter()
+        .filter_map(|bucket| files.get(*bucket)?.as_array())
+        .flatten()
+        .filter(|f| f.get("name").and_then(|v| v.as_str()) == Some(filename))
+        .cloned()
+        .collect()
+}
+
 async fn resolve_artifact(
     client: &EvalClient,
     conversation_id: &str,
@@ -2065,21 +2070,14 @@ async fn resolve_artifact(
     };
 
     let files = client.list_conversation_files(conversation_id).await?;
-    let generated = files
-        .get("generated")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
-    let matches: Vec<_> = generated
-        .into_iter()
-        .filter(|g| g.get("name").and_then(|v| v.as_str()) == Some(&filename))
-        .collect();
+    let matches = named_exported_files(&files, &filename);
     if matches.len() != 1 {
         artifacts
             .append_error(
                 "artifact_missing",
                 &format!(
-                    "expected exactly one generated artifact named {filename:?}, found {}",
+                    "expected exactly one exported file named {filename:?} among the final \
+                     conversation's generated + project files, found {}",
                     matches.len()
                 ),
             )
@@ -2096,7 +2094,7 @@ async fn resolve_artifact(
             artifacts
                 .append_error(
                     "artifact_missing",
-                    &format!("generated artifact {filename:?} has no contentUrl"),
+                    &format!("exported file {filename:?} has no contentUrl"),
                 )
                 .await;
             return Ok(None);
@@ -2847,6 +2845,75 @@ async fn write_report(report: &str, out: Option<&Path>) -> Result<(), RunError> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn files_payload(json: serde_json::Value) -> HashMap<String, serde_json::Value> {
+        serde_json::from_value(json).unwrap()
+    }
+
+    #[test]
+    fn test_named_exported_files_matches_generated() {
+        let files = files_payload(serde_json::json!({
+            "generated": [{"name": "report.xlsx", "contentUrl": "/api/skill-sandbox/artifacts/g1"}],
+            "projectFiles": [{"name": "other.xlsx", "contentUrl": "/api/skill-sandbox/artifacts/p1"}],
+            "attachments": [],
+        }));
+        let matches = named_exported_files(&files, "report.xlsx");
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0]["contentUrl"], "/api/skill-sandbox/artifacts/g1");
+    }
+
+    #[test]
+    fn test_named_exported_files_matches_project_files() {
+        // The overwrite case: a file exported in an earlier stage's conversation is attributed
+        // there, so the final conversation sees it only through the project bucket.
+        let files = files_payload(serde_json::json!({
+            "generated": [],
+            "projectFiles": [{"name": "report.xlsx", "contentUrl": "/api/skill-sandbox/artifacts/p1"}],
+        }));
+        let matches = named_exported_files(&files, "report.xlsx");
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0]["contentUrl"], "/api/skill-sandbox/artifacts/p1");
+    }
+
+    #[test]
+    fn test_named_exported_files_no_match() {
+        let files = files_payload(serde_json::json!({
+            "generated": [{"name": "other.xlsx"}],
+            "projectFiles": [],
+        }));
+        assert!(named_exported_files(&files, "report.xlsx").is_empty());
+    }
+
+    #[test]
+    fn test_named_exported_files_duplicate_across_buckets() {
+        // Cannot happen with project-scoped exports (name-unique per project, buckets deduped by
+        // id), but the selection stays strict rather than salvaging if it ever does.
+        let files = files_payload(serde_json::json!({
+            "generated": [{"name": "report.xlsx"}],
+            "projectFiles": [{"name": "report.xlsx"}],
+        }));
+        assert_eq!(named_exported_files(&files, "report.xlsx").len(), 2);
+    }
+
+    #[test]
+    fn test_named_exported_files_ignores_attachments() {
+        // Harness-staged inputs share the payload but are never a deliverable.
+        let files = files_payload(serde_json::json!({
+            "generated": [],
+            "projectFiles": [],
+            "attachments": [{"name": "report.xlsx", "contentUrl": "/api/chat/attachments/a1/content"}],
+        }));
+        assert!(named_exported_files(&files, "report.xlsx").is_empty());
+    }
+
+    #[test]
+    fn test_named_exported_files_missing_buckets() {
+        // A payload without the optional buckets (or with non-array values) yields no matches
+        // rather than panicking.
+        assert!(named_exported_files(&HashMap::new(), "report.xlsx").is_empty());
+        let files = files_payload(serde_json::json!({"generated": "not-an-array"}));
+        assert!(named_exported_files(&files, "report.xlsx").is_empty());
+    }
 
     #[test]
     fn test_stage_error_is_retryable() {

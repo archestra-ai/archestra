@@ -32,6 +32,7 @@ import {
 } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
@@ -161,8 +162,13 @@ import {
   normalizeChatMessagesForPersistence,
 } from "./normalization/normalize-chat-messages";
 import { buildModelMessages } from "./prepare-model-messages";
+import {
+  detectSandboxCommand,
+  runSandboxCommandTurn,
+} from "./sandbox-command-turn";
 import { repairHarmonyToolName } from "./tool-call-repair";
 import { createToolUiStartTransform } from "./tool-ui-stream";
+import { sendGatedUiMessageStreamResponse } from "./ui-stream-response";
 
 // The chat route always builds a `messages` (not `prompt`) config, so the
 // `runAgentStream` config is narrowed to require it.
@@ -249,13 +255,6 @@ function buildStreamErrorPayload(params: {
 
   return serialized;
 }
-
-// Upper bound on how long the response body's close waits for the active-run row
-// to be marked terminal. Terminalization is normally tens of milliseconds; this
-// cap keeps a wedged DB or notifier after stream-end from hanging the client EOF
-// indefinitely. Past it we release EOF and fall back to the pre-existing 409
-// window (which the stale reaper still cleans up).
-const TERMINAL_CLOSE_GATE_TIMEOUT_MS = 10_000;
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
@@ -501,6 +500,74 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       try {
         const { agentId, agent } = conversation;
+
+        // A `!`-prefixed sandbox command turn: execute run_command directly
+        // and stream/persist the result as a normal tool part — no LLM call,
+        // so none of the context/tool building below runs. Re-sending a
+        // transcript that ends at a stored `!` message re-executes it — the
+        // same "sending a turn runs it" semantics regenerate relies on.
+        const sandboxCommand = detectSandboxCommand(messages as ChatMessage[]);
+        if (sandboxCommand) {
+          // Persist the user message before execution (mirrors the LLM path's
+          // early persist): the command lands in the sandbox replay log the
+          // moment it runs, so the transcript must already show it even if
+          // final persistence fails or the process dies mid-turn.
+          try {
+            await persistNewMessages(conversationId, messages, "earlyUserMsg");
+          } catch (error) {
+            logger.warn(
+              { error, conversationId },
+              "Failed to persist user messages early (will retry in onFinish)",
+            );
+          }
+          const sandboxSlimChatErrorUi =
+            await OrganizationModel.getSlimChatErrorUi(organizationId);
+          return await runSandboxCommandTurn({
+            command: sandboxCommand.command,
+            messages: messages as ChatMessage[],
+            conversationId,
+            agent: { id: agentId, name: agent.name },
+            userId: user.id,
+            organizationId,
+            activeRunId: activeRun.id,
+            abortController: chatAbortController,
+            reply,
+            persistTurn: async (finalMessages) => {
+              // SessionStart hook runs (fired above on the first turn) are
+              // spliced into the assistant message exactly like the LLM path,
+              // so hook activity stays visible on a `!` first turn.
+              const messagesToPersist = applyHookRunsToMessages(
+                finalMessages,
+                hookRunCollector,
+              );
+              if (trigger === "regenerate-message") {
+                await persistRegeneratedTurn({
+                  conversationId,
+                  requestMessages: messages,
+                  finalMessages: messagesToPersist,
+                });
+              } else {
+                await persistNewMessages(
+                  conversationId,
+                  messagesToPersist,
+                  "onFinish",
+                );
+              }
+            },
+            onStreamSettled: () => {
+              removeAbortListeners();
+              stopActiveRunPolling();
+            },
+            buildErrorPayload: ({ error, mappedError }) =>
+              buildStreamErrorPayload({
+                error,
+                mappedError,
+                conversationId,
+                slimChatErrorUi: sandboxSlimChatErrorUi,
+                stage: "via stream",
+              }),
+          });
+        }
 
         // Extract and ingest documents to agent's knowledge base (fire and forget)
         // This runs asynchronously to avoid blocking the chat response
@@ -1091,6 +1158,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 }
 
+                // Request the model's real output ceiling (clamped by the
+                // operator ceiling), or a safe fallback when it is unknown.
+                // Without this, providers that inject a small default max
+                // (e.g. Anthropic's ~4096) truncated large tool-call payloads
+                // and final submission turns.
+                streamTextConfig.maxOutputTokens = resolveAgentMaxOutputTokens({
+                  outputLength: modelRow?.outputLength ?? null,
+                  ceiling: config.chat.maxOutputTokensCeiling,
+                });
+
                 const { result } = await runAgentStream({
                   config: streamTextConfig,
                   recovery: {
@@ -1361,11 +1438,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             });
 
-            const [responseStream, persistenceStream] = uiMessageStream.tee();
-            const { terminalReady } = activeChatRunService.drainStreamToEvents({
+            return await sendGatedUiMessageStreamResponse({
+              reply,
+              stream: uiMessageStream as ReadableStream<UIMessageChunk>,
               runId: activeRun.id,
               conversationId,
-              stream: persistenceStream as ReadableStream<UIMessageChunk>,
               abortController: chatAbortController,
               getTerminalStatus: async () => {
                 const latestRun = await ActiveChatRunModel.findById(
@@ -1383,65 +1460,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 return { status: "completed" };
               },
             });
-
-            const response = createUIMessageStreamResponse({
-              headers: {
-                // Prevent compression middleware from buffering the stream
-                // See: https://ai-sdk.dev/docs/troubleshooting/streaming-not-working-when-proxied
-                "Content-Encoding": "none",
-              },
-              stream: responseStream as ReadableStream<UIMessageChunk>,
-            });
-
-            // Log response headers for debugging
-            logger.info(
-              {
-                conversationId,
-                headers: Object.fromEntries(response.headers.entries()),
-                hasBody: !!response.body,
-              },
-              "Streaming chat response",
-            );
-
-            // Copy headers from Response to Fastify reply
-            for (const [key, value] of response.headers.entries()) {
-              reply.header(key, value);
-            }
-
-            // Send the Response body stream directly, but hold its CLOSE (not
-            // its bytes — they stream through unchanged) until the active-run row
-            // is marked terminal. Without this, a client that fires its next
-            // message the instant this response ends races the async drain and
-            // 409s against a row still flagged running.
-            if (!response.body) {
-              throw new ApiError(400, "No response body");
-            }
-            const gatedBody = (
-              response.body as ReadableStream<Uint8Array>
-            ).pipeThrough(
-              new TransformStream<Uint8Array, Uint8Array>({
-                async flush() {
-                  let timer: ReturnType<typeof setTimeout> | undefined;
-                  try {
-                    await Promise.race([
-                      terminalReady,
-                      new Promise<void>((resolve) => {
-                        timer = setTimeout(
-                          resolve,
-                          TERMINAL_CLOSE_GATE_TIMEOUT_MS,
-                        );
-                      }),
-                    ]);
-                  } finally {
-                    if (timer) {
-                      clearTimeout(timer);
-                    }
-                  }
-                },
-              }),
-            );
-            // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
-            return reply.send(gatedBody as any);
           },
         });
       } catch (error) {

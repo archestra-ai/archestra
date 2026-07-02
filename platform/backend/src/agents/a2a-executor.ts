@@ -17,6 +17,7 @@ import {
   stepCountIs,
   type streamText,
 } from "ai";
+import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
@@ -371,6 +372,14 @@ export async function executeA2AMessage(
         repeatCeilingStopCondition(repeatTracker),
       ],
       abortSignal,
+      // Request the model's real output ceiling (clamped by the operator
+      // ceiling), or a safe fallback when unknown. Without this, providers that
+      // inject a small default max (e.g. Anthropic's ~4096) truncated large
+      // tool-call payloads.
+      maxOutputTokens: resolveAgentMaxOutputTokens({
+        outputLength: modelRow?.outputLength ?? null,
+        ceiling: config.chat.maxOutputTokensCeiling,
+      }),
     };
     const currentTurn: { role: "user"; content: UserContent } | null =
       userContent !== null

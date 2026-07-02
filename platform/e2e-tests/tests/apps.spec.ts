@@ -1,4 +1,12 @@
+import { DEFAULT_TEAM_NAME, MCP_SERVER_TOOL_NAME_SEPARATOR } from "../consts";
 import { goToPage } from "../fixtures";
+import {
+  APP_SDK_JSON_SERVER_TASK_COUNT,
+  APP_SDK_JSON_SERVER_TOOL_NAME,
+  ensureAppSdkJsonTestServerCatalogItem,
+  findInstalledServer,
+  waitForServerInstallation,
+} from "../utils";
 import { expect, test } from "./api-fixtures";
 
 // Seed an app, publish a minimal SDK-probe version, open /a/:id, and assert
@@ -102,5 +110,160 @@ test("create an app from a template and run it standalone", async ({
       urlSuffix: `/api/apps/${app.id}`,
       ignoreStatusCheck: true,
     });
+  }
+});
+
+// Probe for the `archestra.tools.call` unwrapping contract: the fixture tool
+// returns `{"tasks":[...]}` serialized into content[0].text, so `call` must
+// resolve with the parsed object (the probe reads `result.tasks.length`
+// directly off the resolved value).
+const buildToolsCallProbeHtml = (toolName: string) => `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>e2e tools.call probe</title></head>
+<body>
+  <h1>tools.call unwrap probe</h1>
+  <p id="unwrapped">Calling…</p>
+  <script>
+    (async () => {
+      const unwrapped = document.getElementById("unwrapped");
+      const toolName = ${JSON.stringify(toolName)};
+      try {
+        const result = await window.archestra.tools.call(toolName, {});
+        unwrapped.textContent = "unwrapped-tasks:" + result.tasks.length;
+      } catch (err) {
+        unwrapped.textContent =
+          "call-failed: " + (err && err.message ? err.message : String(err));
+      }
+    })();
+  </script>
+</body>
+</html>`;
+
+test("app SDK tools.call unwraps a JSON-as-text tool result", async ({
+  page,
+  request,
+  makeApiRequest,
+  installMcpServer,
+  uninstallMcpServer,
+  getTeamByName,
+}) => {
+  // Installing the local fixture MCP server (npm install inside the pod)
+  // dominates the runtime — same budget as the orchestrator local-server suite.
+  test.setTimeout(240_000);
+
+  const defaultTeam = await getTeamByName(request, DEFAULT_TEAM_NAME);
+  if (!defaultTeam) {
+    throw new Error("Default Team not found");
+  }
+
+  const catalogItem = await ensureAppSdkJsonTestServerCatalogItem(request);
+
+  // A crashed earlier run can leave a broken install behind; reuse a healthy
+  // one, replace anything else.
+  let server = await findInstalledServer(
+    request,
+    catalogItem.id,
+    defaultTeam.id,
+  );
+  if (server) {
+    try {
+      await waitForServerInstallation(request, server.id);
+    } catch {
+      await uninstallMcpServer(request, server.id);
+      // Give K8s time to tear the deployment down before reinstalling.
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      server = undefined;
+    }
+  }
+  if (!server) {
+    const installResponse = await installMcpServer(request, {
+      name: catalogItem.name,
+      catalogId: catalogItem.id,
+      scope: "team",
+      teamId: defaultTeam.id,
+    });
+    server = (await installResponse.json()) as {
+      id: string;
+      catalogId: string;
+    };
+  }
+  const serverId = server.id;
+
+  try {
+    await waitForServerInstallation(request, serverId);
+
+    // Tool discovery persists the tool rows; poll until the fixture tool shows
+    // up so we get its id (for assignment) and full prefixed name (for the call).
+    const expectedToolSuffix = `${MCP_SERVER_TOOL_NAME_SEPARATOR}${APP_SDK_JSON_SERVER_TOOL_NAME}`;
+    let fixtureTool: { id: string; name: string } | undefined;
+    await expect
+      .poll(
+        async () => {
+          const toolsResponse = await makeApiRequest({
+            request,
+            method: "get",
+            urlSuffix: `/api/mcp_server/${serverId}/tools`,
+          });
+          const tools = (await toolsResponse.json()) as Array<{
+            id: string;
+            name: string;
+          }>;
+          fixtureTool = tools.find((tool) =>
+            tool.name.endsWith(expectedToolSuffix),
+          );
+          return fixtureTool !== undefined;
+        },
+        { timeout: 30_000, intervals: [500, 1000, 2000] },
+      )
+      .toBe(true);
+    if (!fixtureTool) {
+      throw new Error(
+        `Tool "*${expectedToolSuffix}" was not discovered on server ${serverId}`,
+      );
+    }
+
+    const appName = `e2e-app-tools-${Date.now()}`;
+    const createRes = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/apps",
+      data: { name: appName, scope: "personal" },
+    });
+    const app = (await createRes.json()) as { id: string };
+
+    try {
+      // Dynamic credential resolution: the viewer's Default Team install is
+      // picked at call time, so no server pin is needed on the assignment.
+      const assignRes = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: `/api/apps/${app.id}/tools/${fixtureTool.id}`,
+        data: { credentialResolutionMode: "dynamic" },
+      });
+      expect(assignRes.ok()).toBeTruthy();
+
+      const patchRes = await makeApiRequest({
+        request,
+        method: "patch",
+        urlSuffix: `/api/apps/${app.id}`,
+        data: { html: buildToolsCallProbeHtml(fixtureTool.name) },
+      });
+      expect(patchRes.ok()).toBeTruthy();
+
+      await goToPage(page, `/a/${app.id}`);
+      const appFrame = page.frameLocator("iframe").frameLocator("iframe");
+      await expect(
+        appFrame.getByText(`unwrapped-tasks:${APP_SDK_JSON_SERVER_TASK_COUNT}`),
+      ).toBeVisible({ timeout: 30_000 });
+    } finally {
+      await makeApiRequest({
+        request,
+        method: "delete",
+        urlSuffix: `/api/apps/${app.id}`,
+        ignoreStatusCheck: true,
+      });
+    }
+  } finally {
+    await uninstallMcpServer(request, serverId);
   }
 });

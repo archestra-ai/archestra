@@ -1021,8 +1021,9 @@ pub fn build_backend_env(
             .unwrap_or_else(|| dagger_cli_bin.to_string()),
     );
     env.insert("ARCHESTRA_ANALYTICS".to_string(), "disabled".to_string());
-    // Per-lane projects isolate file ownership so lanes sharing one backend don't collide on common
-    // artifact names; the feature must be on for `POST /api/projects` and project-scoped conversations.
+    // Per-rollout projects isolate file ownership so concurrent lanes and successive tasks don't
+    // collide on common artifact names; the feature must be on for `POST /api/projects` and
+    // project-scoped conversations.
     env.insert("ARCHESTRA_PROJECTS_ENABLED".to_string(), "true".to_string());
     // MCP Apps and agent environments ship dark behind these flags; the bench turns them on for every
     // env (like the sandbox/projects flags above) so a run never depends on the operator's `.env` or

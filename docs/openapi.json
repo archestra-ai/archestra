@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.80"
+    "version": "1.2.81"
   },
   "components": {
     "schemas": {
@@ -171118,6 +171118,12 @@
                         "minimum": -2147483648,
                         "maximum": 2147483647
                       },
+                      "outputLength": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
                       "inputModalities": {
                         "nullable": true,
                         "type": "array",
@@ -171291,6 +171297,7 @@
                       "modelId",
                       "description",
                       "contextLength",
+                      "outputLength",
                       "inputModalities",
                       "outputModalities",
                       "supportsToolCalling",
@@ -171699,6 +171706,12 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "outputLength": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "inputModalities": {
                       "nullable": true,
                       "type": "array",
@@ -171795,6 +171808,7 @@
                     "modelId",
                     "description",
                     "contextLength",
+                    "outputLength",
                     "inputModalities",
                     "outputModalities",
                     "supportsToolCalling",

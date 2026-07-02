@@ -20,8 +20,9 @@ class MessageModel {
    */
   private static async touchConversation(
     conversationId: string,
+    executor: DbExecutor = db,
   ): Promise<void> {
-    await db
+    await executor
       .update(schema.conversationsTable)
       .set({
         updatedAt: new Date(),
@@ -57,12 +58,16 @@ class MessageModel {
       .insert(schema.messagesTable)
       .values(messages.map((m) => ({ id: uuidv7(), ...m })));
 
-    // Update conversation's updatedAt for all affected conversations
+    // Update conversation's updatedAt for all affected conversations. Must run
+    // on the same executor: with a transaction executor, a separate `db` query
+    // would escape the transaction (and deadlock single-connection PGlite).
     const uniqueConversationIds = [
       ...new Set(messages.map((m) => m.conversationId)),
     ];
     await Promise.all(
-      uniqueConversationIds.map((id) => MessageModel.touchConversation(id)),
+      uniqueConversationIds.map((id) =>
+        MessageModel.touchConversation(id, executor),
+      ),
     );
   }
 

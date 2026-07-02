@@ -1,0 +1,1 @@
+ALTER TABLE "models" ADD COLUMN "output_length" integer;

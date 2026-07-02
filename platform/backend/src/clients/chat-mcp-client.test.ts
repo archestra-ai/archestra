@@ -252,6 +252,58 @@ describe("normalizeJsonSchema", () => {
     expect(normalizeJsonSchema(schema)).toEqual({ type: "string" });
   });
 
+  test("gives untyped nodes an explicit type (Gemini/Vertex rejects untyped schema nodes)", () => {
+    // posthog__cohorts-partial-update shape: `query` is zod.unknown().nullable(),
+    // which serializes to a bare {} branch that Vertex 400s on — even behind
+    // OpenRouter when it routes the model to a Google-hosted deployment.
+    const schema = {
+      type: "object",
+      properties: {
+        query: { anyOf: [{}, { type: "null" }] },
+        payload: {},
+        config: { properties: { a: { type: "string" } } },
+        tags: { items: { type: "string" } },
+        mode: { enum: ["fast", "slow"] },
+        count: { enum: [1, 2] },
+        linked: { $ref: "#/$defs/Thing" },
+      },
+      $defs: { Thing: { type: "string" } },
+    };
+    expect(normalizeJsonSchema(schema)).toEqual({
+      type: "object",
+      properties: {
+        query: {
+          anyOf: [
+            { type: "object", additionalProperties: true },
+            { type: "null" },
+          ],
+        },
+        payload: { type: "object", additionalProperties: true },
+        config: {
+          type: "object",
+          properties: { a: { type: "string" } },
+          additionalProperties: false,
+        },
+        tags: { type: "array", items: { type: "string" } },
+        mode: { type: "string", enum: ["fast", "slow"] },
+        count: { type: "integer", enum: [1, 2] },
+        linked: { $ref: "#/$defs/Thing" },
+      },
+      $defs: { Thing: { type: "string" } },
+      additionalProperties: false,
+    });
+  });
+
+  test("keeps a bare any-node open instead of clamping it with additionalProperties: false", () => {
+    const result = normalizeJsonSchema({
+      type: "object",
+      properties: { anything: {} },
+    });
+    expect(
+      (result.properties as Record<string, Record<string, unknown>>).anything,
+    ).toEqual({ type: "object", additionalProperties: true });
+  });
+
   test("does not mutate the original schema", () => {
     const schema = {
       type: "object",

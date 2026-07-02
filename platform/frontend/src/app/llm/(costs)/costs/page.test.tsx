@@ -1,5 +1,6 @@
 import type { StatisticsTimeFrame } from "@archestra/shared";
 import { render, waitFor } from "@testing-library/react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import StatisticsPage from "./page";
 
@@ -12,10 +13,7 @@ const mockUseProfileStatistics = vi.fn();
 const mockUseModelStatistics = vi.fn();
 const mockUseCostSavingsStatistics = vi.fn();
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockRouterPush }),
-  useSearchParams: () => mockSearchParams,
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/app/llm/(costs)/layout", () => ({
   useSetCostsAction: () => mockSetCostsAction,
@@ -60,6 +58,12 @@ describe("StatisticsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    vi.mocked(useRouter).mockReturnValue({
+      push: mockRouterPush,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockImplementation(
+      () => mockSearchParams as unknown as ReturnType<typeof useSearchParams>,
+    );
     mockSearchParams = new URLSearchParams();
     mockUseTeamStatistics.mockReturnValue({ data: [] });
     mockUseProfileStatistics.mockReturnValue({ data: [] });

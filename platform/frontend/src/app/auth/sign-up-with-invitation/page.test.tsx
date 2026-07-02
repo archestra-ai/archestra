@@ -4,20 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import SignUpWithInvitationPage from "./page";
 
-vi.mock("next/navigation", () => ({
-  useRouter: vi.fn(),
-  useSearchParams: vi.fn(),
-}));
+vi.mock("next/navigation");
 
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    signUp: {
-      email: vi.fn(),
-    },
-  },
-}));
+vi.mock("@/lib/clients/auth/auth-client");
 
 vi.mock("@/lib/auth/invitation.query", () => ({
   useInvitationCheck: vi.fn(() => ({
@@ -31,9 +23,7 @@ vi.mock("@/lib/auth/invitation.query", () => ({
   })),
 }));
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Archestra",
-}));
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/components/app-logo", () => ({
   AppLogo: () => <div data-testid="app-logo">App Logo</div>,
@@ -73,6 +63,7 @@ function renderPage() {
 describe("SignUpWithInvitationPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useAppName).mockReturnValue("Archestra");
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
       replace: routerReplace,

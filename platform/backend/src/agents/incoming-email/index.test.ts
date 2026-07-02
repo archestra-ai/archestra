@@ -7,9 +7,7 @@ vi.mock("@/agents/a2a-executor", () => ({
 }));
 
 // Mock the auth utils for permission checks
-vi.mock("@/auth", () => ({
-  userHasPermission: vi.fn(),
-}));
+vi.mock("@/auth");
 
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth";

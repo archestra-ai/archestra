@@ -3,7 +3,7 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
-import { afterAll, beforeAll } from "vitest";
+import { afterAll } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -15,7 +15,7 @@ import AgentToolModel from "./agent-tool";
 // auto-assigned app tools into them (app-tool assignment is covered in
 // tool-archestra-assignment.test.ts)
 const originalAppsEnabled = config.apps.enabled;
-beforeAll(() => {
+beforeEach(() => {
   (config.apps as { enabled: boolean }).enabled = false;
 });
 afterAll(() => {

@@ -67,3 +67,9 @@ pnpm knip   # flags unused exports; part of frontend check:ci
 - Use `const appName = useAppName();` and interpolate the app name so white-labeled deployments render correctly.
 - Always use `getDocsUrl(DocsPage.PageName, "optional-anchor")` from `@archestra/shared` for documentation links.
 - Never hardcode documentation URLs.
+
+## Test mocking
+
+- Frequently-mocked modules have Jest-style `__mocks__` canonical mocks — activate with a bare `vi.mock("<specifier>");` and configure per test via `vi.mocked(...)`. Covered: `@/lib/auth/auth.query`, `@/lib/organization.query`, `@/lib/config/config.query`, `@/lib/teams/team.query`, `@/lib/hooks/use-app-name`, `@/lib/clients/auth/auth-client` (a memoized proxy — every path like `authClient.signIn.email` is a stable `vi.fn()`), plus root-level `__mocks__/` for `next/navigation` and `sonner`.
+- Do not write a bespoke partial factory for those specifiers. Exception: a file that partially mocks `@/lib/config/config` may keep factories for the query mocks — the canonical mocks' `importActual` chain eagerly loads `auth-client` → `config/config` and breaks under a partial config mock.
+- The `@` alias must stay declared in `vitest.config.ts` `resolve.alias` with an absolute path — tsconfig-paths-only aliasing silently breaks `__mocks__` resolution (vitest-dev/vitest#8343).

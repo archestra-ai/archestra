@@ -9,16 +9,6 @@ import {
   wrapPoolWithRetry,
 } from "./retry";
 
-// Suppress logger output during tests
-vi.mock("@/logging", () => ({
-  default: {
-    warn: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    fatal: vi.fn(),
-  },
-}));
-
 describe("isTransientDbError", () => {
   test("returns false for non-Error values", () => {
     expect(isTransientDbError("string")).toBe(false);

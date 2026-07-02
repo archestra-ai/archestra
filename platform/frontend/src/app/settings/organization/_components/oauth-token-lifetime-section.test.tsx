@@ -21,25 +21,18 @@ const mutateAsync = vi.fn();
 let mockOrganization: Record<string, unknown> | null = null;
 let mockOrganizationPending = false;
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => ({
-    data: mockOrganization,
-    isPending: mockOrganizationPending,
-  }),
-  useAppearanceSettings: () => ({
-    data: { appName: null },
-  }),
-  useUpdateAuthSettings: () => ({
-    mutateAsync,
-    isPending: false,
-  }),
-}));
+vi.mock("@/lib/organization.query");
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: true, isPending: false }),
-  useMissingPermissions: () => [],
-}));
-
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+  useUpdateAuthSettings,
+} from "@/lib/organization.query";
 import { OAuthTokenLifetimeSection } from "./oauth-token-lifetime-section";
 
 function renderPage() {
@@ -64,6 +57,28 @@ describe("OAuthTokenLifetimeSection", () => {
     mutateAsync.mockResolvedValue({
       oauthAccessTokenLifetimeSeconds: 604_800,
     });
+
+    vi.mocked(useOrganization).mockImplementation(
+      () =>
+        ({
+          data: mockOrganization,
+          isPending: mockOrganizationPending,
+        }) as ReturnType<typeof useOrganization>,
+    );
+    vi.mocked(useAppearanceSettings).mockReturnValue({
+      data: { appName: null },
+    } as unknown as ReturnType<typeof useAppearanceSettings>);
+    vi.mocked(useUpdateAuthSettings).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useUpdateAuthSettings>);
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useMissingPermissions).mockReturnValue(
+      [] as unknown as ReturnType<typeof useMissingPermissions>,
+    );
   });
 
   it("submits a preset OAuth token lifetime", async () => {

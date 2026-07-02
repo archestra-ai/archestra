@@ -12,18 +12,6 @@ vi.mock("@/clients/llm-client", () => ({
   createDirectLLMModel: mockCreateDirectLLMModel,
 }));
 
-vi.mock("openai", () => {
-  class MockOpenAI {
-    apiKey: string;
-    baseURL?: string;
-    constructor(opts: { apiKey: string; baseURL?: string }) {
-      this.apiKey = opts.apiKey;
-      this.baseURL = opts.baseURL;
-    }
-  }
-  return { default: MockOpenAI };
-});
-
 import db, { schema } from "@/database";
 import { LlmProviderApiKeyModel, OrganizationModel } from "@/models";
 import { describe, expect, test } from "@/test";

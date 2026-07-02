@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CatalogAppRunPage from "./page.client";
 
 const resolution = {
@@ -34,10 +35,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(searchString),
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/lib/app.query", () => ({
   useExternalApp: () => ({ data: resolution, isPending: false }),
@@ -48,6 +46,19 @@ vi.mock("@/components/mcp-app/app-frame", () => ({
     <div data-testid="app-frame" data-resource={resourceUri} />
   ),
 }));
+
+beforeEach(() => {
+  vi.mocked(useRouter).mockReturnValue({
+    replace: vi.fn(),
+    push: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(useSearchParams).mockImplementation(
+    () =>
+      new URLSearchParams(searchString) as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+  );
+});
 
 afterEach(() => {
   searchString = "";

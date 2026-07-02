@@ -150,8 +150,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/
+COPY archestra-rs/napi-loader/package.json archestra-rs/napi-loader/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
 COPY archestra-rs/app-runtime-rs/package.json archestra-rs/app-runtime-rs/
+COPY archestra-rs/image-rs/package.json archestra-rs/image-rs/
 
 # Install all dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
@@ -175,6 +177,13 @@ RUN set -eux; \
 FROM base AS builder-base
 WORKDIR /app
 
+# Install the Rust toolchain used to compile the N-API addons during `pnpm build`.
+# Kept ABOVE the node_modules/source COPYs so this layer depends only on `base` and
+# stays cache-stable across ordinary source changes. When it lived below the COPYs
+# the ~12s apk install re-ran on every source-changing build because the preceding
+# COPY layers were invalidated.
+RUN apk add --no-cache build-base cargo rust
+
 # Version arg for Sentry release tracking
 ARG VERSION=dev
 
@@ -185,6 +194,7 @@ COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY --from=deps /app/archestra-rs/sandbox-rs/node_modules ./archestra-rs/sandbox-rs/node_modules
 COPY --from=deps /app/archestra-rs/app-runtime-rs/node_modules ./archestra-rs/app-runtime-rs/node_modules
+COPY --from=deps /app/archestra-rs/image-rs/node_modules ./archestra-rs/image-rs/node_modules
 
 # Copy source files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
@@ -192,13 +202,13 @@ COPY backend ./backend
 COPY frontend ./frontend
 COPY shared ./shared
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
+COPY archestra-rs/napi-loader ./archestra-rs/napi-loader
 COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
 COPY archestra-rs/sandbox-rs ./archestra-rs/sandbox-rs
 COPY archestra-rs/app-runtime-core ./archestra-rs/app-runtime-core
 COPY archestra-rs/app-runtime-rs ./archestra-rs/app-runtime-rs
-
-# Build the Rust N-API skill sandbox addon during the JS workspace build.
-RUN apk add --no-cache build-base cargo rust
+COPY archestra-rs/image-core ./archestra-rs/image-core
+COPY archestra-rs/image-rs ./archestra-rs/image-rs
 
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -214,7 +224,7 @@ FROM builder-base AS rust-napi-musl-smoke
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/app/archestra-rs/target \
-    pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs check:musl
+    pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs --filter @archestra/image-rs check:musl
 
 # <----- Builder stage ----->
 FROM builder-base AS builder
@@ -348,8 +358,10 @@ VOLUME /var/lib/postgresql/data /app/data
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
+COPY archestra-rs/napi-loader/package.json archestra-rs/napi-loader/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
 COPY archestra-rs/app-runtime-rs/package.json archestra-rs/app-runtime-rs/
+COPY archestra-rs/image-rs/package.json archestra-rs/image-rs/
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 # slim Dagger Engine manifest (rendered in the dagger-manifest stage above)
@@ -362,7 +374,12 @@ COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
 COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
 
 # Install production dependencies for both workspaces
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend --filter=@frontend
+# The "..." suffix includes each package's workspace dependencies in the
+# install. Without it pnpm only creates node_modules for @backend/@frontend
+# themselves, and workspace deps' own runtime deps are never linked — the
+# three NAPI crates' index.cjs require @archestra/napi-loader and crash the
+# image with MODULE_NOT_FOUND (first surfaced as 500s on POST /api/apps).
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend... --filter=@frontend...
 
 # CVE-2026-33671: replace Next's bundled picomatch 4.0.3 with 4.0.4 (same as deps stage).
 # Production install refetches next so the patched copy from the builder is not inherited.
@@ -394,6 +411,13 @@ COPY --from=builder /app/archestra-rs/sandbox-rs/*.node ./archestra-rs/sandbox-r
 COPY --from=builder /app/archestra-rs/app-runtime-rs/index.cjs ./archestra-rs/app-runtime-rs/
 COPY --from=builder /app/archestra-rs/app-runtime-rs/index.d.ts ./archestra-rs/app-runtime-rs/
 COPY --from=builder /app/archestra-rs/app-runtime-rs/*.node ./archestra-rs/app-runtime-rs/
+COPY --from=builder /app/archestra-rs/image-rs/index.cjs ./archestra-rs/image-rs/
+COPY --from=builder /app/archestra-rs/image-rs/index.d.ts ./archestra-rs/image-rs/
+COPY --from=builder /app/archestra-rs/image-rs/*.node ./archestra-rs/image-rs/
+# Shared JS loader required at runtime by the three NAPI crates' index.cjs
+# (pure JS, no .node); the prod install links it into each crate's node_modules.
+COPY --from=builder /app/archestra-rs/napi-loader/index.cjs ./archestra-rs/napi-loader/
+COPY --from=builder /app/archestra-rs/napi-loader/index.d.ts ./archestra-rs/napi-loader/
 RUN chmod +x /app/backend/scripts/start-production.sh
 
 # Copy built frontend

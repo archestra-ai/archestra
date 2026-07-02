@@ -1,22 +1,11 @@
 import { vi } from "vitest";
-import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
+import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import { beforeEach, describe, expect, test } from "@/test";
 import { isRateLimited, type RateLimitEntry } from "./utils";
 
-// Mock cacheManager while preserving other exports (like LRUCacheManager, CacheKey)
-const mockCache = new Map<string, RateLimitEntry>();
-vi.mock("@/cache-manager", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/cache-manager")>();
-  return {
-    ...actual,
-    cacheManager: {
-      get: vi.fn(async (key: string) => mockCache.get(key)),
-      set: vi.fn(async (key: string, value: RateLimitEntry) => {
-        mockCache.set(key, value);
-      }),
-    },
-  };
-});
+// The canonical Map-backed fake from src/__mocks__/cache-manager.ts; reads
+// and seeds below go through the fake's own get/set.
+vi.mock("@/cache-manager");
 
 describe("isRateLimited", () => {
   const testConfig = { windowMs: 60_000, maxRequests: 3 };
@@ -24,7 +13,6 @@ describe("isRateLimited", () => {
     `${CacheKey.WebhookRateLimit}-test-127.0.0.1` as AllowedCacheKey;
 
   beforeEach(() => {
-    mockCache.clear();
     vi.clearAllMocks();
   });
 
@@ -32,7 +20,7 @@ describe("isRateLimited", () => {
     const result = await isRateLimited(testCacheKey, testConfig);
 
     expect(result).toBe(false);
-    expect(mockCache.get(testCacheKey)).toMatchObject({
+    expect(await cacheManager.get(testCacheKey)).toMatchObject({
       count: 1,
     });
   });
@@ -45,7 +33,9 @@ describe("isRateLimited", () => {
     // Third request (at limit)
     expect(await isRateLimited(testCacheKey, testConfig)).toBe(false);
 
-    expect(mockCache.get(testCacheKey)?.count).toBe(3);
+    expect((await cacheManager.get<RateLimitEntry>(testCacheKey))?.count).toBe(
+      3,
+    );
   });
 
   test("blocks requests at the limit", async () => {
@@ -65,13 +55,13 @@ describe("isRateLimited", () => {
       count: testConfig.maxRequests,
       windowStart: Date.now() - testConfig.windowMs - 1000, // 1 second past expiry
     };
-    mockCache.set(testCacheKey, expiredEntry);
+    await cacheManager.set(testCacheKey, expiredEntry);
 
     // Should allow the request and reset counter
     const result = await isRateLimited(testCacheKey, testConfig);
 
     expect(result).toBe(false);
-    expect(mockCache.get(testCacheKey)).toMatchObject({
+    expect(await cacheManager.get(testCacheKey)).toMatchObject({
       count: 1,
     });
   });
@@ -117,12 +107,12 @@ describe("isRateLimited", () => {
   test("preserves windowStart when incrementing count", async () => {
     // First request sets windowStart
     await isRateLimited(testCacheKey, testConfig);
-    const initialEntry = mockCache.get(testCacheKey);
+    const initialEntry = await cacheManager.get<RateLimitEntry>(testCacheKey);
     const initialWindowStart = initialEntry?.windowStart;
 
     // Second request should preserve windowStart
     await isRateLimited(testCacheKey, testConfig);
-    const updatedEntry = mockCache.get(testCacheKey);
+    const updatedEntry = await cacheManager.get<RateLimitEntry>(testCacheKey);
 
     expect(updatedEntry?.windowStart).toBe(initialWindowStart);
     expect(updatedEntry?.count).toBe(2);

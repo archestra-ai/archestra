@@ -5,11 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    getSession: vi.fn(),
-  },
-}));
+vi.mock("@/lib/clients/auth/auth-client");
 
 function renderMenu() {
   const queryClient = new QueryClient({

@@ -5,31 +5,21 @@ import {
 } from "@archestra/shared";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-// In-memory stand-in for the distributed cache so the sticky-thread activation
-// gate (channel-activation.ts) works without starting the real cache manager.
-// The `mock`-prefixed name is referenced lazily inside the factory so it
-// survives vi.mock hoisting. Tests that need specific cache behavior still
-// vi.spyOn(cacheManager, ...) and restore afterwards.
-const mockCacheStore = new Map<string, unknown>();
-vi.mock("@/cache-manager", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/cache-manager")>();
-  return {
-    ...actual,
-    cacheManager: {
-      async get(key: string) {
-        return mockCacheStore.get(key);
-      },
-      async set(key: string, value: unknown) {
-        mockCacheStore.set(key, value);
-        return true;
-      },
-      async delete(key: string) {
-        return mockCacheStore.delete(key);
-      },
-    },
-  };
-});
+// The canonical Map-backed fake from src/__mocks__/cache-manager.ts stands in
+// for the distributed cache so the sticky-thread activation gate
+// (channel-activation.ts) works without starting the real cache manager; the
+// store resets before every test. Tests that need specific cache behavior still
+// vi.spyOn(cacheManager, ...).
+vi.mock("@/cache-manager");
 
+// The native image shrinker is a compiled addon not built in the unit-test
+// env. Mock it at the boundary; real conversion is covered by the image-core
+// Rust tests. Provider tests here exercise the branching (converted vs skipped).
+vi.mock("@archestra/image-rs", () => ({
+  shrinkImageToFit: vi.fn(),
+}));
+
+import { shrinkImageToFit } from "@archestra/image-rs";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import { markChannelThreadActive } from "./channel-activation";
 import SlackProvider from "./slack-provider";
@@ -845,8 +835,8 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
   const ROOT = "7777777777.000001";
   const BOT_REPLY_TS = "7777777777.000002";
 
-  // These tests reuse one channel/thread, so reset the shared cache each time.
-  beforeEach(() => mockCacheStore.clear());
+  // These tests reuse one channel/thread; the fake cache resets before each
+  // test automatically, so no manual clearing is needed here.
 
   // Client with a postMessage spy and a conversations.replies that resolves the
   // thread root (messages[0].ts) for the reacted message.
@@ -1698,10 +1688,11 @@ describe("SlackProvider file attachment downloads", () => {
     expect(result?.attachments?.[0].name).toBe("report.pdf");
   });
 
-  test("file-only DM whose download fails is dropped (no empty turn)", async () => {
+  test("file-only DM whose download fails is kept as a skipped attachment", async () => {
     const provider = createProviderWithConfig();
 
-    // The download fails (e.g. expired/oversized), so no attachment survives.
+    // The download fails (e.g. expired/oversized). The message is kept (not
+    // dropped) so the model can explain the file rather than denying it.
     vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 404 }));
 
     const payload = makeEventPayload(
@@ -1725,7 +1716,11 @@ describe("SlackProvider file attachment downloads", () => {
 
     const result = await provider.parseWebhookNotification(payload, {});
 
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toBeUndefined();
+    expect(result?.skippedAttachments).toEqual([
+      { name: "report.pdf", sizeBytes: 1234, reason: "download_failed" },
+    ]);
   });
 
   test("file-only app_mention (empty text + files) is parsed with attachments", async () => {
@@ -1891,6 +1886,10 @@ describe("SlackProvider file attachment downloads", () => {
     expect(result).not.toBeNull();
     expect(result?.attachments).toBeUndefined();
     expect(fetch).not.toHaveBeenCalled();
+    // A file with no usable URL is still reported, not silently dropped.
+    expect(result?.skippedAttachments).toEqual([
+      { name: "no-url.txt", sizeBytes: 100, reason: "download_failed" },
+    ]);
   });
 
   test("skips files exceeding individual size limit (10MB)", async () => {
@@ -1916,6 +1915,84 @@ describe("SlackProvider file attachment downloads", () => {
     expect(result).not.toBeNull();
     expect(result?.attachments).toBeUndefined();
     expect(fetch).not.toHaveBeenCalled();
+    // Oversized file is recorded so the model is told it existed.
+    expect(result?.skippedAttachments).toEqual([
+      { name: "huge.bin", sizeBytes: 11 * 1024 * 1024, reason: "too_large" },
+    ]);
+  });
+
+  test("downloads an oversized image and includes the shrunk version", async () => {
+    const provider = createProviderWithConfig();
+    const bigImage = Buffer.alloc(16 * 1024 * 1024, 1); // 16MB — over the 10MB flat limit
+    const shrunk = Buffer.from("small-jpeg-bytes");
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(bigImage, { status: 200 }),
+    );
+    vi.mocked(shrinkImageToFit).mockResolvedValue({
+      bytes: shrunk,
+      contentType: "image/jpeg",
+    });
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F_IMG",
+            name: "IMG_0354.png",
+            mimetype: "image/png",
+            size: bigImage.length,
+            url_private: "https://files.slack.com/big.png",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    // The image is downloaded despite exceeding the 10MB flat limit, then shrunk.
+    expect(fetch).toHaveBeenCalled();
+    expect(result?.attachments).toEqual([
+      {
+        contentType: "image/jpeg",
+        contentBase64: shrunk.toString("base64"),
+        name: "IMG_0354.png",
+      },
+    ]);
+    expect(result?.skippedAttachments).toBeUndefined();
+  });
+
+  test("records an oversized image that cannot be shrunk as too large", async () => {
+    const provider = createProviderWithConfig();
+    const bigImage = Buffer.alloc(16 * 1024 * 1024, 1);
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(bigImage, { status: 200 }),
+    );
+    vi.mocked(shrinkImageToFit).mockResolvedValue(null);
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F_IMG",
+            name: "IMG_0356.png",
+            mimetype: "image/png",
+            size: bigImage.length,
+            url_private: "https://files.slack.com/big2.png",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result?.attachments).toBeUndefined();
+    expect(result?.skippedAttachments).toEqual([
+      { name: "IMG_0356.png", sizeBytes: bigImage.length, reason: "too_large" },
+    ]);
   });
 
   test("skips files when total size would exceed 25MB limit", async () => {
@@ -1963,6 +2040,14 @@ describe("SlackProvider file attachment downloads", () => {
     // Only first 2 files should be downloaded (18MB total), 3rd skipped (would be 27MB)
     expect(result?.attachments).toHaveLength(2);
     expect(fetch).toHaveBeenCalledTimes(2);
+    // The over-budget file is recorded, not silently dropped.
+    expect(result?.skippedAttachments).toEqual([
+      {
+        name: "file3.bin",
+        sizeBytes: 9 * 1024 * 1024,
+        reason: "total_limit_reached",
+      },
+    ]);
   });
 
   test("continues downloading after fetch error on one file", async () => {
@@ -2000,6 +2085,10 @@ describe("SlackProvider file attachment downloads", () => {
     expect(result).not.toBeNull();
     expect(result?.attachments).toHaveLength(1);
     expect(result?.attachments?.[0].name).toBe("ok.png");
+    // The thrown-error file is recorded so the model is told it existed.
+    expect(result?.skippedAttachments).toEqual([
+      { name: "fail.png", sizeBytes: 100, reason: "download_failed" },
+    ]);
   });
 
   test("skips file when fetch returns non-200 status", async () => {
@@ -2028,6 +2117,73 @@ describe("SlackProvider file attachment downloads", () => {
 
     expect(result).not.toBeNull();
     expect(result?.attachments).toBeUndefined();
+    expect(result?.skippedAttachments).toEqual([
+      { name: "missing.png", sizeBytes: 100, reason: "download_failed" },
+    ]);
+  });
+
+  test("records an HTML response (missing files:read scope) as a skipped download", async () => {
+    const provider = createProviderWithConfig();
+
+    // Slack serves an HTML login page instead of the file when the bot lacks
+    // files:read — must not be treated as file content.
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response("<html>login</html>", {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+    );
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F_HTML",
+            name: "chart.png",
+            mimetype: "image/png",
+            size: 500,
+            url_private: "https://files.slack.com/chart",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toBeUndefined();
+    expect(result?.skippedAttachments).toEqual([
+      { name: "chart.png", sizeBytes: 500, reason: "download_failed" },
+    ]);
+  });
+
+  test("records files beyond the per-message cap as skipped", async () => {
+    const provider = createProviderWithConfig();
+    const fileContent = Buffer.from("small");
+
+    const files = Array.from({ length: 22 }, (_, i) => ({
+      id: `F${i}`,
+      name: `file${i}.txt`,
+      mimetype: "text/plain",
+      size: fileContent.length,
+      url_private: `https://files.slack.com/f${i}`,
+    }));
+    for (let i = 0; i < 20; i++) {
+      vi.mocked(fetch).mockResolvedValueOnce(
+        new Response(fileContent, { status: 200 }),
+      );
+    }
+
+    const payload = makeEventPayload({}, { files });
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result?.attachments).toHaveLength(20);
+    expect(result?.skippedAttachments).toHaveLength(2);
+    expect(
+      result?.skippedAttachments?.every((s) => s.reason === "too_many"),
+    ).toBe(true);
   });
 
   test("uses application/octet-stream when mimetype is missing", async () => {
@@ -2240,6 +2396,15 @@ describe("SlackProvider file attachment downloads", () => {
     expect(result?.attachments).toHaveLength(2);
     expect(result?.attachments?.[0]?.name).toBe("big1.bin");
     expect(result?.attachments?.[1]?.name).toBe("big2.bin");
+    // The post-download over-budget file is recorded (on its actual bytes),
+    // not silently dropped.
+    expect(result?.skippedAttachments).toEqual([
+      {
+        name: "big3.bin",
+        sizeBytes: 9 * 1024 * 1024,
+        reason: "total_limit_reached",
+      },
+    ]);
   });
 
   test("returns no attachments when client is null", async () => {
@@ -2264,7 +2429,7 @@ describe("SlackProvider file attachment downloads", () => {
       },
     ]);
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({ attachments: [], skipped: [] });
     expect(fetch).not.toHaveBeenCalled();
   });
 });

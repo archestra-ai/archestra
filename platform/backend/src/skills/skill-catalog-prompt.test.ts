@@ -1,14 +1,7 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
 import { SkillModel } from "@/models";
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { afterAll, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { buildSkillCatalogPrompt } from "./skill-catalog-prompt";
 
@@ -73,7 +66,7 @@ describe("buildSkillCatalogPrompt (sandbox available)", () => {
   let userId: string;
   const originalEnabled = config.skillsSandbox.enabled;
 
-  beforeAll(() => {
+  beforeEach(() => {
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
   });
 

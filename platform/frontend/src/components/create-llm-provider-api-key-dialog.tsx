@@ -18,6 +18,7 @@ import {
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
@@ -130,6 +131,7 @@ export function CreateLlmProviderApiKeyDialog({
       description={description}
       size="small"
       className="sm:max-w-xl"
+      isDirty={form.formState.isDirty}
     >
       <DialogForm
         onSubmit={handleCreate}
@@ -148,13 +150,7 @@ export function CreateLlmProviderApiKeyDialog({
           />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
+          <DialogCancelButton>Cancel</DialogCancelButton>
           <Button type="submit" disabled={!isValid || createMutation.isPending}>
             {createMutation.isPending && (
               <Loader2 className="h-4 w-4 animate-spin" />

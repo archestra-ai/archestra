@@ -1,6 +1,7 @@
 import { OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import { hasPermission, userHasPermission } from "@/auth/utils";
 import db, { schema } from "@/database";
 import { McpServerModel } from "@/models";
 import McpServerUserModel from "@/models/mcp-server-user";
@@ -13,27 +14,23 @@ import type { User } from "@/types";
 const {
   connectAndGetToolsMock,
   exchangeEnterpriseManagedCredentialMock,
-  hasPermissionMock,
   invalidateConnectionsForServerMock,
   inspectServerMock,
   k8sGetOrLoadDeploymentMock,
   k8sRestartServerMock,
   k8sStartServerMock,
   k8sStopServerMock,
-  userHasPermissionMock,
   MockMcpServerConnectionTimeoutError,
   MockMcpServerNotReadyError,
 } = vi.hoisted(() => ({
   connectAndGetToolsMock: vi.fn(),
   exchangeEnterpriseManagedCredentialMock: vi.fn(),
-  hasPermissionMock: vi.fn(),
   invalidateConnectionsForServerMock: vi.fn(),
   inspectServerMock: vi.fn(),
   k8sGetOrLoadDeploymentMock: vi.fn(),
   k8sRestartServerMock: vi.fn(),
   k8sStartServerMock: vi.fn(),
   k8sStopServerMock: vi.fn(),
-  userHasPermissionMock: vi.fn(),
   MockMcpServerNotReadyError: class MockMcpServerNotReadyError extends Error {},
   MockMcpServerConnectionTimeoutError: class MockMcpServerConnectionTimeoutError extends Error {},
 }));
@@ -52,10 +49,7 @@ vi.mock("@/services/identity-providers/enterprise-managed/exchange", () => ({
   exchangeEnterpriseManagedCredential: exchangeEnterpriseManagedCredentialMock,
 }));
 
-vi.mock("@/auth/utils", () => ({
-  hasPermission: hasPermissionMock,
-  userHasPermission: userHasPermissionMock,
-}));
+vi.mock("@/auth/utils");
 
 vi.mock("@/k8s/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
@@ -66,6 +60,9 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
     getOrLoadDeployment: k8sGetOrLoadDeploymentMock,
   },
 }));
+
+const hasPermissionMock = vi.mocked(hasPermission);
+const userHasPermissionMock = vi.mocked(userHasPermission);
 
 // Wait for the reinstall route's `setImmediate`-scheduled background work
 // to flip the install row off "pending". Fails the test if it doesn't —
@@ -105,7 +102,7 @@ describe("mcp server inspect route", () => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     await makeMember(user.id, organization.id);
-    hasPermissionMock.mockResolvedValue({ success: true });
+    hasPermissionMock.mockResolvedValue({ success: true, error: null });
     userHasPermissionMock.mockResolvedValue(true);
     k8sStartServerMock.mockResolvedValue(undefined);
     k8sRestartServerMock.mockResolvedValue(undefined);
@@ -171,7 +168,7 @@ describe("mcp server inspect route", () => {
       catalogId: catalog.id,
     });
 
-    hasPermissionMock.mockResolvedValueOnce({ success: false });
+    hasPermissionMock.mockResolvedValueOnce({ success: false, error: null });
 
     const response = await app.inject({
       method: params.method,
@@ -237,7 +234,7 @@ describe("mcp server inspect route", () => {
     makeTeam,
     makeTeamMember,
   }) => {
-    hasPermissionMock.mockResolvedValueOnce({ success: false });
+    hasPermissionMock.mockResolvedValueOnce({ success: false, error: null });
 
     const selectedTeam = await makeTeam(organizationId, user.id, {
       name: "Selected Team",
@@ -282,7 +279,7 @@ describe("mcp server inspect route", () => {
     makeTeamMember,
     makeUser,
   }) => {
-    hasPermissionMock.mockResolvedValueOnce({ success: true });
+    hasPermissionMock.mockResolvedValueOnce({ success: true, error: null });
 
     const otherUser = await makeUser({ email: "other-owner@example.com" });
     const selectedTeam = await makeTeam(organizationId, user.id, {
@@ -320,7 +317,7 @@ describe("mcp server inspect route", () => {
     makeOrganization,
     makeUser,
   }) => {
-    hasPermissionMock.mockResolvedValueOnce({ success: true });
+    hasPermissionMock.mockResolvedValueOnce({ success: true, error: null });
 
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -363,7 +360,7 @@ describe("mcp server inspect route", () => {
     makeTeamMember,
     makeUser,
   }) => {
-    hasPermissionMock.mockResolvedValueOnce({ success: true });
+    hasPermissionMock.mockResolvedValueOnce({ success: true, error: null });
 
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -3576,12 +3573,12 @@ describe("mcp server inspect route", () => {
     hasPermissionMock.mockImplementation(
       async (permission: Record<string, string[]>) => {
         if (permission.team?.includes("create")) {
-          return { success: opts.canManageAllTeams };
+          return { success: opts.canManageAllTeams, error: null };
         }
         if (permission.mcpServerInstallation?.includes("update")) {
-          return { success: opts.isEditor };
+          return { success: opts.isEditor, error: null };
         }
-        return { success: false };
+        return { success: false, error: null };
       },
     );
   }
@@ -3784,7 +3781,7 @@ describe("mcp server core route coverage", () => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     await makeMember(user.id, organization.id);
-    hasPermissionMock.mockResolvedValue({ success: true });
+    hasPermissionMock.mockResolvedValue({ success: true, error: null });
     userHasPermissionMock.mockResolvedValue(true);
     k8sStopServerMock.mockResolvedValue(undefined);
 

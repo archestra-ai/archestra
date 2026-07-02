@@ -42,6 +42,27 @@ export const APP_PLATFORM_CSP: AppUiCsp = {
   resourceDomains: [...APP_PLATFORM_CSP_RESOURCE_DOMAINS],
 };
 
+/**
+ * The `window.archestra` member surface the platform injects into a rendered app
+ * (see `static/archestra-app-sdk.js`). Single source of truth for the SDK-usage
+ * lint in {@link validateAppHtmlStatic}; the drift guard in
+ * `app-sdk-injection.test.ts` cross-checks every member listed here against that
+ * file, so the allowlist cannot silently fall out of sync with the real SDK.
+ *
+ * @public — the export is consumed only by the drift-guard test, invisible to
+ * `knip --production`; the lint itself reads it in-module.
+ */
+export const ARCHESTRA_APP_SDK_SURFACE = {
+  topLevel: ["ready", "user", "context", "storage", "llm", "tools", "ui"],
+  storage: {
+    partitions: ["user", "shared"],
+    methods: ["get", "set", "list", "delete"],
+  },
+  tools: ["call", "list"],
+  llm: ["complete", "prompt"],
+  ui: ["openLink", "requestDisplayMode"],
+} as const;
+
 // The only iframe permissions an app may request. Mirrors AppUiPermissionsSchema
 // (whose .strict() already rejects unknown keys at parse time); kept here as the
 // explicit save-time allowlist with a clear per-key error.
@@ -150,6 +171,25 @@ export async function validateAppHtmlStatic(
       )}), which is unavailable in the app sandbox (an opaque origin where it throws) and ephemeral browser-local state even where it works. Persist state through the platform-attached store instead: archestra.storage.user.* (private per viewer) or archestra.storage.shared.* (shared across viewers).`,
     });
   }
+  const sdkMisuse = unknownArchestraSdkMembers(html);
+  if (sdkMisuse.storageMisuse.length > 0) {
+    findings.push({
+      severity: "warning",
+      message: `Accesses ${sdkMisuse.storageMisuse.join(
+        ", ",
+      )} directly, but the store has no such member — it is partitioned. Call it on a partition instead: archestra.storage.user.* (private per viewer) or archestra.storage.shared.* (shared across viewers), e.g. archestra.storage.user.get(key).`,
+    });
+  }
+  if (sdkMisuse.unknownTopLevel.length > 0) {
+    findings.push({
+      severity: "warning",
+      message: `Uses ${sdkMisuse.unknownTopLevel.join(
+        ", ",
+      )}, which the injected window.archestra SDK does not expose. Its top-level surface is ${ARCHESTRA_APP_SDK_SURFACE.topLevel
+        .map((member) => `archestra.${member}`)
+        .join(", ")}.`,
+    });
+  }
   return findings;
 }
 
@@ -173,6 +213,64 @@ function browserStorageApisUsed(html: string): string[] {
     }
   }
   return [...apis];
+}
+
+// `archestra.<member>` and `archestra.storage.<member>` accesses inside <script>
+// blocks. Anchored on a word boundary so `myarchestra.x` is not matched, and it
+// also covers the `window.archestra.<member>` form (the `archestra.<member>`
+// substring still matches). Reused across script blocks; matchAll takes a fresh
+// iterator each call so sharing the global regex is safe.
+const ARCHESTRA_TOP_LEVEL_PATTERN = /\barchestra\.([A-Za-z_$][\w$]*)/g;
+const ARCHESTRA_STORAGE_MEMBER_PATTERN =
+  /\barchestra\.storage\.([A-Za-z_$][\w$]*)/g;
+
+// window.archestra members referenced inside <script> blocks that the injected
+// SDK does not expose: the wrong-nesting bug (archestra.storage.get instead of
+// archestra.storage.user.get) and unknown/typo'd top-level members
+// (archestra.tool.call). Script-block scoped like browserStorageApisUsed so
+// prose, comments, and attributes do not warn. Deliberately lexical: aliasing
+// (const s = archestra.storage; s.get()) and computed access
+// (archestra["storage"]) are not detected, and method-level typos under a valid
+// namespace (archestra.tools.calll) are out of scope — acceptable for a soft
+// authoring hint. Full references, first-seen order, deduplicated per category.
+function unknownArchestraSdkMembers(html: string): {
+  storageMisuse: string[];
+  unknownTopLevel: string[];
+} {
+  const topLevel = new Set<string>(ARCHESTRA_APP_SDK_SURFACE.topLevel);
+  const partitions = new Set<string>(
+    ARCHESTRA_APP_SDK_SURFACE.storage.partitions,
+  );
+  const storageMisuse = new Set<string>();
+  const unknownTopLevel = new Set<string>();
+  for (const block of html.matchAll(SCRIPT_BLOCK_PATTERN)) {
+    const script = stripJsComments(block[1]);
+    for (const match of script.matchAll(ARCHESTRA_TOP_LEVEL_PATTERN)) {
+      if (!topLevel.has(match[1])) {
+        unknownTopLevel.add(`archestra.${match[1]}`);
+      }
+    }
+    for (const match of script.matchAll(ARCHESTRA_STORAGE_MEMBER_PATTERN)) {
+      if (!partitions.has(match[1])) {
+        storageMisuse.add(`archestra.storage.${match[1]}`);
+      }
+    }
+  }
+  return {
+    storageMisuse: [...storageMisuse],
+    unknownTopLevel: [...unknownTopLevel],
+  };
+}
+
+// Drop // line and /* */ block comments from a script so a commented-out or
+// documented call (`// use archestra.storage.user.get, not .get`) does not warn.
+// Block comments collapse to a space so a comment between tokens can never fuse
+// two identifiers into a spurious `archestra.*`. Only ever deletes spans, so it
+// can miss a call that is literally inside a comment-shaped string, never invent
+// one; string literals are left as-is (lexically unsafe to strip), a known limit
+// shared with browserStorageApisUsed.
+function stripJsComments(script: string): string {
+  return script.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, "");
 }
 
 const RESOURCE_REF_PATTERN =

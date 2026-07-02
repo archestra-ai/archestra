@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.2.78",
+  "version": "1.2.79",
   "description": "",
   "author": "",
   "private": true,
@@ -49,6 +49,7 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@archestra/app-runtime-rs": "workspace:*",
+    "@archestra/image-rs": "workspace:*",
     "@archestra/sandbox-rs": "workspace:*",
     "@archestra/shared": "workspace:*",
     "@aws-crypto/sha256-js": "^5.2.0",
@@ -166,6 +167,7 @@
     "@typescript/native-preview": "catalog:",
     "esbuild": "^0.28.1",
     "knip": "^5.85.0",
+    "msw": "^2.14.6",
     "tsdown": "^0.21.0",
     "tsx": "^4.21.0",
     "typescript": "catalog:",

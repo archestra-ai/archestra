@@ -29,15 +29,6 @@ vi.mock("@/task-queue", () => ({
   taskQueueService: { enqueue: mockEnqueue },
 }));
 
-vi.mock("@/logging", () => ({
-  default: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}));
-
 import { handleCheckDueScheduleTriggers } from "./check-due-schedule-triggers-handler";
 
 const makeTrigger = (id: string) => ({

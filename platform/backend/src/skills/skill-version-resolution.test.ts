@@ -6,7 +6,7 @@ import {
   SkillVersionModel,
 } from "@/models";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
-import { afterAll, beforeAll, describe, expect, test } from "@/test";
+import { afterAll, beforeEach, describe, expect, test } from "@/test";
 import type { Skill } from "@/types";
 import {
   resolveActivationVersion,
@@ -138,7 +138,7 @@ describe("resolveEffectiveSkillVersion", () => {
 describe("resolveActivationVersion (sandbox runtime enabled)", () => {
   const originalSkills = config.skillsSandbox.enabled;
   const originalDagger = config.daggerRuntime.enabled;
-  beforeAll(() => {
+  beforeEach(() => {
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
     (config.daggerRuntime as { enabled: boolean }).enabled = true;
   });

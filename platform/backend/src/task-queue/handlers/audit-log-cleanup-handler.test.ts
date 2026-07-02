@@ -11,14 +11,9 @@ const mockConfig = vi.hoisted(() => ({
 }));
 vi.mock("@/config", () => ({ default: mockConfig }));
 
-const mockLogger = vi.hoisted(() => ({
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-}));
-vi.mock("@/logging", () => ({ default: mockLogger }));
+vi.mock("@/logging");
 
+import logger from "@/logging";
 import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";
 
 describe("handleAuditLogCleanup", () => {
@@ -33,7 +28,7 @@ describe("handleAuditLogCleanup", () => {
     await handleAuditLogCleanup();
 
     expect(mockDeleteAllOlderThan).not.toHaveBeenCalled();
-    expect(mockLogger.info).toHaveBeenCalledWith(
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
       expect.objectContaining({ retentionDays: 0 }),
       expect.stringContaining("disabled"),
     );
@@ -60,7 +55,7 @@ describe("handleAuditLogCleanup", () => {
 
     await handleAuditLogCleanup();
 
-    expect(mockLogger.info).toHaveBeenCalledWith(
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
       expect.objectContaining({ deleted: 42, retentionDays: 180 }),
       "audit-log retention sweep: complete",
     );
@@ -71,7 +66,7 @@ describe("handleAuditLogCleanup", () => {
 
     await expect(handleAuditLogCleanup()).resolves.toBeUndefined();
 
-    expect(mockLogger.error).toHaveBeenCalledWith(
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
       expect.objectContaining({ error: "DB error", retentionDays: 180 }),
       "audit-log retention sweep: failed",
     );

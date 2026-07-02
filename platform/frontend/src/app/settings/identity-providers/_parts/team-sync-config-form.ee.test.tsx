@@ -6,17 +6,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useForm } from "react-hook-form";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Form } from "@/components/ui/form";
+import { useAppearanceSettings } from "@/lib/organization.query";
 import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
 
-vi.mock("@/lib/organization.query", () => ({
-  useAppearanceSettings: () => ({
-    data: {
-      appName: "Spark",
-    },
-  }),
-}));
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
   useIdentityProviderLatestIdTokenClaims: () => ({
@@ -70,6 +65,12 @@ function TestWrapper({
     </Form>
   );
 }
+
+beforeEach(() => {
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data: { appName: "Spark" },
+  } as unknown as ReturnType<typeof useAppearanceSettings>);
+});
 
 describe("TeamSyncConfigForm", () => {
   it("shows the template debugger without token claims", async () => {

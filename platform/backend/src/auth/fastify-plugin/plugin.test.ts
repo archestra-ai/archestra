@@ -10,19 +10,9 @@ import {
 import { ApiError } from "@/types";
 
 // Mock modules with factory functions to avoid hoisting issues
-vi.mock("@/auth", () => ({
-  betterAuth: {
-    api: {
-      getSession: vi.fn(),
-      verifyApiKey: vi.fn(),
-    },
-  },
-  hasPermission: vi.fn(),
-}));
+vi.mock("@/auth");
 
-vi.mock("@/auth/utils", () => ({
-  hasPermission: vi.fn(),
-}));
+vi.mock("@/auth/utils");
 
 vi.mock("@/models", () => ({
   ServiceAccountModel: {

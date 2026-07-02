@@ -49,9 +49,7 @@ vi.mock("@/lib/config/config", () => ({
   }),
 }));
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: () => null,
-}));
+vi.mock("@/lib/config/config.query");
 
 // Avoid pulling the real auth client / app query (and their network deps) into
 // the test; the edit pencil is covered by app-frame.test.tsx.
@@ -83,6 +81,7 @@ import {
   clearAllAppDiagnostics,
   reportAppDiagnostic,
 } from "@/lib/chat/app-diagnostics-store";
+import { useFeature } from "@/lib/config/config.query";
 import { AppsProvider, useApps } from "./apps-context";
 import { McpAppSection } from "./mcp-app-container";
 
@@ -107,6 +106,9 @@ const preloadedResource = {
 describe("McpAppSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useFeature).mockReturnValue(
+      null as unknown as ReturnType<typeof useFeature>,
+    );
   });
 
   it("shows loading spinner when resource has not yet loaded", () => {

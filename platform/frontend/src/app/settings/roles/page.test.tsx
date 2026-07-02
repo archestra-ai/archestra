@@ -1,7 +1,11 @@
 "use client";
 
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  useEnterpriseFeature,
+  useSmallTeamTier,
+} from "@/lib/config/config.query";
 
 const mockUserSearchableSelect = vi.fn(
   (_props: {
@@ -15,10 +19,7 @@ const mockUserSearchableSelect = vi.fn(
   }) => <div data-testid="user-searchable-select" />,
 );
 
-vi.mock("@/lib/config/config.query", () => ({
-  useEnterpriseFeature: () => false,
-  useSmallTeamTier: () => undefined,
-}));
+vi.mock("@/lib/config/config.query");
 
 vi.mock("@/components/roles/roles-list.ee", () => ({
   RolesList: () => <div>roles list</div>,
@@ -54,6 +55,13 @@ vi.mock("@/lib/impersonation.query", () => ({
     isPending: false,
   }),
 }));
+
+beforeEach(() => {
+  vi.mocked(useEnterpriseFeature).mockReturnValue(false);
+  vi.mocked(useSmallTeamTier).mockReturnValue(
+    undefined as ReturnType<typeof useSmallTeamTier>,
+  );
+});
 
 describe("RolesSettingsPage", () => {
   it("uses the searchable user select for role debugging", async () => {

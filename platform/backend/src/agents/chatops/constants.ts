@@ -144,4 +144,26 @@ export const CHATOPS_ATTACHMENT_LIMITS = {
   MAX_ATTACHMENT_SIZE,
   MAX_TOTAL_ATTACHMENTS_SIZE,
   MAX_ATTACHMENTS_PER_MESSAGE: MAX_ATTACHMENTS_PER_EMAIL,
+  /**
+   * Target raw size for an image sent inline to the model. Chosen so the
+   * base64-encoded payload (~+33%) stays under the ~5 MB per-image limit
+   * common to vision providers (e.g. Anthropic). Oversized images are shrunk
+   * to fit this before delivery; heuristic, conservative.
+   */
+  MAX_MODEL_INLINE_IMAGE_SIZE: 3.75 * 1024 * 1024,
+  /**
+   * Longest-edge cap for a shrunk image. 1568 px is the standard-tier vision
+   * resolution (Anthropic), plenty for screenshot legibility and cheaper in
+   * tokens/decode memory than the high-res tier — a safe default across models.
+   */
+  MAX_MODEL_INLINE_IMAGE_DIMENSION: 1568,
+  /**
+   * Upper bound on the compressed bytes we will download for an oversized
+   * image in order to attempt shrinking. Bounds per-image transfer/buffer
+   * memory (chatops handlers run concurrently and uncapped); an image larger
+   * than this is skipped without downloading. Sized to cover phone screenshots
+   * (~16 MB) with headroom. The decoded-bitmap bomb guard lives in the Rust
+   * shrinker's decode limits, not here.
+   */
+  MAX_CONVERTIBLE_IMAGE_SIZE: 20 * 1024 * 1024,
 } as const;

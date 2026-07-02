@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -436,16 +437,11 @@ function CreateProjectDialog({
       title="New project"
       description="Files the agent saves in this project are kept together and show up in your files."
       size="small"
+      isDirty={form.formState.isDirty}
       onSubmit={onSubmit}
       footer={
         <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
+          <DialogCancelButton>Cancel</DialogCancelButton>
           <Button
             type="submit"
             disabled={
@@ -460,7 +456,9 @@ function CreateProjectDialog({
       <div className="flex items-start gap-3">
         <AgentIconPicker
           value={icon}
-          onChange={(next) => form.setValue("icon", next)}
+          onChange={(next) =>
+            form.setValue("icon", next, { shouldDirty: true })
+          }
           fallbackType="project"
         />
         <div className="flex-1 space-y-3 min-w-0">

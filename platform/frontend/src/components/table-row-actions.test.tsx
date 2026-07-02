@@ -1,21 +1,24 @@
 import { createEvent, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
 import { type TableRowAction, TableRowActions } from "./table-row-actions";
 
 // Mocking icons
 const MockIcon = () => <span data-testid="mock-icon">Icon</span>;
 
-// Mocking hooks
+// The PermissionButton mock below reads the same hook the component does, so a
+// single shared hoisted driver keeps both in lockstep; the bare auth.query mock
+// delegates the real hooks to it in `beforeEach`.
 const { useHasPermissionsMock, useMissingPermissionsMock } = vi.hoisted(() => ({
   useHasPermissionsMock: vi.fn(() => ({ data: true })),
   useMissingPermissionsMock: vi.fn(() => ({})),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: useHasPermissionsMock,
-  useMissingPermissions: useMissingPermissionsMock,
-}));
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/auth/auth.utils", () => ({
   formatMissingPermissions: vi.fn(() => "Missing permissions"),
@@ -167,6 +170,12 @@ describe("TableRowActions", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useHasPermissions).mockImplementation(
+      useHasPermissionsMock as unknown as typeof useHasPermissions,
+    );
+    vi.mocked(useMissingPermissions).mockImplementation(
+      useMissingPermissionsMock as unknown as typeof useMissingPermissions,
+    );
     useHasPermissionsMock.mockReturnValue({ data: true });
   });
 

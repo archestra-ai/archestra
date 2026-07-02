@@ -1,5 +1,6 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { metrics } from "@/observability";
 import {
   getProviderChatInteractionType,
   withKbObservability,
@@ -53,29 +54,13 @@ vi.mock("@/models", () => ({
   },
 }));
 
-const mockReportKbLlmCall = vi.fn();
-vi.mock("@/observability", () => ({
-  metrics: {
-    llm: {
-      reportKbLlmCall: (params: unknown) => mockReportKbLlmCall(params),
-    },
-  },
-}));
+vi.mock("@/observability");
 
-vi.mock("@/logging", () => ({
-  default: {
-    warn: vi.fn(),
-    debug: vi.fn(),
-    info: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
-vi.mock("@/config", () => ({
-  default: {
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
     observability: { otel: { captureContent: false, contentMaxLength: 10000 } },
-  },
-}));
+  }),
+);
 
 // ===== Tests =====
 
@@ -337,8 +322,9 @@ describe("withKbObservability", () => {
       }),
     });
 
-    expect(mockReportKbLlmCall).toHaveBeenCalledOnce();
-    expect(mockReportKbLlmCall).toHaveBeenCalledWith(
+    const reportKbLlmCall = vi.mocked(metrics.llm.reportKbLlmCall);
+    expect(reportKbLlmCall).toHaveBeenCalledOnce();
+    expect(reportKbLlmCall).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "openai",
         model: "text-embedding-3-small",
@@ -348,7 +334,7 @@ describe("withKbObservability", () => {
       }),
     );
     // Should include durationSeconds (number >= 0) and cost
-    const call = mockReportKbLlmCall.mock.calls[0][0];
+    const call = reportKbLlmCall.mock.calls[0][0];
     expect(typeof call.durationSeconds).toBe("number");
     expect(call.durationSeconds).toBeGreaterThanOrEqual(0);
   });

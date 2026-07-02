@@ -22,15 +22,6 @@ vi.mock("@/task-queue", () => ({
   taskQueueService: { enqueue: mockEnqueue },
 }));
 
-vi.mock("@/logging", () => ({
-  default: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}));
-
 import { handleCheckDueConnectors } from "./check-due-connectors-handler";
 
 describe("handleCheckDueConnectors", () => {

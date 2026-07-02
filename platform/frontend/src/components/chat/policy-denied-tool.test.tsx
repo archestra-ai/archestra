@@ -1,17 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useOrganization } from "@/lib/organization.query";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 
-const mockUseHasPermissions = vi.fn();
-const mockUseOrganization = vi.fn();
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: (...args: unknown[]) => mockUseHasPermissions(...args),
-}));
-
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: (...args: unknown[]) => mockUseOrganization(...args),
-}));
+vi.mock("@/lib/organization.query");
 
 vi.mock("./edit-policy-dialog", () => ({
   EditPolicyDialog: () => <div>Edit policy dialog</div>,
@@ -36,13 +31,15 @@ describe("PolicyDeniedTool", () => {
   });
 
   it("shows the inline support message and hides the edit action when the user cannot update policies", () => {
-    mockUseHasPermissions.mockReturnValue({ data: false });
-    mockUseOrganization.mockReturnValue({
+    vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
+      typeof useHasPermissions
+    >);
+    vi.mocked(useOrganization).mockReturnValue({
       data: {
         chatErrorSupportMessage:
           "Contact support@company.com and include the blocked tool details.",
       },
-    });
+    } as unknown as ReturnType<typeof useOrganization>);
 
     render(<PolicyDeniedTool {...defaultProps} editable={true} />);
 
@@ -57,12 +54,14 @@ describe("PolicyDeniedTool", () => {
   });
 
   it("shows the edit action when the user can update policies", () => {
-    mockUseHasPermissions.mockReturnValue({ data: true });
-    mockUseOrganization.mockReturnValue({
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    vi.mocked(useOrganization).mockReturnValue({
       data: {
         chatErrorSupportMessage: "Contact support@company.com",
       },
-    });
+    } as unknown as ReturnType<typeof useOrganization>);
 
     render(<PolicyDeniedTool {...defaultProps} editable={true} />);
 

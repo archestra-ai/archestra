@@ -16,6 +16,9 @@
     "test": "cargo test --workspace --locked",
     "type-check": "cargo check --workspace --locked"
   },
+  "dependencies": {
+    "@archestra/napi-loader": "workspace:*"
+  },
   "devDependencies": {
     "@napi-rs/cli": "^3.4.0"
   },

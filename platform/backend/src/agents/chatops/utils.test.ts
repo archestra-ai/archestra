@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { formatApprovalToolArgs } from "./utils";
+import { buildSkippedAttachmentsNote, formatApprovalToolArgs } from "./utils";
 
 describe("formatApprovalToolArgs", () => {
   test("pretty-prints a non-empty arguments object", () => {
@@ -24,5 +24,26 @@ describe("formatApprovalToolArgs", () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
     expect(formatApprovalToolArgs(circular)).toBeNull();
+  });
+});
+
+describe("buildSkippedAttachmentsNote", () => {
+  test("returns empty string when nothing was skipped", () => {
+    expect(buildSkippedAttachmentsNote([])).toBe("");
+  });
+
+  test("names each skipped file so the model knows it existed", () => {
+    const note = buildSkippedAttachmentsNote([
+      { name: "IMG_0354.png", sizeBytes: 16_562_518, reason: "too_large" },
+      { name: "notes.zip", reason: "download_failed" },
+    ]);
+    expect(note).not.toBe("");
+    expect(note).toContain("IMG_0354.png");
+    expect(note).toContain("notes.zip");
+  });
+
+  test("handles an unnamed file without throwing", () => {
+    const note = buildSkippedAttachmentsNote([{ reason: "too_large" }]);
+    expect(note).not.toBe("");
   });
 });

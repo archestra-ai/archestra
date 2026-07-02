@@ -118,7 +118,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     return harness;
   }
 
-  test("blocks request with 429 when virtual_key limit is exceeded", async ({
+  test("blocks request with 402 when virtual_key limit is exceeded", async ({
     makeAgent,
     makeOrganization,
     makeSecret,
@@ -171,7 +171,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
@@ -183,7 +183,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     });
   });
 
-  test("blocks request with 429 when user limit is exceeded", async ({
+  test("blocks request with 402 when user limit is exceeded", async ({
     makeAgent,
     makeUser,
     makeOrganization,
@@ -226,7 +226,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
@@ -238,7 +238,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     });
   });
 
-  test("blocks request with 429 when default user limit is exceeded", async ({
+  test("blocks request with 402 when default user limit is exceeded", async ({
     makeAgent,
     makeUser,
     makeOrganization,
@@ -282,7 +282,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
@@ -378,7 +378,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.statusCode).toBe(200);
   });
 
-  test("blocks org-scoped agent with 429 when organization limit is exceeded", async ({
+  test("blocks org-scoped agent with 402 when organization limit is exceeded", async ({
     makeAgent,
     makeOrganization,
   }) => {
@@ -416,7 +416,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
@@ -560,11 +560,11 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     const body = response.json();
     expect(body.error.code).toBe("token_cost_limit_exceeded");
     // virtual_key is checked first (most specific), so error should mention it
-    expect(body.error.message).toContain("virtual_key-level");
+    expect(body.error.message).toContain("virtual key-level");
   });
 
   test("records usage in team all-models limit after successful request", async ({
@@ -707,7 +707,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(orgUsage[0].tokensOut).toBe(60);
   });
 
-  test("blocks request with 429 when team all-models limit is exceeded", async ({
+  test("blocks request with 402 when team all-models limit is exceeded", async ({
     makeAgent,
     makeOrganization,
     makeAdmin,
@@ -753,13 +753,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     const body = response.json();
     expect(body.error.code).toBe("token_cost_limit_exceeded");
     expect(body.error.message).toContain("team-level");
   });
 
-  test("blocks request with 429 when user all-models limit is exceeded", async ({
+  test("blocks request with 402 when user all-models limit is exceeded", async ({
     makeAgent,
     makeUser,
     makeOrganization,
@@ -804,13 +804,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     const body = response.json();
     expect(body.error.code).toBe("token_cost_limit_exceeded");
     expect(body.error.message).toContain("user-level");
   });
 
-  test("blocks request with 429 when virtual_key all-models limit is exceeded", async ({
+  test("blocks request with 402 when virtual_key all-models limit is exceeded", async ({
     makeAgent,
     makeOrganization,
     makeSecret,
@@ -863,13 +863,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     const body = response.json();
     expect(body.error.code).toBe("token_cost_limit_exceeded");
-    expect(body.error.message).toContain("virtual_key-level");
+    expect(body.error.message).toContain("virtual key-level");
   });
 
-  test("blocks request with 429 when environment limit is exceeded", async ({
+  test("blocks request with 402 when environment limit is exceeded", async ({
     makeAgent,
     makeOrganization,
   }) => {
@@ -909,7 +909,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
@@ -964,7 +964,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.statusCode).toBe(200);
   });
 
-  test("blocks request with 429 when per-environment default user limit is exceeded", async ({
+  test("blocks request with 402 when per-environment default user limit is exceeded", async ({
     makeAgent,
     makeUser,
     makeOrganization,
@@ -1013,7 +1013,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
@@ -1145,7 +1145,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     expect(response.json()).toMatchObject({
       error: {
         usage_limit: {

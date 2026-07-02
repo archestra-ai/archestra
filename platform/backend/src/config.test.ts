@@ -64,7 +64,9 @@ describe("getAnalyticsConfig", () => {
     process.env = originalEnv;
   });
 
-  test("uses the default PostHog analytics config", () => {
+  test("uses the default PostHog analytics config, enabled in production", () => {
+    process.env.NODE_ENV = "production";
+
     expect(getAnalyticsConfig()).toEqual({
       enabled: true,
       posthog: {
@@ -72,6 +74,26 @@ describe("getAnalyticsConfig", () => {
         host: "https://eu.i.posthog.com",
       },
     });
+  });
+
+  test("defaults to disabled outside production", () => {
+    process.env.NODE_ENV = "development";
+
+    expect(getAnalyticsConfig().enabled).toBe(false);
+  });
+
+  test("explicit ARCHESTRA_ANALYTICS=enabled wins outside production", () => {
+    process.env.NODE_ENV = "development";
+    process.env.ARCHESTRA_ANALYTICS = "enabled";
+
+    expect(getAnalyticsConfig().enabled).toBe(true);
+  });
+
+  test("explicit ARCHESTRA_ANALYTICS=disabled wins in production", () => {
+    process.env.NODE_ENV = "production";
+    process.env.ARCHESTRA_ANALYTICS = "disabled";
+
+    expect(getAnalyticsConfig().enabled).toBe(false);
   });
 
   test("uses custom PostHog analytics env vars", () => {

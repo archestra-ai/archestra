@@ -145,14 +145,17 @@ export class A2ATaskManager {
     if (context.id !== task.contextId) {
       throw new A2AError(A2AErrorKind.TaskContextMismatch);
     }
-    const approvalRequests = z.array(A2AArchestraApprovalRequestSchema).parse(
-      await A2ATaskApprovalRequestModel.findByTaskId(task.id)
+    const [approvalRequestRows, history] = await Promise.all([
+      A2ATaskApprovalRequestModel.findByTaskId(task.id)
         // Sort for deterministic persistence
         .then((reqs) =>
           reqs.sort((a, b) => a.approvalId.localeCompare(b.approvalId)),
         ),
-    );
-    const history = await A2AMessageModel.findByTaskId(task.id);
+      A2AMessageModel.findByTaskId(task.id),
+    ]);
+    const approvalRequests = z
+      .array(A2AArchestraApprovalRequestSchema)
+      .parse(approvalRequestRows);
 
     const statusMessage = history.length
       ? history[history.length - 1]

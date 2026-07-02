@@ -11,9 +11,9 @@ import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SecretTextarea } from "@/components/ui/secret-input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { MCP_SECRET_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -309,14 +309,13 @@ function StaticValueEditor({
   return (
     <div className="space-y-2">
       <Label htmlFor="secret-file-value">File contents</Label>
-      <Textarea
+      <SecretTextarea
         id="secret-file-value"
         value={draft.value}
         onChange={(e) => onValueChange(e.target.value)}
         placeholder={hasStoredSecret ? "••••••••" : "Paste the secret here..."}
         rows={6}
         className="font-mono text-xs"
-        autoComplete={MCP_SECRET_AUTOCOMPLETE}
       />
       {hasStoredSecret && (
         <p className="text-xs text-muted-foreground">

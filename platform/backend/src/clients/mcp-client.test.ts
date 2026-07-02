@@ -3552,6 +3552,7 @@ describe("McpClient", () => {
             kind: "terminal",
             category: "refresh_failed",
             message: "invalid_grant",
+            description: "The refresh token is invalid or has expired",
           });
 
         mockConnect.mockResolvedValue(undefined);
@@ -3583,6 +3584,9 @@ describe("McpClient", () => {
         const row = await McpServerModel.findById(mcpServer.id);
         expect(row?.oauthRefreshError).toBe("refresh_failed");
         expect(row?.oauthRefreshErrorMessage).toBe("invalid_grant");
+        expect(row?.oauthRefreshErrorDescription).toBe(
+          "The refresh token is invalid or has expired",
+        );
         expect(row?.oauthRefreshFailedAt).toBeInstanceOf(Date);
 
         refreshSpy.mockRestore();
@@ -3733,6 +3737,7 @@ describe("McpClient", () => {
         await McpServerModel.update(mcpServer.id, {
           oauthRefreshError: "refresh_failed",
           oauthRefreshErrorMessage: "invalid_grant",
+          oauthRefreshErrorDescription: "The refresh token is invalid",
           oauthRefreshFailedAt: new Date(Date.now() - 60_000),
         });
 
@@ -3792,6 +3797,7 @@ describe("McpClient", () => {
         const row = await McpServerModel.findById(mcpServer.id);
         expect(row?.oauthRefreshError).toBeNull();
         expect(row?.oauthRefreshErrorMessage).toBeNull();
+        expect(row?.oauthRefreshErrorDescription).toBeNull();
         expect(row?.oauthRefreshFailedAt).toBeNull();
 
         refreshSpy.mockRestore();
@@ -4563,6 +4569,7 @@ describe("McpClient", () => {
         const row = await McpServerModel.findById(mcpServer.id);
         expect(row?.oauthRefreshError).toBe("no_refresh_token");
         expect(row?.oauthRefreshErrorMessage).toBe("no_refresh_token");
+        expect(row?.oauthRefreshErrorDescription).toBeNull();
         expect(row?.oauthRefreshFailedAt).toBeInstanceOf(Date);
       });
 

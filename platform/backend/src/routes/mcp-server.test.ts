@@ -4181,5 +4181,46 @@ describe("mcp server core route coverage", () => {
         "App servers are managed via the Apps API and cannot be installed here.",
       );
     });
+
+    test("ignores client-supplied OAuth refresh-failure fields — they are server-owned state", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        name: "Refresh Field Injection Server",
+        serverType: "local",
+        localConfig: {
+          command: "node",
+          arguments: ["server.js"],
+          environment: [],
+          transportType: "streamable-http",
+          httpPort: 8080,
+          httpPath: "/mcp",
+        },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Refresh Field Injection Server",
+          catalogId: catalog.id,
+          scope: "personal",
+          // A caller cannot seed these at install time — they're written only
+          // by the OAuth refresh subsystem, and oauthRefreshErrorDescription
+          // is unsanitized if set directly (bypassing sanitizeOAuthErrorDescription).
+          oauthRefreshError: "refresh_failed",
+          oauthRefreshErrorMessage: "invalid_grant",
+          oauthRefreshErrorDescription: "<script>alert(1)</script>",
+          oauthRefreshFailedAt: new Date().toISOString(),
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.oauthRefreshError).toBeNull();
+      expect(body.oauthRefreshErrorMessage).toBeNull();
+      expect(body.oauthRefreshErrorDescription).toBeNull();
+      expect(body.oauthRefreshFailedAt).toBeNull();
+    });
   });
 });

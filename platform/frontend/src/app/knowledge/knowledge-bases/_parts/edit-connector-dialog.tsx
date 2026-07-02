@@ -27,8 +27,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
 import {
   ConnectorAdvancedConfigFields,
@@ -330,21 +330,14 @@ export function EditConnectorDialog({
                   <FormLabel>{apiTokenLabel}</FormLabel>
                   <FormControl>
                     {apiTokenMultiline ? (
-                      <Textarea
+                      <SecretTextarea
                         placeholder={apiTokenPlaceholder}
                         rows={5}
-                        autoComplete="new-password"
-                        data-1p-ignore
-                        data-lpignore="true"
                         {...field}
                       />
                     ) : (
-                      <Input
-                        type="password"
+                      <SecretInput
                         placeholder={apiTokenPlaceholder}
-                        autoComplete="new-password"
-                        data-1p-ignore
-                        data-lpignore="true"
                         {...field}
                       />
                     )}

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -264,10 +264,18 @@ describe("McpCatalogForm enterprise gating", () => {
       "autocomplete",
       "off",
     );
-    expect(screen.getByLabelText("Client Secret")).toHaveAttribute(
-      "autocomplete",
-      "new-password",
-    );
+    // SecretInput contract: type="text" (a password type would summon
+    // browser password managers), autofill off, extension opt-outs present
+    const clientSecret = screen.getByLabelText("Client Secret");
+    expect(clientSecret).toHaveAttribute("type", "text");
+    expect(clientSecret).toHaveAttribute("autocomplete", "off");
+    expect(clientSecret).toHaveAttribute("data-1p-ignore");
+    expect(clientSecret).toHaveAttribute("data-lpignore", "true");
+    expect(clientSecret).toHaveAttribute("data-bwignore", "true");
+    expect(clientSecret).toHaveClass("secret-masked");
+    // parity with type="password": the masked value cannot be copied out
+    expect(fireEvent.copy(clientSecret)).toBe(false);
+    expect(fireEvent.cut(clientSecret)).toBe(false);
   });
 
   it("shows a disabled default environment selector when no custom environments are available", () => {

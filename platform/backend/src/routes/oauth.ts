@@ -12,6 +12,11 @@ import config from "@/config";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import {
+  classifyRefreshResponse,
+  classifyThrownRefreshError,
+  type OAuthRefreshOutcome,
+} from "@/services/oauth-refresh-classification";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
 /**
@@ -513,125 +518,7 @@ async function getAndDeleteOAuthState(
   return data ?? null;
 }
 
-/**
- * Outcome of an OAuth refresh attempt. A `terminal` failure means the grant is
- * dead (re-authentication required); a `transient` failure is a recoverable
- * transport/infrastructure blip that must not change persisted connection
- * health and is re-attempted on next use.
- */
-export type OAuthRefreshOutcome =
-  | { ok: true }
-  | {
-      ok: false;
-      kind: "terminal";
-      category: "refresh_failed" | "no_refresh_token";
-      message: string;
-    }
-  | {
-      ok: false;
-      kind: "transient";
-      reason:
-        | "network"
-        | "timeout"
-        | "server_error"
-        | "rate_limited"
-        | "unexpected_response";
-    };
-
 const OAUTH_TOKEN_REFRESH_TIMEOUT_MS = 30_000;
-
-// An OAuth `error` code is a restricted ASCII token (RFC 6749 §5.2). Anything
-// outside this shape (URLs, free text, token material) is dropped.
-const OAUTH_ERROR_CODE_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
-
-export function sanitizeOAuthErrorCode(error?: string | null): string {
-  if (typeof error === "string" && OAUTH_ERROR_CODE_PATTERN.test(error)) {
-    return error;
-  }
-  return "refresh_failed";
-}
-
-// OAuth error codes that signal a temporary server condition, not a dead grant
-// (RFC 6749 §4.1.2.1). Some authorization servers return these on a 400.
-const TRANSIENT_OAUTH_ERRORS = new Set([
-  "temporarily_unavailable",
-  "server_error",
-]);
-
-/**
- * Classify a token-endpoint response. A genuine grant rejection is a structured
- * OAuth `error` body, which is terminal — but infrastructure failures
- * (5xx, 429, or a transient OAuth error code) take precedence over the body so
- * a temporary outage is not mistaken for a revoked grant. A proxy/WAF 4xx or a
- * captive-portal 200 with no token are likewise transient, not "re-authenticate".
- */
-export function classifyRefreshResponse(params: {
-  status: number;
-  body: {
-    access_token?: string;
-    error?: string;
-    error_description?: string;
-  } | null;
-}): OAuthRefreshOutcome {
-  const { status, body } = params;
-
-  if (status >= 200 && status < 300 && body?.access_token) {
-    return { ok: true };
-  }
-
-  if (status >= 500) {
-    return { ok: false, kind: "transient", reason: "server_error" };
-  }
-  if (status === 429) {
-    return { ok: false, kind: "transient", reason: "rate_limited" };
-  }
-  if (body?.error && TRANSIENT_OAUTH_ERRORS.has(body.error)) {
-    return { ok: false, kind: "transient", reason: "server_error" };
-  }
-
-  if (body?.error) {
-    return {
-      ok: false,
-      kind: "terminal",
-      category: "refresh_failed",
-      message: sanitizeOAuthErrorCode(body.error),
-    };
-  }
-
-  return { ok: false, kind: "transient", reason: "unexpected_response" };
-}
-
-export function classifyThrownRefreshError(
-  error: unknown,
-): Extract<OAuthRefreshOutcome, { kind: "transient" }> {
-  const isTimeout =
-    error instanceof Error &&
-    (error.name === "TimeoutError" || error.name === "AbortError");
-  return {
-    ok: false,
-    kind: "transient",
-    reason: isTimeout ? "timeout" : "network",
-  };
-}
-
-/**
- * Map a refresh outcome to the `mcp_server` fields to persist. Returns `null`
- * for success and for transient failures (which must persist nothing).
- */
-export function refreshFailureToServerFields(outcome: OAuthRefreshOutcome): {
-  oauthRefreshError: "refresh_failed" | "no_refresh_token";
-  oauthRefreshErrorMessage: string;
-  oauthRefreshFailedAt: Date;
-} | null {
-  if (outcome.ok || outcome.kind !== "terminal") {
-    return null;
-  }
-  return {
-    oauthRefreshError: outcome.category,
-    oauthRefreshErrorMessage: outcome.message,
-    oauthRefreshFailedAt: new Date(),
-  };
-}
 
 /**
  * Refresh an OAuth access token using the stored refresh token, called when an

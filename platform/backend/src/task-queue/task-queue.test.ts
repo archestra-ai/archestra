@@ -1,28 +1,8 @@
 import { vi } from "vitest";
 
-// Mock TaskModel
-const mockCreate = vi.hoisted(() => vi.fn());
-const mockDequeue = vi.hoisted(() => vi.fn());
-const mockComplete = vi.hoisted(() => vi.fn());
-const mockFail = vi.hoisted(() => vi.fn());
-const mockResetStuckTasks = vi.hoisted(() => vi.fn().mockResolvedValue(0));
-const mockHasPendingOrProcessingByType = vi.hoisted(() =>
-  vi.fn().mockResolvedValue(false),
-);
-const mockReleaseToQueue = vi.hoisted(() => vi.fn().mockResolvedValue(0));
-vi.mock("@/models", () => ({
-  TaskModel: {
-    create: mockCreate,
-    dequeue: mockDequeue,
-    complete: mockComplete,
-    fail: mockFail,
-    resetStuckTasks: mockResetStuckTasks,
-    hasPendingOrProcessingByType: mockHasPendingOrProcessingByType,
-    releaseToQueue: mockReleaseToQueue,
-  },
-}));
-
-// Mock config
+// Mock config (poll interval / concurrency / shutdown timeout are read at
+// startWorker/stopWorker time; the canonical factory keeps the rest of config
+// real). Config is a process-boundary concern, not a database interface.
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
     kb: {
@@ -45,30 +25,42 @@ vi.mock("@/observability/metrics", () => ({
   },
 }));
 
-// Suppress logger output during tests
-
 // Import after mocks are set up
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import type { Task } from "@/types";
+import db, { schema } from "@/database";
+import { TaskModel } from "@/models";
+import type { InsertTask, Task } from "@/types";
 import { taskQueueService } from "./task-queue";
 
-// Helper to create a fake task
-function fakeTask(overrides: Partial<Task> = {}): Task {
-  return {
-    id: "task-1",
+// Seeds a real task row. scheduledFor defaults to the past so the worker's
+// `scheduled_for <= NOW()` dequeue picks it up immediately.
+async function seedTask(overrides: Partial<InsertTask> = {}): Promise<Task> {
+  return await TaskModel.create({
     taskType: "connector_sync",
-    status: "processing",
     payload: { connectorId: "conn-1" },
-    attempt: 1,
-    maxAttempts: 5,
-    lastError: null,
-    periodic: false,
-    scheduledFor: new Date(),
-    startedAt: new Date(),
-    completedAt: null,
-    createdAt: new Date(),
+    scheduledFor: new Date(Date.now() - 60_000),
     ...overrides,
-  };
+  });
+}
+
+async function getTask(id: string): Promise<Task | undefined> {
+  const [row] = await db
+    .select()
+    .from(schema.tasksTable)
+    .where(eq(schema.tasksTable.id, id));
+  return row;
+}
+
+async function countTasks(
+  where: Partial<Pick<Task, "taskType" | "status">>,
+): Promise<number> {
+  const rows = await db.select().from(schema.tasksTable);
+  return rows.filter(
+    (r) =>
+      (where.taskType === undefined || r.taskType === where.taskType) &&
+      (where.status === undefined || r.status === where.status),
+  ).length;
 }
 
 describe("TaskQueueService", () => {
@@ -80,93 +72,81 @@ describe("TaskQueueService", () => {
   afterEach(async () => {
     await taskQueueService.stopWorker();
     vi.useRealTimers();
+    // Restore any vi.spyOn(TaskModel, ...) fault-injection so a rejecting
+    // create() doesn't leak into later (shuffled-order) tests.
+    vi.restoreAllMocks();
   });
 
   describe("enqueue", () => {
-    test("calls TaskModel.create with correct params and returns task id", async () => {
-      mockCreate.mockResolvedValue({ id: "task-123" });
-
+    test("persists a task with the given params and returns its id", async () => {
       const id = await taskQueueService.enqueue({
         taskType: "connector_sync",
         payload: { connectorId: "conn-1" },
       });
 
-      expect(id).toBe("task-123");
-      expect(mockCreate).toHaveBeenCalledWith({
-        taskType: "connector_sync",
-        payload: { connectorId: "conn-1" },
-        maxAttempts: 5,
-      });
+      const task = await getTask(id);
+      expect(task?.taskType).toBe("connector_sync");
+      expect(task?.payload).toEqual({ connectorId: "conn-1" });
+      expect(task?.maxAttempts).toBe(5);
     });
 
-    test("passes custom maxAttempts when provided", async () => {
-      mockCreate.mockResolvedValue({ id: "task-456" });
-
-      await taskQueueService.enqueue({
+    test("persists custom maxAttempts when provided", async () => {
+      const id = await taskQueueService.enqueue({
         taskType: "batch_embedding",
         payload: { documentIds: ["d1"] },
         maxAttempts: 3,
       });
 
-      expect(mockCreate).toHaveBeenCalledWith({
-        taskType: "batch_embedding",
-        payload: { documentIds: ["d1"] },
-        maxAttempts: 3,
-      });
+      const task = await getTask(id);
+      expect(task?.maxAttempts).toBe(3);
+      expect(task?.payload).toEqual({ documentIds: ["d1"] });
     });
   });
 
   describe("handler registration and dispatch", () => {
-    test("registered handler is called with task payload", async () => {
+    test("registered handler is called with task payload and task completes", async () => {
       const handler = vi.fn().mockResolvedValue(undefined);
-      const task = fakeTask({
+      const task = await seedTask({
         taskType: "connector_sync",
         payload: { connectorId: "conn-99" },
       });
-      mockDequeue.mockResolvedValueOnce(task);
-      mockComplete.mockResolvedValue(undefined);
 
       taskQueueService.registerHandler("connector_sync", handler);
       taskQueueService.startWorker();
 
-      // Advance timer to trigger poll
       await vi.advanceTimersByTimeAsync(1000);
 
       expect(handler).toHaveBeenCalledWith({ connectorId: "conn-99" });
+      expect((await getTask(task.id))?.status).toBe("completed");
     });
 
     test("fails task when no handler is registered for task type", async () => {
-      const task = fakeTask({ taskType: "batch_embedding" });
-      mockDequeue.mockResolvedValueOnce(task);
-      mockFail.mockResolvedValue(undefined);
+      const task = await seedTask({ taskType: "batch_embedding" });
 
       // Do not register a handler for "batch_embedding"
       taskQueueService.startWorker();
 
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(mockFail).toHaveBeenCalledWith({
-        id: task.id,
-        error: "No handler registered for task type: batch_embedding",
-        attempt: task.attempt,
-        maxAttempts: task.maxAttempts,
-      });
+      const updated = await getTask(task.id);
+      expect(updated?.lastError).toBe(
+        "No handler registered for task type: batch_embedding",
+      );
+      expect(updated?.status).not.toBe("completed");
     });
   });
 
   describe("task completion", () => {
     test("completes task when handler succeeds", async () => {
       const handler = vi.fn().mockResolvedValue(undefined);
-      const task = fakeTask();
-      mockDequeue.mockResolvedValueOnce(task);
-      mockComplete.mockResolvedValue(undefined);
+      const task = await seedTask();
 
       taskQueueService.registerHandler("connector_sync", handler);
       taskQueueService.startWorker();
 
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(mockComplete).toHaveBeenCalledWith(task.id);
+      expect((await getTask(task.id))?.status).toBe("completed");
     });
   });
 
@@ -175,53 +155,52 @@ describe("TaskQueueService", () => {
       const handler = vi
         .fn()
         .mockRejectedValue(new Error("something went wrong"));
-      const task = fakeTask({ attempt: 2, maxAttempts: 5 });
-      mockDequeue.mockResolvedValueOnce(task);
-      mockFail.mockResolvedValue(undefined);
+      const task = await seedTask({ attempt: 2, maxAttempts: 5 });
 
       taskQueueService.registerHandler("connector_sync", handler);
       taskQueueService.startWorker();
 
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(mockFail).toHaveBeenCalledWith({
-        id: task.id,
-        error: "something went wrong",
-        attempt: 2,
-        maxAttempts: 5,
-      });
-      expect(mockComplete).not.toHaveBeenCalled();
+      const updated = await getTask(task.id);
+      expect(updated?.lastError).toBe("something went wrong");
+      // attempt (2) < maxAttempts (5) → retried, not completed
+      expect(updated?.status).toBe("pending");
     });
   });
 
   describe("worker lifecycle", () => {
-    test("startWorker sets up polling interval", async () => {
-      mockDequeue.mockResolvedValue(null);
+    test("startWorker polls repeatedly", async () => {
+      const handler = vi.fn().mockResolvedValue(undefined);
+      taskQueueService.registerHandler("connector_sync", handler);
 
+      const first = await seedTask();
       taskQueueService.startWorker();
-
-      // First poll after interval
       await vi.advanceTimersByTimeAsync(1000);
-      expect(mockDequeue).toHaveBeenCalledTimes(1);
+      expect((await getTask(first.id))?.status).toBe("completed");
 
-      // Second poll
+      // A second task enqueued later is picked up on a subsequent poll,
+      // proving the interval keeps firing.
+      const second = await seedTask();
       await vi.advanceTimersByTimeAsync(1000);
-      expect(mockDequeue).toHaveBeenCalledTimes(2);
+      expect((await getTask(second.id))?.status).toBe("completed");
     });
 
-    test("stopWorker clears intervals and stops polling", async () => {
-      mockDequeue.mockResolvedValue(null);
+    test("stopWorker stops polling", async () => {
+      const handler = vi.fn().mockResolvedValue(undefined);
+      taskQueueService.registerHandler("connector_sync", handler);
 
+      const first = await seedTask();
       taskQueueService.startWorker();
-
       await vi.advanceTimersByTimeAsync(1000);
-      expect(mockDequeue).toHaveBeenCalledTimes(1);
+      expect((await getTask(first.id))?.status).toBe("completed");
 
       await taskQueueService.stopWorker();
 
-      // Further time advances should not trigger more polls
+      // A task enqueued after stop is never processed.
+      const second = await seedTask();
       await vi.advanceTimersByTimeAsync(5000);
-      expect(mockDequeue).toHaveBeenCalledTimes(1);
+      expect((await getTask(second.id))?.status).toBe("pending");
     });
 
     test("stopWorker is safe to call when worker is not started", async () => {
@@ -229,14 +208,10 @@ describe("TaskQueueService", () => {
     });
 
     test("stopWorker resolves immediately when no in-flight tasks", async () => {
-      mockDequeue.mockResolvedValue(null);
       taskQueueService.startWorker();
-
       await vi.advanceTimersByTimeAsync(1000);
 
-      await taskQueueService.stopWorker();
-
-      expect(mockReleaseToQueue).not.toHaveBeenCalled();
+      await expect(taskQueueService.stopWorker()).resolves.toBeUndefined();
     });
 
     test("stopWorker waits for in-flight tasks to drain", async () => {
@@ -245,10 +220,7 @@ describe("TaskQueueService", () => {
         resolveHandler = resolve;
       });
       const handler = vi.fn().mockReturnValue(handlerPromise);
-
-      const task = fakeTask({ id: "drain-task-1" });
-      mockDequeue.mockResolvedValueOnce(task);
-      mockComplete.mockResolvedValue(undefined);
+      const task = await seedTask();
 
       taskQueueService.registerHandler("connector_sync", handler);
       taskQueueService.startWorker();
@@ -257,21 +229,18 @@ describe("TaskQueueService", () => {
       await vi.advanceTimersByTimeAsync(1000);
       expect(handler).toHaveBeenCalled();
 
-      // Start stopping — should not resolve yet
+      // Start stopping — should not resolve until the handler finishes
       const stopPromise = taskQueueService.stopWorker();
-
-      // Complete the handler — should allow drain to finish
       resolveHandler();
       await stopPromise;
 
-      expect(mockReleaseToQueue).not.toHaveBeenCalled();
+      // Drained normally → task completed, not released back to pending.
+      expect((await getTask(task.id))?.status).toBe("completed");
     });
 
-    test("stopWorker releases tasks when drain times out", async () => {
+    test("stopWorker releases tasks back to pending when drain times out", async () => {
       const handler = vi.fn().mockReturnValue(new Promise(() => {})); // never resolves
-
-      const task = fakeTask({ id: "timeout-task-1" });
-      mockDequeue.mockResolvedValueOnce(task);
+      const task = await seedTask();
 
       taskQueueService.registerHandler("connector_sync", handler);
       taskQueueService.startWorker();
@@ -285,69 +254,69 @@ describe("TaskQueueService", () => {
       await vi.advanceTimersByTimeAsync(5000);
       await stopPromise;
 
-      expect(mockReleaseToQueue).toHaveBeenCalledWith(["timeout-task-1"]);
+      // The in-flight task was released back to the queue.
+      expect((await getTask(task.id))?.status).toBe("pending");
     });
   });
 
   describe("poll", () => {
     test("resets stuck tasks before dequeuing", async () => {
-      mockDequeue.mockResolvedValue(null);
-      mockResetStuckTasks.mockResolvedValue(0);
+      // A task stuck in processing for over an hour.
+      const stuck = await seedTask({
+        status: "processing",
+        startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      });
 
       taskQueueService.startWorker();
-
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(mockResetStuckTasks).toHaveBeenCalledWith(60 * 60 * 1000);
+      // resetStuckTasks (1h threshold) recovered it back to pending.
+      expect((await getTask(stuck.id))?.status).toBe("pending");
     });
 
     test("does nothing when no tasks are available", async () => {
-      mockDequeue.mockResolvedValue(null);
-
       taskQueueService.startWorker();
 
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(mockDequeue).toHaveBeenCalled();
-      expect(mockComplete).not.toHaveBeenCalled();
-      expect(mockFail).not.toHaveBeenCalled();
+      expect(await countTasks({ status: "completed" })).toBe(0);
     });
   });
 
   describe("seedPeriodicTasks", () => {
     test("seeds periodic tasks when none exist", async () => {
-      mockHasPendingOrProcessingByType.mockResolvedValue(false);
-      mockCreate.mockResolvedValue({ id: "periodic-1" });
-
       await taskQueueService.seedPeriodicTasks();
 
-      expect(mockHasPendingOrProcessingByType).toHaveBeenCalledWith(
-        "check_due_connectors",
-      );
-      expect(mockCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskType: "check_due_connectors",
-          payload: {},
-          maxAttempts: 1,
-          periodic: true,
-        }),
-      );
+      const rows = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "check_due_connectors"));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].periodic).toBe(true);
+      expect(rows[0].maxAttempts).toBe(1);
+      expect(rows[0].payload).toEqual({});
     });
 
     test("skips seeding when periodic task already exists", async () => {
-      mockHasPendingOrProcessingByType.mockResolvedValue(true);
+      await seedTask({
+        taskType: "check_due_connectors",
+        payload: {},
+        periodic: true,
+        maxAttempts: 1,
+        status: "pending",
+      });
 
       await taskQueueService.seedPeriodicTasks();
 
-      expect(mockCreate).not.toHaveBeenCalled();
+      // Not duplicated for the already-present type.
+      expect(await countTasks({ taskType: "check_due_connectors" })).toBe(1);
     });
 
     test("catches unique constraint violation during seeding", async () => {
-      mockHasPendingOrProcessingByType.mockResolvedValue(false);
       const uniqueError = Object.assign(new Error("unique violation"), {
         code: "23505",
       });
-      mockCreate.mockRejectedValue(uniqueError);
+      vi.spyOn(TaskModel, "create").mockRejectedValue(uniqueError);
 
       // Should not throw
       await expect(
@@ -359,104 +328,93 @@ describe("TaskQueueService", () => {
   describe("rescheduleIfPeriodic", () => {
     test("reschedules periodic task after completion", async () => {
       const handler = vi.fn().mockResolvedValue(undefined);
-      const task = fakeTask({
+      const task = await seedTask({
         taskType: "check_due_connectors",
         periodic: true,
         maxAttempts: 1,
         payload: {},
       });
-      mockDequeue.mockResolvedValueOnce(task);
-      mockComplete.mockResolvedValue(undefined);
-      // First call for reschedule
-      mockCreate.mockResolvedValue({ id: "rescheduled-1" });
 
       taskQueueService.registerHandler("check_due_connectors", handler);
       taskQueueService.startWorker();
 
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(mockComplete).toHaveBeenCalledWith(task.id);
-      // Verify reschedule was called with periodic: true and a future scheduledFor
-      expect(mockCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskType: "check_due_connectors",
-          payload: {},
-          maxAttempts: 1,
-          periodic: true,
-          scheduledFor: expect.any(Date),
-        }),
-      );
+      expect((await getTask(task.id))?.status).toBe("completed");
+      // A fresh periodic task was enqueued for the next interval.
+      const pending = await countTasks({
+        taskType: "check_due_connectors",
+        status: "pending",
+      });
+      expect(pending).toBe(1);
     });
 
     test("reschedules periodic task after terminal failure (dead)", async () => {
       const handler = vi
         .fn()
         .mockRejectedValue(new Error("periodic task failed"));
-      const task = fakeTask({
+      const task = await seedTask({
         taskType: "check_due_connectors",
         periodic: true,
         attempt: 1,
         maxAttempts: 1,
         payload: {},
       });
-      mockDequeue.mockResolvedValueOnce(task);
-      mockFail.mockResolvedValue({ ...task, status: "dead" });
-      mockCreate.mockResolvedValue({ id: "rescheduled-2" });
 
       taskQueueService.registerHandler("check_due_connectors", handler);
       taskQueueService.startWorker();
 
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(mockFail).toHaveBeenCalled();
-      expect(mockCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
+      // attempt (1) >= maxAttempts (1) → dead, and a replacement was scheduled.
+      expect((await getTask(task.id))?.status).toBe("dead");
+      expect(
+        await countTasks({
           taskType: "check_due_connectors",
-          periodic: true,
+          status: "pending",
         }),
-      );
+      ).toBe(1);
     });
 
     test("does not reschedule non-periodic tasks", async () => {
       const handler = vi.fn().mockResolvedValue(undefined);
-      const task = fakeTask({
+      const task = await seedTask({
         taskType: "connector_sync",
         payload: { connectorId: "conn-1" },
       });
-      mockDequeue.mockResolvedValueOnce(task);
-      mockComplete.mockResolvedValue(undefined);
 
       taskQueueService.registerHandler("connector_sync", handler);
       taskQueueService.startWorker();
 
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(mockComplete).toHaveBeenCalledWith(task.id);
-      // mockCreate should not have been called for rescheduling
-      expect(mockCreate).not.toHaveBeenCalled();
+      expect((await getTask(task.id))?.status).toBe("completed");
+      // No new task was created.
+      expect(await countTasks({ status: "pending" })).toBe(0);
     });
 
     test("catches unique constraint violation during rescheduling", async () => {
       const handler = vi.fn().mockResolvedValue(undefined);
-      const task = fakeTask({
+      const task = await seedTask({
         taskType: "check_due_connectors",
         periodic: true,
         payload: {},
       });
-      mockDequeue.mockResolvedValueOnce(task);
-      mockComplete.mockResolvedValue(undefined);
+
+      taskQueueService.registerHandler("check_due_connectors", handler);
+      // Force the reschedule enqueue (TaskModel.create) to hit a unique
+      // violation; complete() uses a different method so the task still finishes.
       const uniqueError = Object.assign(new Error("unique violation"), {
         code: "23505",
       });
-      mockCreate.mockRejectedValue(uniqueError);
+      vi.spyOn(TaskModel, "create").mockRejectedValue(uniqueError);
 
-      taskQueueService.registerHandler("check_due_connectors", handler);
       taskQueueService.startWorker();
 
       // Should not throw
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(mockComplete).toHaveBeenCalledWith(task.id);
+      expect((await getTask(task.id))?.status).toBe("completed");
     });
   });
 });

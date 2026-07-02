@@ -6,19 +6,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { TwoFactorCard } from "./two-factor-card";
 
-vi.mock("next/navigation", () => ({
-  useRouter: vi.fn(),
-}));
+vi.mock("next/navigation");
 
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    getSession: vi.fn(),
-    twoFactor: {
-      enable: vi.fn(),
-      disable: vi.fn(),
-    },
-  },
-}));
+vi.mock("@/lib/clients/auth/auth-client");
 
 const mockRouterPush = vi.fn();
 

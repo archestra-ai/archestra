@@ -1,5 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 
 const CATALOG_ID = "cat-1";
@@ -20,19 +22,24 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
   useMcpServers: () => ({ data: installedServers }),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useSession: () => ({ data: { user: { id: CURRENT_USER_ID } } }),
-  // Member role: no mcpServerInstallation:update and no :admin.
-  useHasPermissions: () => ({ data: false }),
-}));
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/teams/team.query", () => ({
-  useAssignableTeams: () => ({ data: [], isLoading: false }),
-}));
+vi.mock("@/lib/teams/team.query");
 
 describe("SelectMcpServerCredentialTypeAndTeams", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: CURRENT_USER_ID } },
+    } as ReturnType<typeof useSession>);
+    // Member role: no mcpServerInstallation:update and no :admin.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useAssignableTeams).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAssignableTeams>);
   });
 
   it("blocks a fresh install when every scope is already taken", async () => {

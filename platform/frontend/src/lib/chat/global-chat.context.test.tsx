@@ -1,7 +1,9 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { act, render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { ChatProvider, useGlobalChat } from "./global-chat.context";
 
 type ChatSessionSnapshot = ReturnType<
@@ -22,7 +24,6 @@ const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
   setMessages: vi.fn(),
   stop: vi.fn(),
-  toastError: vi.fn(),
   useChat: vi.fn(),
 }));
 
@@ -35,11 +36,7 @@ vi.mock("ai", () => ({
   lastAssistantMessageIsCompleteWithApprovalResponses: vi.fn(() => true),
 }));
 
-vi.mock("sonner", () => ({
-  toast: {
-    error: mocks.toastError,
-  },
-}));
+vi.mock("sonner");
 
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({
@@ -71,9 +68,11 @@ vi.mock("@/lib/chat/chat.query", () => ({
   useConversationUpdatedCacheSync: () => {},
 }));
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Archestra",
-}));
+vi.mock("@/lib/hooks/use-app-name");
+
+beforeEach(() => {
+  vi.mocked(useAppName).mockReturnValue("Archestra");
+});
 
 vi.mock("@/lib/config/config", () => ({
   default: {
@@ -587,7 +586,7 @@ describe("ChatProvider retries", () => {
       );
     });
 
-    expect(mocks.toastError).toHaveBeenCalledWith(
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
       "This conversation already has a response in progress. Stop it before sending another message.",
     );
     expect(mocks.regenerate).not.toHaveBeenCalled();
@@ -643,7 +642,7 @@ describe("ChatProvider retries", () => {
     // run via the replay endpoint instead of telling the user to stop a
     // response they cannot see.
     expect(mocks.resumeStream).toHaveBeenCalledTimes(1);
-    expect(mocks.toastError).not.toHaveBeenCalled();
+    expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
   });
 
   it("concludes recovery when the reattach finds the run already finished (204 no-op)", async () => {
@@ -720,7 +719,7 @@ describe("ChatProvider retries", () => {
       );
     });
     expect(mocks.resumeStream).toHaveBeenCalledTimes(1);
-    expect(mocks.toastError).toHaveBeenCalledWith(
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
       "This conversation already has a response in progress. Stop it before sending another message.",
     );
   });

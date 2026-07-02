@@ -2,17 +2,15 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { TeamManagementDialog } from "./team-management-dialog";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 
-const { useFeatureMock, useHasPermissionsMock, useTokensMock } = vi.hoisted(
-  () => ({
-    useFeatureMock: vi.fn(),
-    useHasPermissionsMock: vi.fn(),
-    useTokensMock: vi.fn(),
-  }),
-);
+const { useTokensMock } = vi.hoisted(() => ({
+  useTokensMock: vi.fn(),
+}));
 
 vi.mock("@/components/tabbed-dialog-shell", () => ({
   TabbedDialogShell: ({
@@ -28,9 +26,7 @@ vi.mock("@/components/tabbed-dialog-shell", () => ({
   ),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: useHasPermissionsMock,
-}));
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/config/config", () => ({
   default: {
@@ -40,9 +36,7 @@ vi.mock("@/lib/config/config", () => ({
   },
 }));
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: useFeatureMock,
-}));
+vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/teams/team-token.query", () => ({
   useTokens: useTokensMock,
@@ -51,8 +45,12 @@ vi.mock("@/lib/teams/team-token.query", () => ({
 describe("TeamManagementDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useFeatureMock.mockReturnValue(true);
-    useHasPermissionsMock.mockReturnValue({ data: false });
+    vi.mocked(useFeature).mockReturnValue(
+      true as ReturnType<typeof useFeature>,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
+      typeof useHasPermissions
+    >);
     useTokensMock.mockReturnValue({ data: { tokens: [] } });
   });
 
@@ -66,7 +64,9 @@ describe("TeamManagementDialog", () => {
   });
 
   it("shows token and vault tabs to users with team:update when vault is enabled", () => {
-    useHasPermissionsMock.mockReturnValue({ data: true });
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
 
     renderDialog();
 
@@ -75,8 +75,12 @@ describe("TeamManagementDialog", () => {
   });
 
   it("hides the vault tab when vault is disabled", () => {
-    useHasPermissionsMock.mockReturnValue({ data: true });
-    useFeatureMock.mockReturnValue(false);
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    vi.mocked(useFeature).mockReturnValue(
+      false as ReturnType<typeof useFeature>,
+    );
 
     renderDialog();
 

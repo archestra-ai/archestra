@@ -12,11 +12,7 @@ import {
 } from "@/lib/interactions/interaction.query";
 import SessionDetailPage from "./page.client";
 
-vi.mock("next/navigation", () => ({
-  useRouter: vi.fn(),
-  useSearchParams: vi.fn(),
-  usePathname: vi.fn(),
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/lib/interactions/interaction.query", () => ({
   useInteractions: vi.fn(),

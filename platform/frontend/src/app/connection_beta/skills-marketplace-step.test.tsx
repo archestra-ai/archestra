@@ -3,6 +3,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { CONNECT_CLIENTS } from "./clients";
 import { SkillsMarketplaceStep } from "./skills-marketplace-step";
 
@@ -21,14 +24,12 @@ const {
   revokeLinkMock,
   rotateLinkMock,
   getSkillsMock,
-  hasPermissionsMock,
 } = vi.hoisted(() => ({
   listLinksMock: vi.fn(),
   createLinkMock: vi.fn(),
   revokeLinkMock: vi.fn(),
   rotateLinkMock: vi.fn(),
   getSkillsMock: vi.fn(),
-  hasPermissionsMock: vi.fn(),
 }));
 
 vi.mock("@archestra/shared", async () => {
@@ -58,17 +59,11 @@ vi.mock("@/lib/skills/skill-share.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => hasPermissionsMock(),
-}));
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: () => true,
-}));
+vi.mock("@/lib/config/config.query");
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Archestra",
-}));
+vi.mock("@/lib/hooks/use-app-name");
 
 function findClient(id: string) {
   const client = CONNECT_CLIENTS.find((c) => c.id === id);
@@ -110,7 +105,11 @@ const CREATE_RESPONSE = {
 describe("SkillsMarketplaceStep", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    hasPermissionsMock.mockReturnValue({ data: true });
+    vi.mocked(useFeature).mockReturnValue(true);
+    vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
     getSkillsMock.mockResolvedValue({
       data: {
         data: [{ id: "skill-1" }, { id: "skill-2" }],
@@ -121,7 +120,9 @@ describe("SkillsMarketplaceStep", () => {
   });
 
   it("returns null for non-admin users", () => {
-    hasPermissionsMock.mockReturnValue({ data: false });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
     listLinksMock.mockReturnValue({
       data: { links: [] },
       isPending: false,

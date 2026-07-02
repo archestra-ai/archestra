@@ -5,13 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSignInWithEmailMutation } from "@/lib/auth/account.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    signIn: {
-      email: vi.fn(),
-    },
-  },
-}));
+vi.mock("@/lib/clients/auth/auth-client");
 
 function createWrapper() {
   const queryClient = new QueryClient({

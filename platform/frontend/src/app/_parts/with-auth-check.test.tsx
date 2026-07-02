@@ -11,16 +11,10 @@ vi.mock("@sentry/nextjs", () => ({
 }));
 
 // Mock Next.js router and navigation
-vi.mock("next/navigation", () => ({
-  useRouter: vi.fn(),
-  usePathname: vi.fn(),
-}));
+vi.mock("next/navigation");
 
 // Mock auth query
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: vi.fn(),
-  useSession: vi.fn(),
-}));
+vi.mock("@/lib/auth/auth.query");
 
 // Mock shared module
 vi.mock("@archestra/shared", () => ({

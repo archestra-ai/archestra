@@ -5,9 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { completeLinkedIdentityProviderIntent } from "@/lib/auth/linked-idp";
 import LinkedIdentityProviderCallbackPage from "./page";
 
-vi.mock("next/navigation", () => ({
-  useSearchParams: vi.fn(),
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/components/app-logo", () => ({
   AppLogo: () => <div data-testid="app-logo" />,

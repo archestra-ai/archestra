@@ -1,26 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useOrganization } from "@/lib/organization.query";
 
 let mockOrganization: Record<string, unknown> | null = null;
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => ({
-    data: mockOrganization,
-    isPending: false,
-  }),
-}));
+vi.mock("@/lib/organization.query");
 
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    useSession: vi.fn().mockReturnValue({
-      data: {
-        user: { id: "test-user", email: "test@example.com" },
-        session: { id: "test-session" },
-      },
-    }),
-  },
-}));
+vi.mock("@/lib/clients/auth/auth-client");
 
 import {
   useIsKnowledgeBaseConfigured,
@@ -39,6 +26,13 @@ const createWrapper = () => {
 beforeEach(() => {
   vi.clearAllMocks();
   mockOrganization = null;
+  vi.mocked(useOrganization).mockImplementation(
+    () =>
+      ({
+        data: mockOrganization,
+        isPending: false,
+      }) as unknown as ReturnType<typeof useOrganization>,
+  );
 });
 
 describe("useIsKnowledgeBaseConfigured", () => {

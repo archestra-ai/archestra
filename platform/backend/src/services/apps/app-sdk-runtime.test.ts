@@ -173,37 +173,34 @@ describe("Apps SDK runtime", () => {
     calls.pop();
   });
 
-  test("tools.call resolves null when the result has no text or structured data", async () => {
-    results.push({ content: [{ type: "image", data: "aGk=" }] });
-    expect(await archestra.tools.call("t", {})).toBeNull();
+  test("tools.call normalizes image/audio-only results into media data URLs", async () => {
+    results.push({
+      content: [
+        { type: "image", data: "aGk=", mimeType: "image/png" },
+        { type: "audio", data: "c28=", mimeType: "audio/mpeg" },
+      ],
+    });
+    expect(await archestra.tools.call("t", {})).toEqual({
+      media: [
+        {
+          type: "image",
+          mimeType: "image/png",
+          dataUrl: "data:image/png;base64,aGk=",
+        },
+        {
+          type: "audio",
+          mimeType: "audio/mpeg",
+          dataUrl: "data:audio/mpeg;base64,c28=",
+        },
+      ],
+    });
     calls.pop();
   });
 
-  test("tools.callRaw resolves with the full result envelope on success", async () => {
-    const result = {
-      content: [{ type: "text", text: "ok" }],
-      structuredContent: { papers: [] },
-      _meta: { trace: "abc" },
-    };
-    results.push(result);
-    expect(
-      await archestra.tools.callRaw("hf__paper_search", { q: "x" }),
-    ).toEqual(result);
-    expect(calls.pop()).toEqual({
-      name: "hf__paper_search",
-      arguments: { q: "x" },
-    });
-  });
-
-  test("tools.callRaw keeps the typed error channel on isError results", async () => {
-    results.push({
-      isError: true,
-      content: [{ type: "text", text: "boom" }],
-    });
-    await expect(archestra.tools.callRaw("t", {})).rejects.toMatchObject({
-      code: "tool_error",
-      message: "boom",
-    });
+  test("tools.call resolves null when the result has no text, structured, or media data", async () => {
+    results.push({ content: [] });
+    expect(await archestra.tools.call("t", {})).toBeNull();
+    calls.pop();
   });
 
   test("auth_required surfaces as a typed error with the action url", async () => {

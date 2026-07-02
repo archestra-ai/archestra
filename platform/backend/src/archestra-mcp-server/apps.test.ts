@@ -1302,12 +1302,28 @@ describe("unwrapToolResultForPreview (SDK tools.call parity)", () => {
     ).toBe(JSON.stringify("plain answer"));
   });
 
-  test("no text or structured data serializes as null", () => {
+  test("image-only results serialize as the media shape with base64 elided", () => {
     expect(
       unwrapToolResultForPreview(
-        envelope({ content: [{ type: "image", data: "aGk=" }] }),
+        envelope({
+          content: [{ type: "image", data: "aGk=", mimeType: "image/png" }],
+        }),
       ),
-    ).toBe("null");
+    ).toBe(
+      JSON.stringify({
+        media: [
+          {
+            type: "image",
+            mimeType: "image/png",
+            dataUrl: "data:image/png;base64,…[base64 elided in preview]",
+          },
+        ],
+      }),
+    );
+  });
+
+  test("no text, structured, or media data serializes as null", () => {
+    expect(unwrapToolResultForPreview(envelope({ content: [] }))).toBe("null");
   });
 });
 

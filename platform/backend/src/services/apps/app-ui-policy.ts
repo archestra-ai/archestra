@@ -58,7 +58,7 @@ export const ARCHESTRA_APP_SDK_SURFACE = {
     partitions: ["user", "shared"],
     methods: ["get", "set", "list", "delete"],
   },
-  tools: ["call", "callRaw", "list"],
+  tools: ["call", "list"],
   llm: ["complete", "prompt"],
   ui: ["openLink", "requestDisplayMode"],
 } as const;

@@ -116,19 +116,16 @@ test("create an app from a template and run it standalone", async ({
 // Probe for the `archestra.tools.call` unwrapping contract: the fixture tool
 // returns `{"tasks":[...]}` serialized into content[0].text, so `call` must
 // resolve with the parsed object (the probe reads `result.tasks.length`
-// directly), while `callRaw` must keep the raw MCP envelope (the probe
-// re-parses the same JSON out of `content[0].text`).
+// directly off the resolved value).
 const buildToolsCallProbeHtml = (toolName: string) => `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8" /><title>e2e tools.call probe</title></head>
 <body>
   <h1>tools.call unwrap probe</h1>
   <p id="unwrapped">Calling…</p>
-  <p id="raw">Calling…</p>
   <script>
     (async () => {
       const unwrapped = document.getElementById("unwrapped");
-      const raw = document.getElementById("raw");
       const toolName = ${JSON.stringify(toolName)};
       try {
         const result = await window.archestra.tools.call(toolName, {});
@@ -137,20 +134,12 @@ const buildToolsCallProbeHtml = (toolName: string) => `<!DOCTYPE html>
         unwrapped.textContent =
           "call-failed: " + (err && err.message ? err.message : String(err));
       }
-      try {
-        const envelope = await window.archestra.tools.callRaw(toolName, {});
-        const parsed = JSON.parse(envelope.content[0].text);
-        raw.textContent = "raw-tasks:" + parsed.tasks.length;
-      } catch (err) {
-        raw.textContent =
-          "callRaw-failed: " + (err && err.message ? err.message : String(err));
-      }
     })();
   </script>
 </body>
 </html>`;
 
-test("app SDK tools.call unwraps a JSON-as-text tool result (callRaw keeps the envelope)", async ({
+test("app SDK tools.call unwraps a JSON-as-text tool result", async ({
   page,
   request,
   makeApiRequest,
@@ -265,9 +254,6 @@ test("app SDK tools.call unwraps a JSON-as-text tool result (callRaw keeps the e
       const appFrame = page.frameLocator("iframe").frameLocator("iframe");
       await expect(
         appFrame.getByText(`unwrapped-tasks:${APP_SDK_JSON_SERVER_TASK_COUNT}`),
-      ).toBeVisible({ timeout: 30_000 });
-      await expect(
-        appFrame.getByText(`raw-tasks:${APP_SDK_JSON_SERVER_TASK_COUNT}`),
       ).toBeVisible({ timeout: 30_000 });
     } finally {
       await makeApiRequest({

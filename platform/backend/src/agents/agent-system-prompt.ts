@@ -204,21 +204,28 @@ async function buildProjectMemoryPrompt(params: {
   agentId: string;
 }): Promise<string> {
   const { memories, mcpTools, agentId } = params;
-  const saveMemory = archestraMcpBranding.getToolName(
-    TOOL_SAVE_MEMORY_SHORT_NAME,
-  );
-  // Reachable when top-level, or via run_tool for a search_and_run_only agent
-  // — but run_tool dispatch still enforces per-agent assignment, so presence
-  // of run_tool alone is not enough: check the actual assignment rather than
-  // instructing the model to call a tool it would be denied.
-  let canReachMemoryTools = saveMemory in mcpTools;
-  if (
-    !canReachMemoryTools &&
-    archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME) in mcpTools
-  ) {
-    const assignedNames = await ToolModel.getMcpToolNamesByAgent(agentId);
-    canReachMemoryTools = assignedNames.includes(saveMemory);
-  }
+
+  // A memory tool is reachable when top-level in the tool set, or — for a
+  // search_and_run_only agent — when it is actually assigned (run_tool
+  // dispatch still enforces per-agent assignment, so run_tool presence alone
+  // is not enough). Checked per tool so the guidance never names a tool
+  // dispatch would deny, even if an admin unassigned part of the group. The
+  // assignment list is fetched lazily, at most once.
+  const runToolExposed =
+    archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME) in mcpTools;
+  let assignedNames: string[] | null = null;
+  const reachableToolName = async (
+    shortName: ArchestraToolShortName,
+  ): Promise<string | null> => {
+    const fullName = archestraMcpBranding.getToolName(shortName);
+    if (fullName in mcpTools) return fullName;
+    if (!runToolExposed) return null;
+    assignedNames ??= await ToolModel.getMcpToolNamesByAgent(agentId);
+    return assignedNames.includes(fullName) ? fullName : null;
+  };
+  const saveMemory = await reachableToolName(TOOL_SAVE_MEMORY_SHORT_NAME);
+  const updateMemory = await reachableToolName(TOOL_UPDATE_MEMORY_SHORT_NAME);
+  const deleteMemory = await reachableToolName(TOOL_DELETE_MEMORY_SHORT_NAME);
 
   const entries: string[] = [];
   // Debit each entry plus its joining newline so the rendered block stays
@@ -248,9 +255,28 @@ async function buildProjectMemoryPrompt(params: {
       ? `<project_memories>\n${entries.join("\n")}\n</project_memories>`
       : "<project_memories>\n(no memories saved yet)\n</project_memories>";
 
-  const guidance = canReachMemoryTools
-    ? `\n\nWhen the user asks you to remember something — or states a clearly durable fact, decision, or preference for this project — save it with the \`${saveMemory}\` tool as one short, self-contained entry. Use \`${archestraMcpBranding.getToolName(TOOL_UPDATE_MEMORY_SHORT_NAME)}\` / \`${archestraMcpBranding.getToolName(TOOL_DELETE_MEMORY_SHORT_NAME)}\` with an entry's id to correct, consolidate, or forget (always delete when the user asks you to forget). Do not save secrets or one-off trivia.`
-    : "";
+  const guidanceSentences: string[] = [];
+  if (saveMemory) {
+    guidanceSentences.push(
+      `When the user asks you to remember something — or states a clearly durable fact, decision, or preference for this project — save it with the \`${saveMemory}\` tool as one short, self-contained entry.`,
+    );
+  }
+  const editTools = [
+    updateMemory ? `\`${updateMemory}\`` : null,
+    deleteMemory ? `\`${deleteMemory}\`` : null,
+  ]
+    .filter(Boolean)
+    .join(" / ");
+  if (editTools) {
+    guidanceSentences.push(
+      `Use ${editTools} with an entry's id to correct, consolidate, or forget${deleteMemory ? " (always delete when the user asks you to forget)" : ""}.`,
+    );
+  }
+  if (saveMemory) {
+    guidanceSentences.push("Do not save secrets or one-off trivia.");
+  }
+  const guidance =
+    guidanceSentences.length > 0 ? `\n\n${guidanceSentences.join(" ")}` : "";
 
   return `${PROJECT_MEMORY_PREFIX}\n\n${entriesBlock}${guidance}`;
 }

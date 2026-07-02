@@ -11,6 +11,7 @@ import {
   TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_SAVE_MEMORY_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
+  TOOL_UPDATE_MEMORY_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type { Tool } from "ai";
@@ -433,20 +434,36 @@ describe("buildAgentSystemPrompt", () => {
 
     const withMemoryTools: Record<string, Tool> = {
       [brand(TOOL_SAVE_MEMORY_SHORT_NAME)]: {} as Tool,
+      [brand(TOOL_UPDATE_MEMORY_SHORT_NAME)]: {} as Tool,
+      [brand(TOOL_DELETE_MEMORY_SHORT_NAME)]: {} as Tool,
     };
-    const prompt = await buildAgentSystemPrompt({
+    const common = {
       agent,
-      mcpTools: withMemoryTools,
       organizationId: agent.organizationId,
       userId: user.id,
       agentId: agent.id,
       projectMemories: [],
+    };
+    const prompt = await buildAgentSystemPrompt({
+      ...common,
+      mcpTools: withMemoryTools,
     });
 
     expect(prompt).toContain(PROJECT_MEMORY_PREFIX);
     expect(prompt).toContain("(no memories saved yet)");
     expect(prompt).toContain(brand(TOOL_SAVE_MEMORY_SHORT_NAME));
+    expect(prompt).toContain(brand(TOOL_UPDATE_MEMORY_SHORT_NAME));
     expect(prompt).toContain(brand(TOOL_DELETE_MEMORY_SHORT_NAME));
+
+    // Reachability is per tool: with only save_memory in the set, the
+    // guidance must not name the unreachable update/delete tools.
+    const saveOnly = await buildAgentSystemPrompt({
+      ...common,
+      mcpTools: { [brand(TOOL_SAVE_MEMORY_SHORT_NAME)]: {} as Tool },
+    });
+    expect(saveOnly).toContain(brand(TOOL_SAVE_MEMORY_SHORT_NAME));
+    expect(saveOnly).not.toContain(brand(TOOL_UPDATE_MEMORY_SHORT_NAME));
+    expect(saveOnly).not.toContain(brand(TOOL_DELETE_MEMORY_SHORT_NAME));
   });
 
   test("run_tool implies memory guidance only when the tools are actually assigned", async ({

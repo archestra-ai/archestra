@@ -44,6 +44,7 @@ import {
   InteractionAuthMethodSchema,
   normalizeInteractionResponse,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
@@ -350,14 +351,16 @@ class InteractionModel {
 
     // Update usage tracking after interaction is created
     // Run in background to not block the response
-    InteractionModel.updateUsageAfterInteraction(
-      interaction as InsertInteraction & { id: string },
-    ).catch((error) => {
-      logger.error(
-        { error },
-        `Failed to update usage tracking for interaction ${interaction.id}`,
-      );
-    });
+    trackBackgroundWork(
+      InteractionModel.updateUsageAfterInteraction(
+        interaction as InsertInteraction & { id: string },
+      ).catch((error) => {
+        logger.error(
+          { error },
+          `Failed to update usage tracking for interaction ${interaction.id}`,
+        );
+      }),
+    );
 
     return interaction;
   }

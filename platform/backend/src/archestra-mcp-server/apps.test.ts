@@ -41,14 +41,7 @@ import {
   McpServerModel,
 } from "@/models";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import { APP_HTML_MAX_BYTES } from "@/types/app";
 import {
   type ArchestraContext,
@@ -64,12 +57,11 @@ import { scaffoldPartialToolFailureResult } from "./apps";
 vi.mock("@/cache-manager");
 
 // App tools are only dispatchable when the feature is enabled.
-const originalAppsEnabled = config.apps.enabled;
-beforeAll(() => {
+// Pin the apps flag per TEST, not per file: the shared setup restores the
+// pristine config before and after every test, so a beforeAll-scoped
+// mutation does not survive, and a file must never depend on worker state.
+beforeEach(() => {
   (config.apps as { enabled: boolean }).enabled = true;
-});
-afterAll(() => {
-  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
 });
 
 function structured(result: { structuredContent?: unknown }): any {

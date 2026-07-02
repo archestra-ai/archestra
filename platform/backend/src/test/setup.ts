@@ -193,6 +193,16 @@ afterEach(() => {
   globalThis.fetch = realFetch;
   vi.clearAllMocks();
   vi.useRealTimers();
+
+  // Also restore the pristine config on the way OUT of every test. The
+  // beforeEach restore alone leaves a gap: mutations made by a file's LAST
+  // test survive until the NEXT file's first beforeEach — which is after
+  // that file's beforeAll has already run. Route tests build their Fastify
+  // server in beforeAll, so a leaked flag (apps.enabled=false, a polling
+  // toggle, ...) could shape another file's server for its entire lifetime.
+  if (liveConfig && pristineConfig) {
+    restoreConfig(liveConfig, structuredClone(pristineConfig));
+  }
 });
 
 /**
@@ -207,6 +217,15 @@ afterEach(() => {
  */
 afterAll(async () => {
   console.warn = originalConsoleWarn;
+
+  // Drain fire-and-forget async work (e.g. interaction usage tracking) BEFORE
+  // swapping out this file's database. In shared workers the getDb() proxy
+  // always routes to the CURRENT file's PGlite, so a background promise that
+  // outlives its file would run its remaining queries against the NEXT
+  // file's database — interleaving with that file's tests or wedging its
+  // connection mid-transaction (a batch of consecutive 30s timeouts).
+  const { drainBackgroundWork } = await import("../utils/background-work.js");
+  await drainBackgroundWork();
 
   const dbModule = await import("../database/index.js");
   dbModule.__setTestDb(null);

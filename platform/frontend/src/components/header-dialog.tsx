@@ -10,6 +10,7 @@ import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SecretInput } from "@/components/ui/secret-input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -196,15 +197,14 @@ export function HeaderDialog({
         {draft.scope === "static" && (
           <div className="space-y-2">
             <Label htmlFor="header-value">Value</Label>
-            <Input
+            <SecretInput
               id="header-value"
-              type={draft.sensitive ? "password" : "text"}
+              masked={draft.sensitive}
               value={draft.value}
               onChange={(e) => updateDraft({ value: e.target.value })}
               placeholder="header value"
               className="font-mono"
               aria-invalid={valueError ? true : undefined}
-              autoComplete={MCP_CONFIG_AUTOCOMPLETE}
             />
             {valueError && (
               <p className="text-xs text-destructive">{valueError}</p>

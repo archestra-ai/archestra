@@ -264,10 +264,15 @@ describe("McpCatalogForm enterprise gating", () => {
       "autocomplete",
       "off",
     );
-    expect(screen.getByLabelText("Client Secret")).toHaveAttribute(
-      "autocomplete",
-      "new-password",
-    );
+    // SecretInput contract: type="text" (a password type would summon
+    // browser password managers), autofill off, extension opt-outs present
+    const clientSecret = screen.getByLabelText("Client Secret");
+    expect(clientSecret).toHaveAttribute("type", "text");
+    expect(clientSecret).toHaveAttribute("autocomplete", "off");
+    expect(clientSecret).toHaveAttribute("data-1p-ignore");
+    expect(clientSecret).toHaveAttribute("data-lpignore", "true");
+    expect(clientSecret).toHaveAttribute("data-bwignore", "true");
+    expect(clientSecret).toHaveClass("secret-masked");
   });
 
   it("shows a disabled default environment selector when no custom environments are available", () => {

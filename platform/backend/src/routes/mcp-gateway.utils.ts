@@ -402,12 +402,51 @@ export async function createAgentServer(
         const isAgentDelegationTool = isAgentTool(name);
         const contextIsTrusted = !agent.considerContextUntrusted;
 
+        // tools/list advertises an all-tools agent's dynamically-accessible
+        // UI-providing tools top-level (see the dynamicUiTools widening above),
+        // so a caller may call one directly rather than through run_tool. Two
+        // gates on this path only know assigned tools and must be told about
+        // the dynamic resolution, exactly as run_tool's own dispatch does
+        // (archestra-mcp-server/run-tool.ts): the invocation-policy evaluator
+        // (whose enabled-tools filter otherwise refuses the unassigned name as
+        // "disabled"), and executeToolCallForOwner (which only accepts an
+        // unassigned tool via a pre-resolved availableTool). A no-op for
+        // assigned tools; policies still evaluate the dynamic tool itself.
+        const dynamicTool =
+          !isArchestraTool &&
+          !isAgentDelegationTool &&
+          agent.accessAllTools &&
+          tokenAuth?.userId &&
+          tokenAuth.organizationId
+            ? await resolveDynamicTool({
+                toolName: name,
+                agentId,
+                userId: tokenAuth.userId,
+                organizationId: tokenAuth.organizationId,
+              })
+            : null;
+        // Direct-call availability mirrors tools/list exposure: only the
+        // UI-providing subset is listed top-level, so only that subset is
+        // directly callable. A non-UI dynamic tool stays behind
+        // search_tools/run_tool — resolving it here would silently make every
+        // hidden tool name directly executable.
+        const availableTool =
+          dynamicTool && providesUiResource(dynamicTool)
+            ? dynamicTool
+            : undefined;
+
         const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
           agentId: agent.id,
           toolName: name,
           toolInput: args ?? {},
           organizationId: tokenAuth?.organizationId,
           contextIsTrusted,
+          ...(availableTool && {
+            enabledToolNames: new Set([
+              ...(await ToolModel.getAssignedToolNames(agent.id)),
+              name,
+            ]),
+          }),
         });
         if (policyBlock) {
           return {
@@ -528,25 +567,6 @@ export async function createAgentServer(
           name,
           arguments: args || {},
         };
-
-        // tools/list now advertises an all-tools agent's dynamically-accessible
-        // UI-providing tools top-level (see the dynamicUiTools widening above),
-        // so a caller may call one of them directly here rather than through
-        // run_tool. executeToolCallForOwner only accepts an unassigned tool via
-        // a pre-resolved availableTool (it never widens access on its own) —
-        // without this, a directly-called unassigned tool would be listed but
-        // fail as unavailable. Mirrors run_tool's own resolution
-        // (archestra-mcp-server/run-tool.ts); a no-op query when the tool is
-        // actually assigned, since validateAndGetTool tries assignment first.
-        const availableTool =
-          agent.accessAllTools && tokenAuth?.userId && tokenAuth.organizationId
-            ? ((await resolveDynamicTool({
-                toolName: name,
-                agentId,
-                userId: tokenAuth.userId,
-                organizationId: tokenAuth.organizationId,
-              })) ?? undefined)
-            : undefined;
 
         // Execute the tool call via McpClient with tracing
         const result = await startActiveMcpSpan({
@@ -1821,7 +1841,9 @@ function isAlwaysExposedTool(toolName: string) {
  * Mirrors {@link toolUiResourceUriSql} (models/tool.ts) so the in-memory gate and
  * the DB-side `providesUi` predicate never drift.
  */
-function providesUiResource(tool: McpListToolCandidate): boolean {
+function providesUiResource(tool: {
+  meta?: McpListToolCandidate["meta"] | null;
+}): boolean {
   const meta = tool.meta?._meta as
     | { ui?: { resourceUri?: unknown }; "ui/resourceUri"?: unknown }
     | undefined;

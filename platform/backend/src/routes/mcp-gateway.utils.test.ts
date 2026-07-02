@@ -2133,6 +2133,7 @@ describe("createAgentServer tools/list", () => {
   // through run_tool).
   test("directly calls an unassigned tool discovered by an all-tools agent", async ({
     makeAgent,
+    makeAgentTool,
     makeInternalMcpCatalog,
     makeMcpServer,
     makeOrganization,
@@ -2160,6 +2161,17 @@ describe("createAgentServer tools/list", () => {
       },
     });
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    // The agent must have at least one ASSIGNED tool: the invocation-policy
+    // gate's enabled-tools filter only activates when the assigned set is
+    // non-empty (a real gateway agent always has the archestra built-ins
+    // assigned). With an empty set the filter is skipped entirely and this
+    // test cannot catch the gate refusing the dynamic tool as "disabled".
+    const assignedDistractor = await makeTool({
+      catalogId: catalog.id,
+      name: "bug_tracker__assigned_distractor",
+      parameters: { type: "object", properties: {} },
+    });
+    await makeAgentTool(agent.id, assignedDistractor.id);
 
     const executeToolCallForOwnerSpy = vi
       .spyOn(mcpClient, "executeToolCallForOwner")
@@ -2207,6 +2219,85 @@ describe("createAgentServer tools/list", () => {
           }),
         }),
       );
+    } finally {
+      executeToolCallForOwnerSpy.mockRestore();
+    }
+  });
+
+  // Direct-call availability must equal tools/list exposure: the widening
+  // lists only UI-providing dynamic tools, so a NON-UI unassigned tool — kept
+  // behind search_tools/run_tool by design — must stay refused when named
+  // directly, not become executable as a side effect of the dynamic
+  // resolution. run_tool remains its only path.
+  test("refuses a direct call to a non-UI unassigned tool even for an all-tools agent", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeOrganization,
+    makeTool,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "bug-tracker",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "bug_tracker__list",
+      parameters: { type: "object", properties: {} },
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    // Non-empty assigned set so the enabled-tools filter is active (the real
+    // gateway shape), same as the positive test above.
+    const assignedDistractor = await makeTool({
+      catalogId: catalog.id,
+      name: "bug_tracker__assigned_distractor2",
+      parameters: { type: "object", properties: {} },
+    });
+    await makeAgentTool(agent.id, assignedDistractor.id);
+
+    const executeToolCallForOwnerSpy = vi.spyOn(
+      mcpClient,
+      "executeToolCallForOwner",
+    );
+
+    try {
+      const { server } = await createAgentServer(agent.id, {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      });
+      const callToolHandler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+      if (!callToolHandler) {
+        throw new Error("Expected tools/call handler to be registered");
+      }
+
+      const response = await callToolHandler(
+        {
+          method: "tools/call",
+          params: { name: "bug_tracker__list", arguments: {} },
+        },
+        { sendRequest: vi.fn() },
+      );
+
+      expect(response.isError).toBe(true);
+      expect(executeToolCallForOwnerSpy).not.toHaveBeenCalled();
     } finally {
       executeToolCallForOwnerSpy.mockRestore();
     }

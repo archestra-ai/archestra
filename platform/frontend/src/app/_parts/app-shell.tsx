@@ -9,10 +9,12 @@ import {
   NavigationStatusProvider,
   useNavigationStatus,
 } from "@/components/navigation-status-provider";
+import { OnboardingSurveyGate } from "@/components/onboarding-survey-dialog";
 import {
   SidebarCircleToggle,
   SidebarProvider,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
@@ -22,6 +24,10 @@ import {
   useConnectivity,
 } from "@/lib/config/connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import {
+  OnboardingProvider,
+  useOnboarding,
+} from "@/lib/onboarding/onboarding-provider";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
 import { cn } from "@/lib/utils";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
@@ -113,41 +119,44 @@ export function AppShell({ children }: AppShellProps) {
         </main>
       ) : (
         <NavigationStatusProvider>
-          <SidebarProvider defaultOpen={!shouldCollapse}>
-            <AppSidebar />
-            <NavAwareSidebarCircleToggle />
-            <MaintenanceModeOverlay />
-            <main className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto">
-              <ConnectivityBar />
-              {notification && (
-                <SiteNotificationBar
-                  content={notification.content}
-                  notificationId={notification.id}
-                />
-              )}
-              <ImpersonationBanner />
-              <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
-                <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
-                <div
-                  id="mobile-header-actions"
-                  className="flex items-center gap-2"
-                />
-              </header>
-              <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-                <div
-                  className={cn(
-                    "flex-1 flex flex-col",
-                    isViewportLocked && "min-h-0",
-                  )}
-                >
-                  {children}
+          <OnboardingProvider>
+            <SidebarProvider defaultOpen={!shouldCollapse}>
+              <AppSidebar />
+              <NavAwareSidebarCircleToggle />
+              <MaintenanceModeOverlay />
+              <main className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto">
+                <ConnectivityBar />
+                {notification && (
+                  <SiteNotificationBar
+                    content={notification.content}
+                    notificationId={notification.id}
+                  />
+                )}
+                <ImpersonationBanner />
+                <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
+                  <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
+                  <div
+                    id="mobile-header-actions"
+                    className="flex items-center gap-2"
+                  />
+                </header>
+                <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+                  <div
+                    className={cn(
+                      "flex-1 flex flex-col",
+                      isViewportLocked && "min-h-0",
+                    )}
+                  >
+                    {children}
+                  </div>
+                  <Version />
                 </div>
-                <Version />
-              </div>
-            </main>
-            <Toaster />
-            <ConversationSearchProvider />
-          </SidebarProvider>
+              </main>
+              <Toaster />
+              <ConversationSearchProvider />
+              <OnboardingSurveyGate />
+            </SidebarProvider>
+          </OnboardingProvider>
         </NavigationStatusProvider>
       )}
     </ConnectivityProvider>
@@ -164,5 +173,14 @@ function ConnectivityBar() {
 
 function NavAwareSidebarCircleToggle() {
   const { isNavigating } = useNavigationStatus();
-  return <SidebarCircleToggle loading={isNavigating} />;
+  const { state } = useSidebar();
+  const { hasPendingItems } = useOnboarding();
+  // While the sidebar is collapsed its per-item dots are hidden, so nudge from
+  // the toggle instead.
+  return (
+    <SidebarCircleToggle
+      loading={isNavigating}
+      showDot={state === "collapsed" && hasPendingItems}
+    />
+  );
 }

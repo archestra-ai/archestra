@@ -564,6 +564,15 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "ephemeral in-app notifications; per-user UI state",
   },
+  userOnboardingStepsTable: {
+    audited: false,
+    reason: "per-user onboarding progress; UI state driving red-dot hints",
+  },
+  onboardingSurveySubmissionsTable: {
+    audited: false,
+    reason:
+      "one-time onboarding survey submission marker; answers stored off-platform, not security-relevant",
+  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

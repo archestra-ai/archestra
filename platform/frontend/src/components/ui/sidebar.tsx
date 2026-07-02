@@ -311,8 +311,13 @@ function SidebarTrigger({
 function SidebarCircleToggle({
   className,
   loading = false,
+  showDot = false,
   ...props
-}: React.ComponentProps<"button"> & { loading?: boolean }) {
+}: React.ComponentProps<"button"> & {
+  loading?: boolean;
+  /** Show a small nudge dot (e.g. pending onboarding while collapsed). */
+  showDot?: boolean;
+}) {
   const { toggleSidebar, state, isMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
   const isMac =
@@ -368,6 +373,9 @@ function SidebarCircleToggle({
             />
           )}
           <span className="sr-only">Toggle Sidebar</span>
+          {showDot && (
+            <span className="absolute -top-0.5 left-1/2 size-1.5 -translate-x-1/2 animate-in fade-in-0 zoom-in-50 rounded-full bg-red-500/80 shadow-[0_0_5px_1px] shadow-red-500/30 duration-300 ease-out" />
+          )}
         </button>
       </TooltipTrigger>
       <TooltipContent side="right">

@@ -80,6 +80,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   chatAgentPicker: ["enable"],
   chatProviderSettings: ["enable"],
   chatExpandToolCalls: ["enable"],
+  onboarding: ["read", "update"],
 
   // Administration
   siteNotification: ["read", "create", "update", "delete"],
@@ -148,6 +149,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   chatAgentPicker: ["enable"],
   chatProviderSettings: ["enable"],
   chatExpandToolCalls: ["enable"],
+  onboarding: ["read", "update"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: [],
@@ -219,6 +221,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   chatAgentPicker: ["enable"],
   chatProviderSettings: ["enable"],
   chatExpandToolCalls: ["enable"],
+  onboarding: ["read", "update"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: [],
@@ -435,6 +438,8 @@ export const permissionDescriptions: Record<string, string> = {
   "chatAgentPicker:enable": "Show agent picker in chat",
   "chatProviderSettings:enable": "Show model and API key selectors in chat",
   "chatExpandToolCalls:enable": "Allow expanding tool call details in chat",
+  "onboarding:read": "View your own onboarding progress",
+  "onboarding:update": "Update your own onboarding progress",
 
   // Administration
   "siteNotification:read": "View site-wide notifications",
@@ -1374,6 +1379,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetProjectInstructions]: { project: ["update"] },
   [RouteId.PinProject]: { project: ["read"] },
   [RouteId.UnpinProject]: { project: ["read"] },
+  [RouteId.GetOnboardingSteps]: { onboarding: ["read"] },
+  [RouteId.CompleteOnboardingStep]: { onboarding: ["update"] },
+  [RouteId.GetOnboardingSurveyStatus]: { onboarding: ["read"] },
+  [RouteId.SubmitOnboardingSurvey]: { onboarding: ["update"] },
   [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
   // Editing a file's text content shares the delete path's authorization
   // (author / project access), enforced per-file in the store handler.

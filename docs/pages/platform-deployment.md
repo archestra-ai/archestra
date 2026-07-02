@@ -1421,6 +1421,13 @@ The audit log records administrative actions (mutations via `/api/*` and auth ev
   - Must be a non-negative integer; invalid values fall back to the default (disabled).
   - When enabled, the sweep runs once every 24 hours as a background task.
 
+### Onboarding
+
+- **`ARCHESTRA_ONBOARDING_SURVEY_ENDPOINT`** - Endpoint the one-time onboarding survey answers are forwarded to for collection.
+  - Default: `https://archestra.ai/api/onboarding-survey`.
+  - Set to an empty string to disable forwarding. The submission is still recorded locally (one marker row per organization), so the survey is not shown again.
+  - The survey is only shown to the first admin of a fresh (empty) organization and never on licensed enterprise deployments.
+
 ### Maintenance Mode
 
 - **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Enables maintenance mode and displays a custom message to all users blocking access to the platform.

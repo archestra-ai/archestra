@@ -577,6 +577,12 @@ export const RouteId = {
   SetProjectInstructions: "setProjectInstructions",
   PinProject: "pinProject",
   UnpinProject: "unpinProject",
+
+  // Onboarding Routes
+  GetOnboardingSteps: "getOnboardingSteps",
+  CompleteOnboardingStep: "completeOnboardingStep",
+  GetOnboardingSurveyStatus: "getOnboardingSurveyStatus",
+  SubmitOnboardingSurvey: "submitOnboardingSurvey",
   DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
   UpdateSkillSandboxArtifactContent: "updateSkillSandboxArtifactContent",
 

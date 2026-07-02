@@ -1559,6 +1559,16 @@ const config = {
       process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,
     ),
   },
+  onboarding: {
+    /**
+     * Where the one-time onboarding survey answers are forwarded for
+     * collection (archestra-website API). Empty string disables forwarding
+     * (the submission is still recorded locally so the form isn't re-shown).
+     */
+    surveyEndpoint:
+      process.env.ARCHESTRA_ONBOARDING_SURVEY_ENDPOINT ??
+      "https://archestra.ai/api/onboarding-survey",
+  },
 };
 
 export const shouldRunWebServer = config.processType !== "worker";

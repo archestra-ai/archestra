@@ -82,6 +82,7 @@ export const resources = [
   "chatAgentPicker",
   "chatProviderSettings",
   "chatExpandToolCalls",
+  "onboarding",
   "siteNotification",
 ] as const;
 
@@ -130,6 +131,7 @@ export const resourceLabels: Record<Resource, string> = {
   chatAgentPicker: "Chat Agent Picker",
   chatProviderSettings: "Chat Provider Settings",
   chatExpandToolCalls: "Chat Expand Tool Calls",
+  onboarding: "Onboarding",
   siteNotification: "Site Notifications",
 };
 
@@ -187,6 +189,7 @@ export const resourceDescriptions: Record<Resource, string> = {
     "Controls visibility of model and API key selectors in chat",
   chatExpandToolCalls:
     "Controls ability to expand and view tool call details in chat",
+  onboarding: "The current user's own onboarding progress (visited menu items)",
   organization: "Organization (internal, used by authentication system)",
   siteNotification: "Site-wide notification banners and announcements",
 };
@@ -240,6 +243,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "chatAgentPicker",
     "chatProviderSettings",
     "chatExpandToolCalls",
+    "onboarding",
   ],
   Administration: [
     "member",

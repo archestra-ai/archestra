@@ -39,6 +39,7 @@ import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import { AppLogo } from "@/components/app-logo";
+import { OnboardingDot } from "@/components/onboarding-dot";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -60,10 +61,11 @@ import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
-
 import { useGithubStars } from "@/lib/github/github.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useOnce } from "@/lib/hooks/use-once";
+import { useOnboarding } from "@/lib/onboarding/onboarding-provider";
+import { menuStepForUrl } from "@/lib/onboarding/onboarding-steps";
 import { cn } from "@/lib/utils";
 
 interface NavSubItem {
@@ -93,6 +95,13 @@ interface NavGroup {
 type SidebarMode = "chats" | "studio";
 
 const SIDEBAR_MODE_STORAGE_KEY = "archestra-sidebar-mode";
+
+// "New" pills are a temporary launch nudge: they retire two weeks after the
+// July 6, 2026 launch — i.e. from July 20, 2026 they no longer render.
+const NEW_BADGE_RETIRES_AT = Date.UTC(2026, 6, 20);
+function isNewBadgeVisible(): boolean {
+  return Date.now() < NEW_BADGE_RETIRES_AT;
+}
 
 // Items of the Chats tab (flat list above Recents)
 const chatsNavItems: NavItem[] = [
@@ -195,6 +204,7 @@ function SidebarModeToggle({
   mode: SidebarMode;
   onPick: (mode: SidebarMode) => void;
 }) {
+  const { isTabDotVisible } = useOnboarding();
   const segment = (value: SidebarMode, label: string, Icon: LucideIcon) => (
     <button
       type="button"
@@ -209,6 +219,10 @@ function SidebarModeToggle({
     >
       <Icon className="h-3.5 w-3.5" />
       {label}
+      {/* Rollup dot: nudge the user to the *other* tab when it still has
+          unvisited items. The active tab already shows its per-item dots, so
+          suppress the rollup there to avoid a redundant double signal. */}
+      <OnboardingDot visible={mode !== value && isTabDotVisible(value)} />
     </button>
   );
 
@@ -369,6 +383,7 @@ const NavPrimary = ({
   permissionMap: Record<string, boolean>;
 }) => {
   const { isMobile, setOpenMobile } = useSidebar();
+  const { isMenuDotVisible } = useOnboarding();
 
   const renderItem = (item: NavItem) => (
     <SidebarMenuItem key={item.title}>
@@ -389,7 +404,11 @@ const NavPrimary = ({
         >
           <item.icon className={item.iconClassName} />
           <span>{item.title}</span>
-          {item.beta && (
+          <OnboardingDot
+            visible={isMenuDotVisible(item.url)}
+            className="ml-1 group-data-[collapsible=icon]:hidden"
+          />
+          {item.beta && isNewBadgeVisible() && (
             <Badge
               variant="secondary"
               className="ml-auto px-1.5 py-0 text-[10px] group-data-[collapsible=icon]:hidden"
@@ -696,6 +715,29 @@ export function AppSidebar() {
         }),
     }));
   }, [skillsEnabled, projectsEnabled, betaEnabled]);
+
+  // Tell the onboarding provider which dotted items this user can actually see
+  // (feature-flag + RBAC filtered), so hidden items don't keep the tab-rollup
+  // or collapsed-toggle dots lit forever.
+  const { registerVisibleSteps } = useOnboarding();
+  const visibleOnboardingKeys = React.useMemo(() => {
+    const keys = new Set<string>();
+    const consider = (url: string) => {
+      // Until permissions load, treat nothing as visible (dots appear once known).
+      if (!permissionMap) return;
+      if (permissionMap[url] ?? true) {
+        const step = menuStepForUrl(url);
+        if (step) keys.add(step.key);
+      }
+    };
+    for (const item of filteredChatsNavItems) consider(item.url);
+    for (const group of filteredNavGroups)
+      for (const item of group.items) consider(item.url);
+    return Array.from(keys);
+  }, [filteredChatsNavItems, filteredNavGroups, permissionMap]);
+  React.useEffect(() => {
+    registerVisibleSteps(visibleOnboardingKeys);
+  }, [registerVisibleSteps, visibleOnboardingKeys]);
 
   return (
     <Sidebar collapsible="icon">

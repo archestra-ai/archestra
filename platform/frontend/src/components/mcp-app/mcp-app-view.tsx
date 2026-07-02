@@ -66,6 +66,28 @@ const SCREENSHOT_DATA_URL_PREFIX = /^data:image\/(png|jpeg|webp);base64,/;
  * (standalone run page, app preview) — those fill their own layout instead. */
 const UNCAPPED_INITIAL_HEIGHT = 600;
 
+/**
+ * Build the iframe `allow` (Permissions Policy) attribute from the app's
+ * requested permissions. This MUST be applied to the outer sandbox-proxy
+ * iframe as well as the inner app iframe (built in mcp-sandbox-proxy.html):
+ * Permissions Policy only delegates a feature to a descendant frame when every
+ * frame in the chain grants it, so omitting it here blocks the feature before
+ * it can reach the app (e.g. getUserMedia throws SecurityError). Kept in sync
+ * with buildAllowAttribute() in mcp-sandbox-proxy.html and the allowed keys in
+ * services/apps/app-ui-policy.ts.
+ */
+function buildIframeAllowAttribute(
+  permissions: McpUiResourcePermissions | undefined,
+): string {
+  if (!permissions) return "";
+  const allowList: string[] = [];
+  if (permissions.camera) allowList.push("camera");
+  if (permissions.microphone) allowList.push("microphone");
+  if (permissions.geolocation) allowList.push("geolocation");
+  if (permissions.clipboardWrite) allowList.push("clipboard-write");
+  return allowList.join("; ");
+}
+
 /** The `containerDimensions` hint sent to the guest: an honest inline ceiling,
  * or `{}` when uncapped (fullscreen, or a surface that supplies no ceiling). */
 function containerDimensionsHint(
@@ -796,6 +818,13 @@ function SandboxIframe({
   // Read inside the (effect-bound) size handler; a ref keeps the latest cap
   // without re-binding onsizechange on every cap change.
   const maxHeightRef = useRef(maxHeight);
+  // The Permissions Policy `allow` value for the outer proxy iframe, derived
+  // from the app's requested permissions. Read at iframe-creation time only; a
+  // ref keeps it out of the effect deps so a re-render doesn't remount the
+  // iframe. The effect below still lists `allowAttribute` in its deps so a
+  // genuine permission change rebuilds the frame.
+  const allowAttribute = buildIframeAllowAttribute(permissions);
+  const allowAttributeRef = useRef(allowAttribute);
 
   useEffect(() => {
     onSizeChangedRef.current = onSizeChanged;
@@ -804,6 +833,7 @@ function SandboxIframe({
     onScreenshotRef.current = onScreenshot;
     initialHeightRef.current = initialHeight;
     maxHeightRef.current = maxHeight;
+    allowAttributeRef.current = allowAttribute;
   });
 
   // Create iframe, wait for proxy-ready, connect bridge
@@ -825,6 +855,15 @@ function SandboxIframe({
         ? "allow-scripts allow-same-origin allow-forms allow-popups"
         : "allow-scripts allow-forms allow-popups",
     );
+    // Permissions Policy delegation: the outer proxy iframe MUST grant every
+    // feature the inner app frame will request, or the browser blocks it before
+    // it reaches the app (getUserMedia → SecurityError). The inner frame
+    // (mcp-sandbox-proxy.html) sets its own matching `allow`; both are needed
+    // because the policy is only delegated when every frame in the chain grants
+    // it. Empty string → attribute omitted (no extra features granted).
+    if (allowAttributeRef.current) {
+      iframe.setAttribute("allow", allowAttributeRef.current);
+    }
     iframe.src = sandboxUrl.href;
     iframeRef.current = iframe;
 
@@ -910,7 +949,13 @@ function SandboxIframe({
       setConnectedBridge((current) => (current === appBridge ? null : current));
       setInitialized(false);
     };
-  }, [sandboxUrl.href, sandboxUrl.origin, appBridge, useDedicatedOrigin]);
+  }, [
+    sandboxUrl.href,
+    sandboxUrl.origin,
+    appBridge,
+    useDedicatedOrigin,
+    allowAttribute,
+  ]);
 
   // Set up size change and initialized handlers
   useEffect(() => {

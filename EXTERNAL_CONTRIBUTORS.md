@@ -675,3 +675,11 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Sakayorii
 - @ghorhh-coder
 - @Rohan-Mishras
+- @Abdullateef1x
+- @ashmitjsg
+- @rwchaneyjr
+- @zbl1998-sdjn
+- @AdarshVerma21
+- @AllaRohith
+- @oogxdd
+- @cartoonasd00488-lab

@@ -6,6 +6,11 @@ export default defineConfig({
   plugins: [tsconfigPaths()],
   resolve: {
     alias: {
+      // Explicit absolute-path alias (tsconfigPaths also provides "@/", but
+      // Vitest's Jest-style __mocks__ sibling resolution only works reliably
+      // through resolve.alias — with tsconfig-paths-only aliasing it silently
+      // falls back to automocking (vitest-dev/vitest#8343).
+      "@": path.resolve(__dirname, "./src"),
       "@archestra/shared/access-control": path.resolve(
         __dirname,
         "../shared/access-control.ts",

@@ -15,41 +15,10 @@ import IdentityProviderModel, {
   type IdpGetRoleData,
 } from "./identity-provider.ee";
 
-// Mock the logger to avoid console output during tests
-vi.mock("@/logging", () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
-// Mock cacheManager for SSO groups caching tests (preserves LRUCacheManager, CacheKey exports)
-const mockCacheStore = new Map<string, unknown>();
-vi.mock("@/cache-manager", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/cache-manager")>();
-  return {
-    ...actual,
-    cacheManager: {
-      get: vi.fn(async (key: string) => mockCacheStore.get(key)),
-      set: vi.fn(async (key: string, value: unknown, _ttl?: number) => {
-        mockCacheStore.set(key, value);
-        return value;
-      }),
-      delete: vi.fn(async (key: string) => {
-        const existed = mockCacheStore.has(key);
-        mockCacheStore.delete(key);
-        return existed;
-      }),
-      getAndDelete: vi.fn(async (key: string) => {
-        const value = mockCacheStore.get(key);
-        mockCacheStore.delete(key);
-        return value;
-      }),
-    },
-  };
-});
+// The canonical Map-backed fake from src/__mocks__/cache-manager.ts backs the
+// SSO groups caching tests (preserves LRUCacheManager, CacheKey exports); the
+// store resets before every test.
+vi.mock("@/cache-manager");
 
 const mockProvider = {
   id: "test-provider-id",

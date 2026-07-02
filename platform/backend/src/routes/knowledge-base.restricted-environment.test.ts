@@ -1,4 +1,4 @@
-import { type Mock, vi } from "vitest";
+import { vi } from "vitest";
 import { KnowledgeBaseConnectorModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -10,15 +10,12 @@ import type { User } from "@/types";
 // environment:deploy-to-restricted (or environment:admin). The gate computes
 // canDeployToRestricted from `userHasPermission`, so we override only that
 // export (resource-aware) and leave the rest of @/auth/utils intact.
-vi.mock("@/auth/utils", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/auth/utils")>();
-  return { ...actual, userHasPermission: vi.fn() };
-});
+vi.mock("@/auth/utils");
 
 import { userHasPermission } from "@/auth/utils";
 import { createEnvironment } from "@/services/environments/environment";
 
-const mockUserHasPermission = userHasPermission as Mock;
+const mockUserHasPermission = vi.mocked(userHasPermission);
 
 describe("Knowledge connector - restricted environment assignment guard", () => {
   let app: FastifyInstanceWithZod;

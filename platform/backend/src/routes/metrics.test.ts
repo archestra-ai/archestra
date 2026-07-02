@@ -17,22 +17,11 @@ vi.mock("fastify-metrics", () => ({
   },
 }));
 
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/config")>();
-  return {
-    ...actual,
-    default: {
-      ...actual.default,
-      observability: {
-        ...actual.default.observability,
-        metrics: {
-          ...actual.default.observability.metrics,
-          secret: "foo-bar",
-        },
-      },
-    },
-  };
-});
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    observability: { metrics: { secret: "foo-bar" } },
+  }),
+);
 
 import {
   createFastifyInstance,

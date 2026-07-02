@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { Textarea } from "@/components/ui/textarea";
+import { SecretTextarea } from "@/components/ui/secret-input";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   type GithubAppConfig,
@@ -333,16 +333,13 @@ export default function GithubAppsSettingsPage() {
                   <FormItem>
                     <FormLabel>Private Key</FormLabel>
                     <FormControl>
-                      <Textarea
+                      <SecretTextarea
                         placeholder={
                           isEditing
                             ? "Leave empty to keep the existing private key"
                             : "Paste the GitHub App private key PEM"
                         }
                         rows={6}
-                        autoComplete="new-password"
-                        data-1p-ignore
-                        data-lpignore="true"
                         {...field}
                       />
                     </FormControl>

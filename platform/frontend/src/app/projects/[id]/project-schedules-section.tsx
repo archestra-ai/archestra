@@ -3,6 +3,7 @@
 import {
   CalendarClock,
   ExternalLink,
+  Loader2,
   MoreHorizontal,
   Pause,
   Play,
@@ -128,13 +129,15 @@ function ScheduleRow({ schedule }: { schedule: ScheduleTrigger }) {
 
   const { resolve, isResolving } = useResolveRunChat();
   // "Open recent run" (overflow menu) opens this schedule's LAST run's chat.
-  // Fetch just that run (no polling — the section already refreshes the trigger
-  // list).
+  // Fetch just that run; poll while it's running so a manual/scheduled run shows
+  // its live "running" state (spinner) here and settles on its own.
   const { data: runsResponse } = useScheduleTriggerRuns(schedule.id, {
     limit: 1,
-    refetchInterval: false,
+    refetchInterval: (query) =>
+      query.state.data?.data?.[0]?.status === "running" ? 3_000 : false,
   });
   const lastRun = runsResponse?.data?.[0];
+  const isLastRunActive = lastRun?.status === "running";
   const lastRunChatHref = lastRun
     ? runChatHref({ triggerId: schedule.id, run: lastRun })
     : null;
@@ -161,13 +164,20 @@ function ScheduleRow({ schedule }: { schedule: ScheduleTrigger }) {
             !schedule.enabled && "bg-muted",
           )}
         >
-          <CalendarClock
-            className={cn(
-              "h-4 w-4 text-primary",
-              !schedule.enabled && "text-muted-foreground",
-            )}
-            aria-hidden
-          />
+          {isLastRunActive ? (
+            <Loader2
+              className="h-4 w-4 animate-spin text-amber-500"
+              aria-hidden
+            />
+          ) : (
+            <CalendarClock
+              className={cn(
+                "h-4 w-4 text-primary",
+                !schedule.enabled && "text-muted-foreground",
+              )}
+              aria-hidden
+            />
+          )}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">

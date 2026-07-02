@@ -80,7 +80,7 @@ class AgentModel {
           notDeleted(schema.agentsTable),
         ),
       )
-      .orderBy(desc(schema.agentsTable.createdAt));
+      .orderBy(desc(schema.agentsTable.createdAt), desc(schema.agentsTable.id));
   }
 
   static async activeNameExistsInOrganization(params: {
@@ -568,7 +568,7 @@ class AgentModel {
       .select()
       .from(schema.agentsTable)
       .where(and(...whereConditions))
-      .orderBy(desc(schema.agentsTable.createdAt));
+      .orderBy(desc(schema.agentsTable.createdAt), desc(schema.agentsTable.id));
 
     // Get tools, teams, and labels for all agents
     const agentIds = agents.map((a) => a.id);
@@ -656,7 +656,7 @@ class AgentModel {
       .select()
       .from(schema.agentsTable)
       .where(and(...whereConditions))
-      .orderBy(desc(schema.agentsTable.createdAt));
+      .orderBy(desc(schema.agentsTable.createdAt), desc(schema.agentsTable.id));
 
     const agentIds = agents.map((a) => a.id);
 

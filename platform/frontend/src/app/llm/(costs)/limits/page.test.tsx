@@ -5,7 +5,6 @@ import LimitsPage, { getLimitModels } from "./page";
 const mockSetCostsAction = vi.fn();
 const mockUseLimits = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
-const mockUseHasPermissions = vi.fn(() => ({ data: true, isPending: false }));
 
 vi.mock("next/link", () => ({
   default: ({
@@ -44,16 +43,9 @@ vi.mock("@/lib/environment.query", () => ({
   useEnvironments: () => ({ data: { environments: [] } }),
 }));
 
-vi.mock("@/lib/teams/team.query", () => ({
-  useTeams: () => ({ data: [] }),
-}));
+vi.mock("@/lib/teams/team.query");
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => ({
-    data: { id: "org-1", defaultUserLimitValue: 100 },
-  }),
-  useOrganizationMembers: () => ({ data: [] }),
-}));
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/virtual-api-keys.query", () => ({
   useAllVirtualApiKeys: (...args: unknown[]) =>
@@ -99,10 +91,17 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => mockUseHasPermissions(),
-  useMissingPermissions: () => [],
-}));
+vi.mock("@/lib/auth/auth.query");
+
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
+import {
+  useOrganization,
+  useOrganizationMembers,
+} from "@/lib/organization.query";
+import { useTeams } from "@/lib/teams/team.query";
 
 vi.mock("@/components/loading", () => ({
   LoadingSpinner: () => <div>Loading</div>,
@@ -320,7 +319,22 @@ vi.mock("@/components/searchable-multi-select", () => ({
 describe("LimitsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseHasPermissions.mockReturnValue({ data: true, isPending: false });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useMissingPermissions).mockReturnValue(
+      [] as unknown as ReturnType<typeof useMissingPermissions>,
+    );
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { id: "org-1", defaultUserLimitValue: 100 },
+    } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useOrganizationMembers).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useOrganizationMembers>);
     mockUseLimits.mockReturnValue({ data: [], isPending: false });
     mockUseAllVirtualApiKeys.mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
@@ -348,7 +362,10 @@ describe("LimitsPage", () => {
   });
 
   it("hides the default user limit settings notice without settings permission", () => {
-    mockUseHasPermissions.mockReturnValue({ data: false, isPending: false });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
 
     render(<LimitsPage />);
 

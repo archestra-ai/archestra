@@ -2,6 +2,31 @@
  * Shared chatops utility functions.
  */
 
+import type { SkippedAttachment } from "@/types/chatops";
+
+/**
+ * Build the in-context note telling the model that files were attached but not
+ * delivered, and why. Without this the model sees no trace of the file and
+ * confidently tells the user "no file came through". Returns "" when nothing
+ * was skipped so callers can append unconditionally.
+ */
+export function buildSkippedAttachmentsNote(
+  skipped: SkippedAttachment[],
+): string {
+  if (skipped.length === 0) return "";
+  const items = skipped
+    .map((s) => {
+      const name = s.name ? `"${s.name}"` : "an unnamed file";
+      const size =
+        s.sizeBytes !== undefined ? ` (${formatByteSize(s.sizeBytes)})` : "";
+      return `${name}${size} — ${SKIPPED_REASON_TEXT[s.reason]}`;
+    })
+    .join("; ");
+  const count =
+    skipped.length === 1 ? "1 file was" : `${skipped.length} files were`;
+  return `\n\n[Note: ${count} attached to this message but could not be shown to you: ${items}. If the user refers to such a file, explain it could not be included (e.g. it was too large) rather than saying you see nothing.]`;
+}
+
 /**
  * In-memory dedup map for Slack events.
  *
@@ -101,3 +126,25 @@ export function errorMessage(error: unknown): string {
     }
   }
 }
+
+// ===========================================================================
+// Internal helpers
+// ===========================================================================
+
+/**
+ * Human-readable byte size (e.g. "15.8 MB", "107 KB"), matching the units the
+ * provider UIs show. Binary (1024) so it lines up with Slack's file labels.
+ */
+function formatByteSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
+}
+
+const SKIPPED_REASON_TEXT: Record<SkippedAttachment["reason"], string> = {
+  too_large: "too large",
+  download_failed: "could not be downloaded",
+  total_limit_reached: "skipped (total attachment size limit reached)",
+  too_many: "skipped (too many files attached)",
+};

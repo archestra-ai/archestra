@@ -198,6 +198,13 @@ describe("AgentModel", () => {
         teams: [],
         scope: "org",
       });
+      // Back-to-back creates can land on the same createdAt millisecond,
+      // making "newest first" a coin flip. Backdate the older agent so the
+      // assertion pins ordering intent, not scheduler timing.
+      await db
+        .update(schema.agentsTable)
+        .set({ createdAt: new Date(Date.now() - 60_000) })
+        .where(eq(schema.agentsTable.id, olderAgent.id));
 
       const result = await AgentModel.findBasicByOrganizationIdAndIds({
         organizationId: organization.id,

@@ -1,7 +1,17 @@
 import type { IncomingHttpHeaders } from "node:http";
 import type { Permissions } from "@archestra/shared";
 import { vi } from "vitest";
-import { ServiceAccountModel, UserModel } from "@/models";
+
+// better-auth is the real external auth boundary — mock it, not the DB.
+vi.mock("./better-auth", () => ({
+  auth: {
+    api: {
+      getSession: vi.fn(),
+      verifyApiKey: vi.fn(),
+    },
+  },
+}));
+
 import {
   beforeEach,
   describe,
@@ -9,47 +19,12 @@ import {
   type MockedFunction,
   test,
 } from "@/test";
-import { hasPermission } from "./utils";
-
-vi.mock("@/models", () => ({
-  ServiceAccountModel: {
-    verifyToken: vi.fn(),
-    getPermissions: vi.fn(),
-    findById: vi.fn(),
-  },
-  UserModel: {
-    getById: vi.fn(),
-    getUserPermissions: vi.fn(),
-  },
-}));
-
-// Mock the better-auth module
-vi.mock("./better-auth", () => ({
-  auth: {
-    api: {
-      hasPermission: vi.fn(),
-      verifyApiKey: vi.fn(),
-    },
-  },
-}));
-
 import { auth as betterAuth } from "./better-auth";
-
-// Type the mocked functions
-const mockUserModel = UserModel as unknown as {
-  getById: MockedFunction<typeof UserModel.getById>;
-  getUserPermissions: MockedFunction<typeof UserModel.getUserPermissions>;
-};
-
-const mockServiceAccountModel = ServiceAccountModel as unknown as {
-  verifyToken: MockedFunction<typeof ServiceAccountModel.verifyToken>;
-  getPermissions: MockedFunction<typeof ServiceAccountModel.getPermissions>;
-  findById: MockedFunction<typeof ServiceAccountModel.findById>;
-};
+import { hasPermission } from "./utils";
 
 const mockBetterAuth = betterAuth as unknown as {
   api: {
-    hasPermission: MockedFunction<typeof betterAuth.api.hasPermission>;
+    getSession: MockedFunction<() => Promise<unknown>>;
     verifyApiKey: MockedFunction<typeof betterAuth.api.verifyApiKey>;
   };
 };
@@ -59,122 +34,176 @@ type ApiKey = Awaited<ReturnType<typeof betterAuth.api.verifyApiKey>>["key"];
 describe("hasPermission", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUserModel.getById.mockResolvedValue(makeUserWithOrganization());
-    mockUserModel.getUserPermissions.mockResolvedValue({
-      agent: ["read", "create", "update", "delete", "admin"],
-      mcpServerInstallation: ["admin"],
-      team: ["read"],
-    });
-    mockServiceAccountModel.verifyToken.mockResolvedValue(null);
-    mockServiceAccountModel.getPermissions.mockResolvedValue({});
-    mockServiceAccountModel.findById.mockResolvedValue(null);
   });
 
   describe("session-based authentication", () => {
-    test("should return success when user has required permissions", async () => {
-      const permissions: Permissions = { agent: ["read"] };
-      const headers: IncomingHttpHeaders = {
-        cookie: "session-cookie",
-      };
+    test("should return success when user has required permissions", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const role = await makeCustomRole(org.id, {
+        permission: { agent: ["read"] },
+      });
+      await makeMember(user.id, org.id, { role: role.role });
 
-      mockBetterAuth.api.hasPermission.mockResolvedValue({
-        success: true,
-        error: null,
+      const permissions: Permissions = { agent: ["read"] };
+      const headers: IncomingHttpHeaders = { cookie: "session-cookie" };
+
+      // The session is only consulted for the caller's IDENTITY; the
+      // permissions themselves are evaluated from the DB member role.
+      mockBetterAuth.api.getSession.mockResolvedValue({
+        user: { id: user.id },
       });
 
       const result = await hasPermission(permissions, headers);
 
       expect(result).toEqual({ success: true, error: null });
-      expect(mockBetterAuth.api.hasPermission).toHaveBeenCalledWith({
-        headers: expect.any(Headers),
-        body: { permissions },
-      });
     });
 
-    test("should return failure when user lacks required permissions", async () => {
-      const permissions: Permissions = { agent: ["admin"] };
-      const headers: IncomingHttpHeaders = {
-        cookie: "session-cookie",
-      };
+    test("should return failure when user lacks required permissions", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const role = await makeCustomRole(org.id, {
+        permission: { agent: ["read"] },
+      });
+      await makeMember(user.id, org.id, { role: role.role });
 
-      mockBetterAuth.api.hasPermission.mockResolvedValue({
-        success: false,
-        error: null,
+      const permissions: Permissions = { agent: ["admin"] };
+      const headers: IncomingHttpHeaders = { cookie: "session-cookie" };
+
+      mockBetterAuth.api.getSession.mockResolvedValue({
+        user: { id: user.id },
       });
 
       const result = await hasPermission(permissions, headers);
 
       expect(result).toEqual({
         success: false,
-        error: null,
+        error: expect.objectContaining({ message: "Forbidden" }),
       });
-      expect(mockBetterAuth.api.hasPermission).toHaveBeenCalledWith({
-        headers: expect.any(Headers),
-        body: { permissions },
+    });
+
+    test("evaluates the DB role even when the session cookie carries a stale activeOrganizationId", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      // Regression for the merge-queue e2e outage: the session cookie cache
+      // snapshots activeOrganizationId at session creation, and a session
+      // created by sign-up-with-invitation caches `null` (the membership is
+      // accepted afterwards). Authorization must follow the DB membership,
+      // not the cookie snapshot.
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const role = await makeCustomRole(org.id, {
+        permission: { mcpServerInstallation: ["create"] },
       });
+      await makeMember(user.id, org.id, { role: role.role });
+
+      mockBetterAuth.api.getSession.mockResolvedValue({
+        user: { id: user.id },
+        session: { activeOrganizationId: null },
+      });
+
+      const result = await hasPermission(
+        { mcpServerInstallation: ["create"] },
+        { cookie: "session-cookie" },
+      );
+
+      expect(result).toEqual({ success: true, error: null });
+    });
+
+    test("skips session resolution when the caller provides a DB-fresh user context", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const role = await makeCustomRole(org.id, {
+        permission: { agent: ["read"] },
+      });
+      await makeMember(user.id, org.id, { role: role.role });
+
+      const result = await hasPermission({ agent: ["read"] }, {}, undefined, {
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      expect(result).toEqual({ success: true, error: null });
+      expect(mockBetterAuth.api.getSession).not.toHaveBeenCalled();
     });
   });
 
   describe("API key authentication", () => {
-    test("should allow valid API key when session check fails", async () => {
+    test("should allow valid API key when session check fails", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const role = await makeCustomRole(org.id, {
+        permission: { agent: ["read"] },
+      });
+      await makeMember(user.id, org.id, { role: role.role });
+
       const permissions: Permissions = { agent: ["read"] };
       const headers: IncomingHttpHeaders = {
         authorization: "Bearer api-key-123",
       };
 
-      // Mock hasPermission to throw (simulating no active session/organization)
-      mockBetterAuth.api.hasPermission.mockRejectedValue(
-        new Error("No active organization"),
-      );
-
-      // Mock API key verification to succeed
+      // No session → the session path throws and the API key fallback runs.
+      mockBetterAuth.api.getSession.mockResolvedValue(null);
       mockBetterAuth.api.verifyApiKey.mockResolvedValue({
         valid: true,
         error: null,
-        key: makeApiKey({
-          referenceId: "user1",
-          metadata: null,
-        }),
+        key: makeApiKey({ referenceId: user.id, metadata: null }),
       });
 
       const result = await hasPermission(permissions, headers);
 
       expect(result).toEqual({ success: true, error: null });
-      expect(mockUserModel.getById).toHaveBeenCalledWith("user1");
-      expect(mockUserModel.getUserPermissions).toHaveBeenCalledWith(
-        "user1",
-        "org-1",
-      );
       expect(mockBetterAuth.api.verifyApiKey).toHaveBeenCalledWith({
         body: { key: "Bearer api-key-123" },
       });
     });
 
-    test("should reject when API key owner lacks required permissions", async () => {
+    test("should reject when API key owner lacks required permissions", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const role = await makeCustomRole(org.id, {
+        permission: { agent: ["read"] },
+      });
+      await makeMember(user.id, org.id, { role: role.role });
+
       const permissions: Permissions = { agent: ["admin"] };
       const headers: IncomingHttpHeaders = {
         authorization: "Bearer limited-user-key",
       };
 
-      mockBetterAuth.api.hasPermission.mockRejectedValue(
-        new Error("No session"),
-      );
+      mockBetterAuth.api.getSession.mockResolvedValue(null);
       mockBetterAuth.api.verifyApiKey.mockResolvedValue({
         valid: true,
         error: null,
-        key: makeApiKey({
-          referenceId: "user-limited",
-          metadata: null,
-        }),
-      });
-      mockUserModel.getById.mockResolvedValue(
-        makeUserWithOrganization({
-          id: "user-limited",
-          email: "user-limited@test.com",
-        }),
-      );
-      mockUserModel.getUserPermissions.mockResolvedValue({
-        agent: ["read"],
+        key: makeApiKey({ referenceId: user.id, metadata: null }),
       });
 
       const result = await hasPermission(permissions, headers);
@@ -191,12 +220,7 @@ describe("hasPermission", () => {
         authorization: "Bearer invalid-key",
       };
 
-      // Mock hasPermission to throw
-      mockBetterAuth.api.hasPermission.mockRejectedValue(
-        new Error("No active organization"),
-      );
-
-      // Mock API key verification to fail
+      mockBetterAuth.api.getSession.mockResolvedValue(null);
       mockBetterAuth.api.verifyApiKey.mockResolvedValue({
         valid: false,
         error: null,
@@ -207,9 +231,7 @@ describe("hasPermission", () => {
 
       expect(result).toEqual({
         success: false,
-        error: expect.objectContaining({
-          message: "Invalid API key",
-        }),
+        error: expect.objectContaining({ message: "Invalid API key" }),
       });
     });
 
@@ -219,27 +241,19 @@ describe("hasPermission", () => {
         authorization: "Bearer ownerless-key",
       };
 
-      mockBetterAuth.api.hasPermission.mockRejectedValue(
-        new Error("No active organization"),
-      );
+      mockBetterAuth.api.getSession.mockResolvedValue(null);
       mockBetterAuth.api.verifyApiKey.mockResolvedValue({
         valid: true,
         error: null,
-        key: makeApiKey({
-          referenceId: undefined as unknown as string,
-        }),
+        key: makeApiKey({ referenceId: undefined as unknown as string }),
       });
 
       const result = await hasPermission(permissions, headers);
 
       expect(result).toEqual({
         success: false,
-        error: expect.objectContaining({
-          message: "Invalid API key",
-        }),
+        error: expect.objectContaining({ message: "Invalid API key" }),
       });
-      expect(mockUserModel.getById).not.toHaveBeenCalled();
-      expect(mockUserModel.getUserPermissions).not.toHaveBeenCalled();
     });
 
     test("should handle API key verification errors", async () => {
@@ -248,12 +262,7 @@ describe("hasPermission", () => {
         authorization: "Bearer some-key",
       };
 
-      // Mock hasPermission to throw
-      mockBetterAuth.api.hasPermission.mockRejectedValue(
-        new Error("No active organization"),
-      );
-
-      // Mock API key verification to throw
+      mockBetterAuth.api.getSession.mockResolvedValue(null);
       mockBetterAuth.api.verifyApiKey.mockRejectedValue(
         new Error("API key service error"),
       );
@@ -262,9 +271,7 @@ describe("hasPermission", () => {
 
       expect(result).toEqual({
         success: false,
-        error: expect.objectContaining({
-          message: "Invalid API key",
-        }),
+        error: expect.objectContaining({ message: "Invalid API key" }),
       });
     });
 
@@ -272,81 +279,93 @@ describe("hasPermission", () => {
       const permissions: Permissions = { agent: ["read"] };
       const headers: IncomingHttpHeaders = {};
 
-      // Mock hasPermission to throw
-      mockBetterAuth.api.hasPermission.mockRejectedValue(
-        new Error("No active organization"),
-      );
+      mockBetterAuth.api.getSession.mockResolvedValue(null);
 
       const result = await hasPermission(permissions, headers);
 
       expect(result).toEqual({
         success: false,
-        error: expect.objectContaining({
-          message: "No API key provided",
-        }),
+        error: expect.objectContaining({ message: "No API key provided" }),
       });
       expect(mockBetterAuth.api.verifyApiKey).not.toHaveBeenCalled();
     });
   });
 
   describe("edge cases", () => {
-    test("should handle empty permissions object", async () => {
-      const permissions: Permissions = {};
-      const headers: IncomingHttpHeaders = {
-        cookie: "session-cookie",
-      };
+    test("should handle empty permissions object", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const role = await makeCustomRole(org.id, {
+        permission: { agent: ["read"] },
+      });
+      await makeMember(user.id, org.id, { role: role.role });
 
-      mockBetterAuth.api.hasPermission.mockResolvedValue({
-        success: true,
-        error: null,
+      const permissions: Permissions = {};
+      const headers: IncomingHttpHeaders = { cookie: "session-cookie" };
+
+      mockBetterAuth.api.getSession.mockResolvedValue({
+        user: { id: user.id },
       });
 
       const result = await hasPermission(permissions, headers);
 
       expect(result).toEqual({ success: true, error: null });
-      expect(mockBetterAuth.api.hasPermission).toHaveBeenCalledWith({
-        headers: expect.any(Headers),
-        body: { permissions: {} },
-      });
     });
 
-    test("should handle complex permissions object", async () => {
+    test("should handle complex permissions object", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
       const permissions: Permissions = {
         agent: ["read", "create", "update", "delete"],
         mcpServerInstallation: ["admin"],
         team: ["read"],
       };
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const role = await makeCustomRole(org.id, { permission: permissions });
+      await makeMember(user.id, org.id, { role: role.role });
+
       const headers: IncomingHttpHeaders = {
         authorization: "Bearer api-key-complex",
       };
 
-      // Mock hasPermission to throw (API key fallback)
-      mockBetterAuth.api.hasPermission.mockRejectedValue(
-        new Error("No session"),
-      );
-
+      mockBetterAuth.api.getSession.mockResolvedValue(null);
       mockBetterAuth.api.verifyApiKey.mockResolvedValue({
         valid: true,
         error: null,
-        key: makeApiKey({
-          referenceId: "user1",
-          metadata: null,
-        }),
+        key: makeApiKey({ referenceId: user.id, metadata: null }),
       });
 
       const result = await hasPermission(permissions, headers);
 
       expect(result).toEqual({ success: true, error: null });
-      expect(mockUserModel.getUserPermissions).toHaveBeenCalledTimes(1);
       expect(mockBetterAuth.api.verifyApiKey).toHaveBeenCalledWith({
         body: { key: "Bearer api-key-complex" },
       });
     });
 
-    test("should pass through different authorization header formats", async () => {
-      const permissions: Permissions = { agent: ["read"] };
+    test("should pass through different authorization header formats", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const role = await makeCustomRole(org.id, {
+        permission: { agent: ["read"] },
+      });
+      await makeMember(user.id, org.id, { role: role.role });
 
-      // Test different header formats
+      const permissions: Permissions = { agent: ["read"] };
       const testCases = [
         "Bearer token123",
         "token456",
@@ -354,21 +373,13 @@ describe("hasPermission", () => {
       ];
 
       for (const authHeader of testCases) {
-        const headers: IncomingHttpHeaders = {
-          authorization: authHeader,
-        };
+        const headers: IncomingHttpHeaders = { authorization: authHeader };
 
-        mockBetterAuth.api.hasPermission.mockRejectedValue(
-          new Error("No session"),
-        );
-
+        mockBetterAuth.api.getSession.mockResolvedValue(null);
         mockBetterAuth.api.verifyApiKey.mockResolvedValue({
           valid: true,
           error: null,
-          key: makeApiKey({
-            referenceId: "user1",
-            metadata: null,
-          }),
+          key: makeApiKey({ referenceId: user.id, metadata: null }),
         });
 
         const result = await hasPermission(permissions, headers);
@@ -409,27 +420,6 @@ function makeApiKey(
     updatedAt: new Date(),
     metadata: null,
     permissions: null,
-    ...overrides,
-  };
-}
-
-function makeUserWithOrganization(
-  overrides: Partial<Awaited<ReturnType<typeof UserModel.getById>>> = {},
-): Awaited<ReturnType<typeof UserModel.getById>> {
-  return {
-    id: "user1",
-    name: "Test User",
-    email: "user1@test.com",
-    emailVerified: true,
-    image: null,
-    role: null,
-    banned: null,
-    banReason: null,
-    banExpires: null,
-    twoFactorEnabled: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    organizationId: "org-1",
     ...overrides,
   };
 }

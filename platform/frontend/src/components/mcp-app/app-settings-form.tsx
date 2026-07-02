@@ -7,10 +7,8 @@ import type {
 import { Globe, User, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { AppDeleteDialog } from "@/app/apps/_parts/app-delete-dialog";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
 import { EnvironmentSelector } from "@/components/environment-selector";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
@@ -32,33 +30,28 @@ type App = archestraApiTypes.GetAppResponses["200"];
 
 type FormValues = { name: string; description: string };
 
-// The whole-app settings page rendered inline in the right panel, replacing the
-// app's iframe body. It folds the previously separate rename dialog, manage-tools
-// dialog, and publish popover into one staged form committed by a single Save:
-// identity (name/description), the bound environment + assigned tools, and
-// visibility (scope + teams). The card's top bar owns the controls — a back arrow
-// (cancel, discards edits) and a save action wired to this form via `formId` —
-// so the form body is just the scrollable fields. `onStatusChange` reports
-// saving/validity up so the top bar's save button can disable/spin. Delete lives
-// in its own zone below the fields and keeps the confirmation dialog.
+// The whole-app settings fields, hosted by `AppSettingsDialog` (apps-page cards
+// and the side panel both open that dialog). It folds the previously separate
+// rename dialog, manage-tools dialog, and publish popover into one staged form
+// committed by a single Save: identity (name/description), the bound environment
+// + assigned tools, and visibility (scope + teams). The dialog owns the Save
+// button (wired to this form via `formId`) and Cancel; `onStatusChange` reports
+// saving/validity up so that button can disable/spin. Delete is intentionally
+// NOT here — it's a separate destructive action owned by each host.
 export function AppSettingsForm({
   app,
   onBack,
   formId,
   onStatusChange,
-  onDeleted,
 }: {
   app: App;
   onBack: () => void;
-  /** Ties the top bar's submit button to this form via the HTML `form` attr. */
+  /** Ties the host's submit button to this form via the HTML `form` attr. */
   formId: string;
   /** Reports save button state (must be a stable callback, e.g. a setState). */
   onStatusChange?: (status: { saving: boolean; disabled: boolean }) => void;
-  /** Called after the app is deleted — e.g. to close the panel. */
-  onDeleted?: () => void;
 }) {
   const { data: canUpdate } = useHasPermissions({ app: ["update"] });
-  const { data: canDelete } = useHasPermissions({ app: ["delete"] });
   const { data: isAppAdmin } = useHasPermissions({ app: ["admin"] });
   const { data: isAppTeamAdmin } = useHasPermissions({ app: ["team-admin"] });
   const { data: teams } = useAssignableTeams({ isResourceAdmin: !!isAppAdmin });
@@ -80,7 +73,6 @@ export function AppSettingsForm({
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
     () => new Set(),
   );
-  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // Seed the staged tool selection once the assignments land.
   useEffect(() => {
@@ -177,111 +169,81 @@ export function AppSettingsForm({
   });
 
   return (
-    <div className="flex h-full flex-col">
-      <form
-        id={formId}
-        onSubmit={onSubmit}
-        className="flex min-h-0 flex-1 flex-col"
-      >
-        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
-          {canUpdate && (
-            <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="app-settings-name">Name</Label>
-                <Input
-                  id="app-settings-name"
-                  {...form.register("name", { required: true, maxLength: 100 })}
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="app-settings-description">Description</Label>
-                <Textarea
-                  id="app-settings-description"
-                  {...form.register("description", { maxLength: 500 })}
-                />
-              </div>
-            </>
-          )}
-
-          <VisibilitySelector
-            heading="Who can use this app"
-            value={scope}
-            options={options}
-            onValueChange={setScope}
-          >
-            {scope === "team" && (
-              <div className="space-y-2">
-                <Label>Teams</Label>
-                <MultiSelectCombobox
-                  disabled={!canShareTeams || hasNoTeams}
-                  options={
-                    teams?.map((team) => ({
-                      value: team.id,
-                      label: team.name,
-                    })) ?? []
-                  }
-                  value={teamIds}
-                  onChange={setTeamIds}
-                  placeholder={
-                    hasNoTeams ? "No teams available" : "Search teams…"
-                  }
-                  emptyMessage="No teams found."
-                />
-              </div>
-            )}
-          </VisibilitySelector>
-
-          {canUpdate && (
-            <>
-              <EnvironmentSelector
-                value={environmentId}
-                onChange={setEnvironmentId}
-                helpText="The app can only be assigned and call MCP tools in this environment."
+    <form
+      id={formId}
+      onSubmit={onSubmit}
+      className="flex min-h-0 flex-1 flex-col"
+    >
+      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
+        {canUpdate && (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="app-settings-name">Name</Label>
+              <Input
+                id="app-settings-name"
+                {...form.register("name", { required: true, maxLength: 100 })}
               />
+            </div>
 
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold">Tools</h3>
-                <AppToolsEditor
-                  appId={app.id}
-                  environmentId={environmentId}
-                  selectedToolIds={selectedToolIds}
-                  onSelectionChange={setSelectedToolIds}
-                  unbounded
-                />
-              </div>
-            </>
-          )}
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="app-settings-description">Description</Label>
+              <Textarea
+                id="app-settings-description"
+                {...form.register("description", { maxLength: 500 })}
+              />
+            </div>
+          </>
+        )}
 
-          {canDelete && (
-            <div className="mt-2 space-y-3 border-t pt-6">
-              <div>
-                <h3 className="text-sm font-semibold text-destructive">
-                  Delete app
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Permanently removes the app and its version history. This
-                  cannot be undone.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => setDeleteOpen(true)}
-              >
-                Delete app
-              </Button>
+        <VisibilitySelector
+          heading="Who can use this app"
+          value={scope}
+          options={options}
+          onValueChange={setScope}
+        >
+          {scope === "team" && (
+            <div className="space-y-2">
+              <Label>Teams</Label>
+              <MultiSelectCombobox
+                disabled={!canShareTeams || hasNoTeams}
+                options={
+                  teams?.map((team) => ({
+                    value: team.id,
+                    label: team.name,
+                  })) ?? []
+                }
+                value={teamIds}
+                onChange={setTeamIds}
+                placeholder={
+                  hasNoTeams ? "No teams available" : "Search teams…"
+                }
+                emptyMessage="No teams found."
+              />
             </div>
           )}
-        </div>
-      </form>
+        </VisibilitySelector>
 
-      <AppDeleteDialog
-        app={app}
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        onDeleted={onDeleted}
-      />
-    </div>
+        {canUpdate && (
+          <>
+            <EnvironmentSelector
+              value={environmentId}
+              onChange={setEnvironmentId}
+              helpText="The app can only be assigned and call MCP tools in this environment."
+            />
+
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold">Tools</h3>
+              <AppToolsEditor
+                appId={app.id}
+                environmentId={environmentId}
+                selectedToolIds={selectedToolIds}
+                onSelectionChange={setSelectedToolIds}
+                unbounded
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </form>
   );
 }

@@ -8,12 +8,9 @@ import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-vi.mock("@/auth", () => ({
-  hasAnyAgentTypeAdminPermission: vi.fn().mockResolvedValue(false),
-  hasPermission: vi.fn(),
-}));
+vi.mock("@/auth");
 
-import { hasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 
 const mockHasPermission = hasPermission as Mock;
 
@@ -24,6 +21,7 @@ describe("schedule trigger routes", () => {
 
   beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
     mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(false);
 
     adminUser = await makeUser();
     const organization = await makeOrganization();

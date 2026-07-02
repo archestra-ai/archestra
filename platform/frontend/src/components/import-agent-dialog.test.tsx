@@ -20,6 +20,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { ImportAgentDialog } from "./import-agent-dialog";
 
 // ---------------------------------------------------------------------------
@@ -43,9 +44,7 @@ vi.mock("@/lib/agent.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Archestra",
-}));
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/components/editor", () => ({
   Editor: (props: {
@@ -136,6 +135,7 @@ async function simulateFileUpload(
 
 describe("ImportAgentDialog", () => {
   beforeEach(() => {
+    vi.mocked(useAppName).mockReturnValue("Archestra");
     mutate.mockClear();
     mutate.mockImplementation((payload, options) => {
       options?.onSuccess?.({

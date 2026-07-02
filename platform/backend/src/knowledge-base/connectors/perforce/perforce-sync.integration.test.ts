@@ -1,41 +1,58 @@
+import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
+import { useMswServer } from "@/test/msw";
 
 // End-to-end pipeline test for the Perforce connector: the REAL
 // PerforceConnector, sync service, chunker, embedding service, task records,
-// and database run together. Mocked: the HTTP boundary to the P4 REST API
-// (global fetch) and the embedding provider (the openai client plus the
-// org-level embedding-config lookup — the latter is internal but resolves
-// external provider credentials; mocking it follows embedder.test.ts).
+// and database run together. Mocked at the network boundary (MSW): the P4 REST
+// API and the OpenAI embeddings endpoint. The org-level embedding-config lookup
+// stays module-mocked (internal, but resolves external provider credentials;
+// mirrors embedder.test.ts).
 
 const fetchState: {
   handler: undefined | ((url: URL) => Response);
 } = { handler: undefined };
 
-vi.stubGlobal(
-  "fetch",
-  vi.fn(async (input: string | URL) => {
-    const url = input instanceof URL ? input : new URL(String(input));
-    if (!fetchState.handler) {
-      throw new Error("fetchState.handler not configured in test");
-    }
-    return fetchState.handler(url);
-  }),
-);
+// openai@6 requests base64 embeddings by default and decodes them client-side,
+// so the wire payload must carry Float32Array bytes, not a JSON number array.
+function encodeEmbedding(values: number[]): string {
+  const floats = new Float32Array(values);
+  return Buffer.from(
+    floats.buffer,
+    floats.byteOffset,
+    floats.byteLength,
+  ).toString("base64");
+}
 
-const mockEmbeddingsCreate = vi.hoisted(() => vi.fn());
-vi.mock("openai", () => {
-  class MockOpenAI {
-    static APIError = class APIError extends Error {
-      status: number;
-      constructor(status: number, message: string) {
-        super(message);
-        this.status = status;
-      }
-    };
-    embeddings = { create: mockEmbeddingsCreate };
+function p4Handler({ request }: { request: Request }): Response {
+  if (!fetchState.handler) {
+    throw new Error("fetchState.handler not configured in test");
   }
-  return { default: MockOpenAI };
-});
+  return fetchState.handler(new URL(request.url));
+}
+
+const mswHandlers = [
+  http.get(
+    "https://perforce.example.com:8080/api/v0/file/revisions",
+    p4Handler,
+  ),
+  http.get("https://perforce.example.com:8080/api/v0/file/contents", p4Handler),
+  http.post("https://api.openai.com/v1/embeddings", async ({ request }) => {
+    const body = (await request.json()) as { input: string[]; model: string };
+    return HttpResponse.json({
+      object: "list",
+      data: body.input.map((_, index) => ({
+        object: "embedding",
+        embedding: encodeEmbedding(
+          Array.from({ length: 1536 }, (_, i) => (index + i) * 1e-4),
+        ),
+        index,
+      })),
+      model: body.model,
+      usage: { prompt_tokens: 0, total_tokens: 0 },
+    });
+  }),
+];
 
 const mockGetDefaultOrgEmbeddingConfig = vi.hoisted(() => vi.fn());
 vi.mock("@/knowledge-base/kb-llm-client", () => ({
@@ -211,6 +228,8 @@ async function drainEmbeddingTasks(): Promise<number> {
 }
 
 describe("Perforce connector end-to-end sync", () => {
+  useMswServer(...mswHandlers);
+
   beforeEach(() => {
     fetchState.handler = undefined;
     vi.clearAllMocks();
@@ -226,18 +245,6 @@ describe("Perforce connector end-to-end sync", () => {
         inputModalities: null,
       },
     });
-    mockEmbeddingsCreate.mockImplementation(
-      async ({ input }: { input: string[] }) => ({
-        object: "list",
-        data: input.map((_, index) => ({
-          object: "embedding",
-          embedding: Array.from({ length: 1536 }, (_, i) => (index + i) * 1e-4),
-          index,
-        })),
-        model: "text-embedding-3-small",
-        usage: { prompt_tokens: 0, total_tokens: 0 },
-      }),
-    );
   });
 
   test("ingests and embeds depot files, then syncs only incremental changes", async ({

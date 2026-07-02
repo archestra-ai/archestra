@@ -48,7 +48,6 @@ import type {
   InsertKnowledgeBase,
   InsertKnowledgeBaseConnector,
   InsertLlmProviderApiKey,
-  InsertMcpServer,
   InsertMember,
   InsertOrganization,
   InsertOrganizationRole,
@@ -611,9 +610,13 @@ async function makeMember(
  * Creates a test MCP server in the database
  */
 async function makeMcpServer(
+  // Typed against the raw Drizzle insert shape, not the API-validated
+  // `InsertMcpServer` — this fixture writes directly via `db.insert`, and
+  // `oauthRefreshError` (server-owned state) is intentionally excluded from
+  // the API-facing insert schema.
   overrides: Partial<
     Pick<
-      InsertMcpServer,
+      typeof schema.mcpServersTable.$inferInsert,
       | "name"
       | "catalogId"
       | "ownerId"

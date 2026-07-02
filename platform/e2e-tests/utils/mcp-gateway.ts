@@ -278,7 +278,7 @@ export async function callMcpTool(
   return callResult.result;
 }
 
-export async function getTeamTokenForProfile(
+async function getTeamTokenForProfile(
   request: APIRequestContext,
   teamName: string,
 ): Promise<string> {

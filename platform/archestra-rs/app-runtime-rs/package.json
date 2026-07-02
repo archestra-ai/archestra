@@ -15,6 +15,9 @@
     "test": "cargo test -p app_runtime_core --locked",
     "type-check": "cargo check -p app_runtime_core -p app_runtime_rs --locked"
   },
+  "dependencies": {
+    "@archestra/napi-loader": "workspace:*"
+  },
   "devDependencies": {
     "@napi-rs/cli": "^3.4.0"
   },

@@ -199,6 +199,7 @@ export function AssignedToolsTable({
       search: searchFromUrl || undefined,
       origin: originFilter !== "all" ? originFilter : undefined,
       excludeArchestraTools: true,
+      includeKnowledgeSourcesTool: true,
     },
   });
 

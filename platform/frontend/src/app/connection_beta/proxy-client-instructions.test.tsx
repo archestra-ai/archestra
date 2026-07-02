@@ -1,20 +1,17 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { CONNECT_CLIENTS } from "./clients";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 
-const {
-  provisionMock,
-  passthroughProvisionMock,
-  hasPermissionsMock,
-  availableKeysMock,
-} = vi.hoisted(() => ({
-  provisionMock: vi.fn(),
-  passthroughProvisionMock: vi.fn(),
-  hasPermissionsMock: vi.fn(),
-  availableKeysMock: vi.fn(),
-}));
+const { provisionMock, passthroughProvisionMock, availableKeysMock } =
+  vi.hoisted(() => ({
+    provisionMock: vi.fn(),
+    passthroughProvisionMock: vi.fn(),
+    availableKeysMock: vi.fn(),
+  }));
 
 vi.mock("@/lib/connection-setup.query", () => ({
   useCreateConnectionVirtualKey: () => ({
@@ -27,9 +24,7 @@ vi.mock("@/lib/connection-setup.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => hasPermissionsMock(),
-}));
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: () => availableKeysMock(),
@@ -42,11 +37,19 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
 
 // The component reads the selected provider from the URL and writes selections
 // back; a static search param + no-op updater is enough for these assertions.
-vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams("providerId=anthropic"),
-  usePathname: () => "/connection_beta",
-  useRouter: () => ({ replace: vi.fn() }),
-}));
+vi.mock("next/navigation");
+
+beforeEach(() => {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams("providerId=anthropic") as unknown as ReturnType<
+      typeof useSearchParams
+    >,
+  );
+  vi.mocked(usePathname).mockReturnValue("/connection_beta");
+  vi.mocked(useRouter).mockReturnValue({
+    replace: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
+});
 
 function genericClient() {
   const client = CONNECT_CLIENTS.find((c) => c.id === "generic");
@@ -68,8 +71,10 @@ function renderInstructions() {
 describe("ProxyClientInstructions — Any Client step 4", () => {
   beforeEach(() => {
     provisionMock.mockReset();
-    hasPermissionsMock.mockReset();
-    hasPermissionsMock.mockReturnValue({ data: true });
+    vi.mocked(useHasPermissions).mockReset();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
     availableKeysMock.mockReset();
     // the user has an anthropic provider key by default
     availableKeysMock.mockReturnValue({ data: [{ provider: "anthropic" }] });
@@ -114,7 +119,9 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
   });
 
   it("disables the virtual-key option without llmVirtualKey:create", () => {
-    hasPermissionsMock.mockReturnValue({ data: false });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
     renderInstructions();
 
     expect(screen.getByRole("tab", { name: "Virtual key" })).toBeDisabled();
@@ -161,8 +168,10 @@ describe("ProxyClientInstructions — Claude Desktop attribution header", () => 
 
   beforeEach(() => {
     passthroughProvisionMock.mockReset();
-    hasPermissionsMock.mockReset();
-    hasPermissionsMock.mockReturnValue({ data: true });
+    vi.mocked(useHasPermissions).mockReset();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
     availableKeysMock.mockReset();
     availableKeysMock.mockReturnValue({ data: [] });
   });
@@ -195,7 +204,9 @@ describe("ProxyClientInstructions — Claude Desktop attribution header", () => 
   });
 
   it("points to the Virtual API Keys page when the user can't mint a key", () => {
-    hasPermissionsMock.mockReturnValue({ data: false });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
     renderClaudeDesktop();
 
     expect(passthroughProvisionMock).not.toHaveBeenCalled();

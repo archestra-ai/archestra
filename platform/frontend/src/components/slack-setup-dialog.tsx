@@ -10,6 +10,7 @@ import { SetupDialog } from "@/components/setup-dialog";
 import { StepCard } from "@/components/step-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SecretInput } from "@/components/ui/secret-input";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/config/config.query";
@@ -309,16 +310,12 @@ function StepInstall({
                 xoxb-
               </code>
               )
-              <Input
-                type="text"
+              <SecretInput
+                masked={false}
                 value={botToken}
                 onChange={(e) => onBotTokenChange(e.target.value)}
                 placeholder="Paste your Bot User OAuth Token"
                 className="mt-1.5"
-                autoComplete="off"
-                data-bwignore
-                data-1p-ignore
-                data-lpignore="true"
               />
             </span>
           </li>
@@ -394,16 +391,12 @@ function StepAppLevelToken({
                 xapp-
               </code>
               )
-              <Input
-                type="text"
+              <SecretInput
+                masked={false}
                 value={appLevelToken}
                 onChange={(e) => onAppLevelTokenChange(e.target.value)}
                 placeholder="Paste your App-Level Token"
                 className="mt-1.5"
-                autoComplete="off"
-                data-bwignore
-                data-1p-ignore
-                data-lpignore="true"
               />
             </span>
           </li>
@@ -523,16 +516,12 @@ function StepManifestWebhook({
             <span className="pt-0.5 flex-1">
               From <strong>Basic Information &rarr; App Credentials</strong>,
               copy the <strong>Signing Secret</strong>
-              <Input
-                type="text"
+              <SecretInput
+                masked={false}
                 value={signingSecret}
                 onChange={(e) => onSigningSecretChange(e.target.value)}
                 placeholder="Paste your Signing Secret"
                 className="mt-1.5"
-                autoComplete="off"
-                data-bwignore
-                data-1p-ignore
-                data-lpignore="true"
               />
             </span>
           </li>

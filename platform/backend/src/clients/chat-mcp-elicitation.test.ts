@@ -1,19 +1,18 @@
 import type { ElicitRequest } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { cacheManager } from "@/cache-manager";
 import {
   createChatMcpElicitationBridge,
   resolveChatMcpElicitation,
 } from "@/clients/chat-mcp-elicitation";
 
-const cacheManagerMocks = vi.hoisted(() => ({
-  getAndDelete: vi.fn(),
-  set: vi.fn(),
-}));
+// The canonical Map-backed fake from src/__mocks__/cache-manager.ts. These
+// tests drive the polling loop by stubbing getAndDelete per call and assert on
+// set(), so they spy over the fake's real methods.
+vi.mock("@/cache-manager");
 
-vi.mock("@/cache-manager", () => ({
-  CacheKey: { ChatMcpElicitation: "chat-mcp-elicitation" },
-  cacheManager: cacheManagerMocks,
-}));
+const getAndDeleteSpy = vi.spyOn(cacheManager, "getAndDelete");
+const setSpy = vi.spyOn(cacheManager, "set");
 
 describe("chat MCP elicitation", () => {
   afterEach(() => {
@@ -29,13 +28,11 @@ describe("chat MCP elicitation", () => {
     });
     bridge.setWriter(writer);
 
-    cacheManagerMocks.getAndDelete
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce({
-        conversationId: "00000000-0000-4000-8000-000000000001",
-        action: "accept",
-        content: { project: "alpha", priority: 2 },
-      });
+    getAndDeleteSpy.mockResolvedValueOnce(undefined).mockResolvedValueOnce({
+      conversationId: "00000000-0000-4000-8000-000000000001",
+      action: "accept",
+      content: { project: "alpha", priority: 2 },
+    });
 
     const handler = bridge.createHandler({ toolName: "example__create_issue" });
     const resultPromise = handler(
@@ -79,7 +76,7 @@ describe("chat MCP elicitation", () => {
     });
     bridge.setWriter(writer);
 
-    cacheManagerMocks.getAndDelete
+    getAndDeleteSpy
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
@@ -105,19 +102,19 @@ describe("chat MCP elicitation", () => {
       {} as never,
     );
 
-    expect(cacheManagerMocks.getAndDelete).toHaveBeenCalledTimes(1);
+    expect(getAndDeleteSpy).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(249);
-    expect(cacheManagerMocks.getAndDelete).toHaveBeenCalledTimes(1);
+    expect(getAndDeleteSpy).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
-    expect(cacheManagerMocks.getAndDelete).toHaveBeenCalledTimes(2);
+    expect(getAndDeleteSpy).toHaveBeenCalledTimes(2);
 
     await vi.advanceTimersByTimeAsync(499);
-    expect(cacheManagerMocks.getAndDelete).toHaveBeenCalledTimes(2);
+    expect(getAndDeleteSpy).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1);
-    expect(cacheManagerMocks.getAndDelete).toHaveBeenCalledTimes(3);
+    expect(getAndDeleteSpy).toHaveBeenCalledTimes(3);
 
     await vi.advanceTimersByTimeAsync(999);
-    expect(cacheManagerMocks.getAndDelete).toHaveBeenCalledTimes(3);
+    expect(getAndDeleteSpy).toHaveBeenCalledTimes(3);
     await vi.advanceTimersByTimeAsync(1);
 
     await expect(resultPromise).resolves.toEqual({
@@ -136,7 +133,7 @@ describe("chat MCP elicitation", () => {
     });
     bridge.setWriter(writer);
 
-    cacheManagerMocks.getAndDelete.mockResolvedValue(undefined);
+    getAndDeleteSpy.mockResolvedValue(undefined);
 
     const handler = bridge.createHandler({ toolName: "example__create_issue" });
     const resultPromise = handler(
@@ -154,9 +151,7 @@ describe("chat MCP elicitation", () => {
       {} as never,
     );
 
-    await vi.waitFor(() =>
-      expect(cacheManagerMocks.getAndDelete).toHaveBeenCalled(),
-    );
+    await vi.waitFor(() => expect(getAndDeleteSpy).toHaveBeenCalled());
 
     abortController.abort();
 
@@ -173,13 +168,11 @@ describe("chat MCP elicitation", () => {
     });
     bridge.setWriter(writer);
 
-    cacheManagerMocks.getAndDelete
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce({
-        conversationId: "00000000-0000-4000-8000-000000000001",
-        action: "accept",
-        content: { features: ["search"] },
-      });
+    getAndDeleteSpy.mockResolvedValueOnce(undefined).mockResolvedValueOnce({
+      conversationId: "00000000-0000-4000-8000-000000000001",
+      action: "accept",
+      content: { features: ["search"] },
+    });
 
     const outcomePromise = bridge.elicit({
       toolName: "archestra__refine_app",
@@ -216,11 +209,11 @@ describe("chat MCP elicitation", () => {
     await expect(
       bridge.elicit({ toolName: "archestra__refine_app", message: "Hi?" }),
     ).resolves.toEqual({ status: "no_viewer" });
-    expect(cacheManagerMocks.getAndDelete).not.toHaveBeenCalled();
+    expect(getAndDeleteSpy).not.toHaveBeenCalled();
   });
 
   test("stores user responses for the pending elicitation id", async () => {
-    cacheManagerMocks.set.mockResolvedValue(undefined);
+    setSpy.mockResolvedValue(undefined);
 
     await resolveChatMcpElicitation({
       id: "00000000-0000-4000-8000-000000000002",
@@ -230,7 +223,7 @@ describe("chat MCP elicitation", () => {
       },
     });
 
-    expect(cacheManagerMocks.set).toHaveBeenCalledWith(
+    expect(setSpy).toHaveBeenCalledWith(
       "chat-mcp-elicitation-00000000-0000-4000-8000-000000000002",
       {
         conversationId: "00000000-0000-4000-8000-000000000001",

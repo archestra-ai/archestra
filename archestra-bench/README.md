@@ -111,6 +111,7 @@ Which Archestra capability each task is built to exercise. A task usually leans 
 | `review-file-upload-persistence` | basic | ✓ | ✓ | | | | | red-herring | |
 | `solidarity-tax-usd` | basic | ✓ | | | | | ✓ | | |
 | `ib-deck-qc` | basic | ✓ | ✓ | | | | | red-herring | persist |
+| `expense-report-continue` | basic | ✓ | ✓ | ✓ | | | | | persist |
 | `author-skill` | archestra-api | ✓ | | | author | | | | state |
 | `letter-count` | archestra-api | | | | | | | | state |
 | `author-aec-normalizer-skill` | archestra-api | ✓ | ✓ | | author | | | | state |
@@ -136,7 +137,8 @@ Which Archestra capability each task is built to exercise. A task usually leans 
 - **State/persist** — marked only where introspecting/mutating Archestra's own state is the task's
   *headline* point. `state`: the answer itself comes from what the agent *did* to Archestra, graded via
   the `[state].rest` backend snapshot (`author-skill`, `letter-count`); `persist`: a file carried across
-  a `new_conversation` boundary via persistent storage (`purchase-ledger`, `ib-deck-qc`).
+  a `new_conversation` boundary via persistent storage (`purchase-ledger`, `ib-deck-qc`,
+  `expense-report-continue`).
   (`decode-cipher`/`xlsx-live-formulas` also
   snapshot `[state].rest`, but only to enforce skill use — counted under Skills, not here.)
 
@@ -365,6 +367,10 @@ coalesced into message-level records — `assistant_text` / `tool_call` / `tool_
 not the raw per-token SSE chunks), `run.json`,
 `submission.json` (the accepted bytes), `artifact.bin` (a downloaded file artifact, when any),
 `state.json` (the `BENCH_STATE` snapshot, when any), and `verifier.stdout.txt` / `verifier.stderr.txt`.
+Analysis adds `<env>/<task>__<lane>/trajectory.md` (rendered trajectory),
+`trajectory_rubrics_<ts>.jsonl` (per-rollout rubric triage records; `_claude_` variant when produced
+by the Claude-skill pipeline), and the `trajectory_analys{es,is}_<ts>.md` docs. Browse it all locally
+with `archestra-bench dashboard [--experiments-dir <dir>] [--port <port>]`.
 
 ## Prerequisites
 

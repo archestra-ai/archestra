@@ -1,6 +1,5 @@
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import type * as originalConfigModule from "@/config";
 import * as embeddingClients from "@/knowledge-base/embedding-clients";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
@@ -14,19 +13,6 @@ import type { User } from "@/types";
 
 const VALID_PNG_BASE64 =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==";
-
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-      enterpriseFeatures: {
-        ...actual.default.enterpriseFeatures,
-        fullWhiteLabeling: true,
-      },
-    },
-  };
-});
 
 describe("organization routes", () => {
   let app: FastifyInstanceWithZod;

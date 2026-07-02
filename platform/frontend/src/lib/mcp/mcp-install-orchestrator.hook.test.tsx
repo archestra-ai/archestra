@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useSession } from "@/lib/auth/auth.query";
 import { useMcpInstallOrchestrator } from "./mcp-install-orchestrator.hook";
 
 const {
@@ -44,9 +45,7 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useSession: () => ({ data: { user: { id: "test-user" } } }),
-}));
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/auth/oauth.query", () => ({
   useInitiateOAuth: () => ({
@@ -85,6 +84,9 @@ vi.mock("@/lib/auth/oauth-session", () => ({
 describe("useMcpInstallOrchestrator", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "test-user" } },
+    } as unknown as ReturnType<typeof useSession>);
     mutateAsyncMock.mockResolvedValue({
       authorizationUrl: "https://posthog.example.com/oauth/authorize",
       state: "oauth-state-123",

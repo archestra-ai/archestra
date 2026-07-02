@@ -643,6 +643,12 @@ class ToolModel {
     environmentId: string | null;
     /** Exact-name filter for single-tool resolution (avoids loading the whole corpus). */
     name?: string;
+    /**
+     * Exact MCP App `ui://` resource filter, for resolving which accessible tool
+     * backs a resource read without loading the whole corpus. Matches the same
+     * canonical/legacy meta keys as the external-apps listing.
+     */
+    uiResourceUri?: string;
   }): Promise<Tool[]> {
     const catalogIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
       params.userId,
@@ -681,6 +687,9 @@ class ToolModel {
           toolInEnvironmentPredicate(params.environmentId),
           params.name !== undefined
             ? eq(schema.toolsTable.name, params.name)
+            : undefined,
+          params.uiResourceUri !== undefined
+            ? eq(toolUiResourceUriSql(), params.uiResourceUri)
             : undefined,
         ),
       )
@@ -1226,10 +1235,72 @@ class ToolModel {
       );
     }
 
+    // Ensure default policies exist for `query_knowledge_sources`.
+    // Unlike other built-ins, this tool participates in policy evaluation
+    // (its results may contain prompt injection from KB content). We seed
+    // explicit default rows so the /mcp/guardrails UI shows the same
+    // "Sensitive" / "Block when context is untrusted" defaults that admins
+    // can manage. Insert-only — never overwrite user customizations.
+    const knowledgeToolName = archestraMcpBranding.getToolName(
+      TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+    );
+    const knowledgeTool = allCatalogTools.find(
+      (t) => t.name === knowledgeToolName,
+    );
+    if (knowledgeTool) {
+      await ToolModel.ensureKnowledgeSourcesDefaultPolicies(knowledgeTool.id);
+    }
+
     // Names of tools actually inserted on this run — used by callers to trigger
     // one-time backfills when a new built-in tool first appears. Excludes rows the
     // conflict path updated, so a concurrent-seed loser doesn't re-trigger backfills.
     return insertedNames;
+  }
+
+  /**
+   * Insert default tool invocation + trusted data policies for the
+   * `query_knowledge_sources` tool if no default policy row exists yet.
+   * Safe to call repeatedly on startup; never overwrites existing rows.
+   */
+  private static async ensureKnowledgeSourcesDefaultPolicies(
+    toolId: string,
+  ): Promise<void> {
+    const [existingInvocation, existingTrusted] = await Promise.all([
+      db
+        .select({ id: schema.toolInvocationPoliciesTable.id })
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, toolId)),
+      db
+        .select({ id: schema.trustedDataPoliciesTable.id })
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, toolId)),
+    ]);
+
+    if (existingInvocation.length === 0) {
+      // KB query is read-only retrieval — safe to invoke even when context is
+      // already untrusted. The security boundary is enforced on RESULTS via
+      // the trusted-data policy below, which propagates untrusted state to
+      // downstream tools.
+      await ToolInvocationPolicyModel.bulkUpsertDefaultPolicy(
+        [toolId],
+        "allow_when_context_is_untrusted",
+      );
+      logger.info(
+        { toolId },
+        "Seeded default tool invocation policy for query_knowledge_sources",
+      );
+    }
+
+    if (existingTrusted.length === 0) {
+      await TrustedDataPolicyModel.bulkUpsertDefaultPolicy(
+        [toolId],
+        "mark_as_untrusted",
+      );
+      logger.info(
+        { toolId },
+        "Seeded default trusted data policy for query_knowledge_sources",
+      );
+    }
   }
 
   /**
@@ -2754,24 +2825,40 @@ class ToolModel {
 
     // Exclude Archestra built-in tools
     if (filters?.excludeArchestraTools) {
+      const brandedKnowledgeToolName = archestraMcpBranding.getToolName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+      );
+
+      // Normally exclude all tools in the Archestra built-in catalog.
+      // However, when explicitly requested, include ONLY the knowledge sources tool.
+      const excludeBuiltInsCondition = filters.includeKnowledgeSourcesTool
+        ? or(
+            isNull(schema.toolsTable.catalogId),
+            ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+            eq(schema.toolsTable.name, brandedKnowledgeToolName),
+          )
+        : or(
+            isNull(schema.toolsTable.catalogId),
+            ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          );
+
       toolWhereConditions.push(
-        or(
-          isNull(schema.toolsTable.catalogId),
-          ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
-        ) ?? isNull(schema.toolsTable.catalogId),
+        excludeBuiltInsCondition ?? isNull(schema.toolsTable.catalogId),
       );
     }
 
-    // Hide knowledge base tool in global tool listings (no agent context).
-    // The tool is only visible when queried per-agent and the agent has a knowledge base assigned.
-    toolWhereConditions.push(
-      ne(
-        schema.toolsTable.name,
-        archestraMcpBranding.getToolName(
-          TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+    // Hide knowledge base tool in global tool listings (no agent context) by default.
+    // Can be explicitly included for guardrails configuration.
+    if (!filters?.includeKnowledgeSourcesTool) {
+      toolWhereConditions.push(
+        ne(
+          schema.toolsTable.name,
+          archestraMcpBranding.getToolName(
+            TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+          ),
         ),
-      ),
-    );
+      );
+    }
 
     // Apply access control filtering for users that are not agent admins
     // Get accessible agent IDs for filtering assignments

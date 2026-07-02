@@ -1,14 +1,14 @@
+import { createOpenAI } from "@ai-sdk/openai";
+import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
 import type { User } from "@/types";
 
-const mockCreateUIMessageStream = vi.hoisted(() => vi.fn());
-const mockCreateUIMessageStreamResponse = vi.hoisted(() => vi.fn());
-const mockStreamText = vi.hoisted(() => vi.fn());
 const mockCreateLLMModelForAgent = vi.hoisted(() => vi.fn());
 const mockGetChatMcpTools = vi.hoisted(() => vi.fn());
 const mockGetChatMcpToolUiResourceUris = vi.hoisted(() => vi.fn());
@@ -16,16 +16,47 @@ const mockExtractAndIngestDocuments = vi.hoisted(() => vi.fn());
 const mockStartActiveChatSpan = vi.hoisted(() => vi.fn());
 const mockCompactMessagesForChat = vi.hoisted(() => vi.fn());
 
-vi.mock("ai", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("ai")>();
-  return {
-    ...actual,
-    createUIMessageStream: mockCreateUIMessageStream,
-    createUIMessageStreamResponse: mockCreateUIMessageStreamResponse,
-    streamText: mockStreamText,
-    convertToModelMessages: vi.fn(async (messages) => messages),
+// Boundary-mock the provider HTTP endpoint instead of the `ai` module: the real
+// streamText + UI-message stream run and only the network is faked (MSW).
+// createLLMModelForAgent resolves to a REAL @ai-sdk/openai model bound to the
+// MSW-served base URL, so the full chat route executes end-to-end for these
+// hook-lifecycle tests (which only care that hooks don't break chat).
+const STREAM_COMPLETIONS_URL = "https://llm.test/v1/chat/completions";
+const streamModel = createOpenAI({
+  baseURL: "https://llm.test/v1",
+  apiKey: "test-key",
+}).chat("gpt-4o-mini");
+
+// Minimal OpenAI chat streaming body: one assistant text delta, then a stop
+// finish, then the [DONE] sentinel.
+function openAiTextStream(text: string): string {
+  const base = {
+    id: "chatcmpl-test",
+    object: "chat.completion.chunk",
+    created: 1_700_000_000,
+    model: "gpt-4o-mini",
   };
-});
+  const chunks = [
+    {
+      ...base,
+      choices: [
+        {
+          index: 0,
+          delta: { role: "assistant", content: text },
+          finish_reason: null,
+        },
+      ],
+    },
+    {
+      ...base,
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
+    },
+  ];
+  return `${chunks
+    .map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`)
+    .join("")}data: [DONE]\n\n`;
+}
 
 vi.mock("@/clients/llm-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/clients/llm-client")>();
@@ -71,6 +102,7 @@ vi.mock("./context-compaction", async (importOriginal) => {
 });
 
 describe("POST /api/chat lifecycle hooks", () => {
+  const server = useMswServer();
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
@@ -93,7 +125,12 @@ describe("POST /api/chat lifecycle hooks", () => {
       });
       conversationId = conversation.id;
 
-      mockCreateLLMModelForAgent.mockResolvedValue({ model: "mock-model" });
+      mockCreateLLMModelForAgent.mockResolvedValue({
+        model: streamModel,
+        provider: "openai",
+        apiKeySource: "test",
+        anthropicNativeEndpoint: false,
+      });
       mockGetChatMcpTools.mockResolvedValue({});
       mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
       mockExtractAndIngestDocuments.mockResolvedValue(undefined);
@@ -109,65 +146,14 @@ describe("POST /api/chat lifecycle hooks", () => {
         async ({ callback }: { callback: () => Promise<Response> }) =>
           callback(),
       );
-      mockStreamText.mockImplementation(() => ({
-        fullStream: {
-          [Symbol.asyncIterator]: () => {
-            const events = [
-              { type: "text-delta", text: "hi" },
-              { type: "finish", finishReason: "stop" },
-            ];
-            let index = 0;
-            return {
-              next: async () =>
-                index < events.length
-                  ? { done: false, value: events[index++] }
-                  : { done: true, value: undefined },
-            };
-          },
-        },
-        toUIMessageStream: () =>
-          new ReadableStream({
-            start(controller) {
-              controller.close();
-            },
-          }),
-        usage: Promise.resolve(null),
-      }));
-      mockCreateUIMessageStream.mockImplementation(
-        ({
-          execute,
-        }: {
-          execute: (args: {
-            writer: {
-              write: (x: unknown) => void;
-              merge: (s: unknown) => void;
-            };
-          }) => Promise<void>;
-        }) => {
-          const writer = { write: vi.fn(), merge: vi.fn() };
-          void execute({ writer }).catch(() => undefined);
-          return {
-            tee: () => [
-              new ReadableStream({
-                start(controller) {
-                  controller.close();
-                },
-              }),
-              new ReadableStream({
-                start(controller) {
-                  controller.close();
-                },
-              }),
-            ],
-          };
-        },
-      );
-      mockCreateUIMessageStreamResponse.mockImplementation(
-        ({ stream }: { stream: ReadableStream }) =>
-          new Response(stream, {
-            status: 200,
-            headers: { "content-type": "text/plain" },
-          }),
+      server.use(
+        http.post(
+          STREAM_COMPLETIONS_URL,
+          () =>
+            new HttpResponse(openAiTextStream("hi"), {
+              headers: { "Content-Type": "text/event-stream" },
+            }),
+        ),
       );
 
       app = createFastifyInstance();

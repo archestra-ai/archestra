@@ -34,13 +34,9 @@ vi.mock("posthog-js/react", () => ({
   }) => <>{children}</>,
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useSession: vi.fn(),
-}));
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/config/config.query", () => ({
-  usePublicConfig: vi.fn(),
-}));
+vi.mock("@/lib/config/config.query");
 
 describe("PostHogProviderWrapper", () => {
   beforeEach(() => {
@@ -126,6 +122,8 @@ describe("PostHogProviderWrapper", () => {
         "ph_test_key",
         expect.objectContaining({
           api_host: "https://posthog.example.com",
+          // Tracing headers let backend errors/logs link to this session replay.
+          __add_tracing_headers: expect.arrayContaining(["localhost"]),
         }),
       );
       expect(mockIdentify).toHaveBeenCalledWith("user-123", {

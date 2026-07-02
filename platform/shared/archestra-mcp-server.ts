@@ -436,6 +436,16 @@ export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
+ * Built-in tools that do NOT bypass policy evaluation. Most built-ins are
+ * auto-trusted, but these ingest external content (e.g. knowledge-base
+ * documents) that can carry prompt injection, so their invocations and
+ * results are evaluated by tool invocation and trusted data policies just
+ * like external tools.
+ */
+export const POLICY_EVALUATED_ARCHESTRA_TOOL_SHORT_NAMES: ReadonlySet<ArchestraToolShortName> =
+  new Set([TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME]);
+
+/**
  * Agent Skill tools — only assigned to agents once an org admin opts in via
  * the "Enable and create a new skill" empty-state action on /skills
  * (sets `organization.skillToolsEnabled`).

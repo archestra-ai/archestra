@@ -8,27 +8,12 @@ import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
 import { betterAuth } from "@/auth";
-import type * as originalConfigModule from "@/config";
 import db, { schema } from "@/database";
+import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
+import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import AgentModel from "@/models/agent";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-    },
-  };
-});
-
-const { browserStreamFeature } = await import(
-  "@/features/browser-stream/services/browser-stream.feature"
-);
-const { default: websocketService } = await import("@/websocket");
-const { default: McpServerRuntimeManager } = await import(
-  "@/k8s/mcp-server-runtime/manager"
-);
+import websocketService from "@/websocket";
 
 interface WebSocketClientContext {
   userId: string;
@@ -78,7 +63,7 @@ const service = websocketService as unknown as {
   wss: { clients: Set<WS> } | null;
 };
 
-// Initialize browser stream context once for all tests (config mock is already applied)
+// Initialize browser stream context once for all tests
 service.initBrowserStreamContextForTesting();
 
 describe("websocket authentication", () => {

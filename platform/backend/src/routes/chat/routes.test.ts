@@ -1,24 +1,60 @@
 import { convertToModelMessages } from "ai";
+import { HttpResponse, http } from "msw";
 import { describe, expect, it, vi } from "vitest";
+import { useMswServer } from "@/test/msw";
 
-// Mock the ai module before importing chat routes
-const mockGenerateText = vi.hoisted(() => vi.fn());
-vi.mock("ai", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("ai")>();
-  return {
-    ...actual,
-    generateText: mockGenerateText,
-  };
-});
+// Boundary-mock the provider HTTP endpoint instead of the `ai` module: the real
+// generateText runs and only the network is faked (MSW). createLLMModel still
+// resolves to a fake model, but a REAL @ai-sdk/openai model bound to the
+// MSW-served base URL — so the title flow exercises real request serialization
+// and error mapping. createLLMModel stays a spy so its resolved-args assertion
+// still holds.
+const TITLE_COMPLETIONS_URL = "https://llm.test/v1/chat/completions";
 
-// Mock createLLMModel to avoid actual API calls
 vi.mock("@/clients/llm-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/clients/llm-client")>();
+  const { createOpenAI } = await import("@ai-sdk/openai");
+  const model = createOpenAI({
+    baseURL: "https://llm.test/v1",
+    apiKey: "test-key",
+  }).chat("gpt-4o-mini");
   return {
     ...actual,
-    createLLMModel: vi.fn(() => "mocked-model"),
+    createLLMModel: vi.fn(() => model),
   };
 });
+
+// A minimal, schema-valid OpenAI /chat/completions response carrying `content`.
+function openAiCompletion(content: string) {
+  return {
+    id: "chatcmpl-test",
+    object: "chat.completion",
+    created: 1_700_000_000,
+    model: "gpt-4o-mini",
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content },
+        finish_reason: "stop",
+      },
+    ],
+    usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
+  };
+}
+
+// Reads the text of a role's message from an intercepted OpenAI request body,
+// whether the provider serialized it as a plain string or a content-part array.
+function messageText(
+  body: { messages: Array<{ role: string; content: unknown }> },
+  role: string,
+): string {
+  const message = body.messages.find((m) => m.role === role);
+  if (!message) return "";
+  if (typeof message.content === "string") return message.content;
+  return (message.content as Array<{ text?: string }>)
+    .map((part) => part.text ?? "")
+    .join("");
+}
 
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { createLLMModel } from "@/clients/llm-client";
@@ -1385,8 +1421,15 @@ describe("buildChatStopConditions", () => {
 });
 
 describe("generateConversationTitle", () => {
+  const server = useMswServer();
+
   it("returns null when LLM call fails", async () => {
-    mockGenerateText.mockRejectedValueOnce(new Error("API Error"));
+    // A non-retryable 4xx surfaces as an APICallError the title flow swallows.
+    server.use(
+      http.post(TITLE_COMPLETIONS_URL, () =>
+        HttpResponse.json({ error: { message: "API Error" } }, { status: 400 }),
+      ),
+    );
 
     const result = await generateConversationTitle({
       provider: "anthropic",
@@ -1405,9 +1448,11 @@ describe("generateConversationTitle", () => {
   });
 
   it("trims whitespace from generated title", async () => {
-    mockGenerateText.mockResolvedValueOnce({
-      text: "\n  Title With Whitespace  \n",
-    });
+    server.use(
+      http.post(TITLE_COMPLETIONS_URL, () =>
+        HttpResponse.json(openAiCompletion("\n  Title With Whitespace  \n")),
+      ),
+    );
 
     const result = await generateConversationTitle({
       provider: "openai",
@@ -1426,7 +1471,18 @@ describe("generateConversationTitle", () => {
   });
 
   it("uses the resolved built-in agent model and system prompt", async () => {
-    mockGenerateText.mockResolvedValueOnce({ text: "Configured Model Title" });
+    let capturedBody:
+      | {
+          messages: Array<{ role: string; content: unknown }>;
+          max_tokens?: number;
+        }
+      | undefined;
+    server.use(
+      http.post(TITLE_COMPLETIONS_URL, async ({ request }) => {
+        capturedBody = (await request.json()) as typeof capturedBody;
+        return HttpResponse.json(openAiCompletion("Configured Model Title"));
+      }),
+    );
 
     const result = await generateConversationTitle({
       provider: "anthropic",
@@ -1451,16 +1507,24 @@ describe("generateConversationTitle", () => {
         source: "chat:title_generation",
       }),
     );
-    expect(mockGenerateText).toHaveBeenCalledWith({
-      model: "mocked-model",
-      system: "Return only a title.",
-      prompt: "Chat conversation messages:\n\nUser: Hello\n\nAssistant: Hi!",
-      maxOutputTokens: 64,
-    });
+    // The former `generateText` call-args assertion, now checked at the wire:
+    // the resolved system prompt and the built title prompt reach the provider.
+    if (!capturedBody) throw new Error("title request was never sent");
+    expect(messageText(capturedBody, "system")).toBe("Return only a title.");
+    expect(messageText(capturedBody, "user")).toBe(
+      "Chat conversation messages:\n\nUser: Hello\n\nAssistant: Hi!",
+    );
+    expect(capturedBody.max_tokens).toBe(64);
   });
 
   it("caps output tokens so non-streaming requests stay under the provider limit", async () => {
-    mockGenerateText.mockResolvedValueOnce({ text: "Short Title" });
+    let capturedBody: { max_tokens?: number } | undefined;
+    server.use(
+      http.post(TITLE_COMPLETIONS_URL, async ({ request }) => {
+        capturedBody = (await request.json()) as typeof capturedBody;
+        return HttpResponse.json(openAiCompletion("Short Title"));
+      }),
+    );
 
     await generateConversationTitle({
       provider: "anthropic",
@@ -1475,8 +1539,8 @@ describe("generateConversationTitle", () => {
       firstAssistantMessage: "Hi!",
     });
 
-    const callArg = mockGenerateText.mock.calls[0][0];
-    expect(callArg.maxOutputTokens).toBeLessThanOrEqual(64);
-    expect(callArg.maxOutputTokens).toBeGreaterThan(0);
+    if (!capturedBody) throw new Error("title request was never sent");
+    expect(capturedBody.max_tokens).toBeLessThanOrEqual(64);
+    expect(capturedBody.max_tokens).toBeGreaterThan(0);
   });
 });

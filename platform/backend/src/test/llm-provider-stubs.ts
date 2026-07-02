@@ -159,6 +159,14 @@ export function createGeminiTestClient(options: GeminiStubOptions = {}) {
           responseId: "gemini-test",
         }) as unknown as GenerateContentResponse,
       generateContentStream: async () => createGeminiStream(options),
+      embedContent: async (params: { contents: unknown }) => {
+        const contents = Array.isArray(params.contents)
+          ? params.contents
+          : [params.contents];
+        return {
+          embeddings: contents.map(() => ({ values: [0.1, 0.2, 0.3] })),
+        };
+      },
     },
   };
 }

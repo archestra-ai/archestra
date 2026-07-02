@@ -40,6 +40,7 @@ import { useProfiles } from "@/lib/agent.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import {
+  isSessionId,
   useInteractionSessions,
   useUniqueUserIds,
 } from "@/lib/interactions/interaction.query";
@@ -169,6 +170,13 @@ function SessionsTable({
   const sourceFilter = sourceFromUrl || "all";
   const clientFilter = clientFromUrl || "all";
 
+  // The logs search box only filters by session ID (free-text content search
+  // was removed). Translate the typed term into a sessionId filter when it is a
+  // valid session ID; otherwise it filters nothing and we surface a hint.
+  const sessionIdFromSearch =
+    searchFromUrl && isSessionId(searchFromUrl) ? searchFromUrl : undefined;
+  const searchIsNotSessionId = !!searchFromUrl && !sessionIdFromSearch;
+
   // Date time range picker hook
   const dateTimePicker = useDateTimeRangePicker({
     startDateFromUrl,
@@ -250,7 +258,7 @@ function SessionsTable({
     client: clientFilter !== "all" ? (clientFilter as ClientFilter) : undefined,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
-    search: searchFromUrl || undefined,
+    sessionId: sessionIdFromSearch,
     toastOnError: false,
   });
 
@@ -533,11 +541,21 @@ function SessionsTable({
   return (
     <div className="space-y-4">
       <TableFilters>
-        <SearchInput
-          objectNamePlural="logs"
-          searchFields={["session ID", "model", "message"]}
-          paramName="search"
-        />
+        {/* Anchor the "not a session ID" hint as a floating overlay under the
+            input so toggling it never reflows the filter bar or the table. */}
+        <div className="relative w-full sm:w-[320px] sm:max-w-[320px]">
+          <SearchInput
+            objectNamePlural="logs"
+            searchFields={["session ID"]}
+            paramName="search"
+            className="relative w-full"
+          />
+          {searchIsNotSessionId && (
+            <output className="absolute left-0 top-full z-20 mt-1 w-full rounded-md border bg-popover px-2 py-1 text-xs text-muted-foreground shadow-md">
+              Enter a valid session UUID
+            </output>
+          )}
+        </div>
 
         <SearchableSelect
           value={profileFilter}

@@ -128,7 +128,7 @@ def test_status_lookup_tool_wired() -> None:
 def test_observed_status_data() -> None:
     observed = any(
         name.endswith(f"__{_STATUS_TOOL}")
-        or (name.endswith("__preview_app_tool") and _STATUS_TOOL in str(inp.get("toolName", "")))
+        or (name.endswith("__preview_app_tool") and str(inp.get("toolName", "")).endswith(f"__{_STATUS_TOOL}"))
         for name, inp in _tool_calls()
     )
     assert observed, (

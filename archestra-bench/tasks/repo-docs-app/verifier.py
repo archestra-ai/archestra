@@ -66,7 +66,7 @@ def test_observed_deepwiki_output() -> None:
         name
         and (
             "deepwiki__" in name
-            or (name.endswith("__preview_app_tool") and "deepwiki" in str(inp.get("toolName", "")))
+            or (name.endswith("__preview_app_tool") and "deepwiki__" in str(inp.get("toolName", "")))
         )
         for name, inp in _calls()
     )

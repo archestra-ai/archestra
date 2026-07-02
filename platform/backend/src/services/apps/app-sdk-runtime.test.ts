@@ -147,6 +147,26 @@ describe("Apps SDK runtime", () => {
     calls.pop();
   });
 
+  test("tools.call parses JSON scalars and arrays in text, not just objects", async () => {
+    results.push({ content: [{ type: "text", text: '[{"id": 1}]' }] });
+    expect(await archestra.tools.call("t", {})).toEqual([{ id: 1 }]);
+    calls.pop();
+    results.push({ content: [{ type: "text", text: "false" }] });
+    expect(await archestra.tools.call("t", {})).toBe(false);
+    calls.pop();
+  });
+
+  test("tools.call falls back to the joined string when text blocks are separate JSON documents", async () => {
+    results.push({
+      content: [
+        { type: "text", text: '{"a": 1}' },
+        { type: "text", text: '{"b": 2}' },
+      ],
+    });
+    expect(await archestra.tools.call("t", {})).toBe('{"a": 1}\n{"b": 2}');
+    calls.pop();
+  });
+
   test("tools.call passes non-JSON text through as the string", async () => {
     results.push({ content: [{ type: "text", text: "plain answer" }] });
     expect(await archestra.tools.call("t", {})).toBe("plain answer");

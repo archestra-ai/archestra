@@ -70,7 +70,7 @@ def test_keyboard_driven() -> None:
 def test_observed_seat_data() -> None:
     observed = any(
         name.endswith(f"__{_DATA_TOOL}")
-        or (name.endswith("__preview_app_tool") and str(inp.get("toolName", "")).endswith(_DATA_TOOL))
+        or (name.endswith("__preview_app_tool") and str(inp.get("toolName", "")).endswith(f"__{_DATA_TOOL}"))
         for name, inp in _tool_calls()
     )
     assert observed, (

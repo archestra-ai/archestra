@@ -1601,6 +1601,10 @@ function buildQuestionsSchema(
 }
 
 const PREVIEW_OUTPUT_MAX_BYTES = 16_384;
+// Untrusted tool text longer than this is never JSON.parsed for the preview —
+// the output is truncated to PREVIEW_OUTPUT_MAX_BYTES anyway, and the parse
+// must not burn CPU before that cap applies.
+const PREVIEW_UNWRAP_PARSE_MAX_CHARS = PREVIEW_OUTPUT_MAX_BYTES * 4;
 
 // get_app_diagnostics waits this long for a render of the head to settle,
 // polling at this cadence — well under request timeouts so a single call is
@@ -1717,7 +1721,9 @@ async function buildLiveValidation(params: {
  * from the joined text blocks, else the raw text, else null — re-serialized
  * as JSON so the preview shows exactly what app code receives. Mirrors
  * `unwrapToolResult` in static/archestra-app-sdk.js (injected browser JS, so
- * the two implementations cannot share code) — keep them in step.
+ * the two implementations cannot share code) — keep them in step. One
+ * deliberate divergence: text beyond PREVIEW_UNWRAP_PARSE_MAX_CHARS is shown
+ * as a string without parsing (the preview truncates far below that anyway).
  *
  * @public — test seam: apps.test.ts pins the SDK-parity unwrap precedence;
  * formatPreviewResult below is its only production caller.
@@ -1728,11 +1734,14 @@ export function unwrapToolResultForPreview(result: CommonToolResult): string {
   const text = textPartsOf(result).join("\n");
   const trimmed = text.trim();
   if (!trimmed) return JSON.stringify(null);
-  try {
-    return JSON.stringify(JSON.parse(trimmed));
-  } catch {
-    return JSON.stringify(text);
+  if (trimmed.length <= PREVIEW_UNWRAP_PARSE_MAX_CHARS) {
+    try {
+      return JSON.stringify(JSON.parse(trimmed));
+    } catch {
+      // fall through — not JSON, serialize as the raw string
+    }
   }
+  return JSON.stringify(text);
 }
 
 /**

@@ -1259,6 +1259,41 @@ describe("unwrapToolResultForPreview (SDK tools.call parity)", () => {
     ).toBe(JSON.stringify({ tasks: [{ id: 7 }] }));
   });
 
+  test("JSON scalars and arrays in text parse like the SDK does", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({ content: [{ type: "text", text: '[{"id": 1}]' }] }),
+      ),
+    ).toBe(JSON.stringify([{ id: 1 }]));
+    expect(
+      unwrapToolResultForPreview(
+        envelope({ content: [{ type: "text", text: "false" }] }),
+      ),
+    ).toBe("false");
+  });
+
+  test("separate JSON documents per text block fall back to the joined string", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({
+          content: [
+            { type: "text", text: '{"a": 1}' },
+            { type: "text", text: '{"b": 2}' },
+          ],
+        }),
+      ),
+    ).toBe(JSON.stringify('{"a": 1}\n{"b": 2}'));
+  });
+
+  test("oversized text is shown as a string without being parsed", () => {
+    const huge = `[${"1,".repeat(40_000)}1]`;
+    expect(
+      unwrapToolResultForPreview(
+        envelope({ content: [{ type: "text", text: huge }] }),
+      ),
+    ).toBe(JSON.stringify(huge));
+  });
+
   test("plain text serializes as the JSON string tools.call returns", () => {
     expect(
       unwrapToolResultForPreview(

@@ -1411,6 +1411,46 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
+    // The finally-block persist below is gated on usage, so a stream that
+    // fails before any usage arrives (e.g. a provider 400 rejecting the
+    // request) would otherwise leave no trace in LLM logs / session history.
+    if (!streamAdapter.state.usage) {
+      try {
+        const errorMessage = provider.extractErrorMessage(error);
+        logger.info(
+          { profileId: agent.id, errorMessage },
+          "Persisting error interaction record for failed stream",
+        );
+        await InteractionModel.create({
+          profileId: agent.id,
+          externalAgentId,
+          executionId,
+          userId,
+          virtualKeyId,
+          passthroughVirtualKeyId,
+          sessionId,
+          sessionSource,
+          source,
+          authMethod,
+          authenticatedAppId: authenticatedApp?.id,
+          authenticatedAppName: authenticatedApp?.name,
+          type: provider.interactionType,
+          request: originalRequest as InteractionRequest,
+          processedRequest: request as InteractionRequest,
+          response: { error: errorMessage },
+          model: actualModel,
+          baselineModel,
+          inputTokens: 0,
+          outputTokens: 0,
+        });
+      } catch (interactionError) {
+        logger.error(
+          { err: interactionError, profileId: agent.id },
+          "Failed to create error interaction record for failed stream",
+        );
+      }
+    }
+
     return handleError(
       error,
       reply,

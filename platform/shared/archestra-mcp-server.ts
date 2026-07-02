@@ -120,6 +120,12 @@ export const TOOL_ARTIFACT_WRITE_SHORT_NAME = "artifact_write";
 // Turn the current chat into a project (moves the chat + its files into a new project).
 export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
   "create_project_from_conversation";
+// Project memory — short durable facts/preferences scoped to a project,
+// injected into the system prompt of the project's chats.
+export const TOOL_SAVE_MEMORY_SHORT_NAME = "save_memory";
+export const TOOL_LIST_MEMORIES_SHORT_NAME = "list_memories";
+export const TOOL_UPDATE_MEMORY_SHORT_NAME = "update_memory";
+export const TOOL_DELETE_MEMORY_SHORT_NAME = "delete_memory";
 export const TOOL_SEARCH_TOOLS_SHORT_NAME = "search_tools";
 export const TOOL_RUN_TOOL_SHORT_NAME = "run_tool";
 export const TOOL_LIST_SKILLS_SHORT_NAME = "list_skills";
@@ -228,6 +234,10 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
+  TOOL_SAVE_MEMORY_SHORT_NAME,
+  TOOL_LIST_MEMORIES_SHORT_NAME,
+  TOOL_UPDATE_MEMORY_SHORT_NAME,
+  TOOL_DELETE_MEMORY_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -522,6 +532,21 @@ export const PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_EDIT_FILE_SHORT_NAME,
   TOOL_DELETE_FILE_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * Project memory tools — save/list/update/delete short durable notes scoped to
+ * a project. Gated by the Projects feature flag (`config.projects.enabled`):
+ * seeded and auto-assigned to new `agent`-type (chat) agents only when it is
+ * on, with a startup backfill for chat agents that predate the tools. Not
+ * auto-assigned to gateway/profile agents — external MCP clients get them via
+ * an explicit assignment.
+ */
+export const PROJECT_MEMORY_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_SAVE_MEMORY_SHORT_NAME,
+  TOOL_LIST_MEMORIES_SHORT_NAME,
+  TOOL_UPDATE_MEMORY_SHORT_NAME,
+  TOOL_DELETE_MEMORY_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**

@@ -8,6 +8,7 @@ import {
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  PROJECT_MEMORY_ARCHESTRA_TOOL_SHORT_NAMES,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -1467,6 +1468,83 @@ class ToolModel {
     if (toolIds.length === 0) return;
 
     await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+  }
+
+  /**
+   * Assign the project memory tools (save/list/update/delete_memory) to a
+   * single agent when the Projects feature is enabled. No-op otherwise (with
+   * the feature dark the memory tools are not even seeded).
+   *
+   * Called from `AgentModel.create` for internal chat agents only — memory is
+   * a chat-driven surface. Gateway/profile agents (external MCP clients) get
+   * the tools via an explicit assignment instead.
+   */
+  static async assignProjectMemoryToolsToAgent(
+    agentId: string,
+    organizationId: string,
+  ): Promise<void> {
+    if (!config.projects.enabled) return;
+
+    const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+      organizationId,
+      PROJECT_MEMORY_ARCHESTRA_TOOL_SHORT_NAMES,
+    );
+    if (toolIds.length === 0) return;
+
+    await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+  }
+
+  /**
+   * One-time backfill triggered on startup: when a project memory built-in
+   * tool is created for the first time on this seed run, assign just those new
+   * tools to every existing internal chat agent (`agentType = "agent"`).
+   *
+   * New chat agents inherit the memory toolset via
+   * {@link assignProjectMemoryToolsToAgent}, but agents that predate the
+   * tools' introduction would otherwise never receive them. Deliberately
+   * scoped to chat agents: gateway/profile agents are external connection
+   * surfaces and must not silently grow mutation tools — they get them via an
+   * explicit assignment. Idempotent via `createManyIfNotExists`.
+   *
+   * @param newlyCreatedToolNames names returned by {@link seedArchestraTools}.
+   */
+  static async backfillNewProjectMemoryToolsToChatAgents(
+    newlyCreatedToolNames: string[],
+  ): Promise<void> {
+    if (!config.projects.enabled) return;
+
+    const createdShortNames = new Set(
+      newlyCreatedToolNames
+        .map(extractArchestraBuiltInShortName)
+        .filter((name): name is string => name !== null),
+    );
+    const newMemoryShortNames =
+      PROJECT_MEMORY_ARCHESTRA_TOOL_SHORT_NAMES.filter((shortName) =>
+        createdShortNames.has(shortName),
+      );
+    if (newMemoryShortNames.length === 0) return;
+
+    const organizationIds = await OrganizationModel.findAllIds();
+    for (const organizationId of organizationIds) {
+      const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+        organizationId,
+        newMemoryShortNames,
+      );
+      if (toolIds.length === 0) continue;
+      const agentIds =
+        await AgentModel.findChatAgentIdsByOrganizationId(organizationId);
+      for (const agentId of agentIds) {
+        await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+      }
+      logger.info(
+        {
+          organizationId,
+          agentCount: agentIds.length,
+          newMemoryShortNames,
+        },
+        "Backfilled new project memory tools to org chat agents",
+      );
+    }
   }
 
   /**

@@ -2,6 +2,7 @@ import {
   MAX_PROJECT_UPLOAD_BYTES,
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
+  PROJECT_MEMORY_MAX_ENTRY_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
   RouteId,
 } from "@archestra/shared";
@@ -16,6 +17,7 @@ import {
   ProjectDetailSchema,
   ProjectListItemSchema,
   ProjectListScopeSchema,
+  ProjectMemoryItemSchema,
   ProjectShareVisibilitySchema,
   SandboxFileListItemSchema,
 } from "@/types";
@@ -395,6 +397,115 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
         content: body.content,
+      });
+      return { ok: true as const };
+    },
+  );
+
+  fastify.get(
+    "/api/projects/:id/memories",
+    {
+      schema: {
+        operationId: RouteId.GetProjectMemories,
+        description:
+          "The project's memory entries (newest first) — short durable notes " +
+          "the assistant saved for the project. Every entry is injected into " +
+          "the system prompt of the project's chats. Readable by anyone with " +
+          "project access.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.array(ProjectMemoryItemSchema)),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) =>
+      projectService.listMemories({ id, organizationId, userId: user.id }),
+  );
+
+  fastify.post(
+    "/api/projects/:id/memories",
+    {
+      schema: {
+        operationId: RouteId.CreateProjectMemory,
+        description:
+          "Save one memory entry to the project. Any project member " +
+          "(owner or shared) may save; the per-project entry cap returns 409.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({
+          content: z.string().min(1).max(PROJECT_MEMORY_MAX_ENTRY_LENGTH),
+        }),
+        response: constructResponseSchema(ProjectMemoryItemSchema),
+      },
+    },
+    async ({ params: { id }, body, organizationId, user }) => {
+      const memory = await projectService.createMemory({
+        id,
+        organizationId,
+        userId: user.id,
+        content: body.content,
+      });
+      return {
+        id: memory.id,
+        content: memory.content,
+        authorName: user.name ?? null,
+        createdAt: memory.createdAt,
+        updatedAt: memory.updatedAt,
+      };
+    },
+  );
+
+  fastify.patch(
+    "/api/projects/:id/memories/:memoryId",
+    {
+      schema: {
+        operationId: RouteId.UpdateProjectMemory,
+        description:
+          "Replace one memory entry's content. Any project member may edit " +
+          "any entry (memories are collaborative, not per-author).",
+        tags: ["Projects"],
+        params: z.object({
+          id: z.string().uuid(),
+          memoryId: z.string().uuid(),
+        }),
+        body: z.object({
+          content: z.string().min(1).max(PROJECT_MEMORY_MAX_ENTRY_LENGTH),
+        }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id, memoryId }, body, organizationId, user }) => {
+      await projectService.updateMemory({
+        id,
+        memoryId,
+        organizationId,
+        userId: user.id,
+        content: body.content,
+      });
+      return { ok: true as const };
+    },
+  );
+
+  fastify.delete(
+    "/api/projects/:id/memories/:memoryId",
+    {
+      schema: {
+        operationId: RouteId.DeleteProjectMemory,
+        description:
+          "Delete one memory entry. Any project member may delete any entry.",
+        tags: ["Projects"],
+        params: z.object({
+          id: z.string().uuid(),
+          memoryId: z.string().uuid(),
+        }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id, memoryId }, organizationId, user }) => {
+      await projectService.deleteMemory({
+        id,
+        memoryId,
+        organizationId,
+        userId: user.id,
       });
       return { ok: true as const };
     },

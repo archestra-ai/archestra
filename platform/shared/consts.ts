@@ -63,6 +63,31 @@ export const PROJECT_INSTRUCTIONS_FILENAME = "instructions.md";
 export const PROJECT_INSTRUCTIONS_MAX_LENGTH = 100_000;
 
 /**
+ * Max length (characters) of a single project memory entry. Memories are short
+ * durable facts/preferences the assistant saves for a project ("the launch is
+ * July 15", "prefers concise answers"), not documents — anything longer belongs
+ * in the project instructions or a file. Enforced by the memories API and the
+ * save_memory / update_memory tools.
+ */
+export const PROJECT_MEMORY_MAX_ENTRY_LENGTH = 2_000;
+
+/**
+ * Max number of memory entries per project. Every entry is injected into the
+ * system prompt of the project's chats, so the set is deliberately bounded;
+ * when full, saving fails and the assistant is told to delete or consolidate
+ * existing entries instead.
+ */
+export const PROJECT_MEMORY_MAX_ENTRIES_PER_PROJECT = 100;
+
+/**
+ * Max length (characters) of the memory block injected into a project chat's
+ * system prompt. Newest entries win; older ones are dropped once the budget is
+ * exhausted. A second bound besides the per-entry/per-project caps so prompt
+ * cost stays predictable even at the caps' worst case.
+ */
+export const PROJECT_MEMORY_MAX_INJECTED_LENGTH = 20_000;
+
+/**
  * Max size (bytes) of a Markdown/plain-text file the in-place editor saves in one
  * write. Editing happens in a textarea, so this caps it below the sandbox
  * artifact limit; larger generated files can still be downloaded and read, just

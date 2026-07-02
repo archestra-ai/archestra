@@ -1372,6 +1372,16 @@ export const requiredEndpointPermissionsMap: Partial<
   // handler on top of project:update.
   [RouteId.GetProjectInstructions]: { project: ["read"] },
   [RouteId.SetProjectInstructions]: { project: ["update"] },
+  // Memories are collaborative project content produced from chatting (the
+  // assistant saves them mid-conversation), so every project reader may list
+  // them, and mutations require the chat-creation capability rather than
+  // owner-level project:update — "anyone who can chat in the project can shape
+  // its memory". Project membership (owner/shared) is enforced in the handler
+  // (projectService.*Memory -> requireReadable).
+  [RouteId.GetProjectMemories]: { project: ["read"] },
+  [RouteId.CreateProjectMemory]: { project: ["read"], chat: ["create"] },
+  [RouteId.UpdateProjectMemory]: { project: ["read"], chat: ["create"] },
+  [RouteId.DeleteProjectMemory]: { project: ["read"], chat: ["create"] },
   [RouteId.PinProject]: { project: ["read"] },
   [RouteId.UnpinProject]: { project: ["read"] },
   [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },

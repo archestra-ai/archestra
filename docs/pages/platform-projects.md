@@ -3,7 +3,7 @@ title: Projects
 category: Projects
 order: 1
 description: Named collections of chats that share files and scheduled runs
-lastUpdated: 2026-06-26
+lastUpdated: 2026-07-02
 ---
 
 <!--
@@ -31,6 +31,14 @@ Because **All** shows only projects they can access, a `project:admin` reaches o
 ## Instructions
 
 Every project has an instructions file (`instructions.md`) whose contents are prepended to the system prompt of every chat in the project, so standing guidance — domain context, house style, constraints the agent must always follow — applies to every conversation without being repeated in each prompt. Edit it from the pinned entry at the top of the project's Files panel; owner edits take effect on the next message in any of the project's chats, and empty instructions add nothing. Once saved it is an ordinary project file that agents can read and update, but it cannot be deleted — clear its contents to remove the guidance.
+
+## Memory
+
+Memory is the project's set of short saved notes — durable facts, decisions, and preferences the agent should carry across the project's chats ("the launch is July 15", "prefers concise answers"). Like instructions, memories are injected into the system prompt of every chat in the project; unlike instructions, they accumulate from conversations: when you ask the agent to remember something (or it encounters a clearly durable fact), it saves a memory with the `save_memory` tool, and it can consolidate or forget entries with `update_memory` / `delete_memory` when asked. Memories are treated as reference data in the prompt, subordinate to the project's instructions.
+
+Browse and manage the entries from the pinned **Memory** row in the project's Files panel: any project member (owner or shared) can add, edit, or delete any entry there — memory is collaborative project state, not per-author. The `project:admin` oversight view is read-only. Each entry is capped at 2,000 characters and a project holds at most 100 entries; when full, saving fails until entries are deleted or consolidated.
+
+The memory tools are assigned to chat agents automatically. External MCP clients can use them through the [MCP Gateway](./platform-mcp-gateway) by passing an explicit `project_id` (from a user-scoped token with access to that project); calls without a user identity are rejected.
 
 ## Files
 

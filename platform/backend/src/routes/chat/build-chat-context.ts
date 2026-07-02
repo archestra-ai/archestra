@@ -30,6 +30,8 @@ export async function buildChatContext(params: {
   hookSessionContext: string | undefined;
   /** The project's instructions, when this chat belongs to a project. */
   projectInstructions: string | undefined;
+  /** The project's saved memories, when this chat belongs to a project. */
+  projectMemories: Array<{ id: string; content: string }> | undefined;
   hookRunCollector: CollectedHookRun[];
   elicitation: ChatMcpElicitationBridge;
   subagentToolStream: SubagentToolStreamBridge;
@@ -51,6 +53,7 @@ export async function buildChatContext(params: {
     organizationId,
     hookSessionContext,
     projectInstructions,
+    projectMemories,
     hookRunCollector,
     elicitation,
     subagentToolStream,
@@ -99,6 +102,7 @@ export async function buildChatContext(params: {
     user: { name: user.name, email: user.email },
     hookSessionContext,
     projectInstructions,
+    projectMemories,
   });
 
   return {

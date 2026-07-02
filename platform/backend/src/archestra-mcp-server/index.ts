@@ -45,6 +45,10 @@ import {
 } from "./knowledge-management";
 import { toolEntries as limitToolEntries, tools as limitTools } from "./limits";
 import {
+  toolEntries as memoryToolEntries,
+  tools as memoryTools,
+} from "./memory";
+import {
   toolEntries as llmProxyToolEntries,
   tools as llmProxyTools,
 } from "./llm-proxies";
@@ -106,6 +110,7 @@ const toolEntries: Partial<
   ...knowledgeManagementToolEntries,
   ...chatToolEntries,
   ...projectToolEntries,
+  ...memoryToolEntries,
   ...searchToolEntries,
   ...runToolEntries,
   ...skillToolEntries,
@@ -132,11 +137,11 @@ const projectGatedSandboxFullNames = new Set<string>(
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES.map(getArchestraToolFullName),
 );
 
-// The dedicated Projects tool group (create_project_from_conversation).
-// Registered above for unit tests, but hidden and non-dispatchable when the
-// projects feature is dark.
+// The dedicated Projects tool groups (create_project_from_conversation and
+// the project memory tools). Registered above for unit tests, but hidden and
+// non-dispatchable when the projects feature is dark.
 const projectFeatureToolFullNames = new Set<string>(
-  projectTools.map((t) => t.name),
+  [...projectTools, ...memoryTools].map((t) => t.name),
 );
 
 export function getArchestraMcpTools() {
@@ -152,7 +157,7 @@ export function getArchestraMcpTools() {
     ...toolAssignmentTools,
     ...knowledgeManagementTools,
     ...chatTools,
-    ...(config.projects.enabled ? projectTools : []),
+    ...(config.projects.enabled ? [...projectTools, ...memoryTools] : []),
     ...searchToolTools,
     ...runToolTools,
     ...skillTools,

@@ -618,6 +618,36 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 })
             : Promise.resolve(undefined);
 
+        // The project's saved memories join the system prompt next to the
+        // instructions. Same posture: concurrent with the org reads,
+        // best-effort (a failure or lost project access logs and injects
+        // nothing). An empty list still injects the block so the model knows
+        // it can save memories in this chat.
+        const projectMemoriesPromise: Promise<
+          Array<{ id: string; content: string }> | undefined
+        > = conversation.projectId
+          ? projectService
+              .listMemories({
+                id: conversation.projectId,
+                organizationId,
+                userId: user.id,
+              })
+              .then((memories) =>
+                memories.map(({ id, content }) => ({ id, content })),
+              )
+              .catch((error) => {
+                logger.warn(
+                  {
+                    error,
+                    conversationId,
+                    projectId: conversation.projectId,
+                  },
+                  "Failed to load project memories, proceeding without them",
+                );
+                return undefined;
+              })
+          : Promise.resolve(undefined);
+
         // Tools + system prompt, alongside the org settings the stream needs.
         const [
           {
@@ -630,20 +660,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           slimChatErrorUi,
           organization,
         ] = await Promise.all([
-          projectInstructionsPromise.then((projectInstructions) =>
-            buildChatContext({
-              conversationId,
-              agentId,
-              agent,
-              user: { id: user.id, email: user.email, name: user.name },
-              organizationId,
-              hookSessionContext,
-              projectInstructions,
-              hookRunCollector,
-              elicitation: chatMcpElicitation,
-              subagentToolStream,
-              abortSignal: chatAbortController.signal,
-            }),
+          Promise.all([projectInstructionsPromise, projectMemoriesPromise]).then(
+            ([projectInstructions, projectMemories]) =>
+              buildChatContext({
+                conversationId,
+                agentId,
+                agent,
+                user: { id: user.id, email: user.email, name: user.name },
+                organizationId,
+                hookSessionContext,
+                projectInstructions,
+                projectMemories,
+                hookRunCollector,
+                elicitation: chatMcpElicitation,
+                subagentToolStream,
+                abortSignal: chatAbortController.signal,
+              }),
           ),
           OrganizationModel.getSlimChatErrorUi(organizationId),
           OrganizationModel.getById(organizationId),

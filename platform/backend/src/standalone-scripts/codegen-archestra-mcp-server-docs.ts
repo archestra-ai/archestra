@@ -30,6 +30,7 @@ enum ToolGroup {
   ToolAssignment = "Tool Assignment",
   KnowledgeManagement = "Knowledge Management",
   Chat = "Chat",
+  ProjectMemory = "Project Memory",
   Meta = "Meta",
   CodeExecution = "Code Execution",
   Skills = "Skills",
@@ -49,11 +50,12 @@ const groupOrder: Record<ToolGroup, number> = {
   [ToolGroup.ToolAssignment]: 8,
   [ToolGroup.KnowledgeManagement]: 9,
   [ToolGroup.Chat]: 10,
-  [ToolGroup.Meta]: 11,
-  [ToolGroup.CodeExecution]: 12,
-  [ToolGroup.Skills]: 13,
-  [ToolGroup.SkillSandbox]: 14,
-  [ToolGroup.Apps]: 15,
+  [ToolGroup.ProjectMemory]: 11,
+  [ToolGroup.Meta]: 12,
+  [ToolGroup.CodeExecution]: 13,
+  [ToolGroup.Skills]: 14,
+  [ToolGroup.SkillSandbox]: 15,
+  [ToolGroup.Apps]: 16,
 };
 
 /**
@@ -144,6 +146,11 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   swap_agent: ToolGroup.Chat,
   swap_to_default_agent: ToolGroup.Chat,
   create_project_from_conversation: ToolGroup.Chat,
+
+  save_memory: ToolGroup.ProjectMemory,
+  list_memories: ToolGroup.ProjectMemory,
+  update_memory: ToolGroup.ProjectMemory,
+  delete_memory: ToolGroup.ProjectMemory,
 
   search_tools: ToolGroup.Meta,
   run_tool: ToolGroup.Meta,
@@ -451,7 +458,11 @@ export function formatToolPermission(
     return "None (no additional RBAC permission required)";
   }
 
-  return `\`${permission.resource}:${permission.action}\``;
+  // An array means ALL listed permissions are required (AND).
+  const permissions = Array.isArray(permission) ? permission : [permission];
+  return permissions
+    .map((perm) => `\`${perm.resource}:${perm.action}\``)
+    .join(" + ");
 }
 
 function formatToolLink(toolShortName: ArchestraToolShortName): string {

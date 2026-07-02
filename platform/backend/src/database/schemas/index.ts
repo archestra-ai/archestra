@@ -129,6 +129,7 @@ export {
   projectSharesTable,
   projectShareTeamsTable,
 } from "./project";
+export { default as projectMemoriesTable } from "./project-memory";
 export { default as projectPinsTable } from "./project-pin";
 export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";

@@ -17,18 +17,22 @@ import { handleApiError, throwOnApiError } from "@/lib/utils";
 const {
   createProject,
   createProjectFromConversation,
+  createProjectMemory,
   deleteProject,
+  deleteProjectMemory,
   deleteSkillSandboxArtifact,
   getProject,
   getProjectConversations,
   getProjectFiles,
   getProjectInstructions,
+  getProjectMemories,
   getProjects,
   pinProject,
   setProjectInstructions,
   setProjectShare,
   unpinProject,
   updateProject,
+  updateProjectMemory,
   uploadProjectFiles,
 } = archestraApiSdk;
 
@@ -159,6 +163,90 @@ export function useSetProjectInstructions() {
       });
       // The first save materializes the instructions.md file.
       queryClient.invalidateQueries({ queryKey: ["projects", id, "files"] });
+    },
+  });
+}
+
+/** The project's saved memories, newest first. */
+export function useProjectMemories(id: string | undefined) {
+  return useQuery({
+    queryKey: ["projects", id, "memories"],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await getProjectMemories({
+        path: { id: id as string },
+      });
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
+    },
+  });
+}
+
+export function useCreateProjectMemory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { id: string; content: string }) => {
+      const { data, error } = await createProjectMemory({
+        path: { id: params.id },
+        body: { content: params.content },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (memory, { id }) => {
+      if (!memory) return;
+      toast.success("Memory saved");
+      queryClient.invalidateQueries({ queryKey: ["projects", id, "memories"] });
+    },
+  });
+}
+
+export function useUpdateProjectMemory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      id: string;
+      memoryId: string;
+      content: string;
+    }) => {
+      const { error } = await updateProjectMemory({
+        path: { id: params.id, memoryId: params.memoryId },
+        body: { content: params.content },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return true;
+    },
+    onSuccess: (ok, { id }) => {
+      if (!ok) return;
+      toast.success("Memory updated");
+      queryClient.invalidateQueries({ queryKey: ["projects", id, "memories"] });
+    },
+  });
+}
+
+export function useDeleteProjectMemory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { id: string; memoryId: string }) => {
+      const { error } = await deleteProjectMemory({
+        path: { id: params.id, memoryId: params.memoryId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return true;
+    },
+    onSuccess: (ok, { id }) => {
+      if (!ok) return;
+      toast.success("Memory deleted");
+      queryClient.invalidateQueries({ queryKey: ["projects", id, "memories"] });
     },
   });
 }

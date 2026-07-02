@@ -1793,6 +1793,63 @@ Required RBAC permission: `project:create`
 | `project_slug` | `string` | Yes | The new project's slug. |
 | `files_transferred` | `integer` | Yes | How many of the chat's files were moved into the project. |
 
+### Project Memory
+
+| Tool | Description | Required RBAC Permission |
+|------|-------------|--------------------------|
+| `save_memory` | Save a memory to the current project — a short durable fact or preference worth carrying into the project's future conversations (a decision, a deadline, how the user likes things done). | `project:read` + `chat:create` |
+| `list_memories` | List the current project's saved memories (newest first), with the ids update_memory / delete_memory take. | `project:read` |
+| `update_memory` | Replace the content of one of the current project's memories (by id, from list_memories or the memory block in your system prompt). | `project:read` + `chat:create` |
+| `delete_memory` | Delete one of the current project's memories (by id, from list_memories or the memory block in your system prompt). | `project:read` + `chat:create` |
+
+#### save_memory
+
+Required RBAC permission: `project:read` + `chat:create`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `content` | `string` | Yes | The memory to save: one short, self-contained fact or preference (max 2000 characters). Not a place for documents or long notes. |
+| `project_id` | `string` | No | Optional project id. Omit inside a project chat (the chat's project is used). Required when calling from outside a conversation, e.g. via the MCP Gateway. |
+
+
+#### list_memories
+
+Required RBAC permission: `project:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project_id` | `string` | No | Optional project id. Omit inside a project chat (the chat's project is used). Required when calling from outside a conversation, e.g. via the MCP Gateway. |
+
+
+#### update_memory
+
+Required RBAC permission: `project:read` + `chat:create`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `memory_id` | `string` | Yes | The id of the memory to update, as returned by list_memories. |
+| `content` | `string` | Yes | The replacement content for the memory. |
+| `project_id` | `string` | No | Optional project id. Omit inside a project chat (the chat's project is used). Required when calling from outside a conversation, e.g. via the MCP Gateway. |
+
+
+#### delete_memory
+
+Required RBAC permission: `project:read` + `chat:create`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `memory_id` | `string` | Yes | The id of the memory to delete, as returned by list_memories. |
+| `project_id` | `string` | No | Optional project id. Omit inside a project chat (the chat's project is used). Required when calling from outside a conversation, e.g. via the MCP Gateway. |
+
+
 ### Meta
 
 | Tool | Description | Required RBAC Permission |

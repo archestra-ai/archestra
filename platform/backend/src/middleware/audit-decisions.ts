@@ -189,6 +189,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: project share × team",
   },
+  projectMemoriesTable: {
+    audited: false,
+    reason:
+      "assistant-saved project notes; chat-derived content, same family as conversations",
+  },
   projectPinsTable: {
     audited: false,
     reason:

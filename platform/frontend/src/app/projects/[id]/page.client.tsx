@@ -42,6 +42,11 @@ import { SelectableFileList } from "@/components/chat/selectable-file-list";
 import { FileDropZone } from "@/components/files/file-drop-zone";
 import { PageLayout } from "@/components/page-layout";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
+import {
+  MEMORY_SELECTION,
+  MemoryRow,
+  ProjectMemoryPanel,
+} from "@/components/projects/project-memory";
 import { QueryLoadError } from "@/components/query-load-error";
 import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
 import { Badge } from "@/components/ui/badge";
@@ -515,10 +520,14 @@ function ProjectFilesSidebar({
     }));
   const selected = items.find((i) => i.id === selectedId) ?? null;
   const instructionsSelected = selectedId === INSTRUCTIONS_SELECTION;
-  const previewing = selected !== null || instructionsSelected;
+  const memorySelected = selectedId === MEMORY_SELECTION;
+  const previewing =
+    selected !== null || instructionsSelected || memorySelected;
   const detailName = instructionsSelected
     ? PROJECT_INSTRUCTIONS_FILENAME
-    : (selected?.name ?? "");
+    : memorySelected
+      ? "Memory"
+      : (selected?.name ?? "");
   // Editable only for a row-backed .md/.txt file when the viewer has real project
   // access (the admin-oversight view is read-only, so `canEditFiles` is false).
   const selectedEditable =
@@ -546,7 +555,10 @@ function ProjectFilesSidebar({
 
   // If the open file disappears (e.g. deleted elsewhere), fall back to the list.
   const selectedMissing =
-    selectedId !== null && !instructionsSelected && selected === null;
+    selectedId !== null &&
+    !instructionsSelected &&
+    !memorySelected &&
+    selected === null;
   useEffect(() => {
     if (selectedMissing) {
       setSelectedId(null);
@@ -597,10 +609,16 @@ function ProjectFilesSidebar({
                 onOpen={openFile}
                 onRequestDelete={requestDelete}
                 leading={
-                  <InstructionsRow
-                    selected={instructionsSelected}
-                    onSelect={() => openFile(INSTRUCTIONS_SELECTION)}
-                  />
+                  <>
+                    <InstructionsRow
+                      selected={instructionsSelected}
+                      onSelect={() => openFile(INSTRUCTIONS_SELECTION)}
+                    />
+                    <MemoryRow
+                      selected={memorySelected}
+                      onSelect={() => openFile(MEMORY_SELECTION)}
+                    />
+                  </>
                 }
               />
             </div>
@@ -671,6 +689,11 @@ function ProjectFilesSidebar({
                 isOwner={canManageProject}
                 editing={editing}
                 onExitEdit={() => setEditing(false)}
+              />
+            ) : previewing && memorySelected ? (
+              <ProjectMemoryPanel
+                projectId={projectId}
+                canEdit={canEditFiles}
               />
             ) : previewing && selected ? (
               <FilePreview

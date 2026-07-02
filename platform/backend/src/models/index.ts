@@ -72,6 +72,11 @@ export {
   ProjectAlreadyAssignedError,
   ProjectNameExistsError,
 } from "./project";
+export {
+  default as ProjectMemoryModel,
+  ProjectMemoryLimitError,
+  ProjectMemoryProjectGoneError,
+} from "./project-memory";
 export { default as ProjectPinModel } from "./project-pin";
 export { default as ProjectShareModel } from "./project-share";
 export { default as ScheduleTriggerModel } from "./schedule-trigger";

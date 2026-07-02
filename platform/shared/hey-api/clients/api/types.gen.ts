@@ -57058,6 +57058,360 @@ export type SetProjectInstructionsResponses = {
 
 export type SetProjectInstructionsResponse = SetProjectInstructionsResponses[keyof SetProjectInstructionsResponses];
 
+export type GetProjectMemoriesData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/memories';
+};
+
+export type GetProjectMemoriesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetProjectMemoriesError = GetProjectMemoriesErrors[keyof GetProjectMemoriesErrors];
+
+export type GetProjectMemoriesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        content: string;
+        authorName: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetProjectMemoriesResponse = GetProjectMemoriesResponses[keyof GetProjectMemoriesResponses];
+
+export type CreateProjectMemoryData = {
+    body: {
+        content: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/memories';
+};
+
+export type CreateProjectMemoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateProjectMemoryError = CreateProjectMemoryErrors[keyof CreateProjectMemoryErrors];
+
+export type CreateProjectMemoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        content: string;
+        authorName: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateProjectMemoryResponse = CreateProjectMemoryResponses[keyof CreateProjectMemoryResponses];
+
+export type DeleteProjectMemoryData = {
+    body?: never;
+    path: {
+        id: string;
+        memoryId: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/memories/{memoryId}';
+};
+
+export type DeleteProjectMemoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteProjectMemoryError = DeleteProjectMemoryErrors[keyof DeleteProjectMemoryErrors];
+
+export type DeleteProjectMemoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+    };
+};
+
+export type DeleteProjectMemoryResponse = DeleteProjectMemoryResponses[keyof DeleteProjectMemoryResponses];
+
+export type UpdateProjectMemoryData = {
+    body: {
+        content: string;
+    };
+    path: {
+        id: string;
+        memoryId: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/memories/{memoryId}';
+};
+
+export type UpdateProjectMemoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateProjectMemoryError = UpdateProjectMemoryErrors[keyof UpdateProjectMemoryErrors];
+
+export type UpdateProjectMemoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+    };
+};
+
+export type UpdateProjectMemoryResponse = UpdateProjectMemoryResponses[keyof UpdateProjectMemoryResponses];
+
 export type GetProjectConversationsData = {
     body?: never;
     path: {

@@ -151,6 +151,72 @@ describe("checkToolPermission", () => {
     expect(result).toBeNull();
   });
 
+  test("an array entry requires ALL its permissions (save_memory pair)", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Pair Agent" });
+
+    // project:read alone — the missing chat:create denies the mutation...
+    const readOnly = await makeUser();
+    const readOnlyRole = await makeCustomRole(org.id, {
+      permission: { project: ["read"] },
+    });
+    await makeMember(readOnly.id, org.id, { role: readOnlyRole.role });
+    const readOnlyContext: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: org.id,
+      userId: readOnly.id,
+    };
+    const denied = await checkToolPermission(t("save_memory"), readOnlyContext);
+    expect(denied).not.toBeNull();
+    expect((denied?.content[0] as any).text).toContain("chat:create");
+    // ...but the single-permission list_memories stays allowed.
+    expect(
+      await checkToolPermission(t("list_memories"), readOnlyContext),
+    ).toBeNull();
+
+    // With both halves of the pair, the mutation is allowed.
+    const writer = await makeUser({ email: "pair-writer@test.com" });
+    const writerRole = await makeCustomRole(org.id, {
+      permission: { project: ["read"], chat: ["create"] },
+    });
+    await makeMember(writer.id, org.id, { role: writerRole.role });
+    expect(
+      await checkToolPermission(t("save_memory"), {
+        agent: { id: agent.id, name: agent.name },
+        organizationId: org.id,
+        userId: writer.id,
+      }),
+    ).toBeNull();
+  });
+
+  test("filterToolNamesByPermission applies AND semantics to array entries", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const role = await makeCustomRole(org.id, {
+      permission: { project: ["read"] },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+
+    const allowed = await filterToolNamesByPermission(
+      [t("save_memory"), t("list_memories")],
+      user.id,
+      org.id,
+    );
+    expect(allowed.has(t("list_memories"))).toBe(true);
+    expect(allowed.has(t("save_memory"))).toBe(false);
+  });
+
   test("sandbox:execute gates the sandbox tools — skill:read alone does not grant run_command", async ({
     makeOrganization,
     makeUser,

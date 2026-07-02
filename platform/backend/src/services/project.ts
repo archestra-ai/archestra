@@ -2,6 +2,7 @@ import {
   MAX_PROJECT_UPLOAD_BYTES,
   MAX_PROJECT_UPLOAD_MB,
   PROJECT_INSTRUCTIONS_FILENAME,
+  PROJECT_MEMORY_MAX_ENTRY_LENGTH,
 } from "@archestra/shared";
 import { userHasPermission } from "@/auth";
 import {
@@ -9,6 +10,9 @@ import {
   ConversationNotOwnedError,
   FileNameExistsError,
   ProjectAlreadyAssignedError,
+  ProjectMemoryLimitError,
+  ProjectMemoryModel,
+  ProjectMemoryProjectGoneError,
   ProjectModel,
   ProjectNameExistsError,
   ProjectPinModel,
@@ -23,6 +27,8 @@ import type {
   ProjectDetail,
   ProjectListItem,
   ProjectListScope,
+  ProjectMemory,
+  ProjectMemoryItem,
   ProjectShareVisibility,
   ProjectViewerRole,
   SandboxFileListItem,
@@ -406,6 +412,94 @@ class ProjectService {
     });
   }
 
+  /**
+   * The project's memory entries, newest first. Memories steer every chat in
+   * the project (like instructions), so any project reader may list them, and
+   * a `project:admin` overseeing a foreign project may too.
+   */
+  async listMemories(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<ProjectMemoryItem[]> {
+    const { project } = await this.requireViewable({
+      ...params,
+      allowAdminOversight: true,
+    });
+    return ProjectMemoryModel.listByProject({
+      projectId: project.id,
+      organizationId: params.organizationId,
+    });
+  }
+
+  /**
+   * Save one memory entry. Memories are collaborative project content produced
+   * from chatting, so membership (`requireReadable` — owner/shared, not admin
+   * oversight) is the gate, mirroring file uploads rather than the owner-only
+   * instructions.
+   */
+  async createMemory(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+    content: string;
+  }): Promise<ProjectMemory> {
+    const project = await this.requireReadable(params);
+    const content = this.validateMemoryContent(params.content);
+    try {
+      return await ProjectMemoryModel.create({
+        projectId: project.id,
+        organizationId: params.organizationId,
+        createdByUserId: params.userId,
+        content,
+      });
+    } catch (error) {
+      if (error instanceof ProjectMemoryLimitError) {
+        throw new ApiError(409, error.message);
+      }
+      if (error instanceof ProjectMemoryProjectGoneError) {
+        throw new ApiError(404, "Project not found");
+      }
+      throw error;
+    }
+  }
+
+  /** Replace an entry's content (same membership gate as {@link createMemory}). */
+  async updateMemory(params: {
+    id: string;
+    memoryId: string;
+    organizationId: string;
+    userId: string;
+    content: string;
+  }): Promise<ProjectMemory> {
+    const project = await this.requireReadable(params);
+    const content = this.validateMemoryContent(params.content);
+    const updated = await ProjectMemoryModel.update({
+      id: params.memoryId,
+      projectId: project.id,
+      organizationId: params.organizationId,
+      content,
+    });
+    if (!updated) throw new ApiError(404, "Memory not found");
+    return updated;
+  }
+
+  /** Delete an entry (same membership gate as {@link createMemory}). */
+  async deleteMemory(params: {
+    id: string;
+    memoryId: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<void> {
+    const project = await this.requireReadable(params);
+    const deleted = await ProjectMemoryModel.delete({
+      id: params.memoryId,
+      projectId: project.id,
+      organizationId: params.organizationId,
+    });
+    if (!deleted) throw new ApiError(404, "Memory not found");
+  }
+
   /** Upsert (or remove, when visibility is null) the project's share. */
   async setShare(params: {
     id: string;
@@ -677,6 +771,21 @@ class ProjectService {
       "project",
       "admin",
     );
+  }
+
+  /** Trimmed memory content, rejecting empty and over-cap input. */
+  private validateMemoryContent(content: string): string {
+    const trimmed = content.trim();
+    if (!trimmed) {
+      throw new ApiError(400, "memory content must not be empty");
+    }
+    if (trimmed.length > PROJECT_MEMORY_MAX_ENTRY_LENGTH) {
+      throw new ApiError(
+        400,
+        `memory content is too long (max ${PROJECT_MEMORY_MAX_ENTRY_LENGTH} characters)`,
+      );
+    }
+    return trimmed;
   }
 }
 

@@ -345,6 +345,9 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
   );
   await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
   await ToolModel.backfillNewAppToolsToEnabledOrgs(newlyCreatedToolNames);
+  await ToolModel.backfillNewProjectMemoryToolsToChatAgents(
+    newlyCreatedToolNames,
+  );
   logger.info("Seeded Archestra catalog and tools");
 }
 

@@ -11,12 +11,14 @@ import type { ArchestraContext } from "./types";
 /**
  * Permission required to use each Archestra MCP tool.
  * `null` means the tool is available to all authenticated users (no additional RBAC check).
+ * An array means ALL listed permissions are required (AND), mirroring
+ * `requiredEndpointPermissionsMap` entries that pair capabilities.
  * Typed as `Record<ArchestraToolShortName, ...>` so adding a new tool without
  * updating this map causes a compile error.
  */
 export const TOOL_PERMISSIONS: Record<
   ArchestraToolShortName,
-  Permission | null
+  Permission | Permission[] | null
 > = {
   // Identity — available to all
   whoami: null,
@@ -140,6 +142,25 @@ export const TOOL_PERMISSIONS: Record<
   swap_to_default_agent: null,
   create_project_from_conversation: { resource: "project", action: "create" },
 
+  // Project memory — reading requires project access; mutations additionally
+  // require the chat-creation capability, mirroring the memory REST routes:
+  // memories are collaborative content produced from chatting, so "anyone who
+  // can chat in the project can shape its memory". Per-project membership is
+  // re-checked in the handlers (projectService -> requireReadable/Viewable).
+  list_memories: { resource: "project", action: "read" },
+  save_memory: [
+    { resource: "project", action: "read" },
+    { resource: "chat", action: "create" },
+  ],
+  update_memory: [
+    { resource: "project", action: "read" },
+    { resource: "chat", action: "create" },
+  ],
+  delete_memory: [
+    { resource: "project", action: "read" },
+    { resource: "chat", action: "create" },
+  ],
+
   // Meta — permission is enforced on the target tool, not on run_tool itself
   search_tools: null,
   run_tool: null,
@@ -219,8 +240,8 @@ export async function checkToolPermission(
   // allowed through — they'll fail in the handler chain with "unknown tool".
   // Known tools with `null` permission are also allowed (no RBAC needed).
   const typedShortName = shortName as ArchestraToolShortName;
-  const perm = TOOL_PERMISSIONS[typedShortName];
-  if (!perm) return null;
+  const perms = requiredPermissions(typedShortName);
+  if (perms.length === 0) return null;
 
   if (!context.organizationId) {
     return errorResult("User context not available");
@@ -233,14 +254,15 @@ export async function checkToolPermission(
     return errorResult("User context not available");
   }
 
-  const allowed = await userHasPermission(
-    context.userId,
-    context.organizationId,
-    perm.resource,
-    perm.action,
-  );
+  for (const perm of perms) {
+    const allowed = await userHasPermission(
+      context.userId,
+      context.organizationId,
+      perm.resource,
+      perm.action,
+    );
+    if (allowed) continue;
 
-  if (!allowed) {
     logger.warn(
       {
         organizationId: context.organizationId,
@@ -289,24 +311,6 @@ export async function filterToolNamesByPermission(
     organizationId,
   );
 
-  // Collect unique permissions we need to check
-  const permResults = new Map<string, boolean>();
-  for (const name of toolNames) {
-    const shortName = archestraMcpBranding.getToolShortName(name);
-    if (!shortName) continue;
-    const perm = TOOL_PERMISSIONS[shortName as ArchestraToolShortName];
-    if (perm) {
-      const key = `${perm.resource}:${perm.action}`;
-      if (!permResults.has(key)) {
-        permResults.set(
-          key,
-          permissions[perm.resource]?.includes(perm.action) ?? false,
-        );
-      }
-    }
-  }
-
-  // Filter tools
   const allowed = new Set<string>();
   for (const name of toolNames) {
     const shortName = archestraMcpBranding.getToolShortName(name);
@@ -314,15 +318,26 @@ export async function filterToolNamesByPermission(
       allowed.add(name); // Non-Archestra tool
       continue;
     }
-    const perm = TOOL_PERMISSIONS[shortName as ArchestraToolShortName];
-    if (!perm) {
-      allowed.add(name); // No permission required
-      continue;
-    }
-    if (permResults.get(`${perm.resource}:${perm.action}`)) {
+    const perms = requiredPermissions(shortName as ArchestraToolShortName);
+    // All required permissions must be held (AND); an empty list = no
+    // permission required.
+    if (
+      perms.every(
+        (perm) => permissions[perm.resource]?.includes(perm.action) ?? false,
+      )
+    ) {
       allowed.add(name);
     }
   }
 
   return allowed;
+}
+
+/** A tool's required permissions as a list ([] = none required). */
+function requiredPermissions(
+  shortName: ArchestraToolShortName,
+): Permission[] {
+  const perm = TOOL_PERMISSIONS[shortName];
+  if (!perm) return [];
+  return Array.isArray(perm) ? perm : [perm];
 }

@@ -381,6 +381,16 @@ class AgentModel {
     // runtime/Projects flags, so new agents can use them without manual setup.
     await ToolModel.assignSandboxToolsToAgent(createdAgent.id, organizationId);
 
+    // Auto-assign the project memory tools to internal chat agents when the
+    // Projects feature is on. Chat agents only: gateway/profile agents are
+    // external connection surfaces and get the tools via explicit assignment.
+    if (createdAgent.agentType === "agent") {
+      await ToolModel.assignProjectMemoryToolsToAgent(
+        createdAgent.id,
+        organizationId,
+      );
+    }
+
     // Get team details and tools for the created agent
     const [teamDetails, assignedTools] = await Promise.all([
       teams && teams.length > 0
@@ -1310,6 +1320,24 @@ class AgentModel {
       .where(
         and(
           eq(schema.agentsTable.organizationId, organizationId),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+
+    return agents.map((agent) => agent.id);
+  }
+
+  /** Ids of the org's non-deleted internal chat agents (`agentType = "agent"`). */
+  static async findChatAgentIdsByOrganizationId(
+    organizationId: string,
+  ): Promise<string[]> {
+    const agents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
           notDeleted(schema.agentsTable),
         ),
       );

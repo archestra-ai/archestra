@@ -46,6 +46,14 @@ process.env.ARCHESTRA_APPS_ENABLED = "true";
 // overriding config.fileStorage at runtime against a temp root.
 process.env.ARCHESTRA_FILE_STORAGE_PROVIDER = "db";
 process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT = "";
+// Vertex AI mode must not leak in from a developer's .env (config.ts loads it
+// via dotenv, which never overrides values set here first): it flips the
+// gemini client into the ADC construction path and makes default-LLM
+// resolution prefer gemini over anthropic, breaking e.g. the gemini
+// createClient baseUrl test and the chat prompt-cache-breakpoint tests.
+process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED = "false";
+process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT = "";
+process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION = "";
 
 // Set auth secret for tests
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";

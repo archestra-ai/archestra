@@ -34,7 +34,7 @@ export const McpOauthClientMetadataSchema = z.object({
   authorId: z.string().nullable().default(null),
 });
 
-export const McpOauthClientTeamInfoSchema = z.object({
+const McpOauthClientTeamInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
 });

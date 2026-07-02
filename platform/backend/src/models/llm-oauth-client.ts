@@ -153,7 +153,7 @@ class LlmOauthClientModel {
       )
       .limit(1);
 
-    return client ? (await hydrateOauthClients([client]))[0] : null;
+    return client ? ((await hydrateOauthClients([client]))[0] ?? null) : null;
   }
 
   static async findByClientId(clientId: string) {
@@ -168,7 +168,7 @@ class LlmOauthClientModel {
       )
       .limit(1);
 
-    return client ? (await hydrateOauthClients([client]))[0] : null;
+    return client ? ((await hydrateOauthClients([client]))[0] ?? null) : null;
   }
 
   static async findByProviderApiKeyId(params: {
@@ -309,7 +309,7 @@ class LlmOauthClientModel {
       return row;
     });
 
-    return client ? (await hydrateOauthClients([client]))[0] : null;
+    return client ? ((await hydrateOauthClients([client]))[0] ?? null) : null;
   }
 
   static async delete(params: { id: string; organizationId: string }) {

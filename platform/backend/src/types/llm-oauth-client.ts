@@ -44,7 +44,7 @@ export const LlmOauthClientMetadataSchema = z.object({
   authorId: z.string().nullable().default(null),
 });
 
-export const LlmOauthClientTeamInfoSchema = z.object({
+const LlmOauthClientTeamInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
 });

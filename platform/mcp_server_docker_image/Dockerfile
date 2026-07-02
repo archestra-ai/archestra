@@ -45,7 +45,16 @@ FROM ${NODE_IMAGE} AS node-builder
 # Upgrade npm to a version whose bundled dependencies already include the fixes for
 # tar/minimatch, picomatch CVE-2026-33671 (ReDoS; bundle ships picomatch 4.0.4)
 # and sigstore CVE-2026-48815 (improper signature verification; fixed in sigstore 4.1.1).
-RUN npm install -g npm@11.17.0
+# Overwrite bundled undici to patch CVE-2026-12151 (uncontrolled resource consumption):
+# npm 11.17.0 bundles undici 6.26.0; 11.18.0 bundles the fixed 6.27.0 but is too recent
+# to satisfy the 7-day release-age practice. Same-minor swap, API compatible.
+RUN npm install -g npm@11.17.0 && \
+    cd /usr/local/lib/node_modules/npm/node_modules && \
+    rm -rf undici && \
+    npm pack undici@6.27.0 && \
+    tar -xzf undici-6.27.0.tgz && \
+    mv package undici && \
+    rm undici-6.27.0.tgz
 
 WORKDIR /opt/node-deps
 

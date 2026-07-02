@@ -34,7 +34,20 @@ import { transformExternalCatalogToFormValues } from "../../_parts/mcp-catalog-f
 import { RequestInstallationDialog } from "../../_parts/request-installation-dialog";
 import { TransportBadges } from "../../_parts/transport-badges";
 
-type ServerType = "all" | "remote" | "local";
+// "mcp-apps-demo" is a pseudo-type: demo servers are marked with the
+// MCP_APPS_DEMO_CATEGORY catalog category, hidden from every other type view,
+// and revealed only by picking this type explicitly.
+type ServerType = "all" | "remote" | "local" | "mcp-apps-demo";
+
+// Catalog category reserved for servers that only exist to exercise the MCP
+// Apps feature. Surfaced in the UI as the "MCP Apps Demo" type, not as a
+// selectable category.
+const MCP_APPS_DEMO_CATEGORY = "MCP Apps Demo";
+
+// Typed to accept a plain string so it composes with the generated category
+// union (which does not yet include the demo category) without casts.
+const isDemoCategory = (category: string | null | undefined) =>
+  category === MCP_APPS_DEMO_CATEGORY;
 
 export function ArchestraCatalogTab({
   catalogItems: initialCatalogItems,
@@ -66,7 +79,14 @@ export function ArchestraCatalogTab({
     mcpRegistry: ["create"],
   });
 
-  // Use server-side search and category filtering
+  // Use server-side search and category filtering. The demo pseudo-type maps
+  // onto its backend category so filtering happens server-side — a client-only
+  // filter would miss demo servers beyond the first page. The cast bridges the
+  // generated category union, which predates the demo category.
+  const effectiveCategory =
+    filters.type === "mcp-apps-demo"
+      ? (MCP_APPS_DEMO_CATEGORY as SelectedCategory)
+      : filters.category;
   const {
     data,
     isLoading,
@@ -74,7 +94,7 @@ export function ArchestraCatalogTab({
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useMcpRegistryServersInfinite(searchQuery, filters.category);
+  } = useMcpRegistryServersInfinite(searchQuery, effectiveCategory);
 
   const handleSelectServer = (
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
@@ -96,11 +116,15 @@ export function ArchestraCatalogTab({
     return data.pages.flatMap((page) => page.servers);
   }, [data]);
 
-  // Apply client-side type filter only (categories are filtered backend-side)
+  // Apply client-side type filter (categories are filtered backend-side).
   const filteredServers = useMemo(() => {
-    let filtered = servers;
+    // The demo pseudo-type shows only MCP Apps demo servers.
+    if (filters.type === "mcp-apps-demo") {
+      return servers.filter((server) => isDemoCategory(server.category));
+    }
 
-    // Filter by type (client-side since API doesn't support this)
+    // Demo servers are hidden from every other type view, including "all".
+    let filtered = servers.filter((server) => !isDemoCategory(server.category));
     if (filters.type !== "all") {
       filtered = filtered.filter(
         (server) => server.server.type === filters.type,
@@ -109,6 +133,12 @@ export function ArchestraCatalogTab({
 
     return filtered;
   }, [servers, filters.type]);
+
+  // The demo marker is surfaced as a type, so keep it out of the category list.
+  const visibleCategories = useMemo(
+    () => availableCategories.filter((category) => !isDemoCategory(category)),
+    [availableCategories],
+  );
 
   // Create a Set of catalog item names for efficient lookup
   const catalogServerNames = useMemo(
@@ -146,6 +176,7 @@ export function ArchestraCatalogTab({
               <SelectItem value="all">All types</SelectItem>
               <SelectItem value="remote">Remote</SelectItem>
               <SelectItem value="local">Local</SelectItem>
+              <SelectItem value="mcp-apps-demo">MCP Apps Demo</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -162,7 +193,7 @@ export function ArchestraCatalogTab({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All categories</SelectItem>
-              {availableCategories.map((category) => (
+              {visibleCategories.map((category) => (
                 <SelectItem key={category} value={category}>
                   {category}
                 </SelectItem>
@@ -310,7 +341,7 @@ function ServerCard({
                 {server.category}
               </Badge>
             )}
-            {!server.oauth_config?.requires_proxy && (
+            {server.oauth_config && !server.oauth_config.requires_proxy && (
               <Badge variant="secondary" className="text-xs">
                 OAuth
               </Badge>

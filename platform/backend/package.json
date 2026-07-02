@@ -6,6 +6,13 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
+  "//files": "Scopes what `pnpm deploy` copies into the production image (platform/Dockerfile). Without this, legacy deploy copies the whole package dir (src, test/config files) into the image. @backend is private and never published, so this only affects the deploy/pack file set.",
+  "files": [
+    "dist",
+    "scripts",
+    "drizzle.config.ts",
+    "src/database/migrations"
+  ],
   "scripts": {
     "build": "tsdown && pnpm run sentry:sourcemaps",
     "start": "NODE_ENV=production ./scripts/start-production.sh",

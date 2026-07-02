@@ -34,6 +34,10 @@ import TrustedDataPolicyModel from "./trusted-data-policy";
 const originalAppsEnabled = config.apps.enabled;
 beforeEach(() => {
   (config.apps as { enabled: boolean }).enabled = false;
+  // Pin every tool-gating flag this suite's expected tool sets assume —
+  // relying on the worker-pristine baseline for these let a rare cross-file
+  // ordering surface sandbox/app tools in the default-assignment counts.
+  (config.skillsSandbox as { enabled: boolean }).enabled = false;
 });
 afterAll(() => {
   (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;

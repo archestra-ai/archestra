@@ -122,6 +122,7 @@ export default function ApiKeysPage() {
   const deleteMutation = useDeleteLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
+  const anthropicWifEnabled = useFeature("anthropicWifEnabled");
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -411,6 +412,7 @@ export default function ApiKeysPage() {
             isProviderApiKeyOptional({
               provider: row.original.provider,
               azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+              anthropicWifEnabled: anthropicWifEnabled === true,
             }) ? (
               <>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -473,6 +475,7 @@ export default function ApiKeysPage() {
       openDeleteDialog,
       getKeyUsage,
       azureOpenAiEntraIdEnabled,
+      anthropicWifEnabled,
     ],
   );
 

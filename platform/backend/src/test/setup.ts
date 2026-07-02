@@ -56,9 +56,20 @@ process.setMaxListeners(20);
 
 // Module-level variables to persist across tests within a file
 let pgliteClient: PGlite | null = null;
-// Pristine config snapshot for the per-test restore (see beforeAll/beforeEach).
+// Pristine config snapshot for the per-test restore (see beforeEach).
+// Captured HERE at setup-module scope — setup files evaluate before any test
+// file's module code in the worker, so a test file that mutates config (or
+// installs accessors) during its own module evaluation can no longer poison
+// the baseline the way a first-file beforeAll capture could.
 let liveConfig: Record<string, unknown> | null = null;
 let pristineConfig: Record<string, unknown> | null = null;
+if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true") {
+  liveConfig = (await import("../config.js")).default as unknown as Record<
+    string,
+    unknown
+  >;
+  pristineConfig = structuredClone(liveConfig);
+}
 let testDb: ReturnType<typeof drizzle> | null = null;
 const originalConsoleWarn = console.warn;
 
@@ -123,22 +134,6 @@ beforeAll(async () => {
   dbModule.__setTestDb(
     testDb as unknown as Parameters<typeof dbModule.__setTestDb>[0],
   );
-
-  // Snapshot the pristine config once per worker (first file's beforeAll).
-  // Tests mutate the real config object directly (config.apps.enabled = ...),
-  // and in a shared worker (isolate: false) an unrestored mutation leaks into
-  // every later file. beforeEach below restores this snapshot before each
-  // test, so per-test/beforeEach mutations keep working while nothing leaks.
-  // Only the shared-worker ("clean") vitest project needs this — isolated
-  // files can't leak across files, and their bespoke config mocks may carry
-  // getter-only properties the restore could not assign to.
-  if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true") {
-    liveConfig ??= (await import("../config.js")).default as unknown as Record<
-      string,
-      unknown
-    >;
-    pristineConfig ??= structuredClone(liveConfig);
-  }
 });
 
 /**

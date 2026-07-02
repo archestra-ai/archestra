@@ -9,6 +9,7 @@ import {
 import {
   BookOpen,
   Check,
+  Github,
   Loader2,
   Plus,
   Search,
@@ -367,6 +368,23 @@ function ServerCard({
                 title="Docs"
               >
                 <BookOpen className="h-4 w-4" />
+              </a>
+            </Button>
+          )}
+          {server.github_info?.url && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground"
+              asChild
+            >
+              <a
+                href={server.github_info.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="GitHub"
+              >
+                <Github className="h-4 w-4" />
               </a>
             </Button>
           )}

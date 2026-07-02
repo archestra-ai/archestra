@@ -77198,6 +77198,7 @@
                                   "type": "string",
                                   "enum": [
                                     "rate_limit",
+                                    "usage_limit_exceeded",
                                     "authentication",
                                     "permission_denied",
                                     "invalid_request",
@@ -77960,6 +77961,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -78693,6 +78695,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -79467,6 +79470,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -81977,6 +81981,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -83353,6 +83358,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -85042,6 +85048,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -85799,6 +85806,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -86548,6 +86556,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -87307,6 +87316,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -110015,6 +110025,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -110958,6 +110969,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -111609,6 +111621,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -112249,6 +112262,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -112764,6 +112778,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -113290,6 +113305,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -115763,6 +115779,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -116289,6 +116306,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -116815,6 +116833,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -117341,6 +117360,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -117867,6 +117887,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -118393,6 +118414,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -118919,6 +118941,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -119445,6 +119468,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -119960,6 +119984,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -120475,6 +120500,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -121001,6 +121027,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -121527,6 +121554,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -124220,6 +124248,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -124746,6 +124775,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -125506,6 +125536,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -126449,6 +126480,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -128474,6 +128506,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -129417,6 +129450,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -130068,6 +130102,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -130708,6 +130743,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -131223,6 +131259,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -131749,6 +131786,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -134222,6 +134260,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -134748,6 +134787,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -135274,6 +135314,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -135800,6 +135841,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -136326,6 +136368,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -136852,6 +136895,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -137378,6 +137422,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -137904,6 +137949,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -138419,6 +138465,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -138934,6 +138981,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -139460,6 +139508,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -139986,6 +140035,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -142679,6 +142729,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -143205,6 +143256,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -143965,6 +144017,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -144908,6 +144961,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -224263,6 +224317,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",

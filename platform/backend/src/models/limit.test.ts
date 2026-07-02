@@ -1318,7 +1318,7 @@ describe("LimitValidationService", () => {
       });
 
       expect(result).not.toBeNull();
-      expect(result?.[1]).toContain("virtual_key-level");
+      expect(result?.[1]).toContain("virtual key-level");
     });
 
     test("should check user limits before agent limits", async ({
@@ -1414,6 +1414,57 @@ describe("LimitValidationService", () => {
 
       expect(result).not.toBeNull();
       expect(result?.[1]).toContain("agent-level");
+    });
+
+    test("names the exact rule (Archestra, model scope, reset window) in the violation message", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Rule Naming Agent" });
+
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1,
+        model: ["gpt-4o"],
+        cleanupInterval: "24h",
+      });
+
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        1000000,
+        1000000,
+      );
+
+      // Prevent cleanup from resetting test data
+      await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+      const result = await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+      });
+
+      expect(result).not.toBeNull();
+      const [refusalMessage, contentMessage] = result as unknown as [
+        string,
+        string,
+      ];
+
+      // The user-facing message must attribute the block to Archestra (not the
+      // provider) and name which rule fired: scope, model coverage, reset cadence.
+      expect(contentMessage).toContain("blocked by Archestra");
+      expect(contentMessage).toContain("agent-level cost limit");
+      expect(contentMessage).toContain("model gpt-4o");
+      expect(contentMessage).toContain("every 24 hours");
+
+      // The same details are mirrored in the metadata block the LLM can parse.
+      expect(refusalMessage).toContain(
+        "<archestra-limit-model-scope>model gpt-4o</archestra-limit-model-scope>",
+      );
+      expect(refusalMessage).toContain(
+        "<archestra-limit-reset-window>every 24 hours</archestra-limit-reset-window>",
+      );
     });
 
     test("should check team limits before organization limits", async ({
@@ -1515,7 +1566,8 @@ describe("LimitValidationService", () => {
       expect(refusalMessage).toContain("<archestra-limit-current-usage>");
       expect(refusalMessage).toContain("<archestra-limit-value>");
 
-      expect(contentMessage).toContain("token cost limit");
+      expect(contentMessage).toContain("blocked by Archestra");
+      expect(contentMessage).toContain("cost limit");
       expect(contentMessage).toContain("Current usage:");
       expect(contentMessage).toContain("Limit:");
     });
@@ -1802,7 +1854,7 @@ describe("LimitValidationService", () => {
       });
 
       expect(result).not.toBeNull();
-      expect(result?.[1]).toContain("virtual_key-level");
+      expect(result?.[1]).toContain("virtual key-level");
     });
 
     test("blocks request when org all-models limit is exceeded", async ({
@@ -2367,7 +2419,7 @@ describe("cleanupLimitsIfNeeded", () => {
       userId: user.id,
     });
     expect(result).not.toBeNull();
-    expect(result?.[1]).toContain("user-level token cost limit");
+    expect(result?.[1]).toContain("user-level cost limit");
   });
 
   test("custom user limits override the inherited default user limit", async ({

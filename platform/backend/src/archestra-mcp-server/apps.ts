@@ -619,9 +619,11 @@ const registry = defineArchestraTools([
       // tool from non-chat agents, but sibling tool descriptions name it and
       // run_tool can still dispatch it — so the handler itself steers external
       // callers to the app's launch tool, the only path that renders there.
+      // Gateway dispatch always carries an agentId; a context without one is
+      // the internal management-tool convention and stays permitted.
       const agentType = context.agentId
         ? await AgentModel.getAgentType(context.agentId)
-        : null;
+        : "agent";
       if (agentType !== "agent") {
         return errorResult(
           "render_app displays an app only inside Archestra's chat UI — on " +

@@ -177,6 +177,13 @@ RUN set -eux; \
 FROM base AS builder-base
 WORKDIR /app
 
+# Install the Rust toolchain used to compile the N-API addons during `pnpm build`.
+# Kept ABOVE the node_modules/source COPYs so this layer depends only on `base` and
+# stays cache-stable across ordinary source changes. When it lived below the COPYs
+# the ~12s apk install re-ran on every source-changing build because the preceding
+# COPY layers were invalidated.
+RUN apk add --no-cache build-base cargo rust
+
 # Version arg for Sentry release tracking
 ARG VERSION=dev
 
@@ -202,9 +209,6 @@ COPY archestra-rs/app-runtime-core ./archestra-rs/app-runtime-core
 COPY archestra-rs/app-runtime-rs ./archestra-rs/app-runtime-rs
 COPY archestra-rs/image-core ./archestra-rs/image-core
 COPY archestra-rs/image-rs ./archestra-rs/image-rs
-
-# Build the Rust N-API skill sandbox addon during the JS workspace build.
-RUN apk add --no-cache build-base cargo rust
 
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1

@@ -768,7 +768,7 @@ describe("ArchestraPromptInput", () => {
 
     beforeEach(() => {
       vi.mocked(useOrganization).mockReturnValue({
-        data: { skillSlashCommandsEnabled: true },
+        data: { skillToolsEnabled: true },
         isLoading: false,
       } as unknown as ReturnType<typeof useOrganization>);
       mockUseSkillsPaginated.mockReturnValue({

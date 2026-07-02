@@ -1821,7 +1821,6 @@ describe("POST /api/chat handler composition", () => {
       "@/models/organization"
     );
     await OrganizationModel.patch(organizationId, {
-      skillSlashCommandsEnabled: true,
       skillToolsEnabled: true,
     });
     const skill = await SkillModel.createWithFiles({

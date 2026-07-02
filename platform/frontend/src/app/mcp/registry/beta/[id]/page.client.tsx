@@ -9,6 +9,7 @@ import {
 import {
   ArrowLeft,
   Copy,
+  MessageSquare,
   MoreHorizontal,
   PackageX,
   Pencil,
@@ -62,6 +63,7 @@ import { useDefaultEnvironment } from "@/lib/organization.query";
 import { cn, formatDate } from "@/lib/utils";
 import { useCanModifyCatalogItem } from "../../_parts/catalog-edit-access";
 import { resolveCatalogEnvironmentLabel } from "../../_parts/catalog-environment-label";
+import { shouldShowMcpCardChatButton } from "../../_parts/chat-button-visibility";
 import { DeleteCatalogDialog } from "../../_parts/delete-catalog-dialog";
 import {
   computeDeploymentStatusSummary,
@@ -73,6 +75,7 @@ import { YamlConfigContent } from "../../_parts/yaml-config-dialog";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import type { CatalogItem } from "../_parts/mcp-server-card";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
+import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
 
 type DetailTab =
   | "overview"
@@ -288,6 +291,16 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
       ? install.installLocal(item)
       : install.installRemote(item);
 
+  // "Chat" spins up (or reuses) a personal agent with this catalog's tools —
+  // same flow and visibility gate as the registry card. The gate reads
+  // `item.toolCount` (not the fetched `tools` list) to match the card exactly.
+  const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
+  const showChatButton = shouldShowMcpCardChatButton({
+    toolsCount: item.toolCount ?? 0,
+    isBuiltin: variant === "builtin",
+    hasInstallation: allServersForCatalog.length > 0,
+  });
+
   const [deleteRequested, setDeleteRequested] = useState(false);
   // Recreate the K8s pods with a freshly pulled image (local servers only).
   const refreshImageMutation = useRefreshInternalMcpCatalogImage();
@@ -345,6 +358,16 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
             <Button variant="outline" onClick={openInstall}>
               <PlugZap className="h-4 w-4" />
               Install
+            </Button>
+          )}
+          {showChatButton && (
+            <Button
+              variant="outline"
+              disabled={isChatCreating}
+              onClick={() => startChat(item)}
+            >
+              <MessageSquare className="h-4 w-4" />
+              {isChatCreating ? "Creating..." : "Chat"}
             </Button>
           )}
           {canModify && (

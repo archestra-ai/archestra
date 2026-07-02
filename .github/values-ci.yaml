@@ -106,9 +106,8 @@ archestra:
     # Add Keycloak as trusted origin for SSO e2e tests (OIDC discovery URL validation)
     # Includes both the internal K8s service name and the NodePort URL that appears in OIDC discovery
     ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS: "http://e2e-tests-keycloak:8080,http://localhost:30081"
-    # Shared CI secrets-manager configuration.
-    # Keep the generic suite on the standard DB-backed secrets manager. The
-    # readonly-vault coverage runs in its own dedicated job via a Helm override.
+    # Shared CI secrets-manager configuration. Keep the generic suite on the
+    # standard DB-backed secrets manager.
     ARCHESTRA_SECRETS_MANAGER: "DB"
     ARCHESTRA_HASHICORP_VAULT_ADDR: "http://vault:8200"
     ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "K8S"

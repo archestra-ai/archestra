@@ -53514,7 +53514,6 @@ export type GetOrganizationResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -53810,7 +53809,6 @@ export type UpdateAppearanceSettingsResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -53980,7 +53978,6 @@ export type UpdateSecuritySettingsResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -54147,7 +54144,6 @@ export type UpdateLlmSettingsResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -54158,7 +54154,6 @@ export type UpdateAgentSettingsData = {
         defaultModelId?: string | null;
         defaultLlmApiKeyId?: string | null;
         defaultAgentId?: string | null;
-        skillSlashCommandsEnabled?: boolean;
     };
     path?: never;
     query?: never;
@@ -54316,7 +54311,6 @@ export type UpdateAgentSettingsResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -54495,7 +54489,6 @@ export type UpdateConnectionSettingsResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -54672,7 +54665,6 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -54839,7 +54831,6 @@ export type UpdateAuthSettingsResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -55008,7 +54999,6 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -55172,7 +55162,6 @@ export type DropEmbeddingConfigResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 
@@ -55425,7 +55414,6 @@ export type CompleteOnboardingResponses = {
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
     };
 };
 

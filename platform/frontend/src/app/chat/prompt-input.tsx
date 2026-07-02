@@ -196,8 +196,9 @@ const PromptInputContent = ({
     placeholders: orgData?.chatPlaceholders,
   });
 
-  // Skills exposed as slash commands, gated by the org flag.
-  const skillSlashCommandsEnabled = orgData?.skillSlashCommandsEnabled ?? false;
+  // Skills exposed as slash commands whenever the org's skill tools are on —
+  // the same flag that gates the backend's activation injection.
+  const skillSlashCommandsEnabled = orgData?.skillToolsEnabled ?? false;
   const { data: skillsData } = useSkillsPaginated(
     { limit: 100 },
     { enabled: skillSlashCommandsEnabled },

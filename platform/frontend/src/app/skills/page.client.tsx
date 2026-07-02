@@ -28,7 +28,6 @@ import {
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -37,19 +36,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import {
-  useOrganization,
-  useUpdateAgentSettings,
-} from "@/lib/organization.query";
+import { useOrganization } from "@/lib/organization.query";
 import {
   useDeleteSkill,
   useEnableSkillToolDefaults,
@@ -363,7 +358,6 @@ function SkillsList() {
                   ))}
                 </SelectContent>
               </Select>
-              <SkillSlashCommandToggle />
             </div>
 
             <DataTable
@@ -420,57 +414,6 @@ function SkillsList() {
         />
       )}
     </LoadingWrapper>
-  );
-}
-
-/**
- * Org-level toggle exposing skills as `/skill-name` slash commands in chat.
- * Independent of `skillToolsEnabled` (the model-facing `load_skill` tool).
- */
-function SkillSlashCommandToggle() {
-  const { data: organization } = useOrganization();
-  const { data: canUpdate } = useHasPermissions({ agent: ["update"] });
-  const updateAgentSettings = useUpdateAgentSettings(
-    "Skill slash commands updated",
-    "Failed to update skill slash commands",
-  );
-  const enabled = organization?.skillSlashCommandsEnabled ?? false;
-  // Slash commands depend on skill tools — the toggle stays locked until skills
-  // are enabled for the organization (the empty-state "Enable" button).
-  const skillToolsEnabled = organization?.skillToolsEnabled ?? false;
-  const disabled =
-    !canUpdate || updateAgentSettings.isPending || !skillToolsEnabled;
-
-  return (
-    <div className="ml-auto flex items-center gap-2">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex">
-            <Switch
-              id="skill-slash-commands"
-              checked={enabled}
-              disabled={disabled}
-              onCheckedChange={(checked) =>
-                updateAgentSettings.mutate({
-                  skillSlashCommandsEnabled: checked,
-                })
-              }
-            />
-          </span>
-        </TooltipTrigger>
-        {!skillToolsEnabled && (
-          <TooltipContent>
-            Enable skills for this organization first.
-          </TooltipContent>
-        )}
-      </Tooltip>
-      <Label
-        htmlFor="skill-slash-commands"
-        className="text-sm text-muted-foreground"
-      >
-        Use skills as slash commands in chat
-      </Label>
-    </div>
   );
 }
 

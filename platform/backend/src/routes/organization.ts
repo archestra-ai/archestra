@@ -235,18 +235,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Skill slash commands inject skill content that points at load_skill,
-      // so they require the skill tools to be enabled for the organization.
-      if (body.skillSlashCommandsEnabled === true) {
-        const currentOrg = await OrganizationModel.getById(organizationId);
-        if (!currentOrg?.skillToolsEnabled) {
-          throw new ApiError(
-            400,
-            "Enable skills for this organization before exposing them as slash commands",
-          );
-        }
-      }
-
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {

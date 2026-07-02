@@ -10,7 +10,6 @@ import {
   MicIcon,
   PaperclipIcon,
   Plus,
-  X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -51,7 +50,6 @@ import {
   RightSidePanel,
 } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
-import { SkillPill } from "@/components/chat/skill-pill";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
 import { LoadingSpinner } from "@/components/loading";
@@ -237,28 +235,8 @@ export function ChatPageContent({
   // Skill invoked via slash command on the first message of a new chat,
   // held until the conversation exists and the message can be sent.
   const pendingSkillRef = useRef<ChatSkillMetadata | undefined>(undefined);
-  // Skill staged from a `?skillId=` deep link when skills-as-slash-commands
-  // are disabled. Deliberately separate from pendingSkillRef: both submit
-  // paths overwrite skill metadata from their own options, so a URL-seeded
-  // skill written into pendingSkillRef would be silently dropped. This ref is
-  // merged into a message's skill metadata only when the submit carries no
-  // skill of its own, and cleared only once it has been attached. It
-  // deliberately survives an agent switch on the new-chat screen — skills are
-  // agent-agnostic, so the deep-linked skill attaches to the first message of
-  // whichever agent the user ends up sending with. The ref is the submit-time
-  // source of truth; the state mirror renders the dismissible composer pill.
-  const pendingUrlSkillRef = useRef<ChatSkillMetadata | null>(null);
-  const [pendingUrlSkill, setPendingUrlSkill] =
-    useState<ChatSkillMetadata | null>(null);
-  const stagePendingUrlSkill = useCallback(
-    (skill: ChatSkillMetadata | null) => {
-      pendingUrlSkillRef.current = skill;
-      setPendingUrlSkill(skill);
-    },
-    [],
-  );
-  // Composer prefill from a `?skillId=` deep link when slash commands are
-  // enabled; handed to the composer once and cleared via onPrefillApplied.
+  // Composer prefill from a `?skillId=` deep link; handed to the composer
+  // once and cleared via onPrefillApplied.
   const [composerPrefill, setComposerPrefill] = useState<string | null>(null);
   const urlSkillProcessedRef = useRef(false);
   const pendingInitialSendConversationRef = useRef<string | undefined>(
@@ -491,37 +469,39 @@ export function ChatPageContent({
     pendingFilesRef.current = drainPendingChatHandoffFiles();
   }, [conversationId]);
 
-  // Resolve a `?skillId=` deep link (from /chat/new) into either a composer
-  // prefill (skills-as-slash-commands enabled) or a silent pending attach.
-  // The param is transient, same posture as user_prompt: stripped once
-  // processed so a refresh or remount cannot re-stage the skill.
+  // Resolve a `?skillId=` deep link (from /chat/new) into a composer prefill
+  // with the skill's slash command. The param is transient, same posture as
+  // user_prompt: stripped once processed so a refresh or remount cannot
+  // re-apply it. A combined skillId + user_prompt link is unsupported (no UI
+  // produces it): the auto-send would orphan the prefill, so the skill is
+  // skipped and only the prompt is sent.
   const urlSkillId = searchParams.get("skillId");
-  const urlSkillQuery = useSkill(urlSkillId);
-  const skillSlashCommandsEnabled =
-    organization?.skillSlashCommandsEnabled ?? false;
-  // A combined skillId + user_prompt link must stage, never prefill: the
-  // auto-send effect below merges the staged ref onto the auto-sent message,
-  // whereas a composer prefill would be orphaned by that send and dropped.
-  const urlSkillWantsPrefill = skillSlashCommandsEnabled && !initialUserPrompt;
+  const urlSkillWanted = !!urlSkillId && !initialUserPrompt;
+  const urlSkillQuery = useSkill(urlSkillWanted ? urlSkillId : null);
+  const skillToolsEnabled = organization?.skillToolsEnabled ?? false;
   // Same query the composer's slash-command table is built from (identical
   // input → shared TanStack cache entry). The prefill token must come from
   // that table, not be re-derived from the skill name, so slug collisions
   // resolve to the right skill.
   const urlSkillCommandsQuery = useSkillsPaginated(
     { limit: 100 },
-    { enabled: urlSkillWantsPrefill && !!urlSkillId },
+    { enabled: urlSkillWanted && skillToolsEnabled },
   );
   useEffect(() => {
     if (urlSkillProcessedRef.current || !urlSkillId) return;
-    // Wait for both the skill fetch and the org flag that picks the mechanism.
-    // useSkill treats a 404 as success with null data (allowNotFound), and a
-    // non-404 lands the query in its error state — both settle this effect.
+    if (!urlSkillWanted) {
+      urlSkillProcessedRef.current = true;
+      clearSkillIdQueryParam({ pathname, router, searchParams });
+      return;
+    }
+    // Wait for the org flag, the skill fetch, and the command table. useSkill
+    // treats a 404 as success with null data (allowNotFound), and a non-404
+    // lands the query in its error state — both settle this effect. An errored
+    // list query settles with no commands, which resolves to "unavailable".
     if (isOrgLoading) return;
     if (!urlSkillQuery.isSuccess && !urlSkillQuery.isError) return;
-    // The prefill path additionally needs the command table; an errored list
-    // query settles with no commands, which falls back to the silent stage.
     if (
-      urlSkillWantsPrefill &&
+      skillToolsEnabled &&
       !urlSkillCommandsQuery.isSuccess &&
       !urlSkillCommandsQuery.isError
     ) {
@@ -534,18 +514,20 @@ export function ChatPageContent({
     const action = resolveUrlSkillAction({
       skill: urlSkillQuery.data ?? null,
       isError: urlSkillQuery.isError,
-      slashCommandsEnabled: urlSkillWantsPrefill,
       skillCommands: urlSkillCommandsQuery.data?.data
         ? buildSkillCommands(urlSkillCommandsQuery.data.data)
         : [],
     });
     if (action.kind === "prefill") {
       setComposerPrefill(action.text);
-    } else if (action.kind === "stage") {
-      stagePendingUrlSkill(action.skill);
+    } else if (action.reason === "unavailable") {
+      toast.error("This skill is not available in chat");
+    } else {
+      toast.error("Skill not found");
     }
   }, [
     urlSkillId,
+    urlSkillWanted,
     urlSkillQuery.isSuccess,
     urlSkillQuery.isError,
     urlSkillQuery.data,
@@ -553,8 +535,7 @@ export function ChatPageContent({
     urlSkillCommandsQuery.isError,
     urlSkillCommandsQuery.data,
     isOrgLoading,
-    urlSkillWantsPrefill,
-    stagePendingUrlSkill,
+    skillToolsEnabled,
     pathname,
     router,
     searchParams,
@@ -1388,14 +1369,10 @@ export function ChatPageContent({
     pendingInitialSendConversationRef.current = conversationId;
     const promptToSend = pendingPromptRef.current;
     const filesToSend = pendingFilesRef.current;
-    // A skill staged from a `?skillId=` deep link rides the first message when
-    // the submit carried no skill of its own; a typed slash command wins. The
-    // URL skill is cleared here — only once it is attached to this message.
-    const skillToSend = pendingSkillRef.current ?? pendingUrlSkillRef.current;
+    const skillToSend = pendingSkillRef.current;
     pendingPromptRef.current = undefined;
     pendingFilesRef.current = [];
     pendingSkillRef.current = undefined;
-    stagePendingUrlSkill(null);
 
     const parts: ChatMessagePart[] = [];
 
@@ -1430,7 +1407,6 @@ export function ChatPageContent({
     messages.length,
     sendMessage,
     setMessages,
-    stagePendingUrlSkill,
     status,
   ]);
 
@@ -1581,9 +1557,7 @@ export function ChatPageContent({
       }
     }
 
-    // A skill staged from a `?skillId=` deep link rides the first message that
-    // carries no skill of its own; a user-typed slash command always wins.
-    const skillToAttach = options?.skill ?? pendingUrlSkillRef.current;
+    const skillToAttach = options?.skill;
 
     // Attach-once: captured app render diagnostics ride this message's
     // metadata and the store is drained — a regenerate never re-attaches.
@@ -1597,31 +1571,7 @@ export function ChatPageContent({
         ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
       },
     });
-    // Cleared only after the send above attached it (or a typed command won).
-    stagePendingUrlSkill(null);
   };
-
-  // Visible affordance for a skill staged from a `?skillId=` deep link (slash
-  // commands off): without it nothing hints at the skill until the first
-  // message is sent. Dismissing detaches the skill.
-  const pendingUrlSkillBanner = pendingUrlSkill ? (
-    <div className="flex items-center gap-2">
-      <SkillPill skillName={pendingUrlSkill.name} />
-      <span className="text-xs text-muted-foreground">
-        will be used with your next message
-      </span>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-6 w-6"
-        aria-label="Remove skill"
-        onClick={() => stagePendingUrlSkill(null)}
-      >
-        <X className="h-3.5 w-3.5" />
-      </Button>
-    </div>
-  ) : null;
 
   const isBrowserPanelVisible = isBrowserPanelOpen && !isPlaywrightSetupVisible;
   const isRightPanelOpen =
@@ -2435,7 +2385,6 @@ export function ChatPageContent({
                   activeAgentId && (
                     <div className="sticky bottom-0 bg-background border-t p-4">
                       <div className="max-w-4xl mx-auto space-y-3">
-                        {pendingUrlSkillBanner}
                         <ArchestraPromptInput
                           onSubmit={handleSubmit}
                           status={status}
@@ -2567,9 +2516,6 @@ export function ChatPageContent({
                       );
                     })()}
                     <div className="w-full max-w-4xl">
-                      {pendingUrlSkillBanner && (
-                        <div className="mb-2">{pendingUrlSkillBanner}</div>
-                      )}
                       <ArchestraPromptInput
                         onSubmit={handleInitialSubmit}
                         status={

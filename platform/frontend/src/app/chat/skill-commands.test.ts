@@ -91,12 +91,11 @@ describe("resolveUrlSkillAction", () => {
     { id: "s1", name: "Deep Research", description: "" },
   ]);
 
-  it("prefills the slash command (with a trailing space) when slash commands are enabled", () => {
+  it("prefills the slash command with a trailing space", () => {
     expect(
       resolveUrlSkillAction({
         skill,
         isError: false,
-        slashCommandsEnabled: true,
         skillCommands,
       }),
     ).toEqual({ kind: "prefill", text: "/deep-research " });
@@ -111,60 +110,38 @@ describe("resolveUrlSkillAction", () => {
       resolveUrlSkillAction({
         skill: { id: "s2", name: "pdf-tools" },
         isError: false,
-        slashCommandsEnabled: true,
         skillCommands: colliding,
       }),
     ).toEqual({ kind: "prefill", text: "/pdf-tools-2 " });
   });
 
-  it("falls back to the silent stage when the skill is missing from the command table", () => {
+  it("reports 'unavailable' when the skill is missing from the command table", () => {
     expect(
       resolveUrlSkillAction({
         skill: { id: "s-not-listed", name: "Hidden Skill" },
         isError: false,
-        slashCommandsEnabled: true,
         skillCommands,
       }),
-    ).toEqual({
-      kind: "stage",
-      skill: { id: "s-not-listed", name: "Hidden Skill" },
-    });
+    ).toEqual({ kind: "none", reason: "unavailable" });
   });
 
-  it("stages the skill silently when slash commands are disabled", () => {
+  it("reports 'not_found' when the skill does not resolve", () => {
     expect(
       resolveUrlSkillAction({
-        skill,
+        skill: null,
         isError: false,
-        slashCommandsEnabled: false,
         skillCommands,
       }),
-    ).toEqual({ kind: "stage", skill: { id: "s1", name: "Deep Research" } });
+    ).toEqual({ kind: "none", reason: "not_found" });
   });
 
-  it("does nothing when the skill was not found, regardless of the flag", () => {
-    for (const slashCommandsEnabled of [true, false]) {
-      expect(
-        resolveUrlSkillAction({
-          skill: null,
-          isError: false,
-          slashCommandsEnabled,
-          skillCommands,
-        }),
-      ).toEqual({ kind: "none" });
-    }
-  });
-
-  it("does nothing when the skill fetch errored", () => {
-    for (const slashCommandsEnabled of [true, false]) {
-      expect(
-        resolveUrlSkillAction({
-          skill: null,
-          isError: true,
-          slashCommandsEnabled,
-          skillCommands,
-        }),
-      ).toEqual({ kind: "none" });
-    }
+  it("reports 'error' when the skill fetch errored", () => {
+    expect(
+      resolveUrlSkillAction({
+        skill: null,
+        isError: true,
+        skillCommands,
+      }),
+    ).toEqual({ kind: "none", reason: "error" });
   });
 });

@@ -170,42 +170,6 @@ describe("organization routes", () => {
     });
   });
 
-  describe("PATCH /api/organization/agent-settings - skill slash commands", () => {
-    test("rejects enabling slash commands while skill tools are off", async () => {
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/agent-settings",
-        payload: { skillSlashCommandsEnabled: true },
-      });
-
-      expect(response.statusCode).toBe(400);
-    });
-
-    test("allows enabling slash commands once skill tools are on", async () => {
-      await OrganizationModel.patch(organizationId, {
-        skillToolsEnabled: true,
-      });
-
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/agent-settings",
-        payload: { skillSlashCommandsEnabled: true },
-      });
-
-      expect(response.statusCode).toBe(200);
-    });
-
-    test("allows disabling slash commands regardless of skill tools", async () => {
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/agent-settings",
-        payload: { skillSlashCommandsEnabled: false },
-      });
-
-      expect(response.statusCode).toBe(200);
-    });
-  });
-
   test("does not resync built-in MCP branding when appName is unchanged", async () => {
     const syncSpy = vi
       .spyOn(ToolModel, "syncArchestraBuiltInCatalog")

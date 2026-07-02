@@ -597,15 +597,95 @@ fn render_trajectory(rollout_dir: &Path) -> (String, String) {
 }
 
 /// Trajectories are untrusted agent/tool output rendered with `|safe`: raw HTML blocks must come
-/// out as visible text, never live markup, or a trajectory could script the dashboard page.
+/// out as visible text, never live markup; link destinations must not smuggle an active scheme
+/// (`javascript:`, `data:`, …) into a live href; and images load only from relative (run-local)
+/// paths — a remote `<img>` would beacon to an attacker-chosen host the moment the page opens.
+/// Stripped links/images render as their label/alt text.
 fn render_markdown(md: &str) -> String {
-    use pulldown_cmark::{CowStr, Event, Options, Parser, html};
+    use pulldown_cmark::{CowStr, Event, Options, Parser, Tag, TagEnd, html};
     let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH;
-    let parser = Parser::new_ext(md, options).map(|event| match event {
-        Event::Html(raw) | Event::InlineHtml(raw) => Event::Text(CowStr::from(raw.into_string())),
-        other => other,
+    // Link/image starts and ends nest properly among themselves; the stack pairs each end with
+    // its own start so dropping an unsafe link never swallows a safe nested image's end tag.
+    let mut dropped: Vec<bool> = Vec::new();
+    let parser = Parser::new_ext(md, options).filter_map(|event| match event {
+        Event::Html(raw) | Event::InlineHtml(raw) => {
+            Some(Event::Text(CowStr::from(raw.into_string())))
+        }
+        Event::Start(Tag::Link { ref dest_url, .. }) => {
+            let drop = !is_safe_link(dest_url);
+            dropped.push(drop);
+            (!drop).then_some(event)
+        }
+        Event::Start(Tag::Image { ref dest_url, .. }) => {
+            let drop = !is_relative(dest_url);
+            dropped.push(drop);
+            (!drop).then_some(event)
+        }
+        Event::End(TagEnd::Link | TagEnd::Image) => {
+            (!dropped.pop().unwrap_or(false)).then_some(event)
+        }
+        other => Some(other),
     });
     let mut out = String::with_capacity(md.len() * 2);
     html::push_html(&mut out, parser);
     out
+}
+
+/// Scheme allowlist for untrusted link destinations. Relative URLs (no scheme) are inert
+/// navigation and pass through.
+fn is_safe_link(url: &str) -> bool {
+    match url.split_once(':') {
+        Some((scheme, _)) if !scheme.contains('/') => {
+            scheme.eq_ignore_ascii_case("http")
+                || scheme.eq_ignore_ascii_case("https")
+                || scheme.eq_ignore_ascii_case("mailto")
+        }
+        _ => true,
+    }
+}
+
+/// No scheme and not protocol-relative: the fetch stays on this dashboard's origin.
+fn is_relative(url: &str) -> bool {
+    !url.starts_with("//")
+        && match url.split_once(':') {
+            Some((scheme, _)) => scheme.contains('/'),
+            None => true,
+        }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_markdown;
+
+    #[test]
+    fn raw_html_renders_as_text_not_markup() {
+        let html = render_markdown("before\n\n<script>alert(1)</script>\n\nafter");
+        assert!(!html.contains("<script>"), "{html}");
+        assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"), "{html}");
+    }
+
+    #[test]
+    fn active_scheme_links_are_stripped_to_their_label() {
+        let html = render_markdown("[click](javascript:alert(1)) and [ok](https://example.com)");
+        assert!(!html.contains("javascript:"), "{html}");
+        assert!(html.contains("click"), "{html}");
+        assert!(html.contains(r#"<a href="https://example.com">ok</a>"#), "{html}");
+    }
+
+    #[test]
+    fn relative_image_inside_unsafe_link_keeps_balanced_markup() {
+        let html = render_markdown("[![alt](local/a.png)](data:text/html,x)");
+        assert!(!html.contains("data:"), "{html}");
+        assert!(!html.contains("<a "), "{html}");
+        assert!(html.contains(r#"<img src="local/a.png""#), "{html}");
+    }
+
+    #[test]
+    fn remote_and_protocol_relative_images_are_stripped_to_alt_text() {
+        for md in ["![beacon](https://evil.example/x.png)", "![beacon](//evil.example/x.png)"] {
+            let html = render_markdown(md);
+            assert!(!html.contains("<img"), "{html}");
+            assert!(html.contains("beacon"), "{html}");
+        }
+    }
 }

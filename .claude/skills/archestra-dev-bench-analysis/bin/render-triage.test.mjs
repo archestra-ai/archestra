@@ -80,6 +80,21 @@ test('fenced reply is accepted', () => {
   }
 })
 
+test('fence lines must be exact (Rust strip_fence parity): padded openers are rejected', () => {
+  const body = JSON.stringify(validJudgment())
+  for (const fenced of ['```json \n' + body + '\n```', '```json\r\n' + body + '\r\n```']) {
+    assert.throws(() => parseJudgment(fenced), /not valid JSON/)
+  }
+})
+
+test('absent reward_hacking.evidence normalizes to null (Rust Option parity)', () => {
+  const judgment = validJudgment()
+  delete judgment.reward_hacking.evidence
+  const parsed = parseJudgment(JSON.stringify(judgment))
+  assert.equal(parsed.reward_hacking.evidence, null)
+  assert.equal(stampRecord(parsed, 'r', 'failed').reward_hacking.evidence, null)
+})
+
 test('observations over 6 entries or non-array are rejected', () => {
   const tooMany = validJudgment()
   tooMany.observations = Array(7).fill('x')

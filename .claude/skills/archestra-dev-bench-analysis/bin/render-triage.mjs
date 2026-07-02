@@ -14,7 +14,7 @@
 //        <RUN_DIR>/trajectory_analyses_claude_<TS>.md
 // Emits both paths as KEY=value on stdout. Missing/extra/invalid triage files
 // are listed by index on stderr and the script exits non-zero (nothing written).
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -24,22 +24,26 @@ const TRUNCATION_MARKER = '\n[analysis truncated]'
 
 export const pad = (idx) => String(idx).padStart(2, '0')
 
-// Contract §1 parse tolerance: trim, and strip one wrapping ``` / ```json fence
-// pair if present. Nothing else is salvaged.
+// Parse tolerance (mirrors analyzer/src/rubric.rs `strip_fence` exactly): trim, then strip one
+// wrapping fence pair only when the first line is exactly ``` or ```json and the last line is
+// exactly ```. Nothing else is salvaged.
 export function stripFence(text) {
   const trimmed = text.trim()
-  if (!trimmed.startsWith('```')) return trimmed
-  const lines = trimmed.split('\n')
-  const opener = lines[0].trim()
-  const closer = lines.length > 1 ? lines[lines.length - 1].trim() : ''
-  if ((opener === '```' || opener === '```json') && closer === '```') {
-    return lines.slice(1, -1).join('\n').trim()
-  }
-  return trimmed
+  const first = trimmed.indexOf('\n')
+  if (first === -1) return trimmed
+  const opener = trimmed.slice(0, first)
+  if (opener !== '```' && opener !== '```json') return trimmed
+  const last = trimmed.lastIndexOf('\n')
+  if (last === first) return trimmed
+  if (trimmed.slice(last + 1) !== '```') return trimmed
+  return trimmed.slice(first + 1, last)
 }
 
-// Parse + validate one model-facing judgment object (contract §1). Throws with
-// a one-line reason on any parse or validation failure.
+// Parse + validate one model-facing judgment object (mirrors analyzer/src/rubric.rs
+// `parse_triage`; the golden fixture pins output parity). Throws with a one-line reason on any
+// parse or validation failure. Known asymmetry: JSON.parse accepts integral floats (4.0) and
+// last-wins duplicate keys where serde rejects both — Rust is the strictly stricter bound, so a
+// judgment this rejects is rejected by both pipelines.
 export function parseJudgment(text) {
   let value
   try {
@@ -70,6 +74,8 @@ export function parseJudgment(text) {
     throw new Error('reward_hacking must be an object')
   }
   if (typeof rh.suspected !== 'boolean') throw new Error('reward_hacking.suspected must be a boolean')
+  // Absent evidence normalizes to null, matching Rust's Option<String>.
+  if (rh.evidence === undefined) rh.evidence = null
   if (rh.evidence !== null && typeof rh.evidence !== 'string') {
     throw new Error('reward_hacking.evidence must be a string or null')
   }
@@ -82,7 +88,7 @@ export function parseJudgment(text) {
   return value
 }
 
-// Build a persisted TriageRecord in contract §2 key order (JSON.stringify
+// Build a persisted TriageRecord in core's TriageRecord field order (JSON.stringify
 // preserves insertion order; the golden fixture depends on it). rollout and
 // outcome always come from order.tsv, never from the model JSON.
 export function stampRecord(judgment, rollout, outcome) {
@@ -102,7 +108,7 @@ export function stampRecord(judgment, rollout, outcome) {
   }
 }
 
-// Contract §3 section body: verdict, blank line, rubric bullets, optional
+// Section body (mirrors analyzer/src/rubric.rs `render_section`): verdict, blank line, rubric bullets, optional
 // reward-hacking line, optional Observations block. No trailing newline.
 export function renderSection(record) {
   const lines = [record.verdict, '']
@@ -206,8 +212,14 @@ function main() {
 
   const jsonlPath = join(runDir, `trajectory_rubrics_claude_${ts}.jsonl`)
   const docPath = join(runDir, `trajectory_analyses_claude_${ts}.md`)
-  writeFileSync(jsonlPath, records.map((record) => JSON.stringify(record) + '\n').join(''))
-  writeFileSync(docPath, buildAnalysesDoc(readFileSync(join(prepDir, 'metrics.md'), 'utf8'), records))
+  // tmp + rename so the dashboard can never observe a half-written artifact.
+  for (const [path, content] of [
+    [jsonlPath, records.map((record) => JSON.stringify(record) + '\n').join('')],
+    [docPath, buildAnalysesDoc(readFileSync(join(prepDir, 'metrics.md'), 'utf8'), records)],
+  ]) {
+    writeFileSync(path + '.tmp', content)
+    renameSync(path + '.tmp', path)
+  }
   console.log(`RUBRICS_JSONL=${jsonlPath}`)
   console.log(`ANALYSES_DOC=${docPath}`)
 }

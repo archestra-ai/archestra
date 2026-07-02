@@ -377,13 +377,16 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
 
     // Persist the raw triage records before reduce, in the same failures-first order as the
     // analyses doc; rollouts whose map failed are simply absent (partial artifacts are normal).
+    // tmp + rename so the dashboard can never observe a half-written artifact.
     let rubrics_path = cfg
         .run_dir
         .join(format!("trajectory_rubrics_{timestamp}.jsonl"));
+    let rubrics_tmp = rubrics_path.with_extension("jsonl.tmp");
     std::fs::write(
-        &rubrics_path,
+        &rubrics_tmp,
         rubrics_jsonl(analyzed.iter().map(|(_, _, record)| record)),
     )
+    .and_then(|()| std::fs::rename(&rubrics_tmp, &rubrics_path))
     .wrap_err_with(|| format!("writing triage rubrics to {}", rubrics_path.display()))?;
     note(&mp, format!("✓ rubrics → {}", rubrics_path.display()));
 

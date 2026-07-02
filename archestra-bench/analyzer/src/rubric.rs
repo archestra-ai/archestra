@@ -33,10 +33,12 @@ impl TriageJudgment {
     }
 }
 
-/// Parse a triage reply. Tolerance is contract-fixed and identical to the Node pipeline: trim,
-/// strip one wrapping ``` / ```json fence pair when the fences sit on their own lines, then strict
-/// JSON. Nothing else is salvaged — prose around the object, partial JSON, an out-of-range grade
-/// (via [`archestra_bench_core::Grade`]), or more than 6 observations is an error.
+/// Parse a triage reply: trim, strip one wrapping ``` / ```json fence pair when the fences sit on
+/// their own lines, then strict JSON. Nothing else is salvaged — prose around the object, partial
+/// JSON, an out-of-range grade (via [`archestra_bench_core::Grade`]), or more than 6 observations
+/// is an error. The Node pipeline (`render-triage.mjs`) mirrors this; serde is the strictly
+/// stricter side (it also rejects integral floats like `4.0` and duplicate keys, which
+/// `JSON.parse` cannot), so anything Node rejects is rejected here too.
 pub fn parse_triage(reply: &str) -> Result<TriageJudgment> {
     let trimmed = reply.trim();
     let body = strip_fence(trimmed).unwrap_or(trimmed);
@@ -132,6 +134,17 @@ mod tests {
         // Surrounding whitespace is trimmed before the fence check.
         let padded = format!("\n```json\n{}\n```  \n", valid_json());
         assert!(parse_triage(&padded).is_ok());
+    }
+
+    #[test]
+    fn absent_evidence_parses_to_none() {
+        // Node normalizes an absent key to null; Option<String> must land on the same record.
+        let reply = valid_json().replace(
+            r#"{"suspected":false,"evidence":null}"#,
+            r#"{"suspected":false}"#,
+        );
+        let judgment = parse_triage(&reply).unwrap();
+        assert_eq!(judgment.reward_hacking.evidence, None);
     }
 
     #[test]

@@ -411,32 +411,46 @@ fn discover_rollouts(
         };
         let id = meta.rollout_id();
         let dir = run_dir.join(rollout_dir(&id.env, &id.task, &id.lane));
+        // A copied/stale run.json whose identity doesn't match the directory it sits in would
+        // silently point artifact links at the wrong rollout — same cross-check the analyzer does.
+        if path.parent() != Some(dir.as_path()) {
+            warnings.push(format!(
+                "skipped rollout {}: run.json identity `{id}` does not match its directory",
+                path.display()
+            ));
+            continue;
+        }
         rollouts.insert(id.to_string(), Rollout { id, dir, meta });
     }
     Ok(rollouts)
 }
 
-/// Parse the latest-mtime `trajectory_rubrics*.jsonl`. Returns `(records, file_found)`. Any
-/// malformed line invalidates the whole file: empty records plus a warning, per the strict-oracle
-/// convention — a half-trusted rubric table is worse than none.
+/// Parse the latest `trajectory_rubrics*.jsonl`, "latest" by the `<ts>` embedded in the file name
+/// (`%Y%m%d-%H%M%S`, lexically ordered) — mtime is not trusted, a stale file touched later must not
+/// shadow a newer analysis. Returns `(records, file_found)`. Any malformed line invalidates the
+/// whole file: empty records plus a warning, per the strict-oracle convention — a half-trusted
+/// rubric table is worse than none.
 fn load_rubrics(
     run_dir: &Path,
     warnings: &mut Vec<String>,
 ) -> Result<(BTreeMap<String, TriageRecord>, bool)> {
     let pattern = run_dir.join("trajectory_rubrics*.jsonl");
     let pattern = pattern.to_string_lossy();
-    let mut latest: Option<(SystemTime, PathBuf)> = None;
+    let mut latest: Option<((String, String), PathBuf)> = None;
     for entry in glob::glob(&pattern).wrap_err("invalid rubric glob pattern")? {
         let path = entry.wrap_err("reading rubric glob entry")?;
-        let mtime = std::fs::metadata(&path)
-            .and_then(|m| m.modified())
-            .unwrap_or(SystemTime::UNIX_EPOCH);
+        let stem = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let ts = stem.rsplit('_').next().unwrap_or_default().to_string();
+        let key = (ts, stem);
         let newer = match &latest {
-            Some((best, _)) => mtime > *best,
+            Some((best, _)) => key > *best,
             None => true,
         };
         if newer {
-            latest = Some((mtime, path));
+            latest = Some((key, path));
         }
     }
     let Some((_, path)) = latest else {

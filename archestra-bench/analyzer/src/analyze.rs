@@ -317,7 +317,14 @@ pub async fn map_one(
     let retry = format!(
         "Your previous reply was not a valid triage JSON object: {first_err}. Reply again with ONLY the corrected JSON object — same schema, no fences, no prose."
     );
-    let history = vec![Message::user(prompt), Message::assistant(first.text())];
+    // A MaxTokens first attempt can burn the whole budget on hidden reasoning and reply with
+    // nothing; some providers reject an empty assistant turn, which would kill the retry that
+    // exists precisely for this case.
+    let first_text = match first.text() {
+        t if t.is_empty() => "(empty reply)".to_string(),
+        t => t,
+    };
+    let history = vec![Message::user(prompt), Message::assistant(first_text)];
     let second = triage_completion(client, model, Message::user(retry), history).await?;
     match judge_reply(&second) {
         Ok(judgment) => Ok(judgment.into_record(rollout, outcome)),

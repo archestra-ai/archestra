@@ -20,7 +20,6 @@ const {
   unassignMutate,
   useAppMock,
   useAppToolsMock,
-  useHasPermissionsMock,
   useInternalMcpCatalogMock,
   fetchCatalogToolsMock,
 } = vi.hoisted(() => ({
@@ -28,7 +27,6 @@ const {
   unassignMutate: vi.fn(),
   useAppMock: vi.fn(),
   useAppToolsMock: vi.fn(),
-  useHasPermissionsMock: vi.fn(),
   useInternalMcpCatalogMock: vi.fn(),
   fetchCatalogToolsMock: vi.fn(),
 }));
@@ -40,9 +38,7 @@ vi.mock("@/lib/app.query", () => ({
   useUnassignToolFromApp: () => ({ mutate: unassignMutate }),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: useHasPermissionsMock,
-}));
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useInternalMcpCatalog: useInternalMcpCatalogMock,
@@ -54,6 +50,7 @@ vi.mock("@/components/mcp-catalog-icon", () => ({
   McpCatalogIcon: () => null,
 }));
 
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { AppToolsEditor } from "./app-tools-editor";
 
 const APP_ID = "app-1";
@@ -91,7 +88,9 @@ describe("AppToolsEditor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAppMock.mockReturnValue({ data: { environmentId: null } });
-    useHasPermissionsMock.mockReturnValue({ data: true });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
     useInternalMcpCatalogMock.mockReturnValue({ data: [makeCatalog()] });
     // create_issue is already assigned; delete_issue is available but not.
     useAppToolsMock.mockReturnValue({
@@ -165,7 +164,9 @@ describe("AppToolsEditor", () => {
   });
 
   it("shows a read-only assigned list without edit affordances for viewers", async () => {
-    useHasPermissionsMock.mockReturnValue({ data: false });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
     renderTab();
 
     // Assigned tool is listed, but no checkbox (no editing) is rendered.

@@ -51,27 +51,13 @@ import {
 } from "@/test";
 import { APP_HTML_MAX_BYTES } from "@/types/app";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { scaffoldPartialToolFailureResult } from "./apps";
 
 // The elicitation bridge polls cacheManager for the user's answer; cacheManager
 // is the Postgres-backed singleton (not started in PGlite tests), so back it
-// with an in-memory map. The bridge and refine_app (the SUT) are real.
-const elicitationStore = vi.hoisted(() => new Map<string, unknown>());
-vi.mock("@/cache-manager", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/cache-manager")>();
-  return {
-    ...actual,
-    cacheManager: {
-      set: async (key: string, value: unknown) => {
-        elicitationStore.set(key, value);
-      },
-      getAndDelete: async (key: string) => {
-        const value = elicitationStore.get(key);
-        elicitationStore.delete(key);
-        return value;
-      },
-    },
-  };
-});
+// with the canonical Map-backed fake from src/__mocks__/cache-manager.ts. The
+// bridge and refine_app (the SUT) are real.
+vi.mock("@/cache-manager");
 
 // App tools are only dispatchable when the feature is enabled.
 const originalAppsEnabled = config.apps.enabled;
@@ -1753,6 +1739,22 @@ describe("validate_app", () => {
     });
   });
 
+  test("warns on a non-existent SDK member call but still passes", async ({
+    makeApp,
+  }) => {
+    const app = await makeApp({
+      organizationId,
+      scope: "org",
+      html: '<html><head><script>const v = await archestra.storage.get("k");</script></head><body/></html>',
+    });
+    const result = await validate(app.id);
+    expect(structured(result).ok).toBe(true);
+    expect(structured(result).findings).toContainEqual({
+      severity: "warning",
+      message: expect.stringContaining("archestra.storage.get"),
+    });
+  });
+
   test("errors on an unknown app id", async () => {
     const result = await validate(crypto.randomUUID());
     expect(result.isError).toBe(true);
@@ -1969,5 +1971,23 @@ describe("publish_app", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("Unknown team");
+  });
+});
+
+describe("scaffoldPartialToolFailureResult", () => {
+  test("reports a created-but-unassigned app as a non-error partial result", async ({
+    makeApp,
+  }) => {
+    const app = await makeApp({ name: "Partial App" });
+    const result = scaffoldPartialToolFailureResult(
+      app,
+      "<html><body>seed</body></html>",
+    );
+    // The app was created, so the model must NOT read this as a failure: it is a
+    // non-error result carrying the app id and a partial status so it can repair
+    // the tools with set_app_tools rather than assume nothing was created.
+    expect(result.isError).toBe(false);
+    expect(structured(result).id).toBe(app.id);
+    expect(structured(result).status).toBe("partial");
   });
 });

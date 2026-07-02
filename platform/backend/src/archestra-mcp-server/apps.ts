@@ -257,6 +257,12 @@ const AppMutationOutputSchema = AppSummaryOutputSchema.extend({
     .describe(
       "The app's assigned tool names after this call (present when the tools param was given).",
     ),
+  status: z
+    .enum(["ok", "partial"])
+    .optional()
+    .describe(
+      'Absent or "ok" on full success. "partial" means the app was created (see id) but assigning its tools failed — the app exists; assign them with set_app_tools rather than re-scaffolding.',
+    ),
 });
 
 const SetAppToolsSchema = z.strictObject({
@@ -410,14 +416,14 @@ const registry = defineArchestraTools([
           await replaceAppToolAssignments(app.id, resolvedTools);
         } catch (error) {
           // Prevalidation makes this a rare race (e.g. a tool deleted
-          // concurrently). The app exists; tell the model how to repair.
+          // concurrently). The app exists, so this is a partial success, not a
+          // failure: return it as such (structured id + status) so the model
+          // repairs the tools instead of assuming nothing was created.
           logger.warn(
             { err: error, appId: app.id },
             "scaffold_app: tool assignment failed after creation",
           );
-          return errorResult(
-            `Created app "${app.name}" (${app.id}), but assigning its tools failed. Delete it and scaffold again with the tools param.`,
-          );
+          return scaffoldPartialToolFailureResult(app, payload.html);
         }
       }
 
@@ -567,7 +573,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_LIST_APPS_SHORT_NAME,
     title: "List Apps",
     description:
-      "List apps visible to the caller, optionally filtered by name.",
+      "List apps visible to the caller, optionally filtered by name — use it to find an app's id. Returns id, name, description, scope, and latest version per app, not the HTML (use read_app) or a render (use render_app).",
     schema: ListAppsSchema,
     outputSchema: z.object({ apps: z.array(AppSummaryOutputSchema) }),
     async handler({ args, context }) {
@@ -599,7 +605,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_RENDER_APP_SHORT_NAME,
     title: "Render App",
     description:
-      "Render an existing app by id, if the caller may view it. Use this when the user asks to open, show, or get back to an app: when called from the chat UI the app is rendered inline in the conversation; its standalone page is /a/<id>.",
+      "Render an existing app by id, if the caller may view it. Use this when the user asks to open, show, or get back to an app: when called from the chat UI the app is rendered inline in the conversation; its standalone page is /a/<id>. This only displays the app — to read its HTML source use read_app, and to check how it rendered (runtime errors / CSP violations) use get_app_diagnostics or validate_app.",
     schema: GetAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -620,7 +626,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_READ_APP_SHORT_NAME,
     title: "Read App",
     description:
-      "Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. This is the source of truth before edit_app whenever the current HTML is not already in context — read it, then make targeted edits. Defaults to the head version; pass version to read an older one.",
+      "Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. This is the source of truth before edit_app whenever the current HTML is not already in context — read it, then make targeted edits. Defaults to the head version; pass version to read an older one. (render_app displays the app to a viewer; this returns the raw saved source.)",
     schema: ReadAppSchema,
     outputSchema: ReadAppOutputSchema,
     async handler({ args, context }) {
@@ -657,7 +663,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
     description:
-      "Build up an app's HTML with str_replace edits — the path for any change, from a one-line tweak to a full rewrite (replace the whole document in a single edit). Read the current HTML with read_app first if it is not already in context, pass that read's version as baseVersion, and supply edits as [{old_str, new_str}] pairs. Each old_str must match the current HTML exactly once (include enough surrounding context to be unique); edits apply in order and the whole call is atomic — any non-match or stale baseVersion leaves the app untouched. A successful edit forks a new immutable version; assigned tools and metadata are unchanged. scaffold_app's result carries the condensed window.archestra SDK surface; for tool-calling apps, the CDN allowlist, or platform theming, load the \"Build App\" skill (in your available skills) for the full authoring playbook.",
+      "The single path for any change to an app's HTML, from a one-line tweak to a full rewrite (one edit whose old_str is the whole document). Read the current HTML with read_app first if it is not already in context, and pass that read's version as baseVersion (see the schema for the str_replace matching and atomicity rules). A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface; for tool-calling apps, the CDN allowlist, or platform theming, load the \"Build App\" skill (in your available skills) for the full authoring playbook.",
     schema: EditAppSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
@@ -827,7 +833,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_VALIDATE_APP_SHORT_NAME,
     title: "Validate App",
     description:
-      "Validate an app's current head version: static structural checks plus the diagnostics from its most recent live render. Static checks flag SDK self-bootstrap, platform script/stylesheet self-loads, and unparseable markup as errors, and a missing document root, <script>/<link> hosts outside the CDN allowlist, or browser-storage use (localStorage/sessionStorage/indexedDB instead of archestra.storage) as warnings. It then reports the head version's live render diagnostics — runtime errors / CSP violations captured the last time it rendered for you (framed as untrusted data), or that no render of this version has been observed yet. Live diagnostics are captured only when the app renders for a viewer — inline in chat or at its run page — so no_render_observed is the normal state right after authoring: a clean static pass (ok: true) is enough to proceed, and any later render diagnostics surface on the next render or via get_app_diagnostics. Fix any errors with edit_app before publishing.",
+      "The pre-publish gate for an app's head version: static structural checks (`findings`, each carrying its own specific message) plus the most recent live-render diagnostics (`live`), with `ok` true when neither reports an error. Run it after editing and fix any error findings with edit_app before publish_app. Live diagnostics exist only once the app has rendered for a viewer, so `live.status` is commonly no_render_observed right after authoring — a clean static pass is enough to proceed, and the result text spells out the findings and the live-render outcome. To re-read render diagnostics on their own without the static gate, use get_app_diagnostics instead.",
     schema: ValidateAppSchema,
     outputSchema: ValidateAppOutputSchema,
     async handler({ args, context }) {
@@ -895,7 +901,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_PUBLISH_APP_SHORT_NAME,
     title: "Publish App",
     description:
-      "Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, with teamIds) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Returns the app's standalone run page. Validate the app first; publishing does not change its HTML.",
+      "Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, with teamIds) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Publishing changes only the app's sharing scope: it does not modify the HTML or re-run validation, so confirm the current version is sound with validate_app (or get_app_diagnostics) beforehand if you need to. Returns the app's standalone run page.",
     schema: PublishAppSchema,
     outputSchema: PublishAppOutputSchema,
     async handler({ args, context }) {
@@ -982,7 +988,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
     title: "Preview App Tool",
     description:
-      "Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. Use this while authoring to see a tool's actual result shape BEFORE writing app code that parses it — never guess the schema. Requires human approval each call (the tool was granted to the app, not to the agent). Output is framed as untrusted data and capped; an auth_required response passes through unchanged so you see exactly what the app would. This previews assigned MCP tools only — not the App Data Store or other built-ins.",
+      "Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. Use this while authoring to see a tool's actual result shape BEFORE writing app code that parses it — never guess the schema. Requires human approval each call (the tool was granted to the app, not to the agent). Output is framed as untrusted data and capped; an auth_required response is surfaced in that framed output so you see exactly what the app would. This previews assigned MCP tools only — not the App Data Store or other built-ins.",
     schema: PreviewAppToolSchema,
     outputSchema: PreviewAppToolOutputSchema,
     async handler({ args, context }) {
@@ -1164,7 +1170,8 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_DELETE_APP_SHORT_NAME,
     title: "Delete App",
-    description: "Soft-delete an app the caller owns or administers.",
+    description:
+      "Soft-delete an app the caller owns or administers, and remove its MCP backing so it is no longer served. Soft delete retains the record, but this is not an authoring undo — to roll back a change, edit_app back to the wanted HTML instead.",
     schema: DeleteAppSchema,
     async handler({ args, context }) {
       if (!context.userId || !context.organizationId) {
@@ -1655,6 +1662,34 @@ async function resolveToolsParam(params: {
     return { ok: false, error: resolution.error.message };
   }
   return { ok: true, tools: resolution.tools };
+}
+
+/**
+ * scaffold_app result for the partial case: the app was created but assigning
+ * its tools failed. A partial success, not an error — the model gets the app id
+ * and a `partial` status so it repairs the tools with set_app_tools instead of
+ * assuming the app was never created (an errorResult here loses both). Carries
+ * the same seeded HTML + SDK summary the success path returns, so the model can
+ * keep building (after repairing tools) without a read_app round-trip.
+ *
+ * @public — exercised by apps.test.ts to pin the partial-success result
+ * contract; the handler above is its only production caller.
+ */
+export function scaffoldPartialToolFailureResult(
+  app: App,
+  seededHtml: string,
+): ReturnType<typeof structuredSuccessResult> {
+  return structuredSuccessResult(
+    {
+      id: app.id,
+      name: app.name,
+      description: app.description,
+      scope: app.scope,
+      latestVersion: app.latestVersion,
+      status: "partial" as const,
+    },
+    `Created app "${app.name}" (${app.id}), but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold), then build it up with edit_app.\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${seededHtml}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+  );
 }
 
 /** Result-text note + structured-output fragment echoing the assignment set. */

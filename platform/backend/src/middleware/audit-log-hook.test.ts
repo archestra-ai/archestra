@@ -18,20 +18,7 @@ const KNOWN_RESOURCE_ID = vi.hoisted(
   () => "00000000-0000-0000-0000-000000000001",
 );
 
-const logErrorFn = vi.hoisted(() => vi.fn());
-const logWarnFn = vi.hoisted(() => vi.fn());
-
-vi.mock("@/logging", () => ({
-  default: {
-    error: logErrorFn,
-    warn: logWarnFn,
-    info: vi.fn(),
-    debug: vi.fn(),
-    trace: vi.fn(),
-    fatal: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  },
-}));
+vi.mock("@/logging");
 
 vi.mock("./audit-log-registry", async () => {
   const { AuditEventNameSchema } =
@@ -149,6 +136,7 @@ vi.mock("./audit-log-registry", async () => {
   };
 });
 
+import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -581,8 +569,10 @@ describe("registerAuditLogHook", () => {
       expect(rows[0].action).toBe("unknown.created");
       expect(rows[0].resourceType).toBeNull();
 
-      expect(logWarnFn).toHaveBeenCalledTimes(1);
-      expect(logWarnFn.mock.calls[0][1]).toMatch(/no action resolved/);
+      expect(vi.mocked(logger.warn)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(logger.warn).mock.calls[0][1]).toMatch(
+        /no action resolved/,
+      );
     });
   });
 
@@ -883,11 +873,13 @@ describe("registerAuditLogHook", () => {
       expect(rows[0].after).toBeNull();
 
       expect(
-        logErrorFn.mock.calls.some(
-          (call: readonly unknown[]) =>
-            typeof call[1] === "string" &&
-            (call[1] as string).includes("fetchById"),
-        ),
+        vi
+          .mocked(logger.error)
+          .mock.calls.some(
+            (call: readonly unknown[]) =>
+              typeof call[1] === "string" &&
+              (call[1] as string).includes("fetchById"),
+          ),
       ).toBe(true);
 
       throwing.mockRestore();
@@ -905,11 +897,13 @@ describe("registerAuditLogHook", () => {
       await settle();
 
       expect(
-        logErrorFn.mock.calls.some(
-          (call: readonly unknown[]) =>
-            typeof call[1] === "string" &&
-            (call[1] as string).includes("failed to write audit log row"),
-        ),
+        vi
+          .mocked(logger.error)
+          .mock.calls.some(
+            (call: readonly unknown[]) =>
+              typeof call[1] === "string" &&
+              (call[1] as string).includes("failed to write audit log row"),
+          ),
       ).toBe(true);
 
       createSpy.mockRestore();

@@ -19,7 +19,6 @@ import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import mcpClient from "@/clients/mcp-client";
-import type * as originalConfigModule from "@/config";
 import {
   AgentTeamModel,
   McpCatalogLabelModel,
@@ -35,15 +34,11 @@ import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/ent
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { describe, expect, test } from "@/test";
 
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-      enterpriseFeatures: { ...actual.default.enterpriseFeatures, core: true },
-    },
-  };
-});
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    enterpriseFeatures: { core: true },
+  }),
+);
 
 const mockValidateJwt = vi.fn<() => Promise<JwksValidationResult | null>>();
 

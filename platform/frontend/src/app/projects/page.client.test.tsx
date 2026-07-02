@@ -1,5 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useTeams } from "@/lib/teams/team.query";
 
 const mockRouterPush = vi.fn();
 const mockDeleteMutateAsync = vi.fn();
@@ -29,11 +32,7 @@ type ProjectFixture = {
   createdAt: string;
 };
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockRouterPush }),
-  useSearchParams: () => new URLSearchParams(),
-  usePathname: () => "/projects",
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/components/search-input", () => ({
   SearchInput: () => <input aria-label="Search projects" />,
@@ -195,9 +194,7 @@ vi.mock("@/components/api-key-load-error", () => ({
   ),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: false }),
-}));
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/projects/projects.query", () => ({
   useProjects: () => ({ data: mockProjects, isPending: false }),
@@ -225,9 +222,7 @@ vi.mock("@/lib/projects/projects.query", () => ({
   useSetProjectShare: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
-vi.mock("@/lib/teams/team.query", () => ({
-  useTeams: () => ({ data: [] }),
-}));
+vi.mock("@/lib/teams/team.query");
 
 vi.mock("@/lib/schedule-trigger.query", () => ({
   useScheduleTriggers: () => ({ data: undefined }),
@@ -238,6 +233,19 @@ import ProjectsPageClient from "./page.client";
 describe("ProjectsPageClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useRouter).mockReturnValue({
+      push: mockRouterPush,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(usePathname).mockReturnValue("/projects");
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
     mockProjects = [];
     mockApiKeyState = {
       hasAnyApiKey: true,

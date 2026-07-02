@@ -32,6 +32,10 @@ inputs:
     description: Optional Dockerfile target stage.
     required: false
     default: ""
+  provenance:
+    description: SLSA provenance attestation. Empty preserves buildx defaults; set 'false' to skip.
+    required: false
+    default: ""
   network:
     description: Network mode for the build.
     required: false
@@ -69,6 +73,7 @@ runs:
         tags: ${{ inputs.tags }}
         outputs: ${{ inputs.outputs }}
         target: ${{ inputs.target }}
+        provenance: ${{ inputs.provenance }}
         network: ${{ inputs.network }}
         build-args: ${{ inputs.build-args }}
         secrets: ${{ inputs.secrets }}

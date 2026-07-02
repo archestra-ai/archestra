@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CreateConnectorDialog } from "./create-connector-dialog";
 
@@ -50,11 +51,7 @@ Element.prototype.releasePointerCapture = vi.fn();
 
 const mockMutateAsync = vi.fn();
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
-  usePathname: () => "/knowledge/knowledge-bases",
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useCreateConnector: () => ({
@@ -106,6 +103,13 @@ async function renderGithubConfigureStep() {
 describe("CreateConnectorDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(usePathname).mockReturnValue("/knowledge/knowledge-bases");
   });
 
   describe("rendering", () => {

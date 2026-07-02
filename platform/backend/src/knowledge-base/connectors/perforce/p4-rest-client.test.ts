@@ -19,17 +19,21 @@ const fetchState: {
   calls: Array<{ url: URL; init: RequestInit }>;
 } = { handler: undefined, calls: [] };
 
-vi.stubGlobal(
-  "fetch",
-  vi.fn(async (input: string | URL, init: RequestInit = {}) => {
-    const url = input instanceof URL ? input : new URL(String(input));
-    fetchState.calls.push({ url, init });
-    if (!fetchState.handler) {
-      throw new Error("fetchState.handler not configured in test");
-    }
-    return fetchState.handler(url, init);
-  }),
-);
+const fetchMock = vi.fn(async (input: string | URL, init: RequestInit = {}) => {
+  const url = input instanceof URL ? input : new URL(String(input));
+  fetchState.calls.push({ url, init });
+  if (!fetchState.handler) {
+    throw new Error("fetchState.handler not configured in test");
+  }
+  return fetchState.handler(url, init);
+});
+
+// The config's `unstubGlobals` removes stubs after every test, so re-apply
+// before each one; the top-level stub covers import time.
+vi.stubGlobal("fetch", fetchMock);
+beforeEach(() => {
+  vi.stubGlobal("fetch", fetchMock);
+});
 
 function jsonl(records: Array<Record<string, unknown>>): string {
   return `${records.map((record) => JSON.stringify(record)).join("\n")}\n`;

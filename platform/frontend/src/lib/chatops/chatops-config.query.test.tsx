@@ -17,12 +17,7 @@ vi.mock("@archestra/shared", async () => {
   };
 });
 
-vi.mock("sonner", () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock("sonner");
 
 vi.mock("@/lib/utils", async () => {
   const actual = await vi.importActual("@/lib/utils");

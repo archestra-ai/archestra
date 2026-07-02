@@ -8,33 +8,18 @@ Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
 Element.prototype.setPointerCapture = vi.fn();
 Element.prototype.releasePointerCapture = vi.fn();
 
-const mockUseHasPermissions = vi.fn();
-const mockUseSession = vi.fn();
-const mockUseSearchParams = vi.fn();
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: (...args: unknown[]) => mockUseHasPermissions(...args),
-  useSession: (...args: unknown[]) => mockUseSession(...args),
-}));
-
-vi.mock("next/navigation", () => ({
-  useSearchParams: (...args: unknown[]) => mockUseSearchParams(...args),
-  useRouter: () => ({ push: vi.fn() }),
-  usePathname: () => "/agents",
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/lib/agent.query", () => ({
   useLabelKeys: () => ({ data: [] }),
   useLabelValues: () => ({ data: [] }),
 }));
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganizationMembers: () => ({ data: [] }),
-}));
+vi.mock("@/lib/organization.query");
 
-vi.mock("@/lib/teams/team.query", () => ({
-  useTeams: () => ({ data: [] }),
-}));
+vi.mock("@/lib/teams/team.query");
 
 // Stub the sibling controls so the only `combobox` roles in the tree are the
 // scope select and the (conditional) owner select under test.
@@ -53,21 +38,42 @@ vi.mock("@/components/permission-requirement-hint", () => ({
   PermissionRequirementHint: () => null,
 }));
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useOrganizationMembers } from "@/lib/organization.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { AgentScopeFilter } from "./agent-scope-filter";
 
 describe("AgentScopeFilter owner selector gating", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseSession.mockReturnValue({ data: { user: { id: "user-1" } } });
-    mockUseSearchParams.mockReturnValue(new URLSearchParams("scope=personal"));
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1" } },
+    } as ReturnType<typeof useSession>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("scope=personal") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(usePathname).mockReturnValue("/agents");
+    vi.mocked(useOrganizationMembers).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useOrganizationMembers>);
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
   });
 
   it("hides the owner selector for a non-admin even if they have member:read", async () => {
-    mockUseHasPermissions.mockImplementation(
+    vi.mocked(useHasPermissions).mockImplementation(
       (permissions: Record<string, unknown>) => {
         // Has member:read and team:read, but NOT agent:admin.
-        if ("agent" in permissions) return { data: false };
-        return { data: true };
+        if ("agent" in permissions)
+          return { data: false } as ReturnType<typeof useHasPermissions>;
+        return { data: true } as ReturnType<typeof useHasPermissions>;
       },
     );
 
@@ -78,10 +84,11 @@ describe("AgentScopeFilter owner selector gating", () => {
   });
 
   it("shows the owner selector for a resource admin", async () => {
-    mockUseHasPermissions.mockImplementation(
+    vi.mocked(useHasPermissions).mockImplementation(
       (permissions: Record<string, unknown>) => {
-        if ("agent" in permissions) return { data: true };
-        return { data: true };
+        if ("agent" in permissions)
+          return { data: true } as ReturnType<typeof useHasPermissions>;
+        return { data: true } as ReturnType<typeof useHasPermissions>;
       },
     );
 

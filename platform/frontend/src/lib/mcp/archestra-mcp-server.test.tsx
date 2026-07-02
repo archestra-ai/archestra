@@ -1,16 +1,16 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
-const mockUseAppName = vi.fn();
-const mockConfig = {
-  enterpriseFeatures: {
-    fullWhiteLabeling: false,
+const { mockConfig } = vi.hoisted(() => ({
+  mockConfig: {
+    enterpriseFeatures: {
+      fullWhiteLabeling: false,
+    },
   },
-};
-
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => mockUseAppName(),
 }));
+
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/config/config", () => ({
   default: new Proxy(
@@ -33,7 +33,7 @@ describe("useArchestraMcpIdentity", () => {
   });
 
   it("returns default built-in MCP identity when full white-labeling is disabled", () => {
-    mockUseAppName.mockReturnValue("Sparky");
+    vi.mocked(useAppName).mockReturnValue("Sparky");
     mockConfig.enterpriseFeatures.fullWhiteLabeling = false;
 
     const { result } = renderHook(() => useArchestraMcpIdentity());
@@ -51,7 +51,7 @@ describe("useArchestraMcpIdentity", () => {
   });
 
   it("returns branded MCP identity when full white-labeling is enabled", () => {
-    mockUseAppName.mockReturnValue("Sparky");
+    vi.mocked(useAppName).mockReturnValue("Sparky");
     mockConfig.enterpriseFeatures.fullWhiteLabeling = true;
 
     const { result } = renderHook(() => useArchestraMcpIdentity());
@@ -69,7 +69,7 @@ describe("useArchestraMcpIdentity", () => {
   });
 
   it("returns stable references across rerenders when branding inputs are unchanged", () => {
-    mockUseAppName.mockReturnValue("Sparky");
+    vi.mocked(useAppName).mockReturnValue("Sparky");
     mockConfig.enterpriseFeatures.fullWhiteLabeling = true;
 
     const { result, rerender } = renderHook(() => useArchestraMcpIdentity());

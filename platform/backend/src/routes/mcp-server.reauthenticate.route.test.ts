@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { hasPermission, userHasPermission } from "@/auth/utils";
 import { OrganizationModel } from "@/models";
 import McpServerModel from "@/models/mcp-server";
 import { secretManager } from "@/secrets-manager";
@@ -7,17 +8,12 @@ import { createFastifyInstance } from "@/server";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-const {
-  invalidateConnectionsForServerMock,
-  hasPermissionMock,
-  userHasPermissionMock,
-  k8sRestartServerMock,
-} = vi.hoisted(() => ({
-  invalidateConnectionsForServerMock: vi.fn(),
-  hasPermissionMock: vi.fn(),
-  userHasPermissionMock: vi.fn(),
-  k8sRestartServerMock: vi.fn(),
-}));
+const { invalidateConnectionsForServerMock, k8sRestartServerMock } = vi.hoisted(
+  () => ({
+    invalidateConnectionsForServerMock: vi.fn(),
+    k8sRestartServerMock: vi.fn(),
+  }),
+);
 
 vi.mock("@/clients/mcp-client", () => ({
   McpServerNotReadyError: class extends Error {},
@@ -27,10 +23,7 @@ vi.mock("@/clients/mcp-client", () => ({
   },
 }));
 
-vi.mock("@/auth/utils", () => ({
-  hasPermission: hasPermissionMock,
-  userHasPermission: userHasPermissionMock,
-}));
+vi.mock("@/auth/utils");
 
 vi.mock("@/k8s/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
@@ -38,6 +31,9 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
     restartServer: k8sRestartServerMock,
   },
 }));
+
+const hasPermissionMock = vi.mocked(hasPermission);
+const userHasPermissionMock = vi.mocked(userHasPermission);
 
 describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
   let app: FastifyInstanceWithZod;
@@ -50,7 +46,7 @@ describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
     organizationId = organization.id;
     await makeMember(user.id, organization.id);
 
-    hasPermissionMock.mockResolvedValue({ success: true });
+    hasPermissionMock.mockResolvedValue({ success: true, error: null });
     userHasPermissionMock.mockResolvedValue(true);
     invalidateConnectionsForServerMock.mockResolvedValue(undefined);
     k8sRestartServerMock.mockResolvedValue(undefined);

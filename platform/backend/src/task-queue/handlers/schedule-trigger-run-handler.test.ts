@@ -8,9 +8,6 @@ const mockAgentFindById = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const mockUserHasAgentAccess = vi.hoisted(() =>
   vi.fn().mockResolvedValue(true),
 );
-const mockHasAnyAgentTypeAdminPermission = vi.hoisted(() =>
-  vi.fn().mockResolvedValue({ success: false }),
-);
 
 vi.mock("@/models", () => ({
   ScheduleTriggerRunModel: {
@@ -31,9 +28,9 @@ vi.mock("@/models", () => ({
   },
 }));
 
-vi.mock("@/auth", () => ({
-  hasAnyAgentTypeAdminPermission: mockHasAnyAgentTypeAdminPermission,
-}));
+vi.mock("@/auth");
+
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 
 const mockExecuteA2AMessage = vi.hoisted(() =>
   vi.fn().mockResolvedValue({
@@ -66,15 +63,6 @@ vi.mock("@/services/scheduled-run-conversation", () => ({
   persistRunConversationMessages: mockPersistRunConversationMessages,
   persistRunUserMessage: mockPersistRunUserMessage,
   recordRunConversationError: mockRecordRunConversationError,
-}));
-
-vi.mock("@/logging", () => ({
-  default: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
 }));
 
 import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handler";
@@ -132,7 +120,7 @@ describe("handleScheduleTriggerRunExecution", () => {
     mockUserGetById.mockResolvedValue(null);
     mockAgentFindById.mockResolvedValue(null);
     mockUserHasAgentAccess.mockResolvedValue(true);
-    mockHasAnyAgentTypeAdminPermission.mockResolvedValue({ success: false });
+    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(false);
     mockCreateAndLinkRunConversation.mockReset();
     mockPersistRunConversationMessages.mockReset();
     mockPersistRunConversationMessages.mockResolvedValue(undefined);

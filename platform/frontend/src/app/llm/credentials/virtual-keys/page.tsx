@@ -53,6 +53,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
+import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -464,6 +466,7 @@ function CreateVirtualKeyDialog({
   );
 
   const prevOpenRef = useRef(open);
+  const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     const wasOpen = prevOpenRef.current;
@@ -471,13 +474,26 @@ function CreateVirtualKeyDialog({
     if (open && !wasOpen) {
       setCreatedKeyValue(null);
       setCreatedKeyExpiresAt(null);
+      const initialExpiresAt = computeDefaultExpiresAt(
+        defaultExpirationSeconds,
+      );
+      const initialScope = getDefaultVirtualKeyScope(visibilityOptions);
       setKeyType("standard");
       setNewKeyName("");
-      setExpiresAt(computeDefaultExpiresAt(defaultExpirationSeconds));
-      setScope(getDefaultVirtualKeyScope(visibilityOptions));
+      setExpiresAt(initialExpiresAt);
+      setScope(initialScope);
       setTeamIds([]);
       setProviderApiKeyIds({});
       setOwnerId("");
+      initialSnapshotRef.current = {
+        keyType: "standard",
+        newKeyName: "",
+        ownerId: "",
+        expiresAt: initialExpiresAt,
+        scope: initialScope,
+        teamIds: [],
+        providerApiKeyIds: {},
+      };
     }
   }, [open, defaultExpirationSeconds, visibilityOptions]);
 
@@ -495,6 +511,21 @@ function CreateVirtualKeyDialog({
     newKeyName.trim().length > 0 &&
     (isPassthrough || standardReady) &&
     !createMutation.isPending;
+
+  // Once the key is created the form is replaced by the reveal view, so there
+  // is nothing left to lose — only guard the editable form.
+  const isDirty =
+    !createdKeyValue &&
+    initialSnapshotRef.current !== null &&
+    hasUnsavedChanges(initialSnapshotRef.current, {
+      keyType,
+      newKeyName,
+      ownerId,
+      expiresAt,
+      scope,
+      teamIds: [...teamIds].sort(),
+      providerApiKeyIds,
+    });
 
   const handleCreate = useCallback(async () => {
     if (!newKeyName.trim()) return;
@@ -551,6 +582,7 @@ function CreateVirtualKeyDialog({
           : "Map provider API keys, or create a passthrough key to attribute requests to a user."
       }
       size="medium"
+      isDirty={isDirty}
     >
       <DialogForm onSubmit={handleCreate}>
         <DialogBody
@@ -641,13 +673,9 @@ function CreateVirtualKeyDialog({
           )}
         </DialogBody>
         <DialogStickyFooter className="mt-0">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
+          <DialogCancelButton>
             {createdKeyValue ? "Close" : "Cancel"}
-          </Button>
+          </DialogCancelButton>
           {!createdKeyValue && (
             <Button type="submit" disabled={!canSubmit}>
               {createMutation.isPending && (
@@ -689,24 +717,38 @@ function EditVirtualKeyDialog({
   const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
     {},
   );
+  const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     if (!open || !virtualKey) {
       return;
     }
 
-    setName(virtualKey.name);
-    setExpiresAt(virtualKey.expiresAt ? new Date(virtualKey.expiresAt) : null);
-    setScope((virtualKey.scope as VirtualKeyScope) ?? "personal");
-    setTeamIds(virtualKey.teams.map((team) => team.id));
-    setProviderApiKeyIds(
-      Object.fromEntries(
-        virtualKey.providerApiKeys.map((mapping) => [
-          mapping.provider,
-          mapping.providerApiKeyId,
-        ]),
-      ),
+    const initialName = virtualKey.name;
+    const initialExpiresAt = virtualKey.expiresAt
+      ? new Date(virtualKey.expiresAt)
+      : null;
+    const initialScope = (virtualKey.scope as VirtualKeyScope) ?? "personal";
+    const initialTeamIds = virtualKey.teams.map((team) => team.id);
+    const initialProviderApiKeyIds = Object.fromEntries(
+      virtualKey.providerApiKeys.map((mapping) => [
+        mapping.provider,
+        mapping.providerApiKeyId,
+      ]),
     );
+
+    setName(initialName);
+    setExpiresAt(initialExpiresAt);
+    setScope(initialScope);
+    setTeamIds(initialTeamIds);
+    setProviderApiKeyIds(initialProviderApiKeyIds);
+    initialSnapshotRef.current = {
+      name: initialName,
+      expiresAt: initialExpiresAt,
+      scope: initialScope,
+      teamIds: [...initialTeamIds].sort(),
+      providerApiKeyIds: initialProviderApiKeyIds,
+    };
   }, [open, virtualKey]);
 
   // The key type is fixed at creation; only its own configuration is editable.
@@ -765,6 +807,15 @@ function EditVirtualKeyDialog({
     name.trim().length > 0 &&
     (isPassthrough || standardReady) &&
     !updateMutation.isPending;
+  const isDirty =
+    initialSnapshotRef.current !== null &&
+    hasUnsavedChanges(initialSnapshotRef.current, {
+      name,
+      expiresAt,
+      scope,
+      teamIds: [...teamIds].sort(),
+      providerApiKeyIds,
+    });
 
   return (
     <FormDialog
@@ -777,6 +828,7 @@ function EditVirtualKeyDialog({
           : "Update the virtual key name, visibility, and expiration."
       }
       size="medium"
+      isDirty={isDirty}
     >
       <DialogForm onSubmit={handleUpdate}>
         <DialogBody className="space-y-4">
@@ -834,13 +886,7 @@ function EditVirtualKeyDialog({
           )}
         </DialogBody>
         <DialogStickyFooter className="mt-0">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
+          <DialogCancelButton>Cancel</DialogCancelButton>
           <Button type="submit" disabled={!canSubmit}>
             {updateMutation.isPending && (
               <Loader2 className="h-4 w-4 animate-spin" />

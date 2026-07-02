@@ -108,12 +108,32 @@ importers:
         version: 2.9.14
 
   archestra-rs/app-runtime-rs:
+    dependencies:
+      '@archestra/napi-loader':
+        specifier: workspace:*
+        version: link:../napi-loader
     devDependencies:
       '@napi-rs/cli':
         specifier: ^3.4.0
         version: 3.6.2(@emnapi/runtime@1.8.1)(@types/node@25.9.1)
 
+  archestra-rs/image-rs:
+    dependencies:
+      '@archestra/napi-loader':
+        specifier: workspace:*
+        version: link:../napi-loader
+    devDependencies:
+      '@napi-rs/cli':
+        specifier: ^3.4.0
+        version: 3.6.2(@emnapi/runtime@1.8.1)(@types/node@25.9.1)
+
+  archestra-rs/napi-loader: {}
+
   archestra-rs/sandbox-rs:
+    dependencies:
+      '@archestra/napi-loader':
+        specifier: workspace:*
+        version: link:../napi-loader
     devDependencies:
       '@napi-rs/cli':
         specifier: ^3.4.0
@@ -160,6 +180,9 @@ importers:
       '@archestra/app-runtime-rs':
         specifier: workspace:*
         version: link:../archestra-rs/app-runtime-rs
+      '@archestra/image-rs':
+        specifier: workspace:*
+        version: link:../archestra-rs/image-rs
       '@archestra/sandbox-rs':
         specifier: workspace:*
         version: link:../archestra-rs/sandbox-rs
@@ -506,6 +529,9 @@ importers:
       knip:
         specifier: ^5.85.0
         version: 5.86.0(@types/node@25.5.0)(typescript@6.0.2)
+      msw:
+        specifier: ^2.14.6
+        version: 2.14.6(@types/node@25.5.0)(typescript@6.0.2)
       tsdown:
         specifier: ^0.21.0
         version: 0.21.3(@typescript/native-preview@7.0.0-dev.20260421.2)(oxc-resolver@11.19.1)(typescript@6.0.2)

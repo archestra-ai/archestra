@@ -9,6 +9,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DialogDismissProvider,
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/components/unsaved-changes-guard";
 import { cn } from "@/lib/utils";
 
 type DialogSize = "small" | "medium" | "large";
@@ -21,6 +26,13 @@ export type FormDialogProps = {
   size?: DialogSize;
   children: React.ReactNode;
   preventCloseOnInteractOutside?: boolean;
+  /**
+   * When the form holds unsaved data, closing it (Esc, outside-click, or the
+   * X button) shows a "Discard unsaved changes?" confirmation instead of
+   * silently dropping the edits. Leave undefined/false to keep the form
+   * unguarded.
+   */
+  isDirty?: boolean;
   className?: string;
 };
 
@@ -39,22 +51,38 @@ export function FormDialog({
   size = "medium",
   children,
   preventCloseOnInteractOutside,
+  isDirty = false,
   className,
 }: FormDialogProps) {
+  const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={cn(sizeClasses[size], className)}
-        onInteractOutside={
-          preventCloseOnInteractOutside ? (e) => e.preventDefault() : undefined
-        }
-      >
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {description && <DialogDescription>{description}</DialogDescription>}
-        </DialogHeader>
-        {children}
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={open} onOpenChange={guard.handleOpenChange}>
+        <DialogContent
+          className={cn(sizeClasses[size], className)}
+          onInteractOutside={
+            preventCloseOnInteractOutside
+              ? (e) => e.preventDefault()
+              : undefined
+          }
+        >
+          <DialogDismissProvider requestClose={guard.requestClose}>
+            <DialogHeader>
+              <DialogTitle>{title}</DialogTitle>
+              {description && (
+                <DialogDescription>{description}</DialogDescription>
+              )}
+            </DialogHeader>
+            {children}
+          </DialogDismissProvider>
+        </DialogContent>
+      </Dialog>
+      <UnsavedChangesDialog
+        open={guard.confirmOpen}
+        onKeepEditing={guard.keepEditing}
+        onDiscard={guard.discardChanges}
+      />
+    </>
   );
 }

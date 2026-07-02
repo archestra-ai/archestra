@@ -25,6 +25,15 @@ import oauthRoutes, {
   sanitizeOAuthErrorCode,
 } from "./oauth";
 
+// Several tests below swap `globalThis.fetch` for a mock and restore it inline
+// after their assertions. If an assertion throws, the inline restore is skipped
+// and the mocked fetch leaks into whatever test file runs next in the worker.
+// This top-level hook guarantees the real fetch is back after every test.
+const realFetch = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = realFetch;
+});
+
 describe("OAuth helper functions", () => {
   describe("generateCodeVerifier", () => {
     test("returns a base64url-encoded string", () => {

@@ -156,10 +156,15 @@ export { schema };
 /**
  * Set the database instance directly (for testing purposes only).
  * This bypasses the normal initialization flow.
+ *
+ * Pass `null` on test-file teardown: between files in a shared worker,
+ * accesses through the proxy then fail with getDb()'s "Database not
+ * initialized" — a condition import-time consumers already tolerate —
+ * instead of "PGlite is closed" from a torn-down instance.
  * @public — consumed via dynamic import in src/test/setup.ts
  */
 export function __setTestDb(
-  testDb: ReturnType<typeof drizzle<typeof schema>>,
+  testDb: ReturnType<typeof drizzle<typeof schema>> | null,
 ): void {
   db = testDb;
 }

@@ -2167,6 +2167,66 @@ describe("ChatOpsManager attachment passthrough", () => {
     expect(callArg.attachments).toBeUndefined();
   });
 
+  test("tells the model about skipped attachments in the message text", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "That file was too large.",
+        messageId: "msg-skip",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-skip",
+          role: "assistant",
+          parts: [{ type: "text", text: "That file was too large." }],
+        },
+      });
+
+    const user = await makeUser({ email: "skip-user@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "skip-user@example.com",
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const message = createMockMessage({
+      skippedAttachments: [
+        { name: "IMG_0354.png", sizeBytes: 16_562_518, reason: "too_large" },
+      ],
+    });
+    await manager.processMessage({ message, provider: mockProvider });
+
+    // The dropped file is named in the text the model receives, so it can
+    // explain it rather than denying the file existed.
+    const callArg = executorSpy.mock.calls[0][0];
+    expect(callArg.message).toContain("IMG_0354.png");
+  });
+
   test("includes image attachments from thread history in follow-up messages", async ({
     makeUser,
     makeOrganization,

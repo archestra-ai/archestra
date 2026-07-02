@@ -35,6 +35,12 @@ process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED = "true";
 // branch's project / My-Files / PFS-tool tests run. The gating ("OFF") tests
 // flip config.projects.enabled to false locally.
 process.env.ARCHESTRA_PROJECTS_ENABLED = "true";
+// Same for Apps: app route/tool tests exercise the enabled paths, and the
+// gating ("OFF") tests flip config.apps.enabled to false in their own
+// beforeEach. Before the per-test config restore existed, these tests rode a
+// cross-file config.apps.enabled leak (or the developer's .env) — make the
+// default explicit so CI and local agree.
+process.env.ARCHESTRA_APPS_ENABLED = "true";
 // Pin "My Files" byte storage to the inline (db) provider for hermetic tests,
 // independent of the dev .env. The filesystem-specific suites opt in by
 // overriding config.fileStorage at runtime against a temp root.
@@ -50,6 +56,9 @@ process.setMaxListeners(20);
 
 // Module-level variables to persist across tests within a file
 let pgliteClient: PGlite | null = null;
+// Pristine config snapshot for the per-test restore (see beforeAll/beforeEach).
+let liveConfig: Record<string, unknown> | null = null;
+let pristineConfig: Record<string, unknown> | null = null;
 let testDb: ReturnType<typeof drizzle> | null = null;
 const originalConsoleWarn = console.warn;
 
@@ -96,18 +105,40 @@ beforeAll(async () => {
     }
   }
 
-  // Set the test database via the internal setter (for getDb() and proxy)
+  // Finish PGlite's async WASM init (incl. its browser-vs-node environment
+  // detection) before any test code runs: tests that fake browser globals
+  // (e.g. a `window` for the app SDK) would otherwise race the detection and
+  // send PGlite down the browser path mid-init.
+  await pgliteClient.waitReady;
+
+  // Set the test database via the internal setter. The module's default
+  // export is a forwarding Proxy over getDb(), so consumers — including
+  // singletons constructed at import time, like better-auth's drizzle
+  // adapter — always reach the CURRENT file's database. Do not replace the
+  // default export with the concrete instance: in a shared worker
+  // (isolate: false) that would pin import-time consumers to whichever
+  // file's PGlite happened to be live, which is closed by the time later
+  // files run ("PGlite is closed").
   const dbModule = await import("../database/index.js");
   dbModule.__setTestDb(
     testDb as unknown as Parameters<typeof dbModule.__setTestDb>[0],
   );
 
-  // Also replace the default export for compatibility
-  Object.defineProperty(dbModule, "default", {
-    value: testDb,
-    writable: true,
-    configurable: true,
-  });
+  // Snapshot the pristine config once per worker (first file's beforeAll).
+  // Tests mutate the real config object directly (config.apps.enabled = ...),
+  // and in a shared worker (isolate: false) an unrestored mutation leaks into
+  // every later file. beforeEach below restores this snapshot before each
+  // test, so per-test/beforeEach mutations keep working while nothing leaks.
+  // Only the shared-worker ("clean") vitest project needs this — isolated
+  // files can't leak across files, and their bespoke config mocks may carry
+  // getter-only properties the restore could not assign to.
+  if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true") {
+    liveConfig ??= (await import("../config.js")).default as unknown as Record<
+      string,
+      unknown
+    >;
+    pristineConfig ??= structuredClone(liveConfig);
+  }
 });
 
 /**
@@ -117,6 +148,14 @@ beforeAll(async () => {
 beforeEach(async () => {
   if (!pgliteClient) {
     throw new Error("Database not initialized. Did beforeAll run?");
+  }
+
+  // Restore the pristine config before every test. This hook is registered
+  // before any test-file hooks, so a file's own beforeEach still applies its
+  // config tweaks on top — but nothing a test mutated can leak into the next
+  // test or, in shared workers, the next file.
+  if (liveConfig && pristineConfig) {
+    restoreConfig(liveConfig, structuredClone(pristineConfig));
   }
 
   // Get all user tables from the database (excluding system tables)
@@ -141,17 +180,35 @@ beforeEach(async () => {
 });
 
 /**
- * Clear mocks after each test
+ * Clear mocks after each test, and restore the real fetch.
+ *
+ * Several tests replace `globalThis.fetch` directly (not via vi.stubGlobal,
+ * which `unstubGlobals` already handles). A mock left behind — e.g. when an
+ * assertion throws before an inline restore — poisons every later file in
+ * the worker. This hook is registered before any test-file hooks, so Vitest
+ * runs it LAST in the afterEach sequence: it always gets the final word.
  */
+const realFetch = globalThis.fetch;
 afterEach(() => {
+  globalThis.fetch = realFetch;
   vi.clearAllMocks();
 });
 
 /**
- * Clean up the PGlite client after all tests in the file complete
+ * Clean up the PGlite client after all tests in the file complete.
+ *
+ * Clearing the injected test DB matters in shared workers (isolate: false):
+ * module-level consumers evaluated while the NEXT file loads — e.g.
+ * better-auth's eager context init querying trusted IdP providers — would
+ * otherwise reach this file's closed PGlite and surface as unhandled
+ * "PGlite is closed" rejections. With the DB cleared they get getDb()'s
+ * "Database not initialized", which those import-time paths already handle.
  */
 afterAll(async () => {
   console.warn = originalConsoleWarn;
+
+  const dbModule = await import("../database/index.js");
+  dbModule.__setTestDb(null);
 
   if (pgliteClient) {
     await pgliteClient.close();
@@ -159,3 +216,41 @@ afterAll(async () => {
   }
   testDb = null;
 });
+
+/**
+ * Overwrite `live`'s contents with `snapshot`'s, in place (the config module
+ * object is referenced everywhere, so identity must be preserved). Keys added
+ * by a test are deleted; nested objects are restored recursively.
+ */
+function restoreConfig(
+  live: Record<string, unknown>,
+  snapshot: Record<string, unknown>,
+): void {
+  for (const key of Object.keys(live)) {
+    if (!(key in snapshot)) {
+      delete live[key];
+    }
+  }
+  for (const [key, snapValue] of Object.entries(snapshot)) {
+    const liveValue = live[key];
+    if (
+      snapValue !== null &&
+      typeof snapValue === "object" &&
+      !Array.isArray(snapValue) &&
+      liveValue !== null &&
+      typeof liveValue === "object" &&
+      !Array.isArray(liveValue)
+    ) {
+      restoreConfig(
+        liveValue as Record<string, unknown>,
+        snapValue as Record<string, unknown>,
+      );
+    } else {
+      // Skip accessor properties (getter-only config fields cannot be
+      // assigned, and getter-based test doubles manage their own state).
+      const descriptor = Object.getOwnPropertyDescriptor(live, key);
+      if (descriptor && !("value" in descriptor)) continue;
+      live[key] = snapValue;
+    }
+  }
+}

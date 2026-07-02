@@ -51,6 +51,34 @@ export const ChatOpsStatusResponseSchema = z.object({
 });
 
 /**
+ * Why an attached file was not included in the message sent to the model.
+ * - `too_large`: exceeded the per-file size limit (and, for images, could not
+ *   be shrunk under the model's inline-image limit).
+ * - `download_failed`: the provider download failed (auth, network, or a
+ *   non-file response such as an HTML login page).
+ * - `total_limit_reached`: the combined attachment budget was already spent.
+ * - `too_many`: more files than the per-message cap were attached.
+ */
+export type SkippedAttachmentReason =
+  | "too_large"
+  | "download_failed"
+  | "total_limit_reached"
+  | "too_many";
+
+/**
+ * A file that was attached to a message but not delivered to the model. Carried
+ * so the chatops layer can tell the model, in-context, that a file was dropped
+ * and why — otherwise the model has no idea the file existed and denies it.
+ */
+export interface SkippedAttachment {
+  /** Filename from the provider, when known. */
+  name?: string;
+  /** Size in bytes from provider metadata, when known. */
+  sizeBytes?: number;
+  reason: SkippedAttachmentReason;
+}
+
+/**
  * Represents an incoming chat message from a chatops provider
  */
 export interface IncomingChatMessage {
@@ -80,6 +108,8 @@ export interface IncomingChatMessage {
   metadata?: Record<string, unknown>;
   /** Attachments from the message (images, files, etc.) */
   attachments?: A2AAttachment[];
+  /** Files that were attached but could not be delivered to the model. */
+  skippedAttachments?: SkippedAttachment[];
 }
 
 /**

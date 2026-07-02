@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
+import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -116,6 +118,14 @@ function EditProjectDialogForm({
   ];
 
   const isPending = updateProject.isPending || setShare.isPending;
+  const sharingDirty =
+    visibility !== initialVisibility ||
+    (visibility === "team" &&
+      hasUnsavedChanges(
+        [...(project.shareTeamIds ?? [])].sort(),
+        [...teamIds].sort(),
+      ));
+  const isDirty = form.formState.isDirty || sharingDirty;
   const teamSelectionMissing = visibility === "team" && teamIds.length === 0;
   const hasLengthError =
     name.length > PROJECT_NAME_MAX_LENGTH ||
@@ -154,18 +164,12 @@ function EditProjectDialogForm({
       onOpenChange={onOpenChange}
       title="Edit project"
       size="medium"
+      isDirty={isDirty}
       onSubmit={onSubmit}
       bodyClassName="space-y-4"
       footer={
         <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isPending}
-          >
-            Cancel
-          </Button>
+          <DialogCancelButton disabled={isPending}>Cancel</DialogCancelButton>
           <Button
             type="submit"
             disabled={
@@ -183,7 +187,9 @@ function EditProjectDialogForm({
       <div className="flex items-start gap-3">
         <AgentIconPicker
           value={icon}
-          onChange={(next) => form.setValue("icon", next)}
+          onChange={(next) =>
+            form.setValue("icon", next, { shouldDirty: true })
+          }
           fallbackType="project"
         />
         <div className="flex-1 space-y-3 min-w-0">

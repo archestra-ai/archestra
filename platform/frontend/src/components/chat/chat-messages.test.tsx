@@ -177,10 +177,7 @@ vi.mock("@/components/chat/knowledge-graph-citations", () => ({
   hasKnowledgeBaseToolCall: () => false,
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: true }),
-  useSession: () => ({ data: { user: { name: "Joey" } } }),
-}));
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/chat/chat.query", () => ({
   useProfileToolsWithIds: () => ({ data: [] }),
@@ -204,13 +201,9 @@ vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
   }),
 }));
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => ({ data: null }),
-}));
+vi.mock("@/lib/organization.query");
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppIconLogo: () => "/custom-logo.png",
-}));
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/chat/global-chat.context", () => ({
   useGlobalChat: () => ({
@@ -227,12 +220,25 @@ vi.mock("@/lib/mcp/archestra-mcp-server", () => ({
   }),
 }));
 
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { PERSISTED_MESSAGE_ID_METADATA_KEY } from "@/lib/chat/chat-utils";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
+import { useOrganization } from "@/lib/organization.query";
 import { ChatMessages } from "./chat-messages";
 
 describe("ChatMessages", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { name: "Joey" } },
+    } as ReturnType<typeof useSession>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: null,
+    } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useAppIconLogo).mockReturnValue("/custom-logo.png");
   });
 
   it("renders the swap divider for branded built-in swap tools", () => {

@@ -209,6 +209,88 @@ describe("validateAppHtmlStatic", () => {
       /localStorage,.*localStorage/,
     );
   });
+
+  test("calling a storage method on the store directly is a warning naming the partitions", async () => {
+    const findings = await validateAppHtmlStatic(
+      '<html><head><script>const x = await archestra.storage.get("k");</script></head><body/></html>',
+    );
+    expect(findings).toContainEqual({
+      severity: "warning",
+      message: expect.stringContaining("archestra.storage.get"),
+    });
+    const misuse = findings.find((f) =>
+      f.message.includes("archestra.storage.get"),
+    );
+    expect(misuse?.message).toContain("archestra.storage.user.");
+  });
+
+  test("an unknown top-level archestra member is a warning naming the real surface", async () => {
+    const findings = await validateAppHtmlStatic(
+      "<html><head><script>archestra.tool.call('x');</script></head><body/></html>",
+    );
+    const unknown = findings.find((f) => f.message.startsWith("Uses "));
+    expect(unknown?.severity).toBe("warning");
+    // \b after "tool" so this names the offending archestra.tool, not the valid
+    // archestra.tools it points at (a substring of it).
+    expect(unknown?.message).toMatch(/\barchestra\.tool\b/);
+    expect(unknown?.message).toContain("archestra.tools");
+  });
+
+  test("correct SDK usage yields no findings", async () => {
+    const findings = await validateAppHtmlStatic(
+      `<html><head><script>
+        await archestra.ready;
+        const me = archestra.user;
+        const v = await archestra.storage.user.get("k");
+        await archestra.storage.shared.set("k", 1);
+        await archestra.tools.call("github__x", {});
+        await archestra.llm.complete("hi");
+        archestra.ui.openLink("/a/" + archestra.context.appId);
+      </script></head><body/></html>`,
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test("a bad archestra call named only in page prose does not warn", async () => {
+    const findings = await validateAppHtmlStatic(
+      "<html><head></head><body><p>Do not call archestra.storage.get directly.</p></body></html>",
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test("a bad archestra call only inside a JS comment does not warn", async () => {
+    const findings = await validateAppHtmlStatic(
+      `<html><head><script>
+        // use archestra.storage.user.get, not archestra.storage.get
+        /* archestra.tool.call is also wrong */
+        const x = 1;
+      </script></head><body/></html>`,
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test("repeated and distinct bad members are reported once per category", async () => {
+    const findings = await validateAppHtmlStatic(
+      `<html><head><script>
+        archestra.storage.get("a"); archestra.storage.get("b"); archestra.storage.delete("c");
+        archestra.tool.call(); archestra.tool.list();
+      </script></head><body/></html>`,
+    );
+    const storageWarnings = findings.filter((f) =>
+      f.message.startsWith("Accesses archestra.storage"),
+    );
+    expect(storageWarnings).toHaveLength(1);
+    expect(storageWarnings[0].message).toContain(
+      "archestra.storage.get, archestra.storage.delete",
+    );
+    const topWarnings = findings.filter((f) => f.message.startsWith("Uses"));
+    expect(topWarnings).toHaveLength(1);
+    // The offending member is listed once, even though .call and .list both hit
+    // it. \b so the count ignores the valid archestra.tools in the surface list.
+    expect(topWarnings[0].message.match(/\barchestra\.tool\b/g)).toHaveLength(
+      1,
+    );
+  });
 });
 
 describe("starter templates pass the save gate", () => {

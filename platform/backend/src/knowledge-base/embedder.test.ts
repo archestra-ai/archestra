@@ -1,27 +1,68 @@
-import { vi } from "vitest";
+import { HttpResponse, http } from "msw";
+import { beforeEach, vi } from "vitest";
+import { useMswServer } from "@/test/msw";
 
-const mockEmbeddingsCreate = vi.hoisted(() =>
-  vi.fn().mockResolvedValue({
-    object: "list",
-    data: [],
-    model: "text-embedding-3-small",
-    usage: { prompt_tokens: 0, total_tokens: 0 },
-  }),
-);
+// Per-call scripting for the OpenAI embeddings wire endpoint. Each `run_command`
+// dequeues the next response; an `error` entry serves a wire-level OpenAI error
+// with `x-should-retry: false` so the SDK surfaces it without its own internal
+// retries (the embedder does its own app-level retry loop).
+type EmbeddingResponseSpec =
+  | { kind: "ok"; embeddings: number[][] }
+  | { kind: "error"; status: number };
 
-vi.mock("openai", () => {
-  class MockOpenAI {
-    static APIError = class APIError extends Error {
-      status: number;
-      constructor(status: number, message: string) {
-        super(message);
-        this.status = status;
-      }
+const embeddingRequests: Array<{
+  model: string;
+  input: string[];
+  dimensions?: number;
+}> = [];
+const responseQueue: EmbeddingResponseSpec[] = [];
+
+// openai@6 requests base64 embeddings by default and decodes them client-side,
+// so the wire payload must carry Float32Array bytes, not a JSON number array.
+function encodeEmbedding(values: number[]): string {
+  const floats = new Float32Array(values);
+  return Buffer.from(
+    floats.buffer,
+    floats.byteOffset,
+    floats.byteLength,
+  ).toString("base64");
+}
+
+const embeddingHandler = http.post(
+  "https://api.openai.com/v1/embeddings",
+  async ({ request }) => {
+    const body = (await request.json()) as {
+      model: string;
+      input: string[];
+      dimensions?: number;
     };
-    embeddings = { create: mockEmbeddingsCreate };
-  }
-  return { default: MockOpenAI };
-});
+    embeddingRequests.push({
+      model: body.model,
+      input: body.input,
+      dimensions: body.dimensions,
+    });
+
+    const next = responseQueue.shift();
+    if (next?.kind === "error") {
+      return HttpResponse.json(
+        { error: { message: "embedding failure", type: "server_error" } },
+        { status: next.status, headers: { "x-should-retry": "false" } },
+      );
+    }
+
+    const embeddings = next?.embeddings ?? body.input.map(() => []);
+    return HttpResponse.json({
+      object: "list",
+      data: embeddings.map((embedding, index) => ({
+        object: "embedding",
+        embedding: encodeEmbedding(embedding),
+        index,
+      })),
+      model: body.model,
+      usage: { prompt_tokens: 10, total_tokens: 10 },
+    });
+  },
+);
 
 const mockGetDefaultOrgEmbeddingConfig = vi.hoisted(() => vi.fn());
 vi.mock("./kb-llm-client", () => ({
@@ -50,6 +91,13 @@ function makeEmbeddingContext() {
 }
 
 describe("EmbeddingService", () => {
+  useMswServer(embeddingHandler);
+
+  beforeEach(() => {
+    embeddingRequests.length = 0;
+    responseQueue.length = 0;
+  });
+
   test("processes pending document — chunks get embeddings, status completed", async ({
     makeOrganization,
     makeKnowledgeBase,
@@ -83,15 +131,7 @@ describe("EmbeddingService", () => {
 
     const emb0 = makeFakeEmbedding(1);
     const emb1 = makeFakeEmbedding(2);
-    mockEmbeddingsCreate.mockResolvedValueOnce({
-      object: "list",
-      data: [
-        { object: "embedding", embedding: emb0, index: 0 },
-        { object: "embedding", embedding: emb1, index: 1 },
-      ],
-      model: "text-embedding-3-small",
-      usage: { prompt_tokens: 10, total_tokens: 10 },
-    });
+    responseQueue.push({ kind: "ok", embeddings: [emb0, emb1] });
 
     await embeddingService.processDocument(doc.id, makeEmbeddingContext());
 
@@ -106,11 +146,13 @@ describe("EmbeddingService", () => {
     expect(chunks[0].embedding?.[0]).toBeCloseTo(emb0[0], 4);
     expect(chunks[1].embedding?.[0]).toBeCloseTo(emb1[0], 4);
 
-    expect(mockEmbeddingsCreate).toHaveBeenCalledWith({
-      model: "text-embedding-3-small",
-      input: ["Chunk one content", "Chunk two content"],
-      dimensions: 1536,
-    });
+    expect(embeddingRequests).toEqual([
+      {
+        model: "text-embedding-3-small",
+        input: ["Chunk one content", "Chunk two content"],
+        dimensions: 1536,
+      },
+    ]);
   });
 
   test("OpenAI failure marks document as failed", async ({
@@ -139,7 +181,8 @@ describe("EmbeddingService", () => {
       },
     ]);
 
-    mockEmbeddingsCreate.mockRejectedValueOnce(new Error("API rate limited"));
+    // 400 is non-retryable, so the embedder fails the document after one call.
+    responseQueue.push({ kind: "error", status: 400 });
 
     await embeddingService.processDocument(doc.id, makeEmbeddingContext());
 
@@ -170,7 +213,7 @@ describe("EmbeddingService", () => {
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("completed");
     expect(updated?.chunkCount).toBe(0);
-    expect(mockEmbeddingsCreate).not.toHaveBeenCalled();
+    expect(embeddingRequests).toHaveLength(0);
   });
 
   test("already-completed document is skipped", async ({
@@ -194,7 +237,7 @@ describe("EmbeddingService", () => {
 
     await embeddingService.processDocument(doc.id, makeEmbeddingContext());
 
-    expect(mockEmbeddingsCreate).not.toHaveBeenCalled();
+    expect(embeddingRequests).toHaveLength(0);
   });
 
   test("retries on 429 rate limit and succeeds", async ({
@@ -225,29 +268,17 @@ describe("EmbeddingService", () => {
 
     const emb = makeFakeEmbedding(10);
 
-    // Create a retryable error that matches the isRetryableError check
-    const rateLimitError = Object.assign(new Error("Rate limited"), {
-      status: 429,
-    });
-    // Make it pass the instanceof check in the actual OpenAI module
-    const OpenAIMod = (await import("openai")).default;
-    Object.setPrototypeOf(rateLimitError, OpenAIMod.APIError.prototype);
-
-    // First call fails with 429, second succeeds
-    mockEmbeddingsCreate
-      .mockRejectedValueOnce(rateLimitError)
-      .mockResolvedValueOnce({
-        object: "list",
-        data: [{ object: "embedding", embedding: emb, index: 0 }],
-        model: "text-embedding-3-small",
-        usage: { prompt_tokens: 5, total_tokens: 5 },
-      });
+    // First call fails with a retryable 429, second succeeds.
+    responseQueue.push(
+      { kind: "error", status: 429 },
+      { kind: "ok", embeddings: [emb] },
+    );
 
     await embeddingService.processDocument(doc.id, makeEmbeddingContext());
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("completed");
-    expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(2);
+    expect(embeddingRequests).toHaveLength(2);
   });
 
   test("fails after exhausting retries", async ({
@@ -276,24 +307,18 @@ describe("EmbeddingService", () => {
       },
     ]);
 
-    const OpenAIMod2 = (await import("openai")).default;
-    const makeServerError = () => {
-      const err = Object.assign(new Error("Server error"), { status: 500 });
-      Object.setPrototypeOf(err, OpenAIMod2.APIError.prototype);
-      return err;
-    };
-
-    // Fail all 3 attempts
-    mockEmbeddingsCreate
-      .mockRejectedValueOnce(makeServerError())
-      .mockRejectedValueOnce(makeServerError())
-      .mockRejectedValueOnce(makeServerError());
+    // Fail all 3 attempts with retryable 500s.
+    responseQueue.push(
+      { kind: "error", status: 500 },
+      { kind: "error", status: 500 },
+      { kind: "error", status: 500 },
+    );
 
     await embeddingService.processDocument(doc.id, makeEmbeddingContext());
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("failed");
-    expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(3);
+    expect(embeddingRequests).toHaveLength(3);
   });
 
   test("processDocuments batches chunks from multiple documents into single API call", async ({
@@ -339,22 +364,13 @@ describe("EmbeddingService", () => {
     const emb2 = makeFakeEmbedding(3);
 
     // All 3 chunks should arrive in a single API call
-    mockEmbeddingsCreate.mockResolvedValueOnce({
-      object: "list",
-      data: [
-        { object: "embedding", embedding: emb0, index: 0 },
-        { object: "embedding", embedding: emb1, index: 1 },
-        { object: "embedding", embedding: emb2, index: 2 },
-      ],
-      model: "text-embedding-3-small",
-      usage: { prompt_tokens: 15, total_tokens: 15 },
-    });
+    responseQueue.push({ kind: "ok", embeddings: [emb0, emb1, emb2] });
 
     await embeddingService.processDocuments([doc1.id, doc2.id]);
 
     // Only 1 OpenAI API call for all 3 chunks
-    expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(1);
-    expect(mockEmbeddingsCreate).toHaveBeenCalledWith({
+    expect(embeddingRequests).toHaveLength(1);
+    expect(embeddingRequests[0]).toEqual({
       model: "text-embedding-3-small",
       input: ["Doc1 Chunk A", "Doc1 Chunk B", "Doc2 Chunk A"],
       dimensions: 1536,
@@ -408,7 +424,7 @@ describe("EmbeddingService", () => {
     expect(updated?.embeddingStatus).toBe("pending");
 
     // No OpenAI API call should have been made
-    expect(mockEmbeddingsCreate).not.toHaveBeenCalled();
+    expect(embeddingRequests).toHaveLength(0);
   });
 
   test("processDocuments marks only affected documents as failed on partial API failure", async ({
@@ -448,7 +464,7 @@ describe("EmbeddingService", () => {
     ]);
     // doc2 has no chunks → should complete with chunkCount 0
 
-    mockEmbeddingsCreate.mockRejectedValueOnce(new Error("API down"));
+    responseQueue.push({ kind: "error", status: 400 });
 
     await embeddingService.processDocuments([doc1.id, doc2.id]);
 

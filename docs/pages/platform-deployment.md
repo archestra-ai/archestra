@@ -1410,6 +1410,12 @@ See [Slack](/docs/platform-slack) for setup instructions.
   - Starts with `xapp-`
   - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
 
+#### Attachment processing
+
+- **`ARCHESTRA_CHATOPS_MAX_CONCURRENT_FILE_TRANSFERS`** - Per-process cap on concurrent chatops attachment downloads and image shrinking.
+  - Default: `4`
+  - Bounds the transient memory a burst of attachment-heavy messages can hold; lower it on memory-constrained deployments
+
 ### Knowledge Base Configuration
 
 These environment variables configure the [Knowledge Base](/docs/platform-knowledge-bases). Knowledge Bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search.

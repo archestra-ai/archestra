@@ -36,6 +36,7 @@ import {
   filterToolNamesByPermission,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
+import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
@@ -202,12 +203,39 @@ export async function createAgentServer(
     // Fetch fresh on every request to ensure we get newly assigned tools
     const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
 
+    // An all-tools agent reaches unassigned tools dynamically (search_tools /
+    // run_tool already resolve them without an agent_tools row). A UI-providing
+    // tool reached only that way would otherwise never become a candidate below,
+    // so filterExposedTools' "keep top-level" check never runs on it — and an
+    // MCP Apps host, which renders a UI only from a tool DEFINITION listed at
+    // tools/list time (never from a run_tool call result), could never discover
+    // or render it. Widen the candidate pool with the caller's dynamically
+    // accessible UI-providing tools so they get the same top-level treatment as
+    // an assigned one. Gated strictly on accessAllTools (not toolExposureMode
+    // alone) — a search_and_run_only agent without it is deliberately scoped to
+    // its assigned set for context-window management, not dynamic reach.
+    const dynamicUiTools =
+      agent.accessAllTools && tokenAuth?.userId && tokenAuth.organizationId
+        ? await ToolModel.getMcpToolsAccessibleToUser({
+            userId: tokenAuth.userId,
+            organizationId: tokenAuth.organizationId,
+            environmentId: agent.environmentId,
+            isAdmin: await userHasPermission(
+              tokenAuth.userId,
+              tokenAuth.organizationId,
+              "mcpServerInstallation",
+              "admin",
+            ),
+            requireUiResource: true,
+          })
+        : [];
+
     const implicitMetaTools =
       agent.toolExposureMode === "search_and_run_only"
         ? getImplicitArchestraMetaTools()
         : [];
     const candidateTools = dedupeToolsByName(
-      [...mcpTools, ...implicitMetaTools].map(toMcpListTool),
+      [...mcpTools, ...dynamicUiTools, ...implicitMetaTools].map(toMcpListTool),
     );
 
     // Filter Archestra tools based on user RBAC permissions
@@ -501,6 +529,25 @@ export async function createAgentServer(
           arguments: args || {},
         };
 
+        // tools/list now advertises an all-tools agent's dynamically-accessible
+        // UI-providing tools top-level (see the dynamicUiTools widening above),
+        // so a caller may call one of them directly here rather than through
+        // run_tool. executeToolCallForOwner only accepts an unassigned tool via
+        // a pre-resolved availableTool (it never widens access on its own) —
+        // without this, a directly-called unassigned tool would be listed but
+        // fail as unavailable. Mirrors run_tool's own resolution
+        // (archestra-mcp-server/run-tool.ts); a no-op query when the tool is
+        // actually assigned, since validateAndGetTool tries assignment first.
+        const availableTool =
+          agent.accessAllTools && tokenAuth?.userId && tokenAuth.organizationId
+            ? ((await resolveDynamicTool({
+                toolName: name,
+                agentId,
+                userId: tokenAuth.userId,
+                organizationId: tokenAuth.organizationId,
+              })) ?? undefined)
+            : undefined;
+
         // Execute the tool call via McpClient with tracing
         const result = await startActiveMcpSpan({
           toolName: name,
@@ -518,6 +565,7 @@ export async function createAgentServer(
               agentOwner(agentId),
               tokenAuth,
               {
+                availableTool,
                 elicitationHandler: async (request) => {
                   try {
                     return await extra.sendRequest(request, ElicitResultSchema);

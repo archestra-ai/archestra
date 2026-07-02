@@ -819,12 +819,11 @@ function SandboxIframe({
   // without re-binding onsizechange on every cap change.
   const maxHeightRef = useRef(maxHeight);
   // The Permissions Policy `allow` value for the outer proxy iframe, derived
-  // from the app's requested permissions. Read at iframe-creation time only; a
-  // ref keeps it out of the effect deps so a re-render doesn't remount the
-  // iframe. The effect below still lists `allowAttribute` in its deps so a
-  // genuine permission change rebuilds the frame.
+  // from the app's requested permissions. Unlike the height refs above this is
+  // a genuine effect dependency: a permission change must rebuild the frame so
+  // the new `allow` takes effect, so it is read directly and listed in the
+  // create-iframe effect's deps.
   const allowAttribute = buildIframeAllowAttribute(permissions);
-  const allowAttributeRef = useRef(allowAttribute);
 
   useEffect(() => {
     onSizeChangedRef.current = onSizeChanged;
@@ -833,7 +832,6 @@ function SandboxIframe({
     onScreenshotRef.current = onScreenshot;
     initialHeightRef.current = initialHeight;
     maxHeightRef.current = maxHeight;
-    allowAttributeRef.current = allowAttribute;
   });
 
   // Create iframe, wait for proxy-ready, connect bridge
@@ -861,8 +859,8 @@ function SandboxIframe({
     // (mcp-sandbox-proxy.html) sets its own matching `allow`; both are needed
     // because the policy is only delegated when every frame in the chain grants
     // it. Empty string → attribute omitted (no extra features granted).
-    if (allowAttributeRef.current) {
-      iframe.setAttribute("allow", allowAttributeRef.current);
+    if (allowAttribute) {
+      iframe.setAttribute("allow", allowAttribute);
     }
     iframe.src = sandboxUrl.href;
     iframeRef.current = iframe;

@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
+import { trackEvent } from "@/lib/analytics";
 import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
@@ -179,6 +180,12 @@ export function useInstallMcpServer() {
       return { installedServer, dontShowToast: data.dontShowToast };
     },
     onSuccess: async ({ installedServer, dontShowToast }, variables) => {
+      trackEvent("mcp_server_installed", {
+        serverId: installedServer?.id,
+        serverName: variables.name,
+        catalogId: variables.catalogId,
+        scope: variables.scope,
+      });
       // Show success toast for remote servers (local servers show toast after async tool fetch completes)
       if (!dontShowToast && installedServer) {
         toast.success(`Successfully installed ${variables.name}`);
@@ -218,6 +225,10 @@ export function useDeleteMcpServer() {
       return response.data;
     },
     onSuccess: async (_, variables) => {
+      trackEvent("mcp_server_uninstalled", {
+        serverId: variables.id,
+        serverName: variables.name,
+      });
       // Refetch instead of just invalidating to ensure data is fresh
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
       // Invalidate all tool assignment queries (tools, agent-tools, chat, etc.)

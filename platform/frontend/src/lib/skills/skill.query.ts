@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/analytics";
 import {
   getApiErrorMessage,
   handleApiError,
@@ -110,6 +111,7 @@ export function useCreateSkill() {
     },
     onSuccess: (data) => {
       if (!data) return;
+      trackEvent("skill_created", { skillId: data.id });
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill created");
     },

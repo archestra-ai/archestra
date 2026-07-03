@@ -180,6 +180,26 @@ describe("createStepContextGuard — summarization compaction", () => {
     expect(result[0].content).toContain("trimmed");
   });
 
+  test("ignores a stale memoized summary when the step messages no longer cover its boundary", async () => {
+    const summarize = vi.fn(
+      async (_p: SummarizeParams): Promise<string | null> => "stale summary",
+    );
+    const guard = createStepContextGuard({
+      contextLength: 200,
+      summarizeTranscript: summarize,
+    });
+
+    // first step compacts, memoizing a boundary index of 2
+    await guard({ messages: overBudgetMessages() });
+    expect(summarize).toHaveBeenCalledTimes(1);
+
+    // a rebuilt, shorter message list breaks the append-only assumption; the
+    // stale summary must be ignored rather than sliced past the array's end
+    const rebuilt: ModelMessage[] = [{ role: "user", content: "fresh start" }];
+    const { messages: result } = await guard({ messages: rebuilt });
+    expect(result).toBe(rebuilt);
+  });
+
   test("never starts the kept suffix on a tool message (pairs stay together)", async () => {
     const summarize = vi.fn(
       async (_p: SummarizeParams): Promise<string | null> => "sum",

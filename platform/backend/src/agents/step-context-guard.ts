@@ -69,6 +69,10 @@ export function createStepContextGuard(params: {
     const budgetTokens = Math.floor(
       contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD,
     );
+    // Rough char accounting on both sides: message sizes are JSON content
+    // length while the system prompt is raw chars. The mismatch slightly
+    // overweights the system prompt, which errs toward compacting earlier —
+    // absorbed by the 20% headroom in the threshold.
     const budgetChars = Math.max(
       budgetTokens * TOKEN_ESTIMATE.charsPerToken - (systemPrompt?.length ?? 0),
       0,
@@ -172,9 +176,9 @@ function buildSummaryMessage(summary: string): ModelMessage {
 
 /**
  * Pick the index up to which messages get summarized: keep a recent suffix of
- * roughly RECENT_KEEP_RATIO of the char budget, never the last message alone,
- * and never split an assistant tool call from its tool results (the suffix
- * must not start with a tool message).
+ * roughly RECENT_KEEP_RATIO of the char budget (always including at least the
+ * last message), and never split an assistant tool call from its tool results
+ * (the suffix must not start with a tool message).
  */
 function chooseCompactionBoundary(params: {
   messages: ModelMessage[];

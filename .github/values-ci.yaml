@@ -99,8 +99,6 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
-    # Enable user-authored MCP Apps for the apps e2e suite
-    ARCHESTRA_APPS_ENABLED: "true"
     # Disable better-auth rate limit for e2e tests
     ARCHESTRA_AUTH_RATE_LIMIT_DISABLED: "true"
     # Add Keycloak as trusted origin for SSO e2e tests (OIDC discovery URL validation)

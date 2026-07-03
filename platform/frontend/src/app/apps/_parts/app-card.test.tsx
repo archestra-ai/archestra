@@ -25,6 +25,7 @@ vi.mock("next/navigation");
 vi.mock("@/lib/app.query", () => ({
   useOpenAppInChat: () => ({ mutateAsync: vi.fn() }),
   useOpenExternalAppInChat: () => ({ mutateAsync: openExternalMutate }),
+  usePinApp: () => ({ mutate: vi.fn() }),
   // The card hosts the shared AppSettingsDialog, which reads the app by id.
   useApp: () => ({ data: undefined }),
 }));
@@ -35,6 +36,14 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("./app-delete-dialog", () => ({
   AppDeleteDialog: ({ open, app }: { open: boolean; app: { name: string } }) =>
     open ? <div data-testid="delete-dialog">Delete {app.name}</div> : null,
+}));
+
+// Stub the catalog icon (its real render pulls appearance settings via react
+// query); the card test only asserts which icon value flows into it.
+vi.mock("@/components/mcp-catalog-icon", () => ({
+  McpCatalogIcon: ({ icon }: { icon?: string | null }) => (
+    <span data-testid="mcp-catalog-icon">{icon ?? "generic-server-icon"}</span>
+  ),
 }));
 
 // Render menu items directly (no Radix portal) so their links are queryable.
@@ -94,6 +103,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   teams: [],
   executionModel: "viewer-scoped",
   cspOrigin: "platform-pinned",
+  pinnedAt: null,
 };
 
 const externalApp: Extract<AppListItem, { source: "external" }> = {
@@ -107,6 +117,8 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   resourceUri: "ui://pm/board.html",
   executionModel: "server-scoped",
   cspOrigin: "author-declared",
+  pinnedAt: null,
+  icon: null,
 };
 
 describe("ExternalAppCard", () => {
@@ -185,6 +197,18 @@ describe("ExternalAppCard", () => {
     expect(
       screen.getByRole("link", { name: /manage mcp server/i }),
     ).toHaveAttribute("href", "/mcp/registry/beta/cat-1");
+  });
+
+  it("shows the server's registry icon, falling back to the generic glyph without one", () => {
+    const { rerender } = render(
+      <AppCard app={{ ...externalApp, icon: "🗂️" }} />,
+    );
+    expect(screen.getByTestId("mcp-catalog-icon")).toHaveTextContent("🗂️");
+
+    rerender(<AppCard app={externalApp} />);
+    expect(screen.getByTestId("mcp-catalog-icon")).toHaveTextContent(
+      "generic-server-icon",
+    );
   });
 });
 

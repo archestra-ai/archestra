@@ -113,6 +113,111 @@ test("create an app from a template and run it standalone", async ({
   }
 });
 
+// Two `hidden` elements, both with a display override. `#reset-hides` uses an
+// ordinary rule the injected base sheet's `[hidden]` reset must still beat;
+// `#stuck-visible` fights back with `!important` and stays painted — the footgun
+// the SDK render lint is the backstop for. The lint must flag only the latter.
+const HIDDEN_LINT_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>e2e hidden lint probe</title>
+<style>
+  #reset-hides { display: flex; position: fixed; inset: 0; }
+  #stuck-visible { display: flex !important; position: fixed; inset: 0; }
+</style></head>
+<body>
+  <div id="reset-hides" hidden>the base reset must hide this</div>
+  <div id="stuck-visible" hidden>stuck visible despite the hidden attribute</div>
+  <p id="status">loading…</p>
+  <script>
+    window.archestra.ready.then(() => {
+      document.getElementById("status").textContent = "Ready.";
+    });
+  </script>
+</body>
+</html>`;
+
+test("the render lint flags a hidden element an app override left visible", async ({
+  page,
+  request,
+  makeApiRequest,
+}) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __appDiagnostics: unknown[] };
+    w.__appDiagnostics = [];
+    window.addEventListener("message", (event) => {
+      const type = (event.data as { type?: string } | null)?.type;
+      if (
+        type === "mcp-apps:runtime-error" ||
+        type === "mcp-apps:csp-violation"
+      ) {
+        w.__appDiagnostics.push(event.data);
+      }
+    });
+  });
+
+  const name = `e2e-app-${Date.now()}`;
+  const createRes = await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/apps",
+    data: { name, scope: "personal" },
+  });
+  const app = (await createRes.json()) as { id: string };
+
+  // The SDK scans twice by design (at DOMContentLoaded and again after `ready`),
+  // so the raw postMessage stream carries the same diagnostic more than once; the
+  // host store dedups on type+message before it reaches the model. This probe
+  // reads the raw stream, so dedup by message here to assert on the distinct
+  // offender set the store would keep.
+  const hiddenOverridden = () =>
+    page.evaluate(() => {
+      const seen = new Set<string>();
+      return (
+        window as unknown as {
+          __appDiagnostics: { errorType?: string; message?: string }[];
+        }
+      ).__appDiagnostics.filter((d) => {
+        if (d.errorType !== "render-check") return false;
+        const message = d.message ?? "";
+        if (!message.includes("[hidden-overridden]")) return false;
+        if (seen.has(message)) return false;
+        seen.add(message);
+        return true;
+      });
+    });
+
+  try {
+    const patchRes = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: `/api/apps/${app.id}`,
+      data: { html: HIDDEN_LINT_HTML },
+    });
+    expect(patchRes.ok()).toBeTruthy();
+
+    await goToPage(page, `/a/${app.id}`);
+    await expect(page).toHaveTitle(name);
+    const appFrame = page.frameLocator("iframe").frameLocator("iframe");
+    await expect(appFrame.getByText("Ready.")).toBeVisible({ timeout: 20_000 });
+
+    // The lint runs a couple frames after the handshake, so poll until it forwards.
+    await expect.poll(hiddenOverridden, { timeout: 10_000 }).not.toEqual([]);
+    const lint = await hiddenOverridden();
+    // Only the `!important` override is stuck visible; the reset-hidden element
+    // must not be flagged.
+    expect(lint).toHaveLength(1);
+    expect(lint[0].message).toContain("stuck-visible");
+    expect(lint[0].message).not.toContain("reset-hides");
+  } finally {
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/apps/${app.id}`,
+      ignoreStatusCheck: true,
+    });
+  }
+});
+
 // Probe for the `archestra.tools.call` unwrapping contract: the fixture tool
 // returns `{"tasks":[...]}` serialized into content[0].text, so `call` must
 // resolve with the parsed object (the probe reads `result.tasks.length`

@@ -16,6 +16,10 @@ const {
   unassignToolFromApp,
   openAppInChat,
   openExternalAppInChat,
+  pinApp,
+  unpinApp,
+  pinExternalApp,
+  unpinExternalApp,
 } = archestraApiSdk;
 
 type AppsQuery = NonNullable<archestraApiTypes.GetAppsData["query"]>;
@@ -156,6 +160,52 @@ export function useOpenExternalAppInChat() {
         return null;
       }
       return data;
+    },
+  });
+}
+
+/**
+ * The identity of a pinnable Apps-surface item, matching the list's
+ * discriminated union: owned apps by id, external apps by (install, resource).
+ */
+export type PinAppTarget =
+  | { source: "owned"; appId: string }
+  | { source: "external"; mcpServerId: string; resourceUri: string };
+
+/** Pin/unpin an app for the current user (personal — toggle by `pinned`). */
+export function usePinApp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      pinned,
+      target,
+    }: {
+      pinned: boolean;
+      target: PinAppTarget;
+    }) => {
+      const { error } =
+        target.source === "owned"
+          ? pinned
+            ? await pinApp({ path: { appId: target.appId } })
+            : await unpinApp({ path: { appId: target.appId } })
+          : pinned
+            ? await pinExternalApp({
+                path: { mcpServerId: target.mcpServerId },
+                body: { resourceUri: target.resourceUri },
+              })
+            : await unpinExternalApp({
+                path: { mcpServerId: target.mcpServerId },
+                query: { resourceUri: target.resourceUri },
+              });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return true;
+    },
+    onSuccess: (ok) => {
+      if (!ok) return;
+      queryClient.invalidateQueries({ queryKey: ["apps"] });
     },
   });
 }

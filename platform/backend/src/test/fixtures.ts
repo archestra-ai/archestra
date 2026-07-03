@@ -665,6 +665,7 @@ async function makeInternalMcpCatalog(
       InsertInternalMcpCatalog,
       | "id"
       | "name"
+      | "icon"
       | "serverType"
       | "serverUrl"
       | "description"

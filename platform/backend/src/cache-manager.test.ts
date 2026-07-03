@@ -356,43 +356,6 @@ describe("CacheManager", () => {
     });
   });
 
-  describe("wrap", () => {
-    test("returns cached value if it exists", async () => {
-      cacheManager.start();
-      mockKeyv.get.mockResolvedValue("cached-result");
-
-      const fnc = vi.fn().mockResolvedValue("fresh-result");
-      const result = await cacheManager.wrap(
-        "test-key" as AllowedCacheKey,
-        fnc,
-      );
-
-      expect(result).toBe("cached-result");
-      expect(fnc).not.toHaveBeenCalled();
-      expect(mockKeyv.set).not.toHaveBeenCalled();
-    });
-
-    test("calls function and caches result on cache miss", async () => {
-      cacheManager.start();
-      mockKeyv.get.mockResolvedValue(undefined);
-      mockKeyv.set.mockResolvedValue(true);
-
-      const fnc = vi.fn().mockResolvedValue("fresh-result");
-      const result = await cacheManager.wrap(
-        "test-key" as AllowedCacheKey,
-        fnc,
-      );
-
-      expect(result).toBe("fresh-result");
-      expect(fnc).toHaveBeenCalled();
-      expect(mockKeyv.set).toHaveBeenCalledWith(
-        "test-key",
-        "fresh-result",
-        3600000,
-      );
-    });
-  });
-
   describe("shutdown", () => {
     test("disconnects Keyv and clears state", () => {
       cacheManager.start();

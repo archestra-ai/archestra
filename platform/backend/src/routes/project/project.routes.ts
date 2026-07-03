@@ -8,7 +8,6 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
-import config from "@/config";
 import { projectService } from "@/services/project";
 import {
   constructResponseSchema,
@@ -41,8 +40,6 @@ const PROJECT_UPLOAD_BODY_LIMIT =
  * owner-only and "not yours" is indistinguishable from 404.
  */
 const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  if (!config.projects.enabled) return;
-
   fastify.post(
     "/api/projects",
     {

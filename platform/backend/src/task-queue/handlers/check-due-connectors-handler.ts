@@ -9,6 +9,11 @@ import { taskQueueService } from "@/task-queue";
 
 export async function handleCheckDueConnectors(): Promise<void> {
   const connectors = await KnowledgeBaseConnectorModel.findAllEnabled();
+  // One query instead of a per-connector EXISTS check.
+  const activeConnectorIds = await TaskModel.findActivePayloadValues(
+    "connector_sync",
+    "connectorId",
+  );
 
   for (const connector of connectors) {
     if (!connector.schedule) continue;
@@ -18,11 +23,7 @@ export async function handleCheckDueConnectors(): Promise<void> {
       const nextRun = cron.nextRun(connector.lastSyncAt ?? new Date(0));
 
       if (nextRun && nextRun <= new Date()) {
-        const exists = await TaskModel.hasPendingOrProcessing(
-          "connector_sync",
-          connector.id,
-        );
-        if (!exists) {
+        if (!activeConnectorIds.has(connector.id)) {
           await taskQueueService.enqueue({
             taskType: "connector_sync",
             payload: { connectorId: connector.id },
@@ -57,14 +58,18 @@ export async function handleCheckDueConnectors(): Promise<void> {
 async function cleanupOrphanedRunningStatuses(): Promise<void> {
   const stuckConnectors =
     await KnowledgeBaseConnectorModel.findAllWithStatus("running");
+  if (stuckConnectors.length === 0) return;
+
+  // Re-fetched here (not reused from the due-check) so tasks enqueued above
+  // are visible and their connectors are not treated as orphaned.
+  const activeConnectorIds = await TaskModel.findActivePayloadValues(
+    "connector_sync",
+    "connectorId",
+  );
 
   for (const connector of stuckConnectors) {
     try {
-      const hasPendingTask = await TaskModel.hasPendingOrProcessing(
-        "connector_sync",
-        connector.id,
-      );
-      if (hasPendingTask) continue;
+      if (activeConnectorIds.has(connector.id)) continue;
 
       const hasRun = await ConnectorRunModel.hasActiveRun(connector.id);
       if (hasRun) continue;

@@ -872,7 +872,13 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
               { error },
               "Authorization server discovery failed",
             );
-            throw new ApiError(500, "Failed to discover OAuth endpoints");
+            // 502, not 500: discovery failed against the user-configured
+            // external server, so surface its failure (with the cause, so the
+            // user can act on it) rather than reporting a crash of ours.
+            throw new ApiError(
+              502,
+              `Failed to discover OAuth endpoints: ${error instanceof Error ? error.message : String(error)}. Verify the server's OAuth metadata (.well-known) endpoints are reachable.`,
+            );
           }
         }
 

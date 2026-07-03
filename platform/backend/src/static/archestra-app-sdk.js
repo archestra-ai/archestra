@@ -165,6 +165,69 @@
   // app never awaits ready
   ready.catch(() => {});
 
+  // Render lint: an element carrying the `hidden` attribute that still occupies
+  // a visible box means a CSS rule is overriding `hidden`, leaving a modal or
+  // toggled element stuck visible. The base sheet's `[hidden]` reset prevents the
+  // ordinary case; this is the backstop for what slips past it — an app that
+  // beats the reset with its own `!important`, or a render where the base sheet
+  // never loaded. Such a render throws nothing and violates no CSP, so only a DOM
+  // check catches it before validate_app reports "clean".
+  const reportHiddenOverridden = () => {
+    try {
+      const offenders = [];
+      for (const el of document.querySelectorAll("[hidden]")) {
+        // `hidden="until-found"` is intentionally in the layout (find-in-page),
+        // so it is not an override; only the boolean form should stay unpainted.
+        if (el.getAttribute("hidden") === "until-found") continue;
+        // A visible box, not merely a layout box: a collapsed element (height:0,
+        // an app's own animation/disclosure state) is not "stuck visible".
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        const id = el.id ? "#" + el.id : "";
+        const cls = el.classList.length ? "." + [...el.classList].join(".") : "";
+        offenders.push(el.tagName.toLowerCase() + id + cls);
+        if (offenders.length >= 5) break;
+      }
+      if (offenders.length > 0) {
+        // `render-check` is the general channel for proactive render-correctness
+        // checks; the specific check is named in brackets so the model — and the
+        // host's dedup, keyed on the message prefix — can tell them apart. A new
+        // check posts here rather than minting its own diagnostic type.
+        postDiagnostic(
+          "render-check",
+          "[hidden-overridden] Element(s) with the `hidden` attribute are still " +
+            "rendered — a CSS rule (e.g. `display:` on the element) is overriding " +
+            "`hidden`, leaving them stuck visible: " +
+            offenders.join(", "),
+        );
+      }
+    } catch {
+      // render lint is best-effort; never surface a failure to the app
+    }
+  };
+  // Scan the DOM twice (the host dedupes): once as soon as the initial markup is
+  // parsed and laid out, and once after the handshake so anything the app's own
+  // `ready.then` handler painted is covered too. The first scan does NOT wait for
+  // `ready` on purpose — posting is a raw postMessage the host records regardless
+  // of the handshake, so scanning at DOMContentLoaded lands the diagnostic before
+  // the host's ~1.5s render-settle snapshot; waiting for a slow handshake would
+  // let that clean snapshot win and mask a statically-broken render from
+  // validate_app. The two rAFs let layout settle before getBoundingClientRect.
+  const scheduleHiddenCheck = () =>
+    requestAnimationFrame(() => requestAnimationFrame(reportHiddenOverridden));
+  // Guarded for non-browser hosts (e.g. the SDK's own Node unit tests run it
+  // against a minimal window with no `document`).
+  if (typeof document !== "undefined") {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", scheduleHiddenCheck, {
+        once: true,
+      });
+    } else {
+      scheduleHiddenCheck();
+    }
+    ready.then(scheduleHiddenCheck).catch(() => {});
+  }
+
   // A connect that neither resolves nor rejects means the host accepted our
   // postMessage but never answered ui/initialize — its sandbox doesn't relay to
   // an MCP-Apps bridge (a wrapper/proxy frame, or a non-conformant host). That

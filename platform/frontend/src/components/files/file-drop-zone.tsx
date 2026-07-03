@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -7,8 +8,11 @@ import { cn } from "@/lib/utils";
 interface FileDropZoneProps {
   /** Called with the dropped files (never empty). */
   onDropFiles: (files: File[]) => void;
-  /** When true, drags are ignored and no overlay is shown. */
-  disabled?: boolean;
+  /**
+   * When true, an upload is in flight: further drags are ignored and a
+   * spinner overlay covers the zone until it flips back to false.
+   */
+  uploading?: boolean;
   className?: string;
   children: ReactNode;
 }
@@ -27,12 +31,12 @@ const isFileDrag = (event: DragEvent) =>
  * composer's `globalDrop`, which would otherwise also attach the dropped file).
  * React's synthetic `stopPropagation` does NOT stop a native `document` listener;
  * a native bubble-phase `stopPropagation` does. The claim happens even while
- * `disabled` (which only suppresses the overlay and the upload), so an in-flight
- * upload can't leak a second drop to the composer.
+ * `uploading` (which only suppresses the drag overlay and the upload), so an
+ * in-flight upload can't leak a second drop to the composer.
  */
 export function FileDropZone({
   onDropFiles,
-  disabled,
+  uploading,
   className,
   children,
 }: FileDropZoneProps) {
@@ -41,8 +45,8 @@ export function FileDropZone({
   // Read the latest props inside once-bound native listeners without rebinding.
   const onDropFilesRef = useRef(onDropFiles);
   onDropFilesRef.current = onDropFiles;
-  const disabledRef = useRef(disabled);
-  disabledRef.current = disabled;
+  const uploadingRef = useRef(uploading);
+  uploadingRef.current = uploading;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -53,7 +57,7 @@ export function FileDropZone({
       if (!isFileDrag(event)) return;
       event.preventDefault();
       event.stopPropagation();
-      if (disabledRef.current) return;
+      if (uploadingRef.current) return;
       depth += 1;
       setDragActive(true);
     };
@@ -67,7 +71,7 @@ export function FileDropZone({
       if (!isFileDrag(event)) return;
       event.preventDefault();
       event.stopPropagation();
-      if (disabledRef.current) return;
+      if (uploadingRef.current) return;
       depth -= 1;
       if (depth <= 0) {
         depth = 0;
@@ -80,7 +84,7 @@ export function FileDropZone({
       event.stopPropagation();
       depth = 0;
       setDragActive(false);
-      if (disabledRef.current) return;
+      if (uploadingRef.current) return;
       const files = Array.from(event.dataTransfer?.files ?? []);
       if (files.length > 0) onDropFilesRef.current(files);
     };
@@ -105,6 +109,14 @@ export function FileDropZone({
           <p className="text-sm font-medium text-primary">
             Drop files to upload
           </p>
+        </div>
+      )}
+      {uploading && !dragActive && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-md bg-background/60">
+          <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 shadow-sm">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <p className="text-sm font-medium">Uploading files…</p>
+          </div>
         </div>
       )}
     </div>

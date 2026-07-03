@@ -27,7 +27,9 @@ import {
   generateConfigFilename,
   maskConfigSecrets,
 } from "./claude-desktop-config";
+import { FINISH_OAUTH_FLOW_TITLE } from "./clients";
 import type { ConnectionBaseUrl } from "./connection-flow.utils";
+import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
 import {
   CONNECT_PLATFORM_OPTIONS,
@@ -140,6 +142,7 @@ export function ConnectConfigPanel({
                   />
                 </EditorField>
               }
+              detail={<GatewayServersSummary gatewayId={gateway.id} />}
             >
               Connect{" "}
               <ResourceLink href="/mcp/gateways">{gateway.name}</ResourceLink>{" "}
@@ -283,7 +286,12 @@ export function ConnectConfigPanel({
       </WizardStep>
 
       {gateway && (
-        <WizardStep n={5} title="Finish the OAuth flow" last>
+        <WizardStep n={5} title={FINISH_OAUTH_FLOW_TITLE} last>
+          <p className="mb-3 text-sm text-muted-foreground">
+            The profile only registers the connector — the gateway grants tool
+            access per user, so its tools appear in chat only after you sign in
+            once and approve it for your account.
+          </p>
           <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
             <li>
               Go to{" "}
@@ -522,12 +530,15 @@ function SummaryRow({
   isEditing = false,
   onToggle,
   editor,
+  detail,
 }: {
   children: React.ReactNode;
   editable?: boolean;
   isEditing?: boolean;
   onToggle?: () => void;
   editor?: React.ReactNode;
+  /** Extra context under the line (e.g. what the gateway contains). */
+  detail?: React.ReactNode;
 }) {
   return (
     <li className="text-sm text-muted-foreground">
@@ -549,6 +560,7 @@ function SummaryRow({
           )}
         </span>
       </div>
+      {detail && <div className="ml-6 mt-1.5">{detail}</div>}
       {isEditing && editor && (
         <div className="ml-6 mt-2 max-w-md rounded-lg border bg-muted/20 p-3">
           {editor}

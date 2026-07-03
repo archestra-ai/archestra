@@ -452,4 +452,21 @@ describe("LRUCacheManager", () => {
       vi.useRealTimers();
     }
   });
+
+  test("has() does not promote an entry's LRU recency", () => {
+    const cache = new LRUCacheManager<string>({ maxSize: 2 });
+
+    cache.set("A", "a");
+    cache.set("B", "b");
+    // A pure existence check — must not count as a use of A.
+    expect(cache.has("A")).toBe(true);
+    cache.set("C", "c");
+    cache.set("D", "d");
+
+    // With get-based has(), A would have been promoted and survived both
+    // rotations; with peek it ages out like any untouched entry.
+    expect(cache.has("A")).toBe(false);
+    expect(cache.has("C")).toBe(true);
+    expect(cache.has("D")).toBe(true);
+  });
 });

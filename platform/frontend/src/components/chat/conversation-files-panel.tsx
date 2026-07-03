@@ -419,7 +419,7 @@ export function ConversationFilesPanel({
   return (
     <FileDropZone
       onDropFiles={(droppedFiles) => uploadProjectFiles.mutate(droppedFiles)}
-      disabled={uploadProjectFiles.isPending}
+      uploading={uploadProjectFiles.isPending}
       className="h-full"
     >
       {panelBody}

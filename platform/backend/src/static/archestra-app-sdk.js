@@ -171,10 +171,7 @@
   // ordinary case; this is the backstop for what slips past it — an app that
   // beats the reset with its own `!important`, or a render where the base sheet
   // never loaded. Such a render throws nothing and violates no CSP, so only a DOM
-  // check catches it before validate_app reports "clean". Scans the initial
-  // render: static markup plus anything the app's own `ready.then` handler
-  // painted synchronously (that runs before the frame below, since the SDK
-  // registers this handler first).
+  // check catches it before validate_app reports "clean".
   const reportHiddenOverridden = () => {
     try {
       const offenders = [];
@@ -204,17 +201,24 @@
       // render lint is best-effort; never surface a failure to the app
     }
   };
-  // Two frames after the handshake: late enough that layout is settled (so
-  // getClientRects is meaningful), but before the host's render-settle snapshot
-  // post (~1.5s after the iframe mounts), so a broken render reaches validate_app
-  // instead of being masked by an earlier clean snapshot.
-  ready
-    .then(() => {
-      requestAnimationFrame(() =>
-        requestAnimationFrame(reportHiddenOverridden),
-      );
-    })
-    .catch(() => {});
+  // Scan the DOM twice (the host dedupes): once as soon as the initial markup is
+  // parsed and laid out, and once after the handshake so anything the app's own
+  // `ready.then` handler painted is covered too. The first scan does NOT wait for
+  // `ready` on purpose — posting is a raw postMessage the host records regardless
+  // of the handshake, so scanning at DOMContentLoaded lands the diagnostic before
+  // the host's ~1.5s render-settle snapshot; waiting for a slow handshake would
+  // let that clean snapshot win and mask a statically-broken render from
+  // validate_app. The two rAFs let layout settle before getBoundingClientRect.
+  const scheduleHiddenCheck = () =>
+    requestAnimationFrame(() => requestAnimationFrame(reportHiddenOverridden));
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", scheduleHiddenCheck, {
+      once: true,
+    });
+  } else {
+    scheduleHiddenCheck();
+  }
+  ready.then(scheduleHiddenCheck).catch(() => {});
 
   // A connect that neither resolves nor rejects means the host accepted our
   // postMessage but never answered ui/initialize — its sandbox doesn't relay to

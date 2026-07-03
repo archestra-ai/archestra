@@ -13,7 +13,6 @@ import {
   Pencil,
   Pin,
   PinOff,
-  Server,
   Sparkles,
   Trash2,
   UsersRound,
@@ -25,6 +24,7 @@ import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-ch
 import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
 import {
@@ -633,7 +633,6 @@ export function ChatSidebarSection({
         ? `app:${appItem.id}`
         : `app:${appItem.mcpServerId}:${appItem.resourceUri}`;
     const isMenuOpen = openMenuId === menuKey;
-    const AppIcon = appItem.source === "owned" ? AppWindow : Server;
 
     return (
       <SidebarMenuSubItem key={menuKey}>
@@ -643,7 +642,13 @@ export function ChatSidebarSection({
             className="cursor-pointer flex-1 justify-between"
           >
             <span className="flex items-center gap-2 min-w-0 flex-1">
-              <AppIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              {appItem.source === "owned" ? (
+                <AppWindow className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              ) : (
+                // The backing MCP server's registry icon, matching the app's
+                // card on the Apps page (falls back to the Server glyph).
+                <McpCatalogIcon icon={appItem.icon} size={14} />
+              )}
               <TruncatedText
                 message={appItem.name}
                 maxLength={MAX_TITLE_LENGTH}

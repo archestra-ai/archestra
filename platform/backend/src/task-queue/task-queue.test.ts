@@ -330,7 +330,10 @@ describe("TaskQueueService", () => {
       expect((await getTask(stuck.id))?.status).toBe("dead");
       // The periodic chain did not die with it: a fresh pending task exists.
       expect(
-        await countTasks({ taskType: "check_due_connectors", status: "pending" }),
+        await countTasks({
+          taskType: "check_due_connectors",
+          status: "pending",
+        }),
       ).toBe(1);
     });
 

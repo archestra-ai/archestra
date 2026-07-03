@@ -1648,8 +1648,7 @@ const config = {
       2,
     ),
     taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
-      process.env
-        .ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
       30,
     ),
   },

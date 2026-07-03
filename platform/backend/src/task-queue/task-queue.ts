@@ -198,9 +198,10 @@ export class TaskQueueService {
         if (this.stopping) {
           // stopWorker may have snapshotted an empty set while the dequeue
           // was in flight; hand the task back instead of processing it
-          // outside the drain.
-          this.untrackTask(task.id);
+          // outside the drain. Release before untracking so shutdown cannot
+          // proceed past the drain while the row is still marked processing.
           await TaskModel.releaseToQueue([task.id]);
+          this.untrackTask(task.id);
           return;
         }
 

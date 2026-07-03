@@ -2,7 +2,10 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertTask, Task, TaskType } from "@/types";
 
-type StuckTaskTransition = Pick<Task, "taskType" | "periodic" | "status">;
+type StuckTaskTransition = Pick<Task, "taskType" | "periodic"> & {
+  // The sweep's two UPDATEs can only produce these statuses.
+  status: Extract<Task["status"], "dead" | "pending">;
+};
 
 class TaskModel {
   static async create(data: InsertTask): Promise<Task> {
@@ -164,21 +167,6 @@ class TaskModel {
         WHERE task_type = ${taskType}
           AND status IN ('pending', 'processing')
           AND payload->>'connectorId' = ${connectorId}
-      ) AS exists
-    `);
-    return (rows[0] as { exists: boolean } | undefined)?.exists ?? false;
-  }
-
-  static async hasPendingOrProcessingForTrigger(
-    taskType: string,
-    triggerId: string,
-  ): Promise<boolean> {
-    const { rows } = await db.execute<{ exists: boolean }>(sql`
-      SELECT EXISTS (
-        SELECT 1 FROM tasks
-        WHERE task_type = ${taskType}
-          AND status IN ('pending', 'processing')
-          AND payload->>'triggerId' = ${triggerId}
       ) AS exists
     `);
     return (rows[0] as { exists: boolean } | undefined)?.exists ?? false;

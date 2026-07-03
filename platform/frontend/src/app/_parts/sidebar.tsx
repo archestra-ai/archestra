@@ -630,8 +630,6 @@ export function AppSidebar() {
   });
   const showConnect = canReadMcpGateway && canReadLlmProxy;
 
-  // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env var.
-  const skillsEnabled = useFeature("agentSkillsEnabled") === true;
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
   // ARCHESTRA_BETA master switch — when on, the new connection page is the
@@ -664,31 +662,24 @@ export function AppSidebar() {
     };
     return contentNavGroups.map((group) => ({
       ...group,
-      items: group.items
-        .filter((item) => {
-          // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env
-          // var. It's a top-level item now, so gate it here (not in subItems).
-          if (item.url === "/skills" && !skillsEnabled) return false;
-          return true;
-        })
-        .map((item) => {
-          const betaUrl = betaEnabled ? betaNavUrls[item.title] : undefined;
-          const resolved = betaUrl ? { ...item, url: betaUrl } : item;
-          return resolved.subItems
-            ? {
-                ...resolved,
-                subItems: resolved.subItems.filter((sub) => {
-                  // Schedules are managed per-project on the project detail page
-                  // (the per-project runs view), so the standalone entry is
-                  // hidden.
-                  if (sub.url === "/scheduled-tasks") return false;
-                  return true;
-                }),
-              }
-            : resolved;
-        }),
+      items: group.items.map((item) => {
+        const betaUrl = betaEnabled ? betaNavUrls[item.title] : undefined;
+        const resolved = betaUrl ? { ...item, url: betaUrl } : item;
+        return resolved.subItems
+          ? {
+              ...resolved,
+              subItems: resolved.subItems.filter((sub) => {
+                // Schedules are managed per-project on the project detail page
+                // (the per-project runs view), so the standalone entry is
+                // hidden.
+                if (sub.url === "/scheduled-tasks") return false;
+                return true;
+              }),
+            }
+          : resolved;
+      }),
     }));
-  }, [skillsEnabled, betaEnabled]);
+  }, [betaEnabled]);
 
   return (
     <Sidebar collapsible="icon">

@@ -845,14 +845,12 @@ async function ensureExistingUsersHavePersonalLlmProxies(): Promise<void> {
 }
 
 /**
- * When the skills feature flag is enabled, turn on the Agent Skill tools for
- * every organization that hasn't already opted in. This makes skills a default
- * capability: newly created agents inherit the model-facing skill tools and the
- * slash-command toggle unlocks without an admin first clicking "enable".
- * Pre-existing agents are not retrofitted. No-op when the flag is off.
+ * Turn on the Agent Skill tools for every organization that hasn't already
+ * opted in. Skills are a default capability: newly created agents inherit the
+ * model-facing skill tools and the slash-command toggle unlocks without an
+ * admin first clicking "enable". Pre-existing agents are not retrofitted.
  */
-async function enableSkillToolsWhenFeatureEnabled(): Promise<void> {
-  if (!config.agents.skillsEnabled) return;
+async function enableSkillToolsForExistingOrgs(): Promise<void> {
   try {
     const enabled = await OrganizationModel.enableSkillToolsForAllOrgs();
     if (enabled > 0) {
@@ -878,7 +876,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await syncBuiltInAgents();
   await syncBuiltInSkills();
   await seedArchestraCatalogAndTools();
-  await enableSkillToolsWhenFeatureEnabled();
+  await enableSkillToolsForExistingOrgs();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();
   await seedTestMcpServer();

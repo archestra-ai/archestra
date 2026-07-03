@@ -93764,12 +93764,6 @@
                         "sandboxArtifactBytesLimit": {
                           "type": "number"
                         },
-                        "agentSkillsEnabled": {
-                          "type": "boolean"
-                        },
-                        "agentEnvironmentsEnabled": {
-                          "type": "boolean"
-                        },
                         "byosEnabled": {
                           "type": "boolean"
                         },
@@ -93865,8 +93859,6 @@
                         "orchestratorK8sRuntime",
                         "sandbox",
                         "sandboxArtifactBytesLimit",
-                        "agentSkillsEnabled",
-                        "agentEnvironmentsEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",

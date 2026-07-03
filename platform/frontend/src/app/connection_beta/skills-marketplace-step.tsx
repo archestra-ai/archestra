@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import {
   type SkillShareLink,
   useCreateSkillShareLink,
@@ -43,21 +42,15 @@ interface SkillsMarketplaceStepProps {
 }
 
 /**
- * Whether the skills marketplace step applies: feature on, caller is a skill
- * admin, and the picked client supports installable marketplaces. The flow
- * uses this for wizard-step numbering; the component returns null without it.
+ * Whether the skills marketplace step applies: caller is a skill admin, and
+ * the picked client supports installable marketplaces. The flow uses this for
+ * wizard-step numbering; the component returns null without it.
  */
 export function useSkillsMarketplaceVisible(
   client: ConnectClient | null,
 ): boolean {
-  const skillsEnabled = useFeature("agentSkillsEnabled") === true;
   const { data: canAdmin } = useHasPermissions({ skill: ["admin"] });
-  return (
-    skillsEnabled &&
-    canAdmin === true &&
-    client !== null &&
-    isClientSupported(client)
-  );
+  return canAdmin === true && client !== null && isClientSupported(client);
 }
 
 /**

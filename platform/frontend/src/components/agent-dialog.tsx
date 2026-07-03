@@ -610,10 +610,6 @@ export function AgentDialog({
   const { data: identityProviders = [] } = useIdentityProviders({
     enabled: shouldLoadIdentityProviders && !!canReadIdentityProviders,
   });
-  // Sandbox environment binding (internal agents only): the agent's code sandbox
-  // runs on this environment's per-env Dagger engine + egress NetworkPolicy.
-  // Gated behind a feature flag (off by default) until the per-env runtime ships.
-  const agentEnvironmentsEnabled = useFeature("agentEnvironmentsEnabled");
   // Environment isolation is always enforced by the backend for agents and MCP
   // gateways, so the tool picker reflects it (cross-environment catalogs are
   // shown disabled). When the org only has the Default environment, nothing is
@@ -1360,7 +1356,7 @@ export function AgentDialog({
                       - LLM proxy / MCP gateway: assigns the deployment environment
                         so its usage falls under environment-scoped cost limits.
                       Hidden when only the default environment is available. */}
-                    {((isInternalAgent && agentEnvironmentsEnabled) ||
+                    {(isInternalAgent ||
                       agentType === "llm_proxy" ||
                       agentType === "mcp_gateway") && (
                       <EnvironmentSelector

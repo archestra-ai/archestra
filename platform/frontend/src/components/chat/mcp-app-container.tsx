@@ -277,10 +277,8 @@ export function McpAppSection({
     // keep the tool-call details inspectable instead of dropping the section.
     if (surface === "panel") {
       return (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
-          <span>This app rendered nothing to display.</span>
-          {/* A reload recovers a transient/stale empty resource. */}
-          <McpAppRefreshButton onClick={reload} size="bar" />
+        <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
+          This app rendered nothing to display.
         </div>
       );
     }

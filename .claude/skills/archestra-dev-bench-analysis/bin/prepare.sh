@@ -22,7 +22,7 @@ ARG="${1:-}"
 # Newest by mtime, restricted to timestamp-named dirs so `repro_*` reproduction
 # dirs (which lexically sort after `2026…` and often have a null `outcome`) never win.
 RUN_DIR="$(realpath "$( [ -n "$ARG" ] && echo "$ARG" \
-  || ls -1dt "$ROOT"/archestra-bench/experiments/[0-9]*/ | head -1 )")"
+  || ls -1dt "$ROOT"/ai-labs/experiments/[0-9]*/ | head -1 )")"
 TS="$(date +%Y%m%d-%H%M%S)"
 TRIAGE_DIR="$RUN_DIR/_triage_claude"
 PREP="$RUN_DIR/_prep_claude"
@@ -33,7 +33,7 @@ mkdir -p "$TRIAGE_DIR" "$PREP"
 
 # --- Rust prepare (deterministic render + metrics + manifest), fail-fast ---
 MANIFEST="$PREP/manifest.json"
-if ! cargo run -q --manifest-path "$ROOT/archestra-bench/cli/Cargo.toml" -- \
+if ! cargo run -q --manifest-path "$ROOT/ai-labs/cli/Cargo.toml" -- \
        prepare --run-dir "$RUN_DIR" >"$MANIFEST" 2>"$PREP/prepare.err"; then
   echo "archestra-bench prepare failed:" >&2
   cat "$PREP/prepare.err" >&2

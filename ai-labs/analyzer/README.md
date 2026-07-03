@@ -10,7 +10,7 @@ The benchmarked model is fixed and out of our control; the report targets the su
 prompts, JSON result schemas, verifiers, env/skill configuration, the MCP tool surface, and the harness.
 
 The reduce agent crawls `--explore-root` read-only, so point it at the **repository root**: the agent
-then sees both the benchmark harness (`archestra-bench/`) and the Archestra product it exercises (the
+then sees both the benchmark harness (`ai-labs/`) and the Archestra product it exercises (the
 backend and MCP tool implementations), and cross-checks each issue against its real definition.
 
 ## Build

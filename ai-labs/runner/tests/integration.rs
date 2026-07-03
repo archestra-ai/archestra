@@ -4,7 +4,7 @@ use std::process::Command;
 use archestra_bench::config::{load_envs, load_lanes};
 
 fn bench_dir() -> PathBuf {
-    // CARGO_MANIFEST_DIR is archestra-bench/runner; the benchmark root is its parent.
+    // CARGO_MANIFEST_DIR is ai-labs/runner; the benchmark root is its parent.
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
@@ -13,7 +13,7 @@ fn bench_dir() -> PathBuf {
 
 fn copy_bench_to_temp(tmp: &Path) -> PathBuf {
     std::fs::create_dir_all(tmp).expect("create temp dir");
-    let dst = tmp.join("archestra-bench");
+    let dst = tmp.join("ai-labs");
     let status = Command::new("cp")
         .args(["-R", bench_dir().to_str().unwrap(), dst.to_str().unwrap()])
         .status()

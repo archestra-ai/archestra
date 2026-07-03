@@ -82,7 +82,7 @@ fn run_dir_rel(run_dir: &Path, explore_root: &Path) -> Option<String> {
     if rel.is_empty() { None } else { Some(rel) }
 }
 
-/// Default lanes registry: `archestra-bench/lanes.toml`, resolved from the crate manifest dir so it
+/// Default lanes registry: `ai-labs/lanes.toml`, resolved from the crate manifest dir so it
 /// is found regardless of the caller's working directory.
 fn default_lanes_file() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -544,7 +544,7 @@ mod tests {
         assert!(p.ends_with("lanes.toml"));
         assert_eq!(
             p.parent().and_then(|d| d.file_name()).unwrap(),
-            "archestra-bench"
+            "ai-labs"
         );
     }
 
@@ -558,7 +558,7 @@ mod tests {
     fn detect_repo_root_finds_nearest_git_ancestor() {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(root.path().join(".git")).unwrap();
-        let nested = root.path().join("archestra-bench/experiments/run-1");
+        let nested = root.path().join("ai-labs/experiments/run-1");
         std::fs::create_dir_all(&nested).unwrap();
         let found = detect_repo_root(&nested).unwrap();
         assert_eq!(found, root.path().canonicalize().unwrap());

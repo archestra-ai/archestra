@@ -102,7 +102,7 @@ pub async fn serve(cfg: DashboardConfig) -> eyre::Result<()> {
     axum::serve(listener, app).await.wrap_err("server error")
 }
 
-/// Default experiments dir: `<git toplevel>/archestra-bench/experiments` when a `.git` ancestor
+/// Default experiments dir: `<git toplevel>/ai-labs/experiments` when a `.git` ancestor
 /// exists (nearest ancestor wins, same walk as the analyzer's explore-root autodetection),
 /// otherwise `./experiments` relative to the cwd.
 pub fn default_experiments_dir() -> PathBuf {
@@ -112,7 +112,7 @@ pub fn default_experiments_dir() -> PathBuf {
     };
     for dir in cwd.ancestors() {
         if dir.join(".git").exists() {
-            return dir.join("archestra-bench").join("experiments");
+            return dir.join("ai-labs").join("experiments");
         }
     }
     fallback

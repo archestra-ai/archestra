@@ -13,7 +13,7 @@
 Both are written from CANONICAL below, so they cannot drift; the script reads ledger.xlsx back and
 asserts it matches sales.json. Deterministic: no RNG, no clock (workbook timestamps are pinned).
 
-Run: `uv run archestra-bench/tasks/xlsx-live-formulas/expected/generate.py`
+Run: `uv run ai-labs/tasks/xlsx-live-formulas/expected/generate.py`
 """
 
 import json
@@ -80,8 +80,8 @@ def read_ledger(path: Path) -> list[dict]:
 
 def main() -> None:
     expected_dir = Path(__file__).resolve().parent
-    repo_root = expected_dir.parents[3]  # .../archestra-bench/tasks/xlsx-live-formulas/expected
-    ledger_path = repo_root / "archestra-bench" / "skills" / "sales-ledger" / "assets" / "ledger.xlsx"
+    repo_root = expected_dir.parents[3]  # .../ai-labs/tasks/xlsx-live-formulas/expected
+    ledger_path = repo_root / "ai-labs" / "skills" / "sales-ledger" / "assets" / "ledger.xlsx"
     sales_json_path = expected_dir / "sales.json"
 
     rows = canonical()

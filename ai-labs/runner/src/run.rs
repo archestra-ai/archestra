@@ -207,7 +207,7 @@ pub async fn run(
     // Stream the managed Dagger engine's container logs into the run dir so a future engine crash is
     // root-causeable (managed tier only; non-fatal). The host was resolved by `preflight` above.
     let dagger_compose = repo_root()
-        .join("archestra-bench")
+        .join("ai-labs")
         .join("dev")
         .join("docker-compose.bench-dagger.yml");
     let dagger_logs =

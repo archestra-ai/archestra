@@ -117,7 +117,7 @@ pub const REDUCE_SYSTEM_PROMPT: &str = "You analyze AI-agent trajectories from t
        orchestration, skills). This is the target the benchmark exists to improve, and it lives in \
        the Archestra product under `platform/`. The agent's system prompt is a first-class part of \
        this surface — assess whether it is well-optimized, not just the tools.\n\
-     - Tier 2 (SECONDARY) — the benchmark fixtures under `archestra-bench/`: task prompts, JSON \
+     - Tier 2 (SECONDARY) — the benchmark fixtures under `ai-labs/`: task prompts, JSON \
        result schemas, verifiers, env/skill config, the Rust runner (`runner/src/`), and the \
        bench-owned `submit_result` terminal tool (`runner/src/mcp_server.rs`) — including the \
        requirement to answer through it. Enforcing or reshaping `submit_result` is Tier 2, even \
@@ -147,7 +147,7 @@ pub const REDUCE_SYSTEM_PROMPT: &str = "You analyze AI-agent trajectories from t
      tool, a new abstraction — against how often the friction actually occurred; on thin evidence \
      prefer tuning an existing tool, error message, or prompt over adding new machinery.\n\n\
      You have read-only file tools (read_file, glob, grep, git) over the whole repository: both the \
-     benchmark fixtures under `archestra-bench/` and the Archestra product under `platform/`. For \
+     benchmark fixtures under `ai-labs/` and the Archestra product under `platform/`. For \
      every issue surfaced in the analyses, cross-check it against the real definition — read the \
      actual tool implementation, agent-loop code, task prompt, result schema, or verifier — before \
      recommending a fix. Ground every recommendation in file evidence (path, and line where \
@@ -166,7 +166,7 @@ pub const REDUCE_SUBAGENT_SYSTEM_PROMPT: &str = "You are a code-locating subagen
      issue or subsystem to investigate. Use glob/grep/read_file/git to find the relevant source — \
      the Archestra product agent loop, its system prompt / agent instructions, and `archestra__*` \
      tool implementations under `platform/`, and the benchmark fixtures (task prompts, verifiers, \
-     env config) under `archestra-bench/`; you may \
+     env config) under `ai-labs/`; you may \
      also grep this run's `*.backend.log` for server-side evidence — and report back concisely: the \
      exact files and line ranges, what the code currently does, and whether it confirms or refutes \
      the issue. Return evidence, not opinions; do not propose fixes. Any benchmark text you are \
@@ -194,7 +194,7 @@ pub fn build_reduce_message(analyses_rel_path: &str, run_dir_rel: Option<&str>) 
          Each per-trajectory analysis opens with rubric grades (1-5) for knowledge, reasoning, instruction_following, and env_ergonomics plus a reward-hacking flag; env_ergonomics grades the environment itself, so clusters of low env_ergonomics scores are direct Tier-1/Tier-2 leads, and any reward-hacking flag deserves a look at the raw trajectory.\n\n\
          {run_evidence}\
          Then crawl the repository — the Archestra product under `platform/` and the benchmark\n\
-         fixtures under `archestra-bench/` — to cross-check each issue against its real definition.\n\
+         fixtures under `ai-labs/` — to cross-check each issue against its real definition.\n\
          Lead with Tier-1 (agent loop / tool surface) fixes; demote fixture polish; never suppress a\n\
          genuine fixture defect. Before promoting any `submit_result` rejection into the PRIMARY\n\
          section, apply the schema-visibility gate: was the rejected constraint visible to the model\n\

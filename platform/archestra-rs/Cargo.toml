@@ -11,11 +11,10 @@ strip = "symbols"
 [profile.dev]
 debug = "line-tables-only"
 
-# Fast local build of the NAPI addons: optimized enough to run, but no LTO and
-# more codegen units so rebuilds parallelize across cores instead of serializing
-# in the LTO link. Used by `pnpm build:dev`; CI/publish still use `release`.
+# Fast local build of the NAPI addons: inherits release (which carries no LTO)
+# but adds codegen units so rebuilds parallelize across cores, plus incremental
+# for quick edit->rebuild. Used by `pnpm build:dev`; CI/publish still use `release`.
 [profile.release-fast]
 inherits = "release"
-lto = false
 codegen-units = 256
 incremental = true

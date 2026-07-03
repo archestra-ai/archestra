@@ -38,6 +38,14 @@ vi.mock("./app-delete-dialog", () => ({
     open ? <div data-testid="delete-dialog">Delete {app.name}</div> : null,
 }));
 
+// Stub the catalog icon (its real render pulls appearance settings via react
+// query); the card test only asserts which icon value flows into it.
+vi.mock("@/components/mcp-catalog-icon", () => ({
+  McpCatalogIcon: ({ icon }: { icon?: string | null }) => (
+    <span data-testid="mcp-catalog-icon">{icon ?? "generic-server-icon"}</span>
+  ),
+}));
+
 // Render menu items directly (no Radix portal) so their links are queryable.
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: ReactNode }) => (
@@ -110,6 +118,7 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   executionModel: "server-scoped",
   cspOrigin: "author-declared",
   pinnedAt: null,
+  icon: null,
 };
 
 describe("ExternalAppCard", () => {
@@ -188,6 +197,18 @@ describe("ExternalAppCard", () => {
     expect(
       screen.getByRole("link", { name: /manage mcp server/i }),
     ).toHaveAttribute("href", "/mcp/registry/beta/cat-1");
+  });
+
+  it("shows the server's registry icon, falling back to the generic glyph without one", () => {
+    const { rerender } = render(
+      <AppCard app={{ ...externalApp, icon: "🗂️" }} />,
+    );
+    expect(screen.getByTestId("mcp-catalog-icon")).toHaveTextContent("🗂️");
+
+    rerender(<AppCard app={externalApp} />);
+    expect(screen.getByTestId("mcp-catalog-icon")).toHaveTextContent(
+      "generic-server-icon",
+    );
   });
 });
 

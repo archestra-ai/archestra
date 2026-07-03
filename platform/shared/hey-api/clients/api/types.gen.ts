@@ -15510,6 +15510,7 @@ export type GetAppsResponses = {
             mcpServerId: string;
             scope: 'personal' | 'team' | 'org';
             resourceUri: string;
+            icon: string | null;
         }>;
         pagination: {
             currentPage: number;

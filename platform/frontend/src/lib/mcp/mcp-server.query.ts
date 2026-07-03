@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
-import { useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
 import websocketService from "@/lib/websocket/websocket";
@@ -34,6 +34,12 @@ type McpServersParams = McpServersQuery & {
 };
 
 export function useMcpServers(params?: McpServersParams) {
+  // The endpoint requires mcpServerInstallation:read; skip the request for
+  // users whose role lacks it instead of letting it 403.
+  const { data: canReadInstallations } = useHasPermissions({
+    mcpServerInstallation: ["read"],
+  });
+
   return useQuery({
     // Include catalogId in queryKey only when provided to maintain cache separation
     queryKey: [
@@ -65,7 +71,7 @@ export function useMcpServers(params?: McpServersParams) {
       return data ?? [];
     },
     initialData: params?.initialData,
-    enabled: params?.enabled,
+    enabled: (params?.enabled ?? true) && !!canReadInstallations,
     refetchInterval: params?.hasInstallingServers ? 2000 : false,
   });
 }

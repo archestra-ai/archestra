@@ -1,4 +1,3 @@
-import config from "@/config";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import SkillSandboxModel from "@/models/skill-sandbox";
@@ -350,53 +349,4 @@ test("project chat: a requester without project access sees no project files", a
   });
   expect(result.projectFiles).toEqual([]);
   expect(result.projectName).toBeNull();
-});
-
-test("projects off: projectFiles is empty and projectName null, generated still shown", async ({
-  makeUser,
-  makeOrganization,
-  makeAgent,
-  makeConversation,
-}) => {
-  const original = config.projects.enabled;
-  (config.projects as { enabled: boolean }).enabled = false;
-  try {
-    const org = await makeOrganization();
-    const user = await makeUser({});
-    const agent = await makeAgent({ organizationId: org.id });
-    const conv = await makeConversation(agent.id, {
-      userId: user.id,
-      organizationId: org.id,
-    });
-    const convSandbox = await SkillSandboxModel.create({
-      organizationId: org.id,
-      userId: user.id,
-      conversationId: conv.id,
-      defaultCwd: "/home/sandbox",
-      isDefault: true,
-    });
-    // this chat's own output — still surfaces under `generated`
-    const ownOutput = await fileStore.put({
-      organizationId: org.id,
-      userId: user.id,
-      projectId: null,
-      conversationId: conv.id,
-      sandboxId: convSandbox.id,
-      filename: "here.txt",
-      mimeType: "text/plain",
-      sizeBytes: 1,
-      data: Buffer.from("a"),
-    });
-
-    const result = await conversationFilesService.list({
-      conversationId: conv.id,
-      organizationId: org.id,
-      requestingUserId: user.id,
-    });
-    expect(result.generated.map((f) => f.id)).toEqual([ownOutput.id]);
-    expect(result.projectFiles).toEqual([]);
-    expect(result.projectName).toBeNull();
-  } finally {
-    (config.projects as { enabled: boolean }).enabled = original;
-  }
 });

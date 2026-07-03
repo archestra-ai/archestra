@@ -71,10 +71,10 @@ in the conversation sandbox, with a **Claude-compatible** stdin payload (`hook_e
 stderr as the reason; `0` proceeds with stdout injected; errors/timeout fail open). So most Claude Code
 hooks for those three events port near-1:1 as a `hook` target — that is the default.
 
-Native hooks require the **agent-hooks feature**, which is off by default: it needs
-`ARCHESTRA_AGENT_HOOKS_ENABLED=true` **and** the sandbox runtime to be on (hooks run in the conversation
-sandbox). `POST /api/hooks` still persists a migrated hook when the feature is off, but the hook never
-fires and is hidden in the agent UI until an admin enables it — `apply.py` probes `/api/config` after
+Native hooks require the **sandbox runtime** to be on (hooks run in the conversation sandbox), which
+means a Dagger runner host must be configured. `POST /api/hooks` still persists a migrated hook when the
+runtime is off, but the hook never fires and is hidden in the agent UI until the runtime is available —
+`apply.py` probes `/api/config` after
 creating hooks and warns when the feature is off.
 
 `discover.py` does the mechanical part and records it on each `hook` item's `data.source`:

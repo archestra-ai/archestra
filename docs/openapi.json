@@ -94943,18 +94943,6 @@
                         "sandboxArtifactBytesLimit": {
                           "type": "number"
                         },
-                        "agentSkillsEnabled": {
-                          "type": "boolean"
-                        },
-                        "agentEnvironmentsEnabled": {
-                          "type": "boolean"
-                        },
-                        "appsEnabled": {
-                          "type": "boolean"
-                        },
-                        "projectsEnabled": {
-                          "type": "boolean"
-                        },
                         "byosEnabled": {
                           "type": "boolean"
                         },
@@ -95050,10 +95038,6 @@
                         "orchestratorK8sRuntime",
                         "sandbox",
                         "sandboxArtifactBytesLimit",
-                        "agentSkillsEnabled",
-                        "agentEnvironmentsEnabled",
-                        "appsEnabled",
-                        "projectsEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",
@@ -222918,6 +222902,7 @@
                 },
                 "required": [
                   "name",
+                  "projectId",
                   "cronExpression",
                   "timezone",
                   "messageTemplate"

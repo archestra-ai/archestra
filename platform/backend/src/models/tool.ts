@@ -1220,12 +1220,14 @@ class ToolModel {
 
     // Remove stale tools that no longer exist in the Archestra tool definitions.
     // FK constraints use onDelete: "cascade" so related records are cleaned up
-    // automatically — which is also why a feature-flagged-off built-in must NOT
-    // be treated as stale: `archestraToolNames` only lists the tools enabled
-    // this boot, so deleting rows missing from it would wipe a disabled
-    // feature's tools (apps, sandbox) and cascade away every agent/conversation
-    // assignment. A built-in is stale only when its short name is gone from the
-    // full registry; flag-gating governs visibility, not catalog reconciliation.
+    // automatically — which is also why a built-in that is inactive this boot
+    // (e.g. the sandbox tools when no Dagger host is configured) must NOT be
+    // treated as stale: `archestraToolNames` only lists the tools active this
+    // boot, so deleting rows missing from it would wipe an inactive tool
+    // group's rows (e.g. the sandbox tools) and cascade away every
+    // agent/conversation assignment. A built-in is stale only when its short
+    // name is gone from the full registry; whether a tool is active this boot
+    // governs visibility, not catalog reconciliation.
     const knownBuiltInShortNames = new Set<string>(ARCHESTRA_TOOL_SHORT_NAMES);
     const allCatalogTools = await db
       .select({ id: schema.toolsTable.id, name: schema.toolsTable.name })
@@ -1383,18 +1385,15 @@ class ToolModel {
    *
    * New agents inherit the app toolset via {@link assignAppToolsToAgent}, but
    * agents that predate a tool's introduction (e.g. existing agents when
-   * read_app/edit_app are added) would otherwise never receive it. Apps are a
-   * global feature (`ARCHESTRA_APPS_ENABLED`), not a per-org opt-in, so this
-   * spans all orgs. Idempotent: only the newly-created short names are assigned,
-   * via `createManyIfNotExists`.
+   * read_app/edit_app are added) would otherwise never receive it. The app
+   * tools apply to every org, so this spans all orgs. Idempotent: only the
+   * newly-created short names are assigned, via `createManyIfNotExists`.
    *
    * @param newlyCreatedToolNames names returned by {@link seedArchestraTools}.
    */
   static async backfillNewAppToolsToEnabledOrgs(
     newlyCreatedToolNames: string[],
   ): Promise<void> {
-    if (!config.apps.enabled) return;
-
     const createdShortNames = new Set(
       newlyCreatedToolNames
         .map(extractArchestraBuiltInShortName)
@@ -1452,19 +1451,15 @@ class ToolModel {
   }
 
   /**
-   * Assign the MCP App management tools to a single agent when the apps
-   * feature is enabled. No-op otherwise.
+   * Assign the MCP App management tools to a single agent.
    *
    * Called from `AgentModel.create` so new agents can build and use apps by
-   * default. With the feature dark the app tools are not even seeded, so
-   * there is nothing to assign.
+   * default.
    */
   static async assignAppToolsToAgent(
     agentId: string,
     organizationId: string,
   ): Promise<void> {
-    if (!config.apps.enabled) return;
-
     const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
       organizationId,
       APP_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -1475,16 +1470,11 @@ class ToolModel {
   }
 
   /**
-   * Assign the code-execution sandbox tools to a single agent based on the
-   * deployment's runtime/Projects flags. No-op when the sandbox runtime is off.
-   *
-   * - Runtime tools (run_command/upload_file/download_file): assigned when the
-   *   skills-sandbox runtime is on (`config.skillsSandbox.enabled`).
-   * - Persistent-files (Projects) tools (search_files/read_file/save_file/
-   *   edit_file/delete_file): also require the Projects flag
-   *   (`config.projects.enabled`) — they need the runtime to run AND Projects to
-   *   be exposed (see `isSandboxToolEnabled`), so gating assignment on both
-   *   avoids assigned-but-hidden rows.
+   * Assign the code-execution sandbox tools to a single agent when the
+   * skills-sandbox runtime is on (`config.skillsSandbox.enabled`). No-op
+   * otherwise. Covers both the runtime tools
+   * (run_command/upload_file/download_file) and the persistent-files tools
+   * (search_files/read_file/save_file/edit_file/delete_file).
    *
    * Called from `AgentModel.create` so new agents inherit the sandbox surface.
    * With the runtime dark the sandbox tools are not even seeded, so there is
@@ -1498,10 +1488,8 @@ class ToolModel {
 
     const shortNames: ArchestraToolShortName[] = [
       ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
     ];
-    if (config.projects.enabled) {
-      shortNames.push(...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
-    }
 
     const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
       organizationId,
@@ -1587,9 +1575,9 @@ class ToolModel {
   ): Promise<void> {
     const organization = await OrganizationModel.getFirst();
     archestraMcpBranding.syncFromOrganization(organization);
-    // The sandbox runtime + Projects file tools are auto-assigned separately by
-    // `assignSandboxToolsToAgent` (flag-gated), not here. This default set is the
-    // always-on baseline only.
+    // Sandbox and persistent-files tools are assigned separately by
+    // `assignSandboxToolsToAgent` (only when the sandbox runtime is on); this
+    // method assigns just the tools every agent gets.
     const defaultToolShortNames: ArchestraToolShortName[] = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
     ];

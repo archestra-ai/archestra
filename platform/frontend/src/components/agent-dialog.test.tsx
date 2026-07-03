@@ -171,6 +171,10 @@ vi.mock("@/components/visibility-selector", () => ({
   ),
 }));
 
+vi.mock("@/components/environment-selector", () => ({
+  EnvironmentSelector: () => <div />,
+}));
+
 vi.mock("@/components/ui/alert", () => ({
   Alert: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>

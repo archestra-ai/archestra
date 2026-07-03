@@ -1,5 +1,4 @@
 import { type ChatMessage, ChatMessageMetadataSchema } from "@archestra/shared";
-import config from "@/config";
 import {
   DIAGNOSTICS_BLOCK_CLOSE,
   DIAGNOSTICS_BLOCK_OPEN,
@@ -24,14 +23,11 @@ const UUID_PATTERN =
  *
  * Mirrors `injectSkillActivation`: returns a shallow copy for the LLM; the
  * persisted messages and the visible bubble stay untouched. Inert when the
- * apps feature is disabled or the metadata is absent/malformed.
+ * metadata is absent/malformed.
  */
 export async function injectAppDiagnostics(
   messages: ChatMessage[],
 ): Promise<ChatMessage[]> {
-  if (!config.apps.enabled) {
-    return messages;
-  }
   const lastUserIndex = messages.findLastIndex(
     (message) => message.role === "user",
   );

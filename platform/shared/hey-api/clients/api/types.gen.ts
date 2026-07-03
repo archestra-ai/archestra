@@ -26668,10 +26668,6 @@ export type GetConfigResponses = {
             orchestratorK8sRuntime: boolean;
             sandbox: boolean;
             sandboxArtifactBytesLimit: number;
-            agentSkillsEnabled: boolean;
-            agentEnvironmentsEnabled: boolean;
-            appsEnabled: boolean;
-            projectsEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             azureOpenAiEntraIdEnabled: boolean;
@@ -58017,7 +58013,7 @@ export type CreateScheduleTriggerData = {
     body: {
         name: string;
         agentId?: string;
-        projectId?: string;
+        projectId: string;
         enabled?: boolean;
         cronExpression: string;
         timezone: string;

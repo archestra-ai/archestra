@@ -307,12 +307,6 @@ jobs:
       - name: Run validation checks (drizzle-kit, codegen, db migrations)
         env:
           IS_RELEASE_PLEASE_PR: ${{ steps.check-release-please.outputs.is-release-please }}
-          # Generate the full Archestra MCP tool catalog and route surface
-          # (incl. flag-gated app tools and the Projects/My Files routes) so
-          # codegen matches the committed docs/spec. Broader than values-ci.yaml,
-          # which enables apps but not Projects, so e2e runs with Projects off.
-          ARCHESTRA_APPS_ENABLED: "true"
-          ARCHESTRA_PROJECTS_ENABLED: "true"
         run: |
           set -e
 

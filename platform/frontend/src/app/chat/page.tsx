@@ -136,7 +136,7 @@ import {
   deriveModelSource,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
-import { useConfig, useFeature } from "@/lib/config/config.query";
+import { useConfig } from "@/lib/config/config.query";
 import {
   type ConnectivityState,
   useConnectivity,
@@ -305,7 +305,6 @@ export function ChatPageContent({
   const { data: canCreateProjectPerm } = useHasPermissions({
     project: ["create"],
   });
-  const projectsEnabled = useFeature("projectsEnabled") === true;
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
 
   // Non-admin users with no teams cannot create agents
@@ -586,7 +585,6 @@ export function ChatPageContent({
     canManageShare &&
     !!conversation &&
     canCreateProjectFromChat({
-      projectsEnabled,
       hasCreatePermission: canCreateProjectPerm === true,
       conversation,
     });

@@ -611,10 +611,6 @@ export function AgentDialog({
   const { data: identityProviders = [] } = useIdentityProviders({
     enabled: shouldLoadIdentityProviders && !!canReadIdentityProviders,
   });
-  // Sandbox environment binding (internal agents only): the agent's code sandbox
-  // runs on this environment's per-env Dagger engine + egress NetworkPolicy.
-  // Gated behind a feature flag (off by default) until the per-env runtime ships.
-  const agentEnvironmentsEnabled = useFeature("agentEnvironmentsEnabled");
   // Environment isolation is always enforced by the backend for agents and MCP
   // gateways, so the tool picker reflects it (cross-environment catalogs are
   // shown disabled). When the org only has the Default environment, nothing is
@@ -710,8 +706,8 @@ export function AgentDialog({
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
   // Agents, LLM proxies, and MCP gateways can all be assigned a deployment
-  // environment. For agents it binds the code sandbox runtime (feature-flagged);
-  // for LLM proxies / MCP gateways it is an attribution label so their
+  // environment. For agents it binds the code sandbox runtime; for LLM proxies
+  // / MCP gateways it is an attribution label so their
   // inference/usage falls under environment-scoped cost limits.
   const supportsEnvironment =
     isInternalAgent || agentType === "llm_proxy" || agentType === "mcp_gateway";
@@ -1357,11 +1353,11 @@ export function AgentDialog({
 
                     {/* Environment assignment (below description).
                       - Agent: binds the agent's code sandbox to a per-environment
-                        Dagger engine + egress policy (feature-flagged).
+                        Dagger engine + egress policy.
                       - LLM proxy / MCP gateway: assigns the deployment environment
                         so its usage falls under environment-scoped cost limits.
-                      Hidden when only the default environment is available. */}
-                    {((isInternalAgent && agentEnvironmentsEnabled) ||
+                      Renders disabled when only the default environment exists. */}
+                    {(isInternalAgent ||
                       agentType === "llm_proxy" ||
                       agentType === "mcp_gateway") && (
                       <EnvironmentSelector
@@ -1996,8 +1992,8 @@ export function AgentDialog({
                   </div>
                 )}
 
-                {/* Hooks (internal agents only, existing agents only; gated by
-                  the agent-hooks feature flag, which requires the agent runtime) */}
+                {/* Hooks (internal agents only, existing agents only; shown when
+                  the agent runtime is available, since hooks run in its sandbox) */}
                 {agentHooksEnabled &&
                   isInternalAgent &&
                   !isBuiltIn &&

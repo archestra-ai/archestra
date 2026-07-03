@@ -1,5 +1,4 @@
 import { makeUserPermissions } from "../src/mocks/data/auth";
-import { makeConfig } from "../src/mocks/data/config";
 import {
   activeShareLinkSeed,
   makeShareLinkCreateResult,
@@ -16,12 +15,6 @@ const STEP_TITLE = "Install shared skills";
 
 test.describe("Skills marketplace share step", () => {
   test.beforeEach(async ({ mswControl }) => {
-    // feature-gated; the base config seed ships with the flag off
-    await mswControl.use({
-      method: "get",
-      url: "/api/config",
-      body: makeConfig({ features: { agentSkillsEnabled: true } }),
-    });
     // the base skills seed is empty, which renders the "no skills" state
     await mswControl.use({
       method: "get",

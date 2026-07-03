@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import {
   type SkillShareLink,
   useCreateSkillShareLink,
@@ -60,10 +59,9 @@ export function SkillsMarketplaceStep({
   expanded,
   onToggle,
 }: SkillsMarketplaceStepProps) {
-  const skillsEnabled = useFeature("agentSkillsEnabled") === true;
   const { data: canAdmin } = useHasPermissions({ skill: ["admin"] });
 
-  if (!skillsEnabled || !canAdmin) return null;
+  if (!canAdmin) return null;
 
   // hide the step entirely when the picked client doesn't support installable
   // skill marketplaces — the user already knows their tool doesn't support it,

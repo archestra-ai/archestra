@@ -1628,6 +1628,28 @@ class ToolModel {
   }
 
   /**
+   * Ids of built-in Archestra catalog tool rows matching the given (full,
+   * possibly branded) names. Used by the startup seed to translate the
+   * newly-inserted names returned by {@link seedArchestraTools} into ids for
+   * the All-tools exclusion pre-fill backfill.
+   */
+  static async findBuiltInToolIdsByNames(names: string[]): Promise<string[]> {
+    if (names.length === 0) return [];
+    const rows = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          isNull(schema.toolsTable.agentId),
+          isNull(schema.toolsTable.delegateToAgentId),
+          inArray(schema.toolsTable.name, names),
+        ),
+      );
+    return rows.map((row) => row.id);
+  }
+
+  /**
    * Check which tool names already exist in the database (any type).
    * Used to avoid creating proxy duplicates of tools that already exist.
    */

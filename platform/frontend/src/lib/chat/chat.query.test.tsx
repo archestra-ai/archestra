@@ -8,6 +8,7 @@ import { handleApiError } from "@/lib/utils";
 import {
   invalidateConversationFileQueries,
   mergeUpdatedConversationIntoCache,
+  useClearChatErrors,
   useConversation,
   useConversationEnabledTools,
   useConversationFiles,
@@ -28,6 +29,7 @@ vi.mock("@archestra/shared", () => ({
     getConversationEnabledTools: vi.fn(),
     markChatConversationRead: vi.fn(),
     deleteChatConversation: vi.fn(),
+    clearChatConversationErrors: vi.fn(),
   },
   PLAYWRIGHT_MCP_CATALOG_ID: "playwright-catalog-id",
   PLAYWRIGHT_MCP_SERVER_NAME: "playwright-mcp",
@@ -555,5 +557,76 @@ describe("useDeleteConversation project-list invalidation", () => {
       ([arg]) => Array.isArray(arg?.queryKey) && arg.queryKey[0] === "projects",
     );
     expect(touchedProjects).toBe(false);
+  });
+});
+
+describe("useClearChatErrors", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const renderClear = (chatErrors: unknown[]) => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(["conversation", "c1"], { id: "c1", chatErrors });
+    const cancelSpy = vi.spyOn(queryClient, "cancelQueries");
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    return {
+      queryClient,
+      cancelSpy,
+      invalidateSpy,
+      ...renderHook(() => useClearChatErrors(), { wrapper }),
+    };
+  };
+
+  const cachedChatErrors = (queryClient: QueryClient) =>
+    queryClient.getQueryData<{ chatErrors: unknown[] }>(["conversation", "c1"])
+      ?.chatErrors;
+
+  it("optimistically drops the error rows and cancels in-flight refetches", async () => {
+    vi.mocked(archestraApiSdk.clearChatConversationErrors).mockResolvedValue({
+      data: { success: true },
+      error: undefined,
+    } as Awaited<
+      ReturnType<typeof archestraApiSdk.clearChatConversationErrors>
+    >);
+    const { queryClient, cancelSpy, invalidateSpy, result } = renderClear([
+      { id: "err-1", error: { message: "boom" } },
+    ]);
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "c1" });
+    });
+
+    // Cancels the competing conversation refetch so it can't resurrect the rows.
+    expect(cancelSpy).toHaveBeenCalledWith({
+      queryKey: ["conversation", "c1"],
+    });
+    // The card is gone immediately and stays gone after the delete settles.
+    expect(cachedChatErrors(queryClient)).toEqual([]);
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["conversation", "c1"],
+    });
+  });
+
+  it("restores the error rows when the delete fails", async () => {
+    const rows = [{ id: "err-1", error: { message: "boom" } }];
+    vi.mocked(archestraApiSdk.clearChatConversationErrors).mockResolvedValue(
+      errorResult(500) as Awaited<
+        ReturnType<typeof archestraApiSdk.clearChatConversationErrors>
+      >,
+    );
+    const { queryClient, result } = renderClear(rows);
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "c1" }).catch(() => {});
+    });
+
+    // The delete didn't take, so the user must still see the error.
+    expect(cachedChatErrors(queryClient)).toEqual(rows);
   });
 });

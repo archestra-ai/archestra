@@ -1,14 +1,18 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   getArchestraToolFullName,
+  TOOL_LIST_AGENTS_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_READ_FILE_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
+  TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_WHOAMI_SHORT_NAME,
 } from "@archestra/shared";
 import config from "@/config";
 import { KnowledgeBaseConnectorModel, ToolModel } from "@/models";
 import McpServerUserModel from "@/models/mcp-server-user";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { afterAll, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import {
@@ -23,9 +27,10 @@ const QUERY_KNOWLEDGE_SOURCES_FULL_NAME = getArchestraToolFullName(
 );
 
 // Dynamic tool access: with the agent's "access all tools" setting on, run_tool
-// executes user-accessible tools directly (resolveDynamicTool) and a narrow set
-// of unassigned built-ins becomes executable (isDynamicallyAvailableArchestraTool).
-// Nothing is written to the agent in any of these paths.
+// executes user-accessible tools directly (resolveDynamicTool) and unassigned
+// built-ins become executable (isDynamicallyAvailableArchestraTool) — gated by
+// feature flags, per-agent exclusions, and the query_knowledge_sources
+// connector check. Nothing is written to the agent in any of these paths.
 
 function makeTestConnector(params: {
   organizationId: string;
@@ -528,9 +533,54 @@ describe("isDynamicallyAvailableArchestraTool", () => {
     expect(available).toBe(false);
   });
 
-  test("other archestra built-ins stay assignment-gated", async () => {
+  test("other archestra built-ins are dynamically available in All mode", async () => {
+    // identity tool and a management tool — no feature gate, so the only
+    // requirements are the dynamic-access context and no exclusion
+    for (const toolName of [
+      getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME),
+      TOOL_LIST_AGENTS_FULL_NAME,
+    ]) {
+      const available = await isDynamicallyAvailableArchestraTool({
+        toolName,
+        agentId: agent.id,
+        userId,
+        organizationId,
+      });
+      expect(available).toBe(true);
+    }
+  });
+
+  test("other archestra built-ins stay assignment-gated when access-all-tools is off", async ({
+    makeAgent,
+  }) => {
+    const strictAgent = await makeAgent({
+      name: "Strict Agent",
+      organizationId,
+    });
+
     const available = await isDynamicallyAvailableArchestraTool({
       toolName: getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME),
+      agentId: strictAgent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(available).toBe(false);
+  });
+
+  test("an excluded built-in is not dynamically available", async () => {
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const whoamiFullName = getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME);
+    const whoami = await ToolModel.findByName(whoamiFullName);
+    if (!whoami) throw new Error("whoami row missing");
+    await agentToolExclusionsService.replaceExclusions({
+      agentId: agent.id,
+      organizationId,
+      excludedToolIds: [whoami.id],
+    });
+
+    const available = await isDynamicallyAvailableArchestraTool({
+      toolName: whoamiFullName,
       agentId: agent.id,
       userId,
       organizationId,
@@ -634,7 +684,7 @@ describe("getUnassignedDiscoverableTools", () => {
     );
   });
 
-  test("excludes other archestra built-ins and agent__ rows", async ({
+  test("includes other archestra built-ins but never agent__ rows or the meta tools", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -650,10 +700,14 @@ describe("getUnassignedDiscoverableTools", () => {
     });
 
     const names = tools.map((tool) => tool.name);
-    expect(names).not.toContain(
-      getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME),
-    );
+    // built-ins are discoverable in All mode
+    expect(names).toContain(getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME));
+    expect(names).toContain(TOOL_LIST_AGENTS_FULL_NAME);
+    // proxy-discovered delegation artifacts stay out
     expect(names).not.toContain("agent__leaked_artifact");
+    // the meta tools are the dispatch surface itself — never in this set
+    expect(names).not.toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
+    expect(names).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
   });
 });
 

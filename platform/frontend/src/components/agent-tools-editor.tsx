@@ -24,6 +24,7 @@ import {
   AssignmentCombobox,
   type AssignmentComboboxItem,
 } from "@/components/ui/assignment-combobox";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ import { Label } from "@/components/ui/label";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useAssignTool, useUnassignTool } from "@/lib/agent-tools.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   fetchCatalogTools,
@@ -290,45 +292,50 @@ const AgentToolsEditorContent = forwardRef<
 
   const { data: organization } = useOrganization();
   const skillToolsEnabled = organization?.skillToolsEnabled === true;
+  const sandboxEnabled = useFeature("sandbox") === true;
 
-  // Pre-select default Archestra tools when creating a new agent (no agentId).
-  // When the org has opted into skills, also pre-select the skill tools so the
-  // form matches what AgentModel.create will assign server-side.
-  useEffect(() => {
-    if (agentId) return; // Only for new agent creation
-    if (defaultToolsInitializedRef.current) return; // Only initialize once
-
+  // The creation-default built-in set, composed by the shared
+  // getCreationDefaultArchestraToolShortNames from the same org/deployment
+  // flags AgentModel.create reads server-side. Null while editing an existing
+  // agent. Used twice: to pre-select the new-agent form, and as the
+  // saveChanges baseline for the built-in catalog right after create.
+  const creationDefaultTools = useMemo(() => {
+    if (agentId) return null; // Only for new agent creation
     const toolsByCatalogIndex = toolCountQueries.map(
       (q) => (q?.data as CatalogTool[] | undefined) ?? undefined,
     );
-    const result = getDefaultArchestraToolIds(
-      catalogItems,
-      toolsByCatalogIndex,
-      {
-        includeSkillTools: skillToolsEnabled,
-      },
-    );
-    if (!result) return;
-
-    const archestraCatalog = catalogItems[result.catalogIndex];
-    if (!archestraCatalog) return;
-
-    defaultToolsInitializedRef.current = true;
-    pendingChangesRef.current.set(ARCHESTRA_MCP_CATALOG_ID, {
-      selectedToolIds: result.toolIds,
-      credentialSourceId: null,
-      catalogItem: archestraCatalog,
-      selectAll: false,
+    return getDefaultArchestraToolIds(catalogItems, toolsByCatalogIndex, {
+      skillsEnabled: skillToolsEnabled,
+      sandboxEnabled,
     });
-    onSelectedCountChange?.(result.toolIds.size);
-    setPendingVersion((v) => v + 1);
   }, [
     agentId,
     catalogItems,
     toolCountQueries,
-    onSelectedCountChange,
     skillToolsEnabled,
+    sandboxEnabled,
   ]);
+
+  // Pre-select the creation-default Archestra tools when creating a new agent
+  // (no agentId), so the form shows exactly what AgentModel.create will assign
+  // server-side.
+  useEffect(() => {
+    if (defaultToolsInitializedRef.current) return; // Only initialize once
+    if (!creationDefaultTools) return;
+
+    const archestraCatalog = catalogItems[creationDefaultTools.catalogIndex];
+    if (!archestraCatalog) return;
+
+    defaultToolsInitializedRef.current = true;
+    pendingChangesRef.current.set(ARCHESTRA_MCP_CATALOG_ID, {
+      selectedToolIds: creationDefaultTools.toolIds,
+      credentialSourceId: null,
+      catalogItem: archestraCatalog,
+      selectAll: false,
+    });
+    onSelectedCountChange?.(creationDefaultTools.toolIds.size);
+    setPendingVersion((v) => v + 1);
+  }, [creationDefaultTools, catalogItems, onSelectedCountChange]);
 
   // Calculate total selected count from pending changes
   const calculateTotalSelectedCount = useCallback(() => {
@@ -374,6 +381,17 @@ const AgentToolsEditorContent = forwardRef<
         const currentAssignedIds = new Set(
           currentAssigned.map((at) => at.tool.id),
         );
+        // A just-created agent already has the creation-default built-ins:
+        // AgentModel.create auto-assigned them, but the assigned-tools query
+        // still reflects the pre-create (empty) state. Diff the built-in
+        // catalog against that set so unchecking a pre-selected default
+        // produces a real unassign, and defaults left checked are not
+        // redundantly re-assigned.
+        if (!agentId && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
+          for (const id of creationDefaultTools?.toolIds ?? []) {
+            currentAssignedIds.add(id);
+          }
+        }
 
         const toAdd = [...changes.selectedToolIds].filter(
           (id) => !currentAssignedIds.has(id),
@@ -1056,6 +1074,13 @@ export interface ToolChecklistProps {
   tools: CatalogTool[];
   selectedToolIds: Set<string>;
   onSelectionChange: (selectedIds: Set<string>) => void;
+  /**
+   * What a checked row means. "assign" (default) keeps the neutral
+   * selection language; "disable" is the exclusions editor, where checked
+   * tools are disabled for the agent — counts, bulk buttons, and row
+   * styling all say so.
+   */
+  variant?: "assign" | "disable";
 }
 
 function formatToolName(toolName: string) {
@@ -1142,8 +1167,10 @@ export function ToolChecklist({
   tools,
   selectedToolIds,
   onSelectionChange,
+  variant = "assign",
 }: ToolChecklistProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const disableVariant = variant === "disable";
 
   // Snapshot the initial selection for sort order so tools don't jump
   // around as the user toggles checkboxes. Updates synchronously during
@@ -1197,7 +1224,8 @@ export function ToolChecklist({
     <div className="flex flex-col min-h-0 flex-1">
       <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/30 shrink-0">
         <span className="text-xs text-muted-foreground">
-          {selectedCount} of {tools.length} selected
+          {selectedCount} of {tools.length}{" "}
+          {disableVariant ? "disabled" : "selected"}
         </span>
         <div className="flex gap-1">
           <Button
@@ -1207,7 +1235,7 @@ export function ToolChecklist({
             onClick={handleSelectAll}
             disabled={allSelected}
           >
-            Select All
+            {disableVariant ? "Disable all" : "Select All"}
           </Button>
           <Button
             variant="ghost"
@@ -1216,7 +1244,7 @@ export function ToolChecklist({
             onClick={handleDeselectAll}
             disabled={noneSelected}
           >
-            Deselect All
+            {disableVariant ? "Enable all" : "Deselect All"}
           </Button>
         </div>
       </div>
@@ -1250,7 +1278,9 @@ export function ToolChecklist({
                   htmlFor={`tool-${tool.id}`}
                   className={cn(
                     "flex items-start gap-3 p-2 rounded-md transition-colors cursor-pointer",
-                    isSelected ? "bg-primary/10" : "hover:bg-muted/50",
+                    !isSelected && "hover:bg-muted/50",
+                    isSelected &&
+                      (disableVariant ? "bg-destructive/10" : "bg-primary/10"),
                   )}
                 >
                   <Checkbox
@@ -1260,7 +1290,17 @@ export function ToolChecklist({
                     className="mt-0.5"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium">{toolName}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-medium">{toolName}</div>
+                      {disableVariant && isSelected && (
+                        <Badge
+                          variant="outline"
+                          className="border-destructive/40 text-destructive px-1.5 py-0"
+                        >
+                          Disabled
+                        </Badge>
+                      )}
+                    </div>
                     {tool.description && (
                       <ExpandableDescription description={tool.description} />
                     )}

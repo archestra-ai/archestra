@@ -9,6 +9,7 @@ export * from "./agent-export";
 export * from "./agent-knowledge-base";
 export * from "./agent-suggested-prompt";
 export * from "./agent-tool";
+export * from "./agent-tool-exclusion";
 export * from "./api";
 export * from "./api-key";
 export * from "./app";

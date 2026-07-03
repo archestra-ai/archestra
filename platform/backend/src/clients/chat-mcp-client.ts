@@ -35,6 +35,10 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import {
+  agentToolExclusionsService,
+  isToolRowExcluded,
+} from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
@@ -391,15 +395,31 @@ export function clearChatMcpClient(agentId: string): void {
     toolClearedCount++;
   }
 
+  // Clear cached MCP App UI resources for this agentId (keys are
+  // `${agentId}:${userId}:${uri}`) — e.g. a tool newly excluded from the
+  // agent's surface must not keep serving its cached app HTML until TTL.
+  let uiResourceClearedCount = 0;
+  const uiResourceKeysToDelete: string[] = [];
+  for (const key of uiResourceCache.keys()) {
+    if (key.startsWith(`${agentId}:`)) {
+      uiResourceKeysToDelete.push(key);
+    }
+  }
+  for (const key of uiResourceKeysToDelete) {
+    uiResourceCache.delete(key);
+    uiResourceClearedCount++;
+  }
+
   logger.info(
     {
       agentId,
       clientClearedCount,
       toolClearedCount,
+      uiResourceClearedCount,
       remainingCachedClients: clientCache.size,
       remainingCachedTools: toolCache.size,
     },
-    "Cleared MCP client and tool cache entries for agent",
+    "Cleared MCP client, tool, and UI resource cache entries for agent",
   );
 }
 
@@ -1048,9 +1068,18 @@ export async function getChatMcpToolUiResourceUris(
   agentId: string,
 ): Promise<Record<string, string>> {
   try {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
+    // Per-agent exclusions (Auto-tool mode): an excluded tool must not emit a
+    // UI hint that would mount its app iframe. Empty (no-op) unless the
+    // agent's accessAllTools setting is on.
+    const [tools, exclusionSets] = await Promise.all([
+      ToolModel.getMcpToolsByAgent(agentId),
+      agentToolExclusionsService.getActiveExclusionSets(agentId),
+    ]);
     const result: Record<string, string> = {};
     for (const tool of tools) {
+      if (isToolRowExcluded(tool, exclusionSets)) {
+        continue;
+      }
       const uriFromMeta = (
         tool.meta as { _meta?: { ui?: McpUiToolMeta } } | undefined
       )?._meta?.ui?.resourceUri;

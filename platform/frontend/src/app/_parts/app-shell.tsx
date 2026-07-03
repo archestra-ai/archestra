@@ -4,11 +4,13 @@ import type { Permissions } from "@archestra/shared/permission.types";
 import { usePathname } from "next/navigation";
 import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
+import { FeedbackPopupDialog } from "@/components/feedback-popup-dialog";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import {
   NavigationStatusProvider,
   useNavigationStatus,
 } from "@/components/navigation-status-provider";
+import { OnboardingSurveyDialog } from "@/components/onboarding-survey-dialog";
 import {
   SidebarCircleToggle,
   SidebarProvider,
@@ -22,6 +24,7 @@ import {
   useConnectivity,
 } from "@/lib/config/connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
 import { cn } from "@/lib/utils";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
@@ -132,7 +135,7 @@ export function AppShell({ children }: AppShellProps) {
               )}
               <ImpersonationBanner />
               <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
-                <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
+                <NavAwareSidebarTrigger />
                 <div
                   id="mobile-header-actions"
                   className="flex items-center gap-2"
@@ -152,6 +155,8 @@ export function AppShell({ children }: AppShellProps) {
             </main>
             <Toaster />
             <ConversationSearchProvider />
+            <OnboardingSurveyDialog />
+            <FeedbackPopupDialog />
           </SidebarProvider>
         </NavigationStatusProvider>
       )}
@@ -169,5 +174,21 @@ function ConnectivityBar() {
 
 function NavAwareSidebarCircleToggle() {
   const { isNavigating } = useNavigationStatus();
-  return <SidebarCircleToggle loading={isNavigating} />;
+  const { showCollapsedToggleDot } = useNavOnboarding();
+  return (
+    <SidebarCircleToggle
+      loading={isNavigating}
+      showDot={showCollapsedToggleDot}
+    />
+  );
+}
+
+function NavAwareSidebarTrigger() {
+  const { showCollapsedToggleDot } = useNavOnboarding();
+  return (
+    <SidebarTrigger
+      className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2"
+      showDot={showCollapsedToggleDot}
+    />
+  );
 }

@@ -29,6 +29,7 @@ import config, {
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
+  AgentExcludedToolModel,
   AgentModel,
   InternalMcpCatalogModel,
   LlmProviderApiKeyModel,
@@ -343,6 +344,23 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
   );
   await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
   await ToolModel.backfillNewAppToolsToEnabledOrgs(newlyCreatedToolNames);
+  // A brand-new built-in tool must not silently reach existing All-tools-mode
+  // agents: pre-exclude it for them. Runs after the assignment backfills above
+  // so a tool those just assigned is skipped (assignments beat the pre-fill);
+  // exempt short names are skipped inside the model method.
+  const newlyCreatedToolIds = await ToolModel.findBuiltInToolIdsByNames(
+    newlyCreatedToolNames,
+  );
+  const excludedRowCount =
+    await AgentExcludedToolModel.prefillNewBuiltInToolsForAllToolsAgents(
+      newlyCreatedToolIds,
+    );
+  if (excludedRowCount > 0) {
+    logger.info(
+      { excludedRowCount, newToolCount: newlyCreatedToolIds.length },
+      "Pre-excluded new built-in tools for All-tools-mode agents",
+    );
+  }
   logger.info("Seeded Archestra catalog and tools");
 }
 

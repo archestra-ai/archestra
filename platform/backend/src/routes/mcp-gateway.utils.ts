@@ -75,6 +75,10 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import {
+  agentToolExclusionsService,
+  isToolRowExcluded,
+} from "@/services/agent-tool-exclusions";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
@@ -209,7 +213,18 @@ export async function createAgentServer(
     // Get MCP tools (from connected MCP servers + Archestra built-in tools)
     // Excludes proxy-discovered tools
     // Fetch fresh on every request to ensure we get newly assigned tools
-    const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+    // Per-agent exclusions (Auto-tool mode): excluded assigned tools must not
+    // be advertised, and their catalogs must not be named in the search_tools
+    // description built below. Every built-in except the search_tools/run_tool
+    // meta tools (rejected at write time) is a valid exclusion target — this
+    // filter runs BEFORE filterExposedTools, so an excluded always-exposed
+    // built-in is dropped here and never re-admitted below. Empty (no-op)
+    // unless the agent's accessAllTools setting is on.
+    const exclusionSets =
+      await agentToolExclusionsService.getActiveExclusionSets(agentId);
+    const mcpTools = (await ToolModel.getMcpToolsByAgent(agentId)).filter(
+      (tool) => !isToolRowExcluded(tool, exclusionSets),
+    );
 
     // An all-tools agent reaches unassigned tools dynamically (search_tools /
     // run_tool already resolve them without an agent_tools row). A UI-providing
@@ -222,7 +237,7 @@ export async function createAgentServer(
     // an assigned one. Gated strictly on accessAllTools (not toolExposureMode
     // alone) — a search_and_run_only agent without it is deliberately scoped to
     // its assigned set for context-window management, not dynamic reach.
-    const dynamicUiTools =
+    const dynamicUiTools = (
       agent.accessAllTools && tokenAuth?.userId && tokenAuth.organizationId
         ? await ToolModel.getMcpToolsAccessibleToUser({
             userId: tokenAuth.userId,
@@ -236,7 +251,8 @@ export async function createAgentServer(
             ),
             requireUiResource: true,
           })
-        : [];
+        : []
+    ).filter((tool) => !isToolRowExcluded(tool, exclusionSets));
 
     const implicitMetaTools =
       agent.toolExposureMode === "search_and_run_only"

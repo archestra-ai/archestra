@@ -1635,6 +1635,82 @@ describe("createAgentServer tools/list", () => {
     expect(byName.has("bug_tracker__list")).toBe(false);
   });
 
+  test("Auto-tool mode: an excluded unassigned UI tool is not advertised in tools/list", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeOrganization,
+    makeTool,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    // accessAllTools reaches unassigned UI tools dynamically (dynamicUiTools).
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "bug-tracker",
+      serverType: "app",
+      scope: "org",
+    });
+    // An org-scoped install makes the catalog accessible to the user, so its
+    // unassigned UI tools reach the dynamic UI-tool path.
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    // Neither tool is assigned; both are reachable via the dynamic UI-tool path.
+    await makeTool({
+      catalogId: catalog.id,
+      name: "bug_tracker__open_shown",
+      parameters: { type: "object", properties: {} },
+      meta: { _meta: { ui: { resourceUri: "ui://archestra-app/shown" } } },
+    });
+    const excludedTool = await makeTool({
+      catalogId: catalog.id,
+      name: "bug_tracker__open_excluded",
+      parameters: { type: "object", properties: {} },
+      meta: { _meta: { ui: { resourceUri: "ui://archestra-app/excluded" } } },
+    });
+    const { agentToolExclusionsService } = await import(
+      "@/services/agent-tool-exclusions"
+    );
+    await agentToolExclusionsService.replaceExclusions({
+      agentId: agent.id,
+      organizationId: org.id,
+      excludedToolIds: [excludedTool.id],
+    });
+
+    const { server } = await createAgentServer(agent.id, {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      isUserToken: true,
+      userId: user.id,
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const names = new Set(response.tools.map((tool) => tool.name));
+    // The dynamic UI-tool path surfaces the non-excluded one...
+    expect(names.has("bug_tracker__open_shown")).toBe(true);
+    // ...but the excluded one must not be advertised.
+    expect(names.has("bug_tracker__open_excluded")).toBe(false);
+  });
+
   test("full mode lists a UI-providing tool with its resource", async ({
     makeAgent,
     makeAgentTool,

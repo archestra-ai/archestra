@@ -1,7 +1,9 @@
 import {
   APP_ARCHESTRA_TOOL_SHORT_NAMES,
   ARCHESTRA_MCP_CATALOG_ID,
+  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   getArchestraToolFullName,
+  getCreationDefaultArchestraToolShortNames,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_CREATE_SKILL_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
@@ -9,6 +11,7 @@ import {
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -26,6 +29,22 @@ describe("Archestra Tools Dynamic Assignment", () => {
   beforeEach(() => {
     (config.skillsSandbox as { enabled: boolean }).enabled = false;
   });
+
+  /**
+   * Names of the tools assigned to the agent, straight from the junction
+   * table (no query-time filtering like the knowledge-tool visibility gate).
+   */
+  async function assignedToolNames(agentId: string): Promise<string[]> {
+    const rows = await db
+      .select({ name: schema.toolsTable.name })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(eq(schema.agentToolsTable.agentId, agentId));
+    return rows.map((row) => row.name);
+  }
 
   test("agents get Archestra tools after explicit assignment", async ({
     makeAgent,
@@ -418,6 +437,47 @@ describe("Archestra Tools Dynamic Assignment", () => {
       for (const shortName of PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES) {
         expect(names).toContain(getArchestraToolFullName(shortName));
       }
+    } finally {
+      sandboxConfig.enabled = originalSandbox;
+    }
+  });
+
+  test("AgentModel.create assigns the always-on default tools in the general create path", async ({
+    makeAgent,
+  }) => {
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const agent = await makeAgent({ name: "Defaults Agent" });
+
+    const names = await assignedToolNames(agent.id);
+    for (const shortName of DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES) {
+      expect(names).toContain(getArchestraToolFullName(shortName));
+    }
+  });
+
+  test("AgentModel.create assigns exactly the shared creation-default composer set with every flag on", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const sandboxConfig = config.skillsSandbox as { enabled: boolean };
+    const originalSandbox = sandboxConfig.enabled;
+    sandboxConfig.enabled = true;
+    try {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, { skillToolsEnabled: true });
+
+      const agent = await makeAgent({
+        organizationId: org.id,
+        name: "Composer Agent",
+      });
+
+      const expected = getCreationDefaultArchestraToolShortNames({
+        skillsEnabled: true,
+        sandboxEnabled: true,
+      })
+        .map((shortName) => getArchestraToolFullName(shortName))
+        .sort();
+      expect((await assignedToolNames(agent.id)).sort()).toEqual(expected);
     } finally {
       sandboxConfig.enabled = originalSandbox;
     }

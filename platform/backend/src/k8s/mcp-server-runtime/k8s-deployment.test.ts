@@ -3491,6 +3491,68 @@ describe("K8sDeployment.createServiceForHttpServer (selector reconciliation)", (
   });
 });
 
+describe("K8sDeployment multitenant selector stability", () => {
+  function make(
+    // biome-ignore lint/suspicious/noExplicitAny: minimal catalog mock for tests
+    catalogItem: any,
+  ): K8sDeployment {
+    const mcpServer = {
+      id: "install-abc-123",
+      name: "archestra-pm",
+      catalogId: "cat9999-0000-0000-0000-000000000000",
+      // biome-ignore lint/suspicious/noExplicitAny: mock server for tests
+    } as any as McpServer;
+    return new K8sDeployment({
+      mcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem,
+    });
+  }
+  const localConfig: z.infer<typeof LocalConfigSchema> = {
+    command: "node",
+    arguments: ["server.js"],
+  };
+
+  // Multitenant catalogs share ONE catalog-named Deployment + Service across all
+  // installs. If the selector used the per-install id, two installs would fight
+  // over the shared resource and leave the Service with zero endpoints. The
+  // selector must be catalog-stable so every install reconciles to the same one.
+  test("multitenant: deployment selector + pod labels use the catalog id (not the per-install id)", () => {
+    const catalogItem = { multitenant: true, name: "Archestra PM" };
+    const spec = make(catalogItem).generateDeploymentSpec(
+      "img:latest",
+      localConfig,
+      true,
+      8080,
+    );
+    expect(spec.spec?.selector.matchLabels?.["mcp-server-id"]).toBe(
+      "cat9999-0000-0000-0000-000000000000",
+    );
+    expect(spec.spec?.template.metadata?.labels?.["mcp-server-id"]).toBe(
+      "cat9999-0000-0000-0000-000000000000",
+    );
+    // The name is catalog-derived too, so name and selector stay in lockstep.
+    expect(spec.metadata?.name).toContain("mcp-mt-cat9999-");
+  });
+
+  test("single-tenant (no catalog item): selector keeps the per-install id", () => {
+    const spec = make(null).generateDeploymentSpec(
+      "img:latest",
+      localConfig,
+      true,
+      8080,
+    );
+    expect(spec.spec?.selector.matchLabels?.["mcp-server-id"]).toBe(
+      "install-abc-123",
+    );
+  });
+});
+
 describe("K8sDeployment.constructHttpServiceName", () => {
   function createK8sDeploymentForServiceName(
     serverName: string,

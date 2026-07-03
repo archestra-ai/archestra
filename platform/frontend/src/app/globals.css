@@ -360,3 +360,29 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
   animation: aceternity-border-spin 3.5s linear infinite;
   pointer-events: none;
 }
+
+
+/* ── Feedback pop-up ──
+   Friendly greeting: the hand waves twice when the pop-up opens, then rests. */
+
+@keyframes feedback-wave {
+  0%,
+  60%,
+  100% {
+    transform: rotate(0deg);
+  }
+  10%,
+  30% {
+    transform: rotate(16deg);
+  }
+  20%,
+  40% {
+    transform: rotate(-8deg);
+  }
+}
+
+.feedback-wave {
+  display: inline-block;
+  transform-origin: 70% 75%;
+  animation: feedback-wave 1.8s ease-in-out 0.4s 2;
+}

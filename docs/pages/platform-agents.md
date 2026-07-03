@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-06-18
+lastUpdated: 2026-07-03
 ---
 
 <!--
@@ -16,7 +16,7 @@ An agent can include:
 
 - a system prompt that defines behavior
 - suggested prompts for common tasks in chat
-- one or more assigned tools
+- a tools setting: **All** (every tool the calling user can access, minus an exclusion list) or **Custom** (only assigned tools)
 - optional **Load tools when needed** mode for keeping MCP `tools/list` small
 - optional delegation targets to other agents
 - one or more assigned knowledge sources
@@ -32,11 +32,27 @@ For larger toolsets, enable **Load tools when needed**. This keeps the initial t
 
 Use this when the full tool menu is too large to send to the model on every turn, but you still want the agent to keep access to the same assigned toolset.
 
-With the per-agent **Access all tools** setting on, discovery is not limited to assigned tools. For a signed-in user, `search_tools` also returns third-party tools from MCP catalogs the user can access, plus `query_knowledge_sources` when the user can access at least one knowledge connector. `run_tool` executes such a tool directly with credentials resolved at call time, following the MCP server's **Agent connections** setting: on behalf of the user by default (each person's own connection), or one shared account when the server is configured that way. A caller without a connection gets an actionable prompt to connect — nothing is borrowed from team or organization credentials. Nothing is assigned to the agent, so no permission to modify the agent is involved. This lets [Agent Skills](/docs/platform-agent-skills-sharing) reference tools without pre-assigning every tool to every agent. Admins can turn the behavior off org-wide with the **Dynamic Tool Access** security setting on the agent settings page, restricting discovery and dispatch to assigned tools only regardless of the per-agent setting.
+An agent's tools setting is **All** or **Custom** — tabs in the agent dialog. In **Custom** mode the agent uses only its explicitly assigned tools; new agents get a default set assigned by the backend, and the create form pre-selects that same set. In **All** mode, discovery is not limited to assigned tools: `search_tools` can find and `run_tool` can run every tool the signed-in user can access — Archestra built-in tools and tools from MCP servers — except tools on the agent's [exclusion list](#excluding-servers-and-tools). User permissions still apply. `run_tool` executes such a tool directly with credentials resolved at call time, following the MCP server's **Agent connections** setting: on behalf of the user by default (each person's own connection), or one shared account when the server is configured that way. A caller without a connection gets an actionable prompt to connect — nothing is borrowed from team or organization credentials. Nothing is assigned to the agent, so no permission to modify the agent is involved. This lets [Agent Skills](/docs/platform-agent-skills-sharing) reference tools without pre-assigning every tool to every agent.
 
 Tool call policies still apply to the target tool. If the model calls `run_tool` to execute `send_email`, Archestra evaluates policies for `send_email` with the same arguments and context it would use for a direct tool call. See [AI Tool Guardrails - Load Tools When Needed](/docs/platform-ai-tool-guardrails#load-tools-when-needed).
 
 See [MCP Gateway - Load Tools When Needed](/docs/platform-mcp-gateway#load-tools-when-needed) for the MCP-client-facing behavior and the same mode on gateways.
+
+### Excluding Servers and Tools
+
+**All** can be too broad: it gives the agent everything the calling user can reach. To carve out exceptions, each agent has an exclusion list — edit it under **Disabled tools** on the **All** tab of the agent dialog (or via `GET`/`PUT /api/agents/:id/tool-exclusions`), excluding whole MCP servers or individual tools. Use this for an agent that should see everything except, say, a payments server or a single destructive tool.
+
+While the tools setting is **All**, exclusions cover the agent's entire surface:
+
+- excluded tools do not appear in `search_tools` results and cannot be executed by `run_tool` or called directly by an MCP client
+- the agent's MCP resources and prompts from an excluded server are also unreachable
+- tools explicitly assigned to the agent are excluded too — the assignments stay in place and take effect again in **Custom** mode
+
+Built-in tools are excluded by default. When an agent is created in **All** mode or switched to it, the exclusion list is pre-filled with every built-in tool that is not assigned to the agent — except a small set that always stays available: `search_tools`, `run_tool`, the sandbox and file tools (`run_command`, `upload_file`, `download_file`, `search_files`, `read_file`, `save_file`, `edit_file`, `delete_file`), and `query_knowledge_sources`. So by default an **All**-mode agent cannot use the built-ins that manage the platform itself (creating agents, managing teams, policies, and so on) until an admin removes them from the list. The pre-fill runs on every switch to **All** — to keep a built-in usable across switches, assign it to the agent. When a platform update ships a new built-in tool, agents already in **All** mode get it excluded by default; admins opt in by un-excluding it. Agents that were in **All** mode before exclusions existed keep exactly their capabilities: the unassigned built-ins they could not use are now on their exclusion list, visible and editable.
+
+Only `search_tools` and `run_tool` can never be excluded; everything else can. Agent delegation tools sit outside the exclusion list — manage them through delegation itself — and the built-in server cannot be excluded as a whole, only tool by tool.
+
+Exclusions are stored per agent and have no effect in **Custom** mode. Cloning an agent copies them. Agent export does not carry them — server and tool IDs are not portable across organizations — so an imported agent starts with no exclusions and they must be re-created. Exclusions track the specific tool record: if an MCP server renames a tool, the renamed tool counts as new and is no longer excluded.
 
 ## Invocation Paths
 

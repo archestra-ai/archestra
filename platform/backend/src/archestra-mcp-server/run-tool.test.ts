@@ -4,6 +4,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   slugify,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+  TOOL_LIST_AGENTS_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
@@ -17,6 +18,7 @@ import {
   ConversationEnabledToolModel,
   ToolModel,
 } from "@/models";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import {
   afterAll,
@@ -966,6 +968,105 @@ describe("run_tool", () => {
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain("sandbox:execute");
       expect(runSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  // Management built-ins (no feature gate) ride the dynamic tool access
+  // relaxation too: an All-mode agent runs them unassigned, gated only by
+  // RBAC (which runs first) and the per-agent exclusions.
+  describe("management built-ins (dynamic tool access)", () => {
+    let dynamicAgent: Agent;
+    let dynamicContext: ArchestraContext;
+
+    beforeEach(async ({ makeAgent }) => {
+      // seed the built-in rows (org-accessible Archestra catalog), keep the
+      // agent free of assignments so every call exercises the dynamic path
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      dynamicAgent = await makeAgent({
+        name: "Dynamic Management Agent",
+        organizationId: mockContext.organizationId,
+        accessAllTools: true,
+      });
+      await AgentToolModel.deleteAllForAgent(dynamicAgent.id);
+      dynamicContext = {
+        ...mockContext,
+        agent: { id: dynamicAgent.id, name: dynamicAgent.name },
+        agentId: dynamicAgent.id,
+      };
+    });
+
+    test("runs an unassigned management built-in dynamically without assigning it", async () => {
+      // Creating the agent in All mode pre-filled its exclusion list with the
+      // unassigned management built-ins; un-exclude list_agents the way an
+      // admin would before it becomes dynamically runnable.
+      const listAgents = await ToolModel.findByName(TOOL_LIST_AGENTS_FULL_NAME);
+      if (!listAgents) throw new Error("list_agents row missing");
+      const current = await agentToolExclusionsService.getExclusions(
+        dynamicAgent.id,
+      );
+      await agentToolExclusionsService.replaceExclusions({
+        agentId: dynamicAgent.id,
+        organizationId: mockContext.organizationId as string,
+        excludedToolIds: current.excludedToolIds.filter(
+          (id) => id !== listAgents.id,
+        ),
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "list_agents", tool_args: {} },
+        dynamicContext,
+      );
+
+      expect(result.isError).toBeFalsy();
+      const assignedNames = await ToolModel.getAssignedToolNames(
+        dynamicAgent.id,
+      );
+      expect(assignedNames.has(TOOL_LIST_AGENTS_FULL_NAME)).toBe(false);
+    });
+
+    test("keeps the not-assigned error when the built-in is excluded for the agent", async () => {
+      const listAgents = await ToolModel.findByName(TOOL_LIST_AGENTS_FULL_NAME);
+      if (!listAgents) throw new Error("list_agents row missing");
+      await agentToolExclusionsService.replaceExclusions({
+        agentId: dynamicAgent.id,
+        organizationId: mockContext.organizationId as string,
+        excludedToolIds: [listAgents.id],
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "list_agents", tool_args: {} },
+        dynamicContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "not assigned to this agent",
+      );
+    });
+
+    test("denies when the user lacks the tool's RBAC permission (RBAC before the dynamic gate)", async ({
+      makeCustomRole,
+      makeMember,
+      makeUser,
+    }) => {
+      const organizationId = mockContext.organizationId as string;
+      const user = await makeUser();
+      // no agent:read, so list_agents is refused before the assignment gate
+      const role = await makeCustomRole(organizationId, {
+        permission: { team: ["read"] },
+      });
+      await makeMember(user.id, organizationId, { role: role.role });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "list_agents", tool_args: {} },
+        { ...dynamicContext, userId: user.id },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("agent:read");
     });
   });
 

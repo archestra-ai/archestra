@@ -136,6 +136,16 @@ vi.mock("@/components/agent-tools-editor", () => ({
   }),
 }));
 
+vi.mock("@/components/agent-tool-exclusions-editor", () => ({
+  AgentToolExclusionsEditor: forwardRef((_props, ref) => {
+    useImperativeHandle(ref, () => ({
+      saveChanges: vi.fn(),
+    }));
+
+    return <div>Mock Tool Exclusions Editor</div>;
+  }),
+}));
+
 vi.mock("@/components/agent-labels", () => ({
   ProfileLabels: () => null,
 }));

@@ -177,6 +177,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: `${catalogApp.serverName} / ${catalogApp.toolName}`,
           description: catalogApp.toolDescription,
           resourceUri: catalogApp.resourceUri,
+          // The server's registry icon (emoji or data URL) so the card can
+          // show which server the app comes from.
+          icon: catalogApp.serverIcon,
           executionModel: "server-scoped" as const,
           cspOrigin: "author-declared" as const,
         })),

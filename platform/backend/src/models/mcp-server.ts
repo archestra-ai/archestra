@@ -352,6 +352,7 @@ class McpServerModel {
       mcpServerId: string;
       scope: ResourceVisibilityScope;
       serverName: string;
+      serverIcon: string | null;
       toolName: string;
       toolDescription: string | null;
       resourceUri: string;
@@ -387,6 +388,7 @@ class McpServerModel {
         mcpServerId: install.mcpServerId,
         scope: install.scope,
         serverName: app.serverName,
+        serverIcon: app.serverIcon,
         toolName: app.toolName,
         toolDescription: app.toolDescription,
         resourceUri: app.resourceUri,
@@ -555,6 +557,7 @@ class McpServerModel {
     Array<{
       catalogId: string;
       serverName: string;
+      serverIcon: string | null;
       toolName: string;
       toolDescription: string | null;
       resourceUri: string;
@@ -568,6 +571,7 @@ class McpServerModel {
       .select({
         catalogId: schema.internalMcpCatalogTable.id,
         serverName: schema.internalMcpCatalogTable.name,
+        serverIcon: schema.internalMcpCatalogTable.icon,
         toolName: schema.toolsTable.name,
         toolDescription: schema.toolsTable.description,
         resourceUri: uiResourceUri,
@@ -606,6 +610,7 @@ class McpServerModel {
               {
                 catalogId: row.catalogId,
                 serverName: row.serverName,
+                serverIcon: row.serverIcon,
                 // Strip the server prefix: catalog tools are stored as
                 // `<server>__<tool>`, but the card shows just the tool.
                 toolName: parseFullToolName(row.toolName).toolName,

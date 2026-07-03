@@ -53781,6 +53781,10 @@
                               },
                               "resourceUri": {
                                 "type": "string"
+                              },
+                              "icon": {
+                                "nullable": true,
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -53792,7 +53796,8 @@
                               "catalogId",
                               "mcpServerId",
                               "scope",
-                              "resourceUri"
+                              "resourceUri",
+                              "icon"
                             ],
                             "additionalProperties": false
                           }

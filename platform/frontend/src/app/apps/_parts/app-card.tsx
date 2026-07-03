@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ScopeBadge } from "@/components/scope-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -98,11 +99,19 @@ function CardOpeningOverlay() {
   );
 }
 
-// The app's type, as the leading icon. The label (what "owned" vs "external"
-// means) rides in the tooltip + aria-label rather than a separate badge. Lifted
-// above the full-card click button so it can be hovered.
-function AppTypeIcon({ owned }: { owned: boolean }) {
-  const Icon = owned ? AppWindow : Server;
+// The app's type, as the leading icon. External cards show the backing MCP
+// server's registry icon (emoji or image) when the catalog has one;
+// McpCatalogIcon falls back to the same generic Server glyph otherwise. The
+// label (what "owned" vs "external" means) rides in the tooltip + aria-label
+// rather than a separate badge. Lifted above the full-card click button so it
+// can be hovered.
+function AppTypeIcon({
+  owned,
+  icon,
+}: {
+  owned: boolean;
+  icon?: string | null;
+}) {
   const label = owned ? "MCP app" : "MCP server app";
   return (
     <Tooltip>
@@ -112,7 +121,11 @@ function AppTypeIcon({ owned }: { owned: boolean }) {
           aria-label={label}
           className="relative z-10 inline-flex text-muted-foreground"
         >
-          <Icon className="h-4 w-4" />
+          {owned ? (
+            <AppWindow className="h-4 w-4" />
+          ) : (
+            <McpCatalogIcon icon={icon} size={16} />
+          )}
         </span>
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
@@ -276,7 +289,7 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
       </CardOverflowMenu>
 
       <div className="mb-3 flex items-center gap-1.5 pr-16">
-        <AppTypeIcon owned={false} />
+        <AppTypeIcon owned={false} icon={app.icon} />
       </div>
 
       <CardTitle className="line-clamp-2 leading-snug break-words">

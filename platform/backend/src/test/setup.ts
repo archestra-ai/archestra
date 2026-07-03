@@ -18,6 +18,8 @@ import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
+// Dependency-free by design — safe to import before test files apply mocks.
+import { clearRegisteredProcessLocalCaches } from "@/process-local-cache-registry";
 import { getMigrationsSql, SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
 
 // Disable Sentry for tests - set BEFORE any config modules are loaded
@@ -177,13 +179,12 @@ beforeEach(async () => {
     await pgliteClient.exec(truncateSql);
   }
 
-  // The agent id/slug resolve cache is process-local while the database above
-  // is truncated per test — clear it so a mapping cached by one test (fixture
-  // slugs are name-derived and can repeat) can't leak into the next.
-  // Dynamic import: a top-level one would load config modules before the env
-  // assignments at the top of this file.
-  const { default: AgentModel } = await import("@/models/agent");
-  AgentModel.clearResolveIdCache();
+  // Process-local caches (e.g. the agent id/slug resolve cache) outlive the
+  // per-test truncation above — clear every registered one so a mapping cached
+  // by one test (fixture slugs are name-derived and can repeat) can't leak
+  // into the next. The registry module is dependency-free, so importing it
+  // here cannot pre-load real modules ahead of a test file's mocks.
+  clearRegisteredProcessLocalCaches();
 
   // NOTE: We intentionally do NOT seed organization or default agent here.
   // Tests that need them should use makeOrganization and makeAgent fixtures.

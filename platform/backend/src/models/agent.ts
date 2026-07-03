@@ -36,6 +36,7 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import type {
   Agent,
@@ -66,15 +67,17 @@ class AgentModel {
    * staleness after a slug change or deletion (requests for a just-deleted
    * agent still fail downstream where the agent row is actually loaded).
    */
-  private static readonly resolveIdCache = new LRUCacheManager<string>({
-    maxSize: 10_000,
-    defaultTtl: TimeInMs.Minute,
-  });
+  private static readonly resolveIdCache = registerProcessLocalCache(
+    new LRUCacheManager<string>({
+      maxSize: 10_000,
+      defaultTtl: TimeInMs.Minute,
+    }),
+  );
 
   /**
-   * Reset the resolve cache. Needed by the shared test setup: the cache is
-   * process-local while each test truncates its database, so a mapping cached
-   * in one test could otherwise leak into the next.
+   * Reset the resolve cache. The shared test setup clears it between tests
+   * via the process-local cache registry; tests that exercise post-deletion
+   * staleness clear it explicitly through this hook.
    */
   static clearResolveIdCache(): void {
     AgentModel.resolveIdCache.clear();

@@ -24,8 +24,6 @@ Create a project from the Projects page, or turn an existing chat into one with 
 
 Files the agent saves go to the project. You can also drag and drop your own files onto the Files panel. You can edit text and Markdown files in place.
 
-![Project files listed next to the project's chats](/docs/automated_screenshots/platform-projects_files-panel.webp)
-
 Every project has an `instructions.md` file, pinned at the top of the Files panel. Write the rules once, and every chat in the project follows them.
 
 ![Editing project instructions](/docs/automated_screenshots/platform-projects_instructions-editor.webp)

@@ -480,6 +480,19 @@ describe("chat-mcp-client health check", () => {
     await chatClient.__test.clearToolCache(cacheKey);
   });
 
+  test("clears the ping timeout timer once ping settles", async () => {
+    vi.useFakeTimers();
+    try {
+      const before = vi.getTimerCount();
+      await chatClient.__test.pingClientWithTimeout({
+        ping: () => Promise.resolve({}),
+      });
+      expect(vi.getTimerCount()).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("discards cached client when ping hangs past timeout", async ({
     makeAgent,
     makeUser,

@@ -116,6 +116,15 @@ export function proxyBaseUrlToOrigin(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
 }
 
+/**
+ * Claude Code's post-install OAuth step, shared by the bash and PowerShell
+ * renderers. Registering the gateway is not enough: it authorizes each user
+ * individually, so its tools unlock only after a one-time browser sign-in.
+ */
+export function claudeCodeOAuthNextStep(serverName: string): string {
+  return `Run \`claude /mcp\`, select "${serverName}", and sign in via your browser — the gateway grants tool access per user, so its tools unlock after this one-time approval.`;
+}
+
 export function renderSetupScript(rawCtx: SetupScriptContext): string {
   // appName is white-label, admin-controlled text that lands in script comments
   // and bare echo strings. Collapse control characters (newlines, NUL, …) to
@@ -317,9 +326,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
   switch (ctx.clientId) {
     case "claude-code":
       if (ctx.mcp) {
-        steps.push(
-          `Run \`claude\` and use /mcp to finish the OAuth flow for "${ctx.mcp.serverName}".`,
-        );
+        steps.push(claudeCodeOAuthNextStep(ctx.mcp.serverName));
       }
       if (ctx.proxy?.provider === "bedrock" && ctx.proxy.virtualKey) {
         steps.push(

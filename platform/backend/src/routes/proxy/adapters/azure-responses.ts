@@ -106,12 +106,7 @@ export const azureResponsesAdapterFactory: LLMProvider<
     }
 
     const customFetch = options.agent
-      ? metrics.llm.getObservableFetch(
-          "azure",
-          options.agent,
-          options.source,
-          options.externalAgentId,
-        )
+      ? metrics.llm.getObservableFetch("azure", options.agent, options.source)
       : undefined;
 
     if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
@@ -455,6 +450,10 @@ class AzureResponsesStreamAdapter
   readonly provider = "azure" as const;
   readonly state = createStreamAccumulatorState();
   private completedResponse: AzureResponsesResponse | null = null;
+  // Set to the refusal text when the streamed response was replaced by a policy
+  // refusal, so toProviderResponse persists the refusal — not the captured
+  // upstream completion or the blocked tool calls.
+  private replacedText: string | null = null;
   private toolCallsByItemId = new Map<
     string,
     { id: string; name: string; arguments: string }
@@ -659,6 +658,7 @@ class AzureResponsesStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): string[] {
+    this.replacedText = text;
     return [this.formatTextDeltaSSE(text)];
   }
 
@@ -667,13 +667,14 @@ class AzureResponsesStreamAdapter
   }
 
   toProviderResponse(): AzureResponsesResponse {
-    if (this.completedResponse) {
+    if (this.replacedText === null && this.completedResponse) {
       return this.completedResponse;
     }
 
     const outputItems: AzureResponsesResponse["output"] = [];
 
-    if (this.state.text) {
+    const messageText = this.replacedText ?? this.state.text;
+    if (messageText) {
       outputItems.push({
         id: `msg_${Date.now()}`,
         type: "message",
@@ -682,23 +683,25 @@ class AzureResponsesStreamAdapter
         content: [
           {
             type: "output_text",
-            text: this.state.text,
+            text: messageText,
             annotations: [],
           },
         ],
       } as AzureResponsesResponse["output"][number]);
     }
 
-    outputItems.push(
-      ...this.state.toolCalls.map((toolCall) => ({
-        id: toolCall.id,
-        call_id: toolCall.id,
-        type: "function_call" as const,
-        name: toolCall.name,
-        arguments: toolCall.arguments,
-        status: "completed" as const,
-      })),
-    );
+    if (this.replacedText === null) {
+      outputItems.push(
+        ...this.state.toolCalls.map((toolCall) => ({
+          id: toolCall.id,
+          call_id: toolCall.id,
+          type: "function_call" as const,
+          name: toolCall.name,
+          arguments: toolCall.arguments,
+          status: "completed" as const,
+        })),
+      );
+    }
 
     return {
       id: this.state.responseId || `resp_${Date.now()}`,

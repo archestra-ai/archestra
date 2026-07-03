@@ -29,8 +29,14 @@ import {
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils";
-import { resolveRunToolTargetName } from "./chat-messages.utils";
+import { useApps } from "./apps-context";
+import {
+  type AppEntryRender,
+  resolveAppEntryRender,
+  resolveRunToolTargetName,
+} from "./chat-messages.utils";
 import { HookRunChip, type HookRunChipData } from "./hook-run-chip";
+import { McpAppEntryContent, McpAppEntryPill } from "./mcp-app-container";
 import { SkillPill } from "./skill-pill";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
@@ -47,13 +53,49 @@ type CompactToolEntry = {
   nestedToolCalls?: React.ReactNode;
 };
 
+type CompactAppEntry = {
+  /** An MCP-App-rendering call: app pill in the row, app content below it. */
+  kind: "app";
+  key: string;
+  toolName: string;
+  part: ToolUIPart | DynamicToolUIPart;
+  toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+  errorText: string | undefined;
+  /** Never set for app entries; present so ExpandedToolCard can take either. */
+  nestedToolCalls?: React.ReactNode;
+};
+
 type CompactHookEntry = {
   kind: "hook";
   key: string;
   data: HookRunChipData;
 };
 
-type CompactEntry = CompactToolEntry | CompactHookEntry;
+type CompactEntry = CompactToolEntry | CompactAppEntry | CompactHookEntry;
+
+/**
+ * Conversation-level context an app entry needs to mount its runtime. Absent
+ * (e.g. in subagent rows), app entries degrade to plain tool circles.
+ */
+type CompactAppContext = {
+  agentId?: string;
+  earlyToolUiStarts?: Record<
+    string,
+    {
+      uiResourceUri: string;
+      html?: string;
+      csp?: { connectDomains?: string[]; resourceDomains?: string[] };
+      permissions?: {
+        camera?: boolean;
+        microphone?: boolean;
+        geolocation?: boolean;
+        clipboardWrite?: boolean;
+      };
+      toolName?: string;
+    }
+  >;
+  onSendMessage?: (text: string) => void;
+};
 
 function CompactCircle({
   toolName,
@@ -242,6 +284,7 @@ export function CompactToolGroup({
   toolIconMap,
   canExpandToolCalls = true,
   onToolApprovalResponse,
+  appContext,
 }: {
   tools: CompactEntry[];
   toolIconMap?: ToolIconMap;
@@ -251,16 +294,62 @@ export function CompactToolGroup({
     approved: boolean;
     reason?: string;
   }) => void;
+  appContext?: CompactAppContext;
 }) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const { isToolName, getToolShortName } = useArchestraMcpIdentity();
+  const { isAppOpen, toggleAppOpen, portalTarget } = useApps();
 
   const handleToggle = (key: string) => {
     if (!canExpandToolCalls) return;
+    // Expanding a tool card collapses any inline app open in this row — the
+    // mirror of an app pill collapsing an expanded tool card, so only one
+    // thing unfolds under the row at a time. Panel-hosted apps are untouched
+    // (nothing is expanded inline while the panel hosts).
+    if (expandedKey !== key && !portalTarget) {
+      for (const entry of tools) {
+        if (
+          entry.kind === "app" &&
+          entry.part.toolCallId &&
+          isAppOpen(entry.part.toolCallId)
+        ) {
+          toggleAppOpen(entry.part.toolCallId);
+        }
+      }
+    }
     setExpandedKey((prev) => (prev === key ? null : key));
   };
 
   const expandedEntry = tools.find((t) => t.key === expandedKey);
+
+  // Resolve each app entry's render once: the pill needs the app identity, the
+  // content below the row needs the full mount props. A `null` render (e.g. a
+  // still-streaming scaffold/edit call) degrades to a plain tool circle.
+  const appRenders = new Map<string, AppEntryRender>();
+  if (appContext?.agentId) {
+    for (const entry of tools) {
+      if (entry.kind !== "app") continue;
+      const render = resolveAppEntryRender({
+        part: entry.part,
+        toolResultPart: entry.toolResultPart,
+        early: entry.part.toolCallId
+          ? appContext.earlyToolUiStarts?.[entry.part.toolCallId]
+          : undefined,
+        getToolShortName,
+      });
+      if (render) appRenders.set(entry.key, render);
+    }
+  }
+
+  const circleIconProps = (displayToolName: string) => {
+    const iconInfo = toolIconMap?.get(displayToolName);
+    return {
+      icon: iconInfo?.icon,
+      catalogId:
+        iconInfo?.catalogId ??
+        (isToolName(displayToolName) ? ARCHESTRA_MCP_CATALOG_ID : undefined),
+    };
+  };
 
   return (
     <div className="mb-4">
@@ -281,6 +370,45 @@ export function CompactToolGroup({
             part: entry.part,
             toolResultPart: entry.toolResultPart,
           });
+          if (entry.kind === "app") {
+            const render = appRenders.get(entry.key);
+            if (!render) {
+              // No render to mount (still streaming, or no agent context):
+              // a regular circle that expands the tool details.
+              const displayToolName = resolveRunToolTargetName(
+                entry.part,
+                entry.toolName,
+                { getToolShortName },
+              );
+              const iconProps = circleIconProps(displayToolName);
+              return (
+                <CompactCircle
+                  key={entry.key}
+                  toolName={displayToolName}
+                  state={state}
+                  isExpanded={expandedKey === entry.key}
+                  isExpandable={canExpandToolCalls}
+                  onClick={() => handleToggle(entry.key)}
+                  {...iconProps}
+                />
+              );
+            }
+            // No icon override: the pill keeps the generic app-window glyph —
+            // the app pill identifies the APP, not the serving MCP catalog.
+            return (
+              <McpAppEntryPill
+                key={entry.key}
+                appId={render.appId}
+                appName={render.appName}
+                toolName={render.mcpAppToolName}
+                toolCallId={entry.part.toolCallId}
+                state={state}
+                // Opening an app collapses an expanded tool-call card so only
+                // one thing unfolds under the row at a time.
+                onClick={() => setExpandedKey(null)}
+              />
+            );
+          }
           if (getToolShortName(entry.toolName) === TOOL_LOAD_SKILL_SHORT_NAME) {
             const input = (entry.part.input ?? {}) as {
               name?: unknown;
@@ -349,6 +477,49 @@ export function CompactToolGroup({
           )}
         </div>
       )}
+      {appContext?.agentId
+        ? tools.map((entry) => {
+            if (entry.kind !== "app") return null;
+            const render = appRenders.get(entry.key);
+            if (!render) return null;
+            const early = entry.part.toolCallId
+              ? appContext.earlyToolUiStarts?.[entry.part.toolCallId]
+              : undefined;
+            return (
+              <McpAppEntryContent
+                key={entry.key}
+                uiResourceUri={render.uiResourceUri}
+                appId={render.appId}
+                mcpServerId={render.mcpServerId}
+                appName={render.appName}
+                appVersion={render.appVersion}
+                agentId={appContext.agentId as string}
+                toolName={render.mcpAppToolName}
+                toolCallId={entry.part.toolCallId}
+                toolInput={render.toolInput}
+                rawOutput={render.rawOutput}
+                preloadedResource={
+                  early?.html
+                    ? {
+                        html: early.html,
+                        csp: early.csp,
+                        permissions: early.permissions,
+                      }
+                    : undefined
+                }
+                // Surfaced only when the app renders nothing to display, so the
+                // call stays inspectable instead of the section going blank.
+                toolDetails={
+                  <ExpandedToolCard
+                    tool={entry}
+                    onToolApprovalResponse={onToolApprovalResponse}
+                  />
+                }
+                onSendMessage={appContext.onSendMessage}
+              />
+            );
+          })
+        : null}
     </div>
   );
 }
@@ -357,7 +528,7 @@ function ExpandedToolCard({
   tool,
   onToolApprovalResponse,
 }: {
-  tool: CompactToolEntry;
+  tool: CompactToolEntry | CompactAppEntry;
   onToolApprovalResponse?: (params: {
     id: string;
     approved: boolean;

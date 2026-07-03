@@ -864,6 +864,52 @@ describe("OpenAIStreamAdapter", () => {
     });
   });
 
+  function finishReasonOf(endSse: string | Uint8Array): unknown {
+    const text =
+      typeof endSse === "string" ? endSse : new TextDecoder().decode(endSse);
+    const firstData = text.split("\n\n")[0].replace(/^data: /, "");
+    return (
+      JSON.parse(firstData) as {
+        choices?: Array<{ finish_reason?: unknown }>;
+      }
+    ).choices?.[0]?.finish_reason;
+  }
+
+  test("closes a refused stream as stop, not the upstream tool_calls", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      id: "chatcmpl-3",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                type: "function",
+                function: { name: "list", arguments: '{"a":1}' },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    } as Chunk);
+
+    adapter.formatCompleteTextSSE("blocked");
+
+    expect(finishReasonOf(adapter.formatEndSSE())).toBe("stop");
+
+    const response = adapter.toProviderResponse();
+    expect(response.choices[0].finish_reason).toBe("stop");
+    expect(response.choices[0].message.tool_calls).toBeUndefined();
+    expect(response.choices[0].message.content).toBe("blocked");
+  });
+
   test("omits usage when the provider sent none", () => {
     const adapter = openaiAdapterFactory.createStreamAdapter();
     adapter.processChunk({

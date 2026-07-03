@@ -783,7 +783,7 @@ export async function getChatMcpTools({
   user?: { id: string; email?: string; name?: string };
   /** Block tool execution when policy is require_approval (for A2A/autonomous contexts where no one can approve) */
   blockOnApprovalRequired?: boolean;
-  /** Schedule trigger run ID — enables artifact_write to target the run */
+  /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];

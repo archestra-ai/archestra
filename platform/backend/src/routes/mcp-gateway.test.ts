@@ -3,7 +3,6 @@ import {
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
@@ -22,6 +21,7 @@ import {
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
@@ -1056,7 +1056,7 @@ describe("MCP Gateway (stateless mode)", () => {
         TOOL_SEARCH_TOOLS_FULL_NAME,
       ].sort(),
     );
-    expect(toolNames).not.toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+    expect(toolNames).not.toContain(TOOL_TODO_WRITE_FULL_NAME);
   });
 
   test("also keeps sandbox runtime and app tools top-level in tools/list when their features are enabled", async ({

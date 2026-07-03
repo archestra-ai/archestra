@@ -63,9 +63,12 @@ jobs:
       # start if a benchmark Job is still active, before spending a build on it.
       - name: Guard against an overlapping run
         run: |
-          set -uo pipefail
-          if kubectl get jobs -n archestra -l app=archestra-bench \
-               -o jsonpath='{.items[*].status.active}' 2>/dev/null | grep -q '[1-9]'; then
+          set -euo pipefail
+          # Fail closed: if the check itself errors (bad credentials, API outage),
+          # abort rather than proceed as "no active job".
+          ACTIVE=$(kubectl get jobs -n archestra -l app=archestra-bench \
+            -o jsonpath='{.items[*].status.active}')
+          if grep -q '[1-9]' <<<"$ACTIVE"; then
             echo "::error::a benchmark Job is still active in archestra; refusing to start an overlapping run"
             exit 1
           fi

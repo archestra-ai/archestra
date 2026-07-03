@@ -10,7 +10,7 @@ export class TaskQueueService {
   private pollIntervalId: ReturnType<typeof setInterval> | null = null;
   private activeTaskIds = new Set<string>();
   private stopping = false;
-  private polling = false;
+  private pollInFlight: Promise<void> | null = null;
   private lastStuckSweepAt = 0;
   private drainResolve: (() => void) | null = null;
 
@@ -117,6 +117,13 @@ export class TaskQueueService {
       this.pollIntervalId = null;
     }
 
+    // A poll may be mid-dequeue with its task not yet tracked; wait for it so
+    // the drain below sees the full in-flight set and the process cannot exit
+    // before a just-dequeued task is released back to the queue.
+    if (this.pollInFlight) {
+      await this.pollInFlight.catch(() => {});
+    }
+
     if (this.activeTaskIds.size === 0) {
       logger.info("[TaskQueue] Worker stopped (no in-flight tasks)");
       return;
@@ -155,72 +162,78 @@ export class TaskQueueService {
 
   // ===== Private methods =====
 
-  private async poll(): Promise<void> {
-    if (this.stopping) return;
+  private poll(): Promise<void> {
     // The interval fires regardless of whether the previous poll finished;
-    // this guard prevents overlapping polls from racing on the same state.
-    if (this.polling) return;
-    this.polling = true;
+    // reusing the in-flight promise prevents overlapping polls from racing on
+    // shared state and lets stopWorker await the critical section.
+    if (this.pollInFlight) {
+      return this.pollInFlight;
+    }
+    const run = this.doPoll().finally(() => {
+      this.pollInFlight = null;
+    });
+    this.pollInFlight = run;
+    return run;
+  }
 
-    try {
-      if (Date.now() - this.lastStuckSweepAt >= STUCK_SWEEP_INTERVAL_MS) {
-        this.lastStuckSweepAt = Date.now();
-        // Reset stuck tasks (processing for more than 1 hour)
-        const swept = await TaskModel.resetStuckTasks(STUCK_TASK_TIMEOUT_MS);
-        if (swept.length > 0) {
-          metrics.taskQueue.reportStuckTasksReset(swept.length);
-          logger.warn(
-            { resetCount: swept.length },
-            "[TaskQueue] Reset stuck tasks",
+  private async doPoll(): Promise<void> {
+    if (this.stopping) return;
+
+    if (Date.now() - this.lastStuckSweepAt >= STUCK_SWEEP_INTERVAL_MS) {
+      this.lastStuckSweepAt = Date.now();
+      // Reset stuck tasks (processing for more than 1 hour)
+      const swept = await TaskModel.resetStuckTasks(STUCK_TASK_TIMEOUT_MS);
+      if (swept.length > 0) {
+        metrics.taskQueue.reportStuckTasksReset(swept.length);
+        logger.warn(
+          { resetCount: swept.length },
+          "[TaskQueue] Reset stuck tasks",
+        );
+      }
+      // A stuck periodic task that went straight to dead would silently end
+      // its chain — resurrect it here.
+      for (const transition of swept) {
+        if (transition.periodic && transition.status === "dead") {
+          await this.rescheduleIfPeriodic(transition.taskType);
+        }
+      }
+      if (this.stopping) return;
+    }
+
+    // Dequeue and process until the concurrency cap is filled
+    while (
+      !this.stopping &&
+      this.activeTaskIds.size < config.kb.taskWorkerMaxConcurrent
+    ) {
+      const task = await TaskModel.dequeue();
+      if (!task) return;
+
+      // Track immediately so a concurrent stopWorker sees this task.
+      this.activeTaskIds.add(task.id);
+
+      if (this.stopping) {
+        // stopWorker may have snapshotted an empty set while the dequeue
+        // was in flight; hand the task back instead of processing it
+        // outside the drain. Release before untracking so shutdown cannot
+        // proceed past the drain while the row is still marked processing.
+        await TaskModel.releaseToQueue([task.id]);
+        this.untrackTask(task.id);
+        return;
+      }
+
+      this.processTask(task)
+        .catch((error) => {
+          logger.error(
+            {
+              taskId: task.id,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            "[TaskQueue] Unhandled error in processTask",
           );
-        }
-        // A stuck periodic task that went straight to dead would silently end
-        // its chain — resurrect it here.
-        for (const transition of swept) {
-          if (transition.periodic && transition.status === "dead") {
-            await this.rescheduleIfPeriodic(transition.taskType);
-          }
-        }
-        if (this.stopping) return;
-      }
-
-      // Dequeue and process until the concurrency cap is filled
-      while (
-        !this.stopping &&
-        this.activeTaskIds.size < config.kb.taskWorkerMaxConcurrent
-      ) {
-        const task = await TaskModel.dequeue();
-        if (!task) return;
-
-        // Track immediately so a concurrent stopWorker sees this task.
-        this.activeTaskIds.add(task.id);
-
-        if (this.stopping) {
-          // stopWorker may have snapshotted an empty set while the dequeue
-          // was in flight; hand the task back instead of processing it
-          // outside the drain. Release before untracking so shutdown cannot
-          // proceed past the drain while the row is still marked processing.
-          await TaskModel.releaseToQueue([task.id]);
+        })
+        .finally(() => {
           this.untrackTask(task.id);
-          return;
-        }
-
-        this.processTask(task)
-          .catch((error) => {
-            logger.error(
-              {
-                taskId: task.id,
-                error: error instanceof Error ? error.message : String(error),
-              },
-              "[TaskQueue] Unhandled error in processTask",
-            );
-          })
-          .finally(() => {
-            this.untrackTask(task.id);
-          });
-      }
-    } finally {
-      this.polling = false;
+        });
     }
   }
 

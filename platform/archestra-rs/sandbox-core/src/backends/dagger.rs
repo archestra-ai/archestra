@@ -362,7 +362,7 @@ impl From<Child> for SessionProc {
 
 /// Spawn the `dagger session` CLI child and read its `ConnectParams` handshake —
 /// a faithful reimplementation of dagger-sdk's private `CliSession::get_conn`,
-/// pinned to `=0.21.5`. The ordering is load-bearing: take stdout/stderr off the
+/// pinned to `=0.21.7`. The ordering is load-bearing: take stdout/stderr off the
 /// child, build the session handle (which owns the shutdown broadcast — there is
 /// no `Drop`), then drain both pipes in background tasks until teardown, parsing
 /// the first JSON line as `ConnectParams`.
@@ -427,7 +427,7 @@ async fn spawn_and_read_connect_params(
 /// setting the runner host on the spawned CLI **child** only — never the parent
 /// process env. `runner_host = None` lets the child inherit the parent's default
 /// host. This owns the thin glue `dagger_sdk::connect_opts` would run (pinned to
-/// `=0.21.5`), so a per-environment host is bound to one child at spawn instead
+/// `=0.21.7`), so a per-environment host is bound to one child at spawn instead
 /// of mutated into process-global, non-synchronized state.
 async fn connect_target<F, Fut>(
     cfg: Config,
@@ -1097,7 +1097,7 @@ fn classify_engine_fault(err: &DaggerError) -> EngineFault {
     }
 }
 
-/// recover an engine fault from a *panic* payload. dagger-sdk 0.21.5 `unwrap()`s
+/// recover an engine fault from a *panic* payload. dagger-sdk 0.21.7 `unwrap()`s
 /// GraphQL errors inside generated lazy-arg resolvers (`gen.rs` `into_id().unwrap()`),
 /// which resolve during exec evaluation — so a stale-attachables timeout reaches
 /// us as a panic rather than a typed `DaggerError`, bypassing [`from_sdk`] /
@@ -1162,7 +1162,7 @@ mod tests {
                 "--label".to_string(),
                 "dagger.io/sdk.name:rust".to_string(),
                 "--label".to_string(),
-                "dagger.io/sdk.version:0.21.5".to_string(),
+                "dagger.io/sdk.version:0.21.7".to_string(),
             ]
         );
     }

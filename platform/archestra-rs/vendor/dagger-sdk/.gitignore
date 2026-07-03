@@ -1,0 +1,4 @@
+# The repo-wide `core` crash-dump ignore (platform/.gitignore) would otherwise
+# drop this vendored crate's legitimate `src/core/` module directory. Re-include it.
+!src/core/
+!src/core/**

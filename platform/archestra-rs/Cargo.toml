@@ -1,7 +1,18 @@
 [workspace]
 members = ["app-runtime-core", "app-runtime-rs", "image-core", "image-rs", "sandbox-core", "sandbox-rs"]
+exclude = ["vendor/dagger-sdk"]
 resolver = "2"
 
 [profile.release]
 lto = "thin"
 strip = "symbols"
+
+# Every released dagger-sdk (<= 0.21.7) still depends on reqwest 0.11 -> rustls
+# 0.21 -> rustls-webpki 0.101, and the 0.101 line has no patched release for
+# GHSA-82j2-j2ch-gfr8 / RUSTSEC-2026-0104. vendor/dagger-sdk is the released
+# 0.21.7 source with upstream's reqwest 0.12 / rustls 0.23 bump
+# (dagger/dagger#13495) applied — see vendor/dagger-sdk/README.md. Drop the
+# patch, the vendor dir, and the exclude above once a dagger-sdk release ships
+# with reqwest >= 0.12.
+[patch.crates-io]
+dagger-sdk = { path = "vendor/dagger-sdk" }

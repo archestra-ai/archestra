@@ -7,8 +7,8 @@ ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
 ARG DOCKER_CLI_VERSION=v29.3.0
 ARG DOCKER_CLI_COMMIT=5927d80c76b3ce5cf782be818922966e8a0d87a3
-ARG DAGGER_VERSION=v0.21.5
-ARG DAGGER_COMMIT=c7a5ecd0d0c2fb3e6609e167325fb70a51a5c2b8
+ARG DAGGER_VERSION=v0.21.7
+ARG DAGGER_COMMIT=054f94b2d86c0ac00bef11ac4550816973c4aeef
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
 
@@ -62,7 +62,7 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     test "$(git -C /dagger rev-parse HEAD)" = "${DAGGER_COMMIT}" && \
     cd /dagger && \
     cp -R /dagger-dockercompat ./dockercompat && \
-    # dagger v0.21.5's vendored Go SDK requires go >= 1.26.1; align the module directive.
+    # dagger v0.21.7's vendored Go SDK requires go >= 1.26.1; align the module directive.
     go mod edit -go=1.26.1 && \
     # cve-2026-34040: replace Dagger's BuildKit Docker monolith imports with split Moby modules.
     go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \

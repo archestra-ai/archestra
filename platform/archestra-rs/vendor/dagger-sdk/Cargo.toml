@@ -1,0 +1,112 @@
+# Vendored copy of the released dagger-sdk 0.21.7 (crates.io), wired in via
+# the [patch.crates-io] entry in the workspace Cargo.toml. See README.md in
+# this directory for why it exists and when to delete it.
+#
+# Local changes vs the published crate:
+#   - graphql_client 0.13 -> 0.16 and reqwest 0.11 -> 0.12 (+"json" feature),
+#     mirroring upstream commit dagger/dagger@6ae7fda3 (PR #13495) exactly.
+#   - publish = false; examples/, tests/, and dev-dependencies dropped.
+# src/ is byte-for-byte the published 0.21.7 source.
+
+[package]
+edition = "2021"
+name = "dagger-sdk"
+version = "0.21.7"
+authors = [
+    "kjuulh <contact@kasperhermansen.com>",
+    "Dagger <hello@dagger.io>",
+]
+publish = false
+description = "A dagger sdk for rust, written in rust"
+readme = "README.md"
+license-file = "LICENSE"
+repository = "https://github.com/dagger/dagger"
+
+[dependencies.async-trait]
+version = "0.1.77"
+
+[dependencies.base64]
+version = "0.21.6"
+
+[dependencies.derive_builder]
+version = "0.12.0"
+
+[dependencies.dirs]
+version = "5.0.1"
+
+[dependencies.eyre]
+version = "0.6.9"
+
+[dependencies.flate2]
+version = "1.0.28"
+features = ["rust_backend"]
+
+[dependencies.futures]
+version = "0.3.30"
+
+[dependencies.graphql_client]
+version = "0.16.0"
+features = [
+    "reqwest-rustls",
+    "graphql_query_derive",
+]
+default-features = false
+
+[dependencies.hex]
+version = "0.4.3"
+
+[dependencies.hex-literal]
+version = "0.4.1"
+
+[dependencies.platform-info]
+version = "2.0.2"
+
+[dependencies.reqwest]
+version = "0.12.23"
+features = [
+    "stream",
+    "json",
+    "rustls-tls",
+]
+default-features = false
+
+[dependencies.serde]
+version = "1.0.195"
+features = ["derive"]
+
+[dependencies.serde_graphql_input]
+version = "0.1.1"
+
+[dependencies.serde_json]
+version = "1.0.111"
+
+[dependencies.sha2]
+version = "0.10.8"
+
+[dependencies.tar]
+version = "0.4.40"
+
+[dependencies.tempfile]
+version = "3.9.0"
+
+[dependencies.thiserror]
+version = "1.0.56"
+
+[dependencies.tokio]
+version = "1.35.1"
+features = ["full"]
+
+[dependencies.tracing]
+version = "0.1.40"
+features = ["log"]
+
+[dependencies.tracing-subscriber]
+version = "0.3.18"
+features = [
+    "tracing-log",
+    "tracing",
+]
+
+[features]
+default = ["gen"]
+gen = []

@@ -202585,7 +202585,8 @@
                                   "enable",
                                   "query",
                                   "execute",
-                                  "deploy-to-restricted"
+                                  "deploy-to-restricted",
+                                  "manage"
                                 ]
                               }
                             }
@@ -202942,7 +202943,8 @@
                           "enable",
                           "query",
                           "execute",
-                          "deploy-to-restricted"
+                          "deploy-to-restricted",
+                          "manage"
                         ]
                       }
                     }
@@ -202997,7 +202999,8 @@
                             "enable",
                             "query",
                             "execute",
-                            "deploy-to-restricted"
+                            "deploy-to-restricted",
+                            "manage"
                           ]
                         }
                       }
@@ -203341,7 +203344,8 @@
                             "enable",
                             "query",
                             "execute",
-                            "deploy-to-restricted"
+                            "deploy-to-restricted",
+                            "manage"
                           ]
                         }
                       }
@@ -203650,7 +203654,8 @@
                           "enable",
                           "query",
                           "execute",
-                          "deploy-to-restricted"
+                          "deploy-to-restricted",
+                          "manage"
                         ]
                       }
                     }
@@ -203726,7 +203731,8 @@
                             "enable",
                             "query",
                             "execute",
-                            "deploy-to-restricted"
+                            "deploy-to-restricted",
+                            "manage"
                           ]
                         }
                       }
@@ -218549,7 +218555,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
+        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and the chats inside them",
         "parameters": [
           {
             "schema": {
@@ -218859,8 +218865,8 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "project:read",
-            "sandbox:execute"
+            "file:manage",
+            "project:read"
           ]
         }
       },
@@ -218869,7 +218875,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Upload one file into the project (drag-and-drop on the Files panel). The bytes are base64-encoded in the body; a colliding name is auto-renamed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
+        "description": "Upload one file into the project (drag-and-drop on the Files panel). The bytes are base64-encoded in the body; a colliding name is auto-renamed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and the chats inside them",
         "requestBody": {
           "required": true,
           "content": {
@@ -219172,8 +219178,8 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "project:read",
-            "sandbox:execute"
+            "file:manage",
+            "project:read"
           ]
         }
       }
@@ -246544,7 +246550,8 @@
                         "enable",
                         "query",
                         "execute",
-                        "deploy-to-restricted"
+                        "deploy-to-restricted",
+                        "manage"
                       ]
                     }
                   }

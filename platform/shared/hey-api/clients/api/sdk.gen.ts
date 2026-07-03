@@ -5372,8 +5372,8 @@ export const setProjectShare = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
+ * `file:manage`: List, read, write, and delete files in chats and projects
  * `project:read`: View projects and the chats inside them
- * `sandbox:execute`: Run commands and upload/download files in code execution sandboxes
  */
 export const getProjectFiles = <ThrowOnError extends boolean = false>(options: Options<GetProjectFilesData, ThrowOnError>) => (options.client ?? client).get<GetProjectFilesResponses, GetProjectFilesErrors, ThrowOnError>({ url: '/api/projects/{id}/files', ...options });
 
@@ -5386,8 +5386,8 @@ export const getProjectFiles = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
+ * `file:manage`: List, read, write, and delete files in chats and projects
  * `project:read`: View projects and the chats inside them
- * `sandbox:execute`: Run commands and upload/download files in code execution sandboxes
  */
 export const uploadProjectFiles = <ThrowOnError extends boolean = false>(options: Options<UploadProjectFilesData, ThrowOnError>) => (options.client ?? client).post<UploadProjectFilesResponses, UploadProjectFilesErrors, ThrowOnError>({
     url: '/api/projects/{id}/files',

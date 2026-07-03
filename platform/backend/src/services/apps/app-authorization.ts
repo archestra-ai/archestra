@@ -5,29 +5,56 @@ import { ApiError } from "@/types";
 import type { AppScope } from "@/types/app";
 
 /**
- * Dedupe the requested team ids and assert every one belongs to the caller's
- * org, throwing `ApiError(400)` otherwise. Shared by the REST app routes and the
- * `publish_app` MCP tool so neither can assign an app to a foreign-org team or
- * a team id that does not exist.
+ * Resolve requested team references — team ids or team names — to a deduped
+ * list of team ids, asserting every one belongs to the caller's org and
+ * throwing `ApiError(400)` otherwise. Shared by the REST app routes (which
+ * pass ids) and the `publish_app` MCP tool (where the model passes whatever
+ * the user said, usually a team name) so neither can assign an app to a
+ * foreign-org team or a team that does not exist. Names match exactly first,
+ * then case-insensitively when that is unambiguous.
  */
-export async function resolveOrgTeamIds(
-  teamIds: string[] | undefined,
+export async function resolveOrgTeams(
+  teamRefs: string[] | undefined,
   organizationId: string,
 ): Promise<string[]> {
-  const unique = [...new Set(teamIds ?? [])];
+  const unique = [...new Set((teamRefs ?? []).map((ref) => ref.trim()))];
   if (unique.length === 0) return [];
-  const teams = await TeamModel.findByIds(unique);
-  const inOrg = new Set(
-    teams.filter((t) => t.organizationId === organizationId).map((t) => t.id),
-  );
-  const invalid = unique.filter((id) => !inOrg.has(id));
-  if (invalid.length > 0) {
+  const orgTeams = await TeamModel.findByOrganization(organizationId);
+  const teamsById = new Map(orgTeams.map((team) => [team.id, team]));
+  const resolved = new Set<string>();
+  const unknown: string[] = [];
+  for (const ref of unique) {
+    const byId = teamsById.get(ref);
+    if (byId) {
+      resolved.add(byId.id);
+      continue;
+    }
+    const exact = orgTeams.filter((team) => team.name === ref);
+    const matches =
+      exact.length > 0
+        ? exact
+        : orgTeams.filter(
+            (team) => team.name.toLowerCase() === ref.toLowerCase(),
+          );
+    if (matches.length > 1) {
+      throw new ApiError(
+        400,
+        `Team name "${ref}" is ambiguous in this organization; pass the team id instead.`,
+      );
+    }
+    if (matches.length === 1) {
+      resolved.add(matches[0].id);
+      continue;
+    }
+    unknown.push(ref);
+  }
+  if (unknown.length > 0) {
     throw new ApiError(
       400,
-      `Unknown team(s) for this organization: ${invalid.join(", ")}`,
+      `Unknown team(s) for this organization: ${unknown.join(", ")}`,
     );
   }
-  return unique;
+  return [...resolved];
 }
 
 /**

@@ -33,6 +33,18 @@ pub fn extract_effective_prompts(interactions: &[Value]) -> ExtractionOutcome {
             continue;
         }
 
+        // Intra-turn platform machinery (`chat:compaction`, `chat:title_generation`,
+        // `chat:tool_call_repair`) is logged under a `chat:`-prefixed source. Those calls don't
+        // carry the agent's effective context — a tool-call repair re-ask has no system prompt at
+        // all — so they are neither a context to capture nor an anomaly.
+        if interaction
+            .get("source")
+            .and_then(Value::as_str)
+            .is_some_and(|s| s.starts_with("chat:"))
+        {
+            continue;
+        }
+
         let body = request_body(interaction);
         let extracted = match type_tag.as_str() {
             t if t.ends_with(":chatCompletions") => extract_openai_chat(body),
@@ -488,6 +500,45 @@ mod tests {
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts.len(), 1);
         assert_eq!(out.prompts[0].system_prompt, "s");
+    }
+
+    #[test]
+    fn chat_machinery_sub_sources_are_skipped() {
+        let main = json!({
+            "type": "anthropic:messages",
+            "source": "chat",
+            "request": {"system": "agent context", "max_tokens": 10}
+        });
+        // Tool-call repair re-asks have no system prompt at all.
+        let repair = json!({
+            "type": "anthropic:messages",
+            "source": "chat:tool_call_repair",
+            "request": {"messages": [{"role": "user", "content": "re-emit as valid JSON"}]}
+        });
+        // Compaction has its own system prompt that must not register as a second context.
+        let compaction = json!({
+            "type": "anthropic:messages",
+            "source": "chat:compaction",
+            "request": {"system": "summarizer rules", "max_tokens": 10}
+        });
+        let out = extract_effective_prompts(&[main.clone(), repair, compaction, main]);
+        assert!(out.errors.is_empty());
+        assert_eq!(out.prompts.len(), 1);
+        assert_eq!(out.prompts[0].system_prompt, "agent context");
+        assert_eq!(out.prompts[0].interaction_count, 2);
+    }
+
+    #[test]
+    fn only_machinery_rows_is_flagged_not_silent() {
+        let repair = json!({
+            "type": "anthropic:messages",
+            "source": "chat:tool_call_repair",
+            "request": {"messages": [{"role": "user", "content": "re-emit"}]}
+        });
+        let out = extract_effective_prompts(&[repair]);
+        assert!(out.prompts.is_empty());
+        assert_eq!(out.errors.len(), 1);
+        assert!(out.errors[0].contains("no model-facing prompt"));
     }
 
     #[test]

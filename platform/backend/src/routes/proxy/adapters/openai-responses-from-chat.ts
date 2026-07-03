@@ -95,6 +95,11 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   private outputCompleted = false;
   private sequenceNumber = 0;
   private readonly itemId = `msg_${randomUUID()}`;
+  // Set to the refusal text when the streamed response was replaced by a policy
+  // refusal, so the terminal response.completed (and the persisted response)
+  // carry only the refusal message — not the original text or the blocked tool
+  // calls the model had emitted.
+  private replacedText: string | null = null;
 
   constructor(
     inner: LLMStreamAdapter<TChunk, TResponse>,
@@ -210,6 +215,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   }
 
   formatCompleteTextSSE(text: string): string[] {
+    this.replacedText = text;
     return [
       this.ensureOutputStarted(),
       this.toSse({
@@ -338,7 +344,10 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   private buildResponsesResponse() {
     const output = [];
 
-    if (this.state.text) {
+    // On a refusal the blocked tool calls are dropped and the refusal message
+    // is the only output — never the original text the model streamed.
+    const messageText = this.replacedText ?? this.state.text;
+    if (messageText) {
       output.push({
         id: this.itemId,
         type: "message",
@@ -347,23 +356,25 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
         content: [
           {
             type: "output_text",
-            text: this.state.text,
+            text: messageText,
             annotations: [],
           },
         ],
       });
     }
 
-    output.push(
-      ...this.state.toolCalls.map((toolCall) => ({
-        id: toolCall.id,
-        call_id: toolCall.id,
-        type: "function_call",
-        name: toolCall.name,
-        arguments: toolCall.arguments,
-        status: "completed",
-      })),
-    );
+    if (this.replacedText === null) {
+      output.push(
+        ...this.state.toolCalls.map((toolCall) => ({
+          id: toolCall.id,
+          call_id: toolCall.id,
+          type: "function_call",
+          name: toolCall.name,
+          arguments: toolCall.arguments,
+          status: "completed",
+        })),
+      );
+    }
 
     const inputTokens = this.state.usage?.inputTokens ?? 0;
     const outputTokens = this.state.usage?.outputTokens ?? 0;

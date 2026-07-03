@@ -99,6 +99,11 @@ export default function StatisticsPage() {
   const searchParams = useSearchParams();
 
   const [timeframe, setTimeframe] = useState<StatisticsTimeFrame>("1h");
+  // The real timeframe (URL param or localStorage) is only known once the
+  // init effect below has run; hold the statistics queries until then so a
+  // page load doesn't fire a throwaway round of default-timeframe requests
+  // that gets discarded one render later.
+  const [isTimeframeResolved, setIsTimeframeResolved] = useState(false);
   const [customFrom, setCustomFrom] = useState<Date | undefined>();
   const [customTo, setCustomTo] = useState<Date | undefined>();
   const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false);
@@ -106,15 +111,19 @@ export default function StatisticsPage() {
   // Statistics data fetching hooks
   const { data: teamStatistics = [] } = useTeamStatistics({
     timeframe,
+    enabled: isTimeframeResolved,
   });
   const { data: agentStatistics = [] } = useProfileStatistics({
     timeframe,
+    enabled: isTimeframeResolved,
   });
   const { data: modelStatistics = [] } = useModelStatistics({
     timeframe,
+    enabled: isTimeframeResolved,
   });
   const { data: costSavingsData } = useCostSavingsStatistics({
     timeframe,
+    enabled: isTimeframeResolved,
   });
 
   /**
@@ -138,6 +147,7 @@ export default function StatisticsPage() {
       setCustomFrom(undefined);
       setCustomTo(undefined);
     }
+    setIsTimeframeResolved(true);
   }, [searchParams]);
 
   // Update URL when timeframe changes

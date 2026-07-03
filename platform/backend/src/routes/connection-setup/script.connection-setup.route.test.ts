@@ -257,6 +257,38 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
   });
 
+  test("claude-code bedrock passthrough injects the X-Archestra-Virtual-Key header by default", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId,
+      agentType: "llm_proxy",
+      name: "Main Proxy",
+    });
+
+    const { rawToken } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      llmProxyId: proxy.id,
+      provider: "bedrock",
+    });
+
+    const response = await fetchScript(rawToken);
+    expect(response.statusCode).toBe(200);
+    const script = response.body;
+    expect(script).toContain("CLAUDE_CODE_USE_BEDROCK");
+    expect(script).toContain(`/v1/bedrock/${proxy.id}`);
+    // The provisioned passthrough key rides in the attribution header alongside
+    // the agent-id line, exactly like the Anthropic passthrough; the user's own
+    // AWS credentials keep passing through (no bearer token is printed).
+    expect(script).toContain(
+      "export ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS",
+    );
+    expect(script).toContain(AGENT_ID_HEADER_LINE);
+    expect(script).toMatch(/X-Archestra-Virtual-Key: arch_[0-9a-f]{64}/);
+    expect(script).not.toContain("AWS_BEARER_TOKEN_BEDROCK");
+  });
+
   test("a revoked attribution key degrades gracefully: script drops the virtual-key header but keeps the agent-id, no 410", async ({
     makeAgent,
   }) => {

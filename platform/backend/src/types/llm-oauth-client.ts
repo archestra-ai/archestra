@@ -1,4 +1,5 @@
 import {
+  ResourceVisibilityScopeSchema,
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@archestra/shared";
@@ -37,6 +38,15 @@ export const LlmOauthClientMetadataSchema = z.object({
   // Rows created before authorization_code support have no grantType; treat
   // them as the original client_credentials clients.
   grantType: LlmOauthClientGrantTypeSchema.default("client_credentials"),
+  // Rows created before team scoping have no scope/authorId; they were
+  // implicitly visible org-wide, so they parse as org-scoped with no author.
+  scope: ResourceVisibilityScopeSchema.default("org"),
+  authorId: z.string().nullable().default(null),
+});
+
+const LlmOauthClientTeamInfoSchema = z.object({
+  id: z.string(),
+  name: z.string(),
 });
 
 export const LlmOauthClientSchema = z.object({
@@ -53,6 +63,10 @@ export const LlmOauthClientSchema = z.object({
   ),
   redirectUris: z.array(z.string()),
   disabled: z.boolean(),
+  scope: ResourceVisibilityScopeSchema,
+  authorId: z.string().nullable(),
+  authorName: z.string().nullable(),
+  teams: z.array(LlmOauthClientTeamInfoSchema),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

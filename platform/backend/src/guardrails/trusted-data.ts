@@ -1,4 +1,6 @@
+import { buildTrustedDataBlockedContentNotice } from "@archestra/shared";
 import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import { TrustedDataPolicyModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
@@ -188,8 +190,10 @@ export async function evaluateIfContextIsTrusted(
         { agentId, toolCallId, reason },
         "[trustedData] evaluateIfContextIsTrusted: tool result blocked by policy",
       );
-      toolResultUpdates[toolCallId] =
-        `[Content blocked by policy${reason ? `: ${reason}` : ""}]`;
+      toolResultUpdates[toolCallId] = buildTrustedDataBlockedContentNotice({
+        reason,
+        productName: archestraMcpBranding.catalogName,
+      });
       toolResultIsTrusted = false;
       // Preserve the first point where context became unsafe so the UI can show
       // a stable boundary even if later tool results are also untrusted.

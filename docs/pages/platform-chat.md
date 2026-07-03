@@ -25,6 +25,8 @@ Type `/` in the prompt input to open available chat commands.
 
 - [`/compact`](#context-compaction) summarizes older conversation history to reduce context usage and help prevent hitting the selected model's context limit. The full chat history remains visible in the conversation.
 
+When the agent has the code sandbox available, a message starting with `!` (for example `! ls attachments/`) runs the rest of the message as a shell command in the conversation's sandbox instead of asking the model. The command and its output appear in the conversation as a regular `run_command` tool call, so the agent sees the result in later turns. Output appears when the command finishes. Requires the `sandbox: execute` permission; without a sandbox, the message is sent as normal text. User-typed commands do not trigger PreToolUse/PostToolUse hooks — the user, not the model, initiated the call.
+
 ### MCP Elicitation
 
 Some MCP tools can ask for additional information while they run. Chat shows these requests as a modal form, validates required fields, and resumes the tool call after you continue. If the request points to an external URL, Chat only opens HTTP or HTTPS links.

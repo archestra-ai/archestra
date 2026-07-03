@@ -154,7 +154,7 @@ export async function gateAppToolCall(params: {
     return {
       allowed: false,
       code: -32601,
-      reason: `Tool "${toolName}" is blocked by a tool-invocation policy: ${verdict.reason}`,
+      reason: `Tool "${toolName}" is blocked by a tool-invocation policy — a security guardrail enforced by ${archestraMcpBranding.catalogName}, not by the tool itself: ${verdict.reason}`,
     };
   }
 

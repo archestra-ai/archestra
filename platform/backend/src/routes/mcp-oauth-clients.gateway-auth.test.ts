@@ -44,6 +44,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [gateway.id],
     });
@@ -63,6 +64,40 @@ describe("MCP OAuth client gateway authorization", () => {
     expect(result?.userId).toBeUndefined();
   });
 
+  test("authorizes a scoped gateway for a TEAM-visibility-scoped client (scoping is management-plane only)", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    const author = await makeUser();
+    const team = await makeTeam(org.id, author.id);
+    const { oauthClient } = await McpOauthClientModel.create({
+      organizationId: org.id,
+      authorId: author.id,
+      name: "team-scoped service",
+      allowedGatewayIds: [gateway.id],
+      scope: "team",
+      teams: [team.id],
+    });
+    const token = await mintToken({
+      clientId: oauthClient.clientId,
+      referenceClientUuid: oauthClient.id,
+    });
+
+    const result = await validateMCPGatewayToken(gateway.id, token);
+
+    expect(result).not.toBeNull();
+    expect(result?.organizationId).toBe(org.id);
+    expect(result?.isOrganizationToken).toBe(false);
+    expect(result?.isUserToken).toBeUndefined();
+  });
+
   test("rejects a gateway the client is not scoped to", async ({
     makeOrganization,
     makeAgent,
@@ -78,6 +113,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [allowedGateway.id],
     });
@@ -103,6 +139,7 @@ describe("MCP OAuth client gateway authorization", () => {
     // The allowedGatewayIds check passes, but the org guard must still reject.
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: clientOrg.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [otherOrgGateway.id],
     });
@@ -122,6 +159,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [gateway.id],
     });
@@ -145,6 +183,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [gateway.id],
     });
@@ -168,6 +207,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [gateway.id],
     });
@@ -190,6 +230,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [gateway.id],
     });
@@ -217,6 +258,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: crypto.randomUUID(),
       name: "service",
       allowedGatewayIds: [gateway.id],
     });
@@ -257,6 +299,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: user.id,
       name: "Agentic Chat Server",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],
@@ -302,6 +345,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: user.id,
       name: "Agentic Chat Server",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],
@@ -349,6 +393,7 @@ describe("MCP OAuth client gateway authorization", () => {
     // access.
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: user.id,
       name: "Chat Interface",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],
@@ -398,6 +443,7 @@ describe("MCP OAuth client gateway authorization", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
+      authorId: user.id,
       name: "Chat Interface",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],

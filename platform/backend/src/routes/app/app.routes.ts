@@ -31,7 +31,7 @@ import {
 import {
   assertCallerMayModifyApp,
   callerIsAppAdmin,
-  resolveOrgTeamIds,
+  resolveOrgTeams,
 } from "@/services/apps/app-authorization";
 import {
   createSeededAppConversation,
@@ -91,6 +91,15 @@ const CreateAppResponseSchema = AppWithWarningsSchema.extend({
 // open-in-chat returns the seeded conversation to navigate to (`/chat/<id>`).
 const OpenAppInChatResponseSchema = z.object({
   conversationId: z.string().uuid(),
+});
+
+// The external variant also says how the conversation was set up: "render"
+// seeds the app already mounted; "prompt" leaves it empty and the client sends
+// `prompt` as the first user message (the tool has required inputs the agent
+// must collect before calling it).
+const OpenExternalAppInChatResponseSchema = OpenAppInChatResponseSchema.extend({
+  mode: z.enum(["render", "prompt"]),
+  prompt: z.string().optional(),
 });
 
 // The single-app GET resolves the app's team assignments so the detail page can
@@ -243,7 +252,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ body, user, organizationId }, reply) => {
       const scope = body.scope ?? "personal";
-      const teamIds = await resolveOrgTeamIds(body.teamIds, organizationId);
+      const teamIds = await resolveOrgTeams(body.teamIds, organizationId);
       if (scope === "team" && teamIds.length === 0) {
         throw new ApiError(
           400,
@@ -366,11 +375,11 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.OpenExternalAppInChat,
         description:
-          "Open an external (MCP-server) UI app in chat: create a conversation with the app rendered against the given install (no model turn) and return its id to navigate to.",
+          "Open an external (MCP-server) UI app in chat: create a conversation and return its id to navigate to. When the tool needs no inputs the app is seeded already rendered (no model turn); when it has required inputs the conversation is created empty and the response carries an opening prompt for the client to send.",
         tags: ["Apps"],
         params: z.object({ mcpServerId: UuidIdSchema }),
         body: z.object({ resourceUri: z.string().min(1) }),
-        response: constructResponseSchema(OpenAppInChatResponseSchema),
+        response: constructResponseSchema(OpenExternalAppInChatResponseSchema),
       },
     },
     async (
@@ -379,13 +388,13 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       // The service re-checks install access + that the resource exists (404s
       // otherwise).
-      const { conversationId } = await createSeededExternalAppConversation({
+      const result = await createSeededExternalAppConversation({
         mcpServerId,
         resourceUri,
         userId: user.id,
         organizationId,
       });
-      return reply.send({ conversationId });
+      return reply.send(result);
     },
   );
 
@@ -442,7 +451,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const resourceTeamIds = await AppAccessModel.getTeamsForApp(app.id);
       const nextTeamIds =
         body.teamIds !== undefined
-          ? await resolveOrgTeamIds(body.teamIds, organizationId)
+          ? await resolveOrgTeams(body.teamIds, organizationId)
           : undefined;
 
       await assertCallerMayModifyApp({

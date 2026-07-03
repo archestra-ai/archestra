@@ -184,6 +184,10 @@ export default configRoutes;
 const PublicConfigResponseSchema = z.strictObject({
   disableBasicAuth: z.boolean(),
   disableInvitations: z.boolean(),
+  // Developer-only: when true, the login page auto-mints a session via
+  // POST /api/auth/dev-auto-login instead of showing the sign-in form. Always
+  // false in production (the driving env var is ignored there).
+  devAutoLoginEnabled: z.boolean(),
   maintenanceMode: z.string().nullable(),
   // Effective enterprise core flag (env var OR small-team free tier). Exposed
   // pre-auth so the login screen can decide whether to render the SSO picker.
@@ -208,6 +212,7 @@ async function getPublicConfigResponse(): Promise<
   return {
     disableBasicAuth: config.auth.disableBasicAuth,
     disableInvitations: config.auth.disableInvitations,
+    devAutoLoginEnabled: !!config.auth.devAutoAuthenticateEmail,
     maintenanceMode: config.maintenanceMode,
     enterpriseCoreActive: enterpriseTier.isCoreActive(),
     analytics: {

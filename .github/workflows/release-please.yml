@@ -72,7 +72,7 @@ jobs:
 
       - name: Generate a token
         id: generate-token
-        uses: ./.github/actions/generate-release-token
+        uses: ./.github/actions/github-app-token
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -294,7 +294,7 @@ jobs:
       - name: Trigger website deploy
         env:
           VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
-        run: curl -X POST "$VERCEL_DEPLOY_HOOK_URL"
+        run: curl -fsS -X POST "$VERCEL_DEPLOY_HOOK_URL"
 
   notify-release-failure:
     name: Notify release failure

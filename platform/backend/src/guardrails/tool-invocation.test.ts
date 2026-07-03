@@ -218,11 +218,99 @@ describe("evaluatePolicies", () => {
 
     expect(result).not.toBeNull();
     expect(result?.blockedToolName).toBe("dangerous__delete_all");
-    expect(result?.reason).toBe("This tool is dangerous");
-    expect(result?.contentMessage).toContain("dangerous__delete_all");
-    expect(result?.contentMessage).toContain(
-      "denied by a tool invocation policy",
+    // Custom admin reasons are framed with the policy that fired.
+    expect(result?.reason).toBe(
+      '"Block always" tool call policy violated: This tool is dangerous',
     );
+    expect(result?.contentMessage).toContain("dangerous__delete_all");
+    expect(result?.contentMessage).toContain("blocked unsafe tool call");
+  });
+
+  test("block message names the enforcing surface, the rule, and tells the model not to retry", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeToolPolicy,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool({ name: "dangerous__delete_all" });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      conditions: [],
+      action: "block_always",
+      reason: "This tool is dangerous",
+    });
+
+    const result = await evaluatePolicies(
+      [
+        {
+          toolCallName: "dangerous__delete_all",
+          toolCallArgs: JSON.stringify({ confirm: true }),
+        },
+      ],
+      agent.id,
+      { teamIds: [] },
+      true,
+      new Set(["dangerous__delete_all"]),
+      "restrictive",
+      { surface: "llm-proxy", sessionId: "session-123" },
+    );
+
+    // Order matters for readability: the block first, then the tool call and
+    // the rule that fired, and only last what Archestra is — with the session
+    // id so the user can hand it to an admin.
+    expect(result?.contentMessage).toContain(
+      'Archestra LLM Proxy blocked unsafe tool call: dangerous__delete_all with arguments: {"confirm":true}.',
+    );
+    expect(result?.contentMessage).toContain(
+      '"Block always" tool call policy violated: This tool is dangerous.',
+    );
+    expect(result?.contentMessage).toContain(
+      "Archestra LLM Proxy monitors agentic traffic and blocks unsafe tool calls according to the configured guardrails.",
+    );
+    expect(result?.contentMessage).toContain("Your session id: session-123.");
+    // The tagged refusal variant keeps the machine-parseable metadata block.
+    expect(result?.refusalMessage).toContain(
+      "<archestra-tool-name>dangerous__delete_all</archestra-tool-name>",
+    );
+  });
+
+  test("gateway-surface blocks attribute the MCP Gateway", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeToolPolicy,
+  }) => {
+    const agent = await makeAgent();
+    // Permissive mode skips policy evaluation entirely; use restrictive so
+    // the block_always policy below is actually consulted.
+    await OrganizationModel.patch(agent.organizationId, {
+      globalToolPolicy: "restrictive",
+    });
+    const tool = await makeTool({ name: "dangerous__delete_all" });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      conditions: [],
+      action: "block_always",
+    });
+
+    const result = await evaluateSingleMcpToolInvocationPolicy({
+      agentId: agent.id,
+      toolName: "dangerous__delete_all",
+      toolInput: { confirm: true },
+      organizationId: agent.organizationId,
+      contextIsTrusted: true,
+    });
+
+    expect(result?.contentMessage).toContain(
+      "Archestra MCP Gateway blocked unsafe tool call: dangerous__delete_all",
+    );
+    // The gateway describes its own role — a single entry to the MCP servers —
+    // rather than the LLM proxy's "monitors agentic traffic".
+    expect(result?.contentMessage).toContain(
+      "Archestra MCP Gateway provides a single entry to the MCP servers",
+    );
+    expect(result?.contentMessage).not.toContain("monitors agentic traffic");
   });
 
   test("returns null when enabledToolNames is empty (no filtering applied)", async ({
@@ -393,7 +481,9 @@ describe("evaluatePolicies", () => {
     );
 
     expect(result).not.toBeNull();
-    expect(result?.reason).toBe("Writing to /etc/ is not allowed");
+    expect(result?.reason).toBe(
+      '"Block always" tool call policy violated: Writing to /etc/ is not allowed',
+    );
   });
 
   test("conditional policy allows when conditions do not match", async ({

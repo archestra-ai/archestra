@@ -19,9 +19,11 @@ const {
 export function useTeamStatistics({
   timeframe = "24h",
   initialData,
+  enabled = true,
 }: {
   timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetTeamStatisticsResponses["200"];
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: ["statistics", "teams", timeframe],
@@ -33,6 +35,7 @@ export function useTeamStatistics({
       return data;
     },
     initialData,
+    enabled,
     refetchInterval: 30_000, // Refresh every 30 seconds
   });
 }
@@ -40,9 +43,11 @@ export function useTeamStatistics({
 export function useProfileStatistics({
   timeframe = "24h",
   initialData,
+  enabled = true,
 }: {
   timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetAgentStatisticsResponses["200"];
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: ["statistics", "agents", timeframe],
@@ -54,6 +59,7 @@ export function useProfileStatistics({
       return data;
     },
     initialData,
+    enabled,
     refetchInterval: 30_000, // Refresh every 30 seconds
   });
 }
@@ -61,9 +67,11 @@ export function useProfileStatistics({
 export function useModelStatistics({
   timeframe = "24h",
   initialData,
+  enabled = true,
 }: {
   timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetModelStatisticsResponses["200"];
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: ["statistics", "models", timeframe],
@@ -75,6 +83,7 @@ export function useModelStatistics({
       return data;
     },
     initialData,
+    enabled,
     refetchInterval: 30_000, // Refresh every 30 seconds
   });
 }
@@ -103,9 +112,11 @@ export function useOverviewStatistics({
 export function useCostSavingsStatistics({
   timeframe = "24h",
   initialData,
+  enabled = true,
 }: {
   timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetCostSavingsStatisticsResponses["200"];
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: ["statistics", "cost-savings", timeframe],
@@ -117,6 +128,7 @@ export function useCostSavingsStatistics({
       return data;
     },
     initialData,
+    enabled,
     refetchInterval: 30_000, // Refresh every 30 seconds
   });
 }

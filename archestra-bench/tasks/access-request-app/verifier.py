@@ -9,14 +9,16 @@ The final stage asks (in a fresh conversation) to add request-status lookup to t
 app. The only in-place way to add a tool to an existing app is `set_app_tools` -- `scaffold_app`
 creates a new app and `edit_app`/`refine_app` never touch assignments -- so a `set_app_tools` call
 that targets the submitted app and carries the status tool, plus authored HTML that references it,
-is the maintenance signal.
+is the maintenance signal. That stage also renders real request data, so the trajectory must show
+the agent observed the status tool's real output -- a direct `get_request_status` call or a
+`preview_app_tool` naming it -- rather than authoring parsing code against a guessed result shape.
 
-Residual the captured data can't close: tool_calls have no outputs, so a `set_app_tools` call that
-named the tool but failed cannot be told apart from one that succeeded; and a model that deleted the
-shared app and re-authored a fresh one from scratch (re-doing all four stages of HTML to add one
-tool) would still pass. Both are economically irrational for a model and not worth a harness change
-to detect; the published-scope + bound-app-id + authored-HTML checks make the in-place path the only
-sane route.
+Residual the captured data can't close: tool_calls have no outputs, so a `set_app_tools` (or status
+lookup) call that named the tool but failed cannot be told apart from one that succeeded; and a
+model that deleted the shared app and re-authored a fresh one from scratch (re-doing all four stages
+of HTML to add one tool) would still pass. Both are economically irrational for a model and not
+worth a harness change to detect; the published-scope + bound-app-id + authored-HTML checks make
+the in-place path the only sane route.
 """
 
 import json
@@ -120,4 +122,16 @@ def test_status_lookup_tool_wired() -> None:
     )
     assert wired, (
         f"no set_app_tools call wired a {_STATUS_TOOL!r} tool onto the submitted app {app_id}"
+    )
+
+
+def test_observed_status_data() -> None:
+    observed = any(
+        name.endswith(f"__{_STATUS_TOOL}")
+        or (name.endswith("__preview_app_tool") and str(inp.get("toolName", "")).endswith(f"__{_STATUS_TOOL}"))
+        for name, inp in _tool_calls()
+    )
+    assert observed, (
+        f"no {_STATUS_TOOL!r} call (direct or via preview_app_tool) anywhere in the trajectory; "
+        "the status lookup was authored against a guessed result shape, never the tool's real output"
     )

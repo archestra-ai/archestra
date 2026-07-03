@@ -63,6 +63,7 @@ import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
   setOAuthCatalogId,
   setOAuthMcpServerId,
+  setOAuthReturnUrl,
   setOAuthState,
 } from "@/lib/auth/oauth-session";
 import {
@@ -291,11 +292,18 @@ export function ManageUsersContent({
       setOAuthState(state);
       setOAuthCatalogId(catalogItem.id);
 
+      // Remember where re-authentication started so the callback returns here
+      setOAuthReturnUrl(window.location.href);
+
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;
-    } catch {
+    } catch (error) {
       setOAuthMcpServerId(null);
-      toast.error("Failed to initiate re-authentication");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to initiate re-authentication",
+      );
     }
   };
 

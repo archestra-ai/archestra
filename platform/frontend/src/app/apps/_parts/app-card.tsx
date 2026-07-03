@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useOpenAppInChat, useOpenExternalAppInChat } from "@/lib/app.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { cn } from "@/lib/utils";
 import { AppDeleteDialog } from "./app-delete-dialog";
 
@@ -219,8 +220,12 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
   );
 }
 
-// External MCP-server apps open in chat exactly like owned apps: clicking seeds
-// a conversation with the UI rendered against this install and navigates to it.
+// External MCP-server apps open in chat like owned apps: clicking creates a
+// conversation and navigates to it. When the app's tool needs no inputs the
+// backend seeds the UI already rendered against this install; when it has
+// required inputs the backend returns an opening prompt instead, which rides
+// the pending-chat handoff so `/chat/<id>` sends it as the first user message —
+// the agent asks for the inputs, calls the tool, and the result mounts the app.
 // Each card is one concrete install (only accessible installs are listed), so
 // the whole card is always a click target. The title is the chat-style
 // "<server> / <tool>" label (the catalog display name, never the slug prefix).
@@ -242,6 +247,12 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
       resourceUri: app.resourceUri,
     });
     if (result?.conversationId) {
+      if (result.mode === "prompt" && result.prompt) {
+        setPendingProjectChatHandoff({
+          conversationId: result.conversationId,
+          prompt: result.prompt,
+        });
+      }
       router.push(`/chat/${result.conversationId}`);
     } else {
       setIsOpening(false);

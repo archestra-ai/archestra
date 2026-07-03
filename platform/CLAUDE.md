@@ -146,6 +146,7 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 - **Route Permissions**: Configure in `shared/access-control.ts`
 - **Request Context**: `request.user` and `request.organizationId`
 - **Schema Files**: Auth schemas in separate files: `account`, `api-key`, `invitation`, `member`, `session`, `two-factor`, `verification`
+- **Dev auto-login (skip the login screen)**: For local development, set `ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL` in your `.env` (e.g. `admin@example.com`, the seeded admin) to have the app auto-mint a real session for that user on load instead of showing the sign-in form. Ignored in production (`NODE_ENV=production`/`prod`); RBAC is unchanged (ordinary session for that user). Backed by the `dev-auto-login` Better Auth plugin (`backend/src/auth/dev-auto-login.ts`) exposing `POST /api/auth/dev-auto-login`, gated behind the `devAutoLoginEnabled` public-config flag.
 
 ## Dependency Security
 

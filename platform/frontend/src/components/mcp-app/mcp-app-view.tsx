@@ -14,6 +14,7 @@ import type {
 } from "@modelcontextprotocol/ext-apps";
 import {
   AppBridge,
+  buildAllowAttribute,
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
 import { useTheme } from "next-themes";
@@ -299,7 +300,12 @@ export const McpAppRuntime = function McpAppRuntime({
       {
         hostContext: {
           displayMode: displayModeRef.current,
-          theme: (resolvedThemeRef.current ?? "light") as "light" | "dark",
+          // Fall back to the <html> class when the theme hook hasn't hydrated
+          // yet (hard load): next-themes stamps the class pre-React, so a
+          // dark-mode page never announces itself as light.
+          theme: (resolvedThemeRef.current ?? readDocumentTheme()) as
+            | "light"
+            | "dark",
           platform: "web",
           availableDisplayModes: AVAILABLE_DISPLAY_MODES,
           containerDimensions: containerDimensionsHint(
@@ -604,9 +610,7 @@ export const McpAppRuntime = function McpAppRuntime({
     if (!bridge) return;
     const observer = new MutationObserver(() => {
       bridge.setHostContext({
-        theme: document.documentElement.classList.contains("dark")
-          ? "dark"
-          : "light",
+        theme: readDocumentTheme(),
         styles: { variables: buildMcpUiStyleVariables() },
       });
     });
@@ -714,6 +718,7 @@ export const McpAppRuntime = function McpAppRuntime({
 
 const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
 const SANDBOX_READY_TIMEOUT = 10_000;
+
 // Coalesce a burst of render errors into one early server post.
 const RENDER_DIAGNOSTIC_POST_DEBOUNCE_MS = 400;
 // Settle window after a resource becomes renderable before posting the snapshot
@@ -796,6 +801,16 @@ function SandboxIframe({
   // Read inside the (effect-bound) size handler; a ref keeps the latest cap
   // without re-binding onsizechange on every cap change.
   const maxHeightRef = useRef(maxHeight);
+  // Permissions-Policy delegation for the outer proxy iframe. The inner app
+  // frame is delegated the same way inside the sandbox proxy; both reuse the
+  // library's mapping so a feature must be granted on EVERY frame in the chain.
+  // Derived to a stable primitive so it can gate the iframe-creation effect
+  // without the raw `permissions` object (new reference each render) forcing
+  // needless remounts.
+  const allowAttribute = useMemo(
+    () => buildAllowAttribute(permissions),
+    [permissions],
+  );
 
   useEffect(() => {
     onSizeChangedRef.current = onSizeChanged;
@@ -817,6 +832,21 @@ function SandboxIframe({
     iframe.style.height = `${initialHeightRef.current}px`;
     iframe.style.border = "none";
     iframe.style.backgroundColor = "transparent";
+    // Propagate the host theme into the sandbox chain: per CSS Color
+    // Adjustment, the frame element's used color-scheme sets the embedded
+    // document's *preferred* color scheme, and the proxy hands it on to the
+    // app frame (`color-scheme: inherit` + its `light dark` meta). Apps that
+    // theme via `@media (prefers-color-scheme)` / `light-dark()` instead of
+    // the bridge's hostContext.theme then follow the app theme rather than
+    // the OS — matching how desktop MCP hosts render them.
+    iframe.style.colorScheme = readDocumentTheme();
+    const themeObserver = new MutationObserver(() => {
+      iframe.style.colorScheme = readDocumentTheme();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
     // With dedicated subdomain: allow-same-origin is safe (different origin from backend).
     // Without: no allow-same-origin → opaque origin for security isolation.
     iframe.setAttribute(
@@ -825,6 +855,22 @@ function SandboxIframe({
         ? "allow-scripts allow-same-origin allow-forms allow-popups"
         : "allow-scripts allow-forms allow-popups",
     );
+
+    // Delegate declared Permissions-Policy features (camera/mic/geo/clipboard)
+    // to the proxy frame so it can pass them on to the inner app frame — without
+    // this the inner frame's `allow` is inert. Powerful features cannot be
+    // delegated to an opaque origin, so they only take effect on a dedicated
+    // sandbox origin; warn rather than fail silently otherwise.
+    if (allowAttribute) {
+      iframe.setAttribute("allow", allowAttribute);
+      if (!useDedicatedOrigin) {
+        console.warn(
+          `MCP App requested permissions (${allowAttribute}) but the sandbox runs on an opaque origin; ` +
+            "browser Permissions-Policy cannot grant them. Configure a dedicated sandbox origin (mcpSandboxDomain).",
+        );
+      }
+    }
+
     iframe.src = sandboxUrl.href;
     iframeRef.current = iframe;
 
@@ -898,6 +944,7 @@ function SandboxIframe({
     return () => {
       cancelled = true;
       clearTimeout(timeout);
+      themeObserver.disconnect();
       window.removeEventListener("message", onMessage);
       window.removeEventListener("message", onDiagnosticMessage);
       iframe.remove();
@@ -910,7 +957,13 @@ function SandboxIframe({
       setConnectedBridge((current) => (current === appBridge ? null : current));
       setInitialized(false);
     };
-  }, [sandboxUrl.href, sandboxUrl.origin, appBridge, useDedicatedOrigin]);
+  }, [
+    sandboxUrl.href,
+    sandboxUrl.origin,
+    appBridge,
+    useDedicatedOrigin,
+    allowAttribute,
+  ]);
 
   // Set up size change and initialized handlers
   useEffect(() => {
@@ -1066,6 +1119,15 @@ export function isRenderableMcpAppHtml(html: string): boolean {
 }
 
 // ── Host-theme bridging helpers ──────────────────────────────────────────────
+
+/**
+ * The host's light/dark theme, read from the class next-themes stamps on
+ * `<html>` (set synchronously by its inline script, so it's correct even
+ * before the `useTheme()` hook has hydrated).
+ */
+function readDocumentTheme(): "light" | "dark" {
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
 
 /** Reads a CSS custom property value from :root */
 function getCssVar(name: string): string {

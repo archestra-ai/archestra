@@ -116,6 +116,15 @@ export function proxyBaseUrlToOrigin(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
 }
 
+/**
+ * Claude Code's post-install OAuth step, shared by the bash and PowerShell
+ * renderers. Registering the gateway is not enough: it authorizes each user
+ * individually, so its tools unlock only after a one-time browser sign-in.
+ */
+export function claudeCodeOAuthNextStep(serverName: string): string {
+  return `Run \`claude /mcp\`, select "${serverName}", and sign in via your browser — the gateway grants tool access per user, so its tools unlock after this one-time approval.`;
+}
+
 export function renderSetupScript(rawCtx: SetupScriptContext): string {
   // appName is white-label, admin-controlled text that lands in script comments
   // and bare echo strings. Collapse control characters (newlines, NUL, …) to
@@ -317,9 +326,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
   switch (ctx.clientId) {
     case "claude-code":
       if (ctx.mcp) {
-        steps.push(
-          `Run \`claude\` and use /mcp to finish the OAuth flow for "${ctx.mcp.serverName}".`,
-        );
+        steps.push(claudeCodeOAuthNextStep(ctx.mcp.serverName));
       }
       if (ctx.proxy?.provider === "bedrock" && ctx.proxy.virtualKey) {
         steps.push(
@@ -498,6 +505,21 @@ if append_headers:
 path.write_text(json.dumps(settings, indent=2) + "\\n")
 print(f"Updated {path}")`;
 
+/**
+ * Custom headers Claude Code sends on every proxied request (Anthropic and
+ * Bedrock alike — ANTHROPIC_CUSTOM_HEADERS applies to both), one "Name: Value"
+ * per line:
+ *  - X-Archestra-Agent-Id attributes the request to the Claude Code client.
+ *  - X-Archestra-Virtual-Key (passthrough) attributes it to the user.
+ */
+function claudeCustomHeaders(proxy: SetupScriptProxySection): string {
+  const headerLines = [`${EXTERNAL_AGENT_ID_HEADER}: ${CLAUDE_CODE_CLIENT_ID}`];
+  if (proxy.passthroughVirtualKey) {
+    headerLines.push(`${VIRTUAL_KEY_HEADER}: ${proxy.passthroughVirtualKey}`);
+  }
+  return headerLines.join("\n");
+}
+
 function claudeAnthropicProxySection(proxy: SetupScriptProxySection): string {
   const env: Record<string, string> = {
     ARCHESTRA_SET_ENV_ANTHROPIC_BASE_URL: proxy.url,
@@ -507,15 +529,9 @@ function claudeAnthropicProxySection(proxy: SetupScriptProxySection): string {
     env.ARCHESTRA_SET_ENV_ANTHROPIC_AUTH_TOKEN = proxy.virtualKey;
     manualEnv.ANTHROPIC_AUTH_TOKEN = proxy.virtualKey;
   }
-  // Custom headers, one "Name: Value" per line (the merge appends/replaces only
-  // our lines, never clobbering headers the user already set):
-  //  - X-Archestra-Agent-Id attributes the request to the Claude Code client.
-  //  - X-Archestra-Virtual-Key (passthrough) attributes it to the user.
-  const headerLines = [`${EXTERNAL_AGENT_ID_HEADER}: ${CLAUDE_CODE_CLIENT_ID}`];
-  if (proxy.passthroughVirtualKey) {
-    headerLines.push(`${VIRTUAL_KEY_HEADER}: ${proxy.passthroughVirtualKey}`);
-  }
-  const customHeaders = headerLines.join("\n");
+  // The merge appends/replaces only our header lines, never clobbering headers
+  // the user already set.
+  const customHeaders = claudeCustomHeaders(proxy);
   env.ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS = customHeaders;
   manualEnv.ANTHROPIC_CUSTOM_HEADERS = customHeaders;
   const passthroughNote = proxy.virtualKey
@@ -535,6 +551,7 @@ ${mergeJsonFileSnippet({
 }
 
 function claudeBedrockProxySection(proxy: SetupScriptProxySection): string {
+  const customHeaders = claudeCustomHeaders(proxy);
   return `say ${sh("Routing Claude Code through the Bedrock proxy")}
 ${mergeJsonFileSnippet({
   file: "$HOME/.claude/settings.json",
@@ -542,6 +559,7 @@ ${mergeJsonFileSnippet({
     ARCHESTRA_SET_ENV_CLAUDE_CODE_USE_BEDROCK: "1",
     ARCHESTRA_SET_ENV_AWS_REGION: "us-east-1",
     ARCHESTRA_SET_ENV_ANTHROPIC_BEDROCK_BASE_URL: proxy.url,
+    ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS: customHeaders,
   },
   python: CLAUDE_SETTINGS_MERGE_PY,
   fallbackMessage:
@@ -552,6 +570,7 @@ ${mergeJsonFileSnippet({
         CLAUDE_CODE_USE_BEDROCK: "1",
         AWS_REGION: "us-east-1",
         ANTHROPIC_BEDROCK_BASE_URL: proxy.url,
+        ANTHROPIC_CUSTOM_HEADERS: customHeaders,
       },
     },
     null,

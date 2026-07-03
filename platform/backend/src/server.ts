@@ -383,6 +383,9 @@ function captureServerException(
       method: request.method,
       url: request.url,
       route: request.routeOptions?.url,
+      // The requested host (from the Host header) — identifies which
+      // deployment hit the error, used by the PostHog Slack alert template.
+      hostname: request.host,
       reqId: request.id,
       ...extraProperties,
     },

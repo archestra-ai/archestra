@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import {
+  AppWindow,
   CalendarClock,
   Download,
   FileText,
@@ -9,7 +10,6 @@ import {
   Globe,
   MoreHorizontal,
   MoreVertical,
-  PanelRight,
   Share2,
   Users,
 } from "lucide-react";
@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
@@ -35,11 +36,14 @@ type Conversation = archestraApiTypes.GetChatConversationResponses["200"];
 /** Right-panel state + handlers the header needs to drive open/close/tab. */
 interface PanelControls {
   isOpen: boolean;
+  /** The tab currently selected (highlighted only while the panel is open). */
+  activeTab: RightPanelTab;
+  /** Set for scheduled-run chats — enables the Runs tab. */
+  scheduledRun: { triggerId: string; runId: string | null } | null;
   isArtifactOpen: boolean;
   isBrowserVisible: boolean;
   showBrowserButton: boolean;
   isPlaywrightSetupVisible: boolean;
-  onToggle: () => void;
   onClose: () => void;
   onOpenTab: (tab: RightPanelTab) => void;
 }
@@ -87,6 +91,25 @@ export function ConversationHeader({
     onShare,
     onExportMarkdown,
     onCreateProject,
+  };
+
+  // Which tab the panel would show — mirror the panel's fallbacks so the strip
+  // never highlights a tab the panel can't actually show. Only highlighted
+  // while the panel is open; collapsing clears the highlight.
+  const canShowBrowser =
+    panel.showBrowserButton && !panel.isPlaywrightSetupVisible;
+  let resolvedTab: RightPanelTab = panel.activeTab;
+  if (resolvedTab === "browser" && !canShowBrowser) resolvedTab = "files";
+  if (resolvedTab === "runs" && !panel.scheduledRun) resolvedTab = "files";
+
+  // Radix won't fire onValueChange when the clicked tab already equals the
+  // controlled value, so collapsing on an active-tab click has to happen here,
+  // on mousedown, where resolvedTab is still pre-click. Opens (different tab,
+  // or any tab while collapsed — value is "" then, so every click is a change)
+  // flow through onValueChange. Left button only (mirrors Radix's guard).
+  const handleTabMouseDown = (tab: RightPanelTab) => (e: React.MouseEvent) => {
+    if (e.button !== 0 || e.ctrlKey) return;
+    if (panel.isOpen && resolvedTab === tab) panel.onClose();
   };
 
   return (
@@ -164,22 +187,63 @@ export function ConversationHeader({
             </DropdownMenu>
           )}
         </div>
-        {/* Right side - desktop: open panel (hidden while open; the panel's own
-            close button is the only way to close it) */}
-        {!panel.isOpen && (
-          <div className="hidden md:flex items-center gap-2 flex-shrink-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={panel.onToggle}
-              className="h-8 w-8"
-              title="Open panel"
-            >
-              <PanelRight className="h-4 w-4" />
-              <span className="sr-only">Open panel</span>
-            </Button>
-          </div>
-        )}
+        {/* Right side - desktop: the Files / Browser / Apps tab strip is always
+            visible (open or collapsed) so it never moves. Clicking a different
+            tab switches; clicking the already-open tab collapses the panel —
+            there is no separate collapse button. */}
+        <div className="hidden md:flex items-center flex-shrink-0">
+          <Tabs
+            value={panel.isOpen ? resolvedTab : ""}
+            onValueChange={(value) => {
+              // Fires on any tab click while collapsed (value is "") and on a
+              // different-tab click while open. It never fires for the
+              // active-tab-while-open click (value unchanged), so it can't
+              // reopen right after handleTabMouseDown collapses the panel.
+              // Keyboard activation flows through here too.
+              panel.onOpenTab(value as RightPanelTab);
+            }}
+          >
+            <TabsList className="h-8">
+              {panel.scheduledRun && (
+                <TabsTrigger
+                  value="runs"
+                  className="text-xs px-3"
+                  onMouseDown={handleTabMouseDown("runs")}
+                >
+                  <CalendarClock className="h-3 w-3" />
+                  Runs
+                </TabsTrigger>
+              )}
+              <TabsTrigger
+                value="files"
+                className="text-xs px-3"
+                onMouseDown={handleTabMouseDown("files")}
+              >
+                <FileText className="h-3 w-3" />
+                Files
+              </TabsTrigger>
+              {panel.showBrowserButton && (
+                <TabsTrigger
+                  value="browser"
+                  className="text-xs px-3"
+                  disabled={panel.isPlaywrightSetupVisible}
+                  onMouseDown={handleTabMouseDown("browser")}
+                >
+                  <Globe className="h-3 w-3" />
+                  Browser
+                </TabsTrigger>
+              )}
+              <TabsTrigger
+                value="apps"
+                className="text-xs px-3"
+                onMouseDown={handleTabMouseDown("apps")}
+              >
+                <AppWindow className="h-3 w-3" />
+                Apps
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
         {/* Right side - mobile: 3-dot dropdown */}
         <div className="flex md:hidden items-center gap-2 flex-shrink-0">
           <DropdownMenu>

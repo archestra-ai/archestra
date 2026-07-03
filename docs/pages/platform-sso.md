@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "Sign users in with their existing identity provider via OIDC or SAML"
 order: 4
-lastUpdated: 2026-05-06
+lastUpdated: 2026-07-03
 ---
 
 <!--
@@ -127,6 +127,26 @@ This is useful when one provider is the primary Archestra login provider, but a 
 Once SSO is working, you can disable the username/password login form to enforce SSO-only authentication. Set `ARCHESTRA_AUTH_DISABLE_BASIC_AUTH=true` and restart the backend. See [Deployment — Environment Variables](/docs/platform-deployment#environment-variables).
 
 > **Important:** verify at least one SSO provider is working before disabling basic auth, or you (and your admins) will be locked out.
+
+Because there is no email provider, password recovery is a shell operation: an operator with access to the backend container resets any user's password with the bundled CLI. This is how a locked-out admin recovers (SSO broken and no usable password, then re-enable basic auth), and how you fulfil a member's "ask an administrator to reset it" request.
+
+```bash
+# Helm / external-database Docker: the database URL is already in the pod/container
+# environment, so run the tool directly.
+kubectl exec -it deploy/archestra-platform -- \
+  sh -c 'cd /app/backend && node dist/standalone-scripts/reset-user-password.mjs --email user@example.com'
+```
+
+```bash
+# All-in-one quickstart image (bundled PostgreSQL): the database URL is not exported
+# to an `exec` shell, so pass it explicitly (defaults shown; adjust if you overrode
+# POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB).
+docker exec -it <container> sh -c 'cd /app/backend && \
+  ARCHESTRA_DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public" \
+  node dist/standalone-scripts/reset-user-password.mjs --email user@example.com'
+```
+
+The tool resets an old user password, prints a new random generated password (or accepts `--password`), revokes all of the user's sessions, and can also clear a lost second factor with `--disable-two-factor`. Access is controlled by shell/database access to the deployment, not an in-app role.
 
 ## Disabling User Invitations
 

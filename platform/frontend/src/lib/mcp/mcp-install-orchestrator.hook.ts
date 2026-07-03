@@ -126,8 +126,12 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
         }
 
         redirectBrowserToUrl(authorizationUrl);
-      } catch {
-        toast.error("Failed to initiate OAuth flow");
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to initiate OAuth flow",
+        );
       }
     },
     [initiateOAuthMutation, installedServers],

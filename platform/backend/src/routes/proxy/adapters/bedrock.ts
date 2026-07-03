@@ -974,6 +974,12 @@ class BedrockStreamAdapter
   readonly state: StreamAccumulatorState;
   private currentToolCallIndex = -1;
   private toolNameMapping: ToolNameMapping = createEmptyToolNameMapping();
+  // Set to the refusal text when the streamed response was replaced by a policy
+  // refusal. On a blocked tool-call turn the upstream messageStop was buffered
+  // with the (discarded) tool events, so formatEndSSE must synthesize a terminal
+  // messageStop (end_turn); toProviderResponse persists the refusal, not the
+  // blocked tool calls.
+  private replacedText: string | null = null;
 
   // Bedrock-specific extended state
   private bedrockState: {
@@ -1308,6 +1314,7 @@ class BedrockStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): Uint8Array[] {
+    this.replacedText = text;
     // AWS Event Stream binary format
     return [
       encodeEventStreamMessage("contentBlockStart", {
@@ -1324,9 +1331,26 @@ class BedrockStreamAdapter
     ];
   }
 
-  formatEndSSE(): string {
-    // All events (messageStop, metadata) are passed through in processChunk
-    // Nothing additional needed here
+  formatEndSSE(): string | Uint8Array {
+    // On the normal path, messageStop and metadata are passed through in
+    // processChunk. On a refusal they were buffered with the blocked tool
+    // events and discarded, so synthesize the terminal here or the client
+    // never sees a stream end.
+    if (this.replacedText !== null) {
+      const messageStop = encodeEventStreamMessage("messageStop", {
+        stopReason: "end_turn",
+      });
+      const metadata = encodeEventStreamMessage("metadata", {
+        usage: {
+          inputTokens: this.state.usage?.inputTokens ?? 0,
+          outputTokens: this.state.usage?.outputTokens ?? 0,
+        },
+      });
+      const terminal = new Uint8Array(messageStop.length + metadata.length);
+      terminal.set(messageStop, 0);
+      terminal.set(metadata, messageStop.length);
+      return terminal;
+    }
     return "";
   }
 
@@ -1341,6 +1365,28 @@ class BedrockStreamAdapter
           };
         }
     > = [];
+
+    if (this.replacedText !== null) {
+      return {
+        $metadata: { requestId: this.state.responseId },
+        output: {
+          message: {
+            role: "assistant",
+            content: [{ text: this.replacedText }],
+          },
+        },
+        stopReason: "end_turn",
+        usage: {
+          inputTokens: this.state.usage?.inputTokens ?? 0,
+          outputTokens: this.state.usage?.outputTokens ?? 0,
+        },
+        metrics:
+          this.bedrockState.latencyMs !== null
+            ? { latencyMs: this.bedrockState.latencyMs }
+            : undefined,
+        trace: this.bedrockState.trace ?? undefined,
+      };
+    }
 
     // Add text block if we have text
     if (this.state.text) {

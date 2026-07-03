@@ -108,6 +108,9 @@ class CohereOpenaiStreamAdapter
   readonly provider = "cohere" as const;
   private inner: LLMStreamAdapter<CohereStreamChunk, CohereResponse>;
   private ctx: CohereOpenaiContext;
+  // Set when a policy refusal replaced the response, so formatEndSSE finishes as
+  // "stop" without reconstructing the inner response just to read one field.
+  private responseReplacedWithText = false;
 
   constructor(ctx: CohereOpenaiContext) {
     this.inner = cohereAdapterFactory.createStreamAdapter();
@@ -140,10 +143,15 @@ class CohereOpenaiStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): string[] {
+    // Mark the inner adapter as refusal-replaced (side effect only; its
+    // Cohere-format events are unused here) so it persists the refusal rather
+    // than the blocked calls. The finish reason is emitted once, by formatEndSSE.
+    this.responseReplacedWithText = true;
+    this.inner.formatCompleteTextSSE(text);
     return [
       this.formatChunk({
         delta: { role: "assistant", content: text },
-        finishReason: "stop",
+        finishReason: null,
       }),
     ];
   }
@@ -151,7 +159,9 @@ class CohereOpenaiStreamAdapter
   formatEndSSE(): string {
     return `${this.formatChunk({
       delta: {},
-      finishReason: mapCohereFinishReason(this.inner.state.stopReason),
+      finishReason: this.responseReplacedWithText
+        ? "stop"
+        : mapCohereFinishReason(this.inner.state.stopReason),
     })}data: [DONE]\n\n`;
   }
 

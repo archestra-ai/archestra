@@ -36,6 +36,7 @@ const MOCK_MODEL = {
   provider: "anthropic" as SupportedProvider,
   description: null,
   contextLength: null,
+  outputLength: null,
   inputModalities: null,
   outputModalities: null,
   supportsToolCalling: null,

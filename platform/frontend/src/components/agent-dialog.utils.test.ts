@@ -3,6 +3,7 @@ import {
   getDescriptionPlaceholder,
   getNamePlaceholder,
   normalizeSuggestedPrompts,
+  shouldOfferAppCatalogs,
   shouldShowDescriptionField,
 } from "./agent-dialog.utils";
 
@@ -106,5 +107,23 @@ describe("normalizeSuggestedPrompts", () => {
       { summaryTitle: "Label only", prompt: "Label only" },
       { summaryTitle: "Whitespace", prompt: "Whitespace" },
     ]);
+  });
+});
+
+describe("shouldOfferAppCatalogs", () => {
+  it("offers owned Apps to a chat agent (renders inline from the __open tool)", () => {
+    expect(shouldOfferAppCatalogs("agent")).toBe(true);
+  });
+
+  it("offers owned Apps to an MCP gateway (exposes the tool to a connected client)", () => {
+    expect(shouldOfferAppCatalogs("mcp_gateway")).toBe(true);
+  });
+
+  it("offers owned Apps to a legacy profile (a gateway served at /v1/mcp/:profileId)", () => {
+    expect(shouldOfferAppCatalogs("profile")).toBe(true);
+  });
+
+  it("does not offer Apps to an LLM proxy (no app-render surface)", () => {
+    expect(shouldOfferAppCatalogs("llm_proxy")).toBe(false);
   });
 });

@@ -4,6 +4,8 @@ import type OpenAI from "openai";
 
 export interface OpenAiStubOptions {
   interruptAtChunk?: number;
+  /** Reject streaming requests with this error message before any chunk arrives (e.g. a provider 400). */
+  failStreamWithError?: string;
 }
 
 export interface AnthropicStubOptions {
@@ -29,6 +31,9 @@ export function createOpenAiTestClient(options: OpenAiStubOptions = {}) {
           params: OpenAI.Chat.Completions.ChatCompletionCreateParams,
         ) => {
           if (params.stream) {
+            if (options.failStreamWithError) {
+              throw new Error(options.failStreamWithError);
+            }
             return createOpenAiStream(options);
           }
 

@@ -36,6 +36,20 @@ export class Authnz {
       return;
     }
 
+    // Developer-only auto-authentication (never active in production; see config).
+    // Populates the request as the configured user, then runs the normal
+    // authorization check so RBAC still applies.
+    if (await this.tryDevAutoAuthenticate(request)) {
+      if (request.user) {
+        this.setSentryUserContext(request.user, request);
+      }
+      const { success } = await this.isAuthorized(request);
+      if (success) {
+        return;
+      }
+      throw new ApiError(403, "Forbidden");
+    }
+
     // return 401 if unauthenticated
     if (!(await this.isAuthenticated(request))) {
       logger.trace(
@@ -202,6 +216,56 @@ export class Authnz {
       "WWW-Authenticate",
       connectorWwwAuthenticate(getPublicRequestOrigin(request), appId),
     );
+  };
+
+  /**
+   * Developer-only convenience: authenticate the request as the user named by
+   * ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL, bypassing the login screen.
+   * Returns false (falling through to normal auth) when the feature is off, we
+   * are in production, or the configured email does not resolve to a member.
+   */
+  private tryDevAutoAuthenticate = async (
+    request: FastifyRequest,
+  ): Promise<boolean> => {
+    const email = config.auth.devAutoAuthenticateEmail;
+    // config already nulls this in production; the extra guard is defense in depth.
+    if (!email || config.production) {
+      return false;
+    }
+    try {
+      const existing = await UserModel.findByEmail(email);
+      if (!existing) {
+        logger.error(
+          { email },
+          "[Authnz] Dev auto-authenticate: no user found for ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL",
+        );
+        return false;
+      }
+      // getById joins the membership to resolve organizationId (like the session path).
+      const withOrg = await UserModel.getById(existing.id);
+      if (!withOrg) {
+        logger.error(
+          { email, userId: existing.id },
+          "[Authnz] Dev auto-authenticate: user has no organization membership",
+        );
+        return false;
+      }
+      const { organizationId, ...user } = withOrg;
+      request.user = user;
+      request.organizationId = organizationId;
+      request.authMethod = "session";
+      logger.warn(
+        { email, userId: user.id, organizationId },
+        "[Authnz] Dev auto-authenticate active: request authenticated as configured user",
+      );
+      return true;
+    } catch (error) {
+      logger.error(
+        { email, error: error instanceof Error ? error.message : "unknown" },
+        "[Authnz] Dev auto-authenticate failed",
+      );
+      return false;
+    }
   };
 
   private isAuthenticated = async (request: FastifyRequest) => {

@@ -926,6 +926,12 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Default: `password`
   - Note: Change this to a secure password for production deployments
 
+- **`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL`** - Developer-only convenience that authenticates every request as the user with this email, skipping the login screen.
+  - Default: None (disabled)
+  - Ignored in production (`NODE_ENV=production` or `prod`); only takes effect in development builds
+  - Role-based access control still applies — requests run with that user's real permissions, not elevated access
+  - Example: `admin@example.com`
+
 - **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
   - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
   - Example: If frontend is at `https://frontend.example.com`, set to `example.com`

@@ -195,6 +195,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // The server's registry icon (emoji or data URL) so the card can
           // show which server the app comes from.
           icon: catalogApp.serverIcon,
+          requiresInput: catalogApp.requiresInput,
           executionModel: "server-scoped" as const,
           cspOrigin: "author-declared" as const,
           pinnedAt:

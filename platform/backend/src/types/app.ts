@@ -102,6 +102,10 @@ export const ExternalAppListItemSchema = AppListItemBaseSchema.extend({
   // character or a base64 image data URL. Null when the server has none (the
   // card falls back to its generic server glyph).
   icon: z.string().nullable(),
+  // The tool declares required inputs, so opening renders nothing until the
+  // agent collects them in chat (mode "prompt"). The card hides its standalone
+  // "Open in new tab" link for these — a bare render would mount a broken app.
+  requiresInput: z.boolean(),
 });
 
 export const AppListItemSchema = z.discriminatedUnion("source", [
@@ -128,6 +132,9 @@ export const ExternalAppResourceSchema = z.object({
   toolName: z.string(),
   // Card/header label: "${serverName} / ${toolName}".
   name: z.string(),
+  // The tool declares required inputs; the standalone run page shows an
+  // open-in-chat handoff instead of rendering the resource with no input.
+  requiresInput: z.boolean(),
 });
 export type ExternalAppResource = z.infer<typeof ExternalAppResourceSchema>;
 

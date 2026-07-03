@@ -19,6 +19,7 @@ import {
 } from "@/services/apps/app-render-result";
 import { ApiError } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import { toolRequiresInputs } from "@/utils/tool-inputs";
 
 const RENDER_APP_TOOL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_RENDER_APP_SHORT_NAME}` as const;
@@ -161,25 +162,6 @@ export async function createSeededExternalAppConversation(params: {
 }
 
 // === internal ===
-
-/**
- * Whether calling the tool with input `{}` cannot succeed: its input schema
- * declares required properties. Mirrors `normalizeToolInputSchema`
- * (routes/mcp-gateway.utils.ts): anything that isn't a `type: "object"` schema
- * normalizes to an empty object schema, i.e. no required inputs.
- */
-function toolRequiresInputs(parameters: unknown): boolean {
-  if (
-    typeof parameters !== "object" ||
-    parameters === null ||
-    Array.isArray(parameters)
-  ) {
-    return false;
-  }
-  const schema = parameters as { type?: unknown; required?: unknown };
-  if (schema.type !== "object") return false;
-  return Array.isArray(schema.required) && schema.required.length > 0;
-}
 
 /**
  * Bind a new, empty conversation to the caller's chat agent (resolving its LLM

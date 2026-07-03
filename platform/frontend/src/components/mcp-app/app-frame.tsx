@@ -17,7 +17,7 @@ const EMPTY_MESSAGE = (
 
 /**
  * Bare full-page MCP App runtime, shared by the owned-app standalone run page
- * (`/a/[appId]`) and the external catalog run page (`/apps/catalog/[id]/run`).
+ * (`/a/[appId]`) and the external catalog run page (`/a/catalog/[catalogId]`).
  * Wires the shared runtime-frame state (display mode / reload / resource state)
  * around {@link McpAppRuntime} with no Archestra chrome — each run page owns its
  * own header.

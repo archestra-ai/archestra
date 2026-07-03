@@ -395,8 +395,17 @@ const AgentToolsEditorContent = forwardRef<
     return ids;
   }, [catalogItems, assignedToolsByCatalog, pendingVersion]);
 
+  // Report only when the CONTENT changes. The memo's inputs get fresh
+  // identities on every render while the queries are loading (`data = []`
+  // defaults), so keying the parent's setState off the Set's identity would
+  // loop render → new Set → setState → render forever and crash the dialog.
+  const lastReportedSelectionKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    onSelectedToolIdsChange?.(effectiveSelectedToolIds);
+    if (!onSelectedToolIdsChange) return;
+    const key = [...effectiveSelectedToolIds].sort().join(",");
+    if (lastReportedSelectionKeyRef.current === key) return;
+    lastReportedSelectionKeyRef.current = key;
+    onSelectedToolIdsChange(effectiveSelectedToolIds);
   }, [effectiveSelectedToolIds, onSelectedToolIdsChange]);
 
   // Expose saveChanges method to parent

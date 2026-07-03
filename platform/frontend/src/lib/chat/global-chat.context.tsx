@@ -1015,6 +1015,29 @@ function ChatSessionHook({
     );
   }, [stableMessages, optimisticToolCalls.length]);
 
+  // A regenerate replaces the failed turn, so any persisted chat-error rows
+  // are now stale — the backend never clears them on its own, and left behind
+  // they keep rendering an error card above the regenerated answer (also after
+  // a reload). Clear them only once the re-run is genuinely issued (clearing
+  // before would wipe the card even when the resend never starts), and only
+  // when the conversation actually has rows. Destructure the stable mutateAsync
+  // like updateChatMessageAsync above so regenerateUserMessage stays
+  // referentially stable.
+  const { mutateAsync: clearChatErrorsAsync } = clearChatErrors;
+  const clearStalePersistedChatErrors = useCallback(() => {
+    const conversation = queryClient.getQueryData<{ chatErrors?: unknown[] }>([
+      "conversation",
+      conversationId,
+    ]);
+    if (!conversation?.chatErrors?.length) return;
+    clearChatErrorsAsync({ id: conversationId }).catch((error) => {
+      console.error(
+        "[ChatSession] Failed to clear stale chat errors after regenerate",
+        error,
+      );
+    });
+  }, [queryClient, clearChatErrorsAsync, conversationId]);
+
   // Save the user message's text, then re-run the assistant turn from it.
   const regenerateUserMessage = useCallback(
     async ({
@@ -1061,6 +1084,7 @@ function ChatSessionHook({
         // regenerate from it. The server replaces the turn atomically.
         setMessages(canonical);
         void regenerate({ messageId: anchorId });
+        clearStalePersistedChatErrors();
         return;
       }
 
@@ -1080,8 +1104,14 @@ function ChatSessionHook({
         }),
       );
       void regenerate({ messageId });
+      clearStalePersistedChatErrors();
     },
-    [updateChatMessageAsync, setMessages, regenerate],
+    [
+      updateChatMessageAsync,
+      setMessages,
+      regenerate,
+      clearStalePersistedChatErrors,
+    ],
   );
 
   // Always keep the session ref up-to-date with the latest values (including

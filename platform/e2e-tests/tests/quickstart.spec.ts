@@ -75,6 +75,17 @@ test.describe("Quickstart", { tag: "@quickstart" }, () => {
           // row never renders here.
           waitForRow: false,
         });
+        // After the org's first provider key, first-run shows a "set a default
+        // model" step before the chat composer opens. Skip it to advance to
+        // chat. Defensive because a shared-DB org that already has a default
+        // model skips the step and lands straight on chat.
+        await page
+          .getByTestId(E2eTestId.OnboardingDefaultModelSkip)
+          .waitFor({ state: "visible", timeout: 10_000 })
+          .then(() =>
+            page.getByTestId(E2eTestId.OnboardingDefaultModelSkip).click(),
+          )
+          .catch(() => {});
       } else {
         await expect(chatPrompt).toBeVisible({ timeout: 15_000 });
       }

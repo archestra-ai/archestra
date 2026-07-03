@@ -188,7 +188,15 @@ jobs:
   # Quickstart remains separate because it validates the docker run path.
   platform-e2e-tests-shards:
     name: Platform E2E Tests Shard (${{ matrix.shard }}/2)
-    needs: [platform-e2e-build]
+    # Deliberately NO `needs: [platform-e2e-build]`: the shards start alongside
+    # the image build and do all image-independent setup (checkout, pnpm, Kind
+    # cluster, MCP dependency images) while the build runs. Setup Archestra
+    # Platform then polls the registry (image-pull-timeout-seconds) until the
+    # freshly pushed image appears; fork PRs poll for the build artifact in the
+    # load steps below. This overlap takes ~2.5 min off the merge-queue critical
+    # path. Trade-off: if the build fails, the shards burn the poll deadline
+    # instead of being skipped — the merge is still blocked either way by the
+    # required "Build ... Image" checks.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # Observed worst-case shard wall-clock is ~10 min (setup + tests); 30 caps a
@@ -203,6 +211,7 @@ jobs:
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
+      actions: read # Required to poll for build artifacts on fork PRs (wait-timeout-seconds).
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -215,19 +224,25 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Load platform image
-        id: load-platform-image
+      # Fork PRs only: the platform image travels as a workflow artifact (forks
+      # get no OIDC-backed registry access), so wait for the build job to upload
+      # it. Trusted runs skip these steps entirely — Setup Archestra Platform
+      # pulls from the registry itself, after the image-independent setup.
+      - name: Load platform image (fork PRs, from artifact)
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
         uses: ./.github/actions/load-platform-image
         with:
-          source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
-          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          source: artifact
+          image-tag: archestra-platform:${{ github.sha }}
+          wait-timeout-seconds: "900"
 
-      - name: Load MCP server base image
-        id: load-mcp-server-base-image
+      - name: Load MCP server base image (fork PRs, from artifact)
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
         uses: ./.github/actions/load-mcp-server-base-image
         with:
-          source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
-          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          source: artifact
+          image-tag: mcp-server-base:${{ github.sha }}
+          wait-timeout-seconds: "900"
 
       - name: Prepare blob report workspace
         run: |
@@ -246,9 +261,10 @@ jobs:
           e2e-dependencies-extra-helm-set: "vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default"
           e2e-dependencies-wait-for-vault: "true"
           build-platform-image: "false"
-          platform-image-tag: ${{ steps.load-platform-image.outputs.image-tag }}
+          platform-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           platform-context: ./platform
-          mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
+          mcp-server-base-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          image-pull-timeout-seconds: "900"
 
       - name: Run all non-quickstart E2E tests
         id: e2e

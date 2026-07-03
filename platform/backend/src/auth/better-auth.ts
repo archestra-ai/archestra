@@ -211,6 +211,12 @@ export const auth = betterAuth({
       jwks: {
         keyPairConfig: { alg: "RS256", modulusLength: 2048 },
       },
+      // Without this, the plugin's /get-session after-hook mints a JWT — a
+      // jwks table read plus an RS256 signature — on EVERY authenticated
+      // request (the auth middleware calls getSession per request) just to
+      // set a `set-auth-jwt` response header nothing consumes. The /token
+      // and /jwks endpoints (used by the OAuth/OIDC flows) are unaffected.
+      disableSettingJwtHeader: true,
     }),
     oauthProvider({
       loginPage: OAUTH_PAGES.login,

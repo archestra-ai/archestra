@@ -5,6 +5,8 @@ import {
   AppWindow,
   Loader2,
   MoreHorizontal,
+  Pin,
+  PinOff,
   Server,
   Settings,
   SquareArrowOutUpRight,
@@ -14,6 +16,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ScopeBadge } from "@/components/scope-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -29,7 +32,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useOpenAppInChat, useOpenExternalAppInChat } from "@/lib/app.query";
+import {
+  type PinAppTarget,
+  useOpenAppInChat,
+  useOpenExternalAppInChat,
+  usePinApp,
+} from "@/lib/app.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { cn } from "@/lib/utils";
@@ -80,6 +88,26 @@ function CardOverflowMenu({
   );
 }
 
+// Pin/Unpin menu item (mirrors the project card's): pins are per-user and
+// toggle from the same overflow menu on both card kinds.
+function PinMenuItem({
+  pinned,
+  target,
+}: {
+  pinned: boolean;
+  target: PinAppTarget;
+}) {
+  const pinAppMutation = usePinApp();
+  return (
+    <DropdownMenuItem
+      onSelect={() => pinAppMutation.mutate({ pinned: !pinned, target })}
+    >
+      {pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+      {pinned ? "Unpin" : "Pin"}
+    </DropdownMenuItem>
+  );
+}
+
 // Opening is a round-trip; while it's in flight show a loading overlay so the
 // card doesn't look frozen. Visual only (pointer-events-none). Shared by both
 // card kinds since both open into chat the same way.
@@ -99,11 +127,19 @@ function CardOpeningOverlay() {
   );
 }
 
-// The app's type, as the leading icon. The label (what "owned" vs "external"
-// means) rides in the tooltip + aria-label rather than a separate badge. Lifted
-// above the full-card click button so it can be hovered.
-function AppTypeIcon({ owned }: { owned: boolean }) {
-  const Icon = owned ? AppWindow : Server;
+// The app's type, as the leading icon. External cards show the backing MCP
+// server's registry icon (emoji or image) when the catalog has one;
+// McpCatalogIcon falls back to the same generic Server glyph otherwise. The
+// label (what "owned" vs "external" means) rides in the tooltip + aria-label
+// rather than a separate badge. Lifted above the full-card click button so it
+// can be hovered.
+function AppTypeIcon({
+  owned,
+  icon,
+}: {
+  owned: boolean;
+  icon?: string | null;
+}) {
   const label = owned ? "MCP app" : "MCP server app";
   return (
     <Tooltip>
@@ -113,7 +149,11 @@ function AppTypeIcon({ owned }: { owned: boolean }) {
           aria-label={label}
           className="relative z-10 inline-flex text-muted-foreground"
         >
-          <Icon className="h-4 w-4" />
+          {owned ? (
+            <AppWindow className="h-4 w-4" />
+          ) : (
+            <McpCatalogIcon icon={icon} size={16} />
+          )}
         </span>
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
@@ -167,6 +207,10 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
             />
           }
         >
+          <PinMenuItem
+            pinned={!!app.pinnedAt}
+            target={{ source: "owned", appId: app.id }}
+          />
           <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
             <Settings className="h-4 w-4" />
             Settings
@@ -272,6 +316,14 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
       {isOpening ? <CardOpeningOverlay /> : null}
 
       <CardOverflowMenu leading={<ScopeBadge scope={app.scope} hidePersonal />}>
+        <PinMenuItem
+          pinned={!!app.pinnedAt}
+          target={{
+            source: "external",
+            mcpServerId: app.mcpServerId,
+            resourceUri: app.resourceUri,
+          }}
+        />
         <DropdownMenuItem asChild>
           <Link href={runHref} target="_blank" rel="noreferrer">
             <SquareArrowOutUpRight className="h-4 w-4" />
@@ -287,7 +339,7 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
       </CardOverflowMenu>
 
       <div className="mb-3 flex items-center gap-1.5 pr-16">
-        <AppTypeIcon owned={false} />
+        <AppTypeIcon owned={false} icon={app.icon} />
       </div>
 
       <CardTitle className="line-clamp-2 leading-snug break-words">

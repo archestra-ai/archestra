@@ -1,6 +1,6 @@
 ---
 name: archestra-dev-rust-napi
-description: Use when editing Rust in this repo — the NAPI crates under platform/archestra-rs (Node bindings, generated TypeScript bindings, telemetry, validation/errors) or the standalone archestra-bench Rust workspace (core/runner/cli/analyzer) — including Rust build/test checks.
+description: Use when editing Rust in this repo — the NAPI crates under platform/archestra-rs (Node bindings, generated TypeScript bindings, telemetry, validation/errors) or the standalone ai-labs Rust workspace (core/runner/cli/analyzer) — including Rust build/test checks.
 ---
 
 # Archestra Rust Coding Style
@@ -8,7 +8,7 @@ description: Use when editing Rust in this repo — the NAPI crates under platfo
 This covers all Rust in the repo:
 
 - `platform/archestra-rs/*` — embedded in Node via NAPI.
-- `archestra-bench/*` — a standalone pure-Rust workspace (core/runner/cli/analyzer), no NAPI.
+- `ai-labs/*` — a standalone pure-Rust workspace (core/runner/cli/analyzer), no NAPI.
 
 The library-quality rules below apply everywhere. Rules tagged **(NAPI only)** apply only to Rust embedded via NAPI.
 
@@ -130,7 +130,7 @@ Do not expand the Rust footprint opportunistically. Reach for Rust when the task
 - Use JS/NAPI integration tests only for actual boundary behavior.
 - Keep every `cfg` or feature gate as narrow as its actual use. Code compiled only because a gate is wider than its callers is dead code and will trip `-D warnings`.
 - **(NAPI only)** Run checks under the default feature set and the binding's feature set, such as `napi` and `telemetry`, not only `--all-features`.
-- `platform/archestra-rs` and `archestra-bench` are separate workspaces. Run the checks below in each workspace you touched.
+- `platform/archestra-rs` and `ai-labs` are separate workspaces. Run the checks below in each workspace you touched.
 - Always run `cargo check` after finishing Rust work.
 - Required before merge: `cargo fmt`, `cargo check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test`.
 

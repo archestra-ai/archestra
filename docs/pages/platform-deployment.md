@@ -1464,6 +1464,14 @@ The audit log records administrative actions (mutations via `/api/*` and auth ev
   - Default: Not set (maintenance mode disabled)
   - When set, all users are shown a full-screen maintenance overlay with the message instead of the normal application interface.
 
+### Site Notification Banner
+
+- **`ARCHESTRA_SITE_NOTIFICATION_MESSAGE`** - Displays an instance-wide banner at the top of the UI, including the login screen.
+  - Default: Not set (no banner)
+  - Supports markdown. Users can dismiss the banner; a changed message reappears for everyone.
+  - Unlike maintenance mode, the platform stays fully functional. Useful for labeling non-production instances or announcing upcoming maintenance.
+  - Shown alongside (above) any organization-level site notification configured in Settings → Organization.
+
 ### Enterprise Licensing
 
 To learn more about enterprise licensing, see the [pricing model](/docs/platform-pricing-model).

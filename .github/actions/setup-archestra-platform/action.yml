@@ -88,6 +88,28 @@ outputs:
 runs:
   using: composite
   steps:
+    # Pre-pull the Playwright test-runner image in the background so its ~24s
+    # pull overlaps the Kind cluster creation + Helm deploy below instead of
+    # delaying the test run inside run-e2e-tests. No `wait` is needed: the
+    # later `docker run` in run-e2e-tests attaches to (dedupes with) the
+    # in-flight pull via the Docker daemon. The tag is derived from
+    # e2e-tests/package.json — the same source run-e2e-tests resolves it from —
+    # so the version is never duplicated; if the file is absent (non-e2e
+    # callers) this is a silent no-op.
+    - name: Pre-pull Playwright image in background
+      shell: bash
+      env:
+        PLATFORM_CONTEXT: ${{ inputs.platform-context }}
+      run: |
+        PKG_JSON="${PLATFORM_CONTEXT}/e2e-tests/package.json"
+        if [ -f "${PKG_JSON}" ]; then
+          PLAYWRIGHT_VERSION=$(jq -r '.devDependencies["@playwright/test"]' "${PKG_JSON}" | sed 's/^[\^~]//')
+          if [ -n "${PLAYWRIGHT_VERSION}" ] && [ "${PLAYWRIGHT_VERSION}" != "null" ]; then
+            echo "Pre-pulling mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble in the background..."
+            docker pull "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" >/dev/null 2>&1 &
+          fi
+        fi
+
     - name: Install Kind
       uses: ./.github/actions/install-kind-cluster
       with:

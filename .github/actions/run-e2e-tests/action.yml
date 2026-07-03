@@ -40,6 +40,10 @@ outputs:
 runs:
   using: composite
   steps:
+    # NOTE: setup-archestra-platform pre-pulls this same image in the background
+    # (deriving the tag from the same package.json field) so the pull overlaps
+    # environment setup; the docker run below then finds it cached or attaches
+    # to the in-flight pull.
     - name: Resolve Playwright version
       id: playwright
       shell: bash

@@ -200,8 +200,8 @@ class OrganizationModel {
 
   /**
    * List every organization id. Used to backfill globally-enabled built-in
-   * tools (e.g. the MCP App tools, gated by `ARCHESTRA_APPS_ENABLED` rather
-   * than a per-org opt-in).
+   * tools (e.g. the MCP App tools, which are a global feature rather than a
+   * per-org opt-in).
    */
   static async findAllIds(): Promise<string[]> {
     const rows = await db

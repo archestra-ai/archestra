@@ -1,5 +1,4 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -9,13 +8,6 @@ describe("GET /api/apps", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
-
-  // Pin the apps flag per TEST, not per file: the shared setup restores the
-  // pristine config before and after every test, so a beforeAll-scoped
-  // mutation does not survive, and a file must never depend on worker state.
-  beforeEach(() => {
-    (config.apps as { enabled: boolean }).enabled = true;
-  });
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
@@ -40,13 +32,6 @@ describe("GET /api/apps", () => {
 
   afterEach(async () => {
     await app.close();
-  });
-
-  test("the whole surface 404s when the feature is disabled", async () => {
-    (config.apps as { enabled: boolean }).enabled = false;
-    const response = await app.inject({ method: "GET", url: "/api/apps" });
-    (config.apps as { enabled: boolean }).enabled = true;
-    expect(response.statusCode).toBe(404);
   });
 
   test("returns owned apps with pagination metadata", async ({ makeApp }) => {

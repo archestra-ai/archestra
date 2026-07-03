@@ -66,7 +66,6 @@ import {
 } from "@/lib/chat/chat-utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
-import { useFeature } from "@/lib/config/config.query";
 import type { Once } from "@/lib/hooks/use-once";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { usePinProject, useProjects } from "@/lib/projects/projects.query";
@@ -161,12 +160,9 @@ export function ChatSidebarSection({
     (c) => !c.pinnedAt && !isScheduledRunConversation(c),
   );
 
-  const projectsEnabled = useFeature("projectsEnabled") === true;
-  const { data: projectsData } = useProjects({ enabled: projectsEnabled });
+  const { data: projectsData } = useProjects();
   const pinProjectMutation = usePinProject();
-  const pinnedProjects = projectsEnabled
-    ? (projectsData ?? []).filter((p) => p.pinnedAt)
-    : [];
+  const pinnedProjects = (projectsData ?? []).filter((p) => p.pinnedAt);
   const pinnedItems = buildPinnedSidebarItems({
     chats: conversations.filter((c) => !isScheduledRunConversation(c)),
     projects: pinnedProjects,
@@ -285,7 +281,6 @@ export function ChatSidebarSection({
     const isMenuOpen = openMenuId === conv.id;
     const isPinned = !!conv.pinnedAt;
     const showCreateProject = canCreateProjectFromChat({
-      projectsEnabled,
       hasCreatePermission: canCreateProject === true,
       conversation: conv,
     });

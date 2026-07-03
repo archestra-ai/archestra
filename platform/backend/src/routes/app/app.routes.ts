@@ -12,7 +12,6 @@ import {
   resolveCreateAppHtml,
 } from "@/app-templates";
 import { userHasPermission } from "@/auth/utils";
-import config from "@/config";
 import logger from "@/logging";
 import {
   AppAccessModel,
@@ -100,14 +99,6 @@ const AppWithTeamsSchema = SelectAppSchema.extend({
 });
 
 const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // Ships dark: routes are always registered (so they appear in the OpenAPI
-  // spec + generated client), but every request 404s until the feature is on.
-  fastify.addHook("onRequest", async () => {
-    if (!config.apps.enabled) {
-      throw new ApiError(404, "Not found");
-    }
-  });
-
   fastify.get(
     "/api/apps",
     {

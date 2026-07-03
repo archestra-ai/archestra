@@ -93770,12 +93770,6 @@
                         "agentEnvironmentsEnabled": {
                           "type": "boolean"
                         },
-                        "appsEnabled": {
-                          "type": "boolean"
-                        },
-                        "projectsEnabled": {
-                          "type": "boolean"
-                        },
                         "byosEnabled": {
                           "type": "boolean"
                         },
@@ -93873,8 +93867,6 @@
                         "sandboxArtifactBytesLimit",
                         "agentSkillsEnabled",
                         "agentEnvironmentsEnabled",
-                        "appsEnabled",
-                        "projectsEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",

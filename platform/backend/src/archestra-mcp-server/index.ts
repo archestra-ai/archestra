@@ -5,7 +5,6 @@ import {
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
-  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -115,30 +114,6 @@ const toolEntries: Partial<
   ...appLlmToolEntries,
 };
 
-// App tools are registered above so they remain unit-testable, but when the
-// feature is dark they must not be dispatchable even by exact name.
-const appToolFullNames = new Set<string>([
-  ...Object.keys(appToolEntries),
-  ...Object.keys(appDataToolEntries),
-  ...Object.keys(appLlmToolEntries),
-]);
-
-// search_files / read_file / save_file / edit_file / delete_file are the
-// persistent-files (Projects) surface of the sandbox tool group. Registered above
-// for unit tests, but hidden and non-dispatchable when the projects feature is dark.
-// Derived from the shared subgroup so this gate and the always-exposed /
-// dynamic-access logic stay in lockstep.
-const projectGatedSandboxFullNames = new Set<string>(
-  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES.map(getArchestraToolFullName),
-);
-
-// The dedicated Projects tool group (create_project_from_conversation).
-// Registered above for unit tests, but hidden and non-dispatchable when the
-// projects feature is dark.
-const projectFeatureToolFullNames = new Set<string>(
-  projectTools.map((t) => t.name),
-);
-
 export function getArchestraMcpTools() {
   const tools = [
     ...identityTools,
@@ -152,18 +127,14 @@ export function getArchestraMcpTools() {
     ...toolAssignmentTools,
     ...knowledgeManagementTools,
     ...chatTools,
-    ...(config.projects.enabled ? projectTools : []),
+    ...projectTools,
     ...searchToolTools,
     ...runToolTools,
     ...skillTools,
-    ...(config.skillsSandbox.enabled
-      ? config.projects.enabled
-        ? sandboxTools
-        : sandboxTools.filter((t) => !projectGatedSandboxFullNames.has(t.name))
-      : []),
-    ...(config.apps.enabled
-      ? [...appTools, ...appDataTools, ...appLlmTools]
-      : []),
+    ...(config.skillsSandbox.enabled ? sandboxTools : []),
+    ...appTools,
+    ...appDataTools,
+    ...appLlmTools,
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {
@@ -222,29 +193,6 @@ export async function executeArchestraTool(
     ? toolEntries[resolvedToolName as ArchestraToolFullName]
     : undefined;
   if (!toolEntry) {
-    throw {
-      code: -32601,
-      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
-    };
-  }
-
-  if (
-    !config.apps.enabled &&
-    resolvedToolName &&
-    appToolFullNames.has(resolvedToolName)
-  ) {
-    throw {
-      code: -32601,
-      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
-    };
-  }
-
-  if (
-    !config.projects.enabled &&
-    resolvedToolName &&
-    (projectGatedSandboxFullNames.has(resolvedToolName) ||
-      projectFeatureToolFullNames.has(resolvedToolName))
-  ) {
     throw {
       code: -32601,
       message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,

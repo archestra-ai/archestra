@@ -32,8 +32,6 @@ export function makeConfig(
       sandboxArtifactBytesLimit: 16 * 1024 * 1024,
       agentSkillsEnabled: false,
       agentEnvironmentsEnabled: false,
-      appsEnabled: false,
-      projectsEnabled: false,
       byosEnabled: false,
       byosVaultKvVersion: "1",
       azureOpenAiEntraIdEnabled: false,

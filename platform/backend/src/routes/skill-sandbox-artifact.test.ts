@@ -616,42 +616,6 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
     expect(bytes.statusCode).toBe(404);
   });
 
-  test("the producer can delete even when Projects is disabled (route is ungated)", async () => {
-    const original = config.projects.enabled;
-    config.projects.enabled = false;
-    const localApp = createFastifyInstance();
-    localApp.addHook("onRequest", async (request) => {
-      (request as typeof request & { user: unknown }).user = user;
-      (request as typeof request & { organizationId: string }).organizationId =
-        organizationId;
-    });
-    try {
-      const { default: routes } = await import("./skill-sandbox-artifact");
-      await localApp.register(routes);
-      await localApp.ready();
-
-      const sandbox = await seedSandbox({ organizationId, userId: user.id });
-      const artifact = await seedArtifact({
-        sandboxId: sandbox.id,
-        userId: user.id,
-        organizationId,
-        mimeType: "text/plain",
-        data: Buffer.from("bye"),
-        path: "/sandbox/no-projects.txt",
-      });
-
-      const del = await localApp.inject({
-        method: "DELETE",
-        url: `/api/skill-sandbox/artifacts/${artifact.id}`,
-      });
-      expect(del.statusCode).toBe(200);
-      expect(await FileModel.findById(artifact.id)).toBeNull();
-    } finally {
-      await localApp.close();
-      config.projects.enabled = original;
-    }
-  });
-
   test("a project member can delete a member-produced file; non-members cannot", async ({
     makeUser,
   }) => {
@@ -730,13 +694,10 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
   });
 });
 
-describe("projects feature gating", () => {
+describe("conversation-artifacts route", () => {
   let user: User;
   let organizationId: string;
-  const original = config.projects.enabled;
 
-  // The plugin reads the flag at registration time, so each test builds its own
-  // app after setting the flag to the value it needs.
   async function buildApp() {
     const app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -757,51 +718,7 @@ describe("projects feature gating", () => {
     organizationId = (await makeOrganization()).id;
   });
 
-  afterEach(() => {
-    (config.projects as { enabled: boolean }).enabled = original;
-  });
-
-  test("the projects-gated routes 404 when off, but the byte route still streams", async ({
-    makeAgent,
-    makeConversation,
-  }) => {
-    const sandbox = await seedSandbox({ organizationId, userId: user.id });
-    const artifact = await seedArtifact({
-      sandboxId: sandbox.id,
-      userId: user.id,
-      organizationId,
-      mimeType: "image/png",
-      data: PNG_FAKE,
-    });
-    const agent = await makeAgent({ organizationId });
-    const conv = await makeConversation(agent.id, {
-      userId: user.id,
-      organizationId,
-    });
-
-    (config.projects as { enabled: boolean }).enabled = false;
-    const app = await buildApp();
-    try {
-      // the conversation-artifacts list is gated behind the Projects flag
-      const list = await app.inject({
-        method: "GET",
-        url: `/api/skill-sandbox/conversations/${conv.id}/artifacts`,
-      });
-      expect(list.statusCode).toBe(404);
-
-      // the byte endpoint is always registered regardless of the flag
-      const bytes = await app.inject({
-        method: "GET",
-        url: `/api/skill-sandbox/artifacts/${artifact.id}`,
-      });
-      expect(bytes.statusCode).toBe(200);
-      expect(bytes.rawPayload).toEqual(PNG_FAKE);
-    } finally {
-      await app.close();
-    }
-  });
-
-  test("the conversation-artifacts route 200s when on", async ({
+  test("lists the artifacts produced in a conversation's sandbox", async ({
     makeAgent,
     makeConversation,
   }) => {
@@ -819,7 +736,6 @@ describe("projects feature gating", () => {
       conversationId: conv.id,
     });
 
-    (config.projects as { enabled: boolean }).enabled = true;
     const app = await buildApp();
     try {
       const list = await app.inject({
@@ -840,15 +756,12 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId — project admin oversig
   let organizationId: string;
   let owner: User;
   let actingUser: User;
-  let savedProjectsEnabled: boolean;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     owner = await makeUser();
     await makeMember(owner.id, organizationId, {});
     actingUser = owner;
-    savedProjectsEnabled = config.projects.enabled;
-    (config.projects as { enabled: boolean }).enabled = true;
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -863,7 +776,6 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId — project admin oversig
   });
 
   afterEach(async () => {
-    (config.projects as { enabled: boolean }).enabled = savedProjectsEnabled;
     await app.close();
   });
 
@@ -945,15 +857,12 @@ describe("PUT /api/skill-sandbox/artifacts/:artifactId/content", () => {
   let organizationId: string;
   let owner: User;
   let actingUser: User;
-  let savedProjectsEnabled: boolean;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     owner = await makeUser();
     await makeMember(owner.id, organizationId, {});
     actingUser = owner;
-    savedProjectsEnabled = config.projects.enabled;
-    (config.projects as { enabled: boolean }).enabled = true;
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -968,7 +877,6 @@ describe("PUT /api/skill-sandbox/artifacts/:artifactId/content", () => {
   });
 
   afterEach(async () => {
-    (config.projects as { enabled: boolean }).enabled = savedProjectsEnabled;
     await app.close();
   });
 

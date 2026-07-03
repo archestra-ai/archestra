@@ -985,7 +985,7 @@ const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
  * always wins (`"true"`/`"false"`); a blank or unset value falls back to
  * `ARCHESTRA_BETA`. This lets a single `ARCHESTRA_BETA=true` light up every
  * ships-dark/preview feature at once while keeping per-feature opt-out intact
- * (e.g. `ARCHESTRA_BETA=true` + `ARCHESTRA_APPS_ENABLED=false` keeps Apps off).
+ * (e.g. `ARCHESTRA_BETA=true` + `ARCHESTRA_AGENT_HOOKS_ENABLED=false` keeps hooks off).
  *
  * This backs ships-dark *product* features only. It deliberately does NOT touch
  * credential/auth-mode toggles (e.g. Bedrock IAM, Azure/Vertex Entra), which are
@@ -1515,24 +1515,6 @@ const config = {
         1024 * 1024 * 1024,
       ),
     },
-  },
-  /**
-   * user-authored MCP Apps — first-class apps created inside Archestra (from
-   * chat or the /apps page), backed by a per-app data store and assignable
-   * tools. Ships dark: off by default until the feature is ready to surface.
-   */
-  apps: {
-    enabled: betaFeatureEnabled(process.env.ARCHESTRA_APPS_ENABLED),
-  },
-  /**
-   * Projects + the persistent "My Files" file system on top of the skill
-   * sandbox. Ships dark: off by default until ready to surface. Gates the
-   * project APIs, the My Files endpoints, the persistent-file MCP tools
-   * (search_files, read_file, save_file, edit_file, delete_file), and the
-   * my_file upload source.
-   */
-  projects: {
-    enabled: betaFeatureEnabled(process.env.ARCHESTRA_PROJECTS_ENABLED),
   },
   /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the

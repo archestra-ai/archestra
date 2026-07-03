@@ -8,7 +8,6 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
-import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -276,20 +275,16 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId = defaultAgent.id;
       }
 
-      // With the projects feature on, schedules belong to a project; verify the
-      // caller can access it. With the feature off, scheduling stays unscoped.
-      let projectId: string | null = null;
-      if (config.projects.enabled) {
-        if (!body.projectId) {
-          throw new ApiError(400, "A project is required for scheduled tasks");
-        }
-        await projectService.get({
-          id: body.projectId,
-          organizationId,
-          userId: user.id,
-        });
-        projectId = body.projectId;
+      // Schedules belong to a project; verify the caller can access it.
+      if (!body.projectId) {
+        throw new ApiError(400, "A project is required for scheduled tasks");
       }
+      await projectService.get({
+        id: body.projectId,
+        organizationId,
+        userId: user.id,
+      });
+      const projectId = body.projectId;
 
       const trigger = await ScheduleTriggerModel.create({
         organizationId,
@@ -412,15 +407,8 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Guard project re-scoping the same way create does: only with the
-      // feature on and only to a project the caller can access.
+      // Guard project re-scoping: only to a project the caller can access.
       if (body.projectId !== undefined) {
-        if (!config.projects.enabled) {
-          throw new ApiError(
-            400,
-            "Projects are not enabled on this deployment",
-          );
-        }
         await projectService.get({
           id: body.projectId,
           organizationId,

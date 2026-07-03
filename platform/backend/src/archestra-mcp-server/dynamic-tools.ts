@@ -2,7 +2,6 @@ import {
   ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
   getArchestraToolFullName,
-  isProjectsFileArchestraToolShortName,
   isSandboxArchestraToolShortName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
@@ -275,17 +274,11 @@ async function userHasAccessibleKnowledgeConnectors(
 }
 
 // Whether a sandbox-group tool is enabled for discovery/dynamic dispatch under
-// the current deployment config. The runtime tools
-// (run_command/upload_file/download_file) follow the skills-sandbox runtime
-// flag; the persistent-files (Projects) tools follow the Projects flag in
-// addition to the runtime flag — they don't materialize a Dagger container, but
-// execution still requires the runtime (see sandbox.ts `ensureUsable`), so
-// exposing them only with both flags on mirrors the registration gate in
-// index.ts. Non-sandbox tools are never enabled by this predicate.
+// the current deployment config. Both the runtime tools
+// (run_command/upload_file/download_file) and the persistent-files tools
+// (search_files/read_file/…) follow the skills-sandbox runtime flag. Non-sandbox
+// tools are never enabled by this predicate.
 function isSandboxToolEnabled(shortName: string): boolean {
-  if (isProjectsFileArchestraToolShortName(shortName)) {
-    return config.skillsSandbox.enabled && config.projects.enabled;
-  }
   return (
     config.skillsSandbox.enabled && isSandboxArchestraToolShortName(shortName)
   );

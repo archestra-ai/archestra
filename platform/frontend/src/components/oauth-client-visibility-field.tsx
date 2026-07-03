@@ -9,8 +9,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
-  VisibilitySelector,
   type VisibilityOption,
+  VisibilitySelector,
 } from "@/components/visibility-selector";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";

@@ -25,14 +25,28 @@ def main() -> int:
             ["git", "rev-parse", "--show-toplevel"], text=True
         ).strip()
     )
-    candidate_files = list(iter_candidate_files(repo_root))
+    failures = collect_failures(repo_root)
+
+    if failures:
+        print("Supply-chain policy violations found:", file=sys.stderr)
+        for failure in failures:
+            print(failure, file=sys.stderr)
+        return 1
+
+    print("Supply-chain policy checks passed.")
+    return 0
+
+
+def collect_failures(repo_root: Path) -> list[str]:
     failures: list[str] = []
 
-    for file_path in candidate_files:
+    for file_path in iter_candidate_files(repo_root):
         relative_path = file_path.relative_to(repo_root)
-        lines = file_path.read_text(encoding="utf-8").splitlines()
+        physical_lines = file_path.read_text(encoding="utf-8").splitlines()
+        logical_lines = fold_continuations(physical_lines)
+        texts = [text for _, text in logical_lines]
 
-        for line_number, line in enumerate(lines, start=1):
+        for index, (line_number, line) in enumerate(logical_lines):
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue
@@ -40,7 +54,7 @@ def main() -> int:
                 continue
 
             if ":latest" in line and not has_inline_or_previous_marker(
-                lines, line_number - 1, LATEST_ALLOW_MARKER
+                texts, index, LATEST_ALLOW_MARKER
             ):
                 failures.append(
                     format_failure(
@@ -54,7 +68,7 @@ def main() -> int:
             if not looks_like_remote_download(line):
                 continue
 
-            if has_inline_or_previous_marker(lines, line_number - 1, DOWNLOAD_ALLOW_MARKER):
+            if has_inline_or_previous_marker(texts, index, DOWNLOAD_ALLOW_MARKER):
                 continue
 
             if is_post_only_webhook(line):
@@ -63,7 +77,7 @@ def main() -> int:
             if has_local_url(line):
                 continue
 
-            if not has_nearby_verification(lines, line_number - 1):
+            if not has_nearby_verification(texts, index):
                 failures.append(
                     format_failure(
                         relative_path,
@@ -73,14 +87,34 @@ def main() -> int:
                     )
                 )
 
-    if failures:
-        print("Supply-chain policy violations found:", file=sys.stderr)
-        for failure in failures:
-            print(failure, file=sys.stderr)
-        return 1
+    return failures
 
-    print("Supply-chain policy checks passed.")
-    return 0
+
+def fold_continuations(lines: list[str]) -> list[tuple[int, str]]:
+    """Join backslash-continued physical lines into logical lines so multi-line
+    commands are matched whole; each logical line keeps its first physical
+    line's number for reporting. Comment lines never continue."""
+    folded: list[tuple[int, str]] = []
+    index = 0
+    while index < len(lines):
+        start_line_number = index + 1
+        line = lines[index]
+        while ends_with_continuation(line) and index + 1 < len(lines):
+            line = line[:-1].rstrip() + " " + lines[index + 1].strip()
+            index += 1
+        folded.append((start_line_number, line))
+        index += 1
+    return folded
+
+
+def ends_with_continuation(line: str) -> bool:
+    # Shell semantics: only an odd count of trailing backslashes continues the
+    # line (an even count is escaped literal backslashes), and the backslash
+    # must be the final character — no trailing whitespace after it.
+    if not line.endswith("\\") or line.strip().startswith("#"):
+        return False
+    trailing_backslashes = len(line) - len(line.rstrip("\\"))
+    return trailing_backslashes % 2 == 1
 
 
 def iter_candidate_files(repo_root: Path):
@@ -124,7 +158,15 @@ def has_nearby_verification(lines: list[str], index: int) -> bool:
         "gpg --verify",
         "minisign -Vm",
     )
-    return any(marker in window for marker in verification_markers)
+    if any(marker in window for marker in verification_markers):
+        return True
+    # A bare `openssl dgst` only prints a hash; it counts as verification only
+    # next to an actual pass/fail check: a signature check (-verify) or a
+    # comparison of the digest against a pinned value (test "$X" = "$Y").
+    return "openssl dgst" in window and (
+        "-verify" in window
+        or re.search(r'\btest\s+"[^"]*"\s*==?\s', window) is not None
+    )
 
 
 def has_inline_or_previous_marker(

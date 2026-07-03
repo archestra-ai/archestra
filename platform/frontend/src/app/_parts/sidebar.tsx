@@ -83,6 +83,8 @@ interface NavItem {
   onClick?: () => void;
   subItems?: NavSubItem[];
   beta?: boolean;
+  /** Chip label shown when `beta` is set; defaults to "New". */
+  badgeLabel?: string;
 }
 
 interface NavGroup {
@@ -115,6 +117,7 @@ const chatsNavItems: NavItem[] = [
     icon: AppWindow,
     customIsActive: (pathname: string) => pathname === "/apps",
     beta: true,
+    badgeLabel: "Beta",
   },
   {
     title: "Connect",
@@ -386,7 +389,7 @@ const NavPrimary = ({
               variant="secondary"
               className="ml-auto px-1.5 py-0 text-[10px] group-data-[collapsible=icon]:hidden"
             >
-              New
+              {item.badgeLabel ?? "New"}
             </Badge>
           )}
         </SidebarPrefetchLink>

@@ -58,6 +58,126 @@ class IsPostOnlyWebhookTest(unittest.TestCase):
             self.assertFalse(policy.is_post_only_webhook(line), line)
 
 
+class FoldContinuationsTest(unittest.TestCase):
+    def test_joins_backslash_continued_lines_keeping_first_line_number(self) -> None:
+        folded = policy.fold_continuations(
+            [
+                "curl -fsSL \\",
+                "  -o /tmp/tool.tgz \\",
+                "  https://example.com/tool.tgz",
+                "echo done",
+            ]
+        )
+        self.assertEqual(
+            folded,
+            [
+                (1, "curl -fsSL -o /tmp/tool.tgz https://example.com/tool.tgz"),
+                (4, "echo done"),
+            ],
+        )
+
+    def test_comment_lines_do_not_continue(self) -> None:
+        folded = policy.fold_continuations(["# trailing backslash \\", "FROM scratch"])
+        self.assertEqual(folded, [(1, "# trailing backslash \\"), (2, "FROM scratch")])
+
+    def test_even_trailing_backslashes_are_literal_not_continuation(self) -> None:
+        # `echo foo \\` in shell is an escaped literal backslash; the statement
+        # ends there and the next line is an independent command.
+        folded = policy.fold_continuations(["echo foo \\\\", "echo bar"])
+        self.assertEqual(folded, [(1, "echo foo \\\\"), (2, "echo bar")])
+
+    def test_odd_trailing_backslashes_continue(self) -> None:
+        folded = policy.fold_continuations(["echo foo \\\\\\", "bar"])
+        self.assertEqual(folded, [(1, "echo foo \\\\ bar")])
+
+    def test_trailing_whitespace_after_backslash_is_not_continuation(self) -> None:
+        folded = policy.fold_continuations(["echo foo \\  ", "echo bar"])
+        self.assertEqual(folded, [(1, "echo foo \\  "), (2, "echo bar")])
+
+
+class CollectFailuresTest(unittest.TestCase):
+    def _scan(self, workflow_body: str) -> list[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workflows = root / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            (workflows / "x.yml").write_text(workflow_body)
+            return policy.collect_failures(root)
+
+    def test_flags_continued_line_download(self) -> None:
+        failures = self._scan(
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            "          curl -fsSL \\\n"
+            "            -o /tmp/tool.tgz \\\n"
+            "            https://example.com/tool.tgz\n"
+        )
+        self.assertEqual(len(failures), 1)
+        self.assertIn(".github/workflows/x.yml:5", failures[0])
+
+    def test_continued_download_with_openssl_dgst_verification_passes(self) -> None:
+        failures = self._scan(
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            "          curl -fsSL \\\n"
+            "            -o /tmp/tool.tgz \\\n"
+            "            https://example.com/tool.tgz\n"
+            "          openssl dgst -sha512 -verify /keys/pub.pem \\\n"
+            "            -signature /tmp/tool.tgz.sig /tmp/tool.tgz\n"
+        )
+        self.assertEqual(failures, [])
+
+    def test_bare_openssl_dgst_hash_print_is_not_verification(self) -> None:
+        failures = self._scan(
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            "          curl -o /tmp/tool.tgz https://example.com/tool.tgz\n"
+            "          openssl dgst -sha256 /tmp/tool.tgz\n"
+        )
+        self.assertEqual(len(failures), 1)
+
+    def test_openssl_dgst_with_pinned_hash_comparison_passes(self) -> None:
+        failures = self._scan(
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            "          curl -o /tmp/tool.tgz https://example.com/tool.tgz\n"
+            '          HASH=$(openssl dgst -sha512 -binary /tmp/tool.tgz | openssl base64 -A)\n'
+            '          test "${HASH}" = "${PINNED_HASH}"\n'
+        )
+        self.assertEqual(failures, [])
+
+    def test_openssl_dgst_with_truthiness_test_is_not_verification(self) -> None:
+        # `test "${H}"` only checks non-emptiness; it compares nothing.
+        failures = self._scan(
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            "          curl -o /tmp/tool.tgz https://example.com/tool.tgz\n"
+            '          H=$(openssl dgst -sha256 /tmp/tool.tgz)\n'
+            '          test "${H}"\n'
+        )
+        self.assertEqual(len(failures), 1)
+
+    def test_single_line_unverified_download_still_flagged(self) -> None:
+        failures = self._scan(
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - run: curl -o /tmp/tool.tgz https://example.com/tool.tgz\n"
+        )
+        self.assertEqual(len(failures), 1)
+        self.assertIn(".github/workflows/x.yml:4", failures[0])
+
+
 class LooksLikeRemoteDownloadTest(unittest.TestCase):
     def test_detects_single_line_downloads(self) -> None:
         self.assertTrue(

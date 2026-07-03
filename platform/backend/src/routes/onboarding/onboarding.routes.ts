@@ -125,9 +125,10 @@ const onboardingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      // Never nudge licensed customers for feedback. The raw env flag, same
-      // gate as the first-login survey.
-      if (config.enterpriseFeatures.core) {
+      // Never nudge licensed customers for feedback (raw env flag, same gate
+      // as the first-login survey), and respect the analytics opt-out — a
+      // deployment that disabled phone-home shouldn't be asked to phone home.
+      if (config.enterpriseFeatures.core || !config.analytics.enabled) {
         return reply.send({ activatedAt: null });
       }
       const [firstServerAt, firstSuccessfulCallAt] = await Promise.all([
@@ -159,6 +160,10 @@ async function isSurveyEligible(organizationId: string): Promise<boolean> {
   // effective tier (which is also active for small free-tier teams — exactly
   // the audience the survey is for).
   if (config.enterpriseFeatures.core) return false;
+
+  // The answers leave the instance, so respect the analytics opt-out
+  // (ARCHESTRA_ANALYTICS=disabled — also how CI suppresses the dialog).
+  if (!config.analytics.enabled) return false;
 
   const organization = await OrganizationModel.getById(organizationId);
   if (organization?.onboardingSurveyCompletedAt != null) return false;

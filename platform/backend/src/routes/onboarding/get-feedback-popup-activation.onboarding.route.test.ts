@@ -15,6 +15,10 @@ describe("GET /api/onboarding/feedback-popup-activation", () => {
     organizationId = organization.id;
     user = await makeUser();
 
+    // Analytics defaults off outside production, and the pop-up respects the
+    // opt-out; enable it so activation is testable. Restored automatically.
+    config.analytics.enabled = true;
+
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (
@@ -115,6 +119,24 @@ describe("GET /api/onboarding/feedback-popup-activation", () => {
     });
     // Restored automatically after the test by the shared setup.
     config.enterpriseFeatures.core = true;
+
+    expect(await getActivatedAt()).toBeNull();
+  });
+
+  test("null when analytics is disabled (phone-home opt-out)", async ({
+    makeMcpServer,
+    makeAgent,
+  }) => {
+    await makeMcpServer();
+    const agent = await makeAgent();
+    await McpToolCallModel.create({
+      agentId: agent.id,
+      mcpServerName: "test-server",
+      method: "tools/call",
+      toolCall: { id: "call-1", name: "testTool", arguments: {} },
+      toolResult: { id: "call-1", content: [], isError: false },
+    });
+    config.analytics.enabled = false;
 
     expect(await getActivatedAt()).toBeNull();
   });

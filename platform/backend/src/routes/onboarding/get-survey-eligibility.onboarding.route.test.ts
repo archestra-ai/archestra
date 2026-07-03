@@ -19,6 +19,10 @@ describe("GET /api/onboarding/survey-eligibility", () => {
     organizationId = organization.id;
     user = await makeUser();
 
+    // Analytics defaults off outside production, and the survey respects the
+    // opt-out; enable it so eligibility is testable. Restored automatically.
+    config.analytics.enabled = true;
+
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (
@@ -51,6 +55,11 @@ describe("GET /api/onboarding/survey-eligibility", () => {
   test("ineligible when the enterprise license env flag is set", async () => {
     // Restored automatically after the test by the shared setup.
     config.enterpriseFeatures.core = true;
+    expect(await getEligibility()).toBe(false);
+  });
+
+  test("ineligible when analytics is disabled (phone-home opt-out)", async () => {
+    config.analytics.enabled = false;
     expect(await getEligibility()).toBe(false);
   });
 

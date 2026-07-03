@@ -68,7 +68,11 @@ import {
   ScaffoldAppSchema,
 } from "@/types/app";
 import { isUniqueConstraintError } from "@/utils/db";
-import { ARCHESTRA_APP_SDK_SUMMARY } from "./app-authoring-guidance";
+import {
+  ARCHESTRA_APP_SDK_SUMMARY,
+  BUILD_APP_SKILL_POINTER,
+  NO_RENDER_PROCEED,
+} from "./app-authoring-guidance";
 import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
@@ -240,7 +244,7 @@ const PublishAppSchema = z.strictObject({
 const PublishAppOutputSchema = z.object({
   id: z.string(),
   scope: AppScopeSchema,
-  runUrl: z.string().describe("Standalone run page for the published app."),
+  runUrl: z.string().describe("Standalone page for the published app."),
 });
 
 const ValidateAppOutputSchema = z.object({
@@ -325,8 +329,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_SCAFFOLD_APP_SHORT_NAME,
     title: "Scaffold App",
-    description:
-      'Create a new interactive app (dashboard, form, tracker, game, or any custom UI) seeded from the default starter template. Use this whenever the user asks to make, build, or create an app or interactive UI — never paste app code into the chat reply or write it as an artifact. The result returns the seeded HTML plus the condensed window.archestra SDK surface; build it up with edit_app. For tool-calling apps (the assign→preview→diagnostics build loop), the CDN allowlist, or platform theming, load the "Build App" skill (in your available skills) for the full authoring playbook.',
+    description: `Create a new interactive app (dashboard, form, tracker, game, or any custom UI) seeded from the default starter template. Use this whenever the user asks to make, build, or create an app or interactive UI — never paste app code into the chat reply or write it as an artifact. The result returns the seeded HTML plus the condensed window.archestra SDK surface; build it up with edit_app. ${BUILD_APP_SKILL_POINTER}`,
     schema: ScaffoldAppToolSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
@@ -476,8 +479,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_REFINE_APP_SHORT_NAME,
     title: "Refine App",
-    description:
-      'Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. Pass `questions` (up to 3) to ask the user clarifying questions, and/or `spec` to persist the consolidated requirements. The result returns the user\'s real assignable MCP tools to ground the spec in plus the condensed window.archestra SDK surface; once a spec is persisted, build the HTML with edit_app. For tool-calling apps, the CDN allowlist, or platform theming, load the "Build App" skill (in your available skills) for the full authoring playbook.',
+    description: `Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. Pass \`questions\` (up to 3) to ask the user clarifying questions, and/or \`spec\` to persist the consolidated requirements. The result returns the user's real assignable MCP tools to ground the spec in plus the condensed window.archestra SDK surface; once a spec is persisted, build the HTML with edit_app. ${BUILD_APP_SKILL_POINTER}`,
     schema: RefineAppToolSchema,
     outputSchema: RefineAppOutputSchema,
     async handler({ args, context, toolName }) {
@@ -692,10 +694,9 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
-    description:
-      "The single path for any change to an app's HTML: pass edits for targeted str_replace changes, or replacementHtml to swap in a complete new document (no old_str matching) — one or the other, never both. Read the current HTML with read_app first if it is not already in context, and pass that read's version as baseVersion (see the schema for the str_replace matching and atomicity rules). A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface; for tool-calling apps, the CDN allowlist, or platform theming, load the \"Build App\" skill (in your available skills) for the full authoring playbook.",
+    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, or replacementHtml to swap in a complete new document (no old_str matching) — one or the other, never both. Read the current HTML with read_app first if it is not already in context, and pass that read's version as baseVersion (see the schema for the str_replace matching and atomicity rules). A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
     schema: EditAppSchema,
-    outputSchema: AppMutationOutputSchema,
+    outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
       const auth = requireAuthed(context);
       if ("error" in auth) return auth.error;
@@ -916,7 +917,8 @@ const registry = defineArchestraTools([
         : live.status === "errors"
           ? `App "${safeName}" version ${app.latestVersion} is structurally sound but its live render reported errors to fix with edit_app.`
           : live.status === "no_render_observed"
-            ? `App "${safeName}" version ${app.latestVersion} passed static checks${warns}. No live render has been observed yet — live diagnostics are captured only when the app renders for a viewer, so this is the normal state right after authoring and the clean static pass is enough to proceed; render diagnostics surface later, on the next render.`
+            ? // The live-render section (below) carries the no_render guidance.
+              `App "${safeName}" version ${app.latestVersion} passed static checks${warns}.`
             : `App "${safeName}" version ${app.latestVersion} passed validation${warns}: static checks and the live render are both clean.`;
       const findingLines = findings.length
         ? `\n${findings
@@ -933,7 +935,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_PUBLISH_APP_SHORT_NAME,
     title: "Publish App",
     description:
-      "Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, with teams — team names or ids) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Publishing changes only the app's sharing scope: it does not modify the HTML or re-run validation, so confirm the current version is sound with validate_app (or get_app_diagnostics) beforehand if you need to. Returns the app's standalone run page.",
+      "Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, with teams — team names or ids) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Publishing changes only the app's sharing scope: it does not modify the HTML or re-run validation, so confirm the current version is sound with validate_app (or get_app_diagnostics) beforehand if you need to. Returns the app's standalone page.",
     schema: PublishAppSchema,
     outputSchema: PublishAppOutputSchema,
     async handler({ args, context }) {
@@ -1104,7 +1106,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
     title: "Get App Diagnostics",
     description:
-      "Check how the app's current version rendered for you. After an edit_app whose result was shown in chat (or a render_app), call this to get the runtime errors and CSP violations the sandboxed render reported, or confirmation it rendered clean. It returns the diagnostics recorded the last time the current version was rendered for you — a render happens when the app is shown inline in chat or at its run page; the call waits briefly for an in-flight render to settle but never triggers one, so calling it repeatedly cannot produce a render. Returns status `clean` (rendered, no problems), `errors` (captured diagnostics, framed as untrusted data), or `no_render_observed` (no render of the current version has happened for you yet — proceed on a clean validate_app static pass; runtime diagnostics instead arrive on the user's next message).",
+      "Check how the app's current version rendered for you. After an edit_app whose result was shown in chat (or a render_app), call this to get the runtime errors and CSP violations the sandboxed render reported, or confirmation it rendered clean. It returns the diagnostics recorded the last time the current version was rendered for you — a render happens when the app is shown inline in chat or at its standalone page; the call waits briefly for an in-flight render to settle but never triggers one, so calling it repeatedly cannot produce a render. Returns status `clean` (rendered, no problems), `errors` (captured diagnostics, framed as untrusted data), or `no_render_observed` (no render of the current version has happened for you yet — proceed on a clean validate_app static pass; runtime diagnostics instead arrive on the user's next message).",
     schema: GetAppDiagnosticsSchema,
     outputSchema: GetAppDiagnosticsOutputSchema,
     async handler({ args, context }) {
@@ -1132,7 +1134,7 @@ const registry = defineArchestraTools([
             renderedAt: null,
             screenshot: false,
           },
-          `No render of app "${safeName}" version ${head} has been observed for you yet. A render happens only when the app is shown to a viewer (inline in chat or at its run page) — calling this tool again does not trigger one, so do not poll. If validate_app's static pass is clean, proceed; runtime diagnostics arrive on their own once the app next renders.`,
+          `No render of app "${safeName}" version ${head} has been observed for you yet. ${NO_RENDER_PROCEED}`,
         );
       }
 
@@ -1277,7 +1279,7 @@ async function loadApp(params: {
   return { app };
 }
 
-// An app's standalone run page.
+// An app's standalone page.
 function appRunUrl(appId: string): string {
   return `/a/${appId}`;
 }
@@ -1675,7 +1677,7 @@ async function buildLiveValidation(params: {
         entries: [],
         renderedAt: null,
       },
-      section: `\nLive render: no render of version ${head} has been observed for you yet. Runtime diagnostics are captured only when the app renders for a viewer (in chat or its run page), so this is the normal state right after authoring — re-running validate_app will not change it on its own, and a clean static pass is enough to proceed.`,
+      section: `\nLive render: no render of version ${head} has been observed for you yet. ${NO_RENDER_PROCEED}`,
     };
   }
   const renderedAt = snapshot.renderedAt.toISOString();

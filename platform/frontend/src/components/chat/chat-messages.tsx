@@ -103,6 +103,7 @@ import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
+import { useApps } from "./apps-context";
 import { AuthErrorTool, type AuthErrorToolProps } from "./auth-error-tool";
 import {
   collectSubagentToolCalls,
@@ -1691,6 +1692,10 @@ const MessageTool = memo(
     const shouldDefaultOpen = isApprovalRequested;
 
     // Hooks must be called before any early returns
+    // Whether this render's app is expanded inline (mirrors McpAppSection's
+    // `expandedInline`): with the panel hosting, every inline render collapses
+    // to a pill; otherwise the app is open unless the user collapsed it.
+    const { isAppOpen, portalTarget } = useApps();
     const [isOpen, setIsOpen] = useState(shouldDefaultOpen);
     const [userDenied, setUserDenied] = useState(false);
     const [userHasInteracted, setUserHasInteracted] = useState(false);
@@ -1874,8 +1879,24 @@ const MessageTool = memo(
 
       // Tool-call circle and the app marker share the flex-wrap row's first line;
       // the tool details + inline app card stack in a full-width column below.
+      // While nothing full-width shows (tool details closed, app collapsed or
+      // hosted in the panel, or no app section at all), the row is an inline
+      // box so consecutive pill-only renders flow on one line instead of
+      // stacking one row per tool call.
+      const rendersAppSection = !!agentId && (!!uiResourceUri || !!ownedApp);
+      const appExpandedInline =
+        rendersAppSection &&
+        !portalTarget &&
+        (!part.toolCallId || isAppOpen(part.toolCallId));
       return (
-        <div className="mb-4">
+        <div
+          className={cn(
+            "mb-4",
+            !isOpen &&
+              !appExpandedInline &&
+              "mr-1.5 inline-flex max-w-full align-top",
+          )}
+        >
           <div className="flex flex-wrap items-start gap-1.5">
             <TooltipProvider delayDuration={200}>
               <Tooltip>

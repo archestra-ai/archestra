@@ -32,6 +32,17 @@ const SYNC_INTERVAL_MS = 24 * TimeInMs.Hour;
 const MODELS_DEV_API_URL = "https://models.dev/api.json";
 
 /**
+ * How long a fetched models.dev API response is served from memory before
+ * hitting the network again.
+ */
+const FETCH_CACHE_TTL_MS = 5 * TimeInMs.Minute;
+
+/**
+ * Default timeout for a single models.dev API fetch.
+ */
+const DEFAULT_FETCH_TIMEOUT_MS = 30 * TimeInMs.Second;
+
+/**
  * Retry configuration for background sync
  */
 const RETRY_CONFIG = {
@@ -249,40 +260,56 @@ export function sanitizeOutputLimit(
  * models.dev Model Registry Client.
  *
  * Fetches model metadata from models.dev API and syncs it to our database.
- * Provides caching to avoid excessive API calls.
+ * Successful fetch results (including the raw fallback used when schema
+ * validation fails) are cached in memory for a short TTL, and concurrent
+ * callers share a single in-flight request. Error results (`{}`) are never
+ * cached, so a transient failure does not stick for the TTL.
+ *
+ * @public — exported so tests can construct instances with custom options
  */
-class ModelsDevClient {
+export class ModelsDevClient {
+  private readonly fetchTimeoutMs: number;
+  private cachedResponse: {
+    data: ModelsDevApiResponse;
+    fetchedAt: number;
+  } | null = null;
+  private inflightFetch: Promise<ModelsDevApiResponse> | null = null;
+
+  constructor(opts?: { fetchTimeoutMs?: number }) {
+    this.fetchTimeoutMs = opts?.fetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
+  }
+
   /**
    * Fetches all providers and models from models.dev API.
    * Validates the response against the expected schema.
+   * Serves a cached response within the TTL and deduplicates concurrent calls.
    */
   async fetchModelsFromApi(): Promise<ModelsDevApiResponse> {
-    try {
-      const response = await fetch(MODELS_DEV_API_URL);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const json = await response.json();
-      const parseResult = ModelsDevApiResponseSchema.safeParse(json);
-
-      if (!parseResult.success) {
-        logger.warn(
-          { errors: parseResult.error.format() },
-          "models.dev API response validation failed, using partial data",
-        );
-        // Fall back to casting if validation fails - the API may have added new fields
-        return json as ModelsDevApiResponse;
-      }
-
-      return parseResult.data;
-    } catch (error) {
-      logger.error(
-        { error: error instanceof Error ? error.message : String(error) },
-        "Error fetching models from models.dev API",
-      );
-      return {};
+    if (
+      this.cachedResponse &&
+      Date.now() - this.cachedResponse.fetchedAt < FETCH_CACHE_TTL_MS
+    ) {
+      return this.cachedResponse.data;
     }
+
+    if (this.inflightFetch) {
+      return this.inflightFetch;
+    }
+
+    this.inflightFetch = this.doFetchModelsFromApi();
+    try {
+      return await this.inflightFetch;
+    } finally {
+      this.inflightFetch = null;
+    }
+  }
+
+  /**
+   * Drops the in-memory fetch cache so the next call hits the network.
+   * Useful for manual resyncs; tests use it to isolate cases.
+   */
+  clearFetchCache(): void {
+    this.cachedResponse = null;
   }
 
   /**
@@ -564,6 +591,44 @@ class ModelsDevClient {
    */
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Performs the actual network fetch. Caches successful results (validated
+   * or raw fallback); the `{}` error result is intentionally not cached.
+   */
+  private async doFetchModelsFromApi(): Promise<ModelsDevApiResponse> {
+    try {
+      const response = await fetch(MODELS_DEV_API_URL, {
+        signal: AbortSignal.timeout(this.fetchTimeoutMs),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const json = await response.json();
+      const parseResult = ModelsDevApiResponseSchema.safeParse(json);
+
+      if (!parseResult.success) {
+        logger.warn(
+          { errors: parseResult.error.format() },
+          "models.dev API response validation failed, using partial data",
+        );
+        // Fall back to casting if validation fails - the API may have added new fields
+        const rawData = json as ModelsDevApiResponse;
+        this.cachedResponse = { data: rawData, fetchedAt: Date.now() };
+        return rawData;
+      }
+
+      this.cachedResponse = { data: parseResult.data, fetchedAt: Date.now() };
+      return parseResult.data;
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        "Error fetching models from models.dev API",
+      );
+      return {};
+    }
   }
 
   /**

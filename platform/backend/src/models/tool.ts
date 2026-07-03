@@ -1380,9 +1380,9 @@ class ToolModel {
    *
    * New agents inherit the app toolset via {@link assignAppToolsToAgent}, but
    * agents that predate a tool's introduction (e.g. existing agents when
-   * read_app/edit_app are added) would otherwise never receive it. Apps are a
-   * global feature, not a per-org opt-in, so this spans all orgs. Idempotent:
-   * only the newly-created short names are assigned, via `createManyIfNotExists`.
+   * read_app/edit_app are added) would otherwise never receive it. The app
+   * tools apply to every org, so this spans all orgs. Idempotent: only the
+   * newly-created short names are assigned, via `createManyIfNotExists`.
    *
    * @param newlyCreatedToolNames names returned by {@link seedArchestraTools}.
    */
@@ -1571,9 +1571,9 @@ class ToolModel {
   ): Promise<void> {
     const organization = await OrganizationModel.getFirst();
     archestraMcpBranding.syncFromOrganization(organization);
-    // The sandbox runtime + persistent-files tools are auto-assigned separately
-    // by `assignSandboxToolsToAgent` (only when the sandbox runtime is on), not
-    // here. This is the default baseline set.
+    // Sandbox and persistent-files tools are assigned separately by
+    // `assignSandboxToolsToAgent` (only when the sandbox runtime is on); this
+    // method assigns just the tools every agent gets.
     const defaultToolShortNames: ArchestraToolShortName[] = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
     ];

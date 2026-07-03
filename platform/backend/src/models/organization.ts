@@ -199,9 +199,8 @@ class OrganizationModel {
   }
 
   /**
-   * List every organization id. Used to backfill globally-enabled built-in
-   * tools (e.g. the MCP App tools, which are a global feature rather than a
-   * per-org opt-in).
+   * List every organization id. Used to backfill built-in tools that every org
+   * gets (e.g. the MCP App tools).
    */
   static async findAllIds(): Promise<string[]> {
     const rows = await db

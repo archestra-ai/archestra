@@ -30,8 +30,8 @@ import TrustedDataPolicyModel from "./trusted-data-policy";
 // these suites assert exact assigned-tool sets after agent creation; pin the
 // sandbox runtime off so its tools do not leak into the default-assignment
 // counts (relying on the worker-pristine baseline for this let a rare
-// cross-file ordering surface sandbox tools). App tools are always seeded and
-// auto-assigned; their assignment is covered in
+// cross-file ordering surface sandbox tools). App tools are seeded and
+// auto-assigned to every agent; their assignment is covered in
 // tool-archestra-assignment.test.ts.
 beforeEach(() => {
   (config.skillsSandbox as { enabled: boolean }).enabled = false;

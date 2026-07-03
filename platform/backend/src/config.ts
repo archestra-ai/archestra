@@ -1451,11 +1451,11 @@ const config = {
     ),
   },
   /**
-   * agent lifecycle hooks — user scripts run at chat lifecycle events. Always
-   * available when the agent runtime (the code execution sandbox) is on, since
-   * hooks execute in the conversation sandbox; off otherwise. This `enabled` is
-   * the fully-resolved flag — the dispatcher, the `/debug` toggle, and the chip
-   * read-gate all key off it.
+   * agent lifecycle hooks — user scripts run at chat lifecycle events.
+   * Available whenever the agent runtime (the code execution sandbox) is on,
+   * since hooks execute in the conversation sandbox; off otherwise. This
+   * `enabled` is the fully-resolved flag — the dispatcher, the `/debug` toggle,
+   * and the chip read-gate all key off it.
    */
   hooks: {
     enabled: skillsSandboxEnabled,

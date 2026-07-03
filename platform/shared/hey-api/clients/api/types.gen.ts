@@ -12943,6 +12943,187 @@ export type ExportAgentResponses = {
 
 export type ExportAgentResponse = ExportAgentResponses[keyof ExportAgentResponses];
 
+export type GetAgentToolExclusionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/tool-exclusions';
+};
+
+export type GetAgentToolExclusionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentToolExclusionsError = GetAgentToolExclusionsErrors[keyof GetAgentToolExclusionsErrors];
+
+export type GetAgentToolExclusionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Individual tool IDs excluded from the agent's surface
+         */
+        excludedToolIds: Array<string>;
+    };
+};
+
+export type GetAgentToolExclusionsResponse = GetAgentToolExclusionsResponses[keyof GetAgentToolExclusionsResponses];
+
+export type UpdateAgentToolExclusionsData = {
+    body: {
+        /**
+         * Individual tool IDs excluded from the agent's surface
+         */
+        excludedToolIds: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/tool-exclusions';
+};
+
+export type UpdateAgentToolExclusionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAgentToolExclusionsError = UpdateAgentToolExclusionsErrors[keyof UpdateAgentToolExclusionsErrors];
+
+export type UpdateAgentToolExclusionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Individual tool IDs excluded from the agent's surface
+         */
+        excludedToolIds: Array<string>;
+    };
+};
+
+export type UpdateAgentToolExclusionsResponse = UpdateAgentToolExclusionsResponses[keyof UpdateAgentToolExclusionsResponses];
+
 export type RestoreAgentData = {
     body?: never;
     path: {

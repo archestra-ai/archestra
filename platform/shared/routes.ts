@@ -12,6 +12,8 @@ export const RouteId = {
   RestoreAgent: "restoreAgent",
   ExportAgent: "exportAgent",
   ImportAgent: "importAgent",
+  GetAgentToolExclusions: "getAgentToolExclusions",
+  UpdateAgentToolExclusions: "updateAgentToolExclusions",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 

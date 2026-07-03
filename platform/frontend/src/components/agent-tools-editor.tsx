@@ -31,6 +31,7 @@ import { Label } from "@/components/ui/label";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useAssignTool, useUnassignTool } from "@/lib/agent-tools.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   fetchCatalogTools,
@@ -290,10 +291,15 @@ const AgentToolsEditorContent = forwardRef<
 
   const { data: organization } = useOrganization();
   const skillToolsEnabled = organization?.skillToolsEnabled === true;
+  const appsEnabled = useFeature("appsEnabled") === true;
+  const sandboxEnabled = useFeature("sandbox") === true;
+  const projectsEnabled = useFeature("projectsEnabled") === true;
 
-  // Pre-select default Archestra tools when creating a new agent (no agentId).
-  // When the org has opted into skills, also pre-select the skill tools so the
-  // form matches what AgentModel.create will assign server-side.
+  // Pre-select the creation-default Archestra tools when creating a new agent
+  // (no agentId). The set is composed by the shared
+  // getCreationDefaultArchestraToolShortNames from the org/deployment feature
+  // flags, so the form pre-selects exactly what AgentModel.create will assign
+  // server-side.
   useEffect(() => {
     if (agentId) return; // Only for new agent creation
     if (defaultToolsInitializedRef.current) return; // Only initialize once
@@ -305,7 +311,10 @@ const AgentToolsEditorContent = forwardRef<
       catalogItems,
       toolsByCatalogIndex,
       {
-        includeSkillTools: skillToolsEnabled,
+        skillsEnabled: skillToolsEnabled,
+        appsEnabled,
+        sandboxEnabled,
+        projectsEnabled,
       },
     );
     if (!result) return;
@@ -328,6 +337,9 @@ const AgentToolsEditorContent = forwardRef<
     toolCountQueries,
     onSelectedCountChange,
     skillToolsEnabled,
+    appsEnabled,
+    sandboxEnabled,
+    projectsEnabled,
   ]);
 
   // Calculate total selected count from pending changes

@@ -492,6 +492,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // Export/Import: agent-type permission checked dynamically in handler
   [RouteId.ExportAgent]: {},
   [RouteId.ImportAgent]: {},
+  // Tool exclusions: agent-type read/update permission checked dynamically in handler
+  [RouteId.GetAgentToolExclusions]: {},
+  [RouteId.UpdateAgentToolExclusions]: {},
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },

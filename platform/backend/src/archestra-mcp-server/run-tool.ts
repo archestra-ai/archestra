@@ -13,6 +13,10 @@ import {
 } from "@/guardrails/tool-invocation";
 import logger from "@/logging";
 import { ConversationEnabledToolModel, ToolModel } from "@/models";
+import {
+  agentToolExclusionsService,
+  isToolRowExcluded,
+} from "@/services/agent-tool-exclusions";
 import { agentOwner, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
@@ -193,12 +197,20 @@ async function visibleCandidates(params: {
     userId: context.userId,
     organizationId: context.organizationId,
   };
-  const assigned = await ToolModel.getMcpToolsByAgent(agentId);
+  // Per-agent exclusions (Auto-tool mode): an excluded tool must not be
+  // recovered from a short name, nor disclosed as a "did you mean" candidate.
+  // Loaded once and applied to the assigned + discoverable contributions.
+  const exclusionSets =
+    await agentToolExclusionsService.getActiveExclusionSets(agentId);
+  const assigned = (await ToolModel.getMcpToolsByAgent(agentId)).filter(
+    (tool) => !isToolRowExcluded(tool, exclusionSets),
+  );
   const names = assigned.map((tool) => tool.name);
   if (await dynamicAccessContext(accessParams)) {
     const discoverable = await getUnassignedDiscoverableTools({
       ...accessParams,
       assignedToolNames: new Set(names),
+      exclusionSets,
     });
     names.push(...discoverable.map((tool) => tool.name));
   }
@@ -335,7 +347,15 @@ async function dispatchTool({
   // nothing is written to the agent. A miss on both means the tool does
   // not exist for this user: steer the model at search_tools. The set is
   // reused by the policy gate below so it is fetched only once.
-  const assignedTools = await ToolModel.getMcpToolsByAgent(context.agentId);
+  // Per-agent exclusions (Auto-tool mode, loaded once per dispatch): an
+  // assigned-but-excluded tool drops out of the assigned set here and the
+  // dynamic fallback refuses it too, so it resolves to "unavailable".
+  const exclusionSets = await agentToolExclusionsService.getActiveExclusionSets(
+    context.agentId,
+  );
+  const assignedTools = (
+    await ToolModel.getMcpToolsByAgent(context.agentId)
+  ).filter((tool) => !isToolRowExcluded(tool, exclusionSets));
   const assignedToolNames = new Set(assignedTools.map((tool) => tool.name));
   let availableTool: Tool | null = null;
   if (!assignedToolNames.has(resolvedName)) {
@@ -350,6 +370,7 @@ async function dispatchTool({
       agentId: context.agentId,
       userId: context.userId,
       organizationId: context.organizationId,
+      exclusionSets,
     });
     logger.info(
       {

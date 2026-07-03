@@ -1983,16 +1983,18 @@ describe("ToolModel", () => {
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
-      // Seed the archestra tools (so query_knowledge_sources exists in DB)
-      // but do NOT assign them to the agent
-      const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
-      await seedAndAssignArchestraTools(tempAgent.id);
-
-      // Agent with a direct connector but NO tools assigned
+      // Agent with a direct connector but NO tools assigned. Created BEFORE
+      // the built-ins are seeded so the create path has nothing to
+      // auto-assign.
       const agent = await makeAgent({ organizationId: org.id });
       await db
         .insert(schema.agentConnectorAssignmentsTable)
         .values({ agentId: agent.id, connectorId: connector.id });
+
+      // Seed the archestra tools (so query_knowledge_sources exists in DB)
+      // but do NOT assign them to the agent
+      const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
+      await seedAndAssignArchestraTools(tempAgent.id);
 
       const tools = await ToolModel.getMcpToolsByAgent(agent.id);
       const toolNames = tools.map((t) => t.name);
@@ -3534,11 +3536,13 @@ describe("ToolModel", () => {
     }) => {
       const org = await makeOrganization();
       await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      // Agent created BEFORE the built-ins are synced so the create path has
+      // nothing to auto-assign — this test assigns the knowledge tool itself.
+      const agent = await makeAgent({ organizationId: org.id });
       await ToolModel.syncArchestraBuiltInCatalog({
         organization: { appName: "Acme Copilot", iconLogo: null },
       });
 
-      const agent = await makeAgent({ organizationId: org.id });
       const [kbTool] = await db
         .select()
         .from(schema.toolsTable)
@@ -3578,11 +3582,13 @@ describe("ToolModel", () => {
     }) => {
       const org = await makeOrganization();
       await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      // Agent created BEFORE the built-ins are synced so the create path has
+      // nothing to auto-assign — this test assigns the knowledge tool itself.
+      const agent = await makeAgent({ organizationId: org.id });
       await ToolModel.syncArchestraBuiltInCatalog({
         organization: { appName: "Acme Copilot", iconLogo: null },
       });
 
-      const agent = await makeAgent({ organizationId: org.id });
       const brandedKbToolName = getArchestraToolFullName(
         TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
         {
@@ -3618,11 +3624,12 @@ describe("ToolModel", () => {
     }) => {
       const org = await makeOrganization();
       await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      // Agent created BEFORE the built-ins are synced so the create path has
+      // nothing to auto-assign — this test assigns its built-ins manually.
+      const agent = await makeAgent({ organizationId: org.id });
       await ToolModel.syncArchestraBuiltInCatalog({
         organization: { appName: "Acme Copilot", iconLogo: null },
       });
-
-      const agent = await makeAgent({ organizationId: org.id });
 
       // Assign a few built-in tools to the agent
       const brandedKbToolName = getArchestraToolFullName(

@@ -48,7 +48,11 @@ import {
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
-import type { GlobalToolPolicy, UnsafeContextBoundary } from "@/types";
+import type {
+  Tool as CatalogTool,
+  GlobalToolPolicy,
+  UnsafeContextBoundary,
+} from "@/types";
 import { agentOwner, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
@@ -875,6 +879,28 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     arguments: toolArguments ?? {},
   };
 
+  // An all-tools agent advertises unassigned UI-providing tools (app/external
+  // launch tools) top-level so a model can call one directly — an MCP-App host
+  // renders a UI only from a tool listed at discovery time, never from a
+  // run_tool result. Dispatch accepts an unassigned tool only via a pre-resolved
+  // availableTool, so resolve it exactly as the gateway CallTool handler and
+  // run_tool do (resolveDynamicTool self-gates on the agent's all-tools
+  // setting), gated to the UI-providing subset: only that subset is listed
+  // top-level, so resolving anything else would make a hidden tool name directly
+  // executable.
+  let availableTool: CatalogTool | undefined;
+  if (userId && organizationId) {
+    const dynamicTool = await resolveDynamicTool({
+      toolName,
+      agentId,
+      userId,
+      organizationId,
+    });
+    if (dynamicTool && toolProvidesUiResource(dynamicTool)) {
+      availableTool = dynamicTool;
+    }
+  }
+
   let result: Awaited<ReturnType<typeof mcpClient.executeToolCallForOwner>>;
   try {
     result = await mcpClient.executeToolCallForOwner(
@@ -890,6 +916,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
           }
         : undefined,
       {
+        ...(availableTool ? { availableTool } : {}),
         // mcp-client scopes per-conversation sessions by this key; in UI chat it
         // is the conversation id, in headless executions the execution key.
         conversationId: isolationKey,
@@ -1111,6 +1138,27 @@ function resolveRunToolTargetName(toolName: string, args: unknown): string {
     : toolName;
 }
 
+// Whether a tool's definition carries an MCP App `ui://` resource — the subset
+// advertised top-level and therefore directly dispatchable. Mirrors
+// `providesUiResource` in the gateway's tools/list builder; kept local to avoid
+// a clients → routes import.
+function toolProvidesUiResource(tool: CatalogTool): boolean {
+  const meta = (
+    tool.meta as
+      | {
+          _meta?: {
+            ui?: { resourceUri?: unknown };
+            "ui/resourceUri"?: unknown;
+          };
+        }
+      | null
+      | undefined
+  )?._meta;
+  const isUiUri = (value: unknown): boolean =>
+    typeof value === "string" && value.startsWith("ui://");
+  return isUiUri(meta?.ui?.resourceUri) || isUiUri(meta?.["ui/resourceUri"]);
+}
+
 async function buildUnsafeContextBoundaryResult(params: {
   resultMeta?: Record<string, unknown>;
   toolCallId: string;
@@ -1123,6 +1171,22 @@ async function buildUnsafeContextBoundaryResult(params: {
   _meta?: Record<string, unknown>;
   unsafeContextBoundary?: UnsafeContextBoundary;
 }> {
+  // A platform dispatch error (tool_state, e.g. unknown_tool) never reached an
+  // upstream tool, so its result is platform-authored text with no external
+  // data — never mark the context unsafe for it. Mirrors the trusted-data bulk
+  // re-evaluation, which exempts the same envelopes; without both, a benign
+  // unresolved-tool error poisons the session and blocks the next legit call.
+  if (
+    extractMcpToolError({
+      _meta: params.resultMeta,
+      content: params.toolOutput,
+    })?.type === "tool_state"
+  ) {
+    return params.resultMeta && Object.keys(params.resultMeta).length > 0
+      ? { _meta: params.resultMeta }
+      : {};
+  }
+
   const unsafeContextBoundary =
     await evaluateUnsafeContextBoundaryForToolResult(params);
   const mergedMeta = unsafeContextBoundary

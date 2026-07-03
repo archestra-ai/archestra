@@ -2268,13 +2268,18 @@ class McpClient {
       structuredContent,
     } = opts;
 
+    // `archestraError` is a platform-reserved envelope: error renderers and the
+    // trusted-data guardrail key off it to identify platform-authored results.
+    // Only createErrorResult sets it, so strip any copy an upstream tool put in
+    // its result metadata — otherwise a hostile server could forge a dispatch
+    // error and slip untrusted output past the injection scan.
     const toolResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
       content,
       isError,
-      _meta,
-      structuredContent,
+      _meta: stripReservedArchestraError(_meta),
+      structuredContent: stripReservedArchestraError(structuredContent),
     };
 
     await this.persistToolCall(
@@ -3951,6 +3956,19 @@ function isAuthRelatedError(errorMessage: string): boolean {
     lower.includes("invalid credentials") ||
     lower.includes("credentials expired")
   );
+}
+
+// Remove the platform-reserved `archestraError` key from tool-supplied metadata
+// so it can only ever be present when the platform itself authored it (see
+// createSuccessResult). Returns the same reference when nothing was stripped.
+function stripReservedArchestraError(
+  meta: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!meta || !("archestraError" in meta)) {
+    return meta;
+  }
+  const { archestraError: _reserved, ...rest } = meta;
+  return rest;
 }
 
 function isAuthRelatedToolResult(result: {

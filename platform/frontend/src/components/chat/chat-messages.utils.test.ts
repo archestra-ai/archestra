@@ -468,6 +468,54 @@ describe("deriveAppsFromMessages", () => {
     });
   });
 
+  it("routes an owned-app __open render (ui://archestra-app URI) app-bound via appId", () => {
+    const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-simple_todo__open",
+            toolCallId: "call_open",
+            state: "output-available",
+            output: {
+              _meta: { ui: { resourceUri: `ui://archestra-app/${APP_ID}` } },
+            },
+          },
+        ],
+      },
+    ] as never;
+
+    const apps = deriveAppsFromMessages(messages, {}, getToolShortName);
+    expect(apps).toHaveLength(1);
+    expect(apps[0]).toMatchObject({
+      toolCallId: "call_open",
+      appId: APP_ID,
+      uiResourceUri: `ui://archestra-app/${APP_ID}`,
+    });
+  });
+
+  it("keeps a non-Archestra MCP-UI render un-app-bound (appId null)", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-excalidraw__draw",
+            toolCallId: "call_ext",
+            state: "output-available",
+            output: { _meta: { ui: { resourceUri: "ui://excalidraw" } } },
+          },
+        ],
+      },
+    ] as never;
+
+    const apps = deriveAppsFromMessages(messages, {}, getToolShortName);
+    expect(apps[0]).toMatchObject({ toolCallId: "call_ext", appId: null });
+  });
+
   it("returns an app labeled with the app name for an owned-app edit_app result", () => {
     const messages = [
       {

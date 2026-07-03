@@ -1,12 +1,14 @@
 import { describe, expect, expectTypeOf, test } from "vitest";
 import { AGENT_TOOL_PREFIX, isAgentTool } from "./agents";
 import {
+  getArchestraAppResourceUri,
   getArchestraMcpServerName,
   getArchestraToolFullName,
   getArchestraToolPrefix,
   getArchestraToolShortName,
   isAlwaysExposedArchestraToolShortName,
   isArchestraMcpServerTool,
+  parseArchestraAppResourceUri,
   TOOL_CREATE_AGENT_FULL_NAME,
 } from "./archestra-mcp-server";
 
@@ -126,5 +128,28 @@ describe("archestra MCP tool names", () => {
     ]) {
       expect(isAlwaysExposedArchestraToolShortName(shortName)).toBe(false);
     }
+  });
+});
+
+describe("parseArchestraAppResourceUri", () => {
+  test("round-trips an owned-app id", () => {
+    const appId = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+    expect(
+      parseArchestraAppResourceUri(getArchestraAppResourceUri(appId)),
+    ).toBe(appId);
+  });
+
+  test("returns null for a non-app UI URI", () => {
+    expect(parseArchestraAppResourceUri("ui://excalidraw")).toBeNull();
+  });
+
+  test("returns null for the bare prefix (no app id)", () => {
+    expect(parseArchestraAppResourceUri("ui://archestra-app/")).toBeNull();
+  });
+
+  test("returns null when the URI has a path past the app id", () => {
+    expect(
+      parseArchestraAppResourceUri("ui://archestra-app/abc/extra"),
+    ).toBeNull();
   });
 });

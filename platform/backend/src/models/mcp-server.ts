@@ -24,6 +24,7 @@ import type {
   ToolParametersContent,
   UpdateMcpServer,
 } from "@/types";
+import { toolRequiresInputs } from "@/utils/tool-inputs";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpHttpSessionModel from "./mcp-http-session";
@@ -357,6 +358,8 @@ class McpServerModel {
       toolName: string;
       toolDescription: string | null;
       resourceUri: string;
+      /** The tool declares required inputs, so a bare render can't succeed. */
+      requiresInput: boolean;
     }>
   > {
     const { userId, organizationId, search } = params;
@@ -393,6 +396,7 @@ class McpServerModel {
         toolName: app.toolName,
         toolDescription: app.toolDescription,
         resourceUri: app.resourceUri,
+        requiresInput: toolRequiresInputs(app.toolParameters),
       })),
     );
   }
@@ -458,7 +462,12 @@ class McpServerModel {
     name: string;
     description: string | null;
     resourceUri: string;
-    resources: Array<{ resourceUri: string; toolName: string; name: string }>;
+    resources: Array<{
+      resourceUri: string;
+      toolName: string;
+      name: string;
+      requiresInput: boolean;
+    }>;
     defaultMcpServerId: string | null;
     installs: Array<{
       mcpServerId: string;
@@ -497,6 +506,7 @@ class McpServerModel {
         resourceUri: app.resourceUri,
         toolName: app.toolName,
         name: `${app.serverName} / ${app.toolName}`,
+        requiresInput: toolRequiresInputs(app.toolParameters),
       })),
       defaultMcpServerId: McpServerModel.pickDefaultInstall(installs),
       installs,

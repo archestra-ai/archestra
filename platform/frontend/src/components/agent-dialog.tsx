@@ -156,6 +156,7 @@ import {
   getDescriptionPlaceholder,
   getNamePlaceholder,
   normalizeSuggestedPrompts,
+  shouldOfferAppCatalogs,
   shouldShowDescriptionField,
 } from "./agent-dialog.utils";
 
@@ -1713,7 +1714,9 @@ export function AgentDialog({
                             agentEnvironmentName={agentEnvironmentName}
                             onConflictsChange={setMcpEnvConflicts}
                             openComboboxOnMount={openToolsCombobox}
-                            includeAppCatalogs={agentType === "mcp_gateway"}
+                            includeAppCatalogs={shouldOfferAppCatalogs(
+                              agentType,
+                            )}
                           />
                         </div>
                         <div className="space-y-2">

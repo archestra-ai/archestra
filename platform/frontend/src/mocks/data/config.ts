@@ -68,6 +68,7 @@ export function makePublicConfig(
   return {
     disableBasicAuth: false,
     disableInvitations: false,
+    devAutoLoginEnabled: false,
     enterpriseCoreActive: false,
     analytics: {
       enabled: false,
@@ -76,6 +77,7 @@ export function makePublicConfig(
     },
     ...overrides,
     maintenanceMode: overrides.maintenanceMode ?? null,
+    siteNotificationMessage: overrides.siteNotificationMessage ?? null,
   };
 }
 

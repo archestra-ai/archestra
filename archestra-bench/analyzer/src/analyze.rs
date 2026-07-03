@@ -89,6 +89,7 @@ In observations, list concrete struggles and inefficiencies, one short bullet ea
 - wrong, malformed, or mistyped tool params; repeated format-correction loops;
 - bloated or redundant context: re-fetching, dumping huge output, repeating itself;
 - wasted turns, thrashing, getting stuck, or giving up / finishing without submitting;
+- an authored app rendering wrong or empty data because generated code misread a tool result, or the user having to correct the data the app displayed;
 - confusing or unhelpful tool error messages the agent visibly stumbled on.
 Optionally one bullet on anything notably smooth worth preserving. At most 6 bullets of one or two sentences; an empty list for a clean rollout.
 

@@ -281,6 +281,80 @@ describe("TaskQueueService", () => {
 
       expect(await countTasks({ status: "completed" })).toBe(0);
     });
+
+    test("dequeues tasks up to maxConcurrent in a single tick", async () => {
+      let releaseHandlers!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        releaseHandlers = resolve;
+      });
+      const handler = vi.fn().mockReturnValue(gate);
+      await seedTask();
+      await seedTask();
+      await seedTask();
+
+      taskQueueService.registerHandler("connector_sync", handler);
+      taskQueueService.startWorker();
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      // One tick fills the worker to its cap (2), leaving the third queued.
+      expect(await countTasks({ status: "processing" })).toBe(2);
+      expect(await countTasks({ status: "pending" })).toBe(1);
+
+      releaseHandlers();
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(await countTasks({ status: "completed" })).toBe(3);
+    });
+
+    test("resurrects a periodic task whose stuck row is swept to dead", async () => {
+      const stuck = await seedTask({
+        taskType: "check_due_connectors",
+        payload: {},
+        periodic: true,
+        maxAttempts: 1,
+      });
+      // Wedge it into processing with an old startedAt and exhausted attempts,
+      // as if the process died mid-run.
+      await db
+        .update(schema.tasksTable)
+        .set({
+          status: "processing",
+          startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+          attempt: 1,
+        })
+        .where(eq(schema.tasksTable.id, stuck.id));
+
+      taskQueueService.startWorker();
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect((await getTask(stuck.id))?.status).toBe("dead");
+      // The periodic chain did not die with it: a fresh pending task exists.
+      expect(
+        await countTasks({
+          taskType: "check_due_connectors",
+          status: "pending",
+        }),
+      ).toBe(1);
+    });
+
+    test("throttles the stuck-task sweep to once per 60s", async () => {
+      taskQueueService.startWorker();
+      // First poll sweeps (nothing stuck yet) and arms the throttle.
+      await vi.advanceTimersByTimeAsync(1000);
+
+      const stuck = await seedTask({
+        status: "processing",
+        startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      });
+
+      // Next tick is inside the throttle window → not swept.
+      await vi.advanceTimersByTimeAsync(1000);
+      expect((await getTask(stuck.id))?.status).toBe("processing");
+
+      // Once 60s have elapsed the sweep runs again.
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect((await getTask(stuck.id))?.status).toBe("pending");
+    });
   });
 
   describe("seedPeriodicTasks", () => {

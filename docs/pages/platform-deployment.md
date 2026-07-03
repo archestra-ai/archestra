@@ -926,10 +926,21 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Default: `password`
   - Note: Change this to a secure password for production deployments
 
+- **`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL`** - Developer-only convenience that skips the login screen by minting a real session for the user with this email when the app loads unauthenticated.
+  - Default: None (disabled)
+  - Ignored in production (`NODE_ENV=production` or `prod`); only takes effect in development builds
+  - The session is an ordinary one for that user — role-based access control is unchanged
+  - Example: `admin@example.com`
+
 - **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
   - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
   - Example: If frontend is at `https://frontend.example.com`, set to `example.com`
   - Required when using different domains or subdomains for frontend and backend
+
+- **`ARCHESTRA_AUTH_COOKIE_PREFIX`** - Prefix for auth cookie names (`<prefix>.session_token`, etc.).
+  - Default: `archestra`
+  - Browsers scope cookies to the host without the port, so multiple Archestra instances on different ports of the same host overwrite each other's session cookies. Give each instance a unique prefix to keep their sessions independent.
+  - Mainly useful for local development with parallel stacks; single-instance deployments can leave the default
 
 - **`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`** - Hides the username/password login form on the sign-in page.
   - Default: `false`
@@ -1185,6 +1196,11 @@ Enable polling compatibility only when your database endpoint cannot keep sessio
   - This is a client-side convenience nudge, not a data-loss-prevention control: it runs in the browser and can be bypassed with "Send anyway".
   - Detection runs entirely in the browser — no message content is sent to the backend for scanning. The flag is read from the backend at runtime via `/api/config`, so toggling it does not require a frontend rebuild.
   - Values: `true`, `false`
+
+- **`ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS`** - Upper bound on the output tokens an agent turn (interactive chat and A2A/headless) may generate.
+  - Default: `32768`
+  - Each turn already requests the model's real output ceiling instead of the provider/SDK default that truncated large tool-call payloads and final submission turns. This variable caps that request for cost control: the turn uses `min(this value, the model's real output ceiling)`, and unsynced models fall back to `8192`.
+  - Lower it to constrain spend; raise it for models whose useful outputs exceed 32768 tokens.
 
 ### MCP Apps Sandbox
 
@@ -1447,6 +1463,14 @@ The audit log records administrative actions (mutations via `/api/*` and auth ev
 - **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Enables maintenance mode and displays a custom message to all users blocking access to the platform.
   - Default: Not set (maintenance mode disabled)
   - When set, all users are shown a full-screen maintenance overlay with the message instead of the normal application interface.
+
+### Site Notification Banner
+
+- **`ARCHESTRA_SITE_NOTIFICATION_MESSAGE`** - Displays an instance-wide banner at the top of the UI, including the login screen.
+  - Default: Not set (no banner)
+  - Supports markdown. Users can dismiss the banner; a changed message reappears for everyone.
+  - Unlike maintenance mode, the platform stays fully functional. Useful for labeling non-production instances or announcing upcoming maintenance.
+  - Shown alongside (above) any organization-level site notification configured in Settings → Organization.
 
 ### Enterprise Licensing
 

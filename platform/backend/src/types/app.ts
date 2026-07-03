@@ -68,6 +68,8 @@ const AppListItemBaseSchema = z.object({
   description: z.string().nullable(),
   executionModel: z.enum(["viewer-scoped", "server-scoped"]),
   cspOrigin: z.enum(["platform-pinned", "author-declared"]),
+  /** When the requesting user pinned this app; null = not pinned. */
+  pinnedAt: z.date().nullable(),
 });
 
 export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
@@ -96,6 +98,10 @@ export const ExternalAppListItemSchema = AppListItemBaseSchema.extend({
   mcpServerId: z.string(),
   scope: AppScopeSchema,
   resourceUri: z.string(),
+  // The catalog's icon, exactly as the MCP registry renders it: an emoji
+  // character or a base64 image data URL. Null when the server has none (the
+  // card falls back to its generic server glyph).
+  icon: z.string().nullable(),
 });
 
 export const AppListItemSchema = z.discriminatedUnion("source", [

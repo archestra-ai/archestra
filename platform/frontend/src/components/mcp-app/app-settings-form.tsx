@@ -238,7 +238,6 @@ export function AppSettingsForm({
                 environmentId={environmentId}
                 selectedToolIds={selectedToolIds}
                 onSelectionChange={setSelectedToolIds}
-                unbounded
               />
             </div>
           </>

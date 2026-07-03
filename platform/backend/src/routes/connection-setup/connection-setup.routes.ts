@@ -226,13 +226,14 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         } else if (
           // provider-key mode is passthrough: the script only rewires the base
-          // URL. For Claude Code's Anthropic subscription passthrough we also
-          // attribute requests to the user via X-Archestra-Virtual-Key, reusing
-          // the (otherwise-null) virtualApiKeyId column to carry the passthrough
-          // key id. Best-effort: silently skipped without llmVirtualKey:create.
+          // URL. For Claude Code passthrough (Anthropic subscription or the
+          // user's own Bedrock credentials) we also attribute requests to the
+          // user via X-Archestra-Virtual-Key, reusing the (otherwise-null)
+          // virtualApiKeyId column to carry the passthrough key id.
+          // Best-effort: silently skipped without llmVirtualKey:create.
           attributePassthrough &&
           clientId === "claude-code" &&
-          provider === "anthropic"
+          (provider === "anthropic" || provider === "bedrock")
         ) {
           const canCreateVirtualKey = await userHasPermission(
             user.id,

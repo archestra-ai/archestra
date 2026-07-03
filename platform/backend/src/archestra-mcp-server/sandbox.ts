@@ -1642,7 +1642,7 @@ function handleRuntimeError(
 ) {
   if (error instanceof FileNameExistsError) {
     return errorResult(
-      `${error.message}. Choose a different name, or delete the existing file first.`,
+      `${error.message}. Choose a different name, pass overwrite: true, or delete the existing file first.`,
     );
   }
   if (error instanceof SkillSandboxError) {

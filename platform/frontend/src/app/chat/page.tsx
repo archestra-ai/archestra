@@ -52,6 +52,7 @@ import {
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
+import { DefaultModelOnboardingStep } from "@/components/default-model-onboarding";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread, {
   type PartialUIMessage,
@@ -94,7 +95,6 @@ import {
 import {
   fetchConversationEnabledTools,
   invalidateConversationFileQueries,
-  useClearChatErrors,
   useCompactConversation,
   useConversation,
   useConversationFiles,
@@ -163,6 +163,7 @@ import {
 } from "./chat-initial-state";
 import ArchestraPromptInput, {
   type ArchestraPromptInputProps,
+  type ChatSubmitOptions,
 } from "./prompt-input";
 import { resolveSharedConversationForkState } from "./shared-conversation-fork";
 import { buildSkillCommands, resolveUrlSkillAction } from "./skill-commands";
@@ -236,6 +237,9 @@ export function ChatPageContent({
   // Skill invoked via slash command on the first message of a new chat,
   // held until the conversation exists and the message can be sent.
   const pendingSkillRef = useRef<ChatSkillMetadata | undefined>(undefined);
+  // Sandbox-command marker (`!` prefix) on the first message of a new chat,
+  // held the same way so the deferred send stamps metadata.sandboxCommand.
+  const pendingSandboxCommandRef = useRef<true | undefined>(undefined);
   // Composer prefill from a `?skillId=` deep link; handed to the composer
   // once and cleared via onPrefillApplied.
   const [composerPrefill, setComposerPrefill] = useState<string | null>(null);
@@ -456,12 +460,13 @@ export function ChatPageContent({
     return searchParams.get("user_prompt") || undefined;
   }, [searchParams]);
 
-  // A chat started from a project is created up front by the project composer,
-  // which stashes its opening prompt and navigates straight here. Drain that
-  // prompt (and any attachments the composer stashed) into the
-  // pending-initial-message refs so the shared send effect delivers them as the
-  // conversation's first message. Gated on the conversation id, so an ordinary
-  // /chat/<id> open never consumes it.
+  // A chat whose conversation was created up front (by the project composer, or
+  // by the apps page for an external app whose tool needs inputs) stashes its
+  // opening prompt and navigates straight here. Drain that prompt (and any
+  // attachments the composer stashed) into the pending-initial-message refs so
+  // the shared send effect delivers them as the conversation's first message.
+  // Gated on the conversation id, so an ordinary /chat/<id> open never
+  // consumes it.
   useEffect(() => {
     if (!conversationId) return;
     const handoff = takePendingProjectChatHandoff(conversationId);
@@ -1039,25 +1044,20 @@ export function ChatPageContent({
     });
   }, [resendLastUserMessage]);
 
-  // "Try again" on a retryable chat error: resend the last user turn, and only
-  // once the resend is genuinely issued clear the persisted error so the card
-  // disappears. Ordering matters — clearing first would wipe the error card even
-  // if the resend never started. If the resend itself fails, keep the card so the
-  // user still sees the error. Owner-editable chats only (read-only viewers render
+  // "Try again" on a retryable chat error: resend the last user turn. The
+  // session's regenerateUserMessage clears the persisted error rows once the
+  // resend is genuinely issued (so the card disappears without wiping the
+  // error when the resend never starts) — same as the regenerate action on a
+  // message. If the resend itself fails, the card stays so the user still sees
+  // the error. Owner-editable chats only (read-only viewers render
   // MessageThread instead of this).
-  const clearChatErrors = useClearChatErrors();
   const handleChatErrorRetry = useCallback(async () => {
-    if (!conversationId) return;
-    let resent: boolean;
     try {
-      resent = await resendLastUserMessage();
+      await resendLastUserMessage();
     } catch (error) {
       console.error("[Chat] Retry failed to resend the last message", error);
-      return;
     }
-    if (!resent) return;
-    await clearChatErrors.mutateAsync({ id: conversationId });
-  }, [conversationId, clearChatErrors, resendLastUserMessage]);
+  }, [resendLastUserMessage]);
   // Hide the error while the session is auto-recovering (retry scheduled or
   // reattaching to the still-running response) — flashing a "connection
   // error" card for a turn that restores itself a second later reads as
@@ -1371,9 +1371,11 @@ export function ChatPageContent({
     const promptToSend = pendingPromptRef.current;
     const filesToSend = pendingFilesRef.current;
     const skillToSend = pendingSkillRef.current;
+    const sandboxCommandToSend = pendingSandboxCommandRef.current;
     pendingPromptRef.current = undefined;
     pendingFilesRef.current = [];
     pendingSkillRef.current = undefined;
+    pendingSandboxCommandRef.current = undefined;
 
     const parts: ChatMessagePart[] = [];
 
@@ -1397,6 +1399,7 @@ export function ChatPageContent({
       metadata: {
         createdAt: new Date().toISOString(),
         ...(skillToSend ? { skill: skillToSend } : {}),
+        ...(sandboxCommandToSend ? { sandboxCommand: true as const } : {}),
         ...(initialAppDiagnostics.length > 0
           ? { appDiagnostics: initialAppDiagnostics }
           : {}),
@@ -1583,6 +1586,7 @@ export function ChatPageContent({
       metadata: {
         createdAt: new Date().toISOString(),
         ...(skillToAttach ? { skill: skillToAttach } : {}),
+        ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
         ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
       },
     });
@@ -1833,23 +1837,25 @@ export function ChatPageContent({
 
   // Core logic for starting a new conversation with a message
   const submitInitialMessage = useCallback(
-    (message: Partial<PromptInputMessage>, skill?: ChatSkillMetadata) => {
+    (message: Partial<PromptInputMessage>, options?: ChatSubmitOptions) => {
       if (isPlaywrightSetupVisible) return;
       const hasText = message.text?.trim();
       const hasFiles = message.files && message.files.length > 0;
 
       if (
-        (!hasText && !hasFiles && !skill) ||
+        (!hasText && !hasFiles && !options?.skill) ||
         !initialAgentId ||
         createConversationMutation.isPending
       ) {
         return;
       }
 
-      // Store the message (text, files, skill) to send after conversation is created
+      // Store the message (text, files, submit options) to send after the
+      // conversation is created
       pendingPromptRef.current = message.text || "";
       pendingFilesRef.current = message.files || [];
-      pendingSkillRef.current = skill;
+      pendingSkillRef.current = options?.skill;
+      pendingSandboxCommandRef.current = options?.sandboxCommand;
 
       // Check if there are pending tool actions to apply
       const pendingActions = getPendingActions(initialAgentId);
@@ -1923,7 +1929,7 @@ export function ChatPageContent({
           // Throw to keep the textarea and draft intact (onSubmit contract).
           throw new Error("offline-not-submit");
         }
-        submitInitialMessage(message, options?.skill);
+        submitInitialMessage(message, options);
       },
       [submitInitialMessage, connectivity.state],
     );
@@ -2065,6 +2071,42 @@ export function ChatPageContent({
   // Check if the conversation's agent was deleted
   const isAgentDeleted = conversationId && conversation && !conversation.agent;
 
+  // First-run onboarding: after the org's first provider key is added, offer to
+  // set the org default model — which built-in background subagents inherit —
+  // before the chat composer opens.
+  //
+  // This is a one-shot nudge, intentionally NOT a persistent gate: it fires only
+  // in the same session, right after the first key is added (`firstKeyAdded`).
+  // If the admin skips it or navigates away mid-onboarding, they are not
+  // re-prompted on later visits — they set the default anytime in Settings →
+  // Agents (which links here from its "Default Model" copy). Deriving it purely
+  // from server state (keys exist && no org default) would re-show it on every
+  // /chat visit until a default is set, which nags.
+  //
+  // Whether to show the step is derived from live org/permission state at render
+  // (not captured in the callback closure), and `Boolean(organization)`
+  // suppresses it while the org record is still loading — so a returning admin
+  // who already has a default never flashes the step during that window.
+  const { data: canSetDefaultModel } = useHasPermissions({
+    agentSettings: ["update"],
+  });
+  const [firstKeyAdded, setFirstKeyAdded] = useState(false);
+  const showDefaultModelStep =
+    firstKeyAdded &&
+    canSetDefaultModel === true &&
+    Boolean(organization) &&
+    !organization?.defaultModelId;
+  const handleFirstKeyAdded = useCallback(() => {
+    setFirstKeyAdded(true);
+    // Reset to a clean /chat URL after a key is added so no stale conversation
+    // param lingers; the keys query refetch reveals the composer.
+    router.push("/chat");
+  }, [router]);
+  const finishFirstRunOnboarding = useCallback(() => {
+    setFirstKeyAdded(false);
+    router.push("/chat");
+  }, [router]);
+
   // If user lacks permission to read agents, show access denied
   // Must check before loading state since disabled queries stay in pending state
   if (!conversationId && canReadAgent === false) {
@@ -2107,11 +2149,17 @@ export function ChatPageContent({
     return <ApiKeyLoadError onRetry={() => refetchApiKeys()} />;
   }
 
+  // First-run step 2: after the first key exists, set the org default model on
+  // the same onboarding backdrop before the composer opens. Checked before the
+  // no-key branch so it wins the moment a key is added (before the keys query
+  // has refetched), rather than flashing the add-key screen again.
+  if (showDefaultModelStep) {
+    return <DefaultModelOnboardingStep onDone={finishFirstRunOnboarding} />;
+  }
+
   // If API key is not configured, show setup prompt with inline creation dialog
   if (!hasAnyApiKey) {
-    // Reset to a clean /chat URL after a key is added so no stale conversation
-    // param lingers; the keys query refetch then reveals the composer.
-    return <NoApiKeySetup onKeyAdded={() => router.push("/chat")} />;
+    return <NoApiKeySetup onKeyAdded={handleFirstKeyAdded} />;
   }
 
   // If no agents exist and we're not viewing a conversation with a deleted agent, show empty state

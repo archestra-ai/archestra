@@ -229,12 +229,7 @@ export const mistralAdapterFactory: LLMProvider<
     options: CreateClientOptions,
   ): OpenAIProvider {
     const customFetch = options.agent
-      ? metrics.llm.getObservableFetch(
-          "mistral",
-          options.agent,
-          options.source,
-          options.externalAgentId,
-        )
+      ? metrics.llm.getObservableFetch("mistral", options.agent, options.source)
       : undefined;
 
     return new OpenAIProvider({

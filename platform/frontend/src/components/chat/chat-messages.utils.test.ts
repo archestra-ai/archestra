@@ -468,6 +468,54 @@ describe("deriveAppsFromMessages", () => {
     });
   });
 
+  it("routes an owned-app __open render (ui://archestra-app URI) app-bound via appId", () => {
+    const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-simple_todo__open",
+            toolCallId: "call_open",
+            state: "output-available",
+            output: {
+              _meta: { ui: { resourceUri: `ui://archestra-app/${APP_ID}` } },
+            },
+          },
+        ],
+      },
+    ] as never;
+
+    const apps = deriveAppsFromMessages(messages, {}, getToolShortName);
+    expect(apps).toHaveLength(1);
+    expect(apps[0]).toMatchObject({
+      toolCallId: "call_open",
+      appId: APP_ID,
+      uiResourceUri: `ui://archestra-app/${APP_ID}`,
+    });
+  });
+
+  it("keeps a non-Archestra MCP-UI render un-app-bound (appId null)", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-excalidraw__draw",
+            toolCallId: "call_ext",
+            state: "output-available",
+            output: { _meta: { ui: { resourceUri: "ui://excalidraw" } } },
+          },
+        ],
+      },
+    ] as never;
+
+    const apps = deriveAppsFromMessages(messages, {}, getToolShortName);
+    expect(apps[0]).toMatchObject({ toolCallId: "call_ext", appId: null });
+  });
+
   it("returns an app labeled with the app name for an owned-app edit_app result", () => {
     const messages = [
       {
@@ -965,6 +1013,94 @@ describe("identifyCompactToolGroups", () => {
     expect(groupMap.get(0)?.entries).toHaveLength(3);
     expect(consumedIndices.has(2)).toBe(true);
     expect(consumedIndices.has(3)).toBe(true);
+  });
+
+  it("groups consecutive MCP-app renders and regular tools into one row", () => {
+    const parts = [
+      {
+        type: "tool-slack__post_message",
+        toolCallId: "call_app1",
+        state: "output-available",
+        input: {},
+        output: {
+          content: "ok",
+          _meta: { ui: { resourceUri: "ui://slack/compose" } },
+        },
+      },
+      {
+        type: "tool-calendar__create_event",
+        toolCallId: "call_app2",
+        state: "output-available",
+        input: {},
+        output: {
+          content: "ok",
+          _meta: { ui: { resourceUri: "ui://calendar/event" } },
+        },
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "call_3",
+        state: "output-available",
+        input: { q: "weather" },
+        output: "sunny",
+      },
+    ] as UIMessage["parts"];
+
+    const { groupMap, consumedIndices } = identifyCompactToolGroups(parts, {
+      getToolShortName: () => null,
+    });
+
+    // One row: app pill, app pill, tool circle — not three separate blocks.
+    expect(groupMap.size).toBe(1);
+    expect(groupMap.get(0)?.entries.map((entry) => entry.kind)).toEqual([
+      "app",
+      "app",
+      "tool",
+    ]);
+    expect(consumedIndices).toEqual(new Set([0, 1, 2]));
+  });
+
+  it("classifies an owned-app management call as an app entry even while pending", () => {
+    const parts = [
+      {
+        type: "tool-archestra__edit_app",
+        toolCallId: "call_edit",
+        state: "input-streaming",
+        input: {},
+      },
+    ] as UIMessage["parts"];
+
+    const { groupMap } = identifyCompactToolGroups(parts, {
+      getToolShortName: (toolName) =>
+        toolName === "archestra__edit_app" ? "edit_app" : null,
+    });
+
+    expect(groupMap.get(0)?.entries.map((entry) => entry.kind)).toEqual([
+      "app",
+    ]);
+  });
+
+  it("keeps a failed app render out of the row so it renders the full card", () => {
+    const parts = [
+      {
+        type: "tool-slack__post_message",
+        toolCallId: "call_app1",
+        state: "output-error",
+        input: {},
+        errorText: "boom",
+        output: {
+          content: "boom",
+          _meta: { ui: { resourceUri: "ui://slack/compose" } },
+        },
+      },
+    ] as unknown as UIMessage["parts"];
+
+    const { groupMap, consumedIndices } = identifyCompactToolGroups(parts, {
+      getToolShortName: () => null,
+    });
+
+    expect(groupMap.size).toBe(0);
+    expect(consumedIndices.size).toBe(0);
   });
 });
 

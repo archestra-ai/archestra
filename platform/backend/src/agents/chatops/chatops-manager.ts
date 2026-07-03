@@ -27,6 +27,7 @@ import type {
   SkippedAttachment,
 } from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
+import { stripThinkingBlocks } from "@/utils/strip-thinking-blocks";
 import type { InteractionSource } from "../../../../shared";
 import {
   buildApprovalDecisionSendMessageRequest,
@@ -2064,15 +2065,6 @@ async function getDefaultOrganizationId(): Promise<string> {
 }
 
 /**
- * Strip `<thinking>...</thinking>` blocks from LLM responses.
- * These are internal reasoning blocks that should not be shown to users.
- *
- * Uses non-greedy matching (`*?`) so multiple separate thinking blocks are
- * stripped independently without eating content between them. This assumes
- * blocks are not nested — nested `<thinking>` tags would leave the tail
- * visible, but LLMs do not produce nested thinking blocks in practice.
- */
-/**
  * Build a deterministic session ID for chatops messages.
  * Uses the thread ID when available (threaded conversations), otherwise
  * falls back to the channel ID (non-threaded DMs/channels).
@@ -2100,10 +2092,6 @@ export function buildChatOpsSessionId(
 // Prometheus exemplar labels allow 128 UTF-8 chars total (keys + values).
 // traceID (7+32) + spanID (6+16) = 61; remaining for sessionID key (9) + value = 58.
 const MAX_SESSION_ID_LENGTH = 58;
-
-function stripThinkingBlocks(text: string): string {
-  return text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
-}
 
 /**
  * Strip bot footer from message text to avoid the LLM repeating it.

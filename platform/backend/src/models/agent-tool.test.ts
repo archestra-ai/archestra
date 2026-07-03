@@ -710,7 +710,6 @@ describe("AgentToolModel.findAll", () => {
       expect(excludedToolNames).toContain("archestra__exclude_test_tool_2");
       expect(excludedToolNames).toContain("archestra_single_underscore_test");
       expect(excludedToolNames).toContain("archestranounderscore_test");
-      expect(excludedToolNames).not.toContain("archestra__artifact_write");
       expect(excludedToolNames).not.toContain("archestra__todo_write");
 
       // Without excludeArchestraTools - should include all tools including archestra__ ones

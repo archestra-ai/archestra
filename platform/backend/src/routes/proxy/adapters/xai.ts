@@ -218,12 +218,7 @@ export const xaiAdapterFactory: LLMProvider<
     }
 
     const customFetch = options.agent
-      ? metrics.llm.getObservableFetch(
-          "xai",
-          options.agent,
-          options.source,
-          options.externalAgentId,
-        )
+      ? metrics.llm.getObservableFetch("xai", options.agent, options.source)
       : undefined;
 
     return new OpenAIProvider({

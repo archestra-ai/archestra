@@ -2443,9 +2443,12 @@ export default class K8sDeployment {
 
       // Multi-tenant fallback: the shared deployment's pod was labeled with
       // the first caller's id, so other callers' label search returns no
-      // pods. Match by deployment name prefix instead.
+      // pods. Match by deployment name prefix instead, scoped to pods this
+      // runtime created (every one carries app=mcp-server) so we never list
+      // the whole namespace.
       const allPods = await this.k8sApi.listNamespacedPod({
         namespace: this.namespace,
+        labelSelector: "app=mcp-server",
       });
       return allPods.items.find(
         (pod) =>
@@ -2486,9 +2489,12 @@ export default class K8sDeployment {
       // Multi-tenant catalogs share one deployment across many mcp_server
       // rows; the deployment's pod label was baked in at create time using
       // the first caller's mcp_server.id, so subsequent callers won't match
-      // by label. Fall back to matching pods by deployment name prefix.
+      // by label. Fall back to matching pods by deployment name prefix,
+      // scoped to pods this runtime created (every one carries
+      // app=mcp-server) so we never list the whole namespace.
       const allPods = await this.k8sApi.listNamespacedPod({
         namespace: this.namespace,
+        labelSelector: "app=mcp-server",
       });
       return allPods.items.find((pod) =>
         (pod.metadata?.name ?? "").startsWith(`${this.deploymentName}-`),
@@ -3426,17 +3432,17 @@ export default class K8sDeployment {
       if (abortSignal?.aborted || isStreamClosed()) return;
 
       await new Promise<void>((resolve) => {
-        const t = setTimeout(resolve, pollIntervalMs);
-        if (abortSignal) {
-          abortSignal.addEventListener(
-            "abort",
-            () => {
-              clearTimeout(t);
-              resolve();
-            },
-            { once: true },
-          );
-        }
+        const onAbort = () => {
+          clearTimeout(t);
+          resolve();
+        };
+        // Remove the abort listener on the normal timeout path — otherwise
+        // one listener per iteration accumulates on the long-lived signal.
+        const t = setTimeout(() => {
+          abortSignal?.removeEventListener("abort", onAbort);
+          resolve();
+        }, pollIntervalMs);
+        abortSignal?.addEventListener("abort", onAbort, { once: true });
       });
 
       if (abortSignal?.aborted || isStreamClosed()) return;

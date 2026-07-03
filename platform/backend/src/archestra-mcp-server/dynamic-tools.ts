@@ -341,7 +341,9 @@ async function getAccessibleTools(
 // Catalog visibility uses the same admin notion as the catalog list endpoint
 // (routes/internal-mcp-catalog.ts): mcpServerInstallation:admin sees all
 // catalogs in the organization, including team-scoped ones.
-function userIsCatalogAdmin(
+/** @public — shared with the app-assignable tool resolver so both surfaces
+ * derive catalog visibility from the same admin notion. */
+export function userIsCatalogAdmin(
   userId: string,
   organizationId: string,
 ): Promise<boolean> {

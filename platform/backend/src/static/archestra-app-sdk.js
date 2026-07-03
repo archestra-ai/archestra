@@ -10,15 +10,22 @@
  *     (values are plain JSON; get(key) resolves to an entry { value, revision,
  *     owner } or null when absent, list() to [{key, value, revision, owner}];
  *     set(key, value, { ifRevision, owned }) resolves to { revision, owner } and
- *     rejects with { code: "conflict" } on a stale ifRevision or
- *     { code: "forbidden" } on an owned-key violation; delete clears a key)
+ *     by default rejects with { code: "conflict" } when the key changed since
+ *     this app last read it — pass { ifRevision: null } to force last-writer-wins,
+ *     or a number to guard on that exact revision — and { code: "forbidden" } on
+ *     an owned-key violation; delete clears a key)
  *   archestra.llm.complete(prompt, opts) — one host LLM completion (opts: { system, jsonMode });
  *                                     resolves to the text, rejects with { code: "llm_quota" }
  *                                     on a usage limit or { code: "llm_unavailable" } otherwise
  *   archestra.llm.prompt`...`       — tagged-template prompt builder (pure string, no round-trip)
  *   archestra.tools.call(name,args) — call an assigned tool with the viewer's credentials;
- *                                     throws { code: "auth_required", url } when the
- *                                     upstream MCP server needs (re)authentication
+ *                                     resolves with the tool's data unwrapped from the MCP
+ *                                     envelope (structuredContent when the tool provides it,
+ *                                     else JSON parsed from its text output, else the raw
+ *                                     text, else { media: [{ type, mimeType, dataUrl }] }
+ *                                     for image/audio-only results, else null); throws
+ *                                     { code: "auth_required", url } when the upstream MCP
+ *                                     server needs (re)authentication
  *   archestra.tools.list()          — the app's assigned tools (name/description/inputSchema)
  *   archestra.ui.openLink(url) / archestra.ui.requestDisplayMode(mode)
  *   archestra.context               — { appId, version } of the running app (sync)
@@ -201,8 +208,10 @@
     null;
 
   /**
-   * Call a tool and resolve with its result. Tool-level failures throw —
-   * apps handle one error channel instead of checking isError:
+   * Call a tool and resolve with the raw MCP result envelope. Internal raw
+   * path — the storage/llm wrappers read the envelope directly; tools.call
+   * unwraps it (see unwrapToolResult). Tool-level failures throw — apps
+   * handle one error channel instead of checking isError:
    * - upstream MCP needs (re)auth → { code: "auth_required", url } so the app
    *   can render a "Connect" link (the user authenticates in the registry UI);
    * - any other tool error → { code: "tool_error" } with the error text.
@@ -260,44 +269,112 @@
     return result;
   };
 
+  // Unwrap a successful envelope into the data an app actually wants:
+  // structuredContent when it is a non-null object, else JSON parsed from the
+  // joined text blocks, else the raw text, else { media } for image/audio-only
+  // results (dataUrl drops straight into an <img>/<audio> src), else null.
+  // Mirrored server-side by unwrapToolResultForPreview in
+  // archestra-mcp-server/apps.ts (this file is injected browser JS, so the
+  // two implementations cannot share code) — keep them in step.
+  const unwrapToolResult = (result) => {
+    const sc = result.structuredContent;
+    if (sc && typeof sc === "object") return sc;
+    const text = textOf(result);
+    if (text.trim()) {
+      try {
+        return JSON.parse(text.trim());
+      } catch {
+        return text;
+      }
+    }
+    // Tool results are untrusted: only a strict type/subtype mimeType and
+    // base64-alphabet data may enter the data URL, so a malicious block can
+    // never smuggle quotes/markup into an attribute an app interpolates.
+    const media = (result.content || [])
+      .filter(
+        (c) =>
+          c &&
+          (c.type === "image" || c.type === "audio") &&
+          typeof c.data === "string" &&
+          /^[A-Za-z0-9+/=]+$/.test(c.data) &&
+          typeof c.mimeType === "string" &&
+          /^[\w.+-]+\/[\w.+-]+$/.test(c.mimeType),
+      )
+      .map((c) => ({
+        type: c.type,
+        mimeType: c.mimeType,
+        dataUrl: "data:" + c.mimeType + ";base64," + c.data,
+      }));
+    return media.length ? { media } : null;
+  };
+
   // Each value is an entry { value, revision, owner }: revision powers optimistic
-  // concurrency (pass it back as set opts.ifRevision to fail a write that raced
-  // another viewer — the call rejects with { code: "conflict" }); owner is the
-  // viewer id that claimed the (shared) key, or null when unclaimed. delete is
-  // guarded by ownership rather than revision.
-  const storagePartition = (scope) =>
-    Object.freeze({
+  // concurrency — a later set of the same key guards on it automatically, failing
+  // a write that raced another instance with { code: "conflict" } (opts.ifRevision
+  // overrides the guard); owner is the viewer id that claimed the (shared) key, or
+  // null when unclaimed. delete is guarded by ownership rather than revision.
+  const storagePartition = (scope) => {
+    // The revision last seen for each key, from a get or a successful set. A
+    // write guards on it by default so a read-modify-write that raced another
+    // instance of this app is rejected as a conflict rather than silently
+    // overwriting the other's committed value.
+    const seenRevisions = new Map();
+    return Object.freeze({
       get: async (key) => {
         const sc = (await callTool(APP_DATA_TOOLS.get, { key, scope }))
           .structuredContent;
-        return sc && sc.revision != null
-          ? { value: sc.value, revision: sc.revision, owner: sc.owner ?? null }
-          : null;
+        const entry =
+          sc && sc.revision != null
+            ? { value: sc.value, revision: sc.revision, owner: sc.owner ?? null }
+            : null;
+        // Cache the revision so a later set of this key guards on it. An absent
+        // key caches 0 (insert-if-absent) so two instances racing to create the
+        // same key conflict rather than one silently overwriting the other.
+        seenRevisions.set(key, entry ? entry.revision : 0);
+        return entry;
       },
-      // opts.ifRevision: write only if the stored revision matches (0 = create,
-      // i.e. fail if the key already exists). opts.owned: claim a new shared key
-      // for the viewer so only they (or the app's author/admins) may overwrite it.
+      // By default a write guards on the revision last seen for the key this
+      // session (a conflict rejects with { code: "conflict" }). opts.ifRevision
+      // overrides that guard: a number writes only if the stored revision
+      // matches (0 = create, i.e. fail if the key already exists); null opts out
+      // entirely (last-writer-wins). opts.owned: claim a new shared key for the
+      // viewer so only they (or the app's author/admins) may overwrite it.
       set: async (key, value, opts) => {
+        const expectedRevision =
+          opts && "ifRevision" in opts
+            ? (opts.ifRevision === null ? undefined : opts.ifRevision)
+            : seenRevisions.get(key);
         const sc = (
           await callTool(APP_DATA_TOOLS.set, {
             key,
             value,
             scope,
-            expectedRevision: opts?.ifRevision,
+            expectedRevision,
             claimOwner: opts?.owned,
           })
         ).structuredContent;
+        if (sc && sc.revision != null) seenRevisions.set(key, sc.revision);
         return { revision: sc?.revision, owner: sc?.owner ?? null };
       },
-      list: async () =>
-        (await callTool(APP_DATA_TOOLS.list, { scope })).structuredContent
-          ?.entries || [],
+      list: async () => {
+        const entries =
+          (await callTool(APP_DATA_TOOLS.list, { scope })).structuredContent
+            ?.entries || [];
+        // Cache each listed revision so an edit flow that loads via list() then
+        // saves one record still guards that write on the revision it loaded.
+        for (const e of entries) {
+          if (e && e.revision != null) seenRevisions.set(e.key, e.revision);
+        }
+        return entries;
+      },
       // delete is guarded by ownership (an owned shared key can only be removed
       // by its owner or the app's author/admins), not by revision.
       delete: async (key) => {
         await callTool(APP_DATA_TOOLS.delete, { key, scope });
+        seenRevisions.delete(key);
       },
     });
+  };
 
   // A single host LLM completion. Runs as the viewer through the org's app
   // runtime model (the app can't pick one); jsonMode steers the model to emit
@@ -333,7 +410,7 @@
       prompt: llmPrompt,
     }),
     tools: Object.freeze({
-      call: callTool,
+      call: async (name, args) => unwrapToolResult(await callTool(name, args)),
       // assigned-tool descriptors embedded at serve time (already filtered to
       // what the app may call); async to allow a live listing later without an
       // API break

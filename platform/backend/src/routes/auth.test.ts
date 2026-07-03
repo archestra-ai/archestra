@@ -137,6 +137,7 @@ describe("auth routes", () => {
     );
     const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -191,6 +192,7 @@ describe("auth routes", () => {
     );
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -232,6 +234,7 @@ describe("auth routes", () => {
     );
     const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -268,6 +271,7 @@ describe("auth routes", () => {
     });
     const { oauthClient, clientSecret } = await McpOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedGatewayIds: [gateway.id],
     });
@@ -315,6 +319,7 @@ describe("auth routes", () => {
     const organization = await makeOrganization();
     const { oauthClient, clientSecret } = await McpOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Native Client",
       grantType: "authorization_code",
       redirectUris: ["http://127.0.0.1:53280/callback"],
@@ -373,6 +378,7 @@ describe("auth routes", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedGatewayIds: [gateway.id],
     });
@@ -403,6 +409,7 @@ describe("auth routes", () => {
     });
     const { oauthClient, clientSecret } = await McpOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedGatewayIds: [gateway.id],
     });

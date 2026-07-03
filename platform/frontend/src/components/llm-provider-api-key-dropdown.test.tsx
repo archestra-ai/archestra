@@ -41,6 +41,79 @@ describe("LlmProviderApiKeyDropdown", () => {
     expect(screen.getByText("OpenAI key")).toBeInTheDocument();
   });
 
+  it("highlights only one row when keys share the same name", async () => {
+    const user = userEvent.setup();
+
+    renderDropdown({
+      availableKeys: [
+        {
+          id: "key-1",
+          name: "Anthropic",
+          provider: "anthropic",
+          scope: "personal",
+          teamName: null,
+        },
+        {
+          id: "key-2",
+          name: "Anthropic",
+          provider: "anthropic",
+          scope: "personal",
+          teamName: null,
+        },
+      ] as LlmProviderApiKey[],
+      selectedApiKeyId: "key-2",
+      onSelectKey: () => {},
+      triggerVariant: "button",
+    });
+
+    await user.click(screen.getByRole("button", { name: /anthropic/i }));
+
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(2);
+    expect(
+      options.filter(
+        (option) => option.getAttribute("aria-selected") === "true",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("filters keys by name via search", async () => {
+    const user = userEvent.setup();
+
+    renderDropdown({
+      availableKeys: [
+        {
+          id: "key-1",
+          name: "Prod key",
+          provider: "anthropic",
+          scope: "personal",
+          teamName: null,
+        },
+        {
+          id: "key-2",
+          name: "Staging key",
+          provider: "openai",
+          scope: "personal",
+          teamName: null,
+        },
+      ] as LlmProviderApiKey[],
+      selectedApiKeyId: null,
+      onSelectKey: () => {},
+      triggerVariant: "button",
+      showChatTestIds: true,
+    });
+
+    await user.click(screen.getByRole("button", { name: /select api key/i }));
+    await user.type(
+      screen.getByTestId(E2eTestId.ChatApiKeySelectorSearchInput),
+      "Staging",
+    );
+
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(1);
+    expect(options[0]).toHaveTextContent("Staging key");
+  });
+
   it("supports selecting organization default", async () => {
     const user = userEvent.setup();
     const onSelectOrganizationDefault = vi.fn();

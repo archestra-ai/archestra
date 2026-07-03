@@ -27,6 +27,24 @@ export function shouldShowDescriptionField(params: {
   return !params.isBuiltIn;
 }
 
+/**
+ * Whether the Custom-tools picker offers owned Apps (serverType:"app" backing
+ * catalogs) for this agent type. A chat agent renders an app inline from its
+ * `__open` tool result; an MCP gateway or legacy profile — both served at
+ * `/v1/mcp/:profileId` — expose that tool to a connected MCP client. LLM
+ * proxies have no app-render surface. The backend still gates the catalog on
+ * `app:read`, so this only decides which dialogs request the rows.
+ */
+export function shouldOfferAppCatalogs(agentType: AgentType): boolean {
+  const offered: Record<AgentType, boolean> = {
+    agent: true,
+    mcp_gateway: true,
+    profile: true,
+    llm_proxy: false,
+  };
+  return offered[agentType];
+}
+
 export function normalizeSuggestedPrompts(
   prompts: Array<{ summaryTitle: string; prompt: string }>,
 ): Array<{ summaryTitle: string; prompt: string }> {

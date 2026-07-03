@@ -71,6 +71,8 @@ When the caller is an application — a backend service, automation job, or anot
 
 Create and manage these clients under **MCPs > Credentials > OAuth Clients**. Each client is scoped to an explicit list of gateways and returns a `client_id` and a one-time `client_secret` (which you can rotate later). A client can only mint tokens for the gateways on its list, so one team can hand a client to another team for access to a curated set of gateways and nothing else.
 
+Like agents and gateways, each OAuth client has a visibility level — **Personal** (only its creator), **Teams** (members of selected teams), or **Organization** — controlling who can see, edit, rotate, and delete it. New clients default to Personal; sharing with teams requires `mcpOauthClient:team-admin`, organization-wide visibility requires `mcpOauthClient:admin`, and admins see every client regardless. Visibility only governs management access — it does not change which gateways the client's tokens can reach at runtime.
+
 The client exchanges its credentials for a short-lived (1-hour) bearer token at `POST /api/auth/oauth2/token` with:
 
 - `grant_type=client_credentials`

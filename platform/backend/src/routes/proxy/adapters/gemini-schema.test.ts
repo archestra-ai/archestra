@@ -166,6 +166,76 @@ describe("sanitizeGeminiToolSchema", () => {
     expect(sanitizeGeminiToolSchema([1, 2])).toEqual([1, 2]);
   });
 
+  it("defaults a bare untyped node to object (zod z.unknown() shape)", () => {
+    expect(
+      sanitizeGeminiToolSchema({
+        type: "object",
+        properties: { payload: {} },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: { payload: { type: "object" } },
+    });
+  });
+
+  it("types untyped anyOf branches but leaves the composite node untyped (the reported Vertex failure shape)", () => {
+    // posthog__cohorts-partial-update `query`: zod.unknown().nullable()
+    expect(
+      sanitizeGeminiToolSchema({
+        type: "object",
+        properties: {
+          query: { anyOf: [{}, { type: "null" }] },
+        },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        query: { anyOf: [{ type: "object" }, { type: "null" }] },
+      },
+    });
+  });
+
+  it("infers object/array types from structural keywords", () => {
+    expect(
+      sanitizeGeminiToolSchema({
+        type: "object",
+        properties: {
+          config: { properties: { a: { type: "string" } } },
+          tags: { items: { type: "string" } },
+          strict: { additionalProperties: false },
+        },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        config: { type: "object", properties: { a: { type: "string" } } },
+        tags: { type: "array", items: { type: "string" } },
+        strict: { type: "object", additionalProperties: false },
+      },
+    });
+  });
+
+  it("types an untyped string enum as string", () => {
+    expect(sanitizeGeminiToolSchema({ enum: ["a", "b"] })).toEqual({
+      type: "string",
+      enum: ["a", "b"],
+    });
+  });
+
+  it("leaves $ref nodes untyped", () => {
+    expect(
+      sanitizeGeminiToolSchema({
+        type: "object",
+        properties: { linked: { $ref: "#/$defs/Thing" } },
+        $defs: { Thing: { type: "string" } },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: { linked: { $ref: "#/$defs/Thing" } },
+      $defs: { Thing: { type: "string" } },
+    });
+  });
+
   it("does not mutate the input", () => {
     const schema = {
       type: "object",

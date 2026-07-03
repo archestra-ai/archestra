@@ -21,6 +21,7 @@ import config, {
   parseAnthropicWifConfig,
   parseAuditLogRetentionDays,
   parseBodyLimit,
+  parseChatMaxOutputTokens,
   parseCodeRuntimeDaggerRunnerHost,
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
@@ -829,6 +830,48 @@ describe("parseContentMaxLength", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       'Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "-100", using default 10000',
     );
+  });
+});
+
+describe("parseChatMaxOutputTokens", () => {
+  test("should return default 32768 when no value provided", () => {
+    expect(parseChatMaxOutputTokens(undefined)).toBe(32768);
+  });
+
+  test("should return default when empty/whitespace string provided", () => {
+    expect(parseChatMaxOutputTokens("")).toBe(32768);
+    expect(parseChatMaxOutputTokens("   ")).toBe(32768);
+  });
+
+  test("should parse and trim a valid value", () => {
+    expect(parseChatMaxOutputTokens("  16000  ")).toBe(16000);
+  });
+
+  test("should accept boundary values", () => {
+    expect(parseChatMaxOutputTokens("1")).toBe(1);
+    expect(parseChatMaxOutputTokens("1000000")).toBe(1000000);
+  });
+
+  test("should return default and warn for non-numeric value", () => {
+    expect(parseChatMaxOutputTokens("abc")).toBe(32768);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS value "abc", using default 32768',
+    );
+  });
+
+  test("should reject fractional and trailing-garbage values instead of truncating", () => {
+    expect(parseChatMaxOutputTokens("1.5")).toBe(32768);
+    expect(parseChatMaxOutputTokens("32768abc")).toBe(32768);
+    expect(parseChatMaxOutputTokens("Infinity")).toBe(32768);
+  });
+
+  test("should accept scientific notation for an integer value", () => {
+    expect(parseChatMaxOutputTokens("1e6")).toBe(1000000);
+  });
+
+  test("should return default and warn for zero and out-of-range", () => {
+    expect(parseChatMaxOutputTokens("0")).toBe(32768);
+    expect(parseChatMaxOutputTokens("1000001")).toBe(32768);
   });
 });
 

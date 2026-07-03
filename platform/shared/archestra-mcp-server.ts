@@ -116,7 +116,6 @@ export const TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME =
 export const TOOL_TODO_WRITE_SHORT_NAME = "todo_write";
 export const TOOL_SWAP_AGENT_SHORT_NAME = "swap_agent";
 export const TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME = "swap_to_default_agent";
-export const TOOL_ARTIFACT_WRITE_SHORT_NAME = "artifact_write";
 // Turn the current chat into a project (moves the chat + its files into a new project).
 export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
   "create_project_from_conversation";
@@ -226,7 +225,6 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_TODO_WRITE_SHORT_NAME,
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
-  TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -392,8 +390,6 @@ export const TOOL_SWAP_AGENT_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_SWAP_AGENT_SHORT_NAME}` as const;
 export const TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME}` as const;
-export const TOOL_ARTIFACT_WRITE_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_ARTIFACT_WRITE_SHORT_NAME}` as const;
 export const TOOL_SEARCH_TOOLS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_SEARCH_TOOLS_SHORT_NAME}` as const;
 export const TOOL_RUN_TOOL_FULL_NAME =
@@ -424,13 +420,11 @@ export const TOOL_DELETE_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_DELETE_FILE_SHORT_NAME}` as const;
 
 export const DEFAULT_ARCHESTRA_TOOL_NAMES: readonly string[] = [
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
 ];
 
 export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
-  TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
@@ -624,6 +618,19 @@ export function isAppRenderingArchestraToolShortName(
  */
 export function getArchestraAppResourceUri(appId: string): string {
   return `ui://archestra-app/${appId}`;
+}
+
+/**
+ * Inverse of {@link getArchestraAppResourceUri}: the owned-app id if `uri` is an
+ * `ui://archestra-app/<appId>` URI, else null. A chat host uses this to route an
+ * owned app's render (e.g. its `__open` launch tool) to the app-bound endpoint
+ * instead of treating it as a generic external MCP-UI render.
+ */
+export function parseArchestraAppResourceUri(uri: string): string | null {
+  const prefix = getArchestraAppResourceUri("");
+  if (!uri.startsWith(prefix)) return null;
+  const appId = uri.slice(prefix.length);
+  return appId.length > 0 && !appId.includes("/") ? appId : null;
 }
 
 export function isArchestraMcpServerTool(

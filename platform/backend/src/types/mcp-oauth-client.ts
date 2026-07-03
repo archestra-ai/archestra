@@ -1,3 +1,4 @@
+import { ResourceVisibilityScopeSchema } from "@archestra/shared";
 import { z } from "zod";
 
 export const MCP_OAUTH_CLIENT_METADATA_TYPE = "mcp_oauth_client";
@@ -27,6 +28,15 @@ export const McpOauthClientMetadataSchema = z.object({
   // Rows created before authorization_code support have no grantType; treat
   // them as the original client_credentials clients.
   grantType: McpOauthClientGrantTypeSchema.default("client_credentials"),
+  // Rows created before team scoping have no scope/authorId; they were
+  // implicitly visible org-wide, so they parse as org-scoped with no author.
+  scope: ResourceVisibilityScopeSchema.default("org"),
+  authorId: z.string().nullable().default(null),
+});
+
+const McpOauthClientTeamInfoSchema = z.object({
+  id: z.string(),
+  name: z.string(),
 });
 
 export const McpOauthClientSchema = z.object({
@@ -38,6 +48,10 @@ export const McpOauthClientSchema = z.object({
   allowedGatewayIds: z.array(z.string()),
   redirectUris: z.array(z.string()),
   disabled: z.boolean(),
+  scope: ResourceVisibilityScopeSchema,
+  authorId: z.string().nullable(),
+  authorName: z.string().nullable(),
+  teams: z.array(McpOauthClientTeamInfoSchema),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

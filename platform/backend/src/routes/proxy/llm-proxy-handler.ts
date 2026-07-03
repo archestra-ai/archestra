@@ -945,7 +945,6 @@ export async function handleLLMProxy<
     const client = provider.createClient(apiKey, {
       baseUrl: effectiveBaseUrl,
       agent: resolvedAgent,
-      externalAgentId,
       source,
       defaultHeaders:
         Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
@@ -1163,7 +1162,6 @@ async function handleStreaming<
               actualModel,
               ttftSeconds,
               source,
-              externalAgentId,
             );
           }
 
@@ -1352,6 +1350,7 @@ async function handleStreaming<
         contextIsTrusted,
         enabledToolNames,
         globalToolPolicy,
+        { surface: "llm-proxy", sessionId: sessionId ?? undefined },
       );
 
       logger.info(
@@ -1386,7 +1385,6 @@ async function handleStreaming<
         toolCallCount: toolCalls.length,
         actualModel,
         source,
-        externalAgentId,
       });
     } else if (
       toolCalls.length > 0 &&
@@ -1411,6 +1409,46 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
+    // The finally-block persist below is gated on usage, so a stream that
+    // fails before any usage arrives (e.g. a provider 400 rejecting the
+    // request) would otherwise leave no trace in LLM logs / session history.
+    if (!streamAdapter.state.usage) {
+      try {
+        const errorMessage = provider.extractErrorMessage(error);
+        logger.info(
+          { profileId: agent.id, errorMessage },
+          "Persisting error interaction record for failed stream",
+        );
+        await InteractionModel.create({
+          profileId: agent.id,
+          externalAgentId,
+          executionId,
+          userId,
+          virtualKeyId,
+          passthroughVirtualKeyId,
+          sessionId,
+          sessionSource,
+          source,
+          authMethod,
+          authenticatedAppId: authenticatedApp?.id,
+          authenticatedAppName: authenticatedApp?.name,
+          type: provider.interactionType,
+          request: originalRequest as InteractionRequest,
+          processedRequest: request as InteractionRequest,
+          response: { error: errorMessage },
+          model: actualModel,
+          baselineModel,
+          inputTokens: 0,
+          outputTokens: 0,
+        });
+      } catch (interactionError) {
+        logger.error(
+          { err: interactionError, profileId: agent.id },
+          "Failed to create error interaction record for failed stream",
+        );
+      }
+    }
+
     return handleError(
       error,
       reply,
@@ -1440,7 +1478,6 @@ async function handleStreaming<
           },
           actualModel,
           source,
-          externalAgentId,
         );
 
         if (usage.outputTokens && firstChunkTime) {
@@ -1452,7 +1489,6 @@ async function handleStreaming<
             usage.outputTokens,
             totalDurationSeconds,
             source,
-            externalAgentId,
           );
         }
       });
@@ -1471,7 +1507,6 @@ async function handleStreaming<
           actualModel,
           costs.actualCost,
           source,
-          externalAgentId,
         );
         metrics.llm.reportLLMCacheCost(
           providerName,
@@ -1482,7 +1517,6 @@ async function handleStreaming<
             cacheReadSavings: costs.cacheReadSavings,
           },
           source,
-          externalAgentId,
         );
       });
 
@@ -1705,6 +1739,7 @@ async function handleNonStreaming<
       contextIsTrusted,
       enabledToolNames,
       globalToolPolicy,
+      { surface: "llm-proxy", sessionId: sessionId ?? undefined },
     );
 
     if (toolInvocationRefusal) {
@@ -1732,7 +1767,6 @@ async function handleNonStreaming<
         toolCallCount: toolCalls.length,
         actualModel,
         source,
-        externalAgentId,
       });
 
       // Record interaction with refusal (usage already corrected above)
@@ -1750,7 +1784,6 @@ async function handleNonStreaming<
           actualModel,
           costs.actualCost,
           source,
-          externalAgentId,
         );
         metrics.llm.reportLLMCacheCost(
           providerName,
@@ -1761,7 +1794,6 @@ async function handleNonStreaming<
             cacheReadSavings: costs.cacheReadSavings,
           },
           source,
-          externalAgentId,
         );
       });
 
@@ -1810,7 +1842,6 @@ async function handleNonStreaming<
   //   { input: usage.inputTokens, output: usage.outputTokens },
   //   actualModel,
   //   source,
-  //   externalAgentId,
   // );
 
   const costs = await calculateInteractionCosts({
@@ -1827,7 +1858,6 @@ async function handleNonStreaming<
       actualModel,
       costs.actualCost,
       source,
-      externalAgentId,
     );
     metrics.llm.reportLLMCacheCost(
       providerName,
@@ -1835,7 +1865,6 @@ async function handleNonStreaming<
       actualModel,
       { cacheCost: costs.cacheCost, cacheReadSavings: costs.cacheReadSavings },
       source,
-      externalAgentId,
     );
   });
 

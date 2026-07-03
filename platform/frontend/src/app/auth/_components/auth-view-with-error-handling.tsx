@@ -571,6 +571,12 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
             </Button>
           </form>
         </Form>
+        {/* There is no self-service reset flow (no email provider). An operator
+            with shell access resets any user's password via the
+            reset-user-password CLI (see docs: Disabling Basic Authentication). */}
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          Forgot your password? Ask your administrator to reset it.
+        </p>
       </CardContent>
     </Card>
   );

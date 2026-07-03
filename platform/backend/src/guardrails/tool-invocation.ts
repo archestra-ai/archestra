@@ -1,8 +1,11 @@
 import {
-  buildArchestraToolRefusalMetadata,
+  buildPolicyDeniedMcpToolError,
+  buildToolInvocationRefusalMessages,
   isAgentTool,
+  type PolicyDeniedMcpToolError,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
+  type ToolInvocationEnforcementSurface,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { disabledToolsNotRunMessage } from "@/archestra-mcp-server/tool-recovery-messages";
@@ -27,8 +30,35 @@ export interface PolicyBlockResult {
   reason: string;
   /** The specific tool that triggered the block */
   blockedToolName: string;
+  /** The blocked tool's arguments, carried into the structured tool error */
+  toolInput: Record<string, unknown>;
   /** All tool call names in the batch (all are blocked when any one is) */
   allToolCallNames: string[];
+}
+
+/**
+ * Where the block happened and how to reference it, for the client-visible
+ * message ("<Product> LLM Proxy blocked…" vs "<Product> MCP Gateway blocked…").
+ */
+export interface PolicyEnforcementContext {
+  surface: ToolInvocationEnforcementSurface;
+  sessionId?: string;
+}
+
+/**
+ * The machine-readable tool error for a policy block. Gateway and run_tool
+ * results attach this to `_meta`/`structuredContent` so clients parse the block
+ * structurally instead of scraping the prose.
+ */
+export function policyBlockToToolError(
+  policyBlock: PolicyBlockResult,
+): PolicyDeniedMcpToolError {
+  return buildPolicyDeniedMcpToolError({
+    toolName: policyBlock.blockedToolName,
+    input: policyBlock.toolInput,
+    reason: policyBlock.reason,
+    message: policyBlock.contentMessage,
+  });
 }
 
 export async function evaluateSingleMcpToolInvocationPolicy(params: {
@@ -84,6 +114,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
     params.contextIsTrusted,
     enabledToolNames,
     globalToolPolicy,
+    MCP_GATEWAY_ENFORCEMENT,
   );
   if (policyBlock) {
     return policyBlock;
@@ -108,6 +139,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
     toolName: params.toolName,
     toolInput: params.toolInput,
     reason: TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+    enforcement: MCP_GATEWAY_ENFORCEMENT,
   });
 }
 
@@ -124,6 +156,8 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
  * @param contextIsTrusted - Whether the context is trusted
  * @param enabledToolNames - Optional set of tool names that are enabled in the request.
  *                          If provided, tool calls not in this set will be filtered and reported as disabled.
+ * @param enforcement - Which surface is blocking (for message attribution) and
+ *                      the session id to reference; defaults to the LLM proxy.
  */
 export const evaluatePolicies = async (
   toolCalls: Array<{ toolCallName: string; toolCallArgs: string }>,
@@ -132,6 +166,7 @@ export const evaluatePolicies = async (
   contextIsTrusted: boolean,
   enabledToolNames: Set<string>,
   globalToolPolicy: GlobalToolPolicy,
+  enforcement: PolicyEnforcementContext = { surface: "llm-proxy" },
 ): Promise<PolicyBlockResult | null> => {
   logger.debug(
     {
@@ -181,6 +216,7 @@ export const evaluatePolicies = async (
       contentMessage: message,
       reason,
       blockedToolName: disabledToolNames[0],
+      toolInput: {},
       allToolCallNames: disabledToolNames,
     };
   }
@@ -237,6 +273,7 @@ export const evaluatePolicies = async (
       toolInput,
       reason,
       allToolCallNames: filteredToolCalls.map((tc) => tc.toolCallName),
+      enforcement,
     });
   }
 
@@ -310,32 +347,34 @@ export async function getGlobalToolPolicy(
   return firstOrg.globalToolPolicy;
 }
 
+const MCP_GATEWAY_ENFORCEMENT: PolicyEnforcementContext = {
+  surface: "mcp-gateway",
+};
+
 function buildToolInvocationPolicyBlockResult(params: {
   toolName: string;
   toolInput: Record<string, unknown>;
   reason: string;
+  enforcement: PolicyEnforcementContext;
   allToolCallNames?: string[];
 }): PolicyBlockResult {
-  const toolArguments = JSON.stringify(params.toolInput);
-  const archestraMetadata = buildArchestraToolRefusalMetadata({
-    toolName: params.toolName,
-    toolArguments,
-    reason: params.reason,
-  });
-
-  const contentMessage = `
-I tried to invoke the ${params.toolName} tool with the following arguments: ${toolArguments}.
-
-However, I was denied by a tool invocation policy:
-
-${params.reason}`;
+  const { contentMessage, refusalMessage } = buildToolInvocationRefusalMessages(
+    {
+      toolName: params.toolName,
+      toolArguments: JSON.stringify(params.toolInput),
+      reason: params.reason,
+      surface: params.enforcement.surface,
+      sessionId: params.enforcement.sessionId,
+      productName: archestraMcpBranding.catalogName,
+    },
+  );
 
   return {
-    refusalMessage: `${archestraMetadata}
-${contentMessage}`,
+    refusalMessage,
     contentMessage,
     reason: params.reason,
     blockedToolName: params.toolName,
+    toolInput: params.toolInput,
     allToolCallNames: params.allToolCallNames ?? [params.toolName],
   };
 }

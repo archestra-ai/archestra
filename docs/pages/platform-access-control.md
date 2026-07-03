@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-06-30
+lastUpdated: 2026-07-03
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -45,13 +45,13 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
 | LLM Provider API Keys | `read`, `create`, `update`, `delete` |
 | LLM Virtual Keys | `read`, `create`, `update`, `delete` |
-| LLM OAuth Clients | `read`, `create`, `update`, `delete` |
+| LLM OAuth Clients | `read`, `create`, `update`, `delete`, `team-admin` |
 | LLM Models | `read`, `update` |
 | LLM Limits | `read`, `create`, `update`, `delete` |
 | Optimization Rules | `read`, `create`, `update`, `delete` |
 | LLM Costs | `read` |
 | MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin` |
-| MCP OAuth Clients | `read`, `create`, `update`, `delete` |
+| MCP OAuth Clients | `read`, `create`, `update`, `delete`, `team-admin` |
 | Tools & Policies | `read`, `create`, `update`, `delete` |
 | MCP Registry | `read`, `create`, `update`, `delete`, `team-admin` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
@@ -61,6 +61,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
+| Files | `manage` |
 | Logs | `read` |
 | API Keys | `read`, `create`, `delete` |
 | LLM Settings | `read`, `update` |
@@ -102,6 +103,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
+| Files | `manage` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
 | Site Notifications | `read` |
@@ -156,6 +158,7 @@ The following table lists all available permissions that can be assigned to cust
 | `chatProviderSettings:enable` | Show model and API key selectors in chat |
 | `environment:admin` | Create, edit, and delete deployment environments (everyone can view them) |
 | `environment:deploy-to-restricted` | Deploy catalog items to restricted environments |
+| `file:manage` | List, read, write, and delete files in chats and projects |
 | `githubAppConfig:read` | View GitHub App configurations |
 | `githubAppConfig:create` | Create GitHub App configurations |
 | `githubAppConfig:update` | Modify GitHub App configurations |
@@ -185,7 +188,8 @@ The following table lists all available permissions that can be assigned to cust
 | `llmOauthClient:create` | Create LLM OAuth client registrations |
 | `llmOauthClient:update` | Modify LLM OAuth client registrations |
 | `llmOauthClient:delete` | Delete LLM OAuth client registrations |
-| `llmOauthClient:admin` | Manage all LLM OAuth client registrations |
+| `llmOauthClient:team-admin` | Manage team assignments for LLM OAuth client registrations |
+| `llmOauthClient:admin` | Manage all LLM OAuth client registrations, bypassing team restrictions |
 | `llmProviderApiKey:read` | View LLM provider API keys |
 | `llmProviderApiKey:create` | Add new LLM provider API keys |
 | `llmProviderApiKey:update` | Modify LLM provider API key configuration and visibility |
@@ -215,7 +219,8 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpOauthClient:create` | Create MCP OAuth client registrations |
 | `mcpOauthClient:update` | Modify MCP OAuth client registrations |
 | `mcpOauthClient:delete` | Delete MCP OAuth client registrations |
-| `mcpOauthClient:admin` | Manage all MCP OAuth client registrations |
+| `mcpOauthClient:team-admin` | Manage team assignments for MCP OAuth client registrations |
+| `mcpOauthClient:admin` | Manage all MCP OAuth client registrations, bypassing team restrictions |
 | `mcpRegistry:read` | Browse the MCP server registry |
 | `mcpRegistry:create` | Add servers to the MCP registry |
 | `mcpRegistry:update` | Modify MCP registry entries |

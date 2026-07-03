@@ -5,9 +5,10 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
-import type {
-  SetupScriptContext,
-  SetupScriptProxySection,
+import {
+  claudeCodeOAuthNextStep,
+  type SetupScriptContext,
+  type SetupScriptProxySection,
 } from "./connection-setup-script";
 
 /**
@@ -207,9 +208,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
   switch (ctx.clientId) {
     case "claude-code":
       if (ctx.mcp) {
-        steps.push(
-          `Run \`claude\` and use /mcp to finish the OAuth flow for "${ctx.mcp.serverName}".`,
-        );
+        steps.push(claudeCodeOAuthNextStep(ctx.mcp.serverName));
       }
       if (ctx.proxy?.provider === "bedrock" && ctx.proxy.virtualKey) {
         steps.push(
@@ -365,6 +364,20 @@ if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install the skills automaticall
 const CLAUDE_SETTINGS_PATH =
   "(Join-Path $env:USERPROFILE '.claude\\settings.json')";
 
+/**
+ * Custom headers Claude Code sends on every proxied request (Anthropic and
+ * Bedrock alike — ANTHROPIC_CUSTOM_HEADERS applies to both), one "Name: Value"
+ * per line: X-Archestra-Agent-Id (Claude Code attribution, always) and the
+ * X-Archestra-Virtual-Key passthrough header (user attribution, when present).
+ */
+function claudeCustomHeaderLines(proxy: SetupScriptProxySection): string[] {
+  const headerLines = [`${EXTERNAL_AGENT_ID_HEADER}: ${CLAUDE_CODE_CLIENT_ID}`];
+  if (proxy.passthroughVirtualKey) {
+    headerLines.push(`${VIRTUAL_KEY_HEADER}: ${proxy.passthroughVirtualKey}`);
+  }
+  return headerLines;
+}
+
 function claudeAnthropicProxySection(proxy: SetupScriptProxySection): string {
   const values: Record<string, string> = {
     ANTHROPIC_BASE_URL: proxy.url,
@@ -373,13 +386,8 @@ function claudeAnthropicProxySection(proxy: SetupScriptProxySection): string {
     values.ANTHROPIC_AUTH_TOKEN = proxy.virtualKey;
   }
   // Append our custom headers after the base-URL merge, preserving any the user
-  // already set: X-Archestra-Agent-Id (Claude Code attribution, always) and the
-  // X-Archestra-Virtual-Key passthrough header (user attribution, when present).
-  const headerLines = [`${EXTERNAL_AGENT_ID_HEADER}: ${CLAUDE_CODE_CLIENT_ID}`];
-  if (proxy.passthroughVirtualKey) {
-    headerLines.push(`${VIRTUAL_KEY_HEADER}: ${proxy.passthroughVirtualKey}`);
-  }
-  const headerAppend = `\n${claudeCustomHeaderAppendSnippet(headerLines)}`;
+  // already set.
+  const headerAppend = `\n${claudeCustomHeaderAppendSnippet(claudeCustomHeaderLines(proxy))}`;
   const passthroughNote = proxy.virtualKey
     ? ""
     : `
@@ -436,6 +444,7 @@ ${mergeJsonFileSnippet({
     ANTHROPIC_BEDROCK_BASE_URL: proxy.url,
   },
 })}
+${claudeCustomHeaderAppendSnippet(claudeCustomHeaderLines(proxy))}
 Write-Host 'Update AWS_REGION in the settings.json env block if you use a different region.'
 ${
   proxy.virtualKey

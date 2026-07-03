@@ -54,6 +54,24 @@ const isDevelopment = !isProduction;
 
 const appVersion = process.env.ARCHESTRA_VERSION || packageJson.version;
 
+/**
+ * Developer-only convenience: when set (and NOT in production), the login screen
+ * is skipped by minting a real session for the user with this email (see the
+ * dev-auto-login Better Auth plugin). Hard-disabled in production so it can never
+ * bypass authentication on a real deployment. The session is an ordinary one for
+ * that user — RBAC is unchanged.
+ */
+const devAutoAuthenticateEmail = isProduction
+  ? undefined
+  : process.env.ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL?.trim() || undefined;
+
+if (devAutoAuthenticateEmail) {
+  logger.warn(
+    { email: devAutoAuthenticateEmail },
+    "[config] ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL is set: the login screen is skipped by auto-minting a session for this user. Developer-only, ignored in production.",
+  );
+}
+
 const frontendBaseUrl =
   process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
@@ -292,6 +310,12 @@ const DEFAULT_BODY_LIMIT = 70 * 1024 * 1024;
 const DEFAULT_DATABASE_POOL_MAX = 50;
 const MAX_DATABASE_POOL_MAX = 500;
 
+// Upper bound applied to every agent turn's output-token budget. Defaults high
+// enough to unblock large tool-call payloads while capping cost; the real
+// per-model output ceiling still applies when it is lower.
+const DEFAULT_CHAT_MAX_OUTPUT_TOKENS = 32_768;
+const MAX_CHAT_MAX_OUTPUT_TOKENS = 1_000_000;
+
 // Per-connection statement timeout (ms). Defense-in-depth: kills runaway
 // queries instead of letting them hang a connection indefinitely. 0 disables.
 const DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS = 30000;
@@ -426,6 +450,32 @@ export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
       `Invalid ARCHESTRA_DATABASE_POOL_MAX value "${value}", using default ${DEFAULT_DATABASE_POOL_MAX}`,
     );
     return DEFAULT_DATABASE_POOL_MAX;
+  }
+
+  return parsed;
+};
+
+/** @public — exported for testability */
+export const parseChatMaxOutputTokens = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
+  }
+
+  // Number() (not parseInt) so trailing garbage ("32768abc") and fractions
+  // ("1.5") are rejected rather than silently truncated to a tiny cap.
+  const parsed = Number(value);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < 1 ||
+    parsed > MAX_CHAT_MAX_OUTPUT_TOKENS
+  ) {
+    logger.warn(
+      `Invalid ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS value "${value}", using default ${DEFAULT_CHAT_MAX_OUTPUT_TOKENS}`,
+    );
+    return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
   }
 
   return parsed;
@@ -1099,6 +1149,14 @@ const config = {
       process.env[DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME] ||
       DEFAULT_ADMIN_PASSWORD,
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
+    /**
+     * Prefix for auth cookie names (`<prefix>.session_token` etc.). Browsers
+     * scope cookies to the host without the port, so parallel local instances
+     * on different localhost ports clobber each other's sessions unless each
+     * uses a distinct prefix.
+     */
+    cookiePrefix:
+      process.env.ARCHESTRA_AUTH_COOKIE_PREFIX?.trim() || "archestra",
     disableBasicAuth: process.env.ARCHESTRA_AUTH_DISABLE_BASIC_AUTH === "true",
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
@@ -1111,6 +1169,7 @@ const config = {
      */
     dynamicClientRegistrationEnabled:
       process.env.ARCHESTRA_AUTH_DCR_ENABLED !== "false",
+    devAutoAuthenticateEmail,
   },
   analytics: getAnalyticsConfig(),
   database: {
@@ -1364,6 +1423,9 @@ const config = {
     },
     secretScanEnabled:
       process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED !== "false",
+    maxOutputTokensCeiling: parseChatMaxOutputTokens(
+      process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
+    ),
   },
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
@@ -1604,19 +1666,17 @@ const config = {
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
-    taskWorkerPollIntervalSeconds: Number.parseInt(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS ||
-        "5",
-      10,
+    taskWorkerPollIntervalSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
+      5,
     ),
-    taskWorkerMaxConcurrent: Number.parseInt(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT || "2",
-      10,
+    taskWorkerMaxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT,
+      2,
     ),
-    taskWorkerShutdownTimeoutSeconds: Number.parseInt(
-      process.env
-        .ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS || "30",
-      10,
+    taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
+      30,
     ),
   },
   secretsManager: {
@@ -1661,6 +1721,10 @@ const config = {
   },
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
+  // Instance-wide banner (markdown) shown at the top of the UI. Unlike
+  // maintenanceMode it does not affect request handling.
+  siteNotificationMessage:
+    process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
   auditLog: {
     retentionDays: parseAuditLogRetentionDays(
       process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,

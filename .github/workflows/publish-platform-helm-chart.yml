@@ -44,7 +44,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
@@ -58,13 +58,12 @@ jobs:
       - name: helm package
         env:
           IMAGE_TAG: ${{ inputs.version }}
-          ARCHESTRA_ANALYTICS: disabled
         run: |
-          helm package . --version $IMAGE_TAG --app-version $IMAGE_TAG
+          helm package . --version "$IMAGE_TAG" --app-version "$IMAGE_TAG"
 
       - name: helm push
         if: inputs.push_chart
         env:
           IMAGE_TAG: ${{ inputs.version }}
         run: |
-          helm push archestra-platform-$IMAGE_TAG.tgz oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts
+          helm push "archestra-platform-${IMAGE_TAG}.tgz" oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts

@@ -335,7 +335,10 @@ export function McpAppSection({
       preloadedResource={preloadedResource}
       onResourceStateChange={handleResourceStateChange}
       onSendMessage={onSendMessage}
-      appVersion={appVersion}
+      // Fall back to the resolved app's head version so a render bound only by
+      // appId (e.g. an `__open` launch) still persists diagnostics/screenshots,
+      // which the runtime gates on a non-null version.
+      appVersion={appVersion ?? ownedApp?.latestVersion ?? null}
       reloadNonce={reloadNonce}
     />
   );

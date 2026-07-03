@@ -5,9 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 import { McpAppAuthBanner } from "./mcp-app-auth-banner";
 
 describe("McpAppAuthBanner", () => {
-  it("renders a connect link opening the install URL in a new tab", () => {
+  it("mirrors the SDK error prose with the install URL clickable", () => {
     render(
       <McpAppAuthBanner
+        toolName="slack__slack_search_channels"
         authState={{
           kind: "auth-required",
           catalogName: "Slack",
@@ -20,7 +21,14 @@ describe("McpAppAuthBanner", () => {
       />,
     );
 
-    const link = screen.getByRole("link", { name: /connect slack/i });
+    expect(
+      screen.getByText(
+        /Tool “slack__slack_search_channels” requires authentication/,
+      ),
+    ).toBeInTheDocument();
+    const link = screen.getByRole("link", {
+      name: "http://localhost:3000/mcp/registry?install=cat_slack",
+    });
     expect(link).toHaveAttribute(
       "href",
       "http://localhost:3000/mcp/registry?install=cat_slack",
@@ -29,9 +37,10 @@ describe("McpAppAuthBanner", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  it("renders a re-authenticate link for expired credentials", () => {
+  it("links the reauth URL for expired credentials", () => {
     render(
       <McpAppAuthBanner
+        toolName="github__list_issues"
         authState={{
           kind: "auth-expired",
           catalogName: "GitHub",
@@ -44,7 +53,12 @@ describe("McpAppAuthBanner", () => {
       />,
     );
 
-    const link = screen.getByRole("link", { name: /re-authenticate/i });
+    expect(
+      screen.getByText(/Tool “github__list_issues” requires re-authentication/),
+    ).toBeInTheDocument();
+    const link = screen.getByRole("link", {
+      name: "http://localhost:3000/mcp/registry?reauth=cat_github&server=srv_1",
+    });
     expect(link).toHaveAttribute(
       "href",
       "http://localhost:3000/mcp/registry?reauth=cat_github&server=srv_1",
@@ -56,6 +70,7 @@ describe("McpAppAuthBanner", () => {
     const onDismiss = vi.fn();
     render(
       <McpAppAuthBanner
+        toolName="slack__slack_search_channels"
         authState={{
           kind: "auth-required",
           catalogName: "Slack",

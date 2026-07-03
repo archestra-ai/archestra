@@ -1511,6 +1511,57 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Update Telegram chatops config.
+   * Persists to DB and reinitializes the chatops manager (which reloads from DB).
+   */
+  fastify.put(
+    "/api/chatops/config/telegram",
+    {
+      schema: {
+        operationId: RouteId.UpdateTelegramChatOpsConfig,
+        description: "Update Telegram chatops configuration",
+        tags: ["ChatOps"],
+        body: z.object({
+          enabled: z.boolean().optional(),
+          botToken: z.string().max(256).optional(),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const { enabled, botToken } = request.body;
+
+      // Merge new values with existing DB config (or defaults for first setup)
+      const existing = await ChatOpsConfigModel.getTelegramConfig();
+      const merged = {
+        enabled: enabled ?? existing?.enabled ?? false,
+        botToken: botToken ?? existing?.botToken ?? "",
+      };
+
+      // Validate the bot token by calling getMe
+      if (merged.enabled && merged.botToken) {
+        try {
+          const response = await fetch(
+            `https://api.telegram.org/bot${merged.botToken}/getMe`,
+          );
+          const body = (await response.json()) as { ok?: boolean };
+          if (!body.ok) throw new Error("getMe returned ok=false");
+        } catch {
+          throw new ApiError(
+            400,
+            "Invalid Telegram credentials — could not authenticate with Telegram. Please check your Bot Token.",
+          );
+        }
+      }
+
+      await ChatOpsConfigModel.saveTelegramConfig(merged);
+      await chatOpsManager.reinitialize();
+
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
    * Refresh channel discovery for a provider.
    * Clears the TTL cache, then triggers immediate discovery if the provider
    * supports it (e.g., Slack). Otherwise channels are re-discovered on the
@@ -1592,7 +1643,12 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
     appLevelToken?: string;
     connectionMode?: ChatOpsConnectionMode;
   };
-  dmInfo?: { botUserId?: string; teamId?: string; appId?: string };
+  dmInfo?: {
+    botUserId?: string;
+    teamId?: string;
+    appId?: string;
+    botUsername?: string;
+  };
 }> {
   switch (providerType) {
     case "ms-teams": {
@@ -1635,6 +1691,22 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
                 teamId: provider.getWorkspaceId() ?? undefined,
               }
             : undefined,
+      };
+    }
+    case "telegram": {
+      const provider = chatOpsManager.getTelegramProvider();
+      const dbConfig = await ChatOpsConfigModel.getTelegramConfig();
+      return {
+        id: "telegram",
+        displayName: "Telegram",
+        configured: provider?.isConfigured() ?? false,
+        credentials: {
+          botToken: maskValue(dbConfig?.botToken ?? ""),
+        },
+        // The bot username builds t.me deep links (chat and account linking)
+        dmInfo: provider?.getBotUsername()
+          ? { botUsername: provider.getBotUsername() ?? undefined }
+          : undefined,
       };
     }
   }

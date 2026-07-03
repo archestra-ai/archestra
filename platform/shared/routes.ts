@@ -522,6 +522,7 @@ export const RouteId = {
   CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
+  UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
   ConnectNgrok: "connectNgrok",
   DisconnectNgrok: "disconnectNgrok",
   GetNgrokConfig: "getNgrokConfig",

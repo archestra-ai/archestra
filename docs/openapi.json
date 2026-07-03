@@ -90910,7 +90910,8 @@
                             "type": "string",
                             "enum": [
                               "ms-teams",
-                              "slack"
+                              "slack",
+                              "telegram"
                             ]
                           },
                           "displayName": {
@@ -90960,6 +90961,9 @@
                                 "type": "string"
                               },
                               "appId": {
+                                "type": "string"
+                              },
+                              "botUsername": {
                                 "type": "string"
                               }
                             },
@@ -91233,7 +91237,8 @@
               "type": "string",
               "enum": [
                 "ms-teams",
-                "slack"
+                "slack",
+                "telegram"
               ]
             },
             "in": "query",
@@ -91341,7 +91346,8 @@
                             "type": "string",
                             "enum": [
                               "ms-teams",
-                              "slack"
+                              "slack",
+                              "telegram"
                             ]
                           },
                           "channelId": {
@@ -91792,7 +91798,8 @@
                         "type": "string",
                         "enum": [
                           "ms-teams",
-                          "slack"
+                          "slack",
+                          "telegram"
                         ]
                       },
                       "channelId": {
@@ -92427,7 +92434,8 @@
                       "type": "string",
                       "enum": [
                         "ms-teams",
-                        "slack"
+                        "slack",
+                        "telegram"
                       ]
                     },
                     "channelId": {
@@ -92748,7 +92756,8 @@
                     "type": "string",
                     "enum": [
                       "ms-teams",
-                      "slack"
+                      "slack",
+                      "telegram"
                     ]
                   },
                   "agentId": {
@@ -92786,7 +92795,8 @@
                       "type": "string",
                       "enum": [
                         "ms-teams",
-                        "slack"
+                        "slack",
+                        "telegram"
                       ]
                     },
                     "channelId": {
@@ -94501,6 +94511,289 @@
         }
       }
     },
+    "/api/chatops/config/telegram": {
+      "put": {
+        "operationId": "updateTelegramChatOpsConfig",
+        "tags": [
+          "ChatOps"
+        ],
+        "description": "Update Telegram chatops configuration\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:update`: Modify agent trigger configurations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "botToken": {
+                    "type": "string",
+                    "maxLength": 256
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agentTrigger:update"
+          ]
+        }
+      }
+    },
     "/api/chatops/channel-discovery/refresh": {
       "post": {
         "operationId": "refreshChatOpsChannelDiscovery",
@@ -94519,7 +94812,8 @@
                     "type": "string",
                     "enum": [
                       "ms-teams",
-                      "slack"
+                      "slack",
+                      "telegram"
                     ]
                   }
                 },
@@ -111483,6 +111777,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -112023,6 +112318,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -112984,6 +113280,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -113642,6 +113939,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -114300,6 +114598,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -114840,6 +115139,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -115380,6 +115680,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -117871,6 +118172,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -118411,6 +118713,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -118951,6 +119254,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -119491,6 +119795,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -120031,6 +120336,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -120571,6 +120877,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -121111,6 +121418,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -121640,6 +121948,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -122169,6 +122478,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -122709,6 +123019,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -123249,6 +123560,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -123789,6 +124101,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -126500,6 +126813,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -127040,6 +127354,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -127814,6 +128129,7 @@
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:telegram",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -129041,6 +129357,7 @@
                 "skill:description_generation",
                 "chatops:slack",
                 "chatops:ms-teams",
+                "chatops:telegram",
                 "email",
                 "schedule-trigger",
                 "knowledge:embedding",
@@ -129154,6 +129471,7 @@
                               "skill:description_generation",
                               "chatops:slack",
                               "chatops:ms-teams",
+                              "chatops:telegram",
                               "email",
                               "schedule-trigger",
                               "knowledge:embedding",
@@ -129176,6 +129494,7 @@
                                 "skill:description_generation",
                                 "chatops:slack",
                                 "chatops:ms-teams",
+                                "chatops:telegram",
                                 "email",
                                 "schedule-trigger",
                                 "knowledge:embedding",
@@ -130277,6 +130596,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -130817,6 +131137,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -131778,6 +132099,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -132436,6 +132758,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -133094,6 +133417,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -133634,6 +133958,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -134174,6 +134499,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -136665,6 +136991,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -137205,6 +137532,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -137745,6 +138073,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -138285,6 +138614,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -138825,6 +139155,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -139365,6 +139696,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -139905,6 +140237,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -140434,6 +140767,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -140963,6 +141297,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -141503,6 +141838,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -142043,6 +142379,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -142583,6 +142920,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -145294,6 +145632,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -145834,6 +146173,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -146608,6 +146948,7 @@
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:telegram",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",

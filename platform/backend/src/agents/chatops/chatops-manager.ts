@@ -56,6 +56,7 @@ import {
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
+import TelegramProvider from "./telegram-provider";
 import {
   buildHistorySkippedAttachmentsNote,
   buildSkippedAttachmentsNote,
@@ -70,6 +71,7 @@ import {
 export class ChatOpsManager {
   private msTeamsProvider: MSTeamsProvider | null = null;
   private slackProvider: SlackProvider | null = null;
+  private telegramProvider: TelegramProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private readonly a2aManager: A2AManager;
 
@@ -87,6 +89,10 @@ export class ChatOpsManager {
     return this.slackProvider;
   }
 
+  getTelegramProvider(): TelegramProvider | null {
+    return this.telegramProvider;
+  }
+
   getChatOpsProvider(
     providerType: ChatOpsProviderType,
   ): ChatOpsProvider | null {
@@ -95,6 +101,8 @@ export class ChatOpsManager {
         return this.getMSTeamsProvider();
       case "slack":
         return this.getSlackProvider();
+      case "telegram":
+        return this.getTelegramProvider();
     }
   }
 
@@ -153,7 +161,8 @@ export class ChatOpsManager {
   isAnyProviderConfigured(): boolean {
     return (
       (this.msTeamsProvider?.isConfigured() ?? false) ||
-      (this.slackProvider?.isConfigured() ?? false)
+      (this.slackProvider?.isConfigured() ?? false) ||
+      (this.telegramProvider?.isConfigured() ?? false)
     );
   }
 
@@ -239,7 +248,7 @@ export class ChatOpsManager {
 
     // Load configs from DB (the single source of truth)
     // Errors are caught individually so a single broken config doesn't prevent other providers from initializing
-    const [msTeamsConfig, slackConfig] = await Promise.all([
+    const [msTeamsConfig, slackConfig, telegramConfig] = await Promise.all([
       ChatOpsConfigModel.getMsTeamsConfig().catch((error) => {
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
@@ -251,6 +260,13 @@ export class ChatOpsManager {
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
           "[ChatOps] Failed to load Slack config, skipping",
+        );
+        return null;
+      }),
+      ChatOpsConfigModel.getTelegramConfig().catch((error) => {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "[ChatOps] Failed to load Telegram config, skipping",
         );
         return null;
       }),
@@ -267,6 +283,12 @@ export class ChatOpsManager {
       // access manager capabilities (e.g., getAccessibleChatopsAgents for slash commands)
       this.slackProvider.setEventHandler(this);
     }
+    if (telegramConfig) {
+      this.telegramProvider = new TelegramProvider(telegramConfig);
+      // Telegram delivers everything over long polling, so all events flow
+      // through the event handler (like Slack socket mode)
+      this.telegramProvider.setEventHandler(this);
+    }
 
     if (!this.isAnyProviderConfigured()) {
       return;
@@ -275,6 +297,7 @@ export class ChatOpsManager {
     const providers: { name: string; provider: ChatOpsProvider | null }[] = [
       { name: "MS Teams", provider: this.msTeamsProvider },
       { name: "Slack", provider: this.slackProvider },
+      { name: "Telegram", provider: this.telegramProvider },
     ];
 
     for (const { name, provider } of providers) {
@@ -327,6 +350,10 @@ export class ChatOpsManager {
       await this.slackProvider.cleanup();
       this.slackProvider = null;
     }
+    if (this.telegramProvider) {
+      await this.telegramProvider.cleanup();
+      this.telegramProvider = null;
+    }
     this.stopCleanupInterval();
   }
 
@@ -375,7 +402,9 @@ export class ChatOpsManager {
       logger.warn("[ChatOps] Could not resolve user email");
       await provider.sendReply({
         originalMessage: message,
-        text: "Could not verify your identity. Please ensure your profile has an email configured.",
+        text:
+          provider.identityVerificationFailureText?.() ??
+          "Could not verify your identity. Please ensure your profile has an email configured.",
       });
       return;
     }
@@ -557,7 +586,7 @@ export class ChatOpsManager {
     const organizationId = await getDefaultOrganizationId();
 
     // Create or update binding
-    const isDm = isSlackDmChannel(selection.channelId);
+    const isDm = selection.isDm ?? isSlackDmChannel(selection.channelId);
     const channelName = isDm
       ? `Direct Message - ${senderEmail}`
       : await provider.getChannelName(selection.channelId);
@@ -728,12 +757,7 @@ export class ChatOpsManager {
 
     // Build the full message with context — use cleanedMessageText so
     // the "AgentName >" prefix is stripped from what the LLM sees
-    const providerLabel =
-      provider.providerId === "slack"
-        ? "Slack"
-        : provider.providerId === "ms-teams"
-          ? "MS Teams"
-          : provider.providerId;
+    const providerLabel = CHATOPS_PROVIDER_LABELS[provider.providerId];
     const threadIdForPrefix = message.threadId ?? message.messageId;
     let systemPrefix = `(${providerLabel} conversation, thread id: ${threadIdForPrefix})`;
     if (provider.providerId === "slack") {
@@ -1422,6 +1446,7 @@ export class ChatOpsManager {
   private async seedConfigFromEnvVars(): Promise<void> {
     await this.seedMsTeamsConfigFromEnvVars();
     await this.seedSlackConfigFromEnvVars();
+    await this.seedTelegramConfigFromEnvVars();
   }
 
   private async seedMsTeamsConfigFromEnvVars(): Promise<void> {
@@ -1490,6 +1515,27 @@ export class ChatOpsManager {
       logger.error(
         { error: errorMessage(error) },
         "[ChatOps] Failed to seed Slack config from env vars",
+      );
+    }
+  }
+
+  private async seedTelegramConfigFromEnvVars(): Promise<void> {
+    try {
+      const existing = await ChatOpsConfigModel.getTelegramConfig();
+      if (existing) return;
+
+      const botToken = process.env.ARCHESTRA_CHATOPS_TELEGRAM_BOT_TOKEN || "";
+      if (!botToken) return;
+
+      await ChatOpsConfigModel.saveTelegramConfig({
+        enabled: process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED === "true",
+        botToken,
+      });
+      logger.info("[ChatOps] Seeded Telegram config from env vars to DB");
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to seed Telegram config from env vars",
       );
     }
   }
@@ -1818,7 +1864,7 @@ export class ChatOpsManager {
       ],
     });
     const source: InteractionSource =
-      provider.providerId === "slack" ? "chatops:slack" : "chatops:ms-teams";
+      CHATOPS_PROVIDER_SOURCES[provider.providerId];
     const systemParams = {
       sessionId,
       source,
@@ -2010,10 +2056,7 @@ export class ChatOpsManager {
             decision.channelId,
             originalMessage.threadId,
           ),
-          source:
-            provider.providerId === "slack"
-              ? "chatops:slack"
-              : "chatops:ms-teams",
+          source: CHATOPS_PROVIDER_SOURCES[provider.providerId],
         },
       });
 
@@ -2063,6 +2106,21 @@ async function getDefaultOrganizationId(): Promise<string> {
   }
   return org.id;
 }
+
+/** Human-readable provider names for LLM context prefixes. */
+const CHATOPS_PROVIDER_LABELS: Record<ChatOpsProviderType, string> = {
+  slack: "Slack",
+  "ms-teams": "MS Teams",
+  telegram: "Telegram",
+};
+
+/** Interaction-log `source` value per provider. */
+const CHATOPS_PROVIDER_SOURCES: Record<ChatOpsProviderType, InteractionSource> =
+  {
+    slack: "chatops:slack",
+    "ms-teams": "chatops:ms-teams",
+    telegram: "chatops:telegram",
+  };
 
 /**
  * Build a deterministic session ID for chatops messages.

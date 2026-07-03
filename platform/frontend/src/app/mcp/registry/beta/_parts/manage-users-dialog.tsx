@@ -297,9 +297,13 @@ export function ManageUsersContent({
 
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;
-    } catch {
+    } catch (error) {
       setOAuthMcpServerId(null);
-      toast.error("Failed to initiate re-authentication");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to initiate re-authentication",
+      );
     }
   };
 

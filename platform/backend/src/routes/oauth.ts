@@ -787,172 +787,195 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body: { catalogId }, organizationId }, reply) => {
-      // Get catalog item to retrieve OAuth configuration (with resolved secrets for runtime)
-      const catalogItem =
-        await InternalMcpCatalogModel.findByIdWithResolvedSecrets(catalogId);
+      try {
+        // Get catalog item to retrieve OAuth configuration (with resolved secrets for runtime)
+        const catalogItem =
+          await InternalMcpCatalogModel.findByIdWithResolvedSecrets(catalogId);
 
-      if (!catalogItem) {
-        throw new ApiError(404, "Catalog item not found");
-      }
-
-      if (!catalogItem.oauthConfig) {
-        throw new ApiError(400, "This server does not support OAuth");
-      }
-
-      const oauthConfig = catalogItem.oauthConfig;
-
-      // Use the redirect URI stored in the catalog (set by frontend based on window.location.origin)
-      // This ensures the redirect URI matches where the user initiated the OAuth flow from
-      const redirectUri = oauthConfig.redirect_uris[0];
-      if (isSsoCallbackRedirectUri(redirectUri)) {
-        throw new ApiError(
-          400,
-          "MCP OAuth redirect URI must use /oauth-callback, not the SSO callback URL.",
-        );
-      }
-
-      let clientId = oauthConfig.client_id;
-      let clientSecret = oauthConfig.client_secret;
-
-      logger.info(
-        {
-          catalogId: catalogItem.id,
-          hasClientSecret: !!clientSecret,
-        },
-        "OAuth init - using client_secret",
-      );
-
-      // Discover actual scopes from the OAuth server (like desktop app does)
-      const { configuredScopes, discoveredScopes, scopesToUse } =
-        await resolveOAuthScopesForAuthorization({
-          oauthConfig,
-        });
-
-      fastify.log.info(
-        {
-          configured: configuredScopes,
-          discovered: discoveredScopes,
-          used: scopesToUse,
-        },
-        "Resolved OAuth scopes",
-      );
-
-      // Check if dynamic registration is needed
-      if (!clientId) {
-        fastify.log.info(
-          "Client ID is empty, checking for cached credentials or performing dynamic registration",
-        );
-      }
-
-      // Discover authorization server metadata to get the correct authorization endpoint
-      let authorizationEndpoint: string;
-      let registrationEndpoint: string | undefined;
-
-      // For proxy servers, skip discovery and use the MCP server URL directly
-      if (oauthConfig.requires_proxy) {
-        fastify.log.info(
-          { serverUrl: oauthConfig.server_url },
-          "Server requires proxy, using MCP server URL as OAuth server",
-        );
-        // GitHub Copilot MCP uses /mcp/oauth/authorize
-        authorizationEndpoint = `${oauthConfig.server_url}/oauth/authorize`;
-        // Proxy servers typically don't support dynamic registration
-        registrationEndpoint = undefined;
-      } else {
-        try {
-          const endpoints = await discoverOAuthEndpoints(
-            oauthConfig,
-            fastify.log,
-          );
-          authorizationEndpoint = endpoints.authorizationEndpoint;
-          registrationEndpoint = endpoints.registrationEndpoint;
-        } catch (error) {
-          fastify.log.error({ error }, "Authorization server discovery failed");
-          throw new ApiError(500, "Failed to discover OAuth endpoints");
+        if (!catalogItem) {
+          throw new ApiError(404, "Catalog item not found");
         }
-      }
 
-      // If we don't have client credentials and registration endpoint is available, try dynamic registration
-      let registrationResult: Record<string, unknown> | undefined;
-      if (!clientId && registrationEndpoint) {
-        try {
-          fastify.log.info(
-            { registrationEndpoint },
-            "Attempting dynamic client registration",
+        if (!catalogItem.oauthConfig) {
+          throw new ApiError(400, "This server does not support OAuth");
+        }
+
+        const oauthConfig = catalogItem.oauthConfig;
+
+        // Use the redirect URI stored in the catalog (set by frontend based on window.location.origin)
+        // This ensures the redirect URI matches where the user initiated the OAuth flow from
+        const redirectUri = oauthConfig.redirect_uris[0];
+        if (isSsoCallbackRedirectUri(redirectUri)) {
+          throw new ApiError(
+            400,
+            "MCP OAuth redirect URI must use /oauth-callback, not the SSO callback URL.",
           );
-          registrationResult = await registerOAuthClient(registrationEndpoint, {
-            client_name: `${await resolveOAuthClientBrandName(organizationId)} - ${catalogItem.name}`,
-            redirect_uris: [redirectUri],
-            grant_types: ["authorization_code", "refresh_token"],
-            response_types: ["code"],
-            scope: scopesToUse.join(" "),
+        }
+
+        let clientId = oauthConfig.client_id;
+        let clientSecret = oauthConfig.client_secret;
+
+        logger.info(
+          {
+            catalogId: catalogItem.id,
+            hasClientSecret: !!clientSecret,
+          },
+          "OAuth init - using client_secret",
+        );
+
+        // Discover actual scopes from the OAuth server (like desktop app does)
+        const { configuredScopes, discoveredScopes, scopesToUse } =
+          await resolveOAuthScopesForAuthorization({
+            oauthConfig,
           });
 
-          clientId = registrationResult?.client_id as string;
-          clientSecret = registrationResult?.client_secret as
-            | string
-            | undefined;
-
-          fastify.log.info(
-            { client_id: clientId },
-            "Dynamic registration successful",
-          );
-        } catch (error) {
-          fastify.log.warn(
-            {
-              error: error instanceof Error ? error.message : String(error),
-              stack: error instanceof Error ? error.stack : undefined,
-            },
-            "Dynamic registration failed, continuing with default client_id",
-          );
-          // Continue with default client_id if registration fails
-        }
-      }
-
-      // Ensure we have a usable client ID (either static or from dynamic registration)
-      if (!clientId) {
-        throw new ApiError(
-          400,
-          "No client ID available. Configure a client_id in the catalog item or ensure the OAuth server supports dynamic client registration.",
+        fastify.log.info(
+          {
+            configured: configuredScopes,
+            discovered: discoveredScopes,
+            used: scopesToUse,
+          },
+          "Resolved OAuth scopes",
         );
+
+        // Check if dynamic registration is needed
+        if (!clientId) {
+          fastify.log.info(
+            "Client ID is empty, checking for cached credentials or performing dynamic registration",
+          );
+        }
+
+        // Discover authorization server metadata to get the correct authorization endpoint
+        let authorizationEndpoint: string;
+        let registrationEndpoint: string | undefined;
+
+        // For proxy servers, skip discovery and use the MCP server URL directly
+        if (oauthConfig.requires_proxy) {
+          fastify.log.info(
+            { serverUrl: oauthConfig.server_url },
+            "Server requires proxy, using MCP server URL as OAuth server",
+          );
+          // GitHub Copilot MCP uses /mcp/oauth/authorize
+          authorizationEndpoint = `${oauthConfig.server_url}/oauth/authorize`;
+          // Proxy servers typically don't support dynamic registration
+          registrationEndpoint = undefined;
+        } else {
+          try {
+            const endpoints = await discoverOAuthEndpoints(
+              oauthConfig,
+              fastify.log,
+            );
+            authorizationEndpoint = endpoints.authorizationEndpoint;
+            registrationEndpoint = endpoints.registrationEndpoint;
+          } catch (error) {
+            fastify.log.error(
+              { error },
+              "Authorization server discovery failed",
+            );
+            throw new ApiError(500, "Failed to discover OAuth endpoints");
+          }
+        }
+
+        // If we don't have client credentials and registration endpoint is available, try dynamic registration
+        let registrationResult: Record<string, unknown> | undefined;
+        if (!clientId && registrationEndpoint) {
+          try {
+            fastify.log.info(
+              { registrationEndpoint },
+              "Attempting dynamic client registration",
+            );
+            registrationResult = await registerOAuthClient(
+              registrationEndpoint,
+              {
+                client_name: `${await resolveOAuthClientBrandName(organizationId)} - ${catalogItem.name}`,
+                redirect_uris: [redirectUri],
+                grant_types: ["authorization_code", "refresh_token"],
+                response_types: ["code"],
+                scope: scopesToUse.join(" "),
+              },
+            );
+
+            clientId = registrationResult?.client_id as string;
+            clientSecret = registrationResult?.client_secret as
+              | string
+              | undefined;
+
+            fastify.log.info(
+              { client_id: clientId },
+              "Dynamic registration successful",
+            );
+          } catch (error) {
+            fastify.log.warn(
+              {
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+              },
+              "Dynamic registration failed, continuing with default client_id",
+            );
+            // Continue with default client_id if registration fails
+          }
+        }
+
+        // Ensure we have a usable client ID (either static or from dynamic registration)
+        if (!clientId) {
+          throw new ApiError(
+            400,
+            "No client ID available. Configure a client_id in the catalog item or ensure the OAuth server supports dynamic client registration.",
+          );
+        }
+
+        // Generate PKCE parameters
+        const codeVerifier = generateCodeVerifier();
+        const codeChallenge = generateCodeChallenge(codeVerifier);
+        const state = randomBytes(16).toString("base64url");
+
+        // Store state temporarily (will be used in callback)
+        await setOAuthState(state, {
+          catalogId,
+          codeVerifier,
+          clientId,
+          clientSecret,
+          registrationResult,
+        });
+
+        // Build authorization URL using the discovered authorization endpoint
+        const authUrl = new URL(authorizationEndpoint);
+        authUrl.searchParams.set("response_type", "code");
+        authUrl.searchParams.set("client_id", clientId);
+        authUrl.searchParams.set("code_challenge", codeChallenge);
+        authUrl.searchParams.set("code_challenge_method", "S256");
+        authUrl.searchParams.set("state", state);
+        authUrl.searchParams.set("scope", scopesToUse.join(" "));
+        authUrl.searchParams.set("redirect_uri", redirectUri);
+
+        // RFC 8707: Include resource parameter for audience binding
+        // Required by MCP servers like Windmill that need to know which
+        // protected resource the token is intended for
+        const oauthResource = getOAuthResource(oauthConfig);
+        if (oauthResource) {
+          authUrl.searchParams.set("resource", oauthResource);
+        }
+
+        return reply.send({
+          authorizationUrl: authUrl.toString(),
+          state,
+        });
+      } catch (error) {
+        // Handled client errors (bad/missing catalog config, no client id, etc.)
+        // are formatted by the centralized error handler but filtered from Sentry,
+        // so surface them here with the catalogId for triage.
+        if (
+          error instanceof ApiError &&
+          error.statusCode >= 400 &&
+          error.statusCode < 500
+        ) {
+          logger.warn(
+            { catalogId, statusCode: error.statusCode, reason: error.message },
+            "OAuth initiate rejected (client error)",
+          );
+        }
+        throw error;
       }
-
-      // Generate PKCE parameters
-      const codeVerifier = generateCodeVerifier();
-      const codeChallenge = generateCodeChallenge(codeVerifier);
-      const state = randomBytes(16).toString("base64url");
-
-      // Store state temporarily (will be used in callback)
-      await setOAuthState(state, {
-        catalogId,
-        codeVerifier,
-        clientId,
-        clientSecret,
-        registrationResult,
-      });
-
-      // Build authorization URL using the discovered authorization endpoint
-      const authUrl = new URL(authorizationEndpoint);
-      authUrl.searchParams.set("response_type", "code");
-      authUrl.searchParams.set("client_id", clientId);
-      authUrl.searchParams.set("code_challenge", codeChallenge);
-      authUrl.searchParams.set("code_challenge_method", "S256");
-      authUrl.searchParams.set("state", state);
-      authUrl.searchParams.set("scope", scopesToUse.join(" "));
-      authUrl.searchParams.set("redirect_uri", redirectUri);
-
-      // RFC 8707: Include resource parameter for audience binding
-      // Required by MCP servers like Windmill that need to know which
-      // protected resource the token is intended for
-      const oauthResource = getOAuthResource(oauthConfig);
-      if (oauthResource) {
-        authUrl.searchParams.set("resource", oauthResource);
-      }
-
-      return reply.send({
-        authorizationUrl: authUrl.toString(),
-        state,
-      });
     },
   );
 

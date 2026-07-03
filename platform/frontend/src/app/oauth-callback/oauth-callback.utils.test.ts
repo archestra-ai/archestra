@@ -1,4 +1,40 @@
-import { getOAuthCallbackErrorState } from "./oauth-callback.utils";
+import {
+  getOAuthCallbackErrorState,
+  toInternalReturnPath,
+} from "./oauth-callback.utils";
+
+describe("toInternalReturnPath", () => {
+  const origin = "https://app.example.com";
+
+  test("returns path, query, and hash for a same-origin URL", () => {
+    expect(
+      toInternalReturnPath(
+        "https://app.example.com/agents/123?tab=tools#section",
+        origin,
+      ),
+    ).toBe("/agents/123?tab=tools#section");
+  });
+
+  test("resolves a relative path against the origin", () => {
+    expect(toInternalReturnPath("/mcp/registry/beta?x=1", origin)).toBe(
+      "/mcp/registry/beta?x=1",
+    );
+  });
+
+  test("returns null for a cross-origin URL", () => {
+    expect(
+      toInternalReturnPath("https://evil.example.com/agents", origin),
+    ).toBe(null);
+  });
+
+  test("returns null for javascript: URLs", () => {
+    expect(toInternalReturnPath("javascript:alert(1)", origin)).toBe(null);
+  });
+
+  test("returns null when no return URL is stored", () => {
+    expect(toInternalReturnPath(null, origin)).toBe(null);
+  });
+});
 
 describe("getOAuthCallbackErrorState", () => {
   test("returns null when code and state are present", () => {

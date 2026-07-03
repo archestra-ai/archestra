@@ -38,11 +38,15 @@ import {
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
 import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
+import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
+import {
+  evaluateSingleMcpToolInvocationPolicy,
+  policyBlockToToolError,
+} from "@/guardrails/tool-invocation";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -478,10 +482,52 @@ export async function createAgentServer(
             }),
         });
         if (policyBlock) {
-          return {
-            content: [{ type: "text", text: policyBlock.refusalMessage }],
+          // Carry the machine-readable policy_denied error alongside the prose
+          // (in _meta + structuredContent) so MCP clients render the block
+          // structurally instead of scraping the refusal text.
+          const blockedResult = structuredToolErrorResult({
+            error: policyBlockToToolError(policyBlock),
+            text: policyBlock.refusalMessage,
+          });
+
+          // Blocked calls are still tool calls: report metrics and persist them
+          // (isError) so they show up in the MCP gateway logs and dashboards
+          // rather than vanishing before any recording.
+          const durationSeconds = (Date.now() - startTime) / 1000;
+          metrics.mcp.reportMcpToolCall({
+            agentId: agent.id,
+            agentName: agent.name,
+            agentType: agent.agentType ?? null,
+            mcpServerName,
+            toolName: name,
+            durationSeconds,
             isError: true,
-          };
+            agentLabels: agent.labels,
+            requestSizeBytes: args ? JSON.stringify(args).length : undefined,
+          });
+
+          try {
+            await McpToolCallModel.create({
+              agentId,
+              mcpServerName,
+              method: "tools/call",
+              toolCall: {
+                id: `blocked-${Date.now()}`,
+                name,
+                arguments: args || {},
+              },
+              toolResult: blockedResult,
+              userId: tokenAuth?.userId ?? null,
+              authMethod: deriveAuthMethod(tokenAuth) ?? null,
+            });
+          } catch (dbError) {
+            logger.info(
+              { err: dbError },
+              "Failed to persist blocked tool call",
+            );
+          }
+
+          return blockedResult;
         }
 
         if (isArchestraTool || isAgentDelegationTool) {

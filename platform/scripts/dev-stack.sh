@@ -58,6 +58,30 @@ require_platform_cwd() {
   fi
 }
 
+# The backend lazily loads three NAPI addons (@archestra/app-runtime-rs,
+# sandbox-rs, image-rs) whose compiled `.node` binaries are gitignored and are
+# never built by `pnpm install` (install scripts are disabled repo-wide), so a
+# fresh worktree fails with "Unable to load @archestra/<crate> for <platform>"
+# the first time an app/sandbox/image feature is touched. Build the missing
+# ones before launching Tilt. Skip crates whose binary already exists — a
+# stale-but-present binary is rebuilt manually via `pnpm --filter <pkg> build`
+# — so restarts stay fast.
+ensure_native_addons() {
+  local platform_dir="$1" crate filters=()
+  for crate in app-runtime-rs sandbox-rs image-rs; do
+    if ! ls "$platform_dir/archestra-rs/$crate"/*.node >/dev/null 2>&1; then
+      filters+=("--filter" "@archestra/$crate")
+    fi
+  done
+  [ ${#filters[@]} -eq 0 ] && return 0
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "⚠ Rust toolchain not found; skipping native addon build. App/sandbox/image features will fail until you install Rust and run: pnpm --filter '@archestra/*-rs' build" >&2
+    return 0
+  fi
+  echo "→ Building missing native addons (first build takes a few minutes): ${filters[*]}" >&2
+  (cd "$platform_dir" && pnpm "${filters[@]}" build)
+}
+
 cmd_up() {
   local detach=false namespace=""
   while [ $# -gt 0 ]; do
@@ -153,6 +177,9 @@ EOF
   # ARCHESTRA_INTERNAL_API_BASE_URL it mirrors: Tiltfile.dev's sync only fills
   # NEXT_PUBLIC_* when the file doesn't already set it, so leaving an inherited
   # value in place would point the parallel frontend at the main backend.
+  # ARCHESTRA_AUTH_COOKIE_PREFIX gets the namespace so this stack's session
+  # cookies don't clobber other localhost stacks' (browsers ignore the port
+  # when scoping cookies, and every stack otherwise uses the same names).
   ARCHESTRA_DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:${pg_port}/archestra_dev?schema=public" \
   ARCHESTRA_INTERNAL_API_BASE_URL="http://localhost:${backend_port}" \
   NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL="http://localhost:${backend_port}" \
@@ -165,6 +192,7 @@ EOF
   ARCHESTRA_FRONTEND_PORT="$frontend_port" \
   ARCHESTRA_FRONTEND_INT_TESTS_PORT="$int_tests_port" \
   ARCHESTRA_TILT_PORT="$tilt_port" \
+  ARCHESTRA_AUTH_COOKIE_PREFIX="$namespace" \
   python3 - "$env_file" <<'PYEOF'
 import os, re, sys
 keys = [
@@ -180,6 +208,7 @@ keys = [
   "ARCHESTRA_FRONTEND_PORT",
   "ARCHESTRA_FRONTEND_INT_TESTS_PORT",
   "ARCHESTRA_TILT_PORT",
+  "ARCHESTRA_AUTH_COOKIE_PREFIX",
 ]
 overrides = {k: os.environ[k] for k in keys}
 path = sys.argv[1]
@@ -221,6 +250,8 @@ PYEOF
 ================================================================
 
 EOF
+
+  ensure_native_addons "$platform_dir"
 
   if [ "$detach" = "true" ]; then
     local log_file="$worktree_dir/.dev-stack.log"

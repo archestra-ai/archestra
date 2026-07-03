@@ -366,6 +366,16 @@ class CohereStreamAdapter
   readonly provider = "cohere" as const;
   readonly state: StreamAccumulatorState;
   private currentToolCallIndex = -1;
+  // Highest content index forwarded to the client, so an appended refusal block
+  // does not reuse an index the client already saw.
+  private maxStreamedBlockIndex = -1;
+  // Set to the refusal text when the streamed response was replaced by a policy
+  // refusal, so formatEndSSE finishes as COMPLETE (not the upstream TOOL_CALL)
+  // and toProviderResponse persists the refusal instead of the blocked calls.
+  private replacedText: string | null = null;
+  private get responseReplacedWithText(): boolean {
+    return this.replacedText !== null;
+  }
 
   constructor() {
     this.state = {
@@ -410,6 +420,10 @@ class CohereStreamAdapter
         // Pass through raw Cohere chunk - @ai-sdk/cohere expects native format
         // The SDK schema expects: { type, index, delta: { message: { content: {...} } } }
         // Cohere API sends this structure natively - do not modify
+        this.maxStreamedBlockIndex = Math.max(
+          this.maxStreamedBlockIndex,
+          get(chunk, "index", 0) as number,
+        );
         sseData = formatSSE(chunk);
         break;
       }
@@ -542,10 +556,10 @@ class CohereStreamAdapter
             (get(usage, "billed_units.output_tokens", 0) as number),
         };
         isFinal = true;
-        // Do NOT send message-end yet if you want to inspect or modify final state
-        // But for Cohere we generally pass it through unless we need policy check refutation
-        // The Proxy Handler handles policy checks on completion.
-        sseData = formatSSE(chunk);
+        // Withhold the upstream message-end: it carries the tool-call finish
+        // reason and would reach the client before the proxy evaluates tool
+        // invocation policies. formatEndSSE emits the single message-end after
+        // evaluation (COMPLETE when a refusal replaced the response).
         break;
       }
 
@@ -600,11 +614,13 @@ class CohereStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): string[] {
+    this.replacedText = text;
+    const index = this.maxStreamedBlockIndex + 1;
     // Format must match Cohere API stream format for @ai-sdk/cohere
     return [
       `data: ${JSON.stringify({
         type: "content-start",
-        index: 0,
+        index,
         delta: {
           message: {
             content: {
@@ -616,7 +632,7 @@ class CohereStreamAdapter
       })}\n\n`,
       `data: ${JSON.stringify({
         type: "content-delta",
-        index: 0,
+        index,
         delta: {
           message: {
             content: {
@@ -627,7 +643,7 @@ class CohereStreamAdapter
       })}\n\n`,
       `data: ${JSON.stringify({
         type: "content-end",
-        index: 0,
+        index,
       })}\n\n`,
     ];
   }
@@ -636,7 +652,9 @@ class CohereStreamAdapter
     const event = {
       type: "message-end",
       delta: {
-        finish_reason: this.state.stopReason ?? "COMPLETE",
+        finish_reason: this.responseReplacedWithText
+          ? "COMPLETE"
+          : (this.state.stopReason ?? "COMPLETE"),
         usage: {
           tokens: {
             input_tokens: this.state.usage?.inputTokens ?? 0,
@@ -649,6 +667,24 @@ class CohereStreamAdapter
   }
 
   toProviderResponse(): CohereResponse {
+    if (this.replacedText !== null) {
+      return {
+        id: this.state.responseId,
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: this.replacedText }],
+          tool_calls: undefined,
+        },
+        finish_reason: "COMPLETE",
+        usage: {
+          tokens: {
+            input_tokens: this.state.usage?.inputTokens ?? 0,
+            output_tokens: this.state.usage?.outputTokens ?? 0,
+          },
+        },
+      };
+    }
+
     const content: CohereResponse["message"]["content"] = [];
 
     if (this.state.text) {

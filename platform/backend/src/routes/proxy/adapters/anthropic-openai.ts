@@ -163,10 +163,16 @@ class AnthropicOpenaiStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): string[] {
+    // Mark the inner adapter as refusal-replaced (side effect only; its
+    // Anthropic-format events are unused here). This makes inner.stop_reason
+    // resolve to end_turn below and inner.toProviderResponse() persist the
+    // refusal rather than the blocked tool calls. The finish reason is emitted
+    // once, by formatEndSSE — this chunk must not also carry one.
+    this.inner.formatCompleteTextSSE(text);
     return [
       this.formatChunk({
         delta: { role: "assistant", content: text },
-        finishReason: "stop",
+        finishReason: null,
       }),
     ];
   }

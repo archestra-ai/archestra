@@ -1084,8 +1084,12 @@ export function InternalMCPCatalog({
 
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;
-    } catch {
-      toast.error("Failed to initiate OAuth flow");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to initiate OAuth flow",
+      );
     }
   };
 

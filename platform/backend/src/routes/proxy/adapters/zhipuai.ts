@@ -588,6 +588,13 @@ class ZhipuaiStreamAdapter
   readonly provider = "zhipuai" as const;
   readonly state: StreamAccumulatorState;
   private currentToolCallIndices = new Map<number, number>();
+  // Set to the refusal text when the streamed response was replaced by a policy
+  // refusal, so formatEndSSE finishes as "stop" (not the upstream "tool_calls")
+  // and toProviderResponse persists the refusal rather than the blocked calls.
+  private replacedText: string | null = null;
+  private get responseReplacedWithText(): boolean {
+    return this.replacedText !== null;
+  }
 
   constructor() {
     this.state = {
@@ -634,16 +641,13 @@ class ZhipuaiStreamAdapter
       this.state.text += delta.content;
     }
 
-    // Only forward chunks with meaningful content updates to prevent empty deltas
-    // from causing the frontend to show loading state
-    // Check for any actual content: text, reasoning, tool calls, or role assignment
-    const hasContent =
-      delta.content ||
-      delta.reasoning_content ||
-      delta.tool_calls ||
-      delta.role;
-
-    if (hasContent) {
+    // Forward only chunks carrying streamable text/reasoning, and never a chunk
+    // that carries tool calls: those are buffered below so a blocking policy can
+    // discard them. Streaming them live (as the old `hasContent` check did, via
+    // `delta.tool_calls`) exposed blocked tool calls to the client before policy
+    // evaluation and defeated the handler's buffering.
+    const hasStreamableContent = delta.content || delta.reasoning_content;
+    if (hasStreamableContent && !delta.tool_calls) {
       sseData = `data: ${JSON.stringify(chunk)}\n\n`;
     }
 
@@ -729,6 +733,7 @@ class ZhipuaiStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): string[] {
+    this.replacedText = text;
     const chunk: ZhipuaiStreamChunk = {
       id: this.state.responseId || `chatcmpl-${Date.now()}`,
       object: "chat.completion.chunk",
@@ -758,7 +763,9 @@ class ZhipuaiStreamAdapter
         {
           index: 0,
           delta: {},
-          finish_reason: this.state.stopReason ?? "stop",
+          finish_reason: this.responseReplacedWithText
+            ? "stop"
+            : (this.state.stopReason ?? "stop"),
         },
       ],
     };
@@ -767,16 +774,16 @@ class ZhipuaiStreamAdapter
 
   toProviderResponse(): ZhipuaiResponse {
     const toolCalls =
-      this.state.toolCalls.length > 0
-        ? this.state.toolCalls.map((tc) => ({
+      this.responseReplacedWithText || this.state.toolCalls.length === 0
+        ? undefined
+        : this.state.toolCalls.map((tc) => ({
             id: tc.id,
             type: "function" as const,
             function: {
               name: tc.name,
               arguments: tc.arguments,
             },
-          }))
-        : undefined;
+          }));
 
     return {
       id: this.state.responseId,
@@ -788,12 +795,13 @@ class ZhipuaiStreamAdapter
           index: 0,
           message: {
             role: "assistant",
-            content: this.state.text || null,
+            content: this.replacedText ?? (this.state.text || null),
             tool_calls: toolCalls,
           },
           logprobs: null,
-          finish_reason:
-            (this.state.stopReason as Zhipuai.Types.FinishReason) ?? "stop",
+          finish_reason: this.responseReplacedWithText
+            ? "stop"
+            : ((this.state.stopReason as Zhipuai.Types.FinishReason) ?? "stop"),
         },
       ],
       usage: {

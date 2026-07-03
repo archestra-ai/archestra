@@ -296,52 +296,52 @@ const AgentToolsEditorContent = forwardRef<
   const sandboxEnabled = useFeature("sandbox") === true;
   const projectsEnabled = useFeature("projectsEnabled") === true;
 
-  // Pre-select the creation-default Archestra tools when creating a new agent
-  // (no agentId). The set is composed by the shared
-  // getCreationDefaultArchestraToolShortNames from the org/deployment feature
-  // flags, so the form pre-selects exactly what AgentModel.create will assign
-  // server-side.
-  useEffect(() => {
-    if (agentId) return; // Only for new agent creation
-    if (defaultToolsInitializedRef.current) return; // Only initialize once
-
+  // The creation-default built-in set, composed by the shared
+  // getCreationDefaultArchestraToolShortNames from the same org/deployment
+  // flags AgentModel.create reads server-side. Null while editing an existing
+  // agent. Used twice: to pre-select the new-agent form, and as the
+  // saveChanges baseline for the built-in catalog right after create.
+  const creationDefaultTools = useMemo(() => {
+    if (agentId) return null; // Only for new agent creation
     const toolsByCatalogIndex = toolCountQueries.map(
       (q) => (q?.data as CatalogTool[] | undefined) ?? undefined,
     );
-    const result = getDefaultArchestraToolIds(
-      catalogItems,
-      toolsByCatalogIndex,
-      {
-        skillsEnabled: skillToolsEnabled,
-        appsEnabled,
-        sandboxEnabled,
-        projectsEnabled,
-      },
-    );
-    if (!result) return;
-
-    const archestraCatalog = catalogItems[result.catalogIndex];
-    if (!archestraCatalog) return;
-
-    defaultToolsInitializedRef.current = true;
-    pendingChangesRef.current.set(ARCHESTRA_MCP_CATALOG_ID, {
-      selectedToolIds: result.toolIds,
-      credentialSourceId: null,
-      catalogItem: archestraCatalog,
-      selectAll: false,
+    return getDefaultArchestraToolIds(catalogItems, toolsByCatalogIndex, {
+      skillsEnabled: skillToolsEnabled,
+      appsEnabled,
+      sandboxEnabled,
+      projectsEnabled,
     });
-    onSelectedCountChange?.(result.toolIds.size);
-    setPendingVersion((v) => v + 1);
   }, [
     agentId,
     catalogItems,
     toolCountQueries,
-    onSelectedCountChange,
     skillToolsEnabled,
     appsEnabled,
     sandboxEnabled,
     projectsEnabled,
   ]);
+
+  // Pre-select the creation-default Archestra tools when creating a new agent
+  // (no agentId), so the form shows exactly what AgentModel.create will assign
+  // server-side.
+  useEffect(() => {
+    if (defaultToolsInitializedRef.current) return; // Only initialize once
+    if (!creationDefaultTools) return;
+
+    const archestraCatalog = catalogItems[creationDefaultTools.catalogIndex];
+    if (!archestraCatalog) return;
+
+    defaultToolsInitializedRef.current = true;
+    pendingChangesRef.current.set(ARCHESTRA_MCP_CATALOG_ID, {
+      selectedToolIds: creationDefaultTools.toolIds,
+      credentialSourceId: null,
+      catalogItem: archestraCatalog,
+      selectAll: false,
+    });
+    onSelectedCountChange?.(creationDefaultTools.toolIds.size);
+    setPendingVersion((v) => v + 1);
+  }, [creationDefaultTools, catalogItems, onSelectedCountChange]);
 
   // Calculate total selected count from pending changes
   const calculateTotalSelectedCount = useCallback(() => {
@@ -387,6 +387,17 @@ const AgentToolsEditorContent = forwardRef<
         const currentAssignedIds = new Set(
           currentAssigned.map((at) => at.tool.id),
         );
+        // A just-created agent already has the creation-default built-ins:
+        // AgentModel.create auto-assigned them, but the assigned-tools query
+        // still reflects the pre-create (empty) state. Diff the built-in
+        // catalog against that set so unchecking a pre-selected default
+        // produces a real unassign, and defaults left checked are not
+        // redundantly re-assigned.
+        if (!agentId && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
+          for (const id of creationDefaultTools?.toolIds ?? []) {
+            currentAssignedIds.add(id);
+          }
+        }
 
         const toAdd = [...changes.selectedToolIds].filter(
           (id) => !currentAssignedIds.has(id),

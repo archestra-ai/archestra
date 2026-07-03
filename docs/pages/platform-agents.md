@@ -40,7 +40,7 @@ See [MCP Gateway - Load Tools When Needed](/docs/platform-mcp-gateway#load-tools
 
 ### Excluding Servers and Tools
 
-**All** can be too broad: it gives the agent everything the calling user can reach. To carve out exceptions, each agent has an exclusion list — edit it under **Exclude servers or tools** on the **All** tab of the agent dialog (or via `GET`/`PUT /api/agents/:id/tool-exclusions`), excluding whole MCP servers or individual tools. Use this for an agent that should see everything except, say, a payments server or a single destructive tool.
+**All** can be too broad: it gives the agent everything the calling user can reach. To carve out exceptions, each agent has an exclusion list — edit it under **Disabled tools** on the **All** tab of the agent dialog (or via `GET`/`PUT /api/agents/:id/tool-exclusions`), excluding whole MCP servers or individual tools. Use this for an agent that should see everything except, say, a payments server or a single destructive tool.
 
 While the tools setting is **All**, exclusions cover the agent's entire surface:
 

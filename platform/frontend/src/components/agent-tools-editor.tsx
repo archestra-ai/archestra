@@ -24,6 +24,7 @@ import {
   AssignmentCombobox,
   type AssignmentComboboxItem,
 } from "@/components/ui/assignment-combobox";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -1068,6 +1069,13 @@ export interface ToolChecklistProps {
   tools: CatalogTool[];
   selectedToolIds: Set<string>;
   onSelectionChange: (selectedIds: Set<string>) => void;
+  /**
+   * What a checked row means. "assign" (default) keeps the neutral
+   * selection language; "disable" is the exclusions editor, where checked
+   * tools are disabled for the agent — counts, bulk buttons, and row
+   * styling all say so.
+   */
+  variant?: "assign" | "disable";
 }
 
 function formatToolName(toolName: string) {
@@ -1154,8 +1162,10 @@ export function ToolChecklist({
   tools,
   selectedToolIds,
   onSelectionChange,
+  variant = "assign",
 }: ToolChecklistProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const disableVariant = variant === "disable";
 
   // Snapshot the initial selection for sort order so tools don't jump
   // around as the user toggles checkboxes. Updates synchronously during
@@ -1209,7 +1219,8 @@ export function ToolChecklist({
     <div className="flex flex-col min-h-0 flex-1">
       <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/30 shrink-0">
         <span className="text-xs text-muted-foreground">
-          {selectedCount} of {tools.length} selected
+          {selectedCount} of {tools.length}{" "}
+          {disableVariant ? "disabled" : "selected"}
         </span>
         <div className="flex gap-1">
           <Button
@@ -1219,7 +1230,7 @@ export function ToolChecklist({
             onClick={handleSelectAll}
             disabled={allSelected}
           >
-            Select All
+            {disableVariant ? "Disable all" : "Select All"}
           </Button>
           <Button
             variant="ghost"
@@ -1228,7 +1239,7 @@ export function ToolChecklist({
             onClick={handleDeselectAll}
             disabled={noneSelected}
           >
-            Deselect All
+            {disableVariant ? "Enable all" : "Deselect All"}
           </Button>
         </div>
       </div>
@@ -1262,7 +1273,9 @@ export function ToolChecklist({
                   htmlFor={`tool-${tool.id}`}
                   className={cn(
                     "flex items-start gap-3 p-2 rounded-md transition-colors cursor-pointer",
-                    isSelected ? "bg-primary/10" : "hover:bg-muted/50",
+                    !isSelected && "hover:bg-muted/50",
+                    isSelected &&
+                      (disableVariant ? "bg-destructive/10" : "bg-primary/10"),
                   )}
                 >
                   <Checkbox
@@ -1272,7 +1285,17 @@ export function ToolChecklist({
                     className="mt-0.5"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium">{toolName}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-medium">{toolName}</div>
+                      {disableVariant && isSelected && (
+                        <Badge
+                          variant="outline"
+                          className="border-destructive/40 text-destructive px-1.5 py-0"
+                        >
+                          Disabled
+                        </Badge>
+                      )}
+                    </div>
                     {tool.description && (
                       <ExpandableDescription description={tool.description} />
                     )}

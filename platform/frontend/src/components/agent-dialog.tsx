@@ -1720,10 +1720,10 @@ export function AgentDialog({
                         )}
                       >
                         <p className="text-xs font-medium text-muted-foreground">
-                          Exclude servers or tools
+                          Disabled tools
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Excluded MCP servers and tools are hidden from this{" "}
+                          These tools are disabled for this{" "}
                           {agentTypeDisplayName[agentType] || "agent"} while
                           "All" access is on.
                         </p>

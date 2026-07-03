@@ -366,10 +366,10 @@ export const AgentToolExclusionsEditor = forwardRef<
           ),
           badge:
             excludedCount > 0
-              ? `${excludedCount}/${totalCount} excluded`
+              ? `${excludedCount}/${totalCount} disabled`
               : undefined,
           disabled: totalCount === 0,
-          disabledReason: totalCount === 0 ? "No tools to exclude" : undefined,
+          disabledReason: totalCount === 0 ? "No tools to disable" : undefined,
         };
       }),
     [catalogItems, catalogName, toolIdsByCatalog, entries],
@@ -419,7 +419,7 @@ export const AgentToolExclusionsEditor = forwardRef<
         selectedIds={[...entries.keys()]}
         onToggle={handleCatalogToggle}
         onItemAdded={setAutoOpenCatalogId}
-        label="Exclude"
+        label="Disable"
         placeholder="Search MCP servers..."
         emptyMessage="No MCP servers found."
       />
@@ -476,7 +476,7 @@ function ExclusionPill({
             />
             <span className="font-medium">{displayName}</span>
             <span className="text-muted-foreground">
-              ({checkedToolIds.size}/{tools.length})
+              {checkedToolIds.size}/{tools.length} disabled
             </span>
             <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
           </Button>
@@ -486,7 +486,7 @@ function ExclusionPill({
           size="sm"
           className="h-8 w-8 p-0 rounded-l-none"
           onClick={() => onRemove(catalogItem.id)}
-          aria-label={`Stop excluding ${displayName}`}
+          aria-label={`Re-enable all ${displayName} tools`}
         >
           <X className="h-3 w-3" />
         </Button>
@@ -503,7 +503,7 @@ function ExclusionPill({
           <div>
             <h4 className="font-semibold">{displayName}</h4>
             <p className="text-sm text-muted-foreground mt-1">
-              Checked tools are excluded from this agent.
+              Checked tools are disabled for this agent.
             </p>
           </div>
           <Button
@@ -527,6 +527,7 @@ function ExclusionPill({
               onSelectionChange={(ids) =>
                 onSelectionChange(catalogItem.id, ids)
               }
+              variant="disable"
             />
           </div>
         )}

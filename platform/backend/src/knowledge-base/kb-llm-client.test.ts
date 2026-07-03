@@ -15,7 +15,7 @@ vi.mock("@/clients/llm-client", () => ({
 import config from "@/config";
 import db, { schema } from "@/database";
 import { LlmProviderApiKeyModel, OrganizationModel } from "@/models";
-import { describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test } from "@/test";
 import {
   getDefaultOrgEmbeddingConfig,
   resolveApiKeyFromChatApiKey,
@@ -32,6 +32,11 @@ async function createSecret(): Promise<string> {
 }
 
 describe("resolveEmbeddingConfig", () => {
+  const originalOllamaBaseUrl = config.llm.ollama.baseUrl;
+  afterEach(() => {
+    config.llm.ollama.baseUrl = originalOllamaBaseUrl;
+  });
+
   test("uses inferenceBaseUrl when resolving a chat API key", async ({
     makeOrganization,
   }) => {

@@ -350,6 +350,19 @@ runs:
         DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
         E2E_DEPS_WAIT_FOR_VAULT: ${{ inputs.e2e-dependencies-wait-for-vault }}
       run: |
+        # Redefined here: shell functions from the "Deploy with Helm" step do
+        # not survive into this step (each composite run block is its own shell).
+        show_vault_diagnostics() {
+          echo "=== Vault Pod Status ==="
+          kubectl get pods -l app=vault -o wide || true
+          echo "=== Vault Pod Describe ==="
+          kubectl describe pod -l app=vault || true
+          echo "=== Vault Pod Logs ==="
+          kubectl logs -l app=vault --tail=200 || true
+          echo "=== Vault Pod Previous Logs ==="
+          kubectl logs -l app=vault --previous --tail=200 || true
+        }
+
         echo "Waiting for platform pods to be ready..."
         kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=90s
         echo "Platform pods are ready"

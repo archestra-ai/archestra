@@ -1,51 +1,51 @@
 ---
 title: Projects
-category: Projects
-order: 1
-description: Named collections of chats that share files and scheduled runs
-lastUpdated: 2026-06-26
+category: Agents
+order: 3
+description: A shared workspace to organize your work
+lastUpdated: 2026-07-03
 ---
 
 <!--
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-A project is a named collection of chats that own a shared set of result files. Chats started in a project belong to it for their lifetime, files the agent saves are owned by the project rather than the individual author, and the project's page lists every chat and file in one place. Use a project to keep a body of work — its conversations, its outputs, and its recurring tasks — together and optionally shared with teammates.
+A project is a shared workspace for your chats, files, instructions, and scheduled tasks. Everything saved in a project is available to everyone in it. Projects are private until you share them with teams or the whole organization.
 
-## Creating a project from a chat
+![A project with its chats, files, and monthly schedule](/docs/automated_screenshots/platform-projects_project-overview.webp)
 
-An existing chat can become a project. From the chat's menu in the sidebar choose **Create project**, or ask the agent in the chat (for example, "create a project out of this chat") when it has the `create_project_from_conversation` tool assigned. The new project is named after the chat by default and is private to you; the chat moves into it and the chat's saved files become project files. Only the owner of a user chat that is not already in a project can do this. The chat's attachments stay on the chat, which now lives in the project.
+## Creating a Project
 
-## Sharing
+Start a project from the Projects page, or turn an existing chat into one with **Create project** in the chat's menu — the chat and its files move right in.
 
-A project is private to its owner until shared. Sharing makes it visible to the whole organization or to selected teams; everyone with access can read its chats, start their own chats in it, and work with its files. Mutations to the project itself (rename, icon, description, sharing, deletion) are owner-only, except for holders of `project:admin` (see Finding projects). Deleting a project keeps its chats as ordinary conversations but removes its files and its scheduled tasks.
-
-## Finding projects
-
-The projects list has a search box and a scope filter that mirrors the agents filter. Scope is a project's share visibility: **Personal** (private, owner-only), **Team** (shared with teams — narrow further by team), or **Organization** (shared org-wide); the default (**All**) lists only projects you can access — your own, plus those shared with you or your teams. Search matches a project's name and description.
-
-Because **All** shows only projects they can access, a `project:admin` reaches other members' projects through the scope filters: **Personal → Other users** (with a by-user picker) for private projects, and **Team** (pick that team) for team-shared ones the admin isn't a member of. In that oversight view a project admin can edit or delete the project, change its sharing, and view, download, or delete its files — but cannot see or start its chats: the Chats panel is hidden, and the project's conversations remain private to its members.
-
-`project:admin` is additive oversight, not a standalone role: it lets a holder discover other members' projects and act on the project and its files, but never read their chats, and it does not by itself grant schedule control. It layers on the standard `project` permissions — to edit or delete a foreign project a custom role also needs `project:update` / `project:delete` (and `project:read` to see it); to manage that project's scheduled runs it needs `scheduledTask:admin`. The predefined Admin role already holds all of these. Configure custom roles from [Access Control](./platform-access-control).
-
-## Instructions
-
-Every project has an instructions file (`instructions.md`) whose contents are prepended to the system prompt of every chat in the project, so standing guidance — domain context, house style, constraints the agent must always follow — applies to every conversation without being repeated in each prompt. Edit it from the pinned entry at the top of the project's Files panel; owner edits take effect on the next message in any of the project's chats, and empty instructions add nothing. Once saved it is an ordinary project file that agents can read and update, but it cannot be deleted — clear its contents to remove the guidance.
+![Chat sidebar menu with the Create project action](/docs/automated_screenshots/platform-projects_create-from-chat.webp)
 
 ## Files
 
-In a project chat, the files an agent produces (`save_file`, `download_file`) are saved to the project, so anyone with project access can reach them — unlike a personal chat, whose files stay scoped to the conversation that produced them. The chat's Files panel shows the files created in that chat and its attachments, and in a project chat it also lists the project's files; the project page is where you browse a project's full set.
+When an agent saves a file in a project chat — a report, for example — it goes to the project. The project page lists them all, and every chat in the project can read them.
 
-Plain-text and Markdown files (`.txt`, `.md`) can be edited in place: open one in the Files panel and choose Edit, then save to overwrite its contents — the same way the instructions file is edited. Whoever can reach a file can edit it (project access for a project file, the author for a personal chat's file); the read-only `project:admin` oversight view cannot.
+You can add your own files too: drag and drop them onto the Files panel. Text and Markdown files are editable right in the panel.
 
-Anyone with project access can also add files directly: drag and drop them onto a project's Files panel — on the project page or in any of its chats — to upload them to the project (up to 25 MB each). Dropping a file whose name already exists keeps both by appending a number, so an upload never overwrites an existing file.
+Every project has an `instructions.md` file, pinned at the top of the Files panel. Write the rules once, and every chat in the project follows them.
 
-## Scheduled tasks
+![Editing project instructions](/docs/automated_screenshots/platform-projects_instructions-editor.webp)
 
-A schedule runs an agent automatically on a repeating cron schedule, scoped to the project. Each run starts a chat in the project — it appears in the project's session list marked as a scheduled run — and any result it saves lands in the project's files. This makes recurring work (a daily summary, periodic triage) accumulate in the same shared place as the rest of the project.
+## Scheduled Tasks
 
-Schedules are managed from the project page. Pick the agent, write the task prompt, and choose a cron schedule and timezone (defaulted to your browser's). A run executes under the permissions of the user who created the schedule. Editing, enabling/disabling, and deleting a schedule are done from its row.
+A schedule runs an agent for you on a recurring basis. Every run is saved as a chat in the project, so you can always see what the agent did.
 
-Callers who cannot pick an agent (no `agent:read`, for example a restricted "basic user" role) do not see the agent selector; their schedules run the organization's default agent.
+![New schedule dialog](/docs/automated_screenshots/platform-projects_schedule-dialog.webp)
 
-Every completed run preserves the full agent conversation. Open a run from the project's chats to review it; the owner can continue chatting in the same context, and a user with `scheduledTask:admin` can view (but not continue) other users' runs. See [Access Control](./platform-access-control) for role configuration.
+## Use Case: Vendor Invoice Approvals
+
+A finance person approves incoming invoices against the company's vendor list. A monthly report is generated automatically:
+
+- **Files**: `approved-vendors.csv`, uploaded once and edited as vendors change, plus the reports the agent writes.
+- **Instructions**: "Match every invoice against approved-vendors.csv. Flag any vendor not on the list. Amounts over $10,000 need CFO sign-off."
+- **Chats**: the daily work — "check this invoice from Acme GmbH". Every chat follows the instructions and can read the vendor list.
+- **A schedule**: on the 1st of each month, an agent collects last month's approvals and saves a report into the project files.
+- **Sharing** with the Finance team: everyone approves against the same list and reads the same reports.
+
+![Sharing the project with the Finance team](/docs/automated_screenshots/platform-projects_sharing-dialog.webp)
+
+Everyone with access to a shared project can read its chats, start their own, and work with its files. Deleting a project keeps the chats but removes the files and schedules. See [Access Control](./platform-access-control) for permissions.

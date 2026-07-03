@@ -88,8 +88,10 @@ export async function resolveConversationLlmSelectionForAgent(params: {
     }
   }
 
-  const member = await MemberModel.getByUserId(userId, organizationId);
-  const organization = await OrganizationModel.getById(organizationId);
+  const [member, organization] = await Promise.all([
+    MemberModel.getByUserId(userId, organizationId),
+    OrganizationModel.getById(organizationId),
+  ]);
 
   const configuredLevels: ModelSelection[] = [
     { modelId: params.explicitModelId, apiKeyId: params.explicitApiKeyId },

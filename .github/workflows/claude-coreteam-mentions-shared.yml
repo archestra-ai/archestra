@@ -47,5 +47,5 @@ jobs:
           additional_permissions: |
             actions: read
           assignee_trigger: "claude-bot"
-          allowed_tools: 'Bash(pnpm install),Bash(pnpm add:*),Bash(pnpm test),Bash(pnpm typecheck),Bash(pnpm codegen:*),Bash(pnpm prettier:*)'
+          allowed_tools: 'Bash(pnpm install),Bash(pnpm add:*),Bash(pnpm test),Bash(pnpm type-check),Bash(pnpm codegen:*)'
           additional_claude_args: '--system-prompt "Keep responses concise and to the point. Avoid lengthy explanations unless specifically requested."'

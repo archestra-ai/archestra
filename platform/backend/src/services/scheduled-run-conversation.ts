@@ -134,8 +134,7 @@ export async function persistRunConversationMessages(params: {
 }): Promise<void> {
   const { conversation, userText, assistantMessage } = params;
 
-  const existing = await MessageModel.findByConversation(conversation.id);
-  if (existing.length > 0) {
+  if (await MessageModel.existsForConversation(conversation.id)) {
     return;
   }
 
@@ -173,8 +172,7 @@ export async function persistRunUserMessage(params: {
 }): Promise<void> {
   const { conversation, userText } = params;
 
-  const existing = await MessageModel.findByConversation(conversation.id);
-  if (existing.length > 0) {
+  if (await MessageModel.existsForConversation(conversation.id)) {
     return;
   }
 
@@ -228,11 +226,11 @@ export async function ensureFailedRunErrorVisible(params: {
     return;
   }
 
-  const [messages, errors] = await Promise.all([
-    MessageModel.findByConversation(conversation.id),
+  const [hasMessages, errors] = await Promise.all([
+    MessageModel.existsForConversation(conversation.id),
     ConversationChatErrorModel.findByConversation(conversation.id),
   ]);
-  if (messages.length > 0 || errors.length > 0) {
+  if (hasMessages || errors.length > 0) {
     return;
   }
 
@@ -269,8 +267,10 @@ export async function backfillRunConversationMessages(params: {
     return;
   }
 
+  // Only interactions[0] is consumed below — the newest interaction carries the
+  // full history in its request and the final reply in its response.
   const interactionResult = await InteractionModel.findAllPaginated(
-    { limit: 50, offset: 0 },
+    { limit: 1, offset: 0 },
     { sortBy: "createdAt", sortDirection: "desc" },
     ownerUserId,
     true,

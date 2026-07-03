@@ -50,11 +50,16 @@ gcloud storage buckets add-iam-policy-binding gs://archestra-bench-history \
 
 ### 2. GitHub secrets
 
-Both are synced into the `archestra-bench-secrets` k8s secret each run, where the pod reads them:
+All three are synced into the `archestra-bench-secrets` k8s secret each run, where the pod reads them:
 
 - `ZAI_API_KEY` — the glm lane key (`api_key_env = ZAI_API_KEY` in `archestra-bench/lanes.toml`).
+- `OPENROUTER_API_KEY` — the key for every `provider = "openrouter"` lane in
+  `archestra-bench/lanes.toml` (their default `api_key_env`).
 - `SLACK_BENCH_WEBHOOK_URL` — Slack incoming webhook for the summary message. If unset, the pod skips
   the Slack post.
+
+These cover every lane in `job.yaml`'s `BENCH_LANES` set. The `kimi` lane is not in that set and its
+`KIMI_API_KEY` is not synced — add both if you ever put it on the CI roster.
 
 The WIF auth and GKE creds reuse the existing
 `DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME` /

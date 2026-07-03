@@ -28,9 +28,9 @@ export function ProviderKeyAccessFields({
       <div className="space-y-1">
         <h3 className="text-sm font-semibold">Provider Keys</h3>
         <p className="text-sm text-muted-foreground">
-          Map one or more Model Provider keys this credential can use.
-          Provider-specific proxy routes use the matching provider key, and
-          Model Router requests use the provider prefix in the requested model.{" "}
+          Choose which provider API keys this credential can use. Each request
+          uses the key matching its provider — from the proxy route, or the
+          model&apos;s provider prefix for Model Router requests.{" "}
           <a
             href={docsUrl}
             target="_blank"

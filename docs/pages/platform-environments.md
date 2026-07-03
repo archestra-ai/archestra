@@ -3,7 +3,7 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-06-21
+lastUpdated: 2026-07-03
 ---
 
 <!--
@@ -57,7 +57,7 @@ This applies to both explicitly assigned tools/knowledge and the implicit "All t
 
 ## Network egress policies
 
-An environment can define a Kubernetes **namespace** and a **network egress policy**. Both MCP server pods and agent code sandboxes for that environment run in its namespace and inherit its egress policy, so their outbound network reach is contained. Policies can disable internet egress, allow all egress, or restrict egress to selected IP/CIDR ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
+An environment can define a Kubernetes **namespace** and a **network egress policy**. Both MCP server pods and agent [code sandboxes](/docs/platform-code-sandbox) for that environment run in its namespace and inherit its egress policy, so their outbound network reach is contained. Policies can disable internet egress, allow all egress, or restrict egress to selected IP/CIDR ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
 
 When a workload runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in unrestricted policy.
 

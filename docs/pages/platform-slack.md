@@ -1,7 +1,7 @@
 ---
 title: Slack
 category: Agents
-order: 4
+order: 6
 description: Connect Archestra agents to Slack channels
 lastUpdated: 2026-02-23
 ---

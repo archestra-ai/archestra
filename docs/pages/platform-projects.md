@@ -1,7 +1,7 @@
 ---
 title: Projects
-category: Agents
-order: 3
+category: Projects
+order: 1
 description: A shared workspace to organize your work
 lastUpdated: 2026-07-03
 ---

@@ -61,6 +61,7 @@ export function McpServerPillShell({
       <div className="flex items-center">
         <PopoverTrigger asChild>
           <Button
+            type="button"
             variant="outline"
             size="sm"
             className={cn(
@@ -84,6 +85,7 @@ export function McpServerPillShell({
         </PopoverTrigger>
         {isEmpty && (
           <Button
+            type="button"
             variant="outline"
             size="sm"
             className="h-8 w-8 p-0 rounded-l-none border-dashed opacity-50 hover:opacity-100"
@@ -124,10 +126,12 @@ export function McpServerPillShell({
             )}
           </div>
           <Button
+            type="button"
             variant="ghost"
             size="sm"
             className="h-6 w-6 p-0 shrink-0"
             onClick={() => onOpenChange(false)}
+            aria-label="Close"
           >
             <X className="h-4 w-4" />
           </Button>

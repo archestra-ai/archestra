@@ -24,11 +24,12 @@
 -- dual-prefix duplicate rows exist.
 --
 -- Skipped agents: other agent types (profile/mcp_gateway/llm_proxy),
--- soft-deleted agents, and built-in system agents (built_in_agent_config IS
--- NOT NULL) — the latter are seeded via raw insert and deliberately bypass
--- the create-time tool hooks, so new ones don't get these tools either.
--- agent_excluded_tools is untouched: for All-mode agents whose exclusion
--- prefill excluded one of these tools, the exclusion keeps winning.
+-- soft-deleted agents, built-in system agents (built_in_agent_config IS NOT
+-- NULL — seeded via raw insert, deliberately bypassing the create-time tool
+-- hooks, so new ones don't get these tools either), and agents in Auto tool
+-- mode (access_all_tools = true) — their tool surface is governed by
+-- agent_excluded_tools instead of assignments, and they already reach the
+-- sandbox/files tools dynamically. agent_excluded_tools is untouched.
 WITH target_tools AS (
   SELECT DISTINCT ON (regexp_replace("name", '^.*__', '')) "id"
   FROM "tools"
@@ -51,4 +52,5 @@ CROSS JOIN target_tools t
 WHERE a."agent_type" = 'agent'
   AND a."deleted_at" IS NULL
   AND a."built_in_agent_config" IS NULL
+  AND a."access_all_tools" = false
 ON CONFLICT DO NOTHING;

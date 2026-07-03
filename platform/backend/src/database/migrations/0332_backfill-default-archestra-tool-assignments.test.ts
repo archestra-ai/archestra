@@ -156,7 +156,7 @@ describe("0332 migration: backfill default Archestra tool assignments", () => {
     expect(assigned.sort()).toEqual([listSkills.id, loadSkill.id].sort());
   });
 
-  test("leaves other agent types, built-in system agents, and soft-deleted agents untouched", async ({
+  test("leaves other agent types, built-in system agents, soft-deleted agents, and Auto-mode agents untouched", async ({
     makeOrganization,
   }) => {
     await seedArchestraCatalog();
@@ -170,10 +170,11 @@ describe("0332 migration: backfill default Archestra tool assignments", () => {
       builtInAgentConfig: { name: "app-runtime-llm-agent" },
     });
     const deleted = await insertAgent(org.id, { deletedAt: new Date() });
+    const autoMode = await insertAgent(org.id, { accessAllTools: true });
 
     await runBackfill();
 
-    for (const agent of [gateway, proxy, profile, builtIn, deleted]) {
+    for (const agent of [gateway, proxy, profile, builtIn, deleted, autoMode]) {
       expect(await assignedToolIds(agent.id)).toHaveLength(0);
     }
   });
@@ -254,8 +255,10 @@ describe("0332 migration: backfill default Archestra tool assignments", () => {
   test("does not touch agent_excluded_tools", async ({ makeOrganization }) => {
     await seedArchestraCatalog();
     const org = await makeOrganization();
-    // An All-mode agent whose exclusion prefill already excluded a group tool.
-    const agent = await insertAgent(org.id, { accessAllTools: true });
+    // A custom-mode agent with a leftover (inert) exclusion row from a past
+    // Auto-mode stint: the assignment is still created, the exclusion row
+    // survives untouched.
+    const agent = await insertAgent(org.id);
 
     const runCommand = await insertBuiltInTool("archestra__run_command");
     await db
@@ -264,8 +267,6 @@ describe("0332 migration: backfill default Archestra tool assignments", () => {
 
     await runBackfill();
 
-    // Assignment row is added, exclusion row survives (and keeps winning
-    // while All mode is on).
     expect(await assignedToolIds(agent.id)).toEqual([runCommand.id]);
     const exclusions = await db
       .select()

@@ -188,6 +188,7 @@ export function McpAppEntryPill({
   toolCallId,
   icon,
   state,
+  onClick,
 }: {
   appId?: string;
   appName?: string | null;
@@ -198,10 +199,14 @@ export function McpAppEntryPill({
   icon?: React.ReactNode;
   /** Tool-call state for the status dot, matching the tool-call circles. */
   state?: "running" | "completed" | "error";
+  /** Runs on every pill click, before the app toggle (e.g. to collapse an
+   * expanded tool-call card so only one thing opens under the row). */
+  onClick?: () => void;
 }) {
   const {
     isAppOpen,
     toggleAppOpen,
+    focusAppRender,
     panelToolCallId,
     setPanelApp,
     canonicalToolCallId,
@@ -239,12 +244,19 @@ export function McpAppEntryPill({
       pressed={pressed}
       hasError={hasRuntimeError || ownedAppUnavailable}
       onClick={() => {
+        onClick?.();
         if (!toolCallId) return;
         // With the panel open, pills select the hosted app; otherwise they toggle
         // this app's inline render, leaving other open apps alone.
         if (portalTarget) {
-          if (isPanelFocused) closePanel();
-          else setPanelApp(toolCallId);
+          if (isPanelFocused) {
+            // Dismissing the panel via a pill expands the app inline under
+            // THIS pill — not wherever the app was last expanded.
+            closePanel();
+            focusAppRender(toolCallId);
+          } else {
+            setPanelApp(toolCallId);
+          }
         } else {
           toggleAppOpen(toolCallId);
         }

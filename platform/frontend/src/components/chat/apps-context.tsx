@@ -58,6 +58,12 @@ interface AppsContextValue {
   isAppOpen: (toolCallId: string) => boolean;
   /** Toggle one app's inline expansion (canonicalized), leaving other open apps alone. */
   toggleAppOpen: (toolCallId: string) => void;
+  /**
+   * Make this render its app's visible one and ensure it is open — without the
+   * toggle semantics. Used when a pill click dismisses the panel-hosted copy:
+   * the app must expand under the clicked pill, not wherever it last was.
+   */
+  focusAppRender: (toolCallId: string) => void;
   /** The single app the right panel hosts: the explicit pick, else the latest still-open app, else the latest — never blank. */
   panelToolCallId: string | null;
   /** Point the right panel at an app (pill selector / "Open in right panel"). */
@@ -89,6 +95,7 @@ const NOOP_VALUE: AppsContextValue = {
   apps: [],
   isAppOpen: () => false,
   toggleAppOpen: () => {},
+  focusAppRender: () => {},
   panelToolCallId: null,
   setPanelApp: () => {},
   canonicalToolCallId: (id) => id,
@@ -179,6 +186,27 @@ export function AppsProvider({
     [groupByToolCallId, closedKeys],
   );
 
+  // Non-toggling variant of toggleAppOpen: point the app's group at this
+  // render and open it, regardless of prior open/pick state.
+  const focusAppRender = useCallback(
+    (id: string) => {
+      const group = groupByToolCallId.get(id);
+      const key = group?.key ?? id;
+      const appId = group?.appId ?? null;
+      if (appId) {
+        setPickedOwnedRender((prev) => new Map(prev).set(appId, id));
+      }
+      setClosedKeys((prev) => {
+        if (!prev.has(key)) return prev;
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+      setSettingsOpen(false);
+    },
+    [groupByToolCallId],
+  );
+
   // Switching the panel app drops the previous app's settings form.
   const setPanelApp = useCallback(
     (id: string) => {
@@ -229,6 +257,7 @@ export function AppsProvider({
       apps,
       isAppOpen,
       toggleAppOpen,
+      focusAppRender,
       panelToolCallId,
       setPanelApp,
       canonicalToolCallId,
@@ -243,6 +272,7 @@ export function AppsProvider({
       apps,
       isAppOpen,
       toggleAppOpen,
+      focusAppRender,
       panelToolCallId,
       setPanelApp,
       canonicalToolCallId,

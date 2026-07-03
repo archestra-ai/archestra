@@ -29,6 +29,7 @@ import {
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils";
+import { useApps } from "./apps-context";
 import {
   type AppEntryRender,
   resolveAppEntryRender,
@@ -297,9 +298,25 @@ export function CompactToolGroup({
 }) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const { isToolName, getToolShortName } = useArchestraMcpIdentity();
+  const { isAppOpen, toggleAppOpen, portalTarget } = useApps();
 
   const handleToggle = (key: string) => {
     if (!canExpandToolCalls) return;
+    // Expanding a tool card collapses any inline app open in this row — the
+    // mirror of an app pill collapsing an expanded tool card, so only one
+    // thing unfolds under the row at a time. Panel-hosted apps are untouched
+    // (nothing is expanded inline while the panel hosts).
+    if (expandedKey !== key && !portalTarget) {
+      for (const entry of tools) {
+        if (
+          entry.kind === "app" &&
+          entry.part.toolCallId &&
+          isAppOpen(entry.part.toolCallId)
+        ) {
+          toggleAppOpen(entry.part.toolCallId);
+        }
+      }
+    }
     setExpandedKey((prev) => (prev === key ? null : key));
   };
 
@@ -376,7 +393,8 @@ export function CompactToolGroup({
                 />
               );
             }
-            const iconProps = circleIconProps(render.mcpAppToolName);
+            // No icon override: the pill keeps the generic app-window glyph —
+            // the app pill identifies the APP, not the serving MCP catalog.
             return (
               <McpAppEntryPill
                 key={entry.key}
@@ -385,15 +403,9 @@ export function CompactToolGroup({
                 toolName={render.mcpAppToolName}
                 toolCallId={entry.part.toolCallId}
                 state={state}
-                icon={
-                  iconProps.icon || iconProps.catalogId ? (
-                    <McpCatalogIcon
-                      icon={iconProps.icon}
-                      catalogId={iconProps.catalogId}
-                      size={16}
-                    />
-                  ) : undefined
-                }
+                // Opening an app collapses an expanded tool-call card so only
+                // one thing unfolds under the row at a time.
+                onClick={() => setExpandedKey(null)}
               />
             );
           }

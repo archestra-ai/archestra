@@ -234,7 +234,6 @@ class McpClient {
   private static readonly ENTERPRISE_CREDENTIAL_CACHE_MAX_ENTRIES = 1_000;
   private static readonly ENTERPRISE_CREDENTIAL_CACHE_FALLBACK_TTL_MS = 30_000;
 
-  private clients = new Map<string, Client>();
   private activeConnections = new LRUCacheManager<Client>({
     maxSize: ACTIVE_CONNECTION_CACHE_MAX_SIZE,
     defaultTtl: ACTIVE_CONNECTION_CACHE_TTL_MS,
@@ -3189,29 +3188,9 @@ class McpClient {
   }
 
   /**
-   * Disconnect from an MCP server
-   */
-  async disconnect(clientId: string): Promise<void> {
-    const client = this.clients.get(clientId);
-    if (client) {
-      try {
-        await client.close();
-      } catch (error) {
-        logger.error({ err: error }, `Error closing MCP client ${clientId}:`);
-      }
-      this.clients.delete(clientId);
-    }
-  }
-
-  /**
    * Disconnect from all MCP servers
    */
   async disconnectAll(): Promise<void> {
-    const disconnectPromises = Array.from(this.clients.keys()).map((clientId) =>
-      this.disconnect(clientId),
-    );
-
-    // Also disconnect active connections
     const activeDisconnectPromises = Array.from(
       this.activeConnections.keys(),
     ).map(async (connectionKey) => {
@@ -3227,7 +3206,7 @@ class McpClient {
       }
     });
 
-    await Promise.all([...disconnectPromises, ...activeDisconnectPromises]);
+    await Promise.all(activeDisconnectPromises);
     this.clearAllConnectionState();
   }
 

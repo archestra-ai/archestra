@@ -206,6 +206,17 @@ class ProjectService {
       candidates = candidates.filter((c) => !exclude.has(c.project.userId));
     }
 
+    // Pure name/description search — applied before the share-teams fetch so
+    // the DB query below only covers the surviving candidates.
+    const query = params.search?.trim().toLowerCase();
+    if (query) {
+      candidates = candidates.filter(
+        ({ project }) =>
+          project.name.toLowerCase().includes(query) ||
+          (project.description?.toLowerCase().includes(query) ?? false),
+      );
+    }
+
     // Team memberships for team-shared projects — backs both the `teamIds`
     // filter and the owner's team-name visibility badge. Fetched once, only when
     // team data is actually relevant.
@@ -223,15 +234,6 @@ class ProjectService {
       const want = new Set(params.teamIds);
       candidates = candidates.filter((c) =>
         (shareTeams.get(c.project.id) ?? []).some((t) => want.has(t.id)),
-      );
-    }
-
-    const query = params.search?.trim().toLowerCase();
-    if (query) {
-      candidates = candidates.filter(
-        ({ project }) =>
-          project.name.toLowerCase().includes(query) ||
-          (project.description?.toLowerCase().includes(query) ?? false),
       );
     }
 

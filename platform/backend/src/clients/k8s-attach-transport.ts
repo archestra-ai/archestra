@@ -25,6 +25,7 @@ export class K8sAttachTransport implements Transport {
   private stdinStream?: Readable;
   private readBuffer = new ReadBuffer();
   private isStarted = false;
+  private closed = false;
 
   onclose?: () => void;
   onerror?: (error: Error) => void;
@@ -99,6 +100,14 @@ export class K8sAttachTransport implements Transport {
           false /* tty */,
         )
         .then((ws) => {
+          // close() may have run while attach was in flight — the just-arrived
+          // websocket has no owner then, so shut it down instead of adopting it.
+          if (this.closed) {
+            ws.close();
+            resolve();
+            return;
+          }
+
           this.ws = ws;
           this.isStarted = true;
 
@@ -143,6 +152,8 @@ export class K8sAttachTransport implements Transport {
   }
 
   async close(): Promise<void> {
+    this.closed = true;
+
     if (this.ws) {
       this.ws.close();
       this.ws = undefined;

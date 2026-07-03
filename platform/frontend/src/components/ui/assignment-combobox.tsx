@@ -92,6 +92,7 @@ export function AssignmentCombobox({
     <DropdownMenu defaultOpen={defaultOpen} onOpenChange={() => setSearch("")}>
       <DropdownMenuTrigger asChild>
         <Button
+          type="button"
           variant="outline"
           size="sm"
           className={cn(

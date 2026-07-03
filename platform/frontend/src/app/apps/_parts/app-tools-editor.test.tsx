@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Radix Popover/Checkbox measure layout and use pointer capture, which jsdom
@@ -15,8 +16,9 @@ Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
 Element.prototype.setPointerCapture = vi.fn();
 Element.prototype.releasePointerCapture = vi.fn();
 
-// The "+ Add" combobox is a Radix dropdown on floating-ui, which needs a real
-// ResizeObserver, layout rects, and DOMRect to position.
+// The "+ Add" combobox is a Radix dropdown on floating-ui, which needs
+// ResizeObserver and DOMRect (both absent in jsdom) to position; the
+// getBoundingClientRect stub is only a fallback for runtimes missing it.
 Element.prototype.getBoundingClientRect =
   Element.prototype.getBoundingClientRect ??
   (() =>
@@ -131,6 +133,19 @@ function renderControlled(onSelectionChange: (next: Set<string>) => void) {
         onSelectionChange={onSelectionChange}
       />
     </QueryClientProvider>,
+  );
+}
+
+// A controlled host that actually holds the staged selection, so deselecting
+// tools shrinks it (a plain spy would leave the prop frozen).
+function StatefulControlled({ initial }: { initial: Set<string> }) {
+  const [selectedToolIds, setSelectedToolIds] = useState(initial);
+  return (
+    <AppToolsEditor
+      appId={APP_ID}
+      selectedToolIds={selectedToolIds}
+      onSelectionChange={setSelectedToolIds}
+    />
   );
 }
 
@@ -285,6 +300,29 @@ describe("AppToolsEditor", () => {
 
     const pill = await screen.findByRole("button", { name: /JIRA/ });
     expect(pill).toHaveTextContent("outside this environment");
+  });
+
+  it("keeps an opened pill visible after all its tools are deselected", async () => {
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StatefulControlled initial={new Set(["t-create"])} />
+      </QueryClientProvider>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /^JIRA/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /deselect all/i }),
+    );
+    await user.keyboard("{Escape}");
+
+    // The pill stays as an empty (0) dashed state instead of vanishing, so the
+    // server can still be reopened or explicitly removed — matching the gateway.
+    const emptied = await screen.findByRole("button", { name: /^JIRA/ });
+    expect(emptied).toHaveTextContent("(0)");
   });
 
   it("surfaces an assignment with no listed MCP server as a removable fallback", async () => {

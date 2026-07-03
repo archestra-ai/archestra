@@ -370,6 +370,11 @@ export function AppToolsEditor({
                       changeCatalogSelection(catalogTools, next)
                     }
                     onRemove={() => toggleCatalog(catalog.id)}
+                    onActivate={() =>
+                      setActiveCatalogIds((prev) =>
+                        new Set(prev).add(catalog.id),
+                      )
+                    }
                     autoOpen={catalog.id === autoOpenCatalogId}
                     onAutoOpened={() => setAutoOpenCatalogId(null)}
                   />
@@ -460,6 +465,7 @@ function AppMcpServerPill({
   note,
   onSelectionChange,
   onRemove,
+  onActivate,
   autoOpen,
   onAutoOpened,
 }: {
@@ -470,6 +476,8 @@ function AppMcpServerPill({
   note?: string;
   onSelectionChange: (next: Set<string>) => void;
   onRemove: () => void;
+  /** Marks the pill visible so it survives deselecting its last tool. */
+  onActivate: () => void;
   autoOpen: boolean;
   onAutoOpened: () => void;
 }) {
@@ -495,7 +503,12 @@ function AppMcpServerPill({
       description={catalog.description}
       docsUrl={catalog.docsUrl}
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(next) => {
+        setOpen(next);
+        // Opening a pill keeps it around even if the user then clears every
+        // tool, matching the gateway's empty-state pill (removed only via X).
+        if (next) onActivate();
+      }}
       onRemove={onRemove}
       removeAriaLabel={`Remove ${catalog.name}`}
     >

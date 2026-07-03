@@ -12,17 +12,18 @@
  * summarization is unavailable or fails, it falls back to deterministic
  * trimming so the step still fits.
  */
-import { CONTEXT_COMPACTION_SYSTEM_PROMPT } from "@archestra/shared";
 import type { ModelMessage } from "ai";
 import type { LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
-import {
-  CONTEXT_COMPACTION_AUTO_THRESHOLD,
-  compactionSummaryText,
-} from "@/routes/chat/context-compaction";
 import { trimMessagesToTokenLimit } from "@/routes/chat/context-trimming";
 import { TOKEN_ESTIMATE } from "@/routes/chat/normalization/estimate-message-tokens";
-import { generateTaggedText } from "@/utils/generate-tagged-text";
+import {
+  CONTEXT_COMPACTION_AUTO_THRESHOLD,
+  CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS,
+  compactionSummaryText,
+  composeCompactionPrompt,
+  summarizeCompactionTranscript,
+} from "@/services/context-compaction";
 
 interface SummarizeParams {
   transcript: string;
@@ -140,16 +141,12 @@ function summarizeWithModel(params: {
   previousSummary: string | null;
   abortSignal?: AbortSignal;
 }): Promise<string | null> {
-  const previous = params.previousSummary
-    ? `Existing summary to update:\n${params.previousSummary}\n\n`
-    : "";
-  return generateTaggedText({
+  return summarizeCompactionTranscript({
     model: params.model,
-    tag: "summary",
-    system: CONTEXT_COMPACTION_SYSTEM_PROMPT,
-    prompt: `${previous}Transcript to compact:\n${params.transcript}`,
-    maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
-    temperature: 0,
+    prompt: composeCompactionPrompt({
+      previousSummary: params.previousSummary,
+      transcript: params.transcript,
+    }),
     abortSignal: params.abortSignal,
   });
 }
@@ -249,9 +246,11 @@ function serializeForTranscript(messages: ModelMessage[]): string {
   }
   const transcript = lines.join("\n");
   // keep the tail — recent context matters most for continuing the task
-  return transcript.length <= TRANSCRIPT_MAX_CHARS
+  return transcript.length <= CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS
     ? transcript
-    : transcript.slice(transcript.length - TRANSCRIPT_MAX_CHARS);
+    : transcript.slice(
+        transcript.length - CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS,
+      );
 }
 
 /**
@@ -315,9 +314,7 @@ const MAX_TOOL_RESULT_CONTEXT_CHARS = 100_000;
 // compacting — the rest of the prefix goes into the summary.
 const RECENT_KEEP_RATIO = 0.3;
 
-// Mirror the chat compaction limits (CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS /
-// MAX_TRANSCRIPT_CHARS in routes/chat/context-compaction.ts).
-const SUMMARY_MAX_OUTPUT_TOKENS = 8_192;
-const TRANSCRIPT_MAX_CHARS = 120_000;
+// Per-entry caps for the ModelMessage transcript serializer above (the
+// whole-transcript ceiling is the shared CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS).
 const TRANSCRIPT_TOOL_INPUT_MAX_CHARS = 2_000;
 const TRANSCRIPT_TOOL_RESULT_MAX_CHARS = 8_000;

@@ -39,6 +39,7 @@ Content rules:
 | Files the agent saves in a project chat go to the project, and every chat in the project can read them. | Files the agent saves go to the project. |
 | …so anyone with access can use them. | …available to everyone in it. |
 | ## Reports that write themselves: schedules | ## Scheduled Tasks |
+| Text and Markdown files are editable right in the panel, so a small fix doesn't need a re-upload. | Text and Markdown files are editable right in the panel. |
 
 Reference page in this voice: `docs/pages/platform-projects.md`.
 

@@ -102,6 +102,8 @@ export const WEBSITE_URL = "https://archestra.ai";
 export const GITHUB_REPO_URL = "https://github.com/archestra-ai/archestra";
 export const GITHUB_REPO_NEW_ISSUE_URL = `${GITHUB_REPO_URL}/issues/new`;
 export const COMMUNITY_SLACK_URL = `${WEBSITE_URL}/join-slack`;
+/** Typeform behind the "Share feedback" pop-up. */
+export const FEEDBACK_TYPEFORM_URL = "https://form.typeform.com/to/qVvzSmEn";
 
 export const MCP_CATALOG_API_BASE_URL =
   process.env.ARCHESTRA_MCP_CATALOG_API_BASE_URL ||

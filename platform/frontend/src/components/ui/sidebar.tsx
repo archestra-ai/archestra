@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
+import { OnboardingDot } from "@/components/onboarding-dot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -262,8 +263,12 @@ function Sidebar({
 function SidebarTrigger({
   className,
   onClick,
+  showDot = false,
   ...props
-}: React.ComponentProps<typeof Button>) {
+}: React.ComponentProps<typeof Button> & {
+  /** Small red onboarding nudge dot (unseen nav items behind this toggle). */
+  showDot?: boolean;
+}) {
   const { toggleSidebar, state } = useSidebar();
   const isCollapsed = state === "collapsed";
   const isMac =
@@ -279,7 +284,7 @@ function SidebarTrigger({
           data-slot="sidebar-trigger"
           variant="ghost"
           size="icon"
-          className={cn("size-7", className)}
+          className={cn("relative size-7", className)}
           onClick={(event) => {
             onClick?.(event);
             toggleSidebar();
@@ -287,6 +292,10 @@ function SidebarTrigger({
           {...props}
         >
           <PanelLeftIcon />
+          <OnboardingDot
+            visible={showDot}
+            className="absolute right-0.5 top-0.5"
+          />
           <span className="sr-only">Toggle Sidebar</span>
         </Button>
       </TooltipTrigger>
@@ -311,8 +320,13 @@ function SidebarTrigger({
 function SidebarCircleToggle({
   className,
   loading = false,
+  showDot = false,
   ...props
-}: React.ComponentProps<"button"> & { loading?: boolean }) {
+}: React.ComponentProps<"button"> & {
+  loading?: boolean;
+  /** Small red onboarding nudge dot, shown only while collapsed. */
+  showDot?: boolean;
+}) {
   const { toggleSidebar, state, isMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
   const isMac =
@@ -367,6 +381,10 @@ function SidebarCircleToggle({
               )}
             />
           )}
+          <OnboardingDot
+            visible={showDot && isCollapsed}
+            className="absolute -right-0.5 -top-0.5"
+          />
           <span className="sr-only">Toggle Sidebar</span>
         </button>
       </TooltipTrigger>

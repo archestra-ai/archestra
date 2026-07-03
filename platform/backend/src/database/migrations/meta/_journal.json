@@ -2297,6 +2297,20 @@
       "when": 1783032604513,
       "tag": "0327_perfect_jean_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 328,
+      "version": "7",
+      "when": 1783083886786,
+      "tag": "0328_gifted_raider",
+      "breakpoints": true
+    },
+    {
+      "idx": 329,
+      "version": "7",
+      "when": 1783086035945,
+      "tag": "0329_steady_sunfire",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "onboarding_survey_completed_at" timestamp;

@@ -298,6 +298,27 @@ class McpToolCallModel {
       .from(schema.mcpToolCallsTable);
     return result.total;
   }
+
+  /**
+   * When the first successful tools/call was routed (a recorded result
+   * without `isError`); null when none yet. An activation signal for the
+   * feedback pop-up.
+   */
+  static async getFirstSuccessfulToolCallAt(): Promise<Date | null> {
+    const [row] = await db
+      .select({ createdAt: schema.mcpToolCallsTable.createdAt })
+      .from(schema.mcpToolCallsTable)
+      .where(
+        and(
+          eq(schema.mcpToolCallsTable.method, "tools/call"),
+          sql`${schema.mcpToolCallsTable.toolResult} IS NOT NULL`,
+          sql`(${schema.mcpToolCallsTable.toolResult} ->> 'isError') IS DISTINCT FROM 'true'`,
+        ),
+      )
+      .orderBy(asc(schema.mcpToolCallsTable.createdAt))
+      .limit(1);
+    return row?.createdAt ?? null;
+  }
 }
 
 export default McpToolCallModel;

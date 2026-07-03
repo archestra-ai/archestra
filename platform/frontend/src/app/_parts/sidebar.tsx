@@ -39,6 +39,7 @@ import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import { AppLogo } from "@/components/app-logo";
+import { OnboardingDot } from "@/components/onboarding-dot";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -60,10 +61,11 @@ import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
-
 import { useGithubStars } from "@/lib/github/github.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useOnce } from "@/lib/hooks/use-once";
+import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
+import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { cn } from "@/lib/utils";
 
 interface NavSubItem {
@@ -83,6 +85,8 @@ interface NavItem {
   onClick?: () => void;
   subItems?: NavSubItem[];
   beta?: boolean;
+  /** Onboarding red-dot target; shown while the user hasn't visited the item. */
+  dotKey?: NavDotKey;
 }
 
 interface NavGroup {
@@ -108,6 +112,7 @@ const chatsNavItems: NavItem[] = [
     icon: FolderKanban,
     customIsActive: (pathname: string) => pathname.startsWith("/projects"),
     beta: true,
+    dotKey: "nav:projects",
   },
   {
     title: "Apps",
@@ -115,6 +120,7 @@ const chatsNavItems: NavItem[] = [
     icon: AppWindow,
     customIsActive: (pathname: string) => pathname === "/apps",
     beta: true,
+    dotKey: "nav:apps",
   },
   {
     title: "Connect",
@@ -122,6 +128,7 @@ const chatsNavItems: NavItem[] = [
     icon: Cable,
     customIsActive: (pathname: string) => pathname.startsWith("/connection"),
     beta: true,
+    dotKey: "nav:connect",
   },
 ];
 
@@ -191,9 +198,12 @@ function useSidebarMode(pathname: string) {
 function SidebarModeToggle({
   mode,
   onPick,
+  modeDots,
 }: {
   mode: SidebarMode;
   onPick: (mode: SidebarMode) => void;
+  /** Aggregate onboarding dots: some item in that tab is still unseen. */
+  modeDots: Record<SidebarMode, boolean>;
 }) {
   const segment = (value: SidebarMode, label: string, Icon: LucideIcon) => (
     <button
@@ -201,7 +211,7 @@ function SidebarModeToggle({
       key={value}
       onClick={() => onPick(value)}
       className={cn(
-        "flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors",
+        "relative flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors",
         mode === value
           ? "bg-background font-medium text-foreground shadow-sm"
           : "text-muted-foreground hover:text-foreground",
@@ -209,6 +219,10 @@ function SidebarModeToggle({
     >
       <Icon className="h-3.5 w-3.5" />
       {label}
+      <OnboardingDot
+        visible={modeDots[value]}
+        className="absolute right-1 top-1"
+      />
     </button>
   );
 
@@ -272,6 +286,7 @@ const contentNavGroups: NavGroup[] = [
         icon: Route,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/mcp/registry"),
+        dotKey: "nav:mcp-registry",
       },
       {
         title: "MCP Gateways",
@@ -314,6 +329,7 @@ const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) =>
           pathname.startsWith("/llm/model-providers") ||
           pathname.startsWith("/llm/models"),
+        dotKey: "nav:model-providers",
       },
       {
         title: "Costs & Limits",
@@ -361,12 +377,16 @@ const NavPrimary = ({
   pathname,
   searchParams,
   permissionMap,
+  unseenDotKeys,
+  onDotItemVisit,
 }: {
   items: NavItem[];
   groups: NavGroup[];
   pathname: string;
   searchParams: URLSearchParams;
   permissionMap: Record<string, boolean>;
+  unseenDotKeys: Set<NavDotKey>;
+  onDotItemVisit: (key: NavDotKey) => void;
 }) => {
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -383,7 +403,9 @@ const NavPrimary = ({
         <SidebarPrefetchLink
           href={item.url}
           data-testid={item.testId}
+          className="relative"
           onClick={() => {
+            if (item.dotKey) onDotItemVisit(item.dotKey);
             if (isMobile) setOpenMobile(false);
           }}
         >
@@ -396,6 +418,12 @@ const NavPrimary = ({
             >
               New
             </Badge>
+          )}
+          {item.dotKey && (
+            <OnboardingDot
+              visible={unseenDotKeys.has(item.dotKey)}
+              className="absolute right-1 top-1"
+            />
           )}
         </SidebarPrefetchLink>
       </SidebarMenuButton>
@@ -641,6 +669,9 @@ export function AppSidebar() {
   // ARCHESTRA_BETA master switch — when on, the new connection page is the
   // default Connect destination.
   const betaEnabled = useFeature("betaEnabled") === true;
+  // Onboarding red dots: unseen nav items for this user (RBAC/flag filtered).
+  const { unseenKeys, showChatsDot, showStudioDot, markSeen } =
+    useNavOnboarding();
 
   // Projects and Apps are each gated behind their own feature flags. Connect
   // requires both MCP gateway and LLM proxy read permissions, and points at
@@ -712,7 +743,11 @@ export function AppSidebar() {
           <img src={appIconLogo} alt="Logo" className="size-7" />
         </SidebarPrefetchLink>
         {isAuthenticated && permissionMap && (
-          <SidebarModeToggle mode={sidebarMode} onPick={pickSidebarMode} />
+          <SidebarModeToggle
+            mode={sidebarMode}
+            onPick={pickSidebarMode}
+            modeDots={{ chats: showChatsDot, studio: showStudioDot }}
+          />
         )}
       </SidebarHeader>
       <SidebarContent>
@@ -726,6 +761,8 @@ export function AppSidebar() {
                 pathname={pathname}
                 searchParams={searchParams}
                 permissionMap={permissionMap}
+                unseenDotKeys={unseenKeys}
+                onDotItemVisit={markSeen}
               />
               {/* The chat list (Pinned + Recents, labeled inside
                     ChatSidebarSection) and the community links below it scroll
@@ -754,6 +791,8 @@ export function AppSidebar() {
                 pathname={pathname}
                 searchParams={searchParams}
                 permissionMap={permissionMap}
+                unseenDotKeys={unseenKeys}
+                onDotItemVisit={markSeen}
               />
               <NavSecondary
                 items={[]}

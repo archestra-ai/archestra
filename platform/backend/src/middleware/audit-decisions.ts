@@ -194,6 +194,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "per-user pin on a project; personal preference, not an access change",
   },
+  userOnboardingSeenItemsTable: {
+    audited: false,
+    reason:
+      "per-user onboarding red-dot dismissals; personal preference, not an access change",
+  },
   conversationShareTeamsTable: {
     audited: false,
     reason: "join: conversation share × team",

@@ -3,7 +3,7 @@ title: Using Claude Code Max Subscription
 category: Examples
 order: 10
 description: Route Claude Code through Archestra with a one-time setup script while your Claude subscription keeps paying for inference
-lastUpdated: 2026-07-02
+lastUpdated: 2026-07-03
 ---
 
 <!--
@@ -29,7 +29,7 @@ Screenshots live in /docs/automated_screenshots/platform-claude-code-example_*.
 Don't restate obvious UI; keep it short.
 -->
 
-If your team already pays for Claude Pro or Max, Claude Code can keep using that subscription while Archestra governs the traffic. The **Connect** page generates a one-time setup script that routes inference through an [LLM proxy](/docs/platform-llm-proxy) in *passthrough* mode, registers your [MCP gateway](/docs/platform-mcp-gateway) for tools, and installs your organization's [shared skills](/docs/platform-agent-skills-sharing) - one command, no manual config edits.
+If your team already pays for Claude Pro or Max, Claude Code can keep using that subscription while its traffic runs through Archestra. The **Connect** page generates a one-time setup script that routes inference through an [LLM proxy](/docs/platform-llm-proxy) in *passthrough* mode, registers your [MCP gateway](/docs/platform-mcp-gateway) for tools, and installs your organization's [shared skills](/docs/platform-agent-skills-sharing) - one command, no manual config edits.
 
 ![The Connect page with Claude Code selected, showing the passthrough setup and the one-time command](/docs/automated_screenshots/platform-claude-code-example_connect-page.webp)
 

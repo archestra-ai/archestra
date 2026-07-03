@@ -209,7 +209,7 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `gen_ai.usage.cache_read.input_tokens` - Prompt-cache tokens served from a provider cache, a subset of `input_tokens` (set only when the response read from cache)
 - `gen_ai.usage.cache_creation.input_tokens` - Prompt-cache tokens written to a provider cache, a subset of `input_tokens` (set only when the response cached a prefix)
 - `archestra.usage.cache_creation.1h_input_tokens` - Portion of cache-creation tokens written at the 1-hour TTL (Anthropic/Bedrock), billed at a higher surcharge than the 5-minute default. Uses the `archestra.*` namespace because the GenAI semantic conventions have no per-TTL breakdown. The remainder of `gen_ai.usage.cache_creation.input_tokens` is the 5-minute portion.
-- `archestra.cost` - Estimated cost in USD (requires [token pricing](/docs/platform-cost-management#token-pricing) configuration)
+- `archestra.cost` - Estimated cost in USD (requires [model pricing](/docs/platform-costs-and-limits#model-pricing) configuration)
 - `gen_ai.response.finish_reasons` - Why the model stopped generating (e.g., `["stop"]`, `["tool_calls"]`, `["end_turn"]`)
 
 **Error Attributes:**

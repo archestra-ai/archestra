@@ -2,11 +2,12 @@
 title: Secure Agent with OpenWebUI
 category: Examples
 order: 5
+lastUpdated: 2026-07-03
 ---
 
 ## Overview
 
-OpenWebUI - one of the most popular clients for LLMs, however it doesn't have built-in mechanisms to prevent data leaks and malicious commands via tool calls. It can be integrated with Archestra, which intercepts malicious tool calls, and prevent untrusted context from influencing the LLM’s behaviour, providing an essential security layer for production deployments.
+OpenWebUI is a client for LLMs. It has no built-in mechanism to prevent data leaks or malicious commands via tool calls. You can integrate it with Archestra, which intercepts malicious tool calls and prevents untrusted context from influencing the LLM’s behaviour.
 
 ## Plan
 
@@ -22,7 +23,7 @@ For OpenAI, you can get an API key from:
 - Azure OpenAI
 - Any OpenAI-compatible service (e.g., LocalAI, FastChat, Helicone, LiteLLM, OpenRouter etc.)
 
-👉 Once you have the key, copy it and keep it handy.
+Once you have the key, copy it and keep it handy.
 
 ## Step 2. Deploy OpenWebUI and Archestra locally with docker compose
 
@@ -58,9 +59,9 @@ Once OpenWebUI is running:
 2. Click on your **User > Admin Panel**.
 3. Navigate to **Settings > Connections > OpenAI > Configure** (look for the wrench icon).
 4. Verify that you have a correct OpenAI API Key and BASE_URL of Archestra: [http://localhost:9000/v1/openai](http://localhost:9000/v1/openai) in URL, or Add Connection with those values, if you use your own OpenWebUI
-   ☝️If you're not sure where is Archestra BASE_URL you can navigate to Archestra settings, in our example it on [http://localhost:3000](http://localhost:3000)
+   If you're not sure where is Archestra BASE_URL you can navigate to Archestra settings, in our example it on [http://localhost:3000](http://localhost:3000)
 
-   ✌️️If you're running OpenWebUI in its own Docker container locally, separately from the platform, the `BASE_URL` will have Docker's special hostname, `host.docker.internal` instead of `localhost`. E.g. `http://host.docker.internal:9000/v1/openai`
+   If you're running OpenWebUI in its own Docker container locally, separately from the platform, the `BASE_URL` will have Docker's special hostname, `host.docker.internal` instead of `localhost`. E.g. `http://host.docker.internal:9000/v1/openai`
 
    **Optional:** To use a specific profile, include the profile ID in the URL: `http://localhost:9000/v1/openai/{profile-id}`. You can create and manage profiles at [http://localhost:3000/profiles](http://localhost:3000/profiles)
 
@@ -128,4 +129,4 @@ The decision tree for archestra would be:
 
 ## All Set
 
-Now you are safe from Lethal Trifecta type attacks and prompt injections cannot influence your agent.
+With these policies in place, Archestra blocks any tool call that could be influenced by untrusted context, unless a rule you set explicitly allows it.

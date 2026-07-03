@@ -2,6 +2,7 @@
 title: Security Concepts
 category: LLM Proxy
 order: 5
+lastUpdated: 2026-07-03
 description: Archestra's context-aware security model for agentic tool use
 ---
 
@@ -9,11 +10,9 @@ description: Archestra's context-aware security model for agentic tool use
 This is the parent page for the Security Concepts section. It exists to give an overview and link to the child pages. Keep it short.
 -->
 
-Most platforms try to make agents safer by writing better prompts or by asking another LLM "is this safe?" at runtime. Both fail under prompt injection, because the model itself is the thing being attacked.
+Archestra enforces security **at the LLM Proxy**, before a request reaches the model and before a tool call leaves the gateway. The decisions are deterministic, auditable, and depend on the **live context of the conversation** — not a static allowlist.
 
-Archestra takes a different approach. Security is enforced **at the LLM Proxy**, before a request reaches the model and before a tool call leaves the gateway. The decisions are deterministic, auditable, and depend on the **live context of the conversation** — not a static allowlist.
-
-That gives you three properties most agentic stacks do not have:
+The enforcement layer has three properties:
 
 - **Context-aware enforcement.** The same tool can be allowed in one turn and blocked in the next, based on what data has already entered the context. After an agent reads an email from outside your domain, `send_email` to external recipients can automatically require approval — without any change to the agent itself.
 - **Sensitive context never leaks.** Untrusted tool output (web pages, emails, issue trackers) is quarantined before it reaches the agent's tool-calling loop. A prompt injection hidden in a fetched page cannot instruct the agent to exfiltrate secrets, because the injected instructions never enter the agent that holds the tools.

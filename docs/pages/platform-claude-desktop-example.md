@@ -3,7 +3,7 @@ title: Using Claude Desktop (Cowork)
 category: Examples
 order: 9
 description: Route Claude Desktop's Cowork inference and tools through Archestra with one importable configuration profile
-lastUpdated: 2026-07-02
+lastUpdated: 2026-07-03
 ---
 
 <!--
@@ -26,7 +26,7 @@ Screenshots live in /docs/automated_screenshots/platform-claude-desktop-example_
 Don't restate obvious UI; keep it short.
 -->
 
-Claude Desktop's Cowork mode lets non-technical teammates run agentic tasks. Pointing it at Archestra brings that traffic under the same governance as the rest of your platform: inference is routed through an [LLM proxy](/docs/platform-llm-proxy), and Cowork gets your organization's tools through an [MCP gateway](/docs/platform-mcp-gateway). Both are wired up by one configuration profile generated on the **Connect** page, so no JSON is edited by hand.
+Claude Desktop's Cowork mode lets non-technical teammates run agentic tasks. Point it at Archestra to route its inference through an [LLM proxy](/docs/platform-llm-proxy) and give Cowork your organization's tools through an [MCP gateway](/docs/platform-mcp-gateway). Both are wired up by one configuration profile generated on the **Connect** page, so no JSON is edited by hand.
 
 ![The Connect page with Claude Desktop selected, showing the profile download and import steps](/docs/automated_screenshots/platform-claude-desktop-example_connect-page.webp)
 

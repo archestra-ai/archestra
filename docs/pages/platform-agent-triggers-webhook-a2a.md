@@ -128,7 +128,7 @@ curl -X POST https://archestra.example.com/v2/a2a/<agentId> \
 
 ## Approvals
 
-When an agent's tool call hits a [tool invocation policy](/docs/platform-guardrails-toolpolicies) requiring approval, the response is a `task`, not a `message`:
+When an agent's tool call hits a [tool invocation policy](/docs/platform-ai-tool-guardrails) requiring approval, the response is a `task`, not a `message`:
 
 ```json
 {
@@ -171,7 +171,7 @@ To approve (or reject), send a follow-up `SendMessage` with `taskId`, `contextId
 }
 ```
 
-Approvals also work through Slack/Teams [ChatOps](/docs/platform-chatops). The same flow handles multi-request and multi-turn approvals.
+Approvals also work through [Slack](/docs/platform-slack) and [MS Teams](/docs/platform-ms-teams). The same flow handles multi-request and multi-turn approvals.
 
 ## GetTask
 

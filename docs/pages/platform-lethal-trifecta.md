@@ -3,9 +3,10 @@ title: The Lethal Trifecta
 category: LLM Proxy
 subcategory: Security Concepts
 order: 2
+lastUpdated: 2026-07-03
 ---
 
-The "Lethal Trifecta" represents a critical security vulnerability pattern in AI agents that emerges when three specific capabilities are combined. This concept, popularized by security researcher Simon Willison, identifies a dangerous configuration that can lead to data exfiltration and system compromise.
+The "Lethal Trifecta" is a security vulnerability pattern in AI agents that emerges when three specific capabilities are combined. This concept, named by security researcher Simon Willison, describes a configuration that can lead to data exfiltration and system compromise.
 
 ## The Three Components
 

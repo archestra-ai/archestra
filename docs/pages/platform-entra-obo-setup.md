@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "End-to-end setup for Microsoft Entra ID — SSO sign-in plus On-Behalf-Of token exchange for downstream MCP tool calls"
 order: 8
-lastUpdated: 2026-05-07
+lastUpdated: 2026-07-03
 ---
 
 <!--
@@ -92,9 +92,9 @@ Then in Archestra:
 
 # Configuring OBO for Enterprise MCP Auth
 
-Without OBO, MCP servers typically authenticate to downstream APIs with a shared secret — every user's tool call hits Microsoft Graph as the same robot. That breaks audit trails, ignores per-user permissions, and is a non-starter for regulated environments.
+Without OBO, MCP servers authenticate to downstream APIs with a shared secret — every user's tool call reaches Microsoft Graph as the same account, so logs cannot attribute the call to the user and per-user permissions are not applied.
 
-With OBO, each tool call carries the **caller's own identity** all the way down. If Alice doesn't have access to a calendar, the tool call fails for Alice. Logs in Microsoft 365 show *Alice* read the message, not "the Archestra service account."
+With OBO, each tool call carries the **caller's own identity** to the downstream API. If Alice does not have access to a calendar, the tool call fails for Alice. Logs in Microsoft 365 record *Alice*, not a shared service account.
 
 ```mermaid
 sequenceDiagram

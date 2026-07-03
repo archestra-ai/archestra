@@ -329,6 +329,7 @@ export const createIdentityProvider = async (
         | "client_secret_basic"
         | "private_key_jwt";
       jwksEndpoint?: string;
+      scopes?: string[];
     };
     enterpriseManagedCredentials?: {
       clientId?: string;
@@ -361,6 +362,7 @@ export const createIdentityProvider = async (
       options?.oidcConfig?.tokenEndpointAuthentication,
     jwksEndpoint:
       options?.oidcConfig?.jwksEndpoint ?? KEYCLOAK_OIDC.jwksEndpoint,
+    scopes: options?.oidcConfig?.scopes,
   };
 
   const response = await makeApiRequest({

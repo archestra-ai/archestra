@@ -68,19 +68,24 @@ test.describe("Enterprise-managed MCP credentials", () => {
       adminApi,
       sharedProviderName,
       {
-        // The admin signs in through this provider in a real browser, so the
-        // allowed email domain must cover admin@example.com and the OIDC
-        // endpoints must be split by reachability: the authorization endpoint
-        // is fetched by the BROWSER (host-visible NodePort URL) while the
-        // token endpoint is fetched by the BACKEND POD (in-cluster URL).
-        // Leaving them unset makes better-auth hydrate them via runtime OIDC
-        // discovery, whose document advertises host-visible URLs the backend
-        // pod cannot reach — the code-for-token exchange then dies with
-        // "?error=invalid_provider&error_description=token_response_not_found".
+        // The admin signs in through this provider in a real browser. Two
+        // fields are load-bearing for that login:
+        //  - domain must cover admin@example.com so the SSO callback treats
+        //    this (domainVerified) provider as trusted for account linking;
+        //  - scopes must be pinned WITHOUT offline_access: with no scopes
+        //    configured, better-auth's SSO sign-in defaults to
+        //    ["openid","email","profile","offline_access"], and the e2e
+        //    Keycloak realm rejects the code-for-token exchange with
+        //    CODE_TO_TOKEN_ERROR "Offline tokens not allowed for the user or
+        //    client", which the SSO callback collapses into
+        //    "?error=invalid_provider&error_description=token_response_not_found".
+        // Explicit authorization/token endpoints are deliberately NOT set:
+        // the backend re-runs OIDC discovery at registration and overwrites
+        // them anyway (identity-provider.ee.ts discoverOidcConfig), and the
+        // discovered endpoints are the ones that work in CI.
         domain: SSO_DOMAIN,
         oidcConfig: {
-          authorizationEndpoint: KEYCLOAK_OIDC.authorizationEndpoint,
-          tokenEndpoint: KEYCLOAK_OIDC.tokenEndpoint,
+          scopes: ["openid", "email", "profile"],
         },
         enterpriseManagedCredentials: {
           clientId: KEYCLOAK_OIDC.clientId,

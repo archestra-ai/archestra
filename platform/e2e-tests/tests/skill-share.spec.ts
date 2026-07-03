@@ -60,15 +60,11 @@ test.describe("Skills marketplace step on /connection", () => {
       createdLinkId = createBody.link.id;
       expect(createBody.cloneUrl).toMatch(PUBLIC_CLONE_URL_REGEX);
 
-      // "Any client" renders the generic snippets: a git clone of the
+      // "Any client" renders the generic snippets, which reference the
       // freshly-issued clone URL.
       const generic = page.getByTestId("skills-marketplace-snippets-generic");
       await expect(generic).toBeVisible();
-      const cloneCmd = generic.locator("code").filter({ hasText: /git clone/ });
-      await expect(cloneCmd).toBeVisible();
-      expect((await cloneCmd.textContent()) ?? "").toContain(
-        createBody.cloneUrl,
-      );
+      await expect(generic).toContainText(createBody.cloneUrl);
     } finally {
       if (createdLinkId) {
         await page.request

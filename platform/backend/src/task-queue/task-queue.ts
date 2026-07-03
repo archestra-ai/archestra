@@ -10,6 +10,8 @@ export class TaskQueueService {
   private pollIntervalId: ReturnType<typeof setInterval> | null = null;
   private activeTaskIds = new Set<string>();
   private stopping = false;
+  private polling = false;
+  private lastStuckSweepAt = 0;
   private drainResolve: (() => void) | null = null;
 
   registerHandler(taskType: string, handler: TaskHandler): void {
@@ -87,6 +89,8 @@ export class TaskQueueService {
     const pollIntervalMs = config.kb.taskWorkerPollIntervalSeconds * 1000;
 
     this.stopping = false;
+    // Sweep on the first poll of a fresh worker, then at most once per minute.
+    this.lastStuckSweepAt = 0;
 
     this.pollIntervalId = setInterval(() => {
       this.poll().catch((error) => {
@@ -153,37 +157,78 @@ export class TaskQueueService {
 
   private async poll(): Promise<void> {
     if (this.stopping) return;
-    if (this.activeTaskIds.size >= config.kb.taskWorkerMaxConcurrent) return;
+    // The interval fires regardless of whether the previous poll finished;
+    // this guard prevents overlapping polls from racing on the same state.
+    if (this.polling) return;
+    this.polling = true;
 
-    // Reset stuck tasks (processing for more than 1 hour)
-    const resetCount = await TaskModel.resetStuckTasks(60 * 60 * 1000);
-    if (resetCount > 0) {
-      metrics.taskQueue.reportStuckTasksReset(resetCount);
-      logger.warn({ resetCount }, "[TaskQueue] Reset stuck tasks");
-    }
-
-    // Dequeue and process
-    const task = await TaskModel.dequeue();
-    if (!task) return;
-
-    this.activeTaskIds.add(task.id);
-    this.processTask(task)
-      .catch((error) => {
-        logger.error(
-          {
-            taskId: task.id,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          "[TaskQueue] Unhandled error in processTask",
-        );
-      })
-      .finally(() => {
-        this.activeTaskIds.delete(task.id);
-        if (this.activeTaskIds.size === 0 && this.drainResolve) {
-          this.drainResolve();
-          this.drainResolve = null;
+    try {
+      if (Date.now() - this.lastStuckSweepAt >= STUCK_SWEEP_INTERVAL_MS) {
+        this.lastStuckSweepAt = Date.now();
+        // Reset stuck tasks (processing for more than 1 hour)
+        const swept = await TaskModel.resetStuckTasks(STUCK_TASK_TIMEOUT_MS);
+        if (swept.length > 0) {
+          metrics.taskQueue.reportStuckTasksReset(swept.length);
+          logger.warn(
+            { resetCount: swept.length },
+            "[TaskQueue] Reset stuck tasks",
+          );
         }
-      });
+        // A stuck periodic task that went straight to dead would silently end
+        // its chain — resurrect it here.
+        for (const transition of swept) {
+          if (transition.periodic && transition.status === "dead") {
+            await this.rescheduleIfPeriodic(transition.taskType);
+          }
+        }
+        if (this.stopping) return;
+      }
+
+      // Dequeue and process until the concurrency cap is filled
+      while (
+        !this.stopping &&
+        this.activeTaskIds.size < config.kb.taskWorkerMaxConcurrent
+      ) {
+        const task = await TaskModel.dequeue();
+        if (!task) return;
+
+        // Track immediately so a concurrent stopWorker sees this task.
+        this.activeTaskIds.add(task.id);
+
+        if (this.stopping) {
+          // stopWorker may have snapshotted an empty set while the dequeue
+          // was in flight; hand the task back instead of processing it
+          // outside the drain.
+          this.untrackTask(task.id);
+          await TaskModel.releaseToQueue([task.id]);
+          return;
+        }
+
+        this.processTask(task)
+          .catch((error) => {
+            logger.error(
+              {
+                taskId: task.id,
+                error: error instanceof Error ? error.message : String(error),
+              },
+              "[TaskQueue] Unhandled error in processTask",
+            );
+          })
+          .finally(() => {
+            this.untrackTask(task.id);
+          });
+      }
+    } finally {
+      this.polling = false;
+    }
+  }
+
+  private untrackTask(taskId: string): void {
+    this.activeTaskIds.delete(taskId);
+    if (this.activeTaskIds.size === 0 && this.drainResolve) {
+      this.drainResolve();
+      this.drainResolve = null;
+    }
   }
 
   private waitForDrain(): Promise<void> {
@@ -312,6 +357,9 @@ export class TaskQueueService {
 export const taskQueueService = new TaskQueueService();
 
 // ===== Internal helpers =====
+
+const STUCK_SWEEP_INTERVAL_MS = 60_000;
+const STUCK_TASK_TIMEOUT_MS = 60 * 60 * 1000;
 
 function isUniqueViolation(error: unknown): boolean {
   return (

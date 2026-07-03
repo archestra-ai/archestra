@@ -116,29 +116,147 @@ describe("TaskModel", () => {
   });
 
   describe("resetStuckTasks", () => {
-    test("resets tasks stuck in processing past the timeout", async () => {
-      // Create a task and manually set it to processing with an old startedAt
+    // Simulate a stuck task: set status to processing with startedAt in the past
+    async function wedgeIntoProcessing(id: string, attempt: number) {
+      await db
+        .update(schema.tasksTable)
+        .set({
+          status: "processing",
+          startedAt: new Date(Date.now() - 120_000),
+          attempt,
+        })
+        .where(eq(schema.tasksTable.id, id));
+    }
+
+    test("returns a stuck retryable task to pending with future scheduledFor", async () => {
       const task = await TaskModel.create({
         taskType: "connector_sync",
         payload: { connectorId: "conn-1" },
         maxAttempts: 5,
       });
+      await wedgeIntoProcessing(task.id, 1);
 
-      // Simulate a stuck task: set status to processing with startedAt in the past
-      const twoMinutesAgo = new Date(Date.now() - 120_000);
+      const transitions = await TaskModel.resetStuckTasks(60_000);
+
+      expect(transitions).toEqual([
+        { taskType: "connector_sync", periodic: false, status: "pending" },
+      ]);
+
+      const [updated] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, task.id));
+      expect(updated.status).toBe("pending");
+      expect(updated.lastError).toBe("Task timed out (stuck in processing)");
+      expect(updated.scheduledFor.getTime()).toBeGreaterThan(Date.now());
+    });
+
+    test("marks a stuck task with exhausted attempts as dead", async () => {
+      const task = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+        maxAttempts: 3,
+      });
+      await wedgeIntoProcessing(task.id, 3);
+
+      const transitions = await TaskModel.resetStuckTasks(60_000);
+
+      expect(transitions).toEqual([
+        { taskType: "connector_sync", periodic: false, status: "dead" },
+      ]);
+
+      const [updated] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, task.id));
+      expect(updated.status).toBe("dead");
+      expect(updated.lastError).toBe("Task timed out (stuck in processing)");
+      expect(updated.completedAt).toBeInstanceOf(Date);
+    });
+
+    test("reports the periodic flag on dead transitions", async () => {
+      const task = await TaskModel.create({
+        taskType: "check_due_connectors",
+        payload: {},
+        maxAttempts: 1,
+        periodic: true,
+      });
+      await wedgeIntoProcessing(task.id, 1);
+
+      const transitions = await TaskModel.resetStuckTasks(60_000);
+
+      expect(transitions).toEqual([
+        { taskType: "check_due_connectors", periodic: true, status: "dead" },
+      ]);
+    });
+
+    test("ignores processing tasks within the timeout", async () => {
+      const task = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+      });
       await db
         .update(schema.tasksTable)
-        .set({
-          status: "processing",
-          startedAt: twoMinutesAgo,
-          attempt: 1,
-        })
+        .set({ status: "processing", startedAt: new Date(), attempt: 1 })
         .where(eq(schema.tasksTable.id, task.id));
 
-      // Reset tasks stuck for more than 60 seconds
-      const count = await TaskModel.resetStuckTasks(60_000);
+      const transitions = await TaskModel.resetStuckTasks(60_000);
 
-      expect(count).toBe(1);
+      expect(transitions).toEqual([]);
+      const [updated] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, task.id));
+      expect(updated.status).toBe("processing");
+    });
+  });
+
+  describe("findActivePayloadValues", () => {
+    test("returns payload values for pending and processing tasks of the given type", async () => {
+      // Oldest task first so dequeue() flips exactly this one to processing.
+      await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-processing" },
+      });
+      await TaskModel.dequeue();
+
+      await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-pending" },
+      });
+
+      const completed = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-completed" },
+      });
+      await TaskModel.complete(completed.id);
+
+      await TaskModel.create({
+        taskType: "schedule_trigger_run_execute",
+        payload: { triggerId: "trig-1" },
+      });
+
+      const connectorIds = await TaskModel.findActivePayloadValues(
+        "connector_sync",
+        "connectorId",
+      );
+      expect(connectorIds).toEqual(
+        new Set(["conn-processing", "conn-pending"]),
+      );
+
+      const triggerIds = await TaskModel.findActivePayloadValues(
+        "schedule_trigger_run_execute",
+        "triggerId",
+      );
+      expect(triggerIds).toEqual(new Set(["trig-1"]));
+    });
+
+    test("returns an empty set when no active tasks match", async () => {
+      const result = await TaskModel.findActivePayloadValues(
+        "connector_sync",
+        "connectorId",
+      );
+      expect(result).toEqual(new Set());
     });
   });
 

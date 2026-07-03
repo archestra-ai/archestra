@@ -1,6 +1,8 @@
-import { and, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertTask, Task } from "@/types";
+import type { InsertTask, Task, TaskType } from "@/types";
+
+type StuckTaskTransition = Pick<Task, "taskType" | "periodic" | "status">;
 
 class TaskModel {
   static async create(data: InsertTask): Promise<Task> {
@@ -90,26 +92,41 @@ class TaskModel {
     return result ?? null;
   }
 
-  static async resetStuckTasks(timeoutMs: number): Promise<number> {
+  /**
+   * Bulk-recovers tasks stuck in `processing` past the timeout. Both UPDATEs
+   * recheck status/started_at in their WHERE clause so a task that finished
+   * (or was picked up again) between statements is never clobbered.
+   */
+  static async resetStuckTasks(
+    timeoutMs: number,
+  ): Promise<StuckTaskTransition[]> {
     const cutoff = new Date(Date.now() - timeoutMs);
-    const t = schema.tasksTable;
+    const timeoutError = "Task timed out (stuck in processing)";
 
-    const stuck = await db
-      .select({ id: t.id, attempt: t.attempt, maxAttempts: t.maxAttempts })
-      .from(t)
-      .where(and(eq(t.status, "processing"), lt(t.startedAt, cutoff)));
+    const { rows: dead } = await db.execute<StuckTaskTransition>(sql`
+      UPDATE tasks
+      SET status = 'dead',
+          last_error = ${timeoutError},
+          completed_at = NOW()
+      WHERE status = 'processing'
+        AND started_at < ${cutoff}
+        AND attempt >= max_attempts
+      RETURNING task_type AS "taskType", periodic, status
+    `);
 
-    let count = 0;
-    for (const task of stuck) {
-      await TaskModel.fail({
-        id: task.id,
-        error: "Task timed out (stuck in processing)",
-        attempt: task.attempt,
-        maxAttempts: task.maxAttempts,
-      });
-      count++;
-    }
-    return count;
+    // Exponential backoff computed in SQL: 30s * 2^(attempt-1)
+    const { rows: retried } = await db.execute<StuckTaskTransition>(sql`
+      UPDATE tasks
+      SET status = 'pending',
+          last_error = ${timeoutError},
+          scheduled_for = NOW() + (30000 * power(2, attempt - 1)) * INTERVAL '1 millisecond'
+      WHERE status = 'processing'
+        AND started_at < ${cutoff}
+        AND attempt < max_attempts
+      RETURNING task_type AS "taskType", periodic, status
+    `);
+
+    return [...dead, ...retried];
   }
 
   static async releaseToQueue(ids: string[]): Promise<number> {
@@ -165,6 +182,27 @@ class TaskModel {
       ) AS exists
     `);
     return (rows[0] as { exists: boolean } | undefined)?.exists ?? false;
+  }
+
+  /**
+   * Batched replacement for per-entity hasPendingOrProcessing* checks: one
+   * query returning every distinct payload value for active tasks of a type.
+   */
+  static async findActivePayloadValues(
+    taskType: TaskType,
+    field: "connectorId" | "triggerId",
+  ): Promise<Set<string>> {
+    const { rows } = await db.execute<{ value: string | null }>(sql`
+      SELECT DISTINCT payload->>${field} AS value
+      FROM tasks
+      WHERE task_type = ${taskType}
+        AND status IN ('pending', 'processing')
+    `);
+    return new Set(
+      rows
+        .map((row) => row.value)
+        .filter((value): value is string => value !== null),
+    );
   }
 
   static async hasPendingOrProcessingByType(

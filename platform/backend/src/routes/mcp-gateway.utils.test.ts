@@ -3,7 +3,6 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
   OAUTH_TOKEN_ID_PREFIX,
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
@@ -13,6 +12,7 @@ import {
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
   TOOL_UPDATE_SKILL_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
@@ -1486,9 +1486,7 @@ describe("createAgentServer tools/list", () => {
       response.tools.every((tool) => tool.inputSchema?.type === "object"),
     ).toBe(true);
     expect(
-      response.tools.some(
-        (tool) => tool.name === TOOL_ARTIFACT_WRITE_FULL_NAME,
-      ),
+      response.tools.some((tool) => tool.name === TOOL_TODO_WRITE_FULL_NAME),
     ).toBe(false);
   });
 

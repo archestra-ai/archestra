@@ -1123,10 +1123,18 @@ class InteractionModel {
         .orderBy(desc(max(schema.interactionsTable.createdAt)))
         .limit(pagination.limit)
         .offset(pagination.offset),
+      // Total = distinct sessions + sessionless interactions (each its own
+      // "session"). Counted without COUNT(DISTINCT COALESCE(session_id,
+      // id::text)) — the per-row uuid cast defeats the session_id index — and
+      // without the conversations join the main query needs for titles: the
+      // filters only touch interactions columns, and joining on the
+      // conversations PK can't change the count, so on large tables it only
+      // pushed this query into statement timeout.
       db
-        .select({ total: sql<number>`COUNT(DISTINCT ${sessionGroupExpr})` })
+        .select({
+          total: sql<number>`COUNT(DISTINCT ${schema.interactionsTable.sessionId}) + COUNT(*) FILTER (WHERE ${schema.interactionsTable.sessionId} IS NULL)`,
+        })
         .from(schema.interactionsTable)
-        .leftJoin(schema.conversationsTable, sessionIdMatchesConversation())
         .where(whereClause),
     ]);
 

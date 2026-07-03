@@ -1,12 +1,17 @@
 /**
- * In-memory carrier for the opening prompt of a chat started from a project.
+ * In-memory carrier for the opening prompt of a chat whose conversation was
+ * created before navigating to it.
  *
- * The project composer creates the conversation up front — so the project page
- * stays on screen instead of routing through an empty `/chat` that flashes the
- * New Chat splash — then navigates straight to `/chat/<id>`. The prompt rides
- * this module-level singleton across that one client-side navigation, and
- * `/chat/<id>` drains it (together with any attachments from
- * `pending-chat-handoff-files`) into the conversation's first message.
+ * Two flows use it. The project composer creates the conversation up front — so
+ * the project page stays on screen instead of routing through an empty `/chat`
+ * that flashes the New Chat splash — then navigates straight to `/chat/<id>`.
+ * The apps page does the same when an external MCP app's tool has required
+ * inputs: the backend creates an empty conversation and returns an opening
+ * prompt, which rides here so the agent's first turn collects the inputs. In
+ * both, the prompt rides this module-level singleton across that one
+ * client-side navigation, and `/chat/<id>` drains it (together with any
+ * attachments from `pending-chat-handoff-files`) into the conversation's first
+ * message.
  *
  * Keyed by the created conversation id so an unrelated `/chat/<id>` open never
  * inherits a stale handoff; a hard reload starts empty, which is fine for a

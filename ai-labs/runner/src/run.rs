@@ -70,7 +70,6 @@ const MAX_WORKERS_CAP: usize = 4;
 const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 const REQUIRED_TOOL_SHORT_NAMES: &[&str] = &[
-    "artifact_write",
     "todo_write",
     "run_command",
     "upload_file",

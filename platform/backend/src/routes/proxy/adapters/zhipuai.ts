@@ -1007,12 +1007,7 @@ export const zhipuaiAdapterFactory: LLMProvider<
     options: CreateClientOptions,
   ): ZhipuaiClient {
     const customFetch = options.agent
-      ? metrics.llm.getObservableFetch(
-          "zhipuai",
-          options.agent,
-          options.source,
-          options.externalAgentId,
-        )
+      ? metrics.llm.getObservableFetch("zhipuai", options.agent, options.source)
       : undefined;
 
     return new ZhipuaiClient(apiKey, options.baseUrl, customFetch);

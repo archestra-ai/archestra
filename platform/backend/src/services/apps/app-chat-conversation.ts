@@ -71,13 +71,33 @@ export async function createSeededAppConversation(params: {
 }
 
 /**
- * Create a chat conversation with an external (MCP-server) UI app already
- * mounted, the external analogue of {@link createSeededAppConversation}. It
- * seeds a synthetic tool-call message whose output carries the UI pointer
- * (`_meta.ui.resourceUri`) plus the concrete `mcpServerId`, so the chat mounts
- * the app against that install via the server endpoint with no model turn.
- * Backs the apps-page deep-link for an MCP-server app card. Returns the
- * conversation id to navigate to (`/chat/<id>`).
+ * How an external app conversation was set up: `render` seeds the app already
+ * mounted (no model turn); `prompt` leaves the conversation empty and hands the
+ * client an opening user prompt to send through the normal chat path, so the
+ * agent collects the tool's required inputs before calling it.
+ */
+type ExternalAppOpenResult = {
+  conversationId: string;
+  mode: "render" | "prompt";
+  /** The opening user message to send; present only for `mode: "prompt"`. */
+  prompt?: string;
+};
+
+/**
+ * Create a chat conversation for an external (MCP-server) UI app, the external
+ * analogue of {@link createSeededAppConversation}. Backs the apps-page
+ * deep-link for an MCP-server app card. Returns the conversation id to
+ * navigate to (`/chat/<id>`) plus the open mode.
+ *
+ * Two modes, decided by the tool's input schema:
+ * - No required inputs: seed a synthetic tool-call message whose output
+ *   carries the UI pointer (`_meta.ui.resourceUri`) plus the concrete
+ *   `mcpServerId`, so the chat mounts the app against that install via the
+ *   server endpoint with no model turn (`mode: "render"`).
+ * - Required inputs: rendering with input `{}` would mount a broken app, so
+ *   the conversation is created empty and the caller gets an opening prompt
+ *   (`mode: "prompt"`) to send as the first user message — the agent asks for
+ *   the inputs, calls the tool, and the tool result mounts the app.
  */
 export async function createSeededExternalAppConversation(params: {
   mcpServerId: string;
@@ -86,7 +106,7 @@ export async function createSeededExternalAppConversation(params: {
   organizationId: string;
   /** Agent to bind the chat to; defaults to the caller's default chat agent. */
   agentId?: string;
-}): Promise<{ conversationId: string }> {
+}): Promise<ExternalAppOpenResult> {
   const { mcpServerId, resourceUri, userId, organizationId } = params;
 
   const uiResource = await McpServerModel.findInstalledUiResourceForCaller({
@@ -101,7 +121,25 @@ export async function createSeededExternalAppConversation(params: {
   // The card title: "<server> / <tool>" — also the seeded part's tool name, so
   // the chat's `mcpToolLabel` derives the same label.
   const label = `${uiResource.serverName} / ${uiResource.toolName}`;
-  return seedConversationWithRender({
+
+  if (toolRequiresInputs(uiResource.toolParameters)) {
+    const { conversationId } = await createAppChatConversation({
+      userId,
+      organizationId,
+      agentId: params.agentId,
+      title: label,
+    });
+    return {
+      conversationId,
+      mode: "prompt",
+      prompt:
+        `Open the ${label} app. ` +
+        `Ask me for any inputs you need first, then call the ` +
+        `${uiResource.toolName} tool on the ${uiResource.serverName} MCP server.`,
+    };
+  }
+
+  const { conversationId } = await seedConversationWithRender({
     userId,
     organizationId,
     agentId: params.agentId,
@@ -119,26 +157,42 @@ export async function createSeededExternalAppConversation(params: {
       }),
     },
   });
+  return { conversationId, mode: "render" };
 }
 
 // === internal ===
 
 /**
- * Shared seeding: bind a new conversation to the caller's chat agent (resolving
- * its LLM selection) and persist a single hand-built assistant message whose one
- * part renders an app inline — no model turn. The part is typed as the AI SDK's
- * `UIMessage` part so the synthetic shape is compile-checked (the `content`
- * column is `$type<any>`) and is indistinguishable from a model-driven render.
+ * Whether calling the tool with input `{}` cannot succeed: its input schema
+ * declares required properties. Mirrors `normalizeToolInputSchema`
+ * (routes/mcp-gateway.utils.ts): anything that isn't a `type: "object"` schema
+ * normalizes to an empty object schema, i.e. no required inputs.
  */
-async function seedConversationWithRender(params: {
+function toolRequiresInputs(parameters: unknown): boolean {
+  if (
+    typeof parameters !== "object" ||
+    parameters === null ||
+    Array.isArray(parameters)
+  ) {
+    return false;
+  }
+  const schema = parameters as { type?: unknown; required?: unknown };
+  if (schema.type !== "object") return false;
+  return Array.isArray(schema.required) && schema.required.length > 0;
+}
+
+/**
+ * Bind a new, empty conversation to the caller's chat agent (resolving its LLM
+ * selection). Shared by the render seeding below and the prompt-mode external
+ * open (which leaves the conversation empty for the client's first send).
+ */
+async function createAppChatConversation(params: {
   userId: string;
   organizationId: string;
   agentId?: string;
   title: string;
-  part: UIMessage["parts"][number];
-  greeting?: string;
 }): Promise<{ conversationId: string }> {
-  const { userId, organizationId, title, part, greeting } = params;
+  const { userId, organizationId, title } = params;
 
   const agentId =
     params.agentId ??
@@ -166,6 +220,33 @@ async function seedConversationWithRender(params: {
     chatApiKeyId: llmSelection.chatApiKeyId,
   });
 
+  return { conversationId: conversation.id };
+}
+
+/**
+ * Shared seeding: bind a new conversation to the caller's chat agent (resolving
+ * its LLM selection) and persist a single hand-built assistant message whose one
+ * part renders an app inline — no model turn. The part is typed as the AI SDK's
+ * `UIMessage` part so the synthetic shape is compile-checked (the `content`
+ * column is `$type<any>`) and is indistinguishable from a model-driven render.
+ */
+async function seedConversationWithRender(params: {
+  userId: string;
+  organizationId: string;
+  agentId?: string;
+  title: string;
+  part: UIMessage["parts"][number];
+  greeting?: string;
+}): Promise<{ conversationId: string }> {
+  const { userId, organizationId, agentId, title, part, greeting } = params;
+
+  const { conversationId } = await createAppChatConversation({
+    userId,
+    organizationId,
+    agentId,
+    title,
+  });
+
   const content: UIMessage = {
     id: generateId(),
     role: "assistant",
@@ -173,7 +254,7 @@ async function seedConversationWithRender(params: {
   };
 
   await MessageModel.create({
-    conversationId: conversation.id,
+    conversationId,
     role: "assistant",
     content,
   });
@@ -181,7 +262,7 @@ async function seedConversationWithRender(params: {
   // Separate message so the render above stays a byte-for-byte model-driven render.
   if (greeting) {
     await MessageModel.create({
-      conversationId: conversation.id,
+      conversationId,
       role: "assistant",
       content: {
         id: generateId(),
@@ -191,7 +272,7 @@ async function seedConversationWithRender(params: {
     });
   }
 
-  return { conversationId: conversation.id };
+  return { conversationId };
 }
 
 async function resolveDefaultChatAgentId(params: {

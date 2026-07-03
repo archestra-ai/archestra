@@ -146,27 +146,36 @@ export function McpAppStandaloneButton({ appId }: { appId: string }) {
 }
 
 /**
- * Interactive app-icon pill shown next to a tool-call circle in the chat, and
- * the toggle for the app's inline render — like a tool-call pill toggles its
- * content. `pressed` means the app is visible inline (its content is expanded
- * under the pill). It reads unpressed while the app is hosted in the right panel
- * (you're looking at the panel copy). `hasError` shows a red status dot for a
- * runtime error, matching the tool-call circles.
+ * Interactive app pill in the chat's tool-call row: the app's icon plus its
+ * name, in the same chrome as the Skill pill and the tool-call circles (32px
+ * tall, rounded-full, bordered). Clicking toggles the app's inline render —
+ * like a tool-call circle toggles its detail card. `pressed` means the app is
+ * visible inline (its content is expanded under the pill). It reads unpressed
+ * while the app is hosted in the right panel (you're looking at the panel
+ * copy). `state` drives the status dot exactly like the tool-call circles;
+ * `hasError` overrides it with red for an app runtime error.
  */
-export function McpAppMarkerCircle({
+export function McpAppPill({
   label,
+  icon,
+  state,
   pressed = false,
   hasError = false,
   onClick,
 }: {
-  /** Tooltip text — the app name. */
+  /** The app name, shown inline and in the tooltip. */
   label: string;
+  /** App icon (e.g. an McpCatalogIcon); falls back to the generic app glyph. */
+  icon?: React.ReactNode;
+  /** Tool-call state for the status dot; omitted renders no dot. */
+  state?: "running" | "completed" | "error";
   /** Pressed = the app's inline render is expanded under the pill. */
   pressed?: boolean;
   /** Show a red status dot for an app runtime error. */
   hasError?: boolean;
   onClick: () => void;
 }) {
+  const dotState = hasError ? "error" : state;
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
@@ -177,15 +186,25 @@ export function McpAppMarkerCircle({
             aria-label={label}
             aria-pressed={pressed}
             className={cn(
-              "relative inline-flex size-8 items-center justify-center rounded-full border transition-all hover:border-accent-foreground/20 hover:bg-accent hover:text-foreground",
+              "relative inline-flex h-8 items-center gap-1.5 rounded-full border px-3 transition-all hover:border-accent-foreground/20 hover:bg-accent hover:text-foreground",
               pressed
                 ? "border-accent-foreground/20 bg-accent text-foreground ring-2 ring-primary/20"
-                : "bg-background text-muted-foreground",
+                : "bg-background",
             )}
           >
-            <AppWindow className="h-4 w-4" />
-            {hasError ? (
-              <span className="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-background bg-destructive" />
+            {icon ?? <AppWindow className="h-4 w-4 text-muted-foreground" />}
+            <span className="whitespace-nowrap text-xs font-medium">
+              {label}
+            </span>
+            {dotState ? (
+              <span
+                className={cn(
+                  "absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-background",
+                  dotState === "completed" && "bg-green-500",
+                  dotState === "running" && "bg-blue-500 animate-pulse",
+                  dotState === "error" && "bg-destructive",
+                )}
+              />
             ) : null}
           </button>
         </TooltipTrigger>

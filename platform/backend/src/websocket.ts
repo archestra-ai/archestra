@@ -40,8 +40,12 @@ interface McpExecSubscription {
 }
 
 interface McpDeploymentStatusSubscription {
-  interval: NodeJS.Timeout;
-  lastStatuses: Record<string, McpDeploymentStatusEntry>;
+  /** Projects the shared runtime summary onto this subscriber's accessible servers. */
+  buildStatuses: (
+    summary: typeof McpServerRuntimeManager.statusSummary,
+  ) => Record<string, McpDeploymentStatusEntry>;
+  /** Serialized last-sent statuses, for change detection. */
+  lastStatusesJson: string;
 }
 
 interface WebSocketClientContext {
@@ -67,6 +71,10 @@ class WebSocketService {
   private clientContexts: Map<WebSocket, WebSocketClientContext> = new Map();
   private browserStreamContext: BrowserStreamSocketClientContext | null = null;
   private deploymentMetricsInterval: NodeJS.Timeout | null = null;
+  // One poller shared by all deployment-status subscribers; runs while the
+  // subscription map is non-empty.
+  private mcpDeploymentStatusPollInterval: NodeJS.Timeout | null = null;
+  private mcpDeploymentStatusRefreshInFlight = false;
 
   /**
    * Proxy object for browser subscriptions - exposes Map-like interface for testing.
@@ -678,10 +686,16 @@ class WebSocketService {
       return result;
     };
 
-    // Refresh and build initial statuses from the runtime manager
-    await McpServerRuntimeManager.refreshAllStates();
-    const runtimeSummary = McpServerRuntimeManager.statusSummary;
-    const statuses = buildStatuses(runtimeSummary);
+    // Refresh (through the shared in-flight guard) and build initial statuses
+    await this.refreshMcpDeploymentStates();
+
+    // The awaits above (DB + refresh) may outlive the socket: revalidate
+    // before registering, or we would start polling for a dead client
+    if (ws.readyState !== WS.OPEN) {
+      return;
+    }
+
+    const statuses = buildStatuses(McpServerRuntimeManager.statusSummary);
 
     // Send initial statuses
     this.sendToClient(ws, {
@@ -689,56 +703,116 @@ class WebSocketService {
       payload: { statuses },
     });
 
-    // Store subscription with initial statuses for change detection
-    const lastStatuses = { ...statuses };
-
-    // Start polling interval (10s)
-    const interval = setInterval(async () => {
-      if (ws.readyState !== WS.OPEN) {
-        this.unsubscribeMcpDeploymentStatuses(ws);
-        return;
-      }
-
-      try {
-        // Refresh deployment states from K8s before reading cached summaries
-        await McpServerRuntimeManager.refreshAllStates();
-
-        const currentSummary = McpServerRuntimeManager.statusSummary;
-        const currentStatuses = buildStatuses(currentSummary);
-
-        // Only send if statuses changed
-        const sub = this.mcpDeploymentStatusSubscriptions.get(ws);
-        if (!sub) return;
-
-        const changed =
-          JSON.stringify(currentStatuses) !== JSON.stringify(sub.lastStatuses);
-
-        if (changed) {
-          sub.lastStatuses = { ...currentStatuses };
-          this.sendToClient(ws, {
-            type: "mcp_deployment_statuses",
-            payload: { statuses: currentStatuses },
-          });
-        }
-      } catch (error) {
-        logger.error({ error }, "Failed to poll MCP deployment statuses");
-      }
-    }, 10_000);
-
     this.mcpDeploymentStatusSubscriptions.set(ws, {
-      interval,
-      lastStatuses,
+      buildStatuses,
+      lastStatusesJson: JSON.stringify(statuses),
     });
+    this.startMcpDeploymentStatusPollingIfNeeded();
 
     logger.info("MCP deployment status client subscribed");
   }
 
   private unsubscribeMcpDeploymentStatuses(ws: WebSocket): void {
-    const subscription = this.mcpDeploymentStatusSubscriptions.get(ws);
-    if (subscription) {
-      clearInterval(subscription.interval);
-      this.mcpDeploymentStatusSubscriptions.delete(ws);
+    if (this.mcpDeploymentStatusSubscriptions.delete(ws)) {
       logger.info("MCP deployment status client unsubscribed");
+    }
+    if (
+      this.mcpDeploymentStatusSubscriptions.size === 0 &&
+      this.mcpDeploymentStatusPollInterval
+    ) {
+      clearInterval(this.mcpDeploymentStatusPollInterval);
+      this.mcpDeploymentStatusPollInterval = null;
+    }
+  }
+
+  private startMcpDeploymentStatusPollingIfNeeded(): void {
+    if (this.mcpDeploymentStatusPollInterval) {
+      return;
+    }
+    this.mcpDeploymentStatusPollInterval = setInterval(() => {
+      void this.pollMcpDeploymentStatuses();
+    }, 10_000);
+  }
+
+  /**
+   * One shared tick for all subscribers: a single runtime refresh, then each
+   * subscriber gets their own projection of the summary (subscribers may see
+   * different servers, so payloads are per-subscriber and never broadcast).
+   */
+  private async pollMcpDeploymentStatuses(): Promise<void> {
+    // A previous tick (or a subscribe-time refresh) is still running; skip.
+    if (this.mcpDeploymentStatusRefreshInFlight) {
+      return;
+    }
+
+    try {
+      await this.refreshMcpDeploymentStates();
+    } catch (error) {
+      logger.error({ error }, "Failed to poll MCP deployment statuses");
+      return;
+    }
+
+    const summary = McpServerRuntimeManager.statusSummary;
+    for (const [ws, sub] of this.mcpDeploymentStatusSubscriptions) {
+      // Isolate subscribers: one failing send must not stop the others
+      try {
+        if (ws.readyState !== WS.OPEN) {
+          this.unsubscribeMcpDeploymentStatuses(ws);
+          continue;
+        }
+
+        const statuses = sub.buildStatuses(summary);
+        const statusesJson = JSON.stringify(statuses);
+        if (statusesJson !== sub.lastStatusesJson) {
+          this.sendToClient(ws, {
+            type: "mcp_deployment_statuses",
+            payload: { statuses },
+          });
+          // Mark delivered only after a successful send, so a throwing send
+          // is retried on the next tick
+          sub.lastStatusesJson = statusesJson;
+        }
+      } catch (error) {
+        logger.error(
+          { error },
+          "Failed to send MCP deployment statuses to subscriber",
+        );
+      }
+    }
+  }
+
+  /**
+   * refreshAllStates mutates per-deployment state and is not concurrency-safe,
+   * so overlapping invocations are skipped; a skipping caller reads the summary
+   * left by the previous refresh. The awaited refresh is bounded: a K8s call
+   * that never settles must not hold the guard forever and freeze polling for
+   * every subscriber.
+   */
+  private async refreshMcpDeploymentStates(): Promise<void> {
+    if (this.mcpDeploymentStatusRefreshInFlight) {
+      return;
+    }
+    this.mcpDeploymentStatusRefreshInFlight = true;
+    let timeoutTimer: NodeJS.Timeout | undefined;
+    try {
+      const result = await Promise.race([
+        McpServerRuntimeManager.refreshAllStates(),
+        new Promise<"timeout">((resolve) => {
+          timeoutTimer = setTimeout(
+            () => resolve("timeout"),
+            MCP_DEPLOYMENT_STATUS_REFRESH_TIMEOUT_MS,
+          );
+        }),
+      ]);
+      if (result === "timeout") {
+        logger.warn(
+          { timeoutMs: MCP_DEPLOYMENT_STATUS_REFRESH_TIMEOUT_MS },
+          "MCP deployment state refresh timed out; releasing poll guard",
+        );
+      }
+    } finally {
+      clearTimeout(timeoutTimer);
+      this.mcpDeploymentStatusRefreshInFlight = false;
     }
   }
 
@@ -972,6 +1046,10 @@ export function broadcastConversationUpdated(
 }
 
 export default websocketService;
+
+// Upper bound on one shared deployment-status refresh: releases the poll
+// guard even if a K8s call never settles.
+const MCP_DEPLOYMENT_STATUS_REFRESH_TIMEOUT_MS = 60_000;
 
 // How much exec output we keep to diagnose why a session ended. The OCI
 // start-failure error is short and arrives first, so a small head is plenty.

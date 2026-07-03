@@ -22,7 +22,7 @@ Start a project from the Projects page, or turn an existing chat into one with *
 
 ## Files
 
-When an agent saves a file in a project chat — a report, an export, a cleaned-up spreadsheet — it goes to the project, not just that chat. The project page lists them all, and every chat in the project can read them.
+When an agent saves a file in a project chat — a report, for example — it goes to the project. The project page lists them all, and every chat in the project can read them.
 
 You can add your own files too: drag and drop them onto the Files panel. Text and Markdown files are editable right in the panel, so a small fix doesn't need a re-upload.
 

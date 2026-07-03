@@ -32,20 +32,14 @@ test.describe("Skills marketplace step on /connection", () => {
       await goToPage(page, "/connection");
       await page.waitForLoadState("domcontentloaded");
 
-      // Pick "Any client" so both Claude Code and Codex snippets render.
+      // Pick "Any client" so the generic (client-agnostic) snippets render.
       await page
         .getByRole("button", { name: /Any Client/i })
         .first()
         .click();
 
-      // Expand the new "Share skills as a marketplace" step.
-      await page
-        .getByRole("button", {
-          name: /Share skills as a marketplace/i,
-        })
-        .first()
-        .click();
-
+      // The "Install shared skills" step expands once a client is picked, so
+      // the create button is reachable directly.
       const createButton = page.getByTestId("skills-marketplace-create");
       await expect(createButton).toBeVisible({ timeout: 20_000 });
 
@@ -66,30 +60,15 @@ test.describe("Skills marketplace step on /connection", () => {
       createdLinkId = createBody.link.id;
       expect(createBody.cloneUrl).toMatch(PUBLIC_CLONE_URL_REGEX);
 
-      // The "Any client" picker shows both Claude Code and Codex snippets,
-      // each referencing the freshly-issued clone URL.
-      const claude = page.getByTestId(
-        "skills-marketplace-snippets-claude-code",
+      // "Any client" renders the generic snippets: a git clone of the
+      // freshly-issued clone URL.
+      const generic = page.getByTestId("skills-marketplace-snippets-generic");
+      await expect(generic).toBeVisible();
+      const cloneCmd = generic.locator("code").filter({ hasText: /git clone/ });
+      await expect(cloneCmd).toBeVisible();
+      expect((await cloneCmd.textContent()) ?? "").toContain(
+        createBody.cloneUrl,
       );
-      const codex = page.getByTestId("skills-marketplace-snippets-codex");
-      await expect(claude).toBeVisible();
-      await expect(codex).toBeVisible();
-
-      const claudeAdd = claude
-        .locator("code")
-        .filter({ hasText: /claude plugin marketplace add/ });
-      await expect(claudeAdd).toBeVisible();
-      const claudeAddText = (await claudeAdd.textContent()) ?? "";
-      const cloneUrl = claudeAddText
-        .replace(/^claude plugin marketplace add\s+/, "")
-        .trim();
-      expect(cloneUrl).toMatch(PUBLIC_CLONE_URL_REGEX);
-
-      const codexAdd = codex
-        .locator("code")
-        .filter({ hasText: /codex plugin marketplace add/ });
-      const codexAddText = (await codexAdd.textContent()) ?? "";
-      expect(codexAddText).toContain(cloneUrl);
     } finally {
       if (createdLinkId) {
         await page.request

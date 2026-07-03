@@ -22,7 +22,7 @@ Create a project from the Projects page, or turn an existing chat into one with 
 
 ## Files
 
-Files the agent saves in a project chat go to the project, and every chat in the project can read them. You can also drag and drop your own files onto the Files panel. Text and Markdown files can be edited in place.
+Files the agent saves go to the project. You can also drag and drop your own files onto the Files panel. Text and Markdown files can be edited in place.
 
 ![Project files listed next to the project's chats](/docs/automated_screenshots/platform-projects_files-panel.webp)
 
@@ -32,7 +32,7 @@ Every project has an `instructions.md` file, pinned at the top of the Files pane
 
 ## Scheduled Tasks
 
-A schedule runs an agent in the project on a recurring basis. Pick an agent, write a task prompt, and choose how often it runs. Each run is saved as a chat in the project, and the files it saves go to the project — so you can always review what the agent did.
+A schedule runs an agent on a recurring basis. Pick an agent, write a task prompt, and choose how often it runs. Every run is saved as a chat in the project, so you can review what the agent did.
 
 ![New schedule dialog](/docs/automated_screenshots/platform-projects_schedule-dialog.webp)
 
@@ -48,4 +48,4 @@ A finance person approves incoming invoices against the company's vendor list, a
 
 ![Sharing the project with the Finance team](/docs/automated_screenshots/platform-projects_sharing-dialog.webp)
 
-Everyone with access to a shared project can read its chats, start their own, and work with its files. Changing or deleting the project itself is up to the owner; deleting it keeps the chats but removes the files and schedules. See [Access Control](./platform-access-control) for permissions.
+Everyone with access to a shared project can read its chats, start their own, and work with its files. Only the owner can change or delete the project. Deleting it keeps the chats but removes the files and schedules. See [Access Control](./platform-access-control) for permissions.

@@ -271,7 +271,10 @@ export function McpAppSection({
   );
 
   if (effectiveResourceState === "empty") {
-    return null;
+    // A blank app document reserves no canvas, but its tool-call details must
+    // stay inspectable — a blank render is usually a bug worth examining. Render
+    // them without mounting the runtime.
+    return toolDetails ? <div className="w-full">{toolDetails}</div> : null;
   }
 
   // A deleted (or no-longer-accessible) owned app: it's already dropped from the

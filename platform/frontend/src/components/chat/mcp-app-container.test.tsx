@@ -185,6 +185,25 @@ describe("McpAppSection", () => {
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
   });
 
+  it("keeps the tool-call details inspectable when the app HTML is empty", async () => {
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          preloadedResource={{
+            html: "<!doctype html><html><body></body></html>",
+          }}
+          toolDetails={<div data-testid="tool-details">details</div>}
+        />,
+      );
+    });
+
+    // A blank app document reserves no canvas, but its tool-call details — the
+    // input/output a user needs to diagnose why it rendered blank — must remain.
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+    expect(screen.getByTestId("tool-details")).toBeInTheDocument();
+  });
+
   it("keeps script-driven app HTML because it may render after initialization", async () => {
     await act(async () => {
       render(

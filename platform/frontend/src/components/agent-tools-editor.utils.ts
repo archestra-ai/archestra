@@ -22,9 +22,7 @@ export function getDefaultArchestraToolIds(
   toolsByCatalogIndex: ({ id: string; name: string }[] | undefined)[],
   options: {
     skillsEnabled?: boolean;
-    appsEnabled?: boolean;
     sandboxEnabled?: boolean;
-    projectsEnabled?: boolean;
   } = {},
 ): { toolIds: Set<string>; catalogIndex: number } | null {
   const catalogIndex = catalogItems.findIndex(
@@ -38,9 +36,7 @@ export function getDefaultArchestraToolIds(
   const creationDefaultShortNames = new Set<string>(
     getCreationDefaultArchestraToolShortNames({
       skillsEnabled: options.skillsEnabled === true,
-      appsEnabled: options.appsEnabled === true,
       sandboxEnabled: options.sandboxEnabled === true,
-      projectsEnabled: options.projectsEnabled === true,
     }),
   );
 

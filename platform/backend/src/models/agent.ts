@@ -1,5 +1,4 @@
 import {
-  APP_ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
   DEFAULT_LLM_PROXY_NAME,
   getCreationDefaultArchestraToolShortNames,
@@ -10,6 +9,7 @@ import {
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   type SupportedProvider,
+  TimeInMs,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   urlSlugify,
 } from "@archestra/shared";
@@ -30,6 +30,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { LRUCacheManager } from "@/cache-manager";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
@@ -40,6 +41,7 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import type {
   Agent,
@@ -64,6 +66,30 @@ import OrganizationModel from "./organization";
 import ToolModel from "./tool";
 
 class AgentModel {
+  /**
+   * Process-local cache for {@link AgentModel.resolveIdFromIdOrSlug}. The
+   * lookup runs on every MCP-gateway request before auth, so under load it is
+   * both a meaningful share of pool traffic and the first query to surface
+   * pool starvation. id/slug → id mappings change rarely; the short TTL bounds
+   * staleness after a slug change or deletion (requests for a just-deleted
+   * agent still fail downstream where the agent row is actually loaded).
+   */
+  private static readonly resolveIdCache = registerProcessLocalCache(
+    new LRUCacheManager<string>({
+      maxSize: 10_000,
+      defaultTtl: TimeInMs.Minute,
+    }),
+  );
+
+  /**
+   * Reset the resolve cache. The shared test setup clears it between tests
+   * via the process-local cache registry; tests that exercise post-deletion
+   * staleness clear it explicitly through this hook.
+   */
+  static clearResolveIdCache(): void {
+    AgentModel.resolveIdCache.clear();
+  }
+
   static async findBasicByOrganizationIdAndIds(params: {
     organizationId: string;
     agentIds: string[];
@@ -401,15 +427,13 @@ class AgentModel {
     const creationDefaultShortNames = new Set<ArchestraToolShortName>(
       getCreationDefaultArchestraToolShortNames({
         skillsEnabled: organization?.skillToolsEnabled === true,
-        appsEnabled: config.apps.enabled,
         sandboxEnabled: config.skillsSandbox.enabled,
-        projectsEnabled: config.projects.enabled,
       }),
     );
     const composesGroup = (group: readonly ArchestraToolShortName[]) =>
       group.every((shortName) => creationDefaultShortNames.has(shortName));
 
-    // Always-on defaults (artifact_write, todo_write, query_knowledge_sources).
+    // Always-on defaults (todo_write, query_knowledge_sources).
     await ToolModel.assignDefaultArchestraToolsToAgent(createdAgent.id);
 
     // Agent Skill tools — org opted in via the "Enable and create a new
@@ -418,14 +442,12 @@ class AgentModel {
       await ToolModel.assignSkillToolsToAgent(createdAgent.id, organizationId);
     }
 
-    // MCP App management tools — apps feature enabled, so new agents can
-    // build and use apps without per-agent setup.
-    if (composesGroup(APP_ARCHESTRA_TOOL_SHORT_NAMES)) {
-      await ToolModel.assignAppToolsToAgent(createdAgent.id, organizationId);
-    }
+    // MCP App management tools — always on, so new agents can build and use
+    // apps without per-agent setup.
+    await ToolModel.assignAppToolsToAgent(createdAgent.id, organizationId);
 
-    // Code-execution sandbox + Projects file tools — the helper applies the
-    // same runtime/Projects sub-gating the composer does.
+    // Code-execution sandbox + persistent-files tools — gated on the sandbox
+    // runtime flag, same as the composer.
     if (composesGroup(SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES)) {
       await ToolModel.assignSandboxToolsToAgent(
         createdAgent.id,
@@ -2667,6 +2689,11 @@ class AgentModel {
    * Checks both the id and slug columns in a single query.
    */
   static async resolveIdFromIdOrSlug(idOrSlug: string): Promise<string | null> {
+    const cached = AgentModel.resolveIdCache.get(idOrSlug);
+    if (cached !== undefined) {
+      return cached;
+    }
+
     // `agents.id` is a uuid column. Casting it to text (`id::text = $1`) so it
     // can be compared against a possibly-non-uuid slug defeats the primary-key
     // index and forces a sequential scan. Instead, only compare against `id`
@@ -2684,6 +2711,13 @@ class AgentModel {
       .from(schema.agentsTable)
       .where(and(matchesIdOrSlug, notDeleted(schema.agentsTable)))
       .limit(1);
+
+    // Only positive results are cached: a missing mapping must become visible
+    // as soon as the agent is created, while a cached hit for a just-deleted
+    // agent fails downstream anyway.
+    if (row) {
+      AgentModel.resolveIdCache.set(idOrSlug, row.id);
+    }
 
     return row?.id ?? null;
   }

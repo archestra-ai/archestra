@@ -17,7 +17,6 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import config from "@/config";
 import db, { schema } from "@/database";
 import {
   AppDataModel,
@@ -30,7 +29,7 @@ import {
   buildConnectorResourceUri,
 } from "@/services/apps/app-connector-resource";
 import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import mcpAppProxyRoutes from "./mcp-app-proxy";
 
@@ -41,14 +40,6 @@ import mcpAppProxyRoutes from "./mcp-app-proxy";
 vi.mock("@archestra/app-runtime-rs", () => ({
   prepareAppEnvelope: vi.fn((html: string) => `<!--app-envelope-->${html}`),
 }));
-
-const originalAppsEnabled = config.apps.enabled;
-beforeAll(() => {
-  (config.apps as { enabled: boolean }).enabled = true;
-});
-afterAll(() => {
-  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
-});
 
 async function buildApp(
   userId: string,
@@ -136,28 +127,6 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
 
   afterEach(async () => {
     if (app) await app.close();
-  });
-
-  test("returns 404 when the apps feature is disabled", async ({
-    makeApp,
-    makeUser,
-    makeMember,
-  }) => {
-    const created = await makeApp();
-    const user = await makeUser();
-    await makeMember(user.id, created.organizationId, { role: "member" });
-    (config.apps as { enabled: boolean }).enabled = false;
-    app = await buildApp(user.id, created.organizationId);
-
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/mcp/app/${created.id}`,
-      headers: JSON_RPC_HEADERS,
-      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
-    });
-
-    (config.apps as { enabled: boolean }).enabled = true;
-    expect(response.statusCode).toBe(404);
   });
 
   test("returns 403 when the user cannot access the app", async ({
@@ -687,32 +656,6 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     });
 
     expect(response.statusCode).toBe(403);
-  });
-
-  test("returns 404 on the Bearer path when the apps feature is disabled", async ({
-    makeApp,
-    makeUser,
-    makeMember,
-  }) => {
-    const created = await makeApp();
-    const user = await makeUser();
-    await makeMember(user.id, created.organizationId, { role: "member" });
-    const { value } = await UserTokenModel.create(
-      user.id,
-      created.organizationId,
-    );
-    (config.apps as { enabled: boolean }).enabled = false;
-    app = await buildBearerApp();
-
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/mcp/app/${created.id}`,
-      headers: bearer(value),
-      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
-    });
-
-    (config.apps as { enabled: boolean }).enabled = true;
-    expect(response.statusCode).toBe(404);
   });
 
   test("accepts an audience-bound OAuth token and hides llm_complete from the model", async ({

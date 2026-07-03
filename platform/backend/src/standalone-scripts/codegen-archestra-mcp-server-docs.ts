@@ -140,7 +140,6 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   unassign_knowledge_connector_from_agent: ToolGroup.KnowledgeManagement,
 
   todo_write: ToolGroup.Chat,
-  artifact_write: ToolGroup.Chat,
   swap_agent: ToolGroup.Chat,
   swap_to_default_agent: ToolGroup.Chat,
   create_project_from_conversation: ToolGroup.Chat,

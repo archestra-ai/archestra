@@ -127,14 +127,13 @@ describe("archestra MCP tool names", () => {
   describe("getCreationDefaultArchestraToolShortNames", () => {
     const allOff = {
       skillsEnabled: false,
-      appsEnabled: false,
       sandboxEnabled: false,
-      projectsEnabled: false,
     };
 
-    test("all flags off yields only the always-on defaults", () => {
+    test("all flags off yields the always-on defaults plus the app tools", () => {
       expect(getCreationDefaultArchestraToolShortNames(allOff)).toEqual([
         ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
       ]);
     });
 
@@ -147,22 +146,11 @@ describe("archestra MCP tool names", () => {
       ).toEqual([
         ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
         ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
-      ]);
-    });
-
-    test("appsEnabled adds the app management tools", () => {
-      expect(
-        getCreationDefaultArchestraToolShortNames({
-          ...allOff,
-          appsEnabled: true,
-        }),
-      ).toEqual([
-        ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
         ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
       ]);
     });
 
-    test("sandboxEnabled adds only the runtime tools without projectsEnabled", () => {
+    test("sandboxEnabled adds the runtime and persistent-files tools", () => {
       expect(
         getCreationDefaultArchestraToolShortNames({
           ...allOff,
@@ -170,40 +158,17 @@ describe("archestra MCP tool names", () => {
         }),
       ).toEqual([
         ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
-        ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
-      ]);
-    });
-
-    test("sandboxEnabled + projectsEnabled adds the persistent-files tools too", () => {
-      expect(
-        getCreationDefaultArchestraToolShortNames({
-          ...allOff,
-          sandboxEnabled: true,
-          projectsEnabled: true,
-        }),
-      ).toEqual([
-        ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
         ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
         ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
       ]);
-    });
-
-    test("projectsEnabled without sandboxEnabled adds nothing (file tools need the runtime)", () => {
-      expect(
-        getCreationDefaultArchestraToolShortNames({
-          ...allOff,
-          projectsEnabled: true,
-        }),
-      ).toEqual([...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES]);
     });
 
     test("all flags on composes every group in order", () => {
       expect(
         getCreationDefaultArchestraToolShortNames({
           skillsEnabled: true,
-          appsEnabled: true,
           sandboxEnabled: true,
-          projectsEnabled: true,
         }),
       ).toEqual([
         ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,

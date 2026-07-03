@@ -3,7 +3,6 @@ import {
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
   PLAYWRIGHT_MCP_CATALOG_ID,
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_AGENT_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
@@ -1974,7 +1973,6 @@ describe("AgentModel", () => {
       });
 
       const toolNames = agent.tools.map((t) => t.name);
-      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
 
       // query_knowledge_sources is assigned too, but filtered from the
@@ -2566,11 +2564,9 @@ describe("AgentModel", () => {
       const toolIds = await AgentToolModel.findToolIdsByAgent(agentId);
       expect(new Set(toolIds).size).toBe(toolIds.length);
 
-      const artifactTool = await ToolModel.findByName(
-        TOOL_ARTIFACT_WRITE_FULL_NAME,
-      );
-      expect(artifactTool).not.toBeNull();
-      expect(toolIds).toContain(artifactTool?.id);
+      const todoTool = await ToolModel.findByName(TOOL_TODO_WRITE_FULL_NAME);
+      expect(todoTool).not.toBeNull();
+      expect(toolIds).toContain(todoTool?.id);
     });
 
     test("creates separate agents per organization for multi-org users", async ({
@@ -3216,6 +3212,44 @@ describe("AgentModel", () => {
         await AgentModel.resolveIdFromIdOrSlug("non-existent-slug");
       expect(result).toBeNull();
     });
+
+    test("does not cache misses: a slug resolves as soon as its agent exists", async () => {
+      expect(await AgentModel.resolveIdFromIdOrSlug("late-agent")).toBeNull();
+
+      const agent = await AgentModel.create({
+        name: "Late Agent",
+        slug: "late-agent",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+
+      expect(await AgentModel.resolveIdFromIdOrSlug("late-agent")).toBe(
+        agent.id,
+      );
+    });
+
+    test("tolerates bounded staleness: a cached slug survives deletion until the TTL", async () => {
+      const agent = await AgentModel.create({
+        name: "Cached Then Deleted",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+      const slug = agent.slug as string;
+
+      expect(await AgentModel.resolveIdFromIdOrSlug(slug)).toBe(agent.id);
+
+      await AgentModel.delete(agent.id);
+
+      // Still served from the process-local cache — the documented tradeoff:
+      // downstream agent loads are what reject requests for deleted agents.
+      expect(await AgentModel.resolveIdFromIdOrSlug(slug)).toBe(agent.id);
+
+      // Once the cache is cleared (as the TTL would), the miss is visible.
+      AgentModel.clearResolveIdCache();
+      expect(await AgentModel.resolveIdFromIdOrSlug(slug)).toBeNull();
+    });
   });
 
   describe("passthroughHeaders", () => {
@@ -3388,7 +3422,6 @@ describe("AgentModel", () => {
       // The default tools are assigned during create, BEFORE the flip-last
       // pre-fill runs — assigned tools are never pre-excluded.
       for (const fullName of [
-        TOOL_ARTIFACT_WRITE_FULL_NAME,
         TOOL_TODO_WRITE_FULL_NAME,
         TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
       ]) {

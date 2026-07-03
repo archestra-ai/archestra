@@ -116,7 +116,7 @@ export function AgentActions({
   const dropdownActions: TableRowAction[] = [
     {
       icon: <Clock className="h-4 w-4" />,
-      label: "Schedule",
+      label: "Scheduled tasks",
       disabled: isBuiltIn,
       disabledTooltip: "Built-in agents cannot be scheduled",
       permissions: { scheduledTask: ["read"] },

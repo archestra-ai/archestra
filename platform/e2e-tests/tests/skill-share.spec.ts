@@ -24,12 +24,6 @@ test.describe("Skills marketplace step on /connection", () => {
     makeRandomString,
     goToPage,
   }) => {
-    const featuresEnabled = await skillsFeatureEnabled(page);
-    test.skip(
-      !featuresEnabled,
-      "ARCHESTRA_AGENTS_SKILLS_ENABLED is off in this environment",
-    );
-
     const skillName = makeRandomString(8, "share-skill").toLowerCase();
     const skillId = await createSkillViaApi(page, skillName);
     let createdLinkId: string | null = null;
@@ -38,20 +32,14 @@ test.describe("Skills marketplace step on /connection", () => {
       await goToPage(page, "/connection");
       await page.waitForLoadState("domcontentloaded");
 
-      // Pick "Any client" so both Claude Code and Codex snippets render.
+      // Pick "Any client" so the generic (client-agnostic) snippets render.
       await page
         .getByRole("button", { name: /Any Client/i })
         .first()
         .click();
 
-      // Expand the new "Share skills as a marketplace" step.
-      await page
-        .getByRole("button", {
-          name: /Share skills as a marketplace/i,
-        })
-        .first()
-        .click();
-
+      // The "Install shared skills" step expands once a client is picked, so
+      // the create button is reachable directly.
       const createButton = page.getByTestId("skills-marketplace-create");
       await expect(createButton).toBeVisible({ timeout: 20_000 });
 
@@ -72,30 +60,11 @@ test.describe("Skills marketplace step on /connection", () => {
       createdLinkId = createBody.link.id;
       expect(createBody.cloneUrl).toMatch(PUBLIC_CLONE_URL_REGEX);
 
-      // The "Any client" picker shows both Claude Code and Codex snippets,
-      // each referencing the freshly-issued clone URL.
-      const claude = page.getByTestId(
-        "skills-marketplace-snippets-claude-code",
-      );
-      const codex = page.getByTestId("skills-marketplace-snippets-codex");
-      await expect(claude).toBeVisible();
-      await expect(codex).toBeVisible();
-
-      const claudeAdd = claude
-        .locator("code")
-        .filter({ hasText: /claude plugin marketplace add/ });
-      await expect(claudeAdd).toBeVisible();
-      const claudeAddText = (await claudeAdd.textContent()) ?? "";
-      const cloneUrl = claudeAddText
-        .replace(/^claude plugin marketplace add\s+/, "")
-        .trim();
-      expect(cloneUrl).toMatch(PUBLIC_CLONE_URL_REGEX);
-
-      const codexAdd = codex
-        .locator("code")
-        .filter({ hasText: /codex plugin marketplace add/ });
-      const codexAddText = (await codexAdd.textContent()) ?? "";
-      expect(codexAddText).toContain(cloneUrl);
+      // "Any client" renders the generic snippets, which reference the
+      // freshly-issued clone URL.
+      const generic = page.getByTestId("skills-marketplace-snippets-generic");
+      await expect(generic).toBeVisible();
+      await expect(generic).toContainText(createBody.cloneUrl);
     } finally {
       if (createdLinkId) {
         await page.request
@@ -106,15 +75,6 @@ test.describe("Skills marketplace step on /connection", () => {
     }
   });
 });
-
-async function skillsFeatureEnabled(page: Page): Promise<boolean> {
-  const response = await page.request.get(`${UI_BASE_URL}/api/config`);
-  if (!response.ok()) return false;
-  const body = (await response.json()) as {
-    features?: { agentSkillsEnabled?: boolean };
-  };
-  return body.features?.agentSkillsEnabled === true;
-}
 
 async function createSkillViaApi(
   page: Page,

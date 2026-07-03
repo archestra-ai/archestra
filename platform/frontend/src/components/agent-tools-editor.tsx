@@ -292,9 +292,7 @@ const AgentToolsEditorContent = forwardRef<
 
   const { data: organization } = useOrganization();
   const skillToolsEnabled = organization?.skillToolsEnabled === true;
-  const appsEnabled = useFeature("appsEnabled") === true;
   const sandboxEnabled = useFeature("sandbox") === true;
-  const projectsEnabled = useFeature("projectsEnabled") === true;
 
   // The creation-default built-in set, composed by the shared
   // getCreationDefaultArchestraToolShortNames from the same org/deployment
@@ -308,18 +306,14 @@ const AgentToolsEditorContent = forwardRef<
     );
     return getDefaultArchestraToolIds(catalogItems, toolsByCatalogIndex, {
       skillsEnabled: skillToolsEnabled,
-      appsEnabled,
       sandboxEnabled,
-      projectsEnabled,
     });
   }, [
     agentId,
     catalogItems,
     toolCountQueries,
     skillToolsEnabled,
-    appsEnabled,
     sandboxEnabled,
-    projectsEnabled,
   ]);
 
   // Pre-select the creation-default Archestra tools when creating a new agent

@@ -1,17 +1,9 @@
 import {
-  APP_ARCHESTRA_TOOL_SHORT_NAMES,
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
   getArchestraToolFullName,
-  isProjectsFileArchestraToolShortName,
   isSandboxArchestraToolShortName,
-  TOOL_APP_DATA_DELETE_SHORT_NAME,
-  TOOL_APP_DATA_GET_SHORT_NAME,
-  TOOL_APP_DATA_LIST_SHORT_NAME,
-  TOOL_APP_DATA_SET_SHORT_NAME,
-  TOOL_APP_LLM_COMPLETE_SHORT_NAME,
-  TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -343,17 +335,11 @@ async function userHasAccessibleKnowledgeConnectors(
 }
 
 // Whether a sandbox-group tool is enabled for discovery/dynamic dispatch under
-// the current deployment config. The runtime tools
-// (run_command/upload_file/download_file) follow the skills-sandbox runtime
-// flag; the persistent-files (Projects) tools follow the Projects flag in
-// addition to the runtime flag — they don't materialize a Dagger container, but
-// execution still requires the runtime (see sandbox.ts `ensureUsable`), so
-// exposing them only with both flags on mirrors the registration gate in
-// index.ts. Non-sandbox tools are never enabled by this predicate.
+// the current deployment config. Both the runtime tools
+// (run_command/upload_file/download_file) and the persistent-files tools
+// (search_files/read_file/…) follow the skills-sandbox runtime flag. Non-sandbox
+// tools are never enabled by this predicate.
 function isSandboxToolEnabled(shortName: string): boolean {
-  if (isProjectsFileArchestraToolShortName(shortName)) {
-    return config.skillsSandbox.enabled && config.projects.enabled;
-  }
   return (
     config.skillsSandbox.enabled && isSandboxArchestraToolShortName(shortName)
   );
@@ -397,35 +383,15 @@ function isExcludedFromDiscovery(
   return !isBuiltInFeatureEnabled(shortName);
 }
 
-// Built-ins registered only while the apps feature is on: the MCP App
-// authoring surface plus the app-data and app-LLM runtime tools. Mirrors the
-// `appToolFullNames` gate in index.ts (apps + app-data + app-llm groups).
-const APP_FEATURE_SHORT_NAMES: ReadonlySet<string> = new Set<string>([
-  ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
-  TOOL_APP_DATA_GET_SHORT_NAME,
-  TOOL_APP_DATA_SET_SHORT_NAME,
-  TOOL_APP_DATA_LIST_SHORT_NAME,
-  TOOL_APP_DATA_DELETE_SHORT_NAME,
-  TOOL_APP_LLM_COMPLETE_SHORT_NAME,
-]);
-
 // Whether a built-in's feature group is live under the current deployment
 // config, mirroring the registration/execution gates in index.ts
-// (getArchestraMcpTools + executeArchestraTool): the sandbox group follows the
-// skills-sandbox flag (persistent-files subgroup additionally the Projects
-// flag, see isSandboxToolEnabled), the app groups follow the apps flag, and
-// the Projects tool group follows the Projects flag. Everything else —
-// including the skill tools, which index.ts registers unconditionally — is
-// always on.
+// (getArchestraMcpTools + executeArchestraTool): the sandbox group (runtime +
+// persistent-files) follows the skills-sandbox flag (see
+// isSandboxToolEnabled). Everything else — including the skill, app, and
+// Projects tools, which are registered unconditionally — is always on.
 function isBuiltInFeatureEnabled(shortName: string): boolean {
   if (isSandboxArchestraToolShortName(shortName)) {
     return isSandboxToolEnabled(shortName);
-  }
-  if (APP_FEATURE_SHORT_NAMES.has(shortName)) {
-    return config.apps.enabled;
-  }
-  if (shortName === TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME) {
-    return config.projects.enabled;
   }
   return true;
 }

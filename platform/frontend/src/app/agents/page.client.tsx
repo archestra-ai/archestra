@@ -40,12 +40,12 @@ import {
   useCloneAgent,
   useDeleteProfile,
   useExportAgent,
-  useProfile,
   useProfiles,
   useProfilesPaginated,
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useAgentDialogUrlParam } from "@/lib/hooks/use-agent-dialog-url-param";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useMyTeams } from "@/lib/teams/team.query";
@@ -197,8 +197,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     name: string;
     agentType: AgentType;
   } | null>(null);
-  const [editingAgent, setEditingAgent] = useState<AgentData | null>(null);
-  const [viewingAgent, setViewingAgent] = useState<AgentData | null>(null);
+  const editDialog = useAgentDialogUrlParam("edit");
+  const viewDialog = useAgentDialogUrlParam("view");
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
   const cloneAgent = useCloneAgent();
@@ -209,11 +209,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         const cloned = await cloneAgent.mutateAsync(agentId);
         if (cloned) {
           // Open edit dialog for the cloned agent so user can rename immediately
-          setEditingAgent(cloned as AgentData);
+          editDialog.open(cloned as AgentData);
         }
       } catch (_error) {}
     },
-    [cloneAgent],
+    [cloneAgent, editDialog.open],
   );
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
@@ -233,44 +233,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       router.replace(`${pathname}?${newParams.toString()}`);
     }
   }, [searchParams, pathname, router]);
-
-  // Handle 'edit' URL parameter to open the Edit Agent dialog
-  const editAgentId = searchParams.get("edit");
-  const { data: editAgentData } = useProfile(editAgentId ?? undefined);
-  useEffect(() => {
-    if (editAgentId && editAgentData && !editingAgent) {
-      setEditingAgent(editAgentData as AgentData);
-      const newParams = new URLSearchParams(searchParams);
-      newParams.delete("edit");
-      router.replace(`${pathname}?${newParams.toString()}`);
-    }
-  }, [
-    editAgentId,
-    editAgentData,
-    editingAgent,
-    searchParams,
-    pathname,
-    router,
-  ]);
-
-  // Handle 'view' URL parameter to open the View Agent dialog (read-only)
-  const viewAgentId = searchParams.get("view");
-  const { data: viewAgentData } = useProfile(viewAgentId ?? undefined);
-  useEffect(() => {
-    if (viewAgentId && viewAgentData && !viewingAgent) {
-      setViewingAgent(viewAgentData as AgentData);
-      const newParams = new URLSearchParams(searchParams);
-      newParams.delete("view");
-      router.replace(`${pathname}?${newParams.toString()}`);
-    }
-  }, [
-    viewAgentId,
-    viewAgentData,
-    viewingAgent,
-    searchParams,
-    pathname,
-    router,
-  ]);
 
   // Update URL when sorting changes
   const handleSortingChange = useCallback(
@@ -410,12 +372,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             agent={agent}
             canModify={canModify}
             onConnect={setConnectingAgent}
-            onEdit={(agentData) => {
-              setEditingAgent(agentData);
-            }}
-            onView={(agentData) => {
-              setViewingAgent(agentData);
-            }}
+            onEdit={editDialog.open}
+            onView={viewDialog.open}
             onDelete={setDeletingAgentId}
             onRestore={(agentId) => {
               restoreAgent.mutate(agentId, {
@@ -572,16 +530,16 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             )}
 
             <AgentDialog
-              open={!!editingAgent}
-              onOpenChange={(open) => !open && setEditingAgent(null)}
-              agent={editingAgent}
+              open={!!editDialog.agent}
+              onOpenChange={(open) => !open && editDialog.close()}
+              agent={editDialog.agent}
               agentType="agent"
             />
 
             <AgentDialog
-              open={!!viewingAgent}
-              onOpenChange={(open) => !open && setViewingAgent(null)}
-              agent={viewingAgent}
+              open={!!viewDialog.agent}
+              onOpenChange={(open) => !open && viewDialog.close()}
+              agent={viewDialog.agent}
               agentType="agent"
               readOnly
             />

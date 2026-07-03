@@ -2301,8 +2301,22 @@
     {
       "idx": 328,
       "version": "7",
-      "when": 1783093007617,
-      "tag": "0328_auto_mode_tool_exclusions",
+      "when": 1783086802875,
+      "tag": "0328_grant-file-manage-to-custom-roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 329,
+      "version": "7",
+      "when": 1783092151478,
+      "tag": "0329_sour_dreaming_celestial",
+      "breakpoints": true
+    },
+    {
+      "idx": 330,
+      "version": "7",
+      "when": 1783098361844,
+      "tag": "0330_auto_mode_tool_exclusions",
       "breakpoints": true
     }
   ]

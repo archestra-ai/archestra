@@ -116,7 +116,6 @@ export const TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME =
 export const TOOL_TODO_WRITE_SHORT_NAME = "todo_write";
 export const TOOL_SWAP_AGENT_SHORT_NAME = "swap_agent";
 export const TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME = "swap_to_default_agent";
-export const TOOL_ARTIFACT_WRITE_SHORT_NAME = "artifact_write";
 // Turn the current chat into a project (moves the chat + its files into a new project).
 export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
   "create_project_from_conversation";
@@ -226,7 +225,6 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_TODO_WRITE_SHORT_NAME,
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
-  TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -392,8 +390,6 @@ export const TOOL_SWAP_AGENT_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_SWAP_AGENT_SHORT_NAME}` as const;
 export const TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME}` as const;
-export const TOOL_ARTIFACT_WRITE_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_ARTIFACT_WRITE_SHORT_NAME}` as const;
 export const TOOL_SEARCH_TOOLS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_SEARCH_TOOLS_SHORT_NAME}` as const;
 export const TOOL_RUN_TOOL_FULL_NAME =
@@ -424,13 +420,11 @@ export const TOOL_DELETE_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_DELETE_FILE_SHORT_NAME}` as const;
 
 export const DEFAULT_ARCHESTRA_TOOL_NAMES: readonly string[] = [
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
 ];
 
 export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
-  TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
@@ -474,10 +468,9 @@ export function isSkillRuntimeTool(toolName: string): boolean {
 }
 
 /**
- * MCP App management tools — assigned to new agents by default when the apps
- * feature (`ARCHESTRA_APPS_ENABLED`) is on, so "build me an app" works
- * without per-agent setup. delete_app completes the lifecycle but stays
- * search-gated in `search_and_run_only` mode (see
+ * MCP App management tools — assigned to new agents by default, so "build me
+ * an app" works without per-agent setup. delete_app completes the lifecycle
+ * but stays search-gated in `search_and_run_only` mode (see
  * ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES).
  */
 export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
@@ -512,8 +505,8 @@ export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
 /**
  * Persistent-files ("My Files" / Projects) tools. Also gated by `sandbox:execute`,
  * but they operate purely on persistent file storage and never touch the Dagger
- * runtime — so their exposure and dynamic-access participation are driven by the
- * Projects feature flag (`config.projects.enabled`), not the runtime flag (see
+ * runtime — their exposure and dynamic-access participation follow the sandbox
+ * runtime flag (`config.skillsSandbox.enabled`), like the runtime tools (see
  * `dynamic-tools.ts` and the backend `index.ts` registration gate).
  */
 export const PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
@@ -541,26 +534,15 @@ export function isSandboxArchestraToolShortName(shortName: string): boolean {
   return SANDBOX_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
 }
 
-const PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
-  new Set(PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
-
-export function isProjectsFileArchestraToolShortName(
-  shortName: string,
-): boolean {
-  return PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
-}
-
 /**
  * The built-in tool set assigned to a new agent at creation, composed from
  * the deployment/org feature flags:
- * - the always-on defaults (artifact_write, todo_write, query_knowledge_sources),
+ * - the always-on defaults (todo_write, query_knowledge_sources),
+ * - the MCP App management tools (the apps feature is always on),
  * - the skill tools when the org opted in (`organization.skillToolsEnabled`),
- * - the MCP App management tools when the apps feature is on (`config.apps.enabled`),
- * - the sandbox runtime tools when the skills-sandbox runtime is on
- *   (`config.skillsSandbox.enabled`), plus the persistent-files (Projects)
- *   tools when Projects is also on (`config.projects.enabled`) — mirroring
- *   `assignSandboxToolsToAgent`, which never assigns the file tools without
- *   the runtime.
+ * - the sandbox runtime + persistent-files tools when the skills-sandbox
+ *   runtime is on (`config.skillsSandbox.enabled`) — mirroring
+ *   `assignSandboxToolsToAgent`.
  *
  * Single source of truth for creation defaults: the backend assigns exactly
  * this set in `AgentModel.create`, and the frontend create form pre-selects
@@ -568,12 +550,9 @@ export function isProjectsFileArchestraToolShortName(
  */
 export function getCreationDefaultArchestraToolShortNames(params: {
   skillsEnabled: boolean;
-  appsEnabled: boolean;
   sandboxEnabled: boolean;
-  projectsEnabled: boolean;
 }): ArchestraToolShortName[] {
-  const { skillsEnabled, appsEnabled, sandboxEnabled, projectsEnabled } =
-    params;
+  const { skillsEnabled, sandboxEnabled } = params;
 
   const shortNames: ArchestraToolShortName[] = [
     ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -581,14 +560,10 @@ export function getCreationDefaultArchestraToolShortNames(params: {
   if (skillsEnabled) {
     shortNames.push(...SKILL_ARCHESTRA_TOOL_SHORT_NAMES);
   }
-  if (appsEnabled) {
-    shortNames.push(...APP_ARCHESTRA_TOOL_SHORT_NAMES);
-  }
+  shortNames.push(...APP_ARCHESTRA_TOOL_SHORT_NAMES);
   if (sandboxEnabled) {
     shortNames.push(...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES);
-    if (projectsEnabled) {
-      shortNames.push(...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
-    }
+    shortNames.push(...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
   }
   return shortNames;
 }

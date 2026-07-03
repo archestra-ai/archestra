@@ -128,9 +128,7 @@ export const AgentToolExclusionsEditor = forwardRef<
     useOrganization();
   const { isPending: configPending } = useConfig();
   const skillToolsEnabled = organization?.skillToolsEnabled === true;
-  const appsEnabled = useFeature("appsEnabled") === true;
   const sandboxEnabled = useFeature("sandbox") === true;
-  const projectsEnabled = useFeature("projectsEnabled") === true;
 
   // The seeded default set depends on the agent's saved assignments (existing
   // agent) or the org/deployment flags (new agent). Until those inputs load,
@@ -209,9 +207,7 @@ export const AgentToolExclusionsEditor = forwardRef<
             assumedAssignedShortNames: new Set(
               getCreationDefaultArchestraToolShortNames({
                 skillsEnabled: skillToolsEnabled,
-                appsEnabled,
                 sandboxEnabled,
-                projectsEnabled,
               }),
             ),
           }),
@@ -222,9 +218,7 @@ export const AgentToolExclusionsEditor = forwardRef<
     agentId,
     assignedTools,
     skillToolsEnabled,
-    appsEnabled,
     sandboxEnabled,
-    projectsEnabled,
   ]);
 
   // (Re)initialize pending state once loaded exclusions and the catalog tool

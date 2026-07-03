@@ -4,7 +4,14 @@ import {
   type ModelInputModality,
   type SupportedProvider,
 } from "@archestra/shared";
-import { convertToModelMessages, type ModelMessage, type UIMessage } from "ai";
+import {
+  convertToModelMessages,
+  type ModelMessage,
+  type ToolCallPart,
+  type ToolResultPart,
+  type UIMessage,
+} from "ai";
+import logger from "@/logging";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import type { ChatMessage } from "@/types";
 import {
@@ -198,8 +205,11 @@ async function buildModelMessagesForProvider(params: {
   // placeholders survive while other providers never see an empty turn. An
   // empty assistant message has no tool-call block, so removing it cannot
   // orphan a tool result.
-  const nonEmpty = modelMessages.filter(
-    (message) => !isEmptyAssistantModelMessage(message),
+  //
+  // Repair unanswered tool calls after that filter so adjacency checks run
+  // against the sequence the provider actually receives.
+  const nonEmpty = ensureToolCallsHaveResults(
+    modelMessages.filter((message) => !isEmptyAssistantModelMessage(message)),
   );
 
   return {
@@ -240,6 +250,82 @@ function ensureGeminiLeadingUserTurn(messages: ModelMessage[]): ModelMessage[] {
     leadingUserTurn,
     ...messages.slice(firstContentIndex),
   ];
+}
+
+// Providers reject a history in which an assistant `tool_use` block is not
+// answered by a `tool_result` in the message that immediately follows — and
+// once such a turn is persisted, every subsequent request in the conversation
+// fails the same way. Histories can legitimately contain unanswered calls:
+// a tool part parked in `approval-requested` / `approval-responded` (the user
+// sent a new message instead of resolving the approval, or the run was blocked
+// in an autonomous session) converts to a tool-call with no result, and
+// provider mappers silently drop the SDK's approval bookkeeping parts.
+// Synthesize an "interrupted" result for every unanswered call so the replay
+// stays valid for any provider.
+const INTERRUPTED_TOOL_RESULT_TEXT =
+  "Tool execution was interrupted before it produced a result (for example an unresolved approval request or an aborted run). The tool did not run; do not assume it did.";
+
+function ensureToolCallsHaveResults(messages: ModelMessage[]): ModelMessage[] {
+  const repaired: ModelMessage[] = [];
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    repaired.push(message);
+
+    if (message.role !== "assistant" || !Array.isArray(message.content)) {
+      continue;
+    }
+
+    // Results can live inline in the assistant content (provider-executed
+    // tools) or in the immediately-following tool message.
+    const next = messages[i + 1];
+    const followingToolMessage =
+      next?.role === "tool" && Array.isArray(next.content) ? next : null;
+    const answeredToolCallIds = new Set(
+      [...message.content, ...(followingToolMessage?.content ?? [])]
+        .filter((part) => part.type === "tool-result")
+        .map((part) => part.toolCallId),
+    );
+
+    const unansweredToolCalls = message.content.filter(
+      (part): part is ToolCallPart =>
+        part.type === "tool-call" &&
+        part.providerExecuted !== true &&
+        !answeredToolCallIds.has(part.toolCallId),
+    );
+    if (unansweredToolCalls.length === 0) {
+      continue;
+    }
+
+    logger.warn(
+      {
+        toolCallIds: unansweredToolCalls.map((part) => part.toolCallId),
+        toolNames: unansweredToolCalls.map((part) => part.toolName),
+      },
+      "[buildModelMessages] Synthesized interrupted tool results for unanswered tool calls",
+    );
+
+    const syntheticResults: ToolResultPart[] = unansweredToolCalls.map(
+      (part) => ({
+        type: "tool-result",
+        toolCallId: part.toolCallId,
+        toolName: part.toolName,
+        output: { type: "error-text", value: INTERRUPTED_TOOL_RESULT_TEXT },
+      }),
+    );
+
+    if (followingToolMessage) {
+      repaired.push({
+        ...followingToolMessage,
+        content: [...followingToolMessage.content, ...syntheticResults],
+      });
+      i++; // the merged copy replaces the original tool message
+    } else {
+      repaired.push({ role: "tool", content: syntheticResults });
+    }
+  }
+
+  return repaired;
 }
 
 function isEmptyAssistantModelMessage(message: {

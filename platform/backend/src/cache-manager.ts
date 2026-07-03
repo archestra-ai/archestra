@@ -301,24 +301,6 @@ class CacheManager {
   }
 
   /**
-   * Wrap a function with caching. If the key exists and hasn't expired,
-   * return the cached value. Otherwise, call the function and cache the result.
-   */
-  async wrap<T>(
-    key: AllowedCacheKey,
-    fnc: () => Promise<T>,
-    { ttl }: { ttl?: number } = {},
-  ): Promise<T> {
-    const cached = await this.get<T>(key);
-    if (cached !== undefined) {
-      return cached;
-    }
-    const result = await fnc();
-    await this.set(key, result, ttl);
-    return result;
-  }
-
-  /**
    * Stop the cache manager and close connections.
    * Should be called during graceful shutdown.
    */

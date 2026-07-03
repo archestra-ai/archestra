@@ -69,6 +69,24 @@ describe("ConversationHeader — top-bar tab strip", () => {
     expect(screen.getByRole("tab", { name: "Apps" })).toBeInTheDocument();
   });
 
+  it("highlights the active tab only while the panel is open", () => {
+    renderHeader({ isOpen: true, activeTab: "files" });
+    expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("highlights no tab while the panel is collapsed", () => {
+    renderHeader({ isOpen: false, activeTab: "files" });
+    for (const name of ["Files", "Browser", "Apps"]) {
+      expect(screen.getByRole("tab", { name })).toHaveAttribute(
+        "aria-selected",
+        "false",
+      );
+    }
+  });
+
   it("clicking a DIFFERENT tab switches to it and does not close", async () => {
     const user = userEvent.setup();
     // "files" is active + open; clicking Browser must switch, not collapse

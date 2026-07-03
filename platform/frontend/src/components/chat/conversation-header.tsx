@@ -36,7 +36,7 @@ type Conversation = archestraApiTypes.GetChatConversationResponses["200"];
 /** Right-panel state + handlers the header needs to drive open/close/tab. */
 interface PanelControls {
   isOpen: boolean;
-  /** The tab currently selected (highlighted even while the panel is collapsed). */
+  /** The tab currently selected (highlighted only while the panel is open). */
   activeTab: RightPanelTab;
   /** Set for scheduled-run chats — enables the Runs tab. */
   scheduledRun: { triggerId: string; runId: string | null } | null;
@@ -93,23 +93,23 @@ export function ConversationHeader({
     onCreateProject,
   };
 
-  // Which tab is highlighted — mirror the panel's fallbacks so the strip never
-  // highlights a tab the panel can't actually show.
+  // Which tab the panel would show — mirror the panel's fallbacks so the strip
+  // never highlights a tab the panel can't actually show. Only highlighted
+  // while the panel is open; collapsing clears the highlight.
   const canShowBrowser =
     panel.showBrowserButton && !panel.isPlaywrightSetupVisible;
   let resolvedTab: RightPanelTab = panel.activeTab;
   if (resolvedTab === "browser" && !canShowBrowser) resolvedTab = "files";
   if (resolvedTab === "runs" && !panel.scheduledRun) resolvedTab = "files";
 
-  // Radix Tabs flip the active tab on mousedown (before onClick), so detect a
-  // click on the ALREADY-active tab here, where resolvedTab is still pre-click:
-  // active + open collapses, active + collapsed opens. A different tab is left
-  // to onValueChange, which switches. Left button only (mirrors Radix's guard).
+  // Radix won't fire onValueChange when the clicked tab already equals the
+  // controlled value, so collapsing on an active-tab click has to happen here,
+  // on mousedown, where resolvedTab is still pre-click. Opens (different tab,
+  // or any tab while collapsed — value is "" then, so every click is a change)
+  // flow through onValueChange. Left button only (mirrors Radix's guard).
   const handleTabMouseDown = (tab: RightPanelTab) => (e: React.MouseEvent) => {
     if (e.button !== 0 || e.ctrlKey) return;
-    if (resolvedTab !== tab) return;
-    if (panel.isOpen) panel.onClose();
-    else panel.onOpenTab(tab);
+    if (panel.isOpen && resolvedTab === tab) panel.onClose();
   };
 
   return (
@@ -193,14 +193,14 @@ export function ConversationHeader({
             there is no separate collapse button. */}
         <div className="hidden md:flex items-center flex-shrink-0">
           <Tabs
-            value={resolvedTab}
+            value={panel.isOpen ? resolvedTab : ""}
             onValueChange={(value) => {
-              // Radix fires this on every mousedown, even on the active tab —
-              // guard so it only switches on a real change and never reopens
-              // right after handleTabMouseDown collapses the panel. Keyboard
-              // activation flows through here too.
-              const tab = value as RightPanelTab;
-              if (tab !== resolvedTab) panel.onOpenTab(tab);
+              // Fires on any tab click while collapsed (value is "") and on a
+              // different-tab click while open. It never fires for the
+              // active-tab-while-open click (value unchanged), so it can't
+              // reopen right after handleTabMouseDown collapses the panel.
+              // Keyboard activation flows through here too.
+              panel.onOpenTab(value as RightPanelTab);
             }}
           >
             <TabsList className="h-8">

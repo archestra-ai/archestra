@@ -1,4 +1,7 @@
-# archestra-bench
+# ai-labs
+
+Rust workspace for Archestra's AI-feature prototyping. Today it houses **archestra-bench**, the
+agentic benchmark documented below; the binary and crates keep the `archestra-bench` name.
 
 A benchmark / trajectory generator for Archestra's core agentic features. Tasks are grouped into
 **environments** (`envs/<id>.toml`): a bundle of web-pinned skills, remote MCP servers, and a single
@@ -354,7 +357,7 @@ carries a unique `name` (the selection handle), `provider` (`anthropic`/`openai`
 `--lanes` flag selects lane names from the catalog (default: every lane), so you can define many and run
 one; `--lanes-file` overrides the catalog path. `--max-workers` runs that many lanes concurrently
 (default: one worker per selected lane, capped at 4); tasks within a lane stay serial. On `benchmark`,
-`--run-dir` overrides the artifact directory (default `archestra-bench/experiments/<timestamp>/`,
+`--run-dir` overrides the artifact directory (default `ai-labs/experiments/<timestamp>/`,
 gitignored) and `--out` writes the markdown report to a file instead of stdout; `full` always starts a
 fresh run dir. `analyze`/`full` resolve `--map`/`--reduce` against the same `lanes.toml` and autodetect
 the repo to crawl from the run dir (override with `--explore-root`).

@@ -153,7 +153,7 @@ struct PrepareArgs {
 struct DashboardArgs {
     #[arg(
         long,
-        help = "Experiments dir to browse (default: <git toplevel>/archestra-bench/experiments, or ./experiments outside a repo)"
+        help = "Experiments dir to browse (default: <git toplevel>/ai-labs/experiments, or ./experiments outside a repo)"
     )]
     experiments_dir: Option<PathBuf>,
     #[arg(long, default_value_t = 8000, help = "Port to listen on")]
@@ -161,7 +161,7 @@ struct DashboardArgs {
 }
 
 fn default_bench_dir() -> &'static str {
-    // CARGO_MANIFEST_DIR is archestra-bench/cli; the benchmark root is its parent.
+    // CARGO_MANIFEST_DIR is ai-labs/cli; the benchmark root is its parent.
     concat!(env!("CARGO_MANIFEST_DIR"), "/..")
 }
 

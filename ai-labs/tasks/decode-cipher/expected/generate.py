@@ -5,7 +5,7 @@ ground truth read by the verifier.
 This is the encoder; `skills/cipher-decoder/scripts/decode.pl` is the decoder. They must stay exact
 inverses (the round-trip is checked in CI/dev by running both). Deterministic: no RNG, no clock.
 
-Run: `uv run archestra-bench/tasks/decode-cipher/expected/generate.py`
+Run: `uv run ai-labs/tasks/decode-cipher/expected/generate.py`
 Writes `../inputs/cipher.txt` and `./plaintext.txt`, then verifies its own round-trip.
 """
 

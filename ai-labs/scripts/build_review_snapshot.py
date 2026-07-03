@@ -13,7 +13,7 @@ DB schemas are included so the reviewer must locate the relevant one rather than
 History is dropped entirely (`git archive` emits a bare tree, no .git), so the fix commit is
 structurally unreachable. Deterministic: fixed commit + sorted file list + gzip without mtime.
 
-Run:  uv run archestra-bench/scripts/build_review_snapshot.py
+Run:  uv run ai-labs/scripts/build_review_snapshot.py
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ def main() -> None:
     targz = _build_targz()
     for task in TASKS:
         dest = (
-            REPO / "archestra-bench" / "tasks" / task / "inputs" / "backend-src.tar.gz"
+            REPO / "ai-labs" / "tasks" / task / "inputs" / "backend-src.tar.gz"
         )
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(targz)

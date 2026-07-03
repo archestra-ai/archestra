@@ -156,7 +156,7 @@ const DEV_AUTH_SECRET: &str = "better-auth-secret-12345678901234567890";
 const DEFAULT_ADMIN_EMAIL: &str = "admin@example.com";
 const DEFAULT_ADMIN_PASSWORD: &str = "password";
 /// The dedicated bench Postgres the runner provisions when no external one is configured.
-/// Credentials and port must match `archestra-bench/dev/docker-compose.bench-pg.yml`.
+/// Credentials and port must match `ai-labs/dev/docker-compose.bench-pg.yml`.
 const DEFAULT_BENCH_DATABASE_URL: &str = "postgres://postgres:postgres@localhost:5544/postgres";
 const BENCH_PG_COMPOSE_PROJECT: &str = "archestra-bench";
 
@@ -239,7 +239,7 @@ impl Instance {
     ) -> Self {
         let run_id = run_id.into();
         let platform = resolve_platform_dir(platform_dir.as_deref(), &repo_root);
-        let bench_dev = repo_root.join("archestra-bench").join("dev");
+        let bench_dev = repo_root.join("ai-labs").join("dev");
         let bench_compose = bench_dev.join("docker-compose.bench-pg.yml");
         let dagger_compose = bench_dev.join("docker-compose.bench-dagger.yml");
         Self {
@@ -670,7 +670,7 @@ pub async fn preflight(
 ) -> Result<(), LifecycleError> {
     let platform = resolve_platform_dir(platform_dir, repo_root);
     let (_bench_db_url, managed) = resolve_bench_db_url(&load_platform_env(&platform)?);
-    let bench_dev = repo_root.join("archestra-bench").join("dev");
+    let bench_dev = repo_root.join("ai-labs").join("dev");
     if managed {
         ensure_bench_postgres(&bench_dev.join("docker-compose.bench-pg.yml")).await?;
     }

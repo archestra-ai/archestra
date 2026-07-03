@@ -1022,6 +1022,20 @@ describe("ToolModel", () => {
     });
   });
 
+  describe("getDefaultToolPolicies", () => {
+    test("falls back to safe restrictive defaults when no organization exists", async () => {
+      // setup.ts intentionally seeds no organization, so getFirst() returns
+      // null here. New tools must then fail safe: block on an untrusted context
+      // and mark results untrusted, never silently permissive.
+      const defaults = await ToolModel.getDefaultToolPolicies();
+
+      expect(defaults).toEqual({
+        invocationAction: "block_when_context_is_untrusted",
+        resultAction: "mark_as_untrusted",
+      });
+    });
+  });
+
   describe("bulkCreateToolsIfNotExists", () => {
     test("creates multiple tools for an MCP server in bulk", async ({
       makeInternalMcpCatalog,
@@ -1066,6 +1080,42 @@ describe("ToolModel", () => {
         expect(tool.catalogId).toBe(catalog.id);
         expect(tool.agentId).toBeNull();
       });
+    });
+
+    test("applies the org's configured default guardrails to new MCP catalog tools", async ({
+      makeOrganization,
+      makeInternalMcpCatalog,
+    }) => {
+      // The org's "Default Guardrails for MCP Tools" settings must flow to every
+      // newly created catalog tool — not just proxy-discovered ones.
+      const org = await makeOrganization({
+        defaultDiscoveredToolInvocationPolicy: "require_approval",
+        defaultDiscoveredToolResultPolicy: "mark_as_trusted",
+      });
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+      const [tool] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "catalog-tool-honors-org-default",
+          description: "Catalog tool",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+        },
+      ]);
+
+      const inv = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+      expect(inv).toHaveLength(1);
+      expect(inv[0].action).toBe("require_approval");
+
+      const trusted = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
+      expect(trusted).toHaveLength(1);
+      expect(trusted[0].action).toBe("mark_as_trusted");
     });
 
     test("returns existing tools when some tools already exist", async ({
@@ -1971,9 +2021,9 @@ describe("ToolModel", () => {
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
-      // Agent with a direct connector but NO tools assigned. Created before the
-      // archestra tools are seeded so create-time auto-assignment (app tools)
-      // does not add anything — this test asserts an otherwise-empty tool set.
+      // Agent with a direct connector but NO tools assigned. Created BEFORE
+      // the built-ins are seeded so the create path has nothing to
+      // auto-assign.
       const agent = await makeAgent({ organizationId: org.id });
       await db
         .insert(schema.agentConnectorAssignmentsTable)
@@ -3523,11 +3573,13 @@ describe("ToolModel", () => {
     }) => {
       const org = await makeOrganization();
       await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      // Agent created BEFORE the built-ins are synced so the create path has
+      // nothing to auto-assign — this test assigns the knowledge tool itself.
+      const agent = await makeAgent({ organizationId: org.id });
       await ToolModel.syncArchestraBuiltInCatalog({
         organization: { appName: "Acme Copilot", iconLogo: null },
       });
 
-      const agent = await makeAgent({ organizationId: org.id });
       const [kbTool] = await db
         .select()
         .from(schema.toolsTable)
@@ -3567,11 +3619,13 @@ describe("ToolModel", () => {
     }) => {
       const org = await makeOrganization();
       await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      // Agent created BEFORE the built-ins are synced so the create path has
+      // nothing to auto-assign — this test assigns the knowledge tool itself.
+      const agent = await makeAgent({ organizationId: org.id });
       await ToolModel.syncArchestraBuiltInCatalog({
         organization: { appName: "Acme Copilot", iconLogo: null },
       });
 
-      const agent = await makeAgent({ organizationId: org.id });
       const brandedKbToolName = getArchestraToolFullName(
         TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
         {
@@ -3607,11 +3661,12 @@ describe("ToolModel", () => {
     }) => {
       const org = await makeOrganization();
       await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      // Agent created BEFORE the built-ins are synced so the create path has
+      // nothing to auto-assign — this test assigns its built-ins manually.
+      const agent = await makeAgent({ organizationId: org.id });
       await ToolModel.syncArchestraBuiltInCatalog({
         organization: { appName: "Acme Copilot", iconLogo: null },
       });
-
-      const agent = await makeAgent({ organizationId: org.id });
 
       // Assign a few built-in tools to the agent
       const brandedKbToolName = getArchestraToolFullName(

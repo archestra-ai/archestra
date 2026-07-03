@@ -122,7 +122,6 @@ export interface LLMProxyContext<TRequest> {
   actualModel: string;
   contextIsTrusted: boolean;
   enabledToolNames: Set<string>;
-  globalToolPolicy: "permissive" | "restrictive";
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
@@ -644,9 +643,8 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Limit check passed`,
     );
 
-    // Resolve the agent's organization once. Reused below for the discovered-tool
-    // persist defaults and further down for the global tool policy, so a proxied
-    // request that includes tools no longer reads the organization twice.
+    // Resolve the agent's organization once, to apply its configured default
+    // discovered-tool guardrails to any tools persisted below.
     const organization = await OrganizationModel.getById(
       resolvedAgent.organizationId,
     );
@@ -741,11 +739,6 @@ export async function handleLLMProxy<
       }
     };
 
-    // Global tool policy is an org-level setting; read it from the organization
-    // resolved above (defaults to "permissive" if the org is missing). Needed for
-    // both trusted data and tool invocation enforcement.
-    const globalToolPolicy = organization?.globalToolPolicy ?? "permissive";
-
     // Fetch the agent's teams (with labels) once. Used both for policy
     // evaluation context (trusted data) and for trace span team attributes.
     const teams =
@@ -766,7 +759,6 @@ export async function handleLLMProxy<
         resolvedAgentId,
         considerContextUntrusted: resolvedAgent.considerContextUntrusted,
         inheritedContextUntrusted,
-        globalToolPolicy,
       },
       `[${providerName}Proxy] Evaluating trusted data policies`,
     );
@@ -790,7 +782,6 @@ export async function handleLLMProxy<
       resolvedAgent.organizationId,
       userId,
       effectiveConsiderContextUntrusted,
-      globalToolPolicy,
       { teamIds, externalAgentId },
       // Streaming callbacks for dual LLM progress
       requestAdapter.isStreaming()
@@ -977,7 +968,6 @@ export async function handleLLMProxy<
       actualModel,
       contextIsTrusted,
       enabledToolNames,
-      globalToolPolicy,
       toonStats,
       toonSkipReason,
       dualLlmAnalyses,
@@ -1094,7 +1084,6 @@ async function handleStreaming<
     actualModel,
     contextIsTrusted,
     enabledToolNames,
-    globalToolPolicy,
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
@@ -1186,8 +1175,10 @@ async function handleStreaming<
             ensureStreamHeaders();
             reply.raw.write(result.sseData);
           } else if (result.isToolCallChunk) {
-            // Determine if the current tool call should be streamed
-            let shouldStream = globalToolPolicy === "permissive";
+            // Determine if the current tool call should be streamed.
+            // Tools with no blocking policy stream immediately for low latency;
+            // tools with blocking policies buffer until evaluation completes.
+            let shouldStream = false;
             if (!shouldStream && !bufferAllToolCalls) {
               const currentToolCall =
                 streamAdapter.state.toolCalls[
@@ -1358,7 +1349,6 @@ async function handleStreaming<
         },
         contextIsTrusted,
         enabledToolNames,
-        globalToolPolicy,
         { surface: "llm-proxy", sessionId: sessionId ?? undefined },
       );
 
@@ -1591,7 +1581,6 @@ async function handleNonStreaming<
     actualModel,
     contextIsTrusted,
     enabledToolNames,
-    globalToolPolicy,
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
@@ -1747,7 +1736,6 @@ async function handleNonStreaming<
       },
       contextIsTrusted,
       enabledToolNames,
-      globalToolPolicy,
       { surface: "llm-proxy", sessionId: sessionId ?? undefined },
     );
 

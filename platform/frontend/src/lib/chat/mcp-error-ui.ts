@@ -269,6 +269,55 @@ export function resolveToolAuthState(params: {
   return null;
 }
 
+export type ConnectableAuthState = Extract<
+  ToolAuthState,
+  { kind: "auth-required" | "auth-expired" }
+>;
+
+/**
+ * Auth state of a `tools/call` result proxied for an MCP App. Reads the
+ * structured `archestraError` the gateway attaches (`_meta` /
+ * `structuredContent`) and falls back to parsing the result's text blocks, so
+ * the host can offer a connect affordance outside the iframe even when the app
+ * itself only prints the error prose. Returns only the kinds a user can act on
+ * with a URL (connect / re-authenticate); everything else is null.
+ */
+export function resolveMcpAppToolCallAuthState(
+  result: unknown,
+): ConnectableAuthState | null {
+  if (typeof result !== "object" || result === null) {
+    return null;
+  }
+
+  const envelope = result as { isError?: unknown; content?: unknown };
+  if (envelope.isError !== true) {
+    return null;
+  }
+
+  const errorText = Array.isArray(envelope.content)
+    ? envelope.content
+        .filter(
+          (block): block is { type: "text"; text: string } =>
+            typeof block === "object" &&
+            block !== null &&
+            (block as { type?: unknown }).type === "text" &&
+            typeof (block as { text?: unknown }).text === "string",
+        )
+        .map((block) => block.text)
+        .join("\n")
+    : "";
+
+  const authState = resolveToolAuthState({
+    errorText: errorText || undefined,
+    rawOutput: result,
+  });
+
+  return authState?.kind === "auth-required" ||
+    authState?.kind === "auth-expired"
+    ? authState
+    : null;
+}
+
 export function resolveAssistantTextAuthState(
   text: string,
 ): Extract<ToolAuthState, { kind: "auth-required" | "auth-expired" }> | null {

@@ -133,8 +133,8 @@ The following table lists all available permissions that can be assigned to cust
 | `agent:delete` | Delete agents |
 | `agent:team-admin` | Manage team assignments for agents |
 | `agent:admin` | Full administrative control over all agents, bypassing team restrictions |
-| `agentSettings:read` | View agent settings (default model, default agent, security engine, file uploads) |
-| `agentSettings:update` | Modify agent settings (default model, default agent, security engine, file uploads) |
+| `agentSettings:read` | View agent settings (default model, default agent, default tool guardrails, file uploads) |
+| `agentSettings:update` | Modify agent settings (default model, default agent, default tool guardrails, file uploads) |
 | `agentTrigger:read` | View agent trigger configurations (Slack, MS Teams, email) |
 | `agentTrigger:create` | Set up new agent triggers |
 | `agentTrigger:update` | Modify agent trigger configurations |

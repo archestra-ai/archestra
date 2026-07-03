@@ -1,5 +1,5 @@
 {
-  "id": "d1314b4f-4896-467f-a97b-110734d54c58",
+  "id": "0f7dcd15-6dbd-4c23-8a3c-933fec5c1bff",
   "prevId": "b69f6928-a0a4-4d4e-92c7-6fb80e37b477",
   "version": "7",
   "dialect": "postgresql",
@@ -631,6 +631,73 @@
           "columns": [
             "agent_id",
             "connector_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.agent_excluded_tools": {
+      "name": "agent_excluded_tools",
+      "schema": "",
+      "columns": {
+        "agent_id": {
+          "name": "agent_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tool_id": {
+          "name": "tool_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "agent_excluded_tools_agent_id_agents_id_fk": {
+          "name": "agent_excluded_tools_agent_id_agents_id_fk",
+          "tableFrom": "agent_excluded_tools",
+          "tableTo": "agents",
+          "columnsFrom": [
+            "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agent_excluded_tools_tool_id_tools_id_fk": {
+          "name": "agent_excluded_tools_tool_id_tools_id_fk",
+          "tableFrom": "agent_excluded_tools",
+          "tableTo": "tools",
+          "columnsFrom": [
+            "tool_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "agent_excluded_tools_agent_id_tool_id_pk": {
+          "name": "agent_excluded_tools_agent_id_tool_id_pk",
+          "columns": [
+            "agent_id",
+            "tool_id"
           ]
         }
       },
@@ -10694,12 +10761,6 @@
           "notNull": true,
           "default": false
         },
-        "onboarding_survey_completed_at": {
-          "name": "onboarding_survey_completed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
         "theme": {
           "name": "theme",
           "type": "text",
@@ -15165,60 +15226,6 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.user_onboarding_seen_items": {
-      "name": "user_onboarding_seen_items",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "item": {
-          "name": "item",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "seen_at": {
-          "name": "seen_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "user_onboarding_seen_items_user_id_user_id_fk": {
-          "name": "user_onboarding_seen_items_user_id_user_id_fk",
-          "tableFrom": "user_onboarding_seen_items",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "user_onboarding_seen_items_user_id_item_pk": {
-          "name": "user_onboarding_seen_items_user_id_item_pk",
-          "columns": [
-            "user_id",
-            "item"
-          ]
-        }
-      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

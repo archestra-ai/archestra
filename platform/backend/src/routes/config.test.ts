@@ -101,9 +101,6 @@ describe("config routes", () => {
       virtualKeyDefaultExpirationSeconds: expect.any(Number),
       chatSecretScanEnabled: true,
     });
-    expect(["permissive", "restrictive"]).toContain(
-      payload.features.globalToolPolicy,
-    );
     expect([null, "1", "2"]).toContain(payload.features.byosVaultKvVersion);
     expect(typeof payload.features.incomingEmail.enabled).toBe("boolean");
     expect(["string", "undefined"]).toContain(

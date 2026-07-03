@@ -15,6 +15,10 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
+import {
+  agentToolExclusionsService,
+  isToolRowExcluded,
+} from "@/services/agent-tool-exclusions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
@@ -318,7 +322,14 @@ async function getSearchableTools(params: {
   conversationId?: string;
 }): Promise<SearchCandidate[]> {
   const { agentId, conversationId, organizationId, userId } = params;
-  const assignedTools = await ToolModel.getMcpToolsByAgent(agentId);
+  // Per-agent exclusions (Auto-tool mode): loaded once per search and applied
+  // to BOTH the assigned contribution and the discoverable widening below.
+  // Empty (no-op) unless the agent's accessAllTools setting is on.
+  const exclusionSets =
+    await agentToolExclusionsService.getActiveExclusionSets(agentId);
+  const assignedTools = (await ToolModel.getMcpToolsByAgent(agentId)).filter(
+    (tool) => !isToolRowExcluded(tool, exclusionSets),
+  );
   const assignedNames = new Set(assignedTools.map((tool) => tool.name));
   // Dynamic tool access: when the agent's "access all tools" setting is on,
   // discovery also spans third-party tools from every catalog the user can
@@ -331,6 +342,7 @@ async function getSearchableTools(params: {
     agentId,
     userId,
     organizationId,
+    exclusionSets,
   });
   const searchSpace = [...assignedTools, ...discoverableTools];
   const permittedNames = await filterToolNamesByPermission(

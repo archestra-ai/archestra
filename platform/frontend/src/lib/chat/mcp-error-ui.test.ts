@@ -10,6 +10,7 @@ import {
   parseExpiredAuth,
   parsePolicyDenied,
   resolveAssistantTextAuthState,
+  resolveMcpAppToolCallAuthState,
   resolveToolAuthState,
   type ToolAuthState,
 } from "./mcp-error-ui";
@@ -508,6 +509,137 @@ describe("resolveToolAuthState", () => {
       providerId: null,
       catalogId: "cat_123",
     });
+  });
+});
+
+describe("resolveMcpAppToolCallAuthState", () => {
+  const authRequiredError = {
+    type: "auth_required",
+    message: 'Authentication required for "Slack"',
+    catalogName: "Slack",
+    catalogId: "cat_slack",
+    action: "install_mcp_credentials",
+    actionUrl: "http://localhost:3000/mcp/registry?install=cat_slack",
+  };
+
+  it("detects the structured auth-required error in _meta on an isError result", () => {
+    expect(
+      resolveMcpAppToolCallAuthState({
+        isError: true,
+        content: [{ type: "text", text: authRequiredError.message }],
+        _meta: { archestraError: authRequiredError },
+      }),
+    ).toMatchObject({
+      kind: "auth-required",
+      catalogName: "Slack",
+      actionUrl: authRequiredError.actionUrl,
+      catalogId: "cat_slack",
+    });
+  });
+
+  it("detects the structured error mirrored only in structuredContent", () => {
+    expect(
+      resolveMcpAppToolCallAuthState({
+        isError: true,
+        content: [{ type: "text", text: authRequiredError.message }],
+        structuredContent: { archestraError: authRequiredError },
+      }),
+    ).toMatchObject({
+      kind: "auth-required",
+      actionUrl: authRequiredError.actionUrl,
+    });
+  });
+
+  it("detects structured auth-expired errors with the reauth URL", () => {
+    expect(
+      resolveMcpAppToolCallAuthState({
+        isError: true,
+        content: [{ type: "text", text: "Expired credentials" }],
+        _meta: {
+          archestraError: {
+            type: "auth_expired",
+            message: "Expired",
+            catalogName: "GitHub",
+            catalogId: "cat_github",
+            serverId: "srv_1",
+            reauthUrl:
+              "http://localhost:3000/mcp/registry?reauth=cat_github&server=srv_1",
+          },
+        },
+      }),
+    ).toMatchObject({
+      kind: "auth-expired",
+      catalogName: "GitHub",
+      reauthUrl:
+        "http://localhost:3000/mcp/registry?reauth=cat_github&server=srv_1",
+    });
+  });
+
+  it("falls back to parsing the auth prose in text content blocks", () => {
+    expect(
+      resolveMcpAppToolCallAuthState({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: 'Authentication required for "Slack"\n\nNo credentials were found for your account.\nTo set up your credentials, visit this URL: http://localhost:3000/mcp/registry?install=cat_slack\nOnce you have completed authentication, retry this tool call.',
+          },
+        ],
+      }),
+    ).toMatchObject({
+      kind: "auth-required",
+      catalogName: "Slack",
+      actionUrl: "http://localhost:3000/mcp/registry?install=cat_slack",
+      catalogId: "cat_slack",
+    });
+  });
+
+  it("ignores successful results even when they carry auth-like content", () => {
+    expect(
+      resolveMcpAppToolCallAuthState({
+        isError: false,
+        content: [{ type: "text", text: authRequiredError.message }],
+        _meta: { archestraError: authRequiredError },
+      }),
+    ).toBeNull();
+    expect(
+      resolveMcpAppToolCallAuthState({
+        content: [{ type: "text", text: authRequiredError.message }],
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null for non-auth tool errors", () => {
+    expect(
+      resolveMcpAppToolCallAuthState({
+        isError: true,
+        content: [{ type: "text", text: "Upstream server returned 500" }],
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null for policy-denied errors (no connect affordance)", () => {
+    expect(
+      resolveMcpAppToolCallAuthState({
+        isError: true,
+        content: [{ type: "text", text: "blocked" }],
+        _meta: {
+          archestraError: {
+            type: "policy_denied",
+            message: "blocked",
+            toolName: "some-tool",
+            input: {},
+            reason: "blocked by policy",
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null for non-object results", () => {
+    expect(resolveMcpAppToolCallAuthState(null)).toBeNull();
+    expect(resolveMcpAppToolCallAuthState("error text")).toBeNull();
+    expect(resolveMcpAppToolCallAuthState(undefined)).toBeNull();
   });
 });
 

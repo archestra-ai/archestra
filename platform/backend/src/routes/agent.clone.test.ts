@@ -798,4 +798,40 @@ describe("clone agent route", () => {
 
     expect(cloned.toolExposureMode).toBe("search_and_run_only");
   });
+
+  test("copies Auto-tool-mode exclusions to the clone", async ({
+    makeInternalAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const toolCatalog = await makeInternalMcpCatalog({ organizationId });
+    const excludedTool = await makeTool({
+      name: "github__create_issue",
+      catalogId: toolCatalog.id,
+    });
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Excluding Agent",
+      accessAllTools: true,
+    });
+    const { agentToolExclusionsService } = await import(
+      "@/services/agent-tool-exclusions"
+    );
+    await agentToolExclusionsService.replaceExclusions({
+      agentId: sourceAgent.id,
+      organizationId,
+      excludedToolIds: [excludedTool.id],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+    expect(await agentToolExclusionsService.getExclusions(cloned.id)).toEqual({
+      excludedToolIds: [excludedTool.id],
+    });
+  });
 });

@@ -5,6 +5,7 @@ export { default as A2ATaskApprovalRequestModel } from "./a2a-task-approval-requ
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
 export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";
+export { default as AgentExcludedToolModel } from "./agent-excluded-tool";
 export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentTeamModel } from "./agent-team";

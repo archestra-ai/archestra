@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { trackEvent } from "@/lib/analytics";
 import { useHandleOAuthCallback } from "@/lib/auth/oauth.query";
 import {
   clearCallbackProcessing,
@@ -69,6 +70,11 @@ function OAuthCallbackContent() {
       });
 
       if (initialError) {
+        if (error) {
+          // The provider bounced the user back without a code — the user
+          // denied access or the provider refused (e.g. "access_denied").
+          trackEvent("mcp_server_installation_cancelled", { reason: error });
+        }
         // Remember where the flow started so the error card can send the
         // user back there instead of always to the registry.
         setErrorReturnPath(

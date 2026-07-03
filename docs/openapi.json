@@ -45101,6 +45101,590 @@
         }
       }
     },
+    "/api/agents/{id}/tool-exclusions": {
+      "get": {
+        "operationId": "getAgentToolExclusions",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Get the agent's Auto-tool-mode exclusions: MCP catalogs and individual tools removed from its tool surface while 'access all tools' is on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "excludedToolIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "description": "Individual tool IDs excluded from the agent's surface"
+                    }
+                  },
+                  "required": [
+                    "excludedToolIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      },
+      "put": {
+        "operationId": "updateAgentToolExclusions",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Replace the agent's Auto-tool-mode exclusions (full replace of the excluded tool set)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "excludedToolIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "description": "Individual tool IDs excluded from the agent's surface"
+                  }
+                },
+                "required": [
+                  "excludedToolIds"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "excludedToolIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "description": "Individual tool IDs excluded from the agent's surface"
+                    }
+                  },
+                  "required": [
+                    "excludedToolIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
     "/api/agents/{id}/restore": {
       "post": {
         "operationId": "restoreAgent",
@@ -94966,13 +95550,6 @@
                         "geminiVertexAiEnabled": {
                           "type": "boolean"
                         },
-                        "globalToolPolicy": {
-                          "type": "string",
-                          "enum": [
-                            "permissive",
-                            "restrictive"
-                          ]
-                        },
                         "incomingEmail": {
                           "type": "object",
                           "properties": {
@@ -95044,7 +95621,6 @@
                         "anthropicWifEnabled",
                         "bedrockIamAuthEnabled",
                         "geminiVertexAiEnabled",
-                        "globalToolPolicy",
                         "incomingEmail",
                         "mcpServerBaseImage",
                         "orchestratorK8sNamespace",
@@ -207493,13 +208069,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -207898,7 +208467,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -208455,13 +209023,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -208860,7 +209421,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -209570,7 +210130,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update security settings (global tool policy, chat file uploads, tool auto-assignment)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
+        "description": "Update security settings (default tool guardrails, chat file uploads)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads)",
         "requestBody": {
           "required": true,
           "content": {
@@ -209578,13 +210138,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "globalToolPolicy": {
-                    "type": "string",
-                    "enum": [
-                      "permissive",
-                      "restrictive"
-                    ]
-                  },
                   "defaultDiscoveredToolInvocationPolicy": {
                     "type": "string",
                     "enum": [
@@ -209708,13 +210261,6 @@
                       "enum": [
                         "organization",
                         "team"
-                      ]
-                    },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
                       ]
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -210115,7 +210661,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -210530,13 +211075,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -210935,7 +211473,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -211231,7 +211768,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update agent settings (default model, default agent, skill slash commands)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
+        "description": "Update agent settings (default model, default agent, skill slash commands)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads)",
         "requestBody": {
           "required": true,
           "content": {
@@ -211356,13 +211893,6 @@
                       "enum": [
                         "organization",
                         "team"
-                      ]
-                    },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
                       ]
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -211763,7 +212293,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -212261,13 +212790,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -212666,7 +213188,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -213145,13 +213666,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -213550,7 +214064,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -213963,13 +214476,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -214368,7 +214874,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -214794,13 +215299,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -215199,7 +215697,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -215592,13 +216089,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -215997,7 +216487,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -216703,13 +217192,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -217108,7 +217590,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",

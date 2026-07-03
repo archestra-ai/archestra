@@ -32,16 +32,25 @@ test.describe("Skills marketplace step on /connection", () => {
       await goToPage(page, "/connection");
       await page.waitForLoadState("domcontentloaded");
 
-      // Pick "Any client" so the generic (client-agnostic) snippets render.
-      await page
+      // Pick "Any Client" so the generic (client-agnostic) snippets render, and
+      // the "Install shared skills" step expands so the create button mounts.
+      //
+      // The client tile is server-rendered, so a click that lands before React
+      // hydration attaches its onClick handler is silently lost — Playwright
+      // reports the click as successful (the SSR button is visible/enabled), but
+      // no client is selected, the skills step never opens, and the create
+      // button never renders. A longer timeout can't recover it: once the click
+      // is dropped the state stays unset for the life of the page. Selecting a
+      // client is idempotent (it sets, never toggles), so retry the click until
+      // the step has opened and the create button is visible.
+      const anyClient = page
         .getByRole("button", { name: /Any Client/i })
-        .first()
-        .click();
-
-      // The "Install shared skills" step expands once a client is picked, so
-      // the create button is reachable directly.
+        .first();
       const createButton = page.getByTestId("skills-marketplace-create");
-      await expect(createButton).toBeVisible({ timeout: 20_000 });
+      await expect(async () => {
+        await anyClient.click();
+        await expect(createButton).toBeVisible({ timeout: 3_000 });
+      }).toPass({ timeout: 20_000 });
 
       const createResponsePromise = page.waitForResponse(
         (response) =>

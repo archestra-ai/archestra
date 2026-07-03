@@ -1,6 +1,12 @@
 import {
+  APP_ARCHESTRA_TOOL_SHORT_NAMES,
   ARCHESTRA_MCP_CATALOG_ID,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
+  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+  getCreationDefaultArchestraToolShortNames,
+  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+  SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
@@ -107,6 +113,103 @@ describe("getDefaultArchestraToolIds", () => {
     expect(result?.toolIds).toEqual(
       new Set(brandedDefaultTools.map((tool) => tool.id)),
     );
+  });
+
+  describe("feature-flag composition (shared composer)", () => {
+    const catalogs = [makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Archestra")];
+    // One catalog tool per short name across every composable group, so the
+    // expected pre-selection can be derived from the composer output.
+    const groupShortNames = [
+      ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+    ];
+    const allGroupTools = groupShortNames.map((shortName) =>
+      makeTool(`tool-${shortName}`, `archestra__${shortName}`),
+    );
+
+    function idsForShortNames(shortNames: readonly string[]): Set<string> {
+      return new Set(shortNames.map((shortName) => `tool-${shortName}`));
+    }
+
+    it("pre-selects the defaults and app tools when every flag is off", () => {
+      const result = getDefaultArchestraToolIds(catalogs, [allGroupTools], {});
+
+      expect(result?.toolIds).toEqual(
+        idsForShortNames([
+          ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+        ]),
+      );
+    });
+
+    it("adds the skill tools when skillsEnabled", () => {
+      const result = getDefaultArchestraToolIds(catalogs, [allGroupTools], {
+        skillsEnabled: true,
+      });
+
+      expect(result?.toolIds).toEqual(
+        idsForShortNames([
+          ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+        ]),
+      );
+    });
+
+    it("adds the sandbox runtime and persistent-files tools when sandboxEnabled", () => {
+      const result = getDefaultArchestraToolIds(catalogs, [allGroupTools], {
+        sandboxEnabled: true,
+      });
+
+      expect(result?.toolIds).toEqual(
+        idsForShortNames([
+          ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+        ]),
+      );
+    });
+
+    it("pre-selects exactly the shared composer output with every flag on", () => {
+      const flags = {
+        skillsEnabled: true,
+        sandboxEnabled: true,
+      };
+
+      const result = getDefaultArchestraToolIds(
+        catalogs,
+        [allGroupTools],
+        flags,
+      );
+
+      expect(result?.toolIds).toEqual(
+        idsForShortNames(getCreationDefaultArchestraToolShortNames(flags)),
+      );
+    });
+
+    it("matches branded group tool names under white-labeling", () => {
+      const brandedTools = groupShortNames.map((shortName) =>
+        makeTool(`tool-${shortName}`, `sparky__${shortName}`),
+      );
+
+      const result = getDefaultArchestraToolIds(
+        [makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Sparky")],
+        [brandedTools],
+        { skillsEnabled: true },
+      );
+
+      expect(result?.toolIds).toEqual(
+        idsForShortNames([
+          ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+        ]),
+      );
+    });
   });
 });
 

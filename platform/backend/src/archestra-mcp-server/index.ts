@@ -12,6 +12,11 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType } from "zod";
 import config from "@/config";
 import { ToolModel } from "@/models";
+import {
+  type AgentToolExclusionSets,
+  agentToolExclusionsService,
+  isToolRowExcluded,
+} from "@/services/agent-tool-exclusions";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
 import {
@@ -180,8 +185,9 @@ export async function executeArchestraTool(
   // Centralized assignment check — an agent may only execute Archestra tools
   // that are actually assigned to it (the same set advertised by tools/list and
   // search_tools). Without this, run_tool or a raw tools/call could invoke any
-  // Archestra tool the user has RBAC for, regardless of assignment. A narrow
-  // set of built-ins is exempt under dynamic tool access (see below).
+  // Archestra tool the user has RBAC for, regardless of assignment. Under
+  // dynamic tool access ("access all tools") unassigned built-ins are exempt
+  // (see below).
   const assignmentDenied = await resolveToolAssignment(toolName, context);
   if (assignmentDenied) return assignmentDenied;
 
@@ -244,6 +250,7 @@ const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
 async function checkToolAssignedToAgent(
   toolName: string,
   context: ArchestraContext,
+  exclusionSets: AgentToolExclusionSets,
 ): Promise<CallToolResult | null> {
   const shortName = archestraMcpBranding.getToolShortName(toolName);
   // Assignment is agent-scoped; org/team-token sessions rely on RBAC alone.
@@ -251,8 +258,13 @@ async function checkToolAssignedToAgent(
   if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
 
   const assignedTools = await ToolModel.getMcpToolsByAgent(context.agentId);
+  // Per-agent exclusions (Auto-tool mode): an assigned-but-excluded built-in
+  // is treated as unavailable — the sets are empty unless the agent's
+  // accessAllTools setting is on, so Custom mode is unchanged.
   const isAssigned = assignedTools.some(
-    (tool) => archestraMcpBranding.getToolShortName(tool.name) === shortName,
+    (tool) =>
+      archestraMcpBranding.getToolShortName(tool.name) === shortName &&
+      !isToolRowExcluded(tool, exclusionSets),
   );
   if (isAssigned) return null;
   return structuredToolErrorResult({
@@ -265,24 +277,43 @@ async function checkToolAssignedToAgent(
   });
 }
 
-// Assignment gate with the dynamic-access relaxation: an unassigned sandbox
-// built-in (feature on) or query_knowledge_sources (user can access a knowledge
-// connector) executes anyway when the agent's "access all tools" setting and
-// the org kill-switch allow it — nothing is assigned. RBAC already ran before
-// this gate, so e.g. the sandbox tools still require sandbox:execute.
+// Assignment gate with the dynamic-access relaxation: an unassigned built-in
+// executes anyway when the agent's "access all tools" setting allows it and
+// isDynamicallyAvailableArchestraTool passes (feature gates, per-agent
+// exclusions, and the query_knowledge_sources connector check) — nothing is
+// assigned. RBAC already ran before this gate, so e.g. the sandbox tools
+// still require sandbox:execute.
 async function resolveToolAssignment(
   toolName: string,
   context: ArchestraContext,
 ): Promise<CallToolResult | null> {
-  const notAssigned = await checkToolAssignedToAgent(toolName, context);
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  // Assignment is agent-scoped; org/team-token sessions rely on RBAC alone.
+  if (!context.agentId || !shortName) return null;
+  // The dispatch-surface tools are exempt from the assignment gate —
+  // short-circuit BEFORE loading exclusion sets so every run_tool /
+  // search_tools invocation skips the extra queries (excluding these tools is
+  // also rejected at write time).
+  if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
+
+  // Loaded once per invocation and threaded through both gates. Empty (no-op)
+  // unless the agent has accessAllTools on and exclusions configured.
+  const exclusionSets = await agentToolExclusionsService.getActiveExclusionSets(
+    context.agentId,
+  );
+  const notAssigned = await checkToolAssignedToAgent(
+    toolName,
+    context,
+    exclusionSets,
+  );
   if (!notAssigned) return null;
-  if (!context.agentId) return notAssigned;
 
   const dynamicallyAvailable = await isDynamicallyAvailableArchestraTool({
     toolName,
     agentId: context.agentId,
     userId: context.userId,
     organizationId: context.organizationId,
+    exclusionSets,
   });
   return dynamicallyAvailable ? null : notAssigned;
 }

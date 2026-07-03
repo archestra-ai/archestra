@@ -115,6 +115,64 @@ describe("PUT/DELETE /api/apps pin routes", () => {
     expect(item?.pinnedAt).toBeNull();
   });
 
+  // Every /api/ route must be registered in requiredEndpointPermissionsMap or
+  // the auth middleware 403s it for everyone (deny-by-default). A missing
+  // registration is invisible from this file's bare fastify instance (routes
+  // are registered without the auth plugin), so assert on the map directly,
+  // like the knowledge-base route tests do. app:read matches project pins'
+  // project:read — any member-level viewer may pin; per-instance visibility is
+  // gated in the handlers.
+  test("pin routes are registered in the endpoint permissions map for members", async () => {
+    const { requiredEndpointPermissionsMap } = await import(
+      "@archestra/shared/access-control"
+    );
+    const { RouteId } = await import("@archestra/shared");
+
+    expect(requiredEndpointPermissionsMap[RouteId.PinApp]).toEqual({
+      app: ["read"],
+    });
+    expect(requiredEndpointPermissionsMap[RouteId.UnpinApp]).toEqual({
+      app: ["read"],
+    });
+    expect(requiredEndpointPermissionsMap[RouteId.PinExternalApp]).toEqual({
+      app: ["read"],
+    });
+    expect(requiredEndpointPermissionsMap[RouteId.UnpinExternalApp]).toEqual({
+      app: ["read"],
+    });
+  });
+
+  test("a plain (non-admin) member can pin an org-visible app; pins are per-user", async ({
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const member = await makeUser({ email: "app-pin-plain-member@test.com" });
+    await makeMember(member.id, organizationId, {});
+    const owned = await makeApp({
+      organizationId,
+      scope: "org",
+      authorId: user.id,
+      name: "Org Shared",
+    });
+
+    actingUser = member;
+    const pin = await app.inject({
+      method: "PUT",
+      url: `/api/apps/${owned.id}/pin`,
+    });
+    expect(pin.statusCode).toBe(200);
+
+    // Pinned for the member…
+    const item = (await listItems()).find((i) => i.id === owned.id);
+    expect(typeof item?.pinnedAt).toBe("string");
+
+    // …but not for the author (pins are personal, like project pins).
+    actingUser = user;
+    const authorItem = (await listItems()).find((i) => i.id === owned.id);
+    expect(authorItem?.pinnedAt).toBeNull();
+  });
+
   test("pinning an owned app you cannot view returns 404", async ({
     makeUser,
     makeMember,

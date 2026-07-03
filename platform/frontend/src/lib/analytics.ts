@@ -22,6 +22,23 @@ type ProductEvents = {
   mcp_server_uninstalled: { serverId: string; serverName: string };
   /** An OAuth install came back from the provider without completing. */
   mcp_server_installation_cancelled: { reason: string };
+  /**
+   * An install didn't complete: the install request was rejected ("request")
+   * or the local server's pod failed to come up afterwards ("runtime").
+   */
+  mcp_server_installation_failed: {
+    serverId?: string;
+    serverName?: string;
+    catalogId?: string;
+    stage: "request" | "runtime";
+    errorMessage?: string;
+  };
+  /** A knowledge base connector could not be created or failed its connection test. */
+  knowledge_base_connector_installation_failed: {
+    connectorType?: string;
+    stage: "create" | "connection_test";
+    errorMessage?: string;
+  };
   message_sent: {
     conversationId?: string;
     agentId?: string;
@@ -49,3 +66,16 @@ export function trackEvent<TName extends keyof ProductEvents>(
   }
   posthog.capture(event, properties);
 }
+
+/**
+ * Clip an error message for use as an event property: enough to tell failure
+ * modes apart in PostHog without shipping whole stack traces or payloads.
+ */
+export function clipErrorMessage(message: unknown): string | undefined {
+  if (typeof message !== "string" || message.length === 0) {
+    return undefined;
+  }
+  return message.slice(0, ERROR_MESSAGE_MAX_LENGTH);
+}
+
+const ERROR_MESSAGE_MAX_LENGTH = 200;

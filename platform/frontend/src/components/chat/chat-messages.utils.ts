@@ -5,6 +5,7 @@ import {
   HOOK_RUN_PART_TYPE,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
+  parseArchestraAppResourceUri,
   parseFullToolName,
   SUBAGENT_TOOL_CALL_PART_TYPE,
   type SubagentToolCallPartData,
@@ -204,6 +205,31 @@ export function deriveAppsFromMessages(
         part,
         earlyToolUiStarts[part.toolCallId],
       );
+
+      // An owned app rendered by its own render (e.g. its `__open` launch tool)
+      // carries a `ui://archestra-app/<appId>` URI. Route it by `appId` to the
+      // app-bound endpoint so its SDK storage and app-scoped tool calls reach
+      // `/api/mcp/app/:appId`, not the generic agent gateway. Its head version
+      // is served from that endpoint, so the inline result isn't seeded.
+      const uriAppId = outputUri
+        ? parseArchestraAppResourceUri(outputUri)
+        : null;
+      if (uriAppId) {
+        seen.add(part.toolCallId);
+        apps.push({
+          toolCallId: part.toolCallId,
+          label: mcpToolLabel(fullToolName),
+          uiResourceUri: outputUri as string,
+          appId: uriAppId,
+          toolName: resolveRunToolTargetName(part, fullToolName, {
+            getToolShortName,
+          }),
+          version: null,
+          createdAt: createdAt ?? 0,
+        });
+
+        continue;
+      }
 
       // An external MCP-UI render carries its own URI in the result. It never
       // dedups: the same URI can represent entirely different content across

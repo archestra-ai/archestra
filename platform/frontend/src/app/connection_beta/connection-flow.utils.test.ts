@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  deriveMcpServerName,
   getShownProviders,
   resolveEffectiveId,
   resolveInitialClientId,
@@ -209,5 +210,19 @@ describe("toMcpServerSlug", () => {
   it("falls back to 'archestra' when the input has no alphanumerics", () => {
     expect(toMcpServerSlug("!!!")).toBe("archestra");
     expect(toMcpServerSlug("")).toBe("archestra");
+  });
+});
+
+describe("deriveMcpServerName", () => {
+  it("underscore-separates the gateway name (mirrors the backend)", () => {
+    expect(
+      deriveMcpServerName({ gatewayName: " Prod Gateway ", appName: "Acme" }),
+    ).toBe("prod_gateway");
+  });
+
+  it("falls back to the app-name slug for unnamed gateways", () => {
+    expect(deriveMcpServerName({ gatewayName: "  ", appName: "Acme AI" })).toBe(
+      "acme-ai",
+    );
   });
 });

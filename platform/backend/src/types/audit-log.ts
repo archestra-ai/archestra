@@ -106,6 +106,7 @@ export const AuditEventNameSchema = z.enum([
   "trustedDataPolicy.updated",
   "trustedDataPolicy.deleted",
   "trustedDataPolicy.bulk_defaulted",
+  "user.password_reset",
   "userToken.rotated",
   "virtualApiKey.created",
   "virtualApiKey.deleted",

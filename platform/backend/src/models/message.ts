@@ -81,6 +81,17 @@ class MessageModel {
     return messages;
   }
 
+  /** Cheap emptiness probe — avoids loading full rows just to count them. */
+  static async existsForConversation(conversationId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.messagesTable.id })
+      .from(schema.messagesTable)
+      .where(eq(schema.messagesTable.conversationId, conversationId))
+      .limit(1);
+
+    return row !== undefined;
+  }
+
   static async delete(id: string): Promise<void> {
     await db
       .delete(schema.messagesTable)

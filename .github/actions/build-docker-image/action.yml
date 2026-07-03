@@ -63,12 +63,6 @@ outputs:
   digest:
     description: "Image digest"
     value: ${{ steps.build.outputs.digest }}
-  imageid:
-    description: "Image ID"
-    value: ${{ steps.build.outputs.imageid }}
-  metadata:
-    description: "Build metadata"
-    value: ${{ steps.build.outputs.metadata }}
 
 runs:
   using: composite

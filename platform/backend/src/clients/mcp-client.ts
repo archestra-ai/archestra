@@ -2942,6 +2942,7 @@ class McpClient {
     let lastError: Error | undefined;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      let client: Client | undefined;
       try {
         // Get the appropriate transport using the existing helper
         const transport = await this.getTransport(
@@ -2957,7 +2958,7 @@ class McpClient {
         };
 
         // Create client with transport
-        const client = new Client(buildMcpClientInfo("archestra-platform"), {
+        client = new Client(buildMcpClientInfo("archestra-platform"), {
           capabilities,
         });
 
@@ -2986,6 +2987,19 @@ class McpClient {
         }));
       } catch (error) {
         lastError = error instanceof Error ? error : new Error("Unknown error");
+
+        // Only the success path closed the client; a failure after connect
+        // (e.g. tool discovery threw) would otherwise leak its transport.
+        if (client) {
+          try {
+            await client.close();
+          } catch (closeError) {
+            logger.warn(
+              { closeError, server: catalogItem.name },
+              "Error closing MCP client after failed tool discovery (non-fatal)",
+            );
+          }
+        }
 
         // If this is not the last attempt, log and retry
         if (attempt < maxRetries) {
@@ -3417,16 +3431,18 @@ class McpClient {
    * (buildExternalAppRenderResult), whose absence otherwise misroutes the app's
    * `callServerTool` to the agent gateway.
    *
+   * Binds to the same install run_tool executes against, for any number of
+   * installs: a valid service-account pin (`dynamicConnectionMcpServerId`)
+   * routes every caller to one install; otherwise the caller's own→team→org
+   * connection policy resolves it (`findMcpServerForResource`), so a
+   * per-user-credentialed catalog binds each caller to their own install.
+   *
    * Returns null (render stays unbound, callbacks fail cleanly rather than
-   * misrouting) when:
-   * - the resource is an owned-app backing (`serverType === "app"`, rendered by
-   *   app id via render_app), or
-   * - the catalog has anything other than exactly one install. This method
-   *   resolves the install by the caller's own→team→org connection policy, but
-   *   run_tool executes against the install chosen by the *tool's* credential
-   *   policy (a static/service-account pin can point elsewhere). Those agree
-   *   only when there is a single install, so binding is limited to that case —
-   *   a different install would route callbacks to the wrong server/account.
+   * misrouting) when the caller has no accessible install for the resource, the
+   * resource is an owned-app backing (`serverType === "app"`, rendered by app id
+   * via render_app), or the catalog is enterprise-managed with more than one
+   * install — enterprise credentials resolve the runtime install by their own
+   * mechanism, which can pick a different install than the own→team→org policy.
    */
   async resolveUiAppInstallIdForCaller(
     resourceUri: string,
@@ -3441,11 +3457,23 @@ class McpClient {
     if (!resolved || resolved.catalogItem.serverType === "app") {
       return null;
     }
-    const installs = await McpServerModel.findByCatalogId(
-      resolved.catalogItem.id,
-    );
-    if (installs.length !== 1) {
-      return null;
+    const { catalogItem } = resolved;
+    const pinnedId = catalogItem.dynamicConnectionMcpServerId;
+    const enterpriseManaged = catalogItem.enterpriseManagedConfig != null;
+    if (pinnedId || enterpriseManaged) {
+      const installs = await McpServerModel.findByCatalogId(catalogItem.id);
+      // A valid service-account pin routes every caller through one install.
+      if (pinnedId && installs.some((server) => server.id === pinnedId)) {
+        return pinnedId;
+      }
+      // Enterprise-managed credentials resolve the runtime install by their own
+      // mechanism (an explicit pin or the first install), which can diverge from
+      // the own→team→org resolution when the catalog has more than one install —
+      // a single install cannot diverge. Decline rather than bind callbacks to
+      // an install run_tool did not execute against.
+      if (enterpriseManaged && installs.length > 1) {
+        return null;
+      }
     }
     return resolved.server.id;
   }

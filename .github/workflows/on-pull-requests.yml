@@ -109,20 +109,20 @@ jobs:
       - name: Generate full license report (on failure)
         if: failure()
         run: |
-          echo "## License Compliance Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "❌ License check failed. See details below:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          pnpm license-check 2>&1 | head -100 >> $GITHUB_STEP_SUMMARY || true
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "## License Compliance Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "❌ License check failed. See details below:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          pnpm license-check 2>&1 | head -100 >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Add success summary
         if: success()
         run: |
-          echo "## ✅ License Compliance Check Passed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "No GPL/AGPL/Unknown licenses found in dependencies." >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ License Compliance Check Passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "No GPL/AGPL/Unknown licenses found in dependencies." >> "$GITHUB_STEP_SUMMARY"
 
   supply-chain-policy:
     name: Supply Chain Policy
@@ -137,7 +137,9 @@ jobs:
           fetch-depth: 1
 
       - name: Enforce image pinning and download verification policy
-        run: python3 .github/scripts/check-supply-chain-policy.py
+        run: |
+          python3 -m unittest discover -s .github/scripts -p "test_*.py"
+          python3 .github/scripts/check-supply-chain-policy.py
 
   docs-image-policy:
     name: Docs Image Policy
@@ -245,14 +247,6 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
 
       - name: Checkout project
-        if: ${{ steps.check-release-please.outputs.is-release-please != 'true' }}
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Checkout project for release-please PR
-        if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false

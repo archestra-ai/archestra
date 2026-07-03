@@ -480,7 +480,6 @@ export const perplexityAdapterFactory: LLMProvider<
           "perplexity",
           options.agent,
           options.source,
-          options.externalAgentId,
         )
       : undefined;
 

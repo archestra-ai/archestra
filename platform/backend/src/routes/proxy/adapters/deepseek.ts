@@ -26,7 +26,6 @@ export const deepseekAdapterFactory = createOpenAiCompatibleAdapterFactory({
           "deepseek",
           options.agent,
           options.source,
-          options.externalAgentId,
         )
       : undefined;
 

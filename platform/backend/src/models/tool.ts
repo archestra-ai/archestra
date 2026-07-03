@@ -343,6 +343,69 @@ class ToolModel {
     return tool;
   }
 
+  /**
+   * Read the fields the policy editor needs for a tool the caller can access.
+   * Unlike findById, catalog-backed tools (agentId null) are scoped by catalog
+   * access rather than returned to anyone, so this is safe for user-facing
+   * reads — including All-mode tools that have no agent_tools assignment.
+   */
+  static async findByIdForOrg(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+    isAdmin: boolean;
+  }): Promise<Pick<Tool, "id" | "name" | "parameters"> | null> {
+    const [tool] = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        parameters: schema.toolsTable.parameters,
+        catalogId: schema.toolsTable.catalogId,
+        agentId: schema.toolsTable.agentId,
+      })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.id, params.id));
+
+    if (!tool) {
+      return null;
+    }
+
+    // Catalog-backed tools (including All-mode tools with no agent_tools row) are
+    // scoped by catalog access, which is org-scoped even for admins.
+    if (tool.catalogId) {
+      const catalogIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+        params.userId,
+        params.isAdmin,
+        params.organizationId,
+      );
+      if (!catalogIds.includes(tool.catalogId)) {
+        return null;
+      }
+    } else if (tool.agentId) {
+      // Proxy-sniffed row: scope by the owning agent's org, then by team access
+      // for non-admins.
+      const agent = await AgentModel.findById(tool.agentId);
+      if (agent?.organizationId !== params.organizationId) {
+        return null;
+      }
+      if (!params.isAdmin) {
+        const hasAccess = await AgentTeamModel.userHasAgentAccess(
+          params.userId,
+          tool.agentId,
+          false,
+        );
+        if (!hasAccess) {
+          return null;
+        }
+      }
+    } else {
+      // No catalog, no agent: no org linkage to scope by.
+      return null;
+    }
+
+    return { id: tool.id, name: tool.name, parameters: tool.parameters };
+  }
+
   // Org-scoped audit snapshot via tool → agent_tools → agents.organizationId.
   // toolsTable has no organizationId column; tenancy is resolved through any
   // agent in the caller's organization that has been assigned the tool.  Closes

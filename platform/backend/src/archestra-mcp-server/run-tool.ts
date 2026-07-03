@@ -404,6 +404,12 @@ async function dispatchTool({
     enabledToolNames: availableTool
       ? new Set([...assignedToolNames, resolvedName])
       : assignedToolNames,
+    // The exact row that will execute, so the policy is evaluated against it and
+    // the id rides along on a block for the "Edit policy" modal (All-mode tools
+    // have no agent_tools row for the modal's assignment lookup to find).
+    resolvedToolId:
+      availableTool?.id ??
+      assignedTools.find((tool) => tool.name === resolvedName)?.id,
   });
   if (policyBlock) {
     // Attach the structured policy_denied error (in _meta + structuredContent)

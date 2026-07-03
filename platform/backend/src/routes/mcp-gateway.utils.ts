@@ -516,6 +516,10 @@ export async function createAgentServer(
             assignedToolNames && {
               enabledToolNames: new Set([...assignedToolNames, name]),
             }),
+          // The dynamically-resolved All-mode row that will execute: evaluate the
+          // policy against it and ride its id along on a block so the "Edit
+          // policy" modal can resolve a tool with no agent_tools assignment.
+          resolvedToolId: availableTool?.id,
         });
         if (policyBlock) {
           // Carry the machine-readable policy_denied error alongside the prose

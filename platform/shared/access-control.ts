@@ -539,6 +539,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RotateToken]: {
     team: ["read"],
   },
+  [RouteId.GetTool]: {
+    toolPolicy: ["read"],
+  },
   [RouteId.GetTools]: {
     toolPolicy: ["read"],
   },

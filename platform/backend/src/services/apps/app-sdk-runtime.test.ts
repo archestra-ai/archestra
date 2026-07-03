@@ -196,6 +196,55 @@ describe("Apps SDK runtime", () => {
     });
   });
 
+  test("a set after get returned absent guards insert-if-absent, so a racing create conflicts", async () => {
+    results.push({
+      structuredContent: { value: null, revision: null, owner: null },
+    });
+    expect(await archestra.storage.shared.get("absent_key")).toBeNull();
+    calls.pop();
+
+    results.push({
+      structuredContent: { key: "absent_key", revision: 1, owner: null },
+    });
+    await archestra.storage.shared.set("absent_key", { first: true });
+    expect(calls.pop()).toEqual({
+      name: "archestra__app_data_set",
+      arguments: {
+        key: "absent_key",
+        value: { first: true },
+        scope: "app",
+        expectedRevision: 0,
+      },
+    });
+  });
+
+  test("a set after list guards on the revision list returned for the key", async () => {
+    results.push({
+      structuredContent: {
+        entries: [
+          { key: "list_a", value: 1, revision: 7, owner: null },
+          { key: "list_b", value: 2, revision: 8, owner: null },
+        ],
+      },
+    });
+    await archestra.storage.user.list();
+    calls.pop();
+
+    results.push({
+      structuredContent: { key: "list_b", revision: 9, owner: null },
+    });
+    await archestra.storage.user.set("list_b", 22);
+    expect(calls.pop()).toEqual({
+      name: "archestra__app_data_set",
+      arguments: {
+        key: "list_b",
+        value: 22,
+        scope: "user",
+        expectedRevision: 8,
+      },
+    });
+  });
+
   test("tools.call resolves with structuredContent when present, over text", async () => {
     results.push({
       content: [{ type: "text", text: '{"other": true}' }],

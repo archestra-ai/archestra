@@ -327,7 +327,10 @@
           sc && sc.revision != null
             ? { value: sc.value, revision: sc.revision, owner: sc.owner ?? null }
             : null;
-        if (entry) seenRevisions.set(key, entry.revision);
+        // Cache the revision so a later set of this key guards on it. An absent
+        // key caches 0 (insert-if-absent) so two instances racing to create the
+        // same key conflict rather than one silently overwriting the other.
+        seenRevisions.set(key, entry ? entry.revision : 0);
         return entry;
       },
       // By default a write guards on the revision last seen for the key this
@@ -353,9 +356,17 @@
         if (sc && sc.revision != null) seenRevisions.set(key, sc.revision);
         return { revision: sc?.revision, owner: sc?.owner ?? null };
       },
-      list: async () =>
-        (await callTool(APP_DATA_TOOLS.list, { scope })).structuredContent
-          ?.entries || [],
+      list: async () => {
+        const entries =
+          (await callTool(APP_DATA_TOOLS.list, { scope })).structuredContent
+            ?.entries || [];
+        // Cache each listed revision so an edit flow that loads via list() then
+        // saves one record still guards that write on the revision it loaded.
+        for (const e of entries) {
+          if (e && e.revision != null) seenRevisions.set(e.key, e.revision);
+        }
+        return entries;
+      },
       // delete is guarded by ownership (an owned shared key can only be removed
       // by its owner or the app's author/admins), not by revision.
       delete: async (key) => {

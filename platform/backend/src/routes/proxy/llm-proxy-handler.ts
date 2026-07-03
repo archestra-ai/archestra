@@ -1352,6 +1352,7 @@ async function handleStreaming<
         contextIsTrusted,
         enabledToolNames,
         globalToolPolicy,
+        { surface: "llm-proxy", sessionId: sessionId ?? undefined },
       );
 
       logger.info(
@@ -1745,6 +1746,7 @@ async function handleNonStreaming<
       contextIsTrusted,
       enabledToolNames,
       globalToolPolicy,
+      { surface: "llm-proxy", sessionId: sessionId ?? undefined },
     );
 
     if (toolInvocationRefusal) {

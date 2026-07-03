@@ -15,8 +15,10 @@ import {
 } from "./mcp-error-ui";
 
 describe("parsePolicyDenied", () => {
-  it("parses a plain-text policy denial with tool name, args, and reason", () => {
-    const text = `\nI tried to invoke the upstash__context7__get-library-docs tool with the following arguments: {"context7CompatibleLibraryID":"/websites/p5js_reference"}.\n\nHowever, I was denied by a tool invocation policy:\n\n${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}`;
+  it("parses a legacy plain-text policy denial with tool name, args, and reason", () => {
+    // Hardcoded legacy wording: this is what pre-rewrite refusals persisted
+    // in chat history look like.
+    const text = `\nI tried to invoke the upstash__context7__get-library-docs tool with the following arguments: {"context7CompatibleLibraryID":"/websites/p5js_reference"}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool call blocked: context contains sensitive data`;
     const result = parsePolicyDenied(text);
     expect(result).not.toBeNull();
     expect(result?.type).toBe("tool-upstash__context7__get-library-docs");
@@ -26,6 +28,20 @@ describe("parsePolicyDenied", () => {
     });
     const errorInfo = JSON.parse(result?.errorText ?? "");
     expect(errorInfo.reason).toContain("context contains sensitive data");
+    expect(result?.unsafeContextActiveAtRequestStart).toBe(true);
+  });
+
+  it("parses a current-format plain-text policy denial with tool name, args, and reason", () => {
+    const text = `\nArchestra MCP Gateway blocked unsafe tool call: upstash__context7__get-library-docs with arguments: {"context7CompatibleLibraryID":"/websites/p5js_reference"}.\n\n${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}.\n\nDo not retry: the same tool call will be blocked again.\n\nArchestra MCP Gateway monitors agentic traffic and blocks unsafe tool calls according to the configured guardrails. If you believe this is a misconfiguration, contact your administrator.`;
+    const result = parsePolicyDenied(text);
+    expect(result).not.toBeNull();
+    expect(result?.type).toBe("tool-upstash__context7__get-library-docs");
+    expect(result?.state).toBe("output-denied");
+    expect(result?.input).toEqual({
+      context7CompatibleLibraryID: "/websites/p5js_reference",
+    });
+    const errorInfo = JSON.parse(result?.errorText ?? "");
+    expect(errorInfo.reason).toBe(TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON);
     expect(result?.unsafeContextActiveAtRequestStart).toBe(true);
   });
 
@@ -445,6 +461,37 @@ describe("resolveToolAuthState", () => {
     });
 
     expect(authState?.kind).toBe("policy-denied");
+  });
+
+  it("prefers the structured policy_denied error on rawOutput over prose parsing", () => {
+    const authState = resolveToolAuthState({
+      rawOutput: {
+        structuredContent: {
+          archestraError: {
+            type: "policy_denied",
+            message: "blocked",
+            toolName: "archestra_pm__list_tasks",
+            input: { list: "week" },
+            reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+            reasonType: "sensitive_context",
+          },
+        },
+      },
+    });
+
+    expect(authState).toEqual({
+      kind: "policy-denied",
+      policyDenied: {
+        type: "tool-archestra_pm__list_tasks",
+        toolCallId: "",
+        state: "output-denied",
+        input: { list: "week" },
+        unsafeContextActiveAtRequestStart: true,
+        errorText: JSON.stringify({
+          reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+        }),
+      },
+    });
   });
 
   it("parses auth-required fallbacks from raw string output", () => {

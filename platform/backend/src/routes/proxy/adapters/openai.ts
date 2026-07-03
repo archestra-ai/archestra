@@ -991,6 +991,15 @@ export class OpenAIStreamAdapter
   readonly provider: SupportedProvider;
   readonly state: StreamAccumulatorState;
   private currentToolCallIndices = new Map<number, number>();
+  // Set to the refusal text when the streamed response was replaced by a policy
+  // refusal. formatEndSSE then finishes the turn as "stop" instead of replaying
+  // the upstream "tool_calls" finish reason (a text-only turn ending in
+  // "tool_calls" with no tool_calls makes agent harnesses retry), and
+  // toProviderResponse persists the refusal rather than the blocked tool calls.
+  private replacedText: string | null = null;
+  private get responseReplacedWithText(): boolean {
+    return this.replacedText !== null;
+  }
 
   constructor(provider: SupportedProvider = "openai") {
     this.provider = provider;
@@ -1149,6 +1158,7 @@ export class OpenAIStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): string[] {
+    this.replacedText = text;
     const chunk: OpenAiStreamChunk = {
       id: this.state.responseId || `chatcmpl-${Date.now()}`,
       object: "chat.completion.chunk",
@@ -1178,8 +1188,9 @@ export class OpenAIStreamAdapter
         {
           index: 0,
           delta: {},
-          finish_reason:
-            (this.state.stopReason as "stop" | "tool_calls") ?? "stop",
+          finish_reason: this.responseReplacedWithText
+            ? "stop"
+            : ((this.state.stopReason as "stop" | "tool_calls") ?? "stop"),
         },
       ],
     };
@@ -1200,16 +1211,16 @@ export class OpenAIStreamAdapter
 
   toProviderResponse(): OpenAiResponse {
     const toolCalls =
-      this.state.toolCalls.length > 0
-        ? this.state.toolCalls.map((tc) => ({
+      this.responseReplacedWithText || this.state.toolCalls.length === 0
+        ? undefined
+        : this.state.toolCalls.map((tc) => ({
             id: tc.id,
             type: "function" as const,
             function: {
               name: tc.name,
               arguments: tc.arguments,
             },
-          }))
-        : undefined;
+          }));
 
     return {
       id: this.state.responseId,
@@ -1221,13 +1232,14 @@ export class OpenAIStreamAdapter
           index: 0,
           message: {
             role: "assistant",
-            content: this.state.text || null,
+            content: this.replacedText ?? (this.state.text || null),
             refusal: null,
             tool_calls: toolCalls,
           },
           logprobs: null,
-          finish_reason:
-            (this.state.stopReason as OpenAi.Types.FinishReason) ?? "stop",
+          finish_reason: this.responseReplacedWithText
+            ? "stop"
+            : ((this.state.stopReason as OpenAi.Types.FinishReason) ?? "stop"),
         },
       ],
       usage: {

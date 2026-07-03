@@ -32,13 +32,18 @@ import {
   type CreateConnectionSetupResult,
   useCreateConnectionSetup,
 } from "@/lib/connection-setup.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useAvailableLlmProviderApiKeys,
   useCreateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
-import type { ConnectClient } from "./clients";
-import type { ConnectionBaseUrl } from "./connection-flow.utils";
+import { type ConnectClient, FINISH_OAUTH_FLOW_TITLE } from "./clients";
+import {
+  type ConnectionBaseUrl,
+  deriveMcpServerName,
+} from "./connection-flow.utils";
+import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
 import {
   CONNECT_PLATFORM_OPTIONS,
@@ -47,10 +52,8 @@ import {
   platformLabels,
   toPlatformOption,
 } from "./platform.utils";
-import {
-  fetchAllSkillIds,
-  useTotalSkillCount,
-} from "./skills-marketplace-step";
+import { type ConnectSkill, useAllSkills } from "./skills-marketplace-step";
+import { TerminalBlock } from "./terminal-block";
 import { WizardStep } from "./wizard-step";
 
 type ScriptClientId = CreateConnectionSetupBody["clientId"];
@@ -73,16 +76,20 @@ export function isScriptClient(
 
 /**
  * Whether skills can ride along in the setup command: feature on, caller is a
- * skill admin, and there is at least one skill to share.
+ * skill admin, and there is at least one skill to share. Also surfaces the
+ * full skill list so the review step can name (and let the user deselect)
+ * exactly what the command installs.
  */
-function useConnectSkills(): { eligible: boolean; totalSkills: number } {
+function useConnectSkills(): { eligible: boolean; skills: ConnectSkill[] } {
   const skillsEnabled = useFeature("agentSkillsEnabled") === true;
   const { data: canAdminSkills } = useHasPermissions({ skill: ["admin"] });
-  const { data: totalSkills } = useTotalSkillCount();
+  const { data: skills } = useAllSkills({
+    enabled: skillsEnabled && canAdminSkills === true,
+  });
   return {
     eligible:
-      skillsEnabled && canAdminSkills === true && (totalSkills ?? 0) > 0,
-    totalSkills: totalSkills ?? 0,
+      skillsEnabled && canAdminSkills === true && (skills ?? []).length > 0,
+    skills: skills ?? [],
   };
 }
 
@@ -130,9 +137,37 @@ export function ConnectCommandPanel({
   baseUrlMetadata,
   onBaseUrlChange,
 }: ConnectCommandPanelProps) {
-  const { eligible: skillsEligible, totalSkills } = useConnectSkills();
-  const [skillsOptOut, setSkillsOptOut] = useState(false);
-  const includeSkills = skillsEligible && !skillsOptOut;
+  const { eligible: skillsEligible, skills: allSkills } = useConnectSkills();
+  // Skill selection: `null` means "all skills" (the default, and it keeps
+  // including skills created later). Once the user touches any checkbox it
+  // becomes an explicit snapshot of chosen ids — so an opt-out (empty set)
+  // stays opted out even if the skill list refetches with new skills, and a
+  // custom pick never silently gains a skill the user never saw. The set is
+  // always intersected with the current list, so deleted skills drop out
+  // cleanly.
+  const [selectedSkillIds, setSelectedSkillIds] =
+    useState<ReadonlySet<string> | null>(null);
+  const selectedSkills = useMemo(
+    () =>
+      selectedSkillIds === null
+        ? allSkills
+        : allSkills.filter((s) => selectedSkillIds.has(s.id)),
+    [allSkills, selectedSkillIds],
+  );
+  const includeSkills = skillsEligible && selectedSkills.length > 0;
+
+  // Toggle one skill, snapshotting the current selection into an explicit set
+  // on first interaction (null → all ids, then add/remove the toggled one).
+  const toggleSkill = useCallback(
+    (skillId: string, checked: boolean) =>
+      setSelectedSkillIds((cur) => {
+        const next = new Set(cur ?? allSkills.map((s) => s.id));
+        if (checked) next.add(skillId);
+        else next.delete(skillId);
+        return next;
+      }),
+    [allSkills],
+  );
 
   const [proxyAuth, setProxyAuth] = useState<ConnectProxyAuth>("provider-key");
   // Target OS for the generated command. Auto-detected from the browser after
@@ -211,6 +246,13 @@ export function ConnectCommandPanel({
   // Claude Desktop panel's "Finish the OAuth flow" step. The gateway is the
   // thing being authorized, so the step is gateway-gated.
   const showOAuthStep = client.id === "claude-code" && !!gateway;
+  const appName = useAppName();
+  // The exact name the script registers the gateway under — referenced in the
+  // OAuth step so the user can find it in the `claude /mcp` list.
+  const oauthServerName = deriveMcpServerName({
+    gatewayName: gateway?.name ?? "",
+    appName,
+  });
 
   // Claude Code passthrough (Anthropic subscription or the user's own Bedrock
   // credentials) also gets a personal passthrough key wired into the command
@@ -253,7 +295,8 @@ export function ConnectCommandPanel({
     proxyId: proxyActive ? proxy.id : null,
     provider: proxyActive ? provider : null,
     proxyAuth: proxyActive ? proxyAuth : null,
-    includeSkills,
+    // Sorted so reorderings of the same selection don't regenerate.
+    skillIds: includeSkills ? selectedSkills.map((s) => s.id).sort() : null,
   });
   const latestKeyRef = useRef(inputsKey);
   latestKeyRef.current = inputsKey;
@@ -268,16 +311,15 @@ export function ConnectCommandPanel({
         proxyId: string | null;
         provider: SupportedProvider | null;
         proxyAuth: ConnectProxyAuth | null;
-        includeSkills: boolean;
+        skillIds: string[] | null;
       };
 
       let skills: CreateConnectionSetupBody["skills"];
-      if (inputs.includeSkills) {
-        const skillIds = await fetchAllSkillIds();
+      if (inputs.skillIds && inputs.skillIds.length > 0) {
         // The marketplace link the client clones from must outlive the one-time
         // setup token, so it never expires — admins revoke it from the Skills
         // page when needed.
-        if (skillIds.length > 0) skills = { skillIds, ttlDays: null };
+        skills = { skillIds: inputs.skillIds, ttlDays: null };
       }
       if (!inputs.gatewayId && !inputs.proxyId && !skills) return;
 
@@ -460,17 +502,52 @@ export function ConnectCommandPanel({
   ) : null;
 
   const skillsEditor = (
-    <label
-      className="flex items-center gap-2 text-sm"
-      htmlFor="connect-include-skills"
-    >
-      <Checkbox
-        id="connect-include-skills"
-        checked={includeSkills}
-        onCheckedChange={(checked) => setSkillsOptOut(checked !== true)}
-      />
-      Install {totalSkills} shared skill{totalSkills === 1 ? "" : "s"}
-    </label>
+    <div className="grid gap-2">
+      <label
+        className="flex items-center gap-2 text-sm font-medium"
+        htmlFor="connect-include-skills"
+      >
+        <Checkbox
+          id="connect-include-skills"
+          // Derived from the current skill list (not a raw id-set size), so a
+          // stale id can never pin the master box at "indeterminate" while
+          // every visible skill is checked. Checking it resets to "all"
+          // (null); unchecking sets an explicit empty selection that sticks.
+          checked={
+            selectedSkills.length === allSkills.length
+              ? true
+              : selectedSkills.length === 0
+                ? false
+                : "indeterminate"
+          }
+          onCheckedChange={(checked) =>
+            setSelectedSkillIds(checked === true ? null : new Set())
+          }
+        />
+        Install shared skills
+      </label>
+      <ul className="grid max-h-56 gap-1.5 overflow-y-auto pl-6">
+        {allSkills.map((skill) => (
+          <li key={skill.id}>
+            <label
+              className="flex items-center gap-2 text-sm"
+              htmlFor={`connect-skill-${skill.id}`}
+            >
+              <Checkbox
+                id={`connect-skill-${skill.id}`}
+                checked={
+                  selectedSkillIds === null || selectedSkillIds.has(skill.id)
+                }
+                onCheckedChange={(checked) =>
+                  toggleSkill(skill.id, checked === true)
+                }
+              />
+              {skill.name}
+            </label>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 
   const noVirtualKeyMessage =
@@ -497,6 +574,7 @@ export function ConnectCommandPanel({
               onToggle={() => toggleEdit("gateway")}
               editor={gatewayEditor}
               changeTestId="connect-change-gateway"
+              detail={<GatewayServersSummary gatewayId={gateway.id} />}
             >
               Connect{" "}
               <ResourceLink href="/mcp/gateways">{gateway.name}</ResourceLink>{" "}
@@ -554,12 +632,19 @@ export function ConnectCommandPanel({
               onToggle={() => toggleEdit("skills")}
               editor={skillsEditor}
               changeTestId="connect-change-skills"
+              detail={
+                includeSkills ? (
+                  <SkillNamesLine skills={selectedSkills} />
+                ) : undefined
+              }
             >
               {includeSkills ? (
                 <>
                   Install{" "}
                   <ResourceLink href="/skills">
-                    {totalSkills} shared skill{totalSkills === 1 ? "" : "s"}
+                    {selectedSkills.length === allSkills.length
+                      ? `${allSkills.length} shared skill${allSkills.length === 1 ? "" : "s"}`
+                      : `${selectedSkills.length} of ${allSkills.length} shared skills`}
                   </ResourceLink>
                 </>
               ) : (
@@ -595,7 +680,7 @@ export function ConnectCommandPanel({
         </ul>
       </WizardStep>
 
-      <WizardStep n={3} title="Run this command" last={!showOAuthStep}>
+      <WizardStep n={3} title="Run the setup script" last={!showOAuthStep}>
         <div className="flex flex-col gap-3">
           <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
             {providers.length > 1 && proxyActive && (
@@ -647,13 +732,12 @@ export function ConnectCommandPanel({
 
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
             <span className="max-w-2xl">
-              One-time command, expires in 15 minutes · for{" "}
-              {platformLabels[platform]} ·{" "}
-              {platform === "windows"
-                ? "runs in PowerShell"
-                : "runs in a shell"}{" "}
-              and edits your client config in place — it isn&apos;t undone
-              automatically, so revert manually if you need to.
+              The command downloads a one-time setup script (expires in 15
+              minutes) and pipes it straight to{" "}
+              {platform === "windows" ? "PowerShell" : "Bash"} on{" "}
+              {platformLabels[platform]}. The script applies the setup reviewed
+              above by editing your client config in place — it isn&apos;t
+              undone automatically, so revert manually if you need to.
             </span>
             <button
               type="button"
@@ -670,23 +754,28 @@ export function ConnectCommandPanel({
       </WizardStep>
 
       {showOAuthStep && (
-        <WizardStep n={4} title="Finish the OAuth flow" last>
-          <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-            <li>
-              Run{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
-                claude
-              </code>{" "}
-              and use{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
-                /mcp
-              </code>{" "}
-              to start the OAuth flow for the gateway you just added.
-            </li>
-            <li>
-              Claude Code opens your browser. Sign in and approve the gateway.
-            </li>
-          </ol>
+        <WizardStep n={4} title={FINISH_OAUTH_FLOW_TITLE} last>
+          <div className="flex flex-col gap-3 text-sm text-muted-foreground">
+            <p>
+              The script only registers the gateway — the gateway grants tool
+              access per user, so its tools stay unavailable until you sign in
+              once and approve it for your account.
+            </p>
+            <ol className="list-decimal space-y-3 pl-5">
+              <li className="space-y-2">
+                <p>Open the MCP manager in Claude Code:</p>
+                <TerminalBlock code="claude /mcp" />
+              </li>
+              <li>
+                Select{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+                  {oauthServerName}
+                </code>{" "}
+                and start authentication. Claude Code opens your browser — sign
+                in and approve the gateway.
+              </li>
+            </ol>
+          </div>
         </WizardStep>
       )}
 
@@ -818,6 +907,7 @@ function SummaryRow({
   onToggle,
   editor,
   changeTestId,
+  detail,
 }: {
   children: React.ReactNode;
   /** Green check vs. muted "not included" indicator. */
@@ -827,6 +917,8 @@ function SummaryRow({
   onToggle?: () => void;
   editor?: React.ReactNode;
   changeTestId?: string;
+  /** Extra context under the line (e.g. what the gateway/skills contain). */
+  detail?: React.ReactNode;
 }) {
   return (
     <li className="text-sm text-muted-foreground">
@@ -853,6 +945,7 @@ function SummaryRow({
           )}
         </span>
       </div>
+      {detail && <div className="ml-6 mt-1.5">{detail}</div>}
       {isEditing && editor && (
         <div className="ml-6 mt-2 max-w-md rounded-lg border bg-muted/20 p-3">
           {editor}
@@ -886,6 +979,20 @@ function RecommendationChip({ children }: { children: React.ReactNode }) {
     <span className="ml-1 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
       {children}
     </span>
+  );
+}
+
+const SKILL_NAME_PREVIEW_LIMIT = 6;
+
+/** Names the skills the command will install, truncated past the limit. */
+function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
+  const shown = skills.slice(0, SKILL_NAME_PREVIEW_LIMIT);
+  const more = skills.length - shown.length;
+  return (
+    <p className="text-xs text-muted-foreground/80">
+      {shown.map((s) => s.name).join(", ")}
+      {more > 0 ? ` and ${more} more` : ""}
+    </p>
   );
 }
 

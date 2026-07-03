@@ -214,6 +214,7 @@ export const __test = {
   getCacheKey,
   isBrowserMcpTool,
   filterToolsByEnabledIds,
+  pingClientWithTimeout,
 };
 
 /**
@@ -696,15 +697,20 @@ async function pingClientWithTimeout(
   client: Pick<Client, "ping">,
   timeoutMs = CLIENT_PING_TIMEOUT_MS,
 ): Promise<void> {
-  await Promise.race([
-    client.ping(),
-    new Promise<never>((_, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error(`Ping timeout after ${timeoutMs}ms`));
-      }, timeoutMs);
-      timeout.unref?.();
-    }),
-  ]);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      client.ping(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`Ping timeout after ${timeoutMs}ms`));
+        }, timeoutMs);
+        timeout.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function shouldValidateCachedClient(cacheKey: string): boolean {

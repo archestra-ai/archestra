@@ -39,6 +39,14 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
     ARCHESTRA_API_BASE_URL: "https://frontend.archestra.dev,https://backend.archestra.dev"
+    # Dedicated origin for MCP App sandboxes so browser device permissions
+    # (camera/mic/geolocation/clipboard) can be delegated to app iframes. Each
+    # app renders at <hash>.sandbox.archestra.dev (a real cross-origin); without
+    # this, sandboxes fall back to the frontend's opaque origin and browsers
+    # block those features. Wildcard DNS + the cert-manager-issued wildcard TLS
+    # secret come from archestra-ai/infra (gke/dns.tf, gke-apps/cert-manager);
+    # the ingress rule + tls entry below route the sandbox hosts to the frontend.
+    ARCHESTRA_MCP_SANDBOX_DOMAIN: "sandbox.archestra.dev"
     ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
     ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
     ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
@@ -123,6 +131,22 @@ archestra:
           - path: /
             port: 9000
             pathType: Prefix
+      # MCP App sandbox origins (<hash>.sandbox.archestra.dev) serve the
+      # frontend; its /_sandbox/* Next.js rewrite proxies to the backend.
+      - host: "*.sandbox.archestra.dev"
+        paths:
+          - path: /
+            port: 3000
+            pathType: Prefix
+
+    # Wildcard cert for the sandbox hosts, issued and renewed by cert-manager
+    # (archestra-ai/infra, gke-apps/cert-manager). GKE combines spec.tls
+    # secrets with the ManagedCertificate annotation above. The secret must
+    # exist before this deploys, or ingress-gce fails to sync the Ingress.
+    tls:
+      - hosts:
+          - "*.sandbox.archestra.dev"
+        secretName: archestra-sandbox-wildcard-tls
 
 postgresql:
   # Staging still uses the bundled PostgreSQL chart. This is not HA, but these

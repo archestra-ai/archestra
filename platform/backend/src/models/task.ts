@@ -122,17 +122,12 @@ class TaskModel {
         status: "pending",
         startedAt: null,
         scheduledFor: new Date(),
+        // Decrement attempt so the interrupted attempt doesn't count
+        // against max retries (ack-late semantics)
+        attempt: sql`GREATEST(${t.attempt} - 1, 0)`,
       })
       .where(and(inArray(t.id, ids), eq(t.status, "processing")))
       .returning({ id: t.id });
-
-    // Decrement attempt for each released task so the interrupted attempt
-    // doesn't count against max retries (ack-late semantics)
-    for (const row of result) {
-      await db.execute(
-        sql`UPDATE tasks SET attempt = GREATEST(attempt - 1, 0) WHERE id = ${row.id}`,
-      );
-    }
 
     return result.length;
   }

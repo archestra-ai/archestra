@@ -93624,6 +93624,9 @@
                     "disableInvitations": {
                       "type": "boolean"
                     },
+                    "devAutoLoginEnabled": {
+                      "type": "boolean"
+                    },
                     "maintenanceMode": {
                       "nullable": true,
                       "type": "string"
@@ -93671,6 +93674,7 @@
                   "required": [
                     "disableBasicAuth",
                     "disableInvitations",
+                    "devAutoLoginEnabled",
                     "maintenanceMode",
                     "enterpriseCoreActive",
                     "analytics"

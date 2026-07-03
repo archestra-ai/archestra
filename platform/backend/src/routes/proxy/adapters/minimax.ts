@@ -571,6 +571,10 @@ class MinimaxStreamAdapter
   readonly state: StreamAccumulatorState;
   private currentToolCallIndices = new Map<number, number>();
   private lastReasoningText = ""; // Track full reasoning text seen so far
+  // Set to the refusal text when the streamed response was replaced by a policy
+  // refusal, so toProviderResponse persists the refusal (finish_reason "stop",
+  // no tool calls) instead of the blocked tool calls.
+  private replacedText: string | null = null;
   private request: MinimaxRequest | undefined; // Store request for token estimation (optional)
 
   constructor(request?: MinimaxRequest) {
@@ -714,6 +718,7 @@ class MinimaxStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): string[] {
+    this.replacedText = text;
     const events: string[] = [];
 
     // Initial chunk with role
@@ -753,15 +758,18 @@ class MinimaxStreamAdapter
   // ---------------------------------------------------------------------------
 
   toProviderResponse(): MinimaxResponse {
-    // Parse tool call arguments
-    const toolCalls = this.state.toolCalls.map((tc) => ({
-      id: tc.id,
-      type: "function" as const,
-      function: {
-        name: tc.name,
-        arguments: tc.arguments,
-      },
-    }));
+    // Parse tool call arguments (dropped when a refusal replaced the response)
+    const toolCalls =
+      this.replacedText !== null
+        ? []
+        : this.state.toolCalls.map((tc) => ({
+            id: tc.id,
+            type: "function" as const,
+            function: {
+              name: tc.name,
+              arguments: tc.arguments,
+            },
+          }));
 
     // Ensure stopReason is a valid finish_reason
     const validFinishReason:
@@ -769,9 +777,10 @@ class MinimaxStreamAdapter
       | "length"
       | "tool_calls"
       | "content_filter" =
-      this.state.stopReason === "tool_calls" ||
-      this.state.stopReason === "length" ||
-      this.state.stopReason === "content_filter"
+      this.replacedText === null &&
+      (this.state.stopReason === "tool_calls" ||
+        this.state.stopReason === "length" ||
+        this.state.stopReason === "content_filter")
         ? this.state.stopReason
         : "stop";
 
@@ -785,9 +794,9 @@ class MinimaxStreamAdapter
           index: 0,
           message: {
             role: "assistant",
-            content: this.state.text || null,
+            content: this.replacedText ?? (this.state.text || null),
             // Convert accumulated reasoning back to reasoning_details format if present
-            ...(this.lastReasoningText
+            ...(this.replacedText === null && this.lastReasoningText
               ? { reasoning_details: [{ text: this.lastReasoningText }] }
               : {}),
             ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),

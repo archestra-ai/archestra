@@ -17,6 +17,7 @@ import {
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
 import { ProviderError } from "@/routes/chat/errors";
+import { THINKING_ONLY_NOTICE } from "@/utils/strip-thinking-blocks";
 import { executeA2AMessage } from "./a2a-executor";
 
 const {
@@ -169,6 +170,65 @@ describe("executeA2AMessage real stream boundary", () => {
     expect(result.responseUiMessage.role).toBe("assistant");
     expect(result.usage?.promptTokens).toBe(5);
     expect(result.usage?.completionTokens).toBe(2);
+  });
+
+  test("strips inline <thinking> blocks from the text and the response message", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    primeAgent(
+      modelEmitting(
+        textChunks("Answer.<thinking>secret reasoning</thinking> Done."),
+      ),
+    );
+
+    const result = await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: "conv-1",
+    });
+
+    expect(result.text).toBe("Answer. Done.");
+    const textPart = result.responseUiMessage.parts.find(
+      (p): p is Extract<typeof p, { type: "text" }> => p.type === "text",
+    );
+    expect(textPart?.text).toBe("Answer. Done.");
+  });
+
+  test("substitutes a notice when a thinking-only turn strips to nothing", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    // The pre-strip stream is non-empty, so the empty-response recovery does not
+    // re-trigger; stripping leaves no visible answer, so the notice stands in —
+    // in both the headless text and the message's text part.
+    primeAgent(
+      modelEmitting(textChunks("<thinking>only reasoning</thinking>")),
+    );
+
+    const result = await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: "conv-1",
+    });
+
+    expect(result.text).toBe(THINKING_ONLY_NOTICE);
+    const textPart = result.responseUiMessage.parts.find(
+      (p): p is Extract<typeof p, { type: "text" }> => p.type === "text",
+    );
+    expect(textPart?.text).toBe(THINKING_ONLY_NOTICE);
   });
 
   test("surfaces the captured provider cause, not a generic NoOutputGeneratedError", async ({

@@ -158,19 +158,24 @@ jobs:
           load: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
           tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
 
-      # Export as artifact for fast co-located downloads in E2E jobs
+      # Export as artifact for fast co-located downloads in E2E jobs. Fork PRs
+      # only: they are the sole consumer (shards use source=artifact for forks,
+      # registry otherwise), and only the fork path loads a local tag to save.
       - name: Export Docker image as tarball
-        if: ${{ !matrix.use-build-action || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
         env:
           GIT_SHA: ${{ github.sha }}
           LOCAL_TAG_PREFIX: ${{ matrix.local-tag-prefix }}
           TARBALL_NAME: ${{ matrix.tarball-name }}
+        # Explicit bash turns on pipefail so a failed docker save cannot be
+        # masked by gzip succeeding on empty input.
+        shell: bash
         run: |
           docker save "${LOCAL_TAG_PREFIX}:${GIT_SHA}" | gzip > "/tmp/${TARBALL_NAME}"
           ls -lh "/tmp/${TARBALL_NAME}"
 
       - name: Upload Docker image artifact
-        if: ${{ !matrix.use-build-action || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
         uses: ./.github/actions/github-upload-artifact
         with:
           name: ${{ matrix.artifact-name }}

@@ -717,6 +717,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         contentMessage: "Tool list_files was blocked",
         reason: "Tool invocation blocked: policy is configured to always block",
         blockedToolName: "list_files",
+        toolInput: {},
         allToolCallNames: ["list_files"],
       };
       mockEvaluatePolicies.mockResolvedValue(blockResult);
@@ -780,6 +781,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         contentMessage: "Tool list_files was blocked",
         reason: "blocked by policy",
         blockedToolName: "list_files",
+        toolInput: {},
         allToolCallNames: ["list_files"],
       };
       mockEvaluatePolicies.mockResolvedValue(blockResult);
@@ -832,6 +834,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         contentMessage: "Tool get_weather was blocked",
         reason: "Tool invocation blocked: always block",
         blockedToolName: "get_weather",
+        toolInput: {},
         allToolCallNames: ["get_weather"],
       };
       mockEvaluatePolicies.mockResolvedValue(blockResult);

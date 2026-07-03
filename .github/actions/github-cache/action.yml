@@ -19,12 +19,6 @@ outputs:
   cache-hit:
     description: A boolean value to indicate an exact match was found for the key.
     value: ${{ steps.cache.outputs.cache-hit }}
-  cache-primary-key:
-    description: The primary key provided by the action.
-    value: ${{ steps.cache.outputs.cache-primary-key }}
-  cache-matched-key:
-    description: The actual cache key that was restored.
-    value: ${{ steps.cache.outputs.cache-matched-key }}
 runs:
   using: composite
   steps:

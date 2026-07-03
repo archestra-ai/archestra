@@ -31,6 +31,7 @@ export default function AppsPage() {
   const searchParams = useSearchParams();
   const search = searchParams.get("search") ?? "";
   const filter = searchParams.get("filter") ?? "all";
+  const kind = searchParams.get("kind") ?? "all";
 
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -46,10 +47,11 @@ export default function AppsPage() {
 
   const filtered = useMemo(
     () =>
-      (data?.data ?? []).filter((app) =>
-        matchesFilter(app, filter, currentUserId),
+      (data?.data ?? []).filter(
+        (app) =>
+          matchesKind(app, kind) && matchesFilter(app, filter, currentUserId),
       ),
-    [data, filter, currentUserId],
+    [data, kind, filter, currentUserId],
   );
 
   const setParam = (name: string, value: string | null) => {
@@ -95,6 +97,21 @@ export default function AppsPage() {
             <SelectItem value="org">Organization</SelectItem>
           </SelectContent>
         </Select>
+        <Select
+          value={kind}
+          onValueChange={(value) =>
+            setParam("kind", value === "all" ? null : value)
+          }
+        >
+          <SelectTrigger className="w-[160px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" side="bottom" align="start">
+            <SelectItem value="all">All kinds</SelectItem>
+            <SelectItem value="owned">Built-in</SelectItem>
+            <SelectItem value="external">MCP servers</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <LoadingWrapper isPending={isPending && !data}>
@@ -134,6 +151,15 @@ export default function AppsPage() {
       <AppCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
     </PageLayout>
   );
+}
+
+// "Built-in" apps are authored inside the platform (source "owned"); "MCP
+// servers" are ui:// resources exposed by installed external MCP servers
+// (source "external"). Exported for tests.
+export function matchesKind(app: AppListItem, kind: string): boolean {
+  if (kind === "owned") return app.source === "owned";
+  if (kind === "external") return app.source === "external";
+  return true;
 }
 
 function matchesFilter(

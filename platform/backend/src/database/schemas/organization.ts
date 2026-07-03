@@ -352,16 +352,6 @@ const organizationsTable = pgTable("organization", {
   skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
 
   /**
-   * When true, the org's skills are exposed in chat as slash commands
-   * (`/skill-name`). Invoking one injects the skill's content directly into the
-   * conversation, independent of `skillToolsEnabled` (which only governs the
-   * model-facing `load_skill` tool).
-   */
-  skillSlashCommandsEnabled: boolean("skill_slash_commands_enabled")
-    .notNull()
-    .default(false),
-
-  /**
    * Legacy preset column (feature removed) — retained inert. Held a validation
    * regex (no delimiters/flags) applied to default-scoped field values at
    * install time. No longer read or written.

@@ -679,3 +679,13 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @ashmitjsg
 - @rwchaneyjr
 - @zbl1998-sdjn
+- @AdarshVerma21
+- @AllaRohith
+- @oogxdd
+- @cartoonasd00488-lab
+- @haskhan433-tech
+- @AviraL0013
+- @SALI-546
+- @SaviPandey
+- @bbbbzzzzcc-afk
+- @yava-code

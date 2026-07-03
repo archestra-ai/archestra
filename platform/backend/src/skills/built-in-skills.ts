@@ -295,9 +295,11 @@ You build interactive single-file HTML/JS apps for users from chat — dashboard
 ## Flow
 1. \`archestra__scaffold_app\` — create the app once from the single starter template; this is the only app-creating tool, so it comes first (a minimal scaffold is fine). Pass the tools it needs via the tools param if you already know them (this is the initial assignment set; replace it at any time afterward with \`archestra__set_app_tools\`, never edit_app/refine_app). Returns the new app's id and the seeded HTML — carry that id through every later step and any follow-up request for the same app; do not scaffold it again (each later change is an edit_app on that id).
 2. \`archestra__refine_app\` — clarify what the app should be. Ask the user up to 3 questions (features and style only, never the implementation stack), then persist a consolidated spec. It returns the user's real assignable MCP tools and the SDK surface — design the app around those tools, never invent one.
-3. \`archestra__edit_app\` — build the app up with str_replace edits over the scaffold (a full rewrite is one edit replacing the whole document). Before writing code that parses an assigned tool's result, call \`archestra__preview_app_tool\` to see its real output shape.
+3. \`archestra__edit_app\` — build the app up with str_replace edits over the scaffold (for a full rewrite, pass the new document as replacementHtml instead of edits). Before writing code that parses an assigned tool's result, call \`archestra__preview_app_tool\` to see its real output shape.
 4. \`archestra__validate_app\` — run static structural checks plus the live render diagnostics (\`archestra__get_app_diagnostics\` reads those render diagnostics on their own). Fix any errors with \`archestra__edit_app\` and re-validate until it passes.
-5. \`archestra__publish_app\` — once it validates and renders correctly, promote it to a team or the whole organization so others can run it.
+5. \`archestra__publish_app\` — only if the user wants others to run the app: promote it to a team or the whole organization (publishing is for sharing, not a required build step).
+
+Once the app passes validation (and any requested publish is done), the build is complete: stop calling app tools — do not re-read, re-validate, or re-check an app you have not changed — and close the loop with the user: report the app's name and standalone page link, and carry out whatever completion the user's request asked for.
 
 ## SDK and authoring conventions
 ${APP_AUTHORING_CONTRACT}

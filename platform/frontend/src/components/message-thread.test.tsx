@@ -20,7 +20,7 @@ vi.mock("@/components/ai-elements/loader", () => ({
 
 vi.mock("@/components/ai-elements/message", () => ({
   Message: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+    <div data-testid="message-bubble">{children}</div>
   ),
   MessageContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -118,6 +118,36 @@ describe("MessageThread", () => {
 
     expect(screen.getByText("Switched to child agent")).toBeInTheDocument();
     expect(screen.queryByText("tool-spark_swap_agent")).not.toBeInTheDocument();
+  });
+
+  it("does not render a message bubble for whitespace-only text parts", () => {
+    const messages: PartialUIMessage[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: " " },
+          {
+            type: "dynamic-tool",
+            toolName: "search_tools",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: {},
+            output: { ok: true },
+          },
+        ],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [{ type: "text", text: "All done." }],
+      },
+    ];
+
+    render(<MessageThread messages={messages} />);
+
+    expect(screen.getAllByTestId("message-bubble")).toHaveLength(1);
+    expect(screen.getByText("All done.")).toBeInTheDocument();
   });
 
   it("renders persisted chat errors between messages by timestamp", () => {

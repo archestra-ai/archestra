@@ -38,7 +38,9 @@ const CerebrasChoiceSchema = z
         content: z.string().nullable().optional(),
         refusal: z.string().nullable().optional(),
         role: z.enum(["assistant"]),
-        annotations: z.array(z.any()).optional(),
+        // Some OpenAI-compatible upstreams return `annotations: null` instead of
+        // omitting it; without nullable() the response fails serialization (500).
+        annotations: z.array(z.any()).nullable().optional(),
         audio: z.any().nullable().optional(),
         function_call: z
           .object({

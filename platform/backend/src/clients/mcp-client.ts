@@ -46,13 +46,7 @@ import {
   ToolModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
-import {
-  classifyThrownRefreshError,
-  discoverOAuthEndpoints,
-  type OAuthRefreshOutcome,
-  refreshFailureToServerFields,
-  refreshOAuthToken,
-} from "@/routes/oauth";
+import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "@/services/environments/remote-server-network-policy";
 import {
@@ -60,6 +54,11 @@ import {
   resolveEnterpriseTransportCredential,
 } from "@/services/identity-providers/enterprise-managed/broker";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
+import {
+  classifyThrownRefreshError,
+  type OAuthRefreshOutcome,
+  refreshFailureToServerFields,
+} from "@/services/oauth-refresh-classification";
 import type {
   Tool as CatalogTool,
   CommonMcpToolDefinition,
@@ -831,6 +830,7 @@ class McpClient {
           await McpServerModel.update(targetMcpServerId, {
             oauthRefreshError: "no_refresh_token",
             oauthRefreshErrorMessage: "no_refresh_token",
+            oauthRefreshErrorDescription: null,
             oauthRefreshFailedAt: new Date(),
           });
           logger.warn(
@@ -2372,6 +2372,7 @@ class McpClient {
     await McpServerModel.update(targetMcpServerId, {
       oauthRefreshError: null,
       oauthRefreshErrorMessage: null,
+      oauthRefreshErrorDescription: null,
       oauthRefreshFailedAt: null,
     });
 
@@ -3406,6 +3407,47 @@ class McpClient {
       }
       throw error;
     }
+  }
+
+  /**
+   * The concrete install (mcp_server id) that serves an MCP App `ui://` resource
+   * for this caller, so the chat MCP-App enrichment can stamp it onto
+   * `_meta.ui.mcpServerId` and bind an agent-driven external-app render's
+   * callbacks to `/api/mcp/server/:id` — matching the seeded open-in-chat path
+   * (buildExternalAppRenderResult), whose absence otherwise misroutes the app's
+   * `callServerTool` to the agent gateway.
+   *
+   * Returns null (render stays unbound, callbacks fail cleanly rather than
+   * misrouting) when:
+   * - the resource is an owned-app backing (`serverType === "app"`, rendered by
+   *   app id via render_app), or
+   * - the catalog has anything other than exactly one install. This method
+   *   resolves the install by the caller's own→team→org connection policy, but
+   *   run_tool executes against the install chosen by the *tool's* credential
+   *   policy (a static/service-account pin can point elsewhere). Those agree
+   *   only when there is a single install, so binding is limited to that case —
+   *   a different install would route callbacks to the wrong server/account.
+   */
+  async resolveUiAppInstallIdForCaller(
+    resourceUri: string,
+    agentId: string,
+    tokenAuth?: TokenAuthContext,
+  ): Promise<string | null> {
+    const resolved = await this.findMcpServerForResource(
+      resourceUri,
+      agentId,
+      tokenAuth,
+    );
+    if (!resolved || resolved.catalogItem.serverType === "app") {
+      return null;
+    }
+    const installs = await McpServerModel.findByCatalogId(
+      resolved.catalogItem.id,
+    );
+    if (installs.length !== 1) {
+      return null;
+    }
+    return resolved.server.id;
   }
 
   private async findMcpServerForResource(

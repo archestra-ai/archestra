@@ -1,4 +1,6 @@
 import { ChatErrorCode } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import ConversationModel from "./conversation";
 import ConversationChatErrorModel from "./conversation-chat-error";
@@ -246,6 +248,51 @@ describe("ConversationModel", () => {
     });
     const [afterRow] = await ConversationModel.findAll(user.id, org.id);
     expect(afterRow.unread).toBe(true);
+  });
+
+  test("a message racing markRead into the same instant still reads as unread", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Tie Agent", teams: [] });
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Tie Conversation",
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant", parts: [{ type: "text", text: "one" }] },
+    });
+    await ConversationModel.markRead({
+      id: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    // Simulate the collision the wall clock only sometimes produces: the
+    // read watermark sits at (or ahead of) the writer's clock when the next
+    // message lands. touchConversation must push lastMessageAt strictly past
+    // lastReadAt — the old plain-`new Date()` write left the two tied (or
+    // behind), and the strict lastMessageAt > lastReadAt unread check then
+    // silently marked the new message read.
+    await db
+      .update(schema.conversationsTable)
+      .set({ lastReadAt: new Date(Date.now() + 60_000) })
+      .where(eq(schema.conversationsTable.id, conversation.id));
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant", parts: [{ type: "text", text: "two" }] },
+    });
+
+    const [listed] = await ConversationModel.findAll(user.id, org.id);
+    expect(listed.unread).toBe(true);
   });
 
   test("markRead does not touch a conversation owned by another user", async ({

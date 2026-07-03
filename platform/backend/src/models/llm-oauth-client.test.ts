@@ -24,6 +24,7 @@ describe("LlmOauthClientModel", () => {
 
     const result = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedLlmProxyIds: [crypto.randomUUID()],
       providerApiKeys: [
@@ -59,6 +60,7 @@ describe("LlmOauthClientModel", () => {
     const organization = await makeOrganization();
     const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Worker",
       allowedLlmProxyIds: [],
       providerApiKeys: [],
@@ -86,6 +88,7 @@ describe("LlmOauthClientModel", () => {
     const secondProxyId = crypto.randomUUID();
     const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Original",
       allowedLlmProxyIds: [firstProxyId],
       providerApiKeys: [],
@@ -163,6 +166,7 @@ describe("LlmOauthClientModel", () => {
     const organization = await makeOrganization();
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Service With Tokens",
       allowedLlmProxyIds: [crypto.randomUUID()],
       providerApiKeys: [],
@@ -197,6 +201,7 @@ describe("LlmOauthClientModel", () => {
     await makeOAuthClient({ name: "Regular OAuth Client" });
     await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "LLM OAuth Client",
       allowedLlmProxyIds: [],
       providerApiKeys: [],
@@ -216,18 +221,21 @@ describe("LlmOauthClientModel", () => {
     const organization = await makeOrganization();
     await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Client with % literal",
       allowedLlmProxyIds: [],
       providerApiKeys: [],
     });
     await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Client with _ literal",
       allowedLlmProxyIds: [],
       providerApiKeys: [],
     });
     await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Client with alpha literal",
       allowedLlmProxyIds: [],
       providerApiKeys: [],
@@ -271,6 +279,7 @@ describe("LlmOauthClientModel", () => {
 
     await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "First Client",
       allowedLlmProxyIds: [],
       providerApiKeys: [
@@ -282,6 +291,7 @@ describe("LlmOauthClientModel", () => {
     });
     await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Second Client",
       allowedLlmProxyIds: [],
       providerApiKeys: [
@@ -313,6 +323,7 @@ describe("LlmOauthClientModel", () => {
     const organization = await makeOrganization();
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Shape Check",
       allowedLlmProxyIds: [],
       providerApiKeys: [],

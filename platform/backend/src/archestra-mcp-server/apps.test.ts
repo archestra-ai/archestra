@@ -41,17 +41,18 @@ import {
   McpServerModel,
 } from "@/models";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
+import type { CommonToolResult } from "@/types";
 import { APP_HTML_MAX_BYTES } from "@/types/app";
-import { type ArchestraContext, executeArchestraTool } from ".";
-import { scaffoldPartialToolFailureResult } from "./apps";
+import {
+  type ArchestraContext,
+  executeArchestraTool,
+  getArchestraMcpTools,
+} from ".";
+import {
+  scaffoldPartialToolFailureResult,
+  unwrapToolResultForPreview,
+} from "./apps";
 
 // The elicitation bridge polls cacheManager for the user's answer; cacheManager
 // is the Postgres-backed singleton (not started in PGlite tests), so back it
@@ -60,12 +61,11 @@ import { scaffoldPartialToolFailureResult } from "./apps";
 vi.mock("@/cache-manager");
 
 // App tools are only dispatchable when the feature is enabled.
-const originalAppsEnabled = config.apps.enabled;
-beforeAll(() => {
+// Pin the apps flag per TEST, not per file: the shared setup restores the
+// pristine config before and after every test, so a beforeAll-scoped
+// mutation does not survive, and a file must never depend on worker state.
+beforeEach(() => {
   (config.apps as { enabled: boolean }).enabled = true;
-});
-afterAll(() => {
-  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
 });
 
 function structured(result: { structuredContent?: unknown }): any {
@@ -343,12 +343,15 @@ describe("app tool execution", () => {
   });
 
   test("scaffold reports a name conflict cleanly", async () => {
-    await scaffold({ name: "Dup", scope: "org" });
+    const first = await scaffold({ name: "Dup", scope: "org" });
+    const firstId = structured(first).id as string;
     const second = await scaffold({ name: "Dup", scope: "org" });
     expect(second.isError).toBe(true);
-    expect((second.content[0] as any).text).toContain(
-      "already have an app named",
-    );
+    const text = (second.content[0] as any).text as string;
+    // The duplicate error names the existing app and points at edit_app so the
+    // model stops re-scaffolding.
+    expect(text).toContain(firstId);
+    expect(text).toContain("edit_app");
   });
 
   test("scaffold rejects team scope", async () => {
@@ -785,6 +788,265 @@ describe("read_app / edit_app", () => {
     ).toBe("<p>just a fragment</p>");
   });
 
+  test("edit_app publishes edits and replacementHtml as independently optional fields", async () => {
+    const tool = getArchestraMcpTools().find(
+      (t) => t.name === getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+    );
+    expect(tool).toBeDefined();
+    // biome-ignore lint/style/noNonNullAssertion: asserted above
+    const schema = tool!.inputSchema as any;
+    // Flat shape: both edit modes are top-level optionals (exclusivity is a
+    // runtime check — JSON Schema shown to models must not require either).
+    expect(Object.keys(schema.properties)).toEqual(
+      expect.arrayContaining(["edits", "replacementHtml"]),
+    );
+    expect(schema.required).toEqual(
+      expect.arrayContaining(["appId", "baseVersion"]),
+    );
+    expect(schema.required).not.toContain("edits");
+    expect(schema.required).not.toContain("replacementHtml");
+  });
+
+  test("replacementHtml replaces the whole document without old_str matching", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body><p>old</p></body></html>",
+    );
+    const next = "<html><head></head><body><h1>rewritten</h1></body></html>";
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: version, replacementHtml: next },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(structured(result).latestVersion).toBe(version + 1);
+    expect((result.content[0] as any).text).toContain(
+      "full-document replacement",
+    );
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version + 1))?.html,
+    ).toBe(next);
+  });
+
+  test("replacementHtml may deliberately replace the document with a fragment", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body><p>full</p></body></html>",
+    );
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: version, replacementHtml: "<p>fragment</p>" },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version + 1))?.html,
+    ).toBe("<p>fragment</p>");
+  });
+
+  test("passing both edits and replacementHtml is rejected without saving", async () => {
+    const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: version,
+        edits: [{ old_str: "v1", new_str: "v2" }],
+        replacementHtml: "<h1>v2</h1>",
+      },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("not both");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+  });
+
+  test("passing neither edits nor replacementHtml is rejected", async () => {
+    const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: version },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("neither");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+  });
+
+  test("replacementHtml is subject to the byte cap", async () => {
+    const { appId, version } = await scaffoldWithHtml("<h1>tiny</h1>");
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: version,
+        replacementHtml: `<p>${"z".repeat(APP_HTML_MAX_BYTES + 1)}</p>`,
+      },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("byte limit");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+  });
+
+  test("replacementHtml injecting SDK bootstrap markers is rejected", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body>hi</body></html>",
+    );
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: version,
+        replacementHtml:
+          "<html><head></head><body><script>new PostMessageTransport(window.parent, window.parent);</script></body></html>",
+      },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("window.archestra");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+  });
+
+  test("a byte-identical replacementHtml creates no new version", async () => {
+    const html = "<html><head></head><body><p>same</p></body></html>";
+    const { appId, version } = await scaffoldWithHtml(html);
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: version, replacementHtml: html },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(structured(result).latestVersion).toBe(version);
+    expect((result.content[0] as any).text).toContain("no new version");
+  });
+
+  test("a stale baseVersion is rejected for replacementHtml", async () => {
+    const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
+    await editApp(appId, version, [{ old_str: "v1", new_str: "v2" }]);
+    const stale = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: version, replacementHtml: "<h1>other</h1>" },
+      context,
+    );
+    expect(stale.isError).toBe(true);
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version + 1);
+  });
+
+  test("success text excerpts each applied edit from the final document", async () => {
+    // The first edit changes length, shifting the second edit's region — the
+    // excerpts must reflect the final saved coordinates, not the originals.
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body><p>alpha</p><section>middle</section><p>omega</p></body></html>",
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "alpha", new_str: "a-much-longer-heading" },
+      { old_str: "omega", new_str: "OMEGA" },
+    ]);
+    expect(result.isError).toBe(false);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("<p>a-much-longer-heading</p>");
+    expect(text).toContain("<p>OMEGA</p>");
+  });
+
+  test("a later length-changing edit shifts an earlier excerpt to its final position", async () => {
+    // Edit 1 lands AFTER edit 2's region in the document, and edit 2 grows the
+    // document by more than the excerpt context window — if edit 1's recorded
+    // span is not shifted by that delta, its window slices a region entirely
+    // before the real <p>OMEGA</p> and the assertion fails. Spacers keep the
+    // two context windows from overlapping.
+    const spacer = `<i>${"x".repeat(600)}</i>`;
+    const grown = `long-${"a".repeat(500)}`;
+    const { appId, version } = await scaffoldWithHtml(
+      `<html><head></head><body><p>alpha</p>${spacer}<p>omega</p></body></html>`,
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "omega", new_str: "OMEGA" },
+      { old_str: "alpha", new_str: grown },
+    ]);
+    expect(result.isError).toBe(false);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("<p>OMEGA</p>");
+    expect(text).toContain(`<p>${grown}</p>`);
+  });
+
+  test("a chained overwrite excerpt shows the final text, never the overwritten intermediate", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body><p>foo</p></body></html>",
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "foo", new_str: "interim" },
+      { old_str: "interim", new_str: "settled" },
+    ]);
+    expect(result.isError).toBe(false);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version + 1))?.html,
+    ).toContain("<p>settled</p>");
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("<p>settled</p>");
+    // the first edit's region was overwritten; its excerpt must not resurrect it
+    expect(text).not.toContain("interim");
+  });
+
+  test("a deletion edit excerpt marks the deletion point", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body><p>keep</p><p>gone</p><p>tail</p></body></html>",
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "<p>gone</p>", new_str: "" },
+    ]);
+    expect(result.isError).toBe(false);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("<p>keep</p>⟦deleted⟧<p>tail</p>");
+  });
+
+  test("a whitespace-fallback edit excerpts the real applied span", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body><p>Hello   World</p></body></html>",
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "Hello World", new_str: "Hi" },
+    ]);
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain("<p>Hi</p>");
+  });
+
+  test("excerpts cap the number of edits shown", async () => {
+    const tokens = ["one", "two", "three", "four", "five", "six", "seven"];
+    // Spacers longer than the excerpt context window keep each edit's window
+    // from covering its neighbours, so the withheld tail is genuinely absent.
+    const spacer = `<i>${"x".repeat(400)}</i>`;
+    const { appId, version } = await scaffoldWithHtml(
+      `<html><head></head><body>${tokens.map((t) => `<p>${t}</p>`).join(spacer)}</body></html>`,
+    );
+    const result = await editApp(
+      appId,
+      version,
+      tokens.map((t) => ({ old_str: `<p>${t}</p>`, new_str: `<b>${t}</b>` })),
+    );
+    expect(result.isError).toBe(false);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("+2 more edits");
+    // the omitted edits still applied — only their excerpts are withheld
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version + 1))?.html,
+    ).toContain("<b>seven</b>");
+    expect(text).not.toContain("<b>seven</b>");
+  });
+
+  test("an overlong inserted span is elided in its excerpt", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body><p>stub</p></body></html>",
+    );
+    const big = `<div>${"y".repeat(4000)}</div>`;
+    const result = await editApp(appId, version, [
+      { old_str: "<p>stub</p>", new_str: big },
+    ]);
+    expect(result.isError).toBe(false);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("[elided]");
+    // the excerpt block stays bounded instead of echoing the whole insertion
+    expect(text.length).toBeLessThan(big.length);
+  });
+
   test("a partial edit on an app that was already a fragment is unaffected", async () => {
     const { appId, version } = await scaffoldWithHtml("<p>frag</p>");
     const result = await editApp(appId, version, [
@@ -805,6 +1067,8 @@ describe("read_app / edit_app", () => {
     expect(result.isError).toBe(false);
     expect(structured(result).latestVersion).toBe(version);
     expect((result.content[0] as any).text).toContain("no new version");
+    // nothing was saved, so there is no applied-edit context to excerpt
+    expect((result.content[0] as any).text).not.toContain("edit 1:");
     expect(
       await AppVersionModel.findByAppAndVersion(appId, version + 1),
     ).toBeNull();
@@ -963,6 +1227,126 @@ describe("preview_app_tool", () => {
   });
 });
 
+// Pins the SDK-parity unwrap precedence: the preview's body must be exactly
+// the JSON-serialized value archestra.tools.call resolves with.
+describe("unwrapToolResultForPreview (SDK tools.call parity)", () => {
+  const envelope = (partial: Partial<CommonToolResult>): CommonToolResult => ({
+    id: "call-1",
+    name: "hf__search",
+    content: [],
+    isError: false,
+    ...partial,
+  });
+
+  test("structuredContent wins over text", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({
+          content: [{ type: "text", text: '{"other": true}' }],
+          structuredContent: { papers: [{ id: 1 }] },
+        }),
+      ),
+    ).toBe(JSON.stringify({ papers: [{ id: 1 }] }));
+  });
+
+  test("JSON-as-text is parsed and re-serialized, joining text blocks", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({
+          content: [
+            { type: "text", text: '{"tasks": [' },
+            { type: "text", text: '{"id": 7}]}' },
+          ],
+        }),
+      ),
+    ).toBe(JSON.stringify({ tasks: [{ id: 7 }] }));
+  });
+
+  test("JSON scalars and arrays in text parse like the SDK does", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({ content: [{ type: "text", text: '[{"id": 1}]' }] }),
+      ),
+    ).toBe(JSON.stringify([{ id: 1 }]));
+    expect(
+      unwrapToolResultForPreview(
+        envelope({ content: [{ type: "text", text: "false" }] }),
+      ),
+    ).toBe("false");
+  });
+
+  test("separate JSON documents per text block fall back to the joined string", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({
+          content: [
+            { type: "text", text: '{"a": 1}' },
+            { type: "text", text: '{"b": 2}' },
+          ],
+        }),
+      ),
+    ).toBe(JSON.stringify('{"a": 1}\n{"b": 2}'));
+  });
+
+  test("oversized text is shown as a string without being parsed", () => {
+    const huge = `[${"1,".repeat(40_000)}1]`;
+    expect(
+      unwrapToolResultForPreview(
+        envelope({ content: [{ type: "text", text: huge }] }),
+      ),
+    ).toBe(JSON.stringify(huge));
+  });
+
+  test("plain text serializes as the JSON string tools.call returns", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({ content: [{ type: "text", text: "plain answer" }] }),
+      ),
+    ).toBe(JSON.stringify("plain answer"));
+  });
+
+  test("image-only results serialize as the media shape with base64 elided", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({
+          content: [{ type: "image", data: "aGk=", mimeType: "image/png" }],
+        }),
+      ),
+    ).toBe(
+      JSON.stringify({
+        media: [
+          {
+            type: "image",
+            mimeType: "image/png",
+            dataUrl: "data:image/png;base64,…[base64 elided in preview]",
+          },
+        ],
+      }),
+    );
+  });
+
+  test("media blocks with unsafe mimeType or non-base64 data are dropped", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({
+          content: [
+            {
+              type: "image",
+              data: "aGk=",
+              mimeType: 'image/png" onerror="alert(1)',
+            },
+            { type: "image", data: 'aGk="><script>', mimeType: "image/png" },
+          ],
+        }),
+      ),
+    ).toBe("null");
+  });
+
+  test("no text, structured, or media data serializes as null", () => {
+    expect(unwrapToolResultForPreview(envelope({ content: [] }))).toBe("null");
+  });
+});
+
 describe("get_app_diagnostics", () => {
   let context: ArchestraContext;
 
@@ -1004,6 +1388,93 @@ describe("get_app_diagnostics", () => {
     expect(result.isError).toBe(false);
     expect(structured(result).status).toBe("no_render_observed");
     expect(structured(result).version).toBe(1);
+  });
+
+  test("returns no_render_observed promptly when the app has never rendered", async () => {
+    const appId = await createApp();
+    const startedAt = Date.now();
+    const result = await getDiagnostics(appId);
+    const elapsed = Date.now() - startedAt;
+    expect(result.isError).toBe(false);
+    expect(structured(result).status).toBe("no_render_observed");
+    // a never-rendered app gets the short settle window, not the full wait
+    expect(elapsed).toBeLessThan(8_000);
+  });
+
+  test("captures a first render that lands during the settle window", async () => {
+    const appId = await createApp();
+    const pending = getDiagnostics(appId);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await AppRenderDiagnosticsModel.record({
+      appId,
+      // biome-ignore lint/style/noNonNullAssertion: set in beforeEach
+      userId: context.userId!,
+      version: 1,
+      entries: [],
+    });
+    const result = await pending;
+    expect(structured(result).status).toBe("clean");
+  });
+
+  test("an older-version snapshot arriving mid-window extends the wait for the head render", async () => {
+    // First poll sees nothing (short window chosen); an older-version snapshot
+    // then lands, proving a viewer is actively rendering, so the head render
+    // arriving after the short window's original deadline is still captured.
+    const appId = await createApp();
+    // bump the head to version 2 so a version-1 snapshot is stale
+    const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
+    await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: 1,
+        // biome-ignore lint/style/noNonNullAssertion: seeded head exists
+        edits: [{ old_str: seeded!.html, new_str: "<p>v2</p>" }],
+      },
+      context,
+    );
+    // Pass-through spy purely for synchronization: the stale snapshot must be
+    // recorded only after the tool's initial (empty) read, or the test would
+    // exercise the ordinary 10s stale-snapshot window instead of the extension.
+    const realGetForUser = AppRenderDiagnosticsModel.getForUser.bind(
+      AppRenderDiagnosticsModel,
+    );
+    let signalFirstRead = () => {};
+    const firstRead = new Promise<void>((resolve) => {
+      signalFirstRead = resolve;
+    });
+    const spy = vi
+      .spyOn(AppRenderDiagnosticsModel, "getForUser")
+      .mockImplementation(async (appIdArg, userIdArg) => {
+        const row = await realGetForUser(appIdArg, userIdArg);
+        signalFirstRead();
+        return row;
+      });
+    try {
+      const pending = getDiagnostics(appId);
+      await firstRead;
+      await AppRenderDiagnosticsModel.record({
+        appId,
+        // biome-ignore lint/style/noNonNullAssertion: set in beforeEach
+        userId: context.userId!,
+        version: 1,
+        entries: [],
+      });
+      // land the head render after the original 3s never-rendered deadline
+      await new Promise((resolve) => setTimeout(resolve, 3_500));
+      await AppRenderDiagnosticsModel.record({
+        appId,
+        // biome-ignore lint/style/noNonNullAssertion: set in beforeEach
+        userId: context.userId!,
+        version: 2,
+        entries: [],
+      });
+      const result = await pending;
+      expect(structured(result).status).toBe("clean");
+      expect(structured(result).version).toBe(2);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   test("reports clean when the head rendered without diagnostics", async () => {
@@ -1668,6 +2139,26 @@ describe("validate_app", () => {
     expect(structured(result).live.status).toBe("no_render_observed");
   });
 
+  test("finishes promptly on a never-rendered app without an aborted signal", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Prompt App" },
+      context,
+    );
+    const startedAt = Date.now();
+    // real settle wait (no abort): the never-rendered short window applies to
+    // validate_app's live path just like get_app_diagnostics
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_VALIDATE_APP_SHORT_NAME),
+      { appId: structured(created).id as string },
+      context,
+    );
+    const elapsed = Date.now() - startedAt;
+    expect(structured(result).ok).toBe(true);
+    expect(structured(result).live.status).toBe("no_render_observed");
+    expect(elapsed).toBeLessThan(8_000);
+  });
+
   test("merges a clean live render into the result", async () => {
     const created = await executeArchestraTool(
       getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
@@ -1823,7 +2314,7 @@ describe("publish_app", () => {
     expect((await AppModel.findById(app.id))?.scope).toBe("personal");
   });
 
-  test("publishing to a team requires teamIds", async ({
+  test("publishing to a team requires teams", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -1845,7 +2336,7 @@ describe("publish_app", () => {
 
     const result = await publish({ appId: app.id, scope: "team" }, context);
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("team id");
+    expect((result.content[0] as any).text).toContain("at least one team");
   });
 
   test("an admin publishes to a team and assigns it", async ({
@@ -1873,12 +2364,172 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "team", teamIds: [team.id] },
+      { appId: app.id, scope: "team", teams: [team.id] },
       context,
     );
     expect(result.isError).toBe(false);
     expect(structured(result).scope).toBe("team");
     expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("an admin publishes to a team by its name instead of its id", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamName" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(agent.organizationId, user.id, {
+      name: "Growth Team",
+    });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["Growth Team"] },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(structured(result).scope).toBe("team");
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("team names match case-insensitively when unambiguous", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamNameCI" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(agent.organizationId, user.id, {
+      name: "Platform",
+    });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["platform"] },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("a name and the id of the same team dedupe to one assignment", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamDedupe" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(agent.organizationId, user.id, {
+      name: "Dedupe Team",
+    });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["Dedupe Team", team.id] },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("an ambiguous case-insensitive team name is rejected", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamAmbiguous" });
+    const orgId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, orgId, { role: ADMIN_ROLE_NAME });
+    await makeTeam(orgId, user.id, { name: "Design" });
+    await makeTeam(orgId, user.id, { name: "design" });
+    const app = await makeApp({
+      organizationId: orgId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: orgId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["DESIGN"] },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("ambiguous");
+    expect((await AppModel.findById(app.id))?.scope).toBe("personal");
+  });
+
+  test("rejects a team name that does not exist in the org", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const agent = await makeAgent({ name: "Publish UnknownName" });
+    const orgId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, orgId, { role: ADMIN_ROLE_NAME });
+    const app = await makeApp({
+      organizationId: orgId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: orgId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["No Such Team"] },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("Unknown team");
+    expect((await AppModel.findById(app.id))?.scope).toBe("personal");
   });
 
   // The source-scope gate: a team admin (editor) can see every org app but must
@@ -1905,7 +2556,7 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "team", teamIds: [team.id] },
+      { appId: app.id, scope: "team", teams: [team.id] },
       context,
     );
     expect(result.isError).toBe(true);
@@ -1914,7 +2565,7 @@ describe("publish_app", () => {
     expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([]);
   });
 
-  test("rejects teamIds when publishing to org scope", async ({
+  test("rejects teams when publishing to org scope", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -1938,7 +2589,7 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "org", teamIds: [team.id] },
+      { appId: app.id, scope: "org", teams: [team.id] },
       context,
     );
     expect(result.isError).toBe(true);
@@ -1966,7 +2617,7 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "team", teamIds: [crypto.randomUUID()] },
+      { appId: app.id, scope: "team", teams: [crypto.randomUUID()] },
       context,
     );
     expect(result.isError).toBe(true);

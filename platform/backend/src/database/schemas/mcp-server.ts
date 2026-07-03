@@ -76,6 +76,14 @@ const mcpServerTable = pgTable(
     // Sanitized OAuth `error` code from the failed grant (e.g. "invalid_grant").
     // Never holds token material, secrets, or URLs.
     oauthRefreshErrorMessage: text("oauth_refresh_error_message"),
+    // Free-text OAuth `error_description` from the failed grant, shown in the
+    // connection management UI. Passed through `sanitizeOAuthErrorDescription`
+    // (services/oauth-refresh-classification.ts) before storage, which redacts
+    // URLs, tokens, emails, and HTML — a blacklist, not a whitelist, so treat
+    // this as lower-trust than `oauthRefreshErrorMessage` (whitelisted).
+    // Returned by the API to the same audience that already sees
+    // `oauthRefreshErrorMessage` — a deliberate choice, not an oversight.
+    oauthRefreshErrorDescription: text("oauth_refresh_error_description"),
     oauthRefreshFailedAt: timestamp("oauth_refresh_failed_at", {
       mode: "date",
     }),

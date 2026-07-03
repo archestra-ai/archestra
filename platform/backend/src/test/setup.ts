@@ -46,6 +46,14 @@ process.env.ARCHESTRA_APPS_ENABLED = "true";
 // overriding config.fileStorage at runtime against a temp root.
 process.env.ARCHESTRA_FILE_STORAGE_PROVIDER = "db";
 process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT = "";
+// Vertex AI mode must not leak in from a developer's .env (config.ts loads it
+// via dotenv, which never overrides values set here first): it flips the
+// gemini client into the ADC construction path and makes default-LLM
+// resolution prefer gemini over anthropic, breaking e.g. the gemini
+// createClient baseUrl test and the chat prompt-cache-breakpoint tests.
+process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED = "false";
+process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT = "";
+process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION = "";
 
 // Set auth secret for tests
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";
@@ -175,18 +183,34 @@ beforeEach(async () => {
 });
 
 /**
- * Clear mocks after each test, and restore the real fetch.
+ * Clear mocks after each test, and restore the real fetch and real timers.
  *
  * Several tests replace `globalThis.fetch` directly (not via vi.stubGlobal,
  * which `unstubGlobals` already handles). A mock left behind — e.g. when an
  * assertion throws before an inline restore — poisons every later file in
  * the worker. This hook is registered before any test-file hooks, so Vitest
  * runs it LAST in the afterEach sequence: it always gets the final word.
+ *
+ * Fake timers leak the same way: neither clearAllMocks nor unstubGlobals
+ * undoes vi.useFakeTimers, and in a shared worker a leaked frozen clock
+ * stalls every later setTimeout and makes DB timestamps collide across
+ * unrelated files. useRealTimers is a no-op when timers are already real.
  */
 const realFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = realFetch;
   vi.clearAllMocks();
+  vi.useRealTimers();
+
+  // Also restore the pristine config on the way OUT of every test. The
+  // beforeEach restore alone leaves a gap: mutations made by a file's LAST
+  // test survive until the NEXT file's first beforeEach — which is after
+  // that file's beforeAll has already run. Route tests build their Fastify
+  // server in beforeAll, so a leaked flag (apps.enabled=false, a polling
+  // toggle, ...) could shape another file's server for its entire lifetime.
+  if (liveConfig && pristineConfig) {
+    restoreConfig(liveConfig, structuredClone(pristineConfig));
+  }
 });
 
 /**
@@ -201,6 +225,15 @@ afterEach(() => {
  */
 afterAll(async () => {
   console.warn = originalConsoleWarn;
+
+  // Drain fire-and-forget async work (e.g. interaction usage tracking) BEFORE
+  // swapping out this file's database. In shared workers the getDb() proxy
+  // always routes to the CURRENT file's PGlite, so a background promise that
+  // outlives its file would run its remaining queries against the NEXT
+  // file's database — interleaving with that file's tests or wedging its
+  // connection mid-transaction (a batch of consecutive 30s timeouts).
+  const { drainBackgroundWork } = await import("../utils/background-work.js");
+  await drainBackgroundWork();
 
   const dbModule = await import("../database/index.js");
   dbModule.__setTestDb(null);

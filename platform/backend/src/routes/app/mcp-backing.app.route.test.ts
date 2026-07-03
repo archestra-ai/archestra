@@ -10,15 +10,7 @@ import {
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 describe("MCP backing for apps", () => {
@@ -26,12 +18,11 @@ describe("MCP backing for apps", () => {
   let organizationId: string;
   let user: User;
 
-  const appsEnabled = config.apps.enabled;
-  beforeAll(() => {
+  // Pin the apps flag per TEST, not per file: the shared setup restores the
+  // pristine config before and after every test, so a beforeAll-scoped
+  // mutation does not survive, and a file must never depend on worker state.
+  beforeEach(() => {
     (config.apps as { enabled: boolean }).enabled = true;
-  });
-  afterAll(() => {
-    (config.apps as { enabled: boolean }).enabled = appsEnabled;
   });
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {

@@ -125,9 +125,10 @@ interface AgentToolsEditorProps {
   /** When true, the "Add MCP server" combobox starts open. */
   openComboboxOnMount?: boolean;
   /**
-   * Include assignable App backing catalogs in the picker. Only the MCP gateway
-   * dialog sets this — Apps launch through a gateway, and the backend still
-   * gates their inclusion on `app:read`.
+   * Include assignable App backing catalogs in the picker. Chat agents, MCP
+   * gateways, and legacy profiles set this — a chat agent renders an app inline
+   * from its `__open` tool, a gateway/profile exposes that tool to a connected
+   * MCP client. The backend still gates their inclusion on `app:read`.
    */
   includeAppCatalogs?: boolean;
 }

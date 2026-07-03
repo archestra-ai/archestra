@@ -232,7 +232,8 @@ export function LlmProviderApiKeyDropdown({
                         ? getChatApiKeySelectorOptionTestId(key.id)
                         : undefined
                     }
-                    value={`${provider} ${key.name} ${key.teamName || ""}`}
+                    value={key.id}
+                    keywords={[provider, key.name, key.teamName ?? ""]}
                     onSelect={() => onSelectKey(key.id)}
                     className="cursor-pointer"
                   >

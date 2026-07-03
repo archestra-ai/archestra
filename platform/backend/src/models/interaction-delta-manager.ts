@@ -343,7 +343,14 @@ class InteractionDeltaManager {
           ),
         ),
       )
-      .orderBy(desc(schema.interactionsTable.createdAt))
+      // desc(id) tiebreak: same-instant interactions are common under load,
+      // and new ids are monotonic UUIDv7 — so "most recent candidate" stays
+      // deterministic (and, for fresh rows, truly means insertion order)
+      // instead of flapping between ties across queries.
+      .orderBy(
+        desc(schema.interactionsTable.createdAt),
+        desc(schema.interactionsTable.id),
+      )
       .limit(16);
 
     const chosen = candidates.find(

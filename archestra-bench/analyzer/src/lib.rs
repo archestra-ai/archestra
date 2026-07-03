@@ -7,6 +7,7 @@
 //! Tier 2, the benchmark fixtures (task prompts, schemas, verifiers, env/skill config, runner).
 
 mod analyze;
+pub mod rubric;
 mod runmeta;
 mod trajectory;
 
@@ -14,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use archestra_bench_core::{find_lane, load_lanes};
+use archestra_bench_core::{TriageRecord, find_lane, load_lanes};
 use eyre::{Context, Result, bail};
 use futures::stream::{self, StreamExt};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -175,6 +176,17 @@ fn rollout_order(
     a_is_pass.cmp(&b_is_pass).then_with(|| a_id.cmp(b_id))
 }
 
+/// One compact JSON line per triage record, in the caller's (deterministic, failures-first) order —
+/// the `trajectory_rubrics_<ts>.jsonl` artifact body.
+fn rubrics_jsonl<'a>(records: impl IntoIterator<Item = &'a TriageRecord>) -> String {
+    let mut out = String::new();
+    for record in records {
+        out.push_str(&serde_json::to_string(record).expect("TriageRecord always serializes"));
+        out.push('\n');
+    }
+    out
+}
+
 /// One rollout in the [`PrepareManifest`]: its identity, outcome, the one-line outcome summary the
 /// map prompt embeds, and the path to its rendered trajectory.
 #[derive(Debug, Serialize)]
@@ -289,17 +301,23 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
         .expect("static progress template")
         .progress_chars("━━─"),
     );
-    let mapped: Vec<(RolloutId, Result<(RunMeta, String)>)> = stream::iter(rollouts)
+    let mapped: Vec<(RolloutId, Result<(RunMeta, TriageRecord)>)> = stream::iter(rollouts)
         .map(|rollout| {
             let client = map_client.clone();
             let model = map_model.clone();
             let bar = bar.clone();
             async move {
                 let summary = rollout.meta.summarize_outcome();
-                let result =
-                    analyze::map_one(&client, &model, &rollout.id, &summary, &rollout.markdown)
-                        .await
-                        .map(|analysis| (rollout.meta, analysis));
+                let result = analyze::map_one(
+                    &client,
+                    &model,
+                    &rollout.id,
+                    &rollout.meta.outcome,
+                    &summary,
+                    &rollout.markdown,
+                )
+                .await
+                .map(|record| (rollout.meta, record));
                 bar.inc(1);
                 (rollout.id, result)
             }
@@ -312,11 +330,11 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
     // A per-rollout map failure (e.g. a provider outage on one rollout) must not discard the summaries we
     // already paid for. Log each failure loudly and proceed with what mapped; abort only if nothing
     // succeeded.
-    let mut analyzed: Vec<(RolloutId, RunMeta, String)> = Vec::new();
+    let mut analyzed: Vec<(RolloutId, RunMeta, TriageRecord)> = Vec::new();
     let mut excluded: Vec<RolloutId> = Vec::new();
     for (id, result) in mapped {
         match result {
-            Ok((meta, analysis)) => analyzed.push((id, meta, analysis)),
+            Ok((meta, record)) => analyzed.push((id, meta, record)),
             Err(e) => {
                 note(&mp, format!("  ✗ map failed for {id}, excluding it: {e:#}"));
                 excluded.push(id);
@@ -357,9 +375,31 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
         .collect();
     let metrics = metrics_block(&metric_pairs);
 
+    // Persist the raw triage records before reduce, in the same failures-first order as the
+    // analyses doc; rollouts whose map failed are simply absent (partial artifacts are normal).
+    // tmp + rename so the dashboard can never observe a half-written artifact.
+    let rubrics_path = cfg
+        .run_dir
+        .join(format!("trajectory_rubrics_{timestamp}.jsonl"));
+    let rubrics_tmp = rubrics_path.with_extension("jsonl.tmp");
+    std::fs::write(
+        &rubrics_tmp,
+        rubrics_jsonl(analyzed.iter().map(|(_, _, record)| record)),
+    )
+    .and_then(|()| std::fs::rename(&rubrics_tmp, &rubrics_path))
+    .wrap_err_with(|| format!("writing triage rubrics to {}", rubrics_path.display()))?;
+    note(&mp, format!("✓ rubrics → {}", rubrics_path.display()));
+
     let analyses: Vec<(RolloutId, String, String)> = analyzed
         .into_iter()
-        .map(|(id, meta, analysis)| (id, meta.outcome, analysis))
+        .map(|(id, meta, record)| {
+            // The cap bounds the rendered section body (what the reducer reads), not the record.
+            let body = analyze::truncate_chars(
+                rubric::render_section(&record),
+                analyze::MAP_ANALYSIS_CAP_CHARS,
+            );
+            (id, meta.outcome, body)
+        })
         .collect();
     let mut analyses_doc = analyze::build_analyses_doc(&metrics, &analyses, run_dir_rel.as_deref());
     if !excluded.is_empty() {
@@ -583,6 +623,43 @@ mod tests {
     }
 
     #[test]
+    fn rubrics_jsonl_is_one_compact_line_per_record_in_rollout_order() {
+        let judgment = r#"{"verdict":"v","rubrics":{"knowledge":{"grade":4,"comment":"k"},"reasoning":{"grade":3,"comment":"r"},"instruction_following":{"grade":5,"comment":"i"},"env_ergonomics":{"grade":2,"comment":"e"}},"reward_hacking":{"suspected":false,"evidence":null},"observations":["a"]}"#;
+        let record = |env: &str, task: &str, lane: &str, outcome: &str| {
+            let id = RolloutId {
+                env: env.into(),
+                task: task.into(),
+                lane: lane.into(),
+            };
+            let rec = rubric::parse_triage(judgment)
+                .unwrap()
+                .into_record(&id, outcome);
+            (id, outcome == "passed", rec)
+        };
+        // Passing rollout listed first so the sort must actually reorder.
+        let mut rows = [
+            record("basic", "a", "x", "passed"),
+            record("basic", "b", "y", "failed"),
+        ];
+        rows.sort_by(|a, b| rollout_order(a.1, &a.0, b.1, &b.0));
+
+        let jsonl = rubrics_jsonl(rows.iter().map(|(_, _, rec)| rec));
+        let lines: Vec<&str> = jsonl.lines().collect();
+        assert_eq!(lines.len(), 2);
+        // Failures first, each line a compact record that parses back with its stamped identity.
+        let first: TriageRecord = serde_json::from_str(lines[0]).unwrap();
+        let second: TriageRecord = serde_json::from_str(lines[1]).unwrap();
+        assert_eq!(
+            (first.rollout.as_str(), first.outcome.as_str()),
+            ("basic/b__y", "failed")
+        );
+        assert_eq!(
+            (second.rollout.as_str(), second.outcome.as_str()),
+            ("basic/a__x", "passed")
+        );
+    }
+
+    #[test]
     fn prepare_run_dir_renders_md_and_builds_ordered_manifest() {
         let run = tempfile::tempdir().unwrap();
         // Written passing-first so the assertion proves the failures-first sort actually reorders.
@@ -625,6 +702,10 @@ mod tests {
             .find(|r| r.id == "basic/tau__kimi")
             .unwrap();
         assert_eq!(failing.outcome, "failed");
-        assert!(failing.trajectory_md.ends_with("basic/tau__kimi/trajectory.md"));
+        assert!(
+            failing
+                .trajectory_md
+                .ends_with("basic/tau__kimi/trajectory.md")
+        );
     }
 }

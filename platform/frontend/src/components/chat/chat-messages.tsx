@@ -9,6 +9,7 @@ import {
   getArchestraToolFullName,
   HOOK_RUN_PART_TYPE,
   isAppRenderingArchestraToolShortName,
+  parseArchestraAppResourceUri,
   parseFullToolName,
   type ResourceVisibilityScope,
   SWAP_AGENT_FAILED_POKE_TEXT,
@@ -1617,6 +1618,12 @@ const MessageTool = memo(
     // A server-scoped deep link (apps-page open-in-chat) stamps the concrete
     // install so the chat mounts against it instead of the agent gateway.
     const uiMcpServerId = uiMeta?.mcpServerId;
+    // An owned app's own render (e.g. its `__open` launch tool) carries a
+    // `ui://archestra-app/<appId>` URI; bind it so the app runs against the
+    // app-bound endpoint (/api/mcp/app/:appId), not the agent gateway.
+    const uiAppId = uiResourceUri
+      ? parseArchestraAppResourceUri(uiResourceUri)
+      : null;
 
     // When the model dispatched through run_tool, the MCP App belongs to the
     // *target* tool. Unwrap so the app receives the target tool's name (for the
@@ -1775,8 +1782,12 @@ const MessageTool = memo(
     }
 
     if (authToolBody) {
-      const shortName = parseFullToolName(toolName).toolName.replace(/_/g, " ");
-      const iconInfo = toolIconMap?.get(toolName);
+      // Unwrap run_tool so the circle carries the target tool's server icon.
+      const shortName = parseFullToolName(mcpAppToolName).toolName.replace(
+        /_/g,
+        " ",
+      );
+      const iconInfo = toolIconMap?.get(mcpAppToolName);
 
       return (
         <div className="mb-1">
@@ -1824,8 +1835,12 @@ const MessageTool = memo(
       !errorText
     ) {
       const compactState = getCompactToolState({ part, toolResultPart });
-      const shortName = parseFullToolName(toolName).toolName.replace(/_/g, " ");
-      const iconInfo = toolIconMap?.get(toolName);
+      // Unwrap run_tool so the circle carries the target tool's server icon.
+      const shortName = parseFullToolName(mcpAppToolName).toolName.replace(
+        /_/g,
+        " ",
+      );
+      const iconInfo = toolIconMap?.get(mcpAppToolName);
       // Fall back to the Archestra catalog icon for owned-app / archestra tools
       // whose icon isn't in the map yet (e.g. a still-pending management call).
       const catalogId =
@@ -1905,6 +1920,7 @@ const MessageTool = memo(
                 <McpAppSection
                   uiResourceUri={uiResourceUri}
                   mcpServerId={uiMcpServerId}
+                  appId={uiAppId ?? undefined}
                   agentId={agentId}
                   toolName={mcpAppToolName}
                   toolCallId={part.toolCallId}
@@ -2014,6 +2030,7 @@ const MessageTool = memo(
               <McpAppSection
                 uiResourceUri={uiResourceUri}
                 mcpServerId={uiMcpServerId}
+                appId={uiAppId ?? undefined}
                 agentId={agentId}
                 toolName={mcpAppToolName}
                 toolCallId={part.toolCallId}

@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 
 // Import after mock is defined
-import { modelsDevClient } from "./models-dev-client";
+import { modelsDevClient, sanitizeOutputLimit } from "./models-dev-client";
 
 // The canonical Map-backed fake from src/__mocks__/cache-manager.ts avoids
 // "CacheManager: Not started" errors; the store resets before every test.
@@ -192,6 +192,7 @@ describe("ModelsDevClient", () => {
       expect(result?.modelId).toBe("gpt-4o");
       expect(result?.description).toBe("GPT-4o");
       expect(result?.contextLength).toBe(128000);
+      expect(result?.outputLength).toBe(16384);
       expect(result?.inputModalities).toEqual(["text", "image", "pdf"]);
       expect(result?.outputModalities).toEqual(["text"]);
       expect(result?.supportsToolCalling).toBe(true);
@@ -253,6 +254,35 @@ describe("ModelsDevClient", () => {
       const result = modelsDevClient.convertToModel("openai", model);
 
       expect(result?.contextLength).toBeNull();
+      expect(result?.outputLength).toBeNull();
+    });
+
+    test("drops an invalid output limit to null", () => {
+      const model = createMockModel({
+        id: "test-model",
+        limit: { context: 128000, output: 0 },
+      });
+
+      const result = modelsDevClient.convertToModel("openai", model);
+
+      expect(result?.outputLength).toBeNull();
+    });
+  });
+
+  describe("sanitizeOutputLimit", () => {
+    test("keeps positive integers", () => {
+      expect(sanitizeOutputLimit(16384)).toBe(16384);
+      expect(sanitizeOutputLimit(1)).toBe(1);
+    });
+
+    test("drops zero, negative, non-integer, null and undefined", () => {
+      expect(sanitizeOutputLimit(0)).toBeNull();
+      expect(sanitizeOutputLimit(-100)).toBeNull();
+      expect(sanitizeOutputLimit(1.5)).toBeNull();
+      expect(sanitizeOutputLimit(Number.NaN)).toBeNull();
+      expect(sanitizeOutputLimit(Number.POSITIVE_INFINITY)).toBeNull();
+      expect(sanitizeOutputLimit(null)).toBeNull();
+      expect(sanitizeOutputLimit(undefined)).toBeNull();
     });
   });
 

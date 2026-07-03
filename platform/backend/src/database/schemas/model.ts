@@ -43,6 +43,9 @@ const modelsTable = pgTable(
     /** Maximum context window size in tokens */
     contextLength: integer("context_length"),
 
+    /** Maximum output size in tokens (from the model source's output limit) */
+    outputLength: integer("output_length"),
+
     /** Supported input modalities */
     inputModalities: jsonb("input_modalities").$type<ModelInputModality[]>(),
 

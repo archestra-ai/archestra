@@ -1,7 +1,7 @@
-import { and, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { InsertMessage, Message } from "@/types";
-import { isUuid } from "@/utils/uuid";
+import { isUuid, uuidv7 } from "@/utils/uuid";
 
 type DbExecutor =
   | typeof db
@@ -9,22 +9,35 @@ type DbExecutor =
 
 class MessageModel {
   /**
-   * Update the conversation's updatedAt timestamp when messages are added.
-   * This ensures conversations are sorted by latest message activity.
+   * Update the conversation's timestamps when messages are added.
+   *
+   * `lastMessageAt` is forced strictly past `lastReadAt` when the two would
+   * otherwise land on the same millisecond: the unread check is a strict
+   * `lastMessageAt > lastReadAt` comparison, so a message racing markRead
+   * into the same instant would silently read as already-seen. GREATEST with
+   * a 1ms nudge keeps the invariant "written after a read ⇒ unread" without
+   * needing a sequence column.
    */
   private static async touchConversation(
     conversationId: string,
+    executor: DbExecutor = db,
   ): Promise<void> {
-    await db
+    await executor
       .update(schema.conversationsTable)
-      .set({ updatedAt: new Date(), lastMessageAt: new Date() })
+      .set({
+        updatedAt: new Date(),
+        lastMessageAt: sql`GREATEST(${new Date()}::timestamp, ${schema.conversationsTable.lastReadAt} + interval '1 millisecond')`,
+      })
       .where(eq(schema.conversationsTable.id, conversationId));
   }
 
   static async create(data: InsertMessage): Promise<Message> {
     const [message] = await db
       .insert(schema.messagesTable)
-      .values(data)
+      // Monotonic v7 id: with `created_at` at millisecond precision,
+      // back-to-back writes can tie, and every "which message is later?"
+      // question (ordering, delete-subsequent) breaks ties with the id.
+      .values({ id: uuidv7(), ...data })
       .returning();
 
     // Update conversation's updatedAt so it sorts to the top
@@ -41,14 +54,20 @@ class MessageModel {
       return;
     }
 
-    await executor.insert(schema.messagesTable).values(messages);
+    await executor
+      .insert(schema.messagesTable)
+      .values(messages.map((m) => ({ id: uuidv7(), ...m })));
 
-    // Update conversation's updatedAt for all affected conversations
+    // Update conversation's updatedAt for all affected conversations. Must run
+    // on the same executor: with a transaction executor, a separate `db` query
+    // would escape the transaction (and deadlock single-connection PGlite).
     const uniqueConversationIds = [
       ...new Set(messages.map((m) => m.conversationId)),
     ];
     await Promise.all(
-      uniqueConversationIds.map((id) => MessageModel.touchConversation(id)),
+      uniqueConversationIds.map((id) =>
+        MessageModel.touchConversation(id, executor),
+      ),
     );
   }
 
@@ -57,7 +76,7 @@ class MessageModel {
       .select()
       .from(schema.messagesTable)
       .where(eq(schema.messagesTable.conversationId, conversationId))
-      .orderBy(schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
     return messages;
   }
@@ -234,7 +253,7 @@ class MessageModel {
       .where(
         and(
           eq(schema.messagesTable.conversationId, conversationId),
-          gt(schema.messagesTable.createdAt, message.createdAt),
+          MessageModel.createdAfter(message),
         ),
       );
   }
@@ -296,7 +315,7 @@ class MessageModel {
           .where(
             and(
               eq(schema.messagesTable.conversationId, message.conversationId),
-              gt(schema.messagesTable.createdAt, message.createdAt),
+              MessageModel.createdAfter(message),
             ),
           );
       }
@@ -309,6 +328,24 @@ class MessageModel {
       return await withDbTransaction(async (tx) => run(tx));
     }
     return await run(executor);
+  }
+
+  /**
+   * Rows that come after `message` in the canonical conversation order,
+   * `(created_at, id)`. A strict `created_at >` comparison alone misses
+   * same-millisecond neighbours (back-to-back writes routinely tie), so
+   * "subsequent" is the tuple comparison that matches exactly what
+   * findByConversation displays. New ids are monotonic UUIDv7, so for
+   * fresh data the id tiebreak IS insertion order.
+   */
+  private static createdAfter(message: Pick<Message, "id" | "createdAt">) {
+    return or(
+      gt(schema.messagesTable.createdAt, message.createdAt),
+      and(
+        eq(schema.messagesTable.createdAt, message.createdAt),
+        gt(schema.messagesTable.id, message.id),
+      ),
+    );
   }
 }
 

@@ -3913,3 +3913,68 @@ describe("policy configurator and cloned tools", () => {
     }
   });
 });
+
+describe("getMcpToolsAccessibleToUser requireUiResource", () => {
+  // The route-level tools/list tests cannot isolate this filter: the in-memory
+  // providesUiResource gate in filterExposedTools hides non-UI tools anyway, so
+  // a dropped requireUiResource is invisible there (it only changes how many
+  // rows are loaded and re-filtered). This pins the DB-side predicate directly.
+  test("restricts to tools carrying a ui:// resource (canonical or legacy key)", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const canonicalTool = await makeTool({
+      catalogId: catalog.id,
+      name: "widget__open_canonical",
+      meta: { _meta: { ui: { resourceUri: "ui://widget/canonical.html" } } },
+    });
+    const legacyTool = await makeTool({
+      catalogId: catalog.id,
+      name: "widget__open_legacy",
+      meta: { _meta: { "ui/resourceUri": "ui://widget/legacy.html" } },
+    });
+    const nonUiTool = await makeTool({
+      catalogId: catalog.id,
+      name: "widget__list",
+    });
+    const nonUiSchemeTool = await makeTool({
+      catalogId: catalog.id,
+      name: "widget__https_scheme",
+      meta: { _meta: { ui: { resourceUri: "https://example.com/page" } } },
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+    const uiOnlyNames = (
+      await ToolModel.getMcpToolsAccessibleToUser({
+        userId: user.id,
+        organizationId: org.id,
+        isAdmin: true,
+        environmentId: null,
+        requireUiResource: true,
+      })
+    ).map((tool) => tool.name);
+    expect(uiOnlyNames).toContain(canonicalTool.name);
+    expect(uiOnlyNames).toContain(legacyTool.name);
+    expect(uiOnlyNames).not.toContain(nonUiTool.name);
+    expect(uiOnlyNames).not.toContain(nonUiSchemeTool.name);
+
+    // Without the flag the filter must not apply — the same non-UI tools stay
+    // in the unrestricted discovery set search_tools/run_tool rely on.
+    const allNames = (
+      await ToolModel.getMcpToolsAccessibleToUser({
+        userId: user.id,
+        organizationId: org.id,
+        isAdmin: true,
+        environmentId: null,
+      })
+    ).map((tool) => tool.name);
+    expect(allNames).toContain(nonUiTool.name);
+    expect(allNames).toContain(nonUiSchemeTool.name);
+  });
+});

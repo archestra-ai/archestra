@@ -164,13 +164,6 @@ export const KC_TEST_USER = {
   name: "Admin User",
 };
 
-export const KC_MEMBER_USER = {
-  username: MEMBER_EMAIL.split("@")[0],
-  password: "memberpass",
-  email: MEMBER_EMAIL,
-  name: "Member User",
-};
-
 /** SSO domain - extracted from admin email for account linking */
 export const SSO_DOMAIN = ADMIN_EMAIL.split("@")[1];
 
@@ -194,15 +187,6 @@ export const MCP_SERVER_JWKS_EXTERNAL_URL = "http://localhost:30082";
 export const MCP_SERVER_JWKS_BACKEND_URL = IS_CI
   ? "http://e2e-tests-mcp-server-jwks:3456"
   : "http://localhost:30082";
-
-export const MCP_SERVER_ID_JAG_EXTERNAL_URL = "http://localhost:30084";
-export const MCP_SERVER_ID_JAG_BACKEND_URL = IS_CI
-  ? "http://e2e-tests-mcp-server-id-jag:3458"
-  : "http://localhost:30084";
-export const MCP_SERVER_ID_JAG_GATEWAY_AUDIENCE = "id-jag-gateway-client";
-export const MCP_SERVER_ID_JAG_RESOURCE_CLIENT_ID = "id-jag-resource-client";
-export const MCP_SERVER_ID_JAG_RESOURCE_CLIENT_SECRET =
-  "id-jag-resource-secret";
 
 /** Docker image for the JWKS MCP server (used for local K8s deployment tests) */
 export const MCP_SERVER_JWKS_DOCKER_IMAGE =

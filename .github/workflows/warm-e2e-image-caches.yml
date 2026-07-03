@@ -71,13 +71,6 @@ jobs:
           path: /tmp/mcp-jwks-server.tar
           key: mcp-jwks-server-0.0.3-${{ runner.arch }}
 
-      - name: Cache MCP ID-JAG server image
-        id: cache-id-jag-image
-        uses: ./.github/actions/github-cache
-        with:
-          path: /tmp/mcp-id-jag-server.tar
-          key: mcp-id-jag-server-0.0.4-${{ runner.arch }}
-
       # Pull and tarball whichever images missed; the cache action's post
       # step uploads them with main-branch scope, which is what makes them
       # visible to merge-queue and PR runs. All-hit runs are near-free.
@@ -86,7 +79,6 @@ jobs:
           KIND_HIT: ${{ steps.cache-kind-node.outputs.cache-hit }}
           OAUTH_HIT: ${{ steps.cache-oauth-image.outputs.cache-hit }}
           JWKS_HIT: ${{ steps.cache-jwks-image.outputs.cache-hit }}
-          ID_JAG_HIT: ${{ steps.cache-id-jag-image.outputs.cache-hit }}
         run: |
           set -euo pipefail
 
@@ -108,8 +100,6 @@ jobs:
           save_image "${OAUTH_HIT}" "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1" /tmp/mcp-oauth-server.tar &
           PIDS+=($!)
           save_image "${JWKS_HIT}" "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3" /tmp/mcp-jwks-server.tar &
-          PIDS+=($!)
-          save_image "${ID_JAG_HIT}" "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4" /tmp/mcp-id-jag-server.tar &
           PIDS+=($!)
 
           FAILED=0

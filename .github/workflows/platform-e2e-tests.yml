@@ -359,28 +359,12 @@ jobs:
           echo "The non-quickstart E2E run (shard ${SHARD}/2) failed."
           exit 1
 
-  # Fan-in gate that carries the "Platform E2E Tests" required status check.
-  # The sharded matrix above emits per-shard check names, which never match the
-  # required context, so this job reproduces the exact name and is green only
-  # when every shard succeeded. !cancelled() keeps it from being skipped — a
-  # skipped required check stalls the merge queue just like a missing one.
-  platform-e2e-tests:
-    name: Platform E2E Tests
-    needs: [platform-e2e-tests-shards]
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check shard results
-        env:
-          SHARDS_RESULT: ${{ needs.platform-e2e-tests-shards.result }}
-        run: |
-          echo "Aggregated shard result: ${SHARDS_RESULT}"
-          if [ "${SHARDS_RESULT}" != "success" ]; then
-            echo "One or more non-quickstart E2E shards did not succeed."
-            exit 1
-          fi
-          echo "All non-quickstart E2E shards passed."
-
+  # NOTE: there is deliberately no separate "Platform E2E Tests" fan-in job. The
+  # shard results are already gated by "Merge E2E Test Reports" below (its "Fail
+  # if any e2e job failed" step fails when any shard or the quickstart leg is not
+  # green), and that is the required status check for the merge queue. A second
+  # fan-in job checking the same shard result was redundant and not referenced by
+  # the branch ruleset, so it was removed.
 
   platform-quickstart-e2e-tests:
     name: Platform E2E Tests (Quickstart)

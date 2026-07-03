@@ -153,6 +153,9 @@ EOF
   # ARCHESTRA_INTERNAL_API_BASE_URL it mirrors: Tiltfile.dev's sync only fills
   # NEXT_PUBLIC_* when the file doesn't already set it, so leaving an inherited
   # value in place would point the parallel frontend at the main backend.
+  # ARCHESTRA_AUTH_COOKIE_PREFIX gets the namespace so this stack's session
+  # cookies don't clobber other localhost stacks' (browsers ignore the port
+  # when scoping cookies, and every stack otherwise uses the same names).
   ARCHESTRA_DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:${pg_port}/archestra_dev?schema=public" \
   ARCHESTRA_INTERNAL_API_BASE_URL="http://localhost:${backend_port}" \
   NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL="http://localhost:${backend_port}" \
@@ -165,6 +168,7 @@ EOF
   ARCHESTRA_FRONTEND_PORT="$frontend_port" \
   ARCHESTRA_FRONTEND_INT_TESTS_PORT="$int_tests_port" \
   ARCHESTRA_TILT_PORT="$tilt_port" \
+  ARCHESTRA_AUTH_COOKIE_PREFIX="$namespace" \
   python3 - "$env_file" <<'PYEOF'
 import os, re, sys
 keys = [
@@ -180,6 +184,7 @@ keys = [
   "ARCHESTRA_FRONTEND_PORT",
   "ARCHESTRA_FRONTEND_INT_TESTS_PORT",
   "ARCHESTRA_TILT_PORT",
+  "ARCHESTRA_AUTH_COOKIE_PREFIX",
 ]
 overrides = {k: os.environ[k] for k in keys}
 path = sys.argv[1]

@@ -58,7 +58,12 @@ const APP_NAME = DEFAULT_APP_NAME;
 const {
   api: { apiKeyAuthorizationHeaderName },
   frontendBaseUrl,
-  auth: { secret, cookieDomain, trustedOrigins: staticTrustedOrigins },
+  auth: {
+    secret,
+    cookieDomain,
+    cookiePrefix,
+    trustedOrigins: staticTrustedOrigins,
+  },
 } = config;
 
 const ac = createAccessControl(allAvailableActions);
@@ -308,7 +313,7 @@ export const auth = betterAuth({
   },
 
   advanced: {
-    cookiePrefix: "archestra",
+    cookiePrefix,
     defaultCookieAttributes: {
       ...(cookieDomain ? { domain: cookieDomain } : {}),
       // "lax" is required for OAuth/SSO flows because the callback is a cross-site top-level navigation

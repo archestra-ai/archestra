@@ -18,10 +18,6 @@ Principals to follow:
 4) Good docs are short docs. Make them very-very consize.
 5) Don't use emojis, write in simple and straightforward manner.
 6) Don't add "Future Considerations", or general "Best Practices".
-7) Use easy language: short sentences, common words. If a sentence needs re-reading, rewrite it.
-8) Not too much details: if a detail doesn't change how someone uses the feature (size limits, edge cases, internal tool names), cut it or leave it to the UI.
-9) Add a use case example section to the page. Ask the user for the scenario before writing it.
-10) Capture all screenshots with the playwright MCP against the running platform.
 
 Strong rules:
 1) Never edit the comment at the top of the file <!-- --> That's your prompt.

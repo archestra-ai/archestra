@@ -2448,7 +2448,7 @@ describe("createAgentServer tools/list", () => {
     expect(chatResponse.structuredContent).toMatchObject({ id: app.id });
   });
 
-  test("adds assigned MCP server context to search_tools description", async ({
+  test("adds assigned MCP server names and descriptions to search_tools description", async ({
     makeAgent,
     makeAgentTool,
     makeInternalMcpCatalog,
@@ -2460,20 +2460,32 @@ describe("createAgentServer tools/list", () => {
       organizationId: org.id,
       toolExposureMode: "search_and_run_only",
     });
-    const sentryCatalog = await makeInternalMcpCatalog({
+    const errorTrackerCatalog = await makeInternalMcpCatalog({
       organizationId: org.id,
-      name: "sentry",
+      name: "error-tracker",
+      description: "Error tracking and\nperformance   monitoring",
     });
-    await McpCatalogLabelModel.syncCatalogLabels(sentryCatalog.id, [
+    await McpCatalogLabelModel.syncCatalogLabels(errorTrackerCatalog.id, [
       { key: "app", value: "observability" },
-      { key: "type", value: "errors" },
     ]);
-    const sentryTool = await makeTool({
-      catalogId: sentryCatalog.id,
-      name: "sentry__list_issues",
+    const errorTrackerTool = await makeTool({
+      catalogId: errorTrackerCatalog.id,
+      name: "error_tracker__list_issues",
       parameters: { type: "object", properties: {} },
     });
-    await makeAgentTool(agent.id, sentryTool.id);
+    await makeAgentTool(agent.id, errorTrackerTool.id);
+
+    // A catalog without a description renders as a bare name.
+    const notesCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "notes",
+    });
+    const notesTool = await makeTool({
+      catalogId: notesCatalog.id,
+      name: "notes__create_note",
+      parameters: { type: "object", properties: {} },
+    });
+    await makeAgentTool(agent.id, notesTool.id);
 
     const { server } = await createAgentServer(agent.id);
     const listToolsHandler = (
@@ -2495,11 +2507,142 @@ describe("createAgentServer tools/list", () => {
       (tool) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME,
     );
 
+    // Server description is whitespace-collapsed and rendered in parens.
     expect(searchTool?.description).toContain(
-      "Available MCP servers for this gateway include: sentry",
+      "error-tracker (Error tracking and performance monitoring)",
     );
-    expect(searchTool?.description).toContain("app:observability");
-    expect(searchTool?.description).toContain("type:errors");
+    expect(searchTool?.description).toContain("notes");
+    // Labels are no longer part of the summary.
+    expect(searchTool?.description).not.toContain("app:observability");
+  });
+
+  test("search_tools description lists every assigned server, not a top-10 slice", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      toolExposureMode: "search_and_run_only",
+    });
+
+    const catalogNames = Array.from(
+      { length: 12 },
+      (_, i) => `server-${String(i).padStart(2, "0")}`,
+    );
+    for (const name of catalogNames) {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name,
+      });
+      const tool = await makeTool({
+        catalogId: catalog.id,
+        name: `${name.replace(/-/g, "_")}__do_thing`,
+        parameters: { type: "object", properties: {} },
+      });
+      await makeAgentTool(agent.id, tool.id);
+    }
+
+    const { server } = await createAgentServer(agent.id);
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const searchTool = response.tools.find(
+      (tool) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME,
+    );
+
+    for (const name of catalogNames) {
+      expect(searchTool?.description).toContain(name);
+    }
+    expect(searchTool?.description).not.toContain("more");
+  });
+
+  test("search_tools description includes dynamically discoverable servers for all-tools agents", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      toolExposureMode: "search_and_run_only",
+      accessAllTools: true,
+    });
+
+    const assignedCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "assigned-server",
+    });
+    const assignedTool = await makeTool({
+      catalogId: assignedCatalog.id,
+      name: "assigned_server__do_thing",
+      parameters: { type: "object", properties: {} },
+    });
+    await makeAgentTool(agent.id, assignedTool.id);
+
+    // Accessible to the user but not assigned to the agent — reachable only
+    // through the search_tools/run_tool dynamic dispatch surface.
+    const discoverableCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "github",
+      description: "Repositories, issues, and pull requests",
+    });
+    await makeTool({
+      catalogId: discoverableCatalog.id,
+      name: "github__search_repositories",
+      parameters: { type: "object", properties: {} },
+    });
+    await makeMcpServer({ catalogId: discoverableCatalog.id, scope: "org" });
+
+    const { server } = await createAgentServer(agent.id, {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      isUserToken: true,
+      userId: user.id,
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const searchTool = response.tools.find(
+      (tool) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME,
+    );
+
+    expect(searchTool?.description).toContain("assigned-server");
+    expect(searchTool?.description).toContain(
+      "github (Repositories, issues, and pull requests)",
+    );
   });
 
   test("preserves user context when calling restricted Archestra tools", async ({

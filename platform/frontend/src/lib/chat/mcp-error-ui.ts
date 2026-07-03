@@ -4,6 +4,7 @@ import {
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
+  type PolicyDeniedMcpToolError,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
 import type { PolicyDeniedPart } from "@/components/message-thread";
@@ -53,21 +54,26 @@ export type ToolAuthState =
       credentialTeamName?: string | null;
     };
 
+function policyDeniedPartFromError(
+  error: PolicyDeniedMcpToolError,
+): PolicyDeniedPart {
+  return {
+    type: `tool-${error.toolName}`,
+    toolCallId: "",
+    state: "output-denied",
+    input: error.input,
+    unsafeContextActiveAtRequestStart: error.reasonType === "sensitive_context",
+    errorText: JSON.stringify({ reason: error.reason }),
+  };
+}
+
 export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
   const policyDenied = extractMcpToolError(text);
   if (policyDenied?.type !== "policy_denied") {
     return null;
   }
 
-  return {
-    type: `tool-${policyDenied.toolName}`,
-    toolCallId: "",
-    state: "output-denied",
-    input: policyDenied.input,
-    unsafeContextActiveAtRequestStart:
-      policyDenied.reasonType === "sensitive_context",
-    errorText: JSON.stringify({ reason: policyDenied.reason }),
-  };
+  return policyDeniedPartFromError(policyDenied);
 }
 
 export function parseAuthRequired(
@@ -154,6 +160,13 @@ export function resolveToolAuthState(params: {
   rawOutput?: unknown;
 }): ToolAuthState | null {
   const structuredError = extractMcpToolError(params.rawOutput);
+
+  if (structuredError?.type === "policy_denied") {
+    return {
+      kind: "policy-denied",
+      policyDenied: policyDeniedPartFromError(structuredError),
+    };
+  }
 
   if (structuredError?.type === "auth_expired") {
     return {

@@ -278,7 +278,13 @@ test("enforces a block_always policy on the target (runtime gap fix)", async ({
       treatRequireApprovalAsBlock,
     });
     expect(decision.allowed).toBe(false);
-    if (!decision.allowed) expect(decision.reason).toContain("policy");
+    if (!decision.allowed) {
+      // Attribute the guardrail to Archestra so the app (and whoever reads the
+      // error) knows the gateway blocked the call, not the tool.
+      expect(decision.reason).toContain(
+        "a security guardrail enforced by Archestra, not by the tool itself",
+      );
+    }
   }
 });
 

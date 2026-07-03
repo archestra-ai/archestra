@@ -707,6 +707,100 @@ describe("AnthropicStreamAdapter content block forwarding", () => {
   });
 });
 
+describe("AnthropicStreamAdapter policy refusal terminal", () => {
+  type Chunk = Parameters<
+    ReturnType<
+      typeof anthropicAdapterFactory.createStreamAdapter
+    >["processChunk"]
+  >[0];
+
+  // Reproduces the reported incident: a blocked tool-call turn must not end the
+  // stream with the upstream "tool_use" stop reason, or Claude Code reads the
+  // text-only refusal as a malformed tool call and retries it.
+  function streamBlockedToolTurn() {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    // A text block streams live at index 0...
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "" },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "text_delta", text: "let me check" },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_stop",
+      index: 0,
+    } as Chunk);
+    // ...then a tool_use block at index 1 is buffered (held back)...
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 1,
+      content_block: {
+        type: "tool_use",
+        id: "toolu_1",
+        name: "list",
+        input: {},
+      },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_delta",
+      index: 1,
+      delta: { type: "input_json_delta", partial_json: '{"a":1}' },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_stop",
+      index: 1,
+    } as Chunk);
+    // ...and the upstream turn ends with a tool_use stop reason.
+    adapter.processChunk({
+      type: "message_delta",
+      delta: { stop_reason: "tool_use", stop_sequence: null },
+      usage: { output_tokens: 5 },
+    } as Chunk);
+    return adapter;
+  }
+
+  test("formatEndSSE closes a refused stream as end_turn, not the upstream tool_use", () => {
+    const adapter = streamBlockedToolTurn();
+
+    adapter.formatCompleteTextSSE(
+      "Archestra LLM Proxy blocked unsafe tool call",
+    );
+    const endEvents = adapter.formatEndSSE();
+
+    expect(endEvents).toContain('"stop_reason":"end_turn"');
+    expect(endEvents).not.toContain('"stop_reason":"tool_use"');
+  });
+
+  test("refusal text block is placed after already-streamed blocks (no index reuse)", () => {
+    const adapter = streamBlockedToolTurn();
+
+    const refusalEvents = adapter.formatCompleteTextSSE("blocked").join("");
+
+    // index 0 was already streamed (the text block); the refusal must use index 1.
+    expect(refusalEvents).toContain('"index":1');
+    expect(refusalEvents).not.toContain('"index":0');
+  });
+
+  test("toProviderResponse persists the refusal, not the blocked tool call", () => {
+    const adapter = streamBlockedToolTurn();
+
+    adapter.formatCompleteTextSSE("blocked message");
+    const response = adapter.toProviderResponse();
+
+    expect(response.stop_reason).toBe("end_turn");
+    expect(response.content).toEqual([
+      { type: "text", text: "blocked message", citations: null },
+    ]);
+    expect(response.content.some((block) => block.type === "tool_use")).toBe(
+      false,
+    );
+  });
+});
+
 describe("anthropicAdapterFactory.execute", () => {
   // The SDK refuses non-streaming requests whose max_tokens implies a >10 min
   // completion ("Streaming is required for operations that may take longer

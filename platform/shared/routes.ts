@@ -140,6 +140,7 @@ export const RouteId = {
   DeleteRole: "deleteRole",
 
   // Tool Routes
+  GetTool: "getTool",
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
   GetUnassignedTools: "getUnassignedTools",

@@ -64,6 +64,7 @@ function policyDeniedPartFromError(
     input: error.input,
     unsafeContextActiveAtRequestStart: error.reasonType === "sensitive_context",
     errorText: JSON.stringify({ reason: error.reason }),
+    toolId: error.toolId,
   };
 }
 

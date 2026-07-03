@@ -83,6 +83,14 @@ interface AgentToolExclusionsEditorProps {
    */
   seedDefaultExclusions?: boolean;
   /**
+   * The tools editor's live selection (pending edits included). When present it
+   * is unioned into the "assigned" set the seeded default mirror reads, so a
+   * built-in the user just checked in the Custom tab — but hasn't saved — is
+   * treated as assigned rather than seeded as disabled. Falls back to the saved
+   * assignments / creation-default set when absent.
+   */
+  pendingAssignedToolIds?: ReadonlySet<string>;
+  /**
    * Reports `{ initial, current }` normalized exclusion payloads for the
    * dialog's unsaved-changes tracking; called with `null` on unmount. Pass a
    * referentially-stable callback (e.g. a `useState` setter).
@@ -108,7 +116,12 @@ export const AgentToolExclusionsEditor = forwardRef<
   AgentToolExclusionsEditorRef,
   AgentToolExclusionsEditorProps
 >(function AgentToolExclusionsEditor(
-  { agentId, seedDefaultExclusions = false, onStateChange },
+  {
+    agentId,
+    seedDefaultExclusions = false,
+    pendingAssignedToolIds,
+    onStateChange,
+  },
   ref,
 ) {
   const { catalogName } = useArchestraMcpIdentity();
@@ -199,10 +212,20 @@ export const AgentToolExclusionsEditor = forwardRef<
   // assignments, or the creation-default set for a new agent) nor exempt.
   const defaultExcludedToolIds = useMemo(() => {
     if (!seedDefaultExclusions) return [];
+    // "Assigned" = the agent's saved assignments UNIONED with the tools editor's
+    // live pending selection, so a built-in the user just checked in the Custom
+    // tab (unsaved) is treated as assigned and not seeded as disabled.
+    const assignedToolIds = new Set<string>([
+      ...(agentId ? assignedTools.map((tool) => tool.id) : []),
+      ...(pendingAssignedToolIds ?? []),
+    ]);
     return computeDefaultExclusionToolIds({
       builtInTools: toolsByCatalog.get(ARCHESTRA_MCP_CATALOG_ID) ?? [],
+      assignedToolIds,
+      // New agent: the backend auto-assigns the creation-default set; protect it
+      // by short name until the live selection reports those tool ids.
       ...(agentId
-        ? { assignedToolIds: new Set(assignedTools.map((tool) => tool.id)) }
+        ? {}
         : {
             assumedAssignedShortNames: new Set(
               getCreationDefaultArchestraToolShortNames({
@@ -217,6 +240,7 @@ export const AgentToolExclusionsEditor = forwardRef<
     toolsByCatalog,
     agentId,
     assignedTools,
+    pendingAssignedToolIds,
     skillToolsEnabled,
     sandboxEnabled,
   ]);

@@ -220,11 +220,8 @@ export async function createAgentServer(
     // filter runs BEFORE filterExposedTools, so an excluded always-exposed
     // built-in is dropped here and never re-admitted below. Empty (no-op)
     // unless the agent's accessAllTools setting is on.
-    const exclusionSets =
-      await agentToolExclusionsService.getActiveExclusionSets(agentId);
-    const mcpTools = (await ToolModel.getMcpToolsByAgent(agentId)).filter(
-      (tool) => !isToolRowExcluded(tool, exclusionSets),
-    );
+    const { tools: mcpTools, exclusionSets } =
+      await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
 
     // An all-tools agent reaches unassigned tools dynamically (search_tools /
     // run_tool already resolve them without an agent_tools row). A UI-providing
@@ -516,6 +513,10 @@ export async function createAgentServer(
             assignedToolNames && {
               enabledToolNames: new Set([...assignedToolNames, name]),
             }),
+          // The dynamically-resolved All-mode row that will execute: evaluate the
+          // policy against it and ride its id along on a block so the "Edit
+          // policy" modal can resolve a tool with no agent_tools assignment.
+          resolvedToolId: availableTool?.id,
         });
         if (policyBlock) {
           // Carry the machine-readable policy_denied error alongside the prose

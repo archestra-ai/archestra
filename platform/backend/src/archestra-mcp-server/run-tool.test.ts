@@ -802,6 +802,9 @@ describe("run_tool", () => {
         type: "policy_denied",
         toolName: "workspace__export_data",
         input: { destination: "external" },
+        // The resolved row id rides along so the "Edit policy" modal can open
+        // this All-mode tool, which has no agent_tools assignment to look up.
+        toolId: tool.id,
       });
       expect((result._meta as any)?.archestraError).toEqual(archestraError);
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();

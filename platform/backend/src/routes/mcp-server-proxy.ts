@@ -203,6 +203,7 @@ async function rejectDisallowedToolCall(
   // callable. Policy is keyed by the stored (slugified) name.
   const refusal = await enforceAppRuntimeInvocationPolicy({
     resolvedToolName: tool.name,
+    resolvedToolId: tool.id,
     displayName: toolName,
     toolInput:
       callParams?.arguments && typeof callParams.arguments === "object"

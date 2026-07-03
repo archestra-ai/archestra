@@ -14,6 +14,7 @@ import {
   INPUT_MODALITY_OPTIONS,
   isInlineableTextMimeType,
   OUTPUT_MODALITY_OPTIONS,
+  parseSandboxCommand,
   supportsFileUploads,
 } from "./chat";
 
@@ -458,5 +459,33 @@ describe("hasRenderableAssistantContent", () => {
   test("returns false for no parts", () => {
     expect(hasRenderableAssistantContent({ parts: [] })).toBe(false);
     expect(hasRenderableAssistantContent({})).toBe(false);
+  });
+});
+
+describe("parseSandboxCommand", () => {
+  test("extracts the command after the bang", () => {
+    expect(parseSandboxCommand("! npx foo mcp add")).toEqual({
+      command: "npx foo mcp add",
+    });
+  });
+
+  test("accepts the bang glued to the command", () => {
+    expect(parseSandboxCommand("!echo hi")).toEqual({ command: "echo hi" });
+  });
+
+  test("ignores surrounding whitespace", () => {
+    expect(parseSandboxCommand("  ! ls -la  ")).toEqual({ command: "ls -la" });
+  });
+
+  test("rejects a bare bang", () => {
+    expect(parseSandboxCommand("!")).toBeNull();
+    expect(parseSandboxCommand("!   ")).toBeNull();
+  });
+
+  test("rejects ordinary messages", () => {
+    expect(parseSandboxCommand("hello world")).toBeNull();
+    expect(parseSandboxCommand("")).toBeNull();
+    expect(parseSandboxCommand("/compact")).toBeNull();
+    expect(parseSandboxCommand("what does ! mean in bash?")).toBeNull();
   });
 });

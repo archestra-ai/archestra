@@ -207,6 +207,11 @@ export class DynamicInteraction implements InteractionUtils {
     return null;
   }
 
+  /** True when the interaction is a persisted failure (`{ error }` response). */
+  hasErrorResponse(): boolean {
+    return this.getErrorResponseText() !== null;
+  }
+
   isLastMessageToolCall(): boolean {
     return this.interactionClass.isLastMessageToolCall();
   }

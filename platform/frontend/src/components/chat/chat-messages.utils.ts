@@ -5,6 +5,7 @@ import {
   HOOK_RUN_PART_TYPE,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
+  parseArchestraAppResourceUri,
   parseFullToolName,
   SUBAGENT_TOOL_CALL_PART_TYPE,
   type SubagentToolCallPartData,
@@ -18,6 +19,7 @@ import {
 import type { PanelApp } from "./apps-context";
 import type { FileAttachment } from "./editable-user-message";
 import type { HookRunChipData } from "./hook-run-chip";
+import type { McpToolOutput } from "./mcp-app-container";
 
 export type OptimisticToolCall = {
   toolCallId: string;
@@ -150,35 +152,6 @@ export function extractOwnedAppRender(params: {
 }
 
 /**
- * Collapse the render registry to one entry per distinct app, for display
- * surfaces that must not repeat an app (the right-panel app switcher). Owned
- * apps collapse by `appId` keeping the latest render (max `createdAt`); external
- * MCP-UI renders each stand alone (no `appId`), so they are kept per tool call.
- * The full registry keeps every render so each inline pill stays independently
- * openable — only display consumers dedup.
- */
-export function distinctPanelApps(apps: PanelApp[]): PanelApp[] {
-  const result: PanelApp[] = [];
-  const ownedIndex = new Map<string, number>();
-
-  for (const app of apps) {
-    if (!app.appId) {
-      result.push(app);
-      continue;
-    }
-    const existing = ownedIndex.get(app.appId);
-    if (existing === undefined) {
-      ownedIndex.set(app.appId, result.length);
-      result.push(app);
-    } else if (app.createdAt >= result[existing].createdAt) {
-      result[existing] = app;
-    }
-  }
-
-  return result;
-}
-
-/**
  * Derive the list of MCP Apps for a conversation directly from its messages
  * (plus any early UI-start data from the active stream).
  *
@@ -196,8 +169,8 @@ export function distinctPanelApps(apps: PanelApp[]): PanelApp[] {
  * openable and expands its app under itself. Owned apps always resolve to the
  * latest version at render time (their runtime endpoint is keyed by `appId`), so
  * a stale render still shows current content. Display surfaces that must not
- * repeat an app (the right-panel switcher) collapse the registry via
- * {@link distinctPanelApps} instead of the registry deduping here.
+ * repeat an app fold the registry into per-app groups (see `buildAppGroups`)
+ * instead of the registry deduping here.
  */
 
 /**
@@ -233,6 +206,31 @@ export function deriveAppsFromMessages(
         earlyToolUiStarts[part.toolCallId],
       );
 
+      // An owned app rendered by its own render (e.g. its `__open` launch tool)
+      // carries a `ui://archestra-app/<appId>` URI. Route it by `appId` to the
+      // app-bound endpoint so its SDK storage and app-scoped tool calls reach
+      // `/api/mcp/app/:appId`, not the generic agent gateway. Its head version
+      // is served from that endpoint, so the inline result isn't seeded.
+      const uriAppId = outputUri
+        ? parseArchestraAppResourceUri(outputUri)
+        : null;
+      if (uriAppId) {
+        seen.add(part.toolCallId);
+        apps.push({
+          toolCallId: part.toolCallId,
+          label: mcpToolLabel(fullToolName),
+          uiResourceUri: outputUri as string,
+          appId: uriAppId,
+          toolName: resolveRunToolTargetName(part, fullToolName, {
+            getToolShortName,
+          }),
+          version: null,
+          createdAt: createdAt ?? 0,
+        });
+
+        continue;
+      }
+
       // An external MCP-UI render carries its own URI in the result. It never
       // dedups: the same URI can represent entirely different content across
       // calls (e.g. Excalidraw drawing different pictures), so each tool call is
@@ -245,7 +243,22 @@ export function deriveAppsFromMessages(
           uiResourceUri: outputUri,
           appId: null,
           mcpServerId,
-          toolName: fullToolName,
+          // Unwrap run_tool so the server prefix matches the inline render.
+          toolName: resolveRunToolTargetName(part, fullToolName, {
+            getToolShortName,
+          }),
+          // Seed the panel-hosted iframe with the tool result exactly like the
+          // inline render, so it doesn't re-call its source tool on mount.
+          rawOutput: part.output as McpToolOutput,
+          // Unwrap run_tool's tool_args so the seeded input matches inline.
+          toolInput:
+            getToolShortName(fullToolName) === TOOL_RUN_TOOL_SHORT_NAME
+              ? ((
+                  part.input as
+                    | { tool_args?: Record<string, unknown> }
+                    | undefined
+                )?.tool_args ?? null)
+              : ((part.input as Record<string, unknown> | undefined) ?? null),
           version: null,
           createdAt: createdAt ?? 0,
         });

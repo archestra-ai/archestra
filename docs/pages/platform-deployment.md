@@ -892,8 +892,8 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Example: `archestra-prod/`
 
 - **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
-  - Default: `enabled`
-  - Set to `disabled` to opt-out of analytics
+  - Default: `enabled` in production builds (`NODE_ENV=production`, which includes the released Docker images); disabled in development/test environments
+  - Set to `disabled` to opt-out of analytics, or `enabled` to force it on regardless of environment
 
 - **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key used when analytics is enabled.
   - Default: Archestra's hosted PostHog project key
@@ -1191,6 +1191,11 @@ Enable polling compatibility only when your database endpoint cannot keep sessio
   - This is a client-side convenience nudge, not a data-loss-prevention control: it runs in the browser and can be bypassed with "Send anyway".
   - Detection runs entirely in the browser — no message content is sent to the backend for scanning. The flag is read from the backend at runtime via `/api/config`, so toggling it does not require a frontend rebuild.
   - Values: `true`, `false`
+
+- **`ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS`** - Upper bound on the output tokens an agent turn (interactive chat and A2A/headless) may generate.
+  - Default: `32768`
+  - Each turn already requests the model's real output ceiling instead of the provider/SDK default that truncated large tool-call payloads and final submission turns. This variable caps that request for cost control: the turn uses `min(this value, the model's real output ceiling)`, and unsynced models fall back to `8192`.
+  - Lower it to constrain spend; raise it for models whose useful outputs exceed 32768 tokens.
 
 ### MCP Apps Sandbox
 

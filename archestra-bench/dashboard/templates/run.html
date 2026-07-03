@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ id }} — bench dashboard{% endblock %}
 {% block content %}
+<p class="crumb"><a href="/">← runs</a></p>
 <h1>{{ id }} <span class="badge {{ rubric_badge.class }}">{{ rubric_badge.label }}</span></h1>
 <p class="muted">{{ date }}</p>
 
@@ -9,20 +10,24 @@
 {% endfor %}
 
 <section>
-    <h2>Metrics</h2>
-    <table class="kv">
-        <tbody>
-        {% for row in summary %}
-            <tr><th>{{ row.label }}</th><td>{{ row.value }}</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
+    <div class="stats">
+    {% for row in summary %}
+        <div class="stat"><span class="stat-label">{{ row.label }}</span><span class="stat-value">{{ row.value }}</span></div>
+    {% endfor %}
+    </div>
+    {% if !outcome_pills.is_empty() %}
+    <div class="pills">
+    {% for o in outcome_pills %}
+        <span class="pill {{ o.class }}">{{ o.label }} <b>{{ o.count }}</b></span>
+    {% endfor %}
+    </div>
+    {% endif %}
 </section>
 
 {% if !hacking.is_empty() %}
-<section class="hacking">
-    <h2>Reward hacking suspected</h2>
-    <ul>
+<section class="card danger">
+    <h2>⚠ Reward hacking suspected</h2>
+    <ul class="hack-list">
     {% for h in hacking %}
         <li><a href="{{ h.href }}">{{ h.id }}</a>{% if !h.evidence.is_empty() %} — <em>{{ h.evidence }}</em>{% endif %}</li>
     {% endfor %}
@@ -33,16 +38,30 @@
 {% if has_rubrics %}
 <section>
     <h2>Rubric averages by lane</h2>
+    <div class="card table-card">
     <table>
         <thead>
-            <tr><th>rubric</th>{% for lane in lanes %}<th>{{ lane }}</th>{% endfor %}</tr>
+            <tr><th>rubric</th>{% for lane in lanes %}<th>{{ lane }}</th>{% endfor %}<th class="avg-col">avg</th></tr>
         </thead>
         <tbody>
         {% for row in rubric_rows %}
-            <tr><th>{{ row.label }}</th>{% for v in row.values %}<td>{{ v }}</td>{% endfor %}</tr>
+            <tr><th>{{ row.label }}</th>{% for v in row.values %}<td>{{ v }}</td>{% endfor %}<td class="avg-col">{{ row.avg }}</td></tr>
         {% endfor %}
         </tbody>
     </table>
+    </div>
+</section>
+{% endif %}
+
+{% if !reports.is_empty() %}
+<section>
+    <h2>Analysis reports</h2>
+    {% for report in reports %}
+    <details class="report">
+        <summary><strong>{{ report.label }}</strong> <span class="muted">{{ report.filename }}</span></summary>
+        <article class="trajectory">{{ report.html|safe }}</article>
+    </details>
+    {% endfor %}
 </section>
 {% endif %}
 

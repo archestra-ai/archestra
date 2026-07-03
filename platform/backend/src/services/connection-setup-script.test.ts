@@ -222,6 +222,13 @@ describe("renderSetupScript", () => {
     expect(script).toContain("AWS_BEARER_TOKEN_BEDROCK");
     // The secret goes to the profile-paste block, not the settings merge env.
     expect(script).not.toContain(`ARCHESTRA_SET_ENV_AWS_BEARER_TOKEN_BEDROCK`);
+    // The client-attribution header rides along for Bedrock too (no passthrough
+    // key in virtual-key mode, so only the agent-id line).
+    expect(script).toContain(
+      "export ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS",
+    );
+    expect(script).toContain(AGENT_ID_HEADER_LINE);
+    expect(script).not.toContain("X-Archestra-Virtual-Key");
   });
 
   test("claude-code anthropic passthrough: injects the attribution header, not an auth token", async () => {
@@ -262,7 +269,7 @@ describe("renderSetupScript", () => {
     expect(script).toContain("ANTHROPIC_BASE_URL");
   });
 
-  test("claude-code bedrock: never gets the anthropic attribution header", () => {
+  test("claude-code bedrock passthrough: injects both attribution headers, no bearer token", async () => {
     const script = renderSetupScript({
       ...fullContext("claude-code"),
       mcp: null,
@@ -272,15 +279,20 @@ describe("renderSetupScript", () => {
         provider: "bedrock",
         providerLabel: "Bedrock",
         url: "https://archestra.example.com/v1/bedrock/profile-123",
-        // even if a value is present, the bedrock section ignores it
-        passthroughVirtualKey: "arch_passthroughcafe",
       },
     });
-    // The bedrock section never exports the attribution header.
-    expect(script).not.toContain(
+    await expectValidBash(script);
+    // ANTHROPIC_CUSTOM_HEADERS applies to the Bedrock transport too, so both
+    // attribution headers are appended exactly like the Anthropic section.
+    expect(script).toContain(
       "export ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS",
     );
-    expect(script).not.toContain("X-Archestra-Virtual-Key");
+    expect(script).toContain(AGENT_ID_HEADER_LINE);
+    expect(script).toContain("X-Archestra-Virtual-Key: arch_passthroughcafe");
+    expect(script).toContain("CLAUDE_CODE_USE_BEDROCK");
+    // Passthrough: the user's own AWS credentials keep working — no bearer
+    // token export is printed.
+    expect(script).not.toContain("AWS_BEARER_TOKEN_BEDROCK");
   });
 
   test("claude-code passthrough merge: preserves existing headers, no duplicate on re-run", async () => {
@@ -508,7 +520,7 @@ describe("renderSetupScript (windows)", () => {
     expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
   });
 
-  test("claude-code bedrock: no attribution header (PowerShell)", () => {
+  test("claude-code bedrock passthrough: appends the attribution headers (PowerShell)", () => {
     const script = renderSetupScript({
       ...fullContext("claude-code", "windows"),
       mcp: null,
@@ -518,10 +530,12 @@ describe("renderSetupScript (windows)", () => {
         provider: "bedrock",
         providerLabel: "Bedrock",
         url: "https://archestra.example.com/v1/bedrock/profile-123",
-        passthroughVirtualKey: "arch_passthroughcafe",
       },
     });
-    expect(script).not.toContain("ANTHROPIC_CUSTOM_HEADERS");
+    expect(script).toContain("ANTHROPIC_CUSTOM_HEADERS");
+    expect(script).toContain(AGENT_ID_HEADER_LINE);
+    expect(script).toContain("X-Archestra-Virtual-Key: arch_passthroughcafe");
+    expect(script).toContain("CLAUDE_CODE_USE_BEDROCK");
   });
 
   test("codex: marker-delimited TOML block dropped before append (idempotent)", () => {

@@ -47,6 +47,7 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
 vi.mock("@/clients/mcp-client", () => ({
   default: {
     executeToolCallForOwner: vi.fn(),
+    resolveUiAppInstallIdForCaller: vi.fn().mockResolvedValue(null),
   },
 }));
 
@@ -62,6 +63,8 @@ vi.mock("@/services/identity-providers/session-token", () => ({
 
 beforeEach(() => {
   vi.mocked(mcpClient.executeToolCallForOwner).mockReset();
+  vi.mocked(mcpClient.resolveUiAppInstallIdForCaller).mockReset();
+  vi.mocked(mcpClient.resolveUiAppInstallIdForCaller).mockResolvedValue(null);
   vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
   vi.mocked(StreamableHTTPClientTransport).mockClear();
 });
@@ -247,6 +250,58 @@ describe("normalizeJsonSchema", () => {
   test("does not modify non-object schemas", () => {
     const schema = { type: "string" };
     expect(normalizeJsonSchema(schema)).toEqual({ type: "string" });
+  });
+
+  test("gives untyped nodes an explicit type (Gemini/Vertex rejects untyped schema nodes)", () => {
+    // posthog__cohorts-partial-update shape: `query` is zod.unknown().nullable(),
+    // which serializes to a bare {} branch that Vertex 400s on — even behind
+    // OpenRouter when it routes the model to a Google-hosted deployment.
+    const schema = {
+      type: "object",
+      properties: {
+        query: { anyOf: [{}, { type: "null" }] },
+        payload: {},
+        config: { properties: { a: { type: "string" } } },
+        tags: { items: { type: "string" } },
+        mode: { enum: ["fast", "slow"] },
+        count: { enum: [1, 2] },
+        linked: { $ref: "#/$defs/Thing" },
+      },
+      $defs: { Thing: { type: "string" } },
+    };
+    expect(normalizeJsonSchema(schema)).toEqual({
+      type: "object",
+      properties: {
+        query: {
+          anyOf: [
+            { type: "object", additionalProperties: true },
+            { type: "null" },
+          ],
+        },
+        payload: { type: "object", additionalProperties: true },
+        config: {
+          type: "object",
+          properties: { a: { type: "string" } },
+          additionalProperties: false,
+        },
+        tags: { type: "array", items: { type: "string" } },
+        mode: { type: "string", enum: ["fast", "slow"] },
+        count: { type: "integer", enum: [1, 2] },
+        linked: { $ref: "#/$defs/Thing" },
+      },
+      $defs: { Thing: { type: "string" } },
+      additionalProperties: false,
+    });
+  });
+
+  test("keeps a bare any-node open instead of clamping it with additionalProperties: false", () => {
+    const result = normalizeJsonSchema({
+      type: "object",
+      properties: { anything: {} },
+    });
+    expect(
+      (result.properties as Record<string, Record<string, unknown>>).anything,
+    ).toEqual({ type: "object", additionalProperties: true });
   });
 
   test("does not mutate the original schema", () => {
@@ -2210,6 +2265,87 @@ describe("buildArchestraToolOutput", () => {
       content: "Diagram displayed!",
       _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } },
     });
+  });
+
+  test("stamps the resolved install id onto the dispatched app's UI so callbacks bind to the server", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+    // The resolver (unit-tested against the DB in mcp-client.test.ts) yields the
+    // caller's install; here we assert buildArchestraToolOutput surfaces it on
+    // _meta.ui.mcpServerId. Without it the app's SDK callServerTool misroutes to
+    // the agent gateway ("No tool named ..."); with it chat mounts callbacks
+    // against POST /api/mcp/server/<install>.
+    vi.mocked(mcpClient.resolveUiAppInstallIdForCaller).mockResolvedValue(
+      "install-123",
+    );
+
+    const result = await buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      _meta: {
+        ui: {
+          resourceUri: "ui://excalidraw/mcp-app.html",
+          mcpServerId: "install-123",
+        },
+      },
+    });
+  });
+
+  test("omits mcpServerId when the resolver returns null (owned-app backing / unreachable install)", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+    // The resolver returns null for owned-app backings (routed by app id via
+    // render_app) and when no install is reachable — the UI must render without
+    // a spurious server binding.
+    vi.mocked(mcpClient.resolveUiAppInstallIdForCaller).mockResolvedValue(null);
+
+    const result = await buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } },
+    });
+    expect(
+      (result as unknown as { _meta: { ui: Record<string, unknown> } })._meta
+        .ui,
+    ).not.toHaveProperty("mcpServerId");
   });
 
   test("does not attach the UI resource for an all-tools agent when the target tool is not accessible", async ({

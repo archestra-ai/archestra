@@ -8,6 +8,7 @@ import {
   type ModelsDevApiResponse,
   modelsDevClient,
   modelsDevCostToPerToken,
+  sanitizeOutputLimit,
 } from "@/clients/models-dev-client";
 import logger from "@/logging";
 import {
@@ -237,6 +238,7 @@ export const modelSyncService = new ModelSyncService();
 interface ProviderModelCapabilities {
   description: string | null;
   contextLength: number | null;
+  outputLength: number | null;
   inputModalities: ModelInputModality[] | null;
   outputModalities: ModelOutputModality[] | null;
   supportsToolCalling: boolean | null;
@@ -286,6 +288,7 @@ export function buildModelsToUpsert(params: {
       modelId: model.id,
       description: capabilities.description,
       contextLength: capabilities.contextLength,
+      outputLength: capabilities.outputLength,
       inputModalities: capabilities.inputModalities,
       outputModalities: capabilities.outputModalities,
       supportsToolCalling: capabilities.supportsToolCalling,
@@ -371,6 +374,8 @@ export function resolveModelCapabilities(params: {
         fetched?.contextLength ??
         capabilities?.contextLength ??
         inferredCapabilities.contextLength,
+      outputLength:
+        capabilities?.outputLength ?? inferredCapabilities.outputLength,
       inputModalities:
         capabilities?.inputModalities ?? inferredCapabilities.inputModalities,
       outputModalities:
@@ -436,6 +441,7 @@ function buildCapabilitiesMap(
       map.set(model.id, {
         description: model.name,
         contextLength: model.limit?.context ?? null,
+        outputLength: sanitizeOutputLimit(model.limit?.output),
         inputModalities,
         outputModalities,
         supportsToolCalling: model.tool_call ?? null,
@@ -574,6 +580,7 @@ function emptyCapabilities(): ProviderModelCapabilities {
   return {
     description: null,
     contextLength: null,
+    outputLength: null,
     inputModalities: null,
     outputModalities: null,
     supportsToolCalling: null,

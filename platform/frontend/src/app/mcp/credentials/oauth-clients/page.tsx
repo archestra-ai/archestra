@@ -1,6 +1,9 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import type {
+  archestraApiTypes,
+  ResourceVisibilityScope,
+} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -11,7 +14,9 @@ import {
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
+import { OauthClientVisibilityField } from "@/components/oauth-client-visibility-field";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +32,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
+import { useSession } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   useCreateMcpOauthClient,
@@ -97,6 +103,8 @@ export default function OAuthClientsPage() {
   const updateMutation = useUpdateMcpOauthClient();
   const rotateMutation = useRotateMcpOauthClientSecret();
   const deleteMutation = useDeleteMcpOauthClient();
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [createdCredentials, setCreatedCredentials] =
@@ -160,6 +168,19 @@ export default function OAuthClientsPage() {
         ),
       },
       {
+        id: "visibility",
+        header: "Accessible to",
+        cell: ({ row }) => (
+          <ResourceVisibilityBadge
+            scope={row.original.scope}
+            teams={row.original.teams}
+            authorId={row.original.authorId}
+            authorName={row.original.authorName}
+            currentUserId={currentUserId}
+          />
+        ),
+      },
+      {
         accessorKey: "createdAt",
         header: "Created",
         cell: ({ row }) => (
@@ -195,7 +216,7 @@ export default function OAuthClientsPage() {
         ),
       },
     ],
-    [],
+    [currentUserId],
   );
 
   return (
@@ -355,6 +376,8 @@ function CreateOAuthClientDialog({
   const [grantType, setGrantType] = useState<GrantType>("client_credentials");
   const [selectedGatewayIds, setSelectedGatewayIds] = useState<string[]>([]);
   const [redirectUrisText, setRedirectUrisText] = useState("");
+  const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
+  const [teamIds, setTeamIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (open) {
@@ -362,6 +385,8 @@ function CreateOAuthClientDialog({
       setGrantType("client_credentials");
       setSelectedGatewayIds([]);
       setRedirectUrisText("");
+      setScope("personal");
+      setTeamIds([]);
     }
   }, [open]);
 
@@ -369,6 +394,7 @@ function CreateOAuthClientDialog({
   const isAuthorizationCode = grantType === "authorization_code";
   const canSubmit =
     name.trim().length > 0 &&
+    (scope !== "team" || teamIds.length > 0) &&
     (isAuthorizationCode
       ? redirectUris.length > 0
       : selectedGatewayIds.length > 0);
@@ -383,20 +409,14 @@ function CreateOAuthClientDialog({
       <DialogForm
         onSubmit={async (event) => {
           event.preventDefault();
-          await onSubmit(
-            isAuthorizationCode
-              ? {
-                  name: name.trim(),
-                  grantType,
-                  redirectUris,
-                  allowedGatewayIds: selectedGatewayIds,
-                }
-              : {
-                  name: name.trim(),
-                  grantType,
-                  allowedGatewayIds: selectedGatewayIds,
-                },
-          );
+          await onSubmit({
+            name: name.trim(),
+            grantType,
+            allowedGatewayIds: selectedGatewayIds,
+            ...(isAuthorizationCode && { redirectUris }),
+            scope,
+            teams: scope === "team" ? teamIds : [],
+          });
         }}
       >
         <DialogBody className="space-y-4">
@@ -439,6 +459,14 @@ function CreateOAuthClientDialog({
               />
             </div>
           )}
+
+          <OauthClientVisibilityField
+            resource="mcpOauthClient"
+            scope={scope}
+            onScopeChange={setScope}
+            teamIds={teamIds}
+            onTeamIdsChange={setTeamIds}
+          />
         </DialogBody>
         <DialogStickyFooter>
           <Button
@@ -476,12 +504,16 @@ function EditOAuthClientDialog({
   const [name, setName] = useState("");
   const [selectedGatewayIds, setSelectedGatewayIds] = useState<string[]>([]);
   const [redirectUrisText, setRedirectUrisText] = useState("");
+  const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
+  const [teamIds, setTeamIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!oauthClient) return;
     setName(oauthClient.name);
     setSelectedGatewayIds(oauthClient.allowedGatewayIds);
     setRedirectUrisText(oauthClient.redirectUris.join("\n"));
+    setScope(oauthClient.scope);
+    setTeamIds(oauthClient.teams.map((team) => team.id));
   }, [oauthClient]);
 
   // The grant type is fixed at creation, so only its own configuration is editable.
@@ -490,6 +522,7 @@ function EditOAuthClientDialog({
   const canSubmit =
     !!oauthClient &&
     name.trim().length > 0 &&
+    (scope !== "team" || teamIds.length > 0) &&
     (isAuthorizationCode
       ? redirectUris.length > 0
       : selectedGatewayIds.length > 0);
@@ -509,21 +542,14 @@ function EditOAuthClientDialog({
         onSubmit={async (event) => {
           event.preventDefault();
           if (!oauthClient) return;
-          await onSubmit(
-            oauthClient.id,
-            isAuthorizationCode
-              ? {
-                  name: name.trim(),
-                  grantType: oauthClient.grantType,
-                  redirectUris,
-                  allowedGatewayIds: selectedGatewayIds,
-                }
-              : {
-                  name: name.trim(),
-                  grantType: oauthClient.grantType,
-                  allowedGatewayIds: selectedGatewayIds,
-                },
-          );
+          await onSubmit(oauthClient.id, {
+            name: name.trim(),
+            grantType: oauthClient.grantType,
+            allowedGatewayIds: selectedGatewayIds,
+            ...(isAuthorizationCode && { redirectUris }),
+            scope,
+            teams: scope === "team" ? teamIds : [],
+          });
         }}
       >
         <DialogBody className="space-y-4">
@@ -564,6 +590,15 @@ function EditOAuthClientDialog({
               />
             </div>
           )}
+
+          <OauthClientVisibilityField
+            resource="mcpOauthClient"
+            scope={scope}
+            onScopeChange={setScope}
+            teamIds={teamIds}
+            onTeamIdsChange={setTeamIds}
+            initialScope={oauthClient?.scope}
+          />
         </DialogBody>
         <DialogStickyFooter>
           <Button

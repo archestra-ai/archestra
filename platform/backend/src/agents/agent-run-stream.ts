@@ -16,7 +16,7 @@
 import { streamText } from "ai";
 import logger from "@/logging";
 import {
-  parseMaxInputTokens,
+  parseContextLengthError,
   trimMessagesToTokenLimit,
 } from "@/routes/chat/context-trimming";
 import { EmptyModelResponseError } from "@/routes/chat/errors";
@@ -132,23 +132,25 @@ export async function runAgentStream(params: {
     }
 
     if (probe.kind === "error") {
-      const maxTokens = parseMaxInputTokens(probe.error);
+      const contextError = parseContextLengthError(probe.error);
       if (
-        maxTokens !== null &&
+        contextError !== null &&
         Array.isArray(config.messages) &&
         contextTrimAttempts < MAX_CONTEXT_TRIM_ATTEMPTS
       ) {
         contextTrimAttempts++;
         const trimmed = trimMessagesToTokenLimit({
           messages: config.messages,
-          maxTokens,
+          maxTokens: contextError.maxInputTokens,
+          requestedTokens: contextError.requestedTokens,
           systemPrompt:
             typeof config.system === "string" ? config.system : undefined,
         });
         logger.info(
           {
             ...logContext,
-            maxTokens,
+            maxTokens: contextError.maxInputTokens,
+            requestedTokens: contextError.requestedTokens,
             originalMessages: config.messages.length,
             trimmedMessages: trimmed.length,
           },

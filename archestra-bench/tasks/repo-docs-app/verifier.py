@@ -1,10 +1,16 @@
 """Verify the agent authored an app that wires the DeepWiki (3rd-party MCP) integration.
 
 Reads BENCH_STATE: `rest` holds the `/api/apps?search=...` snapshot captured after the run, and
-`tool_calls` holds the run's ordered tool invocations. `/api/apps` returns a discriminated union --
-keep `source == "owned"` rows. Wiring is proven from the `scaffold_app` call's `tools` arg: a tool
-name only resolves (and the app only gets created) if it exists in the org environment, so a wired
-`deepwiki__*` name is a real signal, not a memorizable proxy.
+`tool_calls` holds the run's ordered tool invocations (name + input only, no outputs). `/api/apps`
+returns a discriminated union -- keep `source == "owned"` rows. Wiring is proven from the
+`scaffold_app` call's `tools` arg: a tool name only resolves (and the app only gets created) if it
+exists in the org environment, so a wired `deepwiki__*` name is a real signal, not a memorizable
+proxy.
+
+The app's answers come from DeepWiki, so the trajectory must also show the agent observed a
+`deepwiki__*` tool's real output -- a direct call or a `preview_app_tool` naming one -- rather than
+authoring parsing code against a guessed result shape. Residual: tool_calls carry no outputs, so a
+call that errored counts the same as one that succeeded.
 """
 
 import json
@@ -52,4 +58,19 @@ def test_wires_deepwiki() -> None:
             wired += [str(t) for t in (inp.get("tools") or [])]
     assert any("deepwiki__" in t for t in wired), (
         f"the app was not wired to a DeepWiki tool at scaffold time; tools wired: {wired}"
+    )
+
+
+def test_observed_deepwiki_output() -> None:
+    observed = any(
+        name
+        and (
+            "deepwiki__" in name
+            or (name.endswith("__preview_app_tool") and "deepwiki__" in str(inp.get("toolName", "")))
+        )
+        for name, inp in _calls()
+    )
+    assert observed, (
+        "no deepwiki__* call (direct or via preview_app_tool) anywhere in the trajectory; "
+        "the answer view was authored against a guessed result shape, never the tool's real output"
     )

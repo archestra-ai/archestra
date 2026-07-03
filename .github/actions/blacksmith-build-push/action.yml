@@ -49,15 +49,9 @@ inputs:
     required: false
     default: ""
 outputs:
-  imageid:
-    description: Built image ID.
-    value: ${{ steps.build.outputs.imageid }}
   digest:
     description: Built image digest.
     value: ${{ steps.build.outputs.digest }}
-  metadata:
-    description: Build metadata.
-    value: ${{ steps.build.outputs.metadata }}
 runs:
   using: composite
   steps:

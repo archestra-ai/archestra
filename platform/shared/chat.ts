@@ -415,8 +415,32 @@ export const ChatMessageMetadataSchema = z
   .object({
     skill: ChatSkillMetadataSchema.optional(),
     appDiagnostics: ChatAppDiagnosticsMetadataSchema.optional(),
+    /**
+     * Marks a `!`-prefixed user message the composer submitted for direct
+     * sandbox execution (no LLM turn). A marker only — the command is always
+     * re-derived server-side from the message text via `parseSandboxCommand`,
+     * so a forged marker can never execute anything other than what the
+     * transcript shows.
+     */
+    sandboxCommand: z.literal(true).optional(),
   })
   .passthrough();
+
+/**
+ * Parse a `!`-prefixed chat message into the shell command it requests
+ * (Claude Code's `!` convention). Returns null for anything else, including a
+ * bare `!` — those submit as ordinary messages. Used by the composer to decide
+ * whether to mark a message and by the chat route to derive the command to
+ * execute; both sides must agree, which is why it lives in shared.
+ */
+export function parseSandboxCommand(text: string): { command: string } | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("!")) {
+    return null;
+  }
+  const command = trimmed.slice(1).trim();
+  return command.length > 0 ? { command } : null;
+}
 
 // ============================================================================
 // Zod Schemas for Model Modalities

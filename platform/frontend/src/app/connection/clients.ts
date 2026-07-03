@@ -223,6 +223,13 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
 }`,
               },
               {
+                title: "Add your personal auth key header",
+                body: "Add ANTHROPIC_CUSTOM_HEADERS to the same env block and set to the value below to authenticate on the LLM Proxy.",
+                showPassthroughKey: true,
+                passthroughKeyVariant: "env",
+                passthroughKeyAgentId: CLAUDE_CODE_CLIENT_ID,
+              },
+              {
                 title: "Export your Bedrock API key in the shell",
                 body: "Keep the token out of files on disk.",
                 language: "bash",

@@ -31,7 +31,7 @@ import {
 import {
   assertCallerMayModifyApp,
   callerIsAppAdmin,
-  resolveOrgTeamIds,
+  resolveOrgTeams,
 } from "@/services/apps/app-authorization";
 import {
   createSeededAppConversation,
@@ -243,7 +243,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ body, user, organizationId }, reply) => {
       const scope = body.scope ?? "personal";
-      const teamIds = await resolveOrgTeamIds(body.teamIds, organizationId);
+      const teamIds = await resolveOrgTeams(body.teamIds, organizationId);
       if (scope === "team" && teamIds.length === 0) {
         throw new ApiError(
           400,
@@ -442,7 +442,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const resourceTeamIds = await AppAccessModel.getTeamsForApp(app.id);
       const nextTeamIds =
         body.teamIds !== undefined
-          ? await resolveOrgTeamIds(body.teamIds, organizationId)
+          ? await resolveOrgTeams(body.teamIds, organizationId)
           : undefined;
 
       await assertCallerMayModifyApp({

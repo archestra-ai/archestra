@@ -133,10 +133,14 @@ async function runAppLlmCompletion(
     });
     return structuredSuccessResult({ text: result.text }, result.text);
   } catch (error) {
-    // 429 covers both the org token-cost limit and an upstream provider rate
-    // limit; both warrant the same app action (back off and retry), so the
-    // message does not assert a single cause.
-    if (APICallError.isInstance(error) && error.statusCode === 429) {
+    // 429 is an upstream provider rate limit; 402 is the Archestra token-cost
+    // limit block. Both surface to apps as llm_quota — the app-visible action
+    // (stop and back off) is the same, so the message does not assert a
+    // single cause.
+    if (
+      APICallError.isInstance(error) &&
+      (error.statusCode === 429 || error.statusCode === 402)
+    ) {
       return llmErrorResult(
         "llm_quota",
         "The LLM call was rate-limited or has reached its usage limit — back off and retry.",

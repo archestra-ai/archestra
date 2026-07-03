@@ -254,6 +254,11 @@ export function buildMcpGatewayTool(params: {
               agentId: ctx.agentId,
               userId: ctx.userId,
               organizationId: ctx.organizationId,
+              tokenAuth: buildTokenAuthContext({
+                mcpGwToken: ctx.mcpGwToken,
+                organizationId: ctx.organizationId,
+                userId: ctx.userId,
+              }),
             });
           } else {
             // Execute non-Archestra tools via shared helper with browser sync
@@ -491,6 +496,13 @@ export async function buildArchestraToolOutput(params: {
    */
   userId?: string;
   organizationId?: string;
+  /**
+   * Caller auth used to resolve the concrete install (own→team→org) backing a
+   * run_tool-dispatched external MCP App's UI resource, so its callbacks bind to
+   * that install. Omit when the caller can't reach external UI tools; the app
+   * then renders without a server binding (unchanged legacy behaviour).
+   */
+  tokenAuth?: TokenAuthContext;
 }): Promise<
   | string
   | {
@@ -500,8 +512,15 @@ export async function buildArchestraToolOutput(params: {
       rawContent?: ContentBlock[];
     }
 > {
-  const { response, toolName, toolArguments, agentId, userId, organizationId } =
-    params;
+  const {
+    response,
+    toolName,
+    toolArguments,
+    agentId,
+    userId,
+    organizationId,
+    tokenAuth,
+  } = params;
   // Never stringify an image block into the text summary — its base64 would
   // bloat context and evade the history image-stripper. Images ride rawContent
   // and reach the model as bounded media parts via toModelOutput instead.
@@ -600,9 +619,22 @@ export async function buildArchestraToolOutput(params: {
     return text;
   }
 
+  // Bind the app's callbacks to the concrete install so its SDK `callServerTool`
+  // reaches the originating server (POST /api/mcp/server/:id) rather than the
+  // agent gateway (which rejects the bare tool name). This run_tool path is how
+  // an all-tools agent opens an external app — the tool is unassigned, so only
+  // the dynamic-access resolution above (and this install lookup) can bind it.
+  // Owned-app backings resolve to null and keep their app-id routing.
+  const mcpServerId = await mcpClient
+    .resolveUiAppInstallIdForCaller(resourceUri, agentId, tokenAuth)
+    .catch(() => null);
+
   return {
     content: text,
-    _meta: { ...response._meta, ui: { resourceUri } },
+    _meta: {
+      ...response._meta,
+      ui: { resourceUri, ...(mcpServerId ? { mcpServerId } : {}) },
+    },
     structuredContent: response.structuredContent as
       | Record<string, unknown>
       | undefined,
@@ -1495,12 +1527,144 @@ function normalizeJsonSchema(schema: unknown): JSONSchema7 {
     return fallbackSchema;
   }
 
+  // Give every subschema an explicit `type`. MCP servers may emit untyped
+  // nodes (e.g. zod `z.unknown()` becomes a bare `{}`), which are valid JSON
+  // Schema but rejected by providers with strict function-call validation —
+  // Gemini/Vertex 400s with "schema didn't specify the schema type field",
+  // and that can surface even behind OpenRouter when it routes a model to a
+  // Google-hosted deployment.
+  const typed = ensureExplicitSchemaTypes(schema);
+
   // Add additionalProperties: false to all object-type schemas recursively.
   // This is required for OpenAI-compatible providers (Ollama, vLLM) to properly
   // emit streaming tool calls instead of outputting tool calls as text content.
   // Without it, models hallucinate extra properties and providers may fail to
   // recognize the output as a tool call in streaming mode.
-  return addAdditionalPropertiesFalse(schema) as JSONSchema7;
+  return addAdditionalPropertiesFalse(typed) as JSONSchema7;
+}
+
+// JSON-schema keywords whose value is a map of named subschemas
+const SUBSCHEMA_MAP_KEYS = [
+  "properties",
+  "patternProperties",
+  "$defs",
+  "definitions",
+] as const;
+
+// JSON-schema keywords whose value is an array of subschemas
+const SUBSCHEMA_ARRAY_KEYS = [
+  "anyOf",
+  "oneOf",
+  "allOf",
+  "prefixItems",
+] as const;
+
+// JSON-schema keywords whose value is a single subschema
+const SINGLE_SUBSCHEMA_KEYS = [
+  "additionalProperties",
+  "items",
+  "contains",
+  "not",
+] as const;
+
+/**
+ * Recursively ensures every schema node carries an explicit `type` (or is a
+ * `$ref` / an `anyOf`/`oneOf`/`allOf` composite whose branches are typed).
+ * The type is inferred from structural keywords when possible; a completely
+ * bare "accept anything" node (`{}`) becomes an open object — the same
+ * fallback Google's own SDKs and LiteLLM apply for Vertex compatibility.
+ */
+function ensureExplicitSchemaTypes(
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = { ...schema };
+
+  for (const key of SUBSCHEMA_MAP_KEYS) {
+    const map = result[key];
+    if (isRecord(map)) {
+      const newMap: Record<string, unknown> = {};
+      for (const [name, sub] of Object.entries(map)) {
+        newMap[name] = isRecord(sub) ? ensureExplicitSchemaTypes(sub) : sub;
+      }
+      result[key] = newMap;
+    }
+  }
+
+  for (const key of SUBSCHEMA_ARRAY_KEYS) {
+    const arr = result[key];
+    if (Array.isArray(arr)) {
+      result[key] = arr.map((sub) =>
+        isRecord(sub) ? ensureExplicitSchemaTypes(sub) : sub,
+      );
+    }
+  }
+
+  for (const key of SINGLE_SUBSCHEMA_KEYS) {
+    const sub = result[key];
+    if (isRecord(sub)) {
+      result[key] = ensureExplicitSchemaTypes(sub);
+    }
+  }
+
+  // `items` may also be the (deprecated) tuple form
+  if (Array.isArray(result.items)) {
+    result.items = result.items.map((sub) =>
+      isRecord(sub) ? ensureExplicitSchemaTypes(sub) : sub,
+    );
+  }
+
+  if (result.type !== undefined || typeof result.$ref === "string") {
+    return result;
+  }
+  // Composite nodes are typed via their branches
+  if (
+    Array.isArray(result.anyOf) ||
+    Array.isArray(result.oneOf) ||
+    Array.isArray(result.allOf)
+  ) {
+    return result;
+  }
+
+  const inferred = inferSchemaType(result);
+  if (inferred) {
+    result.type = inferred;
+    return result;
+  }
+
+  // Bare "any" node: default to an open object. `additionalProperties: true`
+  // is set explicitly so addAdditionalPropertiesFalse doesn't clamp it shut.
+  result.type = "object";
+  result.additionalProperties = true;
+  return result;
+}
+
+/** Infers a JSON-schema `type` from structural keywords, or null for a bare node. */
+function inferSchemaType(node: Record<string, unknown>): string | null {
+  if (
+    isRecord(node.properties) ||
+    isRecord(node.patternProperties) ||
+    Array.isArray(node.required) ||
+    "additionalProperties" in node
+  ) {
+    return "object";
+  }
+  if ("items" in node || "prefixItems" in node || "contains" in node) {
+    return "array";
+  }
+  const literals = Array.isArray(node.enum)
+    ? node.enum
+    : "const" in node
+      ? [node.const]
+      : [];
+  const nonNull = literals.filter((v) => v !== null);
+  if (nonNull.length > 0) {
+    if (nonNull.every((v) => typeof v === "string")) return "string";
+    if (nonNull.every((v) => typeof v === "boolean")) return "boolean";
+    if (nonNull.every((v) => typeof v === "number")) {
+      return nonNull.every((v) => Number.isInteger(v)) ? "integer" : "number";
+    }
+  }
+  return null;
 }
 
 /**

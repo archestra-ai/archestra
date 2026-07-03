@@ -198,6 +198,9 @@ function buildFileHandlingInstruction(
     paragraphs.push(
       `You have a code execution environment: \`${runCommand}\` runs shell commands and Python in a persistent Linux workspace at \`${SKILL_SANDBOX_HOME}\`. Use it to compute, transform files, run scripts, or fetch data when the other tools don't cover the task. Files there persist across commands within this conversation but the user cannot see them. Files the user attached are staged under \`${SKILL_SANDBOX_ATTACHMENTS_DIR}/\` — the on-disk name may be sanitized, so \`ls\` that directory to find them.`,
     );
+    paragraphs.push(
+      `Skill scripts and instructions may assume packages or system binaries this workspace does not have. When a command fails on a missing module or binary, install it or work around it — for example, compute the values directly in Python instead of relying on the missing tool — and make sure the deliverable reflects the workaround, not the broken intermediate state.`,
+    );
   }
 
   if (hasPersistentFiles) {

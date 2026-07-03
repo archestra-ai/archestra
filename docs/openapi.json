@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.80"
+    "version": "1.2.81"
   },
   "components": {
     "schemas": {
@@ -1010,6 +1010,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -5306,6 +5307,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -6975,6 +6977,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -8132,6 +8135,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -9289,6 +9293,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -10463,6 +10468,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -11664,6 +11670,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -12835,6 +12842,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -14612,6 +14620,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -16953,6 +16962,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -18254,6 +18264,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -22742,6 +22753,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -24490,6 +24502,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -25700,6 +25713,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -26910,6 +26924,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -28137,6 +28152,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -29391,6 +29407,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -30616,6 +30633,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -32473,6 +32491,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -34924,6 +34943,7 @@
                       ]
                     },
                     "annotations": {
+                      "nullable": true,
                       "type": "array",
                       "items": {}
                     },
@@ -59359,6 +59379,7 @@
                 "trustedDataPolicy.updated",
                 "trustedDataPolicy.deleted",
                 "trustedDataPolicy.bulk_defaulted",
+                "user.password_reset",
                 "userToken.rotated",
                 "virtualApiKey.created",
                 "virtualApiKey.deleted",
@@ -59610,6 +59631,7 @@
                               "trustedDataPolicy.updated",
                               "trustedDataPolicy.deleted",
                               "trustedDataPolicy.bulk_defaulted",
+                              "user.password_reset",
                               "userToken.rotated",
                               "virtualApiKey.created",
                               "virtualApiKey.deleted",
@@ -65717,6 +65739,7 @@
                                 ]
                               },
                               "annotations": {
+                                "nullable": true,
                                 "type": "array",
                                 "items": {}
                               },
@@ -67413,6 +67436,7 @@
                                 ]
                               },
                               "annotations": {
+                                "nullable": true,
                                 "type": "array",
                                 "items": {}
                               },
@@ -77176,6 +77200,7 @@
                                   "type": "string",
                                   "enum": [
                                     "rate_limit",
+                                    "usage_limit_exceeded",
                                     "authentication",
                                     "permission_denied",
                                     "invalid_request",
@@ -77938,6 +77963,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -78671,6 +78697,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -79445,6 +79472,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -81955,6 +81983,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -83331,6 +83360,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -85020,6 +85050,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -85777,6 +85808,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -86526,6 +86558,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -87285,6 +87318,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
@@ -103469,6 +103503,7 @@
                                 ]
                               },
                               "annotations": {
+                                "nullable": true,
                                 "type": "array",
                                 "items": {}
                               },
@@ -104913,6 +104948,7 @@
                                 ]
                               },
                               "annotations": {
+                                "nullable": true,
                                 "type": "array",
                                 "items": {}
                               },
@@ -109710,6 +109746,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -109995,6 +110032,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -110236,6 +110274,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -110938,6 +110977,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -111179,6 +111219,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -111589,6 +111630,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -111819,6 +111861,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -112229,6 +112272,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -112459,6 +112503,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -112744,6 +112789,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -112985,6 +113031,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -113270,6 +113317,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -113511,6 +113559,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -115743,6 +115792,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -115984,6 +116034,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -116269,6 +116320,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -116510,6 +116562,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -116795,6 +116848,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -117036,6 +117090,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -117321,6 +117376,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -117562,6 +117618,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -117847,6 +117904,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -118088,6 +118146,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -118373,6 +118432,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -118614,6 +118674,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -118899,6 +118960,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -119140,6 +119202,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -119425,6 +119488,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -119655,6 +119719,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -119940,6 +120005,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -120170,6 +120236,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -120455,6 +120522,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -120696,6 +120764,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -120981,6 +121050,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -121222,6 +121292,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -121507,6 +121578,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -121748,6 +121820,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -123784,6 +123857,7 @@
                                                   ]
                                                 },
                                                 "annotations": {
+                                                  "nullable": true,
                                                   "type": "array",
                                                   "items": {}
                                                 },
@@ -124199,6 +124273,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -124440,6 +124515,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -124725,6 +124801,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -124966,6 +125043,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -125064,6 +125142,7 @@
                                                   ]
                                                 },
                                                 "annotations": {
+                                                  "nullable": true,
                                                   "type": "array",
                                                   "items": {}
                                                 },
@@ -125484,6 +125563,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -125725,6 +125805,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "chat:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -126427,6 +126508,7 @@
                                           "type": "string",
                                           "enum": [
                                             "rate_limit",
+                                            "usage_limit_exceeded",
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
@@ -126934,6 +127016,7 @@
                 "chat",
                 "chat:compaction",
                 "chat:title_generation",
+                "chat:tool_call_repair",
                 "skill:description_generation",
                 "chatops:slack",
                 "chatops:ms-teams",
@@ -127046,6 +127129,7 @@
                               "chat",
                               "chat:compaction",
                               "chat:title_generation",
+                              "chat:tool_call_repair",
                               "skill:description_generation",
                               "chatops:slack",
                               "chatops:ms-teams",
@@ -127067,6 +127151,7 @@
                                 "chat",
                                 "chat:compaction",
                                 "chat:title_generation",
+                                "chat:tool_call_repair",
                                 "skill:description_generation",
                                 "chatops:slack",
                                 "chatops:ms-teams",
@@ -128167,6 +128252,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -128452,6 +128538,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -128693,6 +128780,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -129395,6 +129483,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -129636,6 +129725,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -130046,6 +130136,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -130276,6 +130367,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -130686,6 +130778,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -130916,6 +131009,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -131201,6 +131295,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -131442,6 +131537,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -131727,6 +131823,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -131968,6 +132065,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -134200,6 +134298,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -134441,6 +134540,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -134726,6 +134826,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -134967,6 +135068,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -135252,6 +135354,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -135493,6 +135596,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -135778,6 +135882,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -136019,6 +136124,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -136304,6 +136410,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -136545,6 +136652,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -136830,6 +136938,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -137071,6 +137180,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -137356,6 +137466,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -137597,6 +137708,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -137882,6 +137994,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -138112,6 +138225,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -138397,6 +138511,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -138627,6 +138742,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -138912,6 +139028,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -139153,6 +139270,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -139438,6 +139556,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -139679,6 +139798,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -139964,6 +140084,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -140205,6 +140326,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -142241,6 +142363,7 @@
                                             ]
                                           },
                                           "annotations": {
+                                            "nullable": true,
                                             "type": "array",
                                             "items": {}
                                           },
@@ -142656,6 +142779,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -142897,6 +143021,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -143182,6 +143307,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -143423,6 +143549,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -143521,6 +143648,7 @@
                                             ]
                                           },
                                           "annotations": {
+                                            "nullable": true,
                                             "type": "array",
                                             "items": {}
                                           },
@@ -143941,6 +144069,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -144182,6 +144311,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "chat:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -144884,6 +145014,7 @@
                                     "type": "string",
                                     "enum": [
                                       "rate_limit",
+                                      "usage_limit_exceeded",
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
@@ -170993,6 +171124,12 @@
                         "minimum": -2147483648,
                         "maximum": 2147483647
                       },
+                      "outputLength": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
                       "inputModalities": {
                         "nullable": true,
                         "type": "array",
@@ -171166,6 +171303,7 @@
                       "modelId",
                       "description",
                       "contextLength",
+                      "outputLength",
                       "inputModalities",
                       "outputModalities",
                       "supportsToolCalling",
@@ -171574,6 +171712,12 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "outputLength": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "inputModalities": {
                       "nullable": true,
                       "type": "array",
@@ -171670,6 +171814,7 @@
                     "modelId",
                     "description",
                     "contextLength",
+                    "outputLength",
                     "inputModalities",
                     "outputModalities",
                     "supportsToolCalling",
@@ -172047,6 +172192,41 @@
                       "disabled": {
                         "type": "boolean"
                       },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "personal",
+                          "team",
+                          "org"
+                        ]
+                      },
+                      "authorId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "authorName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "teams": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -172066,6 +172246,10 @@
                       "providerApiKeys",
                       "redirectUris",
                       "disabled",
+                      "scope",
+                      "authorId",
+                      "authorName",
+                      "teams",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -172391,6 +172575,20 @@
                       "type": "string",
                       "format": "uri"
                     }
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teams": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -172487,6 +172685,41 @@
                     "disabled": {
                       "type": "boolean"
                     },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -172509,6 +172742,10 @@
                     "providerApiKeys",
                     "redirectUris",
                     "disabled",
+                    "scope",
+                    "authorId",
+                    "authorName",
+                    "teams",
                     "createdAt",
                     "updatedAt",
                     "clientSecret"
@@ -172836,6 +173073,20 @@
                       "type": "string",
                       "format": "uri"
                     }
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teams": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -172942,6 +173193,41 @@
                     "disabled": {
                       "type": "boolean"
                     },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -172961,6 +173247,10 @@
                     "providerApiKeys",
                     "redirectUris",
                     "disabled",
+                    "scope",
+                    "authorId",
+                    "authorName",
+                    "teams",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -173582,6 +173872,41 @@
                     "disabled": {
                       "type": "boolean"
                     },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -173604,6 +173929,10 @@
                     "providerApiKeys",
                     "redirectUris",
                     "disabled",
+                    "scope",
+                    "authorId",
+                    "authorName",
+                    "teams",
                     "createdAt",
                     "updatedAt",
                     "clientSecret"
@@ -176549,6 +176878,41 @@
                       "disabled": {
                         "type": "boolean"
                       },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "personal",
+                          "team",
+                          "org"
+                        ]
+                      },
+                      "authorId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "authorName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "teams": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -176567,6 +176931,10 @@
                       "allowedGatewayIds",
                       "redirectUris",
                       "disabled",
+                      "scope",
+                      "authorId",
+                      "authorName",
+                      "teams",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -176852,6 +177220,20 @@
                       "type": "string",
                       "format": "uri"
                     }
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teams": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -176903,6 +177285,41 @@
                     "disabled": {
                       "type": "boolean"
                     },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -176924,6 +177341,10 @@
                     "allowedGatewayIds",
                     "redirectUris",
                     "disabled",
+                    "scope",
+                    "authorId",
+                    "authorName",
+                    "teams",
                     "createdAt",
                     "updatedAt",
                     "clientSecret"
@@ -177211,6 +177632,20 @@
                       "type": "string",
                       "format": "uri"
                     }
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teams": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -177272,6 +177707,41 @@
                     "disabled": {
                       "type": "boolean"
                     },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -177290,6 +177760,10 @@
                     "allowedGatewayIds",
                     "redirectUris",
                     "disabled",
+                    "scope",
+                    "authorId",
+                    "authorName",
+                    "teams",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -177866,6 +178340,41 @@
                     "disabled": {
                       "type": "boolean"
                     },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -177887,6 +178396,10 @@
                     "allowedGatewayIds",
                     "redirectUris",
                     "disabled",
+                    "scope",
+                    "authorId",
+                    "authorName",
+                    "teams",
                     "createdAt",
                     "updatedAt",
                     "clientSecret"
@@ -224239,6 +224752,7 @@
                                 "type": "string",
                                 "enum": [
                                   "rate_limit",
+                                  "usage_limit_exceeded",
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",

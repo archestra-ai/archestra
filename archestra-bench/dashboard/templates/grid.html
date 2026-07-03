@@ -6,7 +6,7 @@
     <div class="grid-scroll">
         <table class="grid">
             <thead>
-                <tr><th>task</th>{% for lane in grid.lanes %}<th>{{ lane }}</th>{% endfor %}</tr>
+                <tr><th>task</th>{% for lane in grid.lanes %}<th>{{ lane }}</th>{% endfor %}<th class="avg-col">avg</th></tr>
             </thead>
             <tbody>
             {% for row in grid.rows %}
@@ -26,6 +26,7 @@
                     <td class="cell cell-empty">—</td>
                     {% endmatch %}
                     {% endfor %}
+                    <td class="cell avg-col">{% if row.avg_text.is_empty() %}<span class="cell-empty">—</span>{% else %}<span class="chip {{ row.avg_class }}">{{ row.avg_text }}</span>{% endif %}</td>
                 </tr>
             {% endfor %}
             </tbody>

@@ -617,11 +617,18 @@ export async function handleLLMProxy<
         { resolvedAgentId, reason: "token_cost_limit_exceeded" },
         `${providerName} request blocked due to token cost limit`,
       );
-      // Preserve the proxy-compatible error envelope so chat clients can read structured limit metadata.
-      return reply.status(429).send({
+      // Preserve the proxy-compatible error envelope so chat clients can read
+      // structured limit metadata. This is Archestra budget enforcement, not the
+      // provider throttling traffic, so it must not look like a rate limit:
+      // a 429 makes every LLM SDK auto-retry a block that cannot clear on retry,
+      // and makes clients frame it as a provider limit ("not your usage limit").
+      // 402 Payment Required is non-retryable in all SDKs and semantically a
+      // budget stop. The Archestra-specific `type` plus the stable `code` keep
+      // structured detection working.
+      return reply.status(402).send({
         error: {
           message: contentMessage,
-          type: "rate_limit_exceeded",
+          type: "usage_limit_exceeded",
           code: "token_cost_limit_exceeded",
           usage_limit: limitMetadata
             ? {
@@ -1404,6 +1411,46 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
+    // The finally-block persist below is gated on usage, so a stream that
+    // fails before any usage arrives (e.g. a provider 400 rejecting the
+    // request) would otherwise leave no trace in LLM logs / session history.
+    if (!streamAdapter.state.usage) {
+      try {
+        const errorMessage = provider.extractErrorMessage(error);
+        logger.info(
+          { profileId: agent.id, errorMessage },
+          "Persisting error interaction record for failed stream",
+        );
+        await InteractionModel.create({
+          profileId: agent.id,
+          externalAgentId,
+          executionId,
+          userId,
+          virtualKeyId,
+          passthroughVirtualKeyId,
+          sessionId,
+          sessionSource,
+          source,
+          authMethod,
+          authenticatedAppId: authenticatedApp?.id,
+          authenticatedAppName: authenticatedApp?.name,
+          type: provider.interactionType,
+          request: originalRequest as InteractionRequest,
+          processedRequest: request as InteractionRequest,
+          response: { error: errorMessage },
+          model: actualModel,
+          baselineModel,
+          inputTokens: 0,
+          outputTokens: 0,
+        });
+      } catch (interactionError) {
+        logger.error(
+          { err: interactionError, profileId: agent.id },
+          "Failed to create error interaction record for failed stream",
+        );
+      }
+    }
+
     return handleError(
       error,
       reply,

@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{{ id }} — bench dashboard{% endblock %}
 {% block content %}
-<p><a href="{{ run_href }}">← {{ run_id }}</a></p>
+<p class="crumb"><a href="{{ run_href }}">← {{ run_id }}</a></p>
 <h1>{{ id }} <span class="badge {{ outcome_class }}">{{ outcome_label }}</span></h1>
 
 <section>
     <h2>Metadata</h2>
+    <div class="card table-card">
     <table class="kv">
         <tbody>
         {% for row in meta_rows %}
@@ -13,6 +14,7 @@
         {% endfor %}
         </tbody>
     </table>
+    </div>
 </section>
 
 {% match rubric %}
@@ -23,6 +25,7 @@
     <p class="warning">⚠ reward hacking suspected{% if !r.hacking_evidence.is_empty() %}: <em>{{ r.hacking_evidence }}</em>{% endif %}</p>
     {% endif %}
     <p><strong>Verdict:</strong> {{ r.verdict }}</p>
+    <div class="card table-card">
     <table>
         <thead>
             <tr><th>rubric</th><th>grade</th><th>comment</th></tr>
@@ -33,6 +36,7 @@
         {% endfor %}
         </tbody>
     </table>
+    </div>
     {% if !r.observations.is_empty() %}
     <h3>Observations</h3>
     <ul>
@@ -47,10 +51,13 @@
 {% endmatch %}
 
 <section>
-    <h2>Trajectory</h2>
     {% if trajectory_note.is_empty() %}
-    <article class="trajectory">{{ trajectory_html|safe }}</article>
+    <details class="report">
+        <summary><h2>Trajectory</h2></summary>
+        <article class="trajectory">{{ trajectory_html|safe }}</article>
+    </details>
     {% else %}
+    <h2>Trajectory</h2>
     <p class="muted">{{ trajectory_note }}</p>
     {% endif %}
 </section>

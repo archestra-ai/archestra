@@ -846,6 +846,17 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false`
   - Values: `true`, `false`
 
+- **`ARCHESTRA_SKILLS_SANDBOX_CPU_LIMIT_SECONDS`** - CPU-time cap for a single sandbox command.
+  - Default: `30`
+- **`ARCHESTRA_SKILLS_SANDBOX_MEMORY_LIMIT_BYTES`** - Memory cap for the sandbox container.
+  - Default: `1073741824` (1 GiB)
+- **`ARCHESTRA_SKILLS_SANDBOX_WALL_CLOCK_SECONDS`** - Wall-clock cap for a single command; a caller-supplied timeout is clamped to this.
+  - Default: `120`
+- **`ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT`** - Maximum captured stdout/stderr per command; output beyond this is truncated.
+  - Default: `262144` (256 KiB)
+- **`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`** - Maximum size of a file the sandbox can export to the conversation's Files panel.
+  - Default: `16777216` (16 MiB)
+
 - **`ARCHESTRA_APPS_ENABLED`** - Enables user-authored MCP Apps — apps created inside Archestra (from chat or the `/apps` page) with their own data store and assignable tools. When off, the `/apps` page and its sidebar link are hidden, the app tools and routes are not registered, and the feature cannot be used.
   - Default: `false`
   - Values: `true`, `false`

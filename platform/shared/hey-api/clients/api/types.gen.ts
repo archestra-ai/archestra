@@ -4,7 +4,7 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
-export type EmbeddingDimensionsInput = 3072 | 1536 | 768;
+export type EmbeddingDimensionsInput = 3072 | 1536 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefaultInput = string | number | boolean;
 
@@ -5318,7 +5318,7 @@ export type UserConfigFieldInput = {
     valuePrefix?: string;
 };
 
-export type EmbeddingDimensions = 3072 | 1536 | 768;
+export type EmbeddingDimensions = 3072 | 1536 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefault = string | number | boolean;
 
@@ -45060,6 +45060,9 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
+        defaultParameters: {
+            [key: string]: string | number | Array<string>;
+        } | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -45193,6 +45196,9 @@ export type UpdateModelResponses = {
         customPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
+        defaultParameters: {
+            [key: string]: string | number | Array<string>;
+        } | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;

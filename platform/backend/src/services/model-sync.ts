@@ -1,6 +1,7 @@
 import {
   MODELS_DEV_PROVIDER_MAP,
   OPENROUTER_FREE_MODEL_ID,
+  SUPPORTED_EMBEDDING_DIMENSIONS,
   type SupportedEmbeddingDimension,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -296,10 +297,44 @@ export function buildModelsToUpsert(params: {
       completionPricePerToken: capabilities.completionPricePerToken,
       cacheReadPricePerToken: capabilities.cacheReadPricePerToken,
       cacheWritePricePerToken: capabilities.cacheWritePricePerToken,
-      embeddingDimensions: inferEmbeddingDimensions(model.id, provider),
+      embeddingDimensions: resolveEmbeddingDimensions({
+        modelId: model.id,
+        provider,
+        fetched: model.capabilities,
+      }),
+      defaultParameters: model.capabilities?.defaultParameters ?? null,
       lastSyncedAt: new Date(),
     };
   });
+}
+
+/**
+ * Resolve a model's embedding dimension. When the provider reports embedding
+ * capability authoritatively (Ollama `/api/show`), trust it and skip the name
+ * heuristic entirely — including for authoritatively-generative models (avoids
+ * mis-tagging a chat model whose id happens to match an embed name pattern).
+ * An authoritative embedding dimension the KB cannot store (not in
+ * SUPPORTED_EMBEDDING_DIMENSIONS) resolves to null rather than a broken value.
+ */
+function resolveEmbeddingDimensions(params: {
+  modelId: string;
+  provider: SupportedProvider;
+  fetched?: FetchedModelCapabilities;
+}): SupportedEmbeddingDimension | null {
+  const { modelId, provider, fetched } = params;
+  if (fetched?.embeddingDimensions !== undefined) {
+    const dim = fetched.embeddingDimensions;
+    return dim !== null && isSupportedEmbeddingDimension(dim) ? dim : null;
+  }
+  return inferEmbeddingDimensions(modelId, provider);
+}
+
+function isSupportedEmbeddingDimension(
+  dimension: number,
+): dimension is SupportedEmbeddingDimension {
+  return (SUPPORTED_EMBEDDING_DIMENSIONS as readonly number[]).includes(
+    dimension,
+  );
 }
 
 /**
@@ -340,6 +375,19 @@ function inferEmbeddingDimensions(
   }
   if (id === "nomic-embed-text" || id.endsWith("/nomic-embed-text")) {
     return 768;
+  }
+  // Fallback for older Ollama that omits `/api/show` capabilities; the
+  // authoritative path above wins whenever capabilities are reported. Match the
+  // base name so an optional `:tag` suffix is ignored, and gate to Ollama so a
+  // same-named model on another provider isn't mis-tagged.
+  if (provider === "ollama") {
+    const base = id.split(":")[0];
+    if (base === "mxbai-embed-large" || base === "bge-m3") {
+      return 1024;
+    }
+    if (base === "all-minilm") {
+      return 384;
+    }
   }
   return null;
 }

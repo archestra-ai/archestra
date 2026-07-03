@@ -13,7 +13,9 @@
         "enum": [
           3072,
           1536,
-          768
+          1024,
+          768,
+          384
         ]
       },
       "LocalConfigEnvironmentDefaultInput": {
@@ -17222,7 +17224,9 @@
         "enum": [
           3072,
           1536,
-          768
+          1024,
+          768,
+          384
         ]
       },
       "LocalConfigEnvironmentDefault": {
@@ -173512,6 +173516,26 @@
                           }
                         ]
                       },
+                      "defaultParameters": {
+                        "nullable": true,
+                        "type": "object",
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          ]
+                        }
+                      },
                       "discoveredViaLlmProxy": {
                         "type": "boolean"
                       },
@@ -173626,6 +173650,7 @@
                       "customPricePerMillionCacheWrite",
                       "ignored",
                       "embeddingDimensions",
+                      "defaultParameters",
                       "discoveredViaLlmProxy",
                       "lastSyncedAt",
                       "createdAt",
@@ -174100,6 +174125,26 @@
                         }
                       ]
                     },
+                    "defaultParameters": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      }
+                    },
                     "discoveredViaLlmProxy": {
                       "type": "boolean"
                     },
@@ -174137,6 +174182,7 @@
                     "customPricePerMillionCacheWrite",
                     "ignored",
                     "embeddingDimensions",
+                    "defaultParameters",
                     "discoveredViaLlmProxy",
                     "lastSyncedAt",
                     "createdAt",

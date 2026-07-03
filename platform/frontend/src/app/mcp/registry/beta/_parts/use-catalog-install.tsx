@@ -23,6 +23,7 @@ import {
   setOAuthEnvironmentValues,
   setOAuthIsFirstInstallation,
   setOAuthPendingAfterEnvVars,
+  setOAuthReturnUrl,
   setOAuthScope,
   setOAuthServerType,
   setOAuthState,
@@ -766,6 +767,9 @@ export function useCatalogInstall(opts?: {
         (s) => s.catalogId === selectedCatalogItem.id,
       );
       setOAuthIsFirstInstallation(isFirstInstallation);
+
+      // Remember where the install started so the callback returns here
+      setOAuthReturnUrl(window.location.href);
 
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;

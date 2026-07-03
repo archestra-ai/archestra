@@ -63,6 +63,7 @@ import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
   setOAuthCatalogId,
   setOAuthMcpServerId,
+  setOAuthReturnUrl,
   setOAuthState,
 } from "@/lib/auth/oauth-session";
 import {
@@ -290,6 +291,9 @@ export function ManageUsersContent({
       // Store state in session storage for the callback
       setOAuthState(state);
       setOAuthCatalogId(catalogItem.id);
+
+      // Remember where re-authentication started so the callback returns here
+      setOAuthReturnUrl(window.location.href);
 
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;

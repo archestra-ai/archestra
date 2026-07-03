@@ -409,24 +409,23 @@ describe("K8sDeployment.constructDeploymentName", () => {
       id: "123e4567-e89b-12d3-a456-426614174000",
       expected: "mcp-server.name",
     },
-  ])("converts server name '$name' with id '$id' to deployment name '$expected'", ({
-    name,
-    id,
-    expected,
-  }) => {
-    // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
-    const mockServer = { name, id } as any;
-    const result = K8sDeployment.constructDeploymentName(mockServer);
-    expect(result).toBe(expected);
+  ])(
+    "converts server name '$name' with id '$id' to deployment name '$expected'",
+    ({ name, id, expected }) => {
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+      const mockServer = { name, id } as any;
+      const result = K8sDeployment.constructDeploymentName(mockServer);
+      expect(result).toBe(expected);
 
-    // Verify all results are valid Kubernetes DNS subdomain names
-    // Must match pattern: lowercase alphanumeric, '-' or '.', start and end with alphanumeric
-    expect(result).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
-    // Must be no longer than 253 characters
-    expect(result.length).toBeLessThanOrEqual(253);
-    // Must start with 'mcp-'
-    expect(result).toMatch(/^mcp-/);
-  });
+      // Verify all results are valid Kubernetes DNS subdomain names
+      // Must match pattern: lowercase alphanumeric, '-' or '.', start and end with alphanumeric
+      expect(result).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
+      // Must be no longer than 253 characters
+      expect(result.length).toBeLessThanOrEqual(253);
+      // Must start with 'mcp-'
+      expect(result).toMatch(/^mcp-/);
+    },
+  );
 
   test("handles very long server names by truncating to 253 characters", () => {
     const longName = "a".repeat(300); // 300 character name
@@ -3488,6 +3487,68 @@ describe("K8sDeployment.createServiceForHttpServer (selector reconciliation)", (
       body: { spec: { selector: Record<string, string> } };
     };
     expect(createArg.body.spec.selector["mcp-server-id"]).toBe("new-server-id");
+  });
+});
+
+describe("K8sDeployment multitenant selector stability", () => {
+  function make(
+    // biome-ignore lint/suspicious/noExplicitAny: minimal catalog mock for tests
+    catalogItem: any,
+  ): K8sDeployment {
+    const mcpServer = {
+      id: "install-abc-123",
+      name: "archestra-pm",
+      catalogId: "cat9999-0000-0000-0000-000000000000",
+      // biome-ignore lint/suspicious/noExplicitAny: mock server for tests
+    } as any as McpServer;
+    return new K8sDeployment({
+      mcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem,
+    });
+  }
+  const localConfig: z.infer<typeof LocalConfigSchema> = {
+    command: "node",
+    arguments: ["server.js"],
+  };
+
+  // Multitenant catalogs share ONE catalog-named Deployment + Service across all
+  // installs. If the selector used the per-install id, two installs would fight
+  // over the shared resource and leave the Service with zero endpoints. The
+  // selector must be catalog-stable so every install reconciles to the same one.
+  test("multitenant: deployment selector + pod labels use the catalog id (not the per-install id)", () => {
+    const catalogItem = { multitenant: true, name: "Archestra PM" };
+    const spec = make(catalogItem).generateDeploymentSpec(
+      "img:latest",
+      localConfig,
+      true,
+      8080,
+    );
+    expect(spec.spec?.selector.matchLabels?.["mcp-server-id"]).toBe(
+      "cat9999-0000-0000-0000-000000000000",
+    );
+    expect(spec.spec?.template.metadata?.labels?.["mcp-server-id"]).toBe(
+      "cat9999-0000-0000-0000-000000000000",
+    );
+    // The name is catalog-derived too, so name and selector stay in lockstep.
+    expect(spec.metadata?.name).toContain("mcp-mt-cat9999-");
+  });
+
+  test("single-tenant (no catalog item): selector keeps the per-install id", () => {
+    const spec = make(null).generateDeploymentSpec(
+      "img:latest",
+      localConfig,
+      true,
+      8080,
+    );
+    expect(spec.spec?.selector.matchLabels?.["mcp-server-id"]).toBe(
+      "install-abc-123",
+    );
   });
 });
 

@@ -4,9 +4,7 @@ import { ChatOpsChannelBindingModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { ChatOpsEventHandler, IncomingChatMessage } from "@/types";
 import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
-import TelegramProvider, {
-  markdownToTelegramHtml,
-} from "./telegram-provider";
+import TelegramProvider, { markdownToTelegramHtml } from "./telegram-provider";
 
 vi.mock("@/cache-manager");
 
@@ -149,6 +147,25 @@ describe("parseWebhookNotification", () => {
   test("ignores group messages that don't address the bot", async () => {
     const provider = makeProvider();
     expect(await provider.parseWebhookNotification(groupUpdate())).toBeNull();
+    // A bare command may target another bot in the group
+    expect(
+      await provider.parseWebhookNotification(
+        groupUpdate({ text: "/weather" }),
+      ),
+    ).toBeNull();
+    expect(
+      await provider.parseWebhookNotification(
+        groupUpdate({ text: "/weather@some_other_bot" }),
+      ),
+    ).toBeNull();
+  });
+
+  test("processes group commands explicitly addressed to the bot", async () => {
+    const provider = makeProvider();
+    const message = await provider.parseWebhookNotification(
+      groupUpdate({ text: `/weather@${BOT_USERNAME} in Berlin` }),
+    );
+    expect(message?.text).toBe("/weather in Berlin");
   });
 
   test("parses a group @mention and strips it from the text", async () => {
@@ -214,7 +231,7 @@ describe("parseWebhookNotification", () => {
   test("downloads the largest photo that fits the size limit", async () => {
     const provider = makeProvider();
     const bytes = new Uint8Array([1, 2, 3, 4]);
-    const getFile = vi.fn(() => ({
+    const getFile = vi.fn((_params: Record<string, unknown>) => ({
       ok: true,
       result: { file_path: "photos/big.jpg" },
     }));
@@ -289,7 +306,10 @@ describe("sendReply", () => {
 
   test("sends HTML with the footer appended and link previews disabled", async () => {
     const provider = makeProvider();
-    const sendMessage = vi.fn(() => ({ ok: true, result: { message_id: 42 } }));
+    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: { message_id: 42 },
+    }));
     stubTelegramApi({ sendMessage });
 
     const id = await provider.sendReply({
@@ -312,7 +332,7 @@ describe("sendReply", () => {
   test("falls back to plain text when Telegram rejects the markup", async () => {
     const provider = makeProvider();
     const sendMessage = vi
-      .fn()
+      .fn<(params: Record<string, unknown>) => unknown>()
       .mockReturnValueOnce({
         ok: false,
         error_code: 400,
@@ -336,7 +356,7 @@ describe("sendReply", () => {
   test("splits long replies into multiple messages and returns the first id", async () => {
     const provider = makeProvider();
     let next = 100;
-    const sendMessage = vi.fn(() => ({
+    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
       ok: true,
       result: { message_id: next++ },
     }));
@@ -344,7 +364,9 @@ describe("sendReply", () => {
 
     const id = await provider.sendReply({
       originalMessage: dmMessage,
-      text: Array.from({ length: 400 }, (_, i) => `line ${i}`).join("\n").repeat(3),
+      text: Array.from({ length: 400 }, (_, i) => `line ${i}`)
+        .join("\n")
+        .repeat(3),
     });
 
     expect(sendMessage.mock.calls.length).toBeGreaterThan(1);
@@ -353,7 +375,10 @@ describe("sendReply", () => {
 
   test("anchors group replies to the triggering message", async () => {
     const provider = makeProvider();
-    const sendMessage = vi.fn(() => ({ ok: true, result: { message_id: 1 } }));
+    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: { message_id: 1 },
+    }));
     stubTelegramApi({ sendMessage });
 
     await provider.sendReply({
@@ -390,7 +415,10 @@ describe("account linking via /start", () => {
 
     const handler = makeEventHandler();
     const provider = makeProvider(handler);
-    const sendMessage = vi.fn(() => ({ ok: true, result: { message_id: 1 } }));
+    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: { message_id: 1 },
+    }));
     stubTelegramApi({ sendMessage });
 
     await dispatchUpdate(provider, dmUpdate({ text: `/start ${pending.id}` }));
@@ -421,21 +449,27 @@ describe("account linking via /start", () => {
     });
 
     const provider = makeProvider(makeEventHandler());
-    const sendMessage = vi.fn(() => ({ ok: true, result: { message_id: 1 } }));
+    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: { message_id: 1 },
+    }));
     stubTelegramApi({ sendMessage });
 
     await dispatchUpdate(provider, dmUpdate({ text: `/start ${used.id}` }));
 
-    expect((await ChatOpsChannelBindingModel.findById(used.id))?.channelId).toBe(
-      "777",
-    );
+    expect(
+      (await ChatOpsChannelBindingModel.findById(used.id))?.channelId,
+    ).toBe("777");
     expect(String(sendMessage.mock.calls[0][0].text)).toContain("already used");
     expect(await provider.getUserEmail("555")).toBeNull();
   });
 
   test("plain /start replies with linking guidance", async () => {
     const provider = makeProvider(makeEventHandler());
-    const sendMessage = vi.fn(() => ({ ok: true, result: { message_id: 1 } }));
+    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: { message_id: 1 },
+    }));
     stubTelegramApi({ sendMessage });
 
     await dispatchUpdate(provider, dmUpdate({ text: "/start" }));
@@ -477,8 +511,14 @@ describe("approval flow", () => {
   };
 
   async function postApprovalForm(provider: TelegramProvider) {
-    const sendMessage = vi.fn(() => ({ ok: true, result: { message_id: 1 } }));
-    const answerCallbackQuery = vi.fn(() => ({ ok: true, result: true }));
+    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: { message_id: 1 },
+    }));
+    const answerCallbackQuery = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: true,
+    }));
     stubTelegramApi({ sendMessage, answerCallbackQuery });
 
     await provider.addApprovalRequestForm({
@@ -603,7 +643,10 @@ describe("approval flow", () => {
   test("answers an expired approval click without dispatching", async () => {
     const handler = makeEventHandler();
     const provider = makeProvider(handler);
-    const answerCallbackQuery = vi.fn(() => ({ ok: true, result: true }));
+    const answerCallbackQuery = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: true,
+    }));
     stubTelegramApi({ answerCallbackQuery });
 
     await dispatchUpdate(
@@ -621,7 +664,10 @@ describe("approval flow", () => {
 describe("agent selection", () => {
   test("sends one button per agent and parses the click back", async () => {
     const provider = makeProvider(makeEventHandler());
-    const sendMessage = vi.fn(() => ({ ok: true, result: { message_id: 1 } }));
+    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: { message_id: 1 },
+    }));
     stubTelegramApi({ sendMessage });
 
     await provider.sendAgentSelectionCard({
@@ -709,7 +755,10 @@ describe("initialize and cleanup", () => {
       ok: true,
       result: { id: BOT_ID, is_bot: true, username: BOT_USERNAME },
     }));
-    const deleteWebhook = vi.fn(() => ({ ok: true, result: true }));
+    const deleteWebhook = vi.fn(() => ({
+      ok: true,
+      result: true,
+    }));
     fetchMock.mockImplementation(async (url: unknown, init?: RequestInit) => {
       const u = String(url);
       if (u.endsWith("/getMe")) return new Response(JSON.stringify(getMe()));

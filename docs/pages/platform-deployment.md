@@ -1405,6 +1405,17 @@ See [Slack](/docs/platform-slack) for setup instructions.
   - Starts with `xapp-`
   - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
 
+#### Telegram
+
+See [Telegram](/docs/platform-telegram) for setup instructions. Telegram uses long polling — no public URL, webhook, or ngrok needed.
+
+- **`ARCHESTRA_CHATOPS_TELEGRAM_ENABLED`** - Enable Telegram integration.
+  - Default: `false`
+
+- **`ARCHESTRA_CHATOPS_TELEGRAM_BOT_TOKEN`** - Bot token issued by [@BotFather](https://t.me/BotFather).
+  - Required when: `ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true`
+  - Format: `123456789:ABC...`
+
 #### Attachment processing
 
 - **`ARCHESTRA_CHATOPS_MAX_CONCURRENT_FILE_TRANSFERS`** - Per-process cap on concurrent chatops attachment downloads and image shrinking.

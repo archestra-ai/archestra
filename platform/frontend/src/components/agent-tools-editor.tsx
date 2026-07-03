@@ -10,7 +10,7 @@ import {
   parseFullToolName,
 } from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
-import { Loader2, Pencil, Search, X } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import {
   forwardRef,
   useCallback,
@@ -28,11 +28,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useAssignTool, useUnassignTool } from "@/lib/agent-tools.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
@@ -52,8 +47,8 @@ import {
   sortAndFilterTools,
   sortCatalogItems,
 } from "./agent-tools-editor.utils";
-import { CatalogDocsLink } from "./catalog-docs-link";
 import { McpCatalogIcon } from "./mcp-catalog-icon";
+import { McpServerPillShell } from "./mcp-server-pill-shell";
 import { DYNAMIC_CREDENTIAL_VALUE, TokenSelect } from "./token-select";
 
 type InternalMcpCatalogItem =
@@ -982,140 +977,78 @@ function McpServerPill({
     !isPlaywright &&
     mcpServers.length > 0;
   return (
-    <Popover
+    <McpServerPillShell
+      icon={
+        <McpCatalogIcon
+          icon={catalogItem.icon}
+          catalogId={catalogItem.id}
+          size={14}
+        />
+      }
+      displayName={displayName}
+      count={displayedCount}
+      isEmpty={isEmpty}
+      highlighted={hasPendingChanges}
+      description={catalogItem.description}
+      docsUrl={catalogItem.docsUrl}
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
         if (v) setChangedInSession(false);
       }}
-      modal
+      onRemove={() => onRemove(catalogItem.id)}
+      removeAriaLabel={`Remove ${catalogItem.name}`}
+      triggerTestId={getAgentToolCatalogPillTestId(catalogItem.name)}
     >
-      <div className="flex items-center">
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn(
-              "h-8 px-3 gap-1.5 text-xs",
-              isEmpty && "border-dashed opacity-50",
-              isEmpty && "rounded-r-none border-r-0",
-              hasPendingChanges && "border-primary opacity-100",
-            )}
-            data-testid={getAgentToolCatalogPillTestId(catalogItem.name)}
-          >
-            <McpCatalogIcon
-              icon={catalogItem.icon}
-              catalogId={catalogItem.id}
-              size={14}
-            />
-            <span className="font-medium">{displayName}</span>
-            <span className="text-muted-foreground">({displayedCount})</span>
-            <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
-          </Button>
-        </PopoverTrigger>
-        {isEmpty && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 w-8 p-0 rounded-l-none border-dashed opacity-50 hover:opacity-100"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove(catalogItem.id);
+      {showCredentialSelector && (
+        <div className="p-4 border-b space-y-2 shrink-0">
+          <Label className="text-sm font-medium">Connect on behalf of</Label>
+          <p className="text-xs text-muted-foreground">
+            Choose whether this tool uses a fixed server connection or resolves
+            credentials for the current caller at runtime.
+          </p>
+          <TokenSelect
+            catalogId={catalogItem.id}
+            assignmentScope={assignmentScope}
+            assignmentTeamIds={assignmentTeamIds}
+            value={selectedCredential}
+            onValueChange={setSelectedCredential}
+            shouldSetDefaultValue={false}
+            prefersEnterpriseManaged={prefersEnterpriseManaged}
+          />
+        </div>
+      )}
+
+      {isLoadingTools ? (
+        <div className="p-4 flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading tools...</span>
+        </div>
+      ) : totalCount === 0 ? (
+        <div className="p-4 text-sm text-muted-foreground">
+          No tools available for this server.
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <ToolChecklist
+            tools={allTools}
+            selectedToolIds={selectedToolIds}
+            onSelectionChange={(ids) => {
+              setSelectedToolIds(ids);
+              setChangedInSession(true);
             }}
-            aria-label={`Remove ${catalogItem.name}`}
-          >
-            <X className="h-3 w-3" />
-          </Button>
-        )}
-      </div>
-      <PopoverContent
-        className="w-[420px] max-h-[min(500px,var(--radix-popover-content-available-height))] p-0 flex flex-col overflow-hidden"
-        side="bottom"
-        align="start"
-        sideOffset={8}
-        avoidCollisions
-        collisionPadding={16}
-      >
-        <div className="p-4 border-b flex items-start justify-between gap-2 shrink-0">
-          <div>
-            <h4 className="font-semibold">{displayName}</h4>
-            {catalogItem.description && (
-              <p className="text-sm text-muted-foreground mt-1">
-                {catalogItem.description}
-                {catalogItem.docsUrl ? (
-                  <>
-                    {" "}
-                    <CatalogDocsLink
-                      url={catalogItem.docsUrl}
-                      className="inline-flex items-center gap-1 text-primary hover:underline"
-                    />
-                  </>
-                ) : null}
-              </p>
-            )}
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 shrink-0"
-            onClick={() => setOpen(false)}
-          >
-            <X className="h-4 w-4" />
+          />
+        </div>
+      )}
+
+      {changedInSession && (
+        <div className="p-2 border-t shrink-0">
+          <Button size="sm" className="w-full" onClick={() => setOpen(false)}>
+            OK
           </Button>
         </div>
-
-        {/* Credential Selector */}
-        {showCredentialSelector && (
-          <div className="p-4 border-b space-y-2 shrink-0">
-            <Label className="text-sm font-medium">Connect on behalf of</Label>
-            <p className="text-xs text-muted-foreground">
-              Choose whether this tool uses a fixed server connection or
-              resolves credentials for the current caller at runtime.
-            </p>
-            <TokenSelect
-              catalogId={catalogItem.id}
-              assignmentScope={assignmentScope}
-              assignmentTeamIds={assignmentTeamIds}
-              value={selectedCredential}
-              onValueChange={setSelectedCredential}
-              shouldSetDefaultValue={false}
-              prefersEnterpriseManaged={prefersEnterpriseManaged}
-            />
-          </div>
-        )}
-
-        {/* Tool Checklist */}
-        {isLoadingTools ? (
-          <div className="p-4 flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Loading tools...</span>
-          </div>
-        ) : totalCount === 0 ? (
-          <div className="p-4 text-sm text-muted-foreground">
-            No tools available for this server.
-          </div>
-        ) : (
-          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            <ToolChecklist
-              tools={allTools}
-              selectedToolIds={selectedToolIds}
-              onSelectionChange={(ids) => {
-                setSelectedToolIds(ids);
-                setChangedInSession(true);
-              }}
-            />
-          </div>
-        )}
-
-        {changedInSession && (
-          <div className="p-2 border-t shrink-0">
-            <Button size="sm" className="w-full" onClick={() => setOpen(false)}>
-              OK
-            </Button>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
+      )}
+    </McpServerPillShell>
   );
 }
 

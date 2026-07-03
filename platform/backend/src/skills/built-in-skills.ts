@@ -41,11 +41,6 @@ interface BuiltInSkill {
   /** SKILL.md body. */
   content: string;
   files: BuiltInSkillFile[];
-  /**
-   * Seed only when the MCP Apps feature is enabled. Keeps a feature that ships
-   * dark behind ARCHESTRA_APPS_ENABLED out of the skill catalog until release.
-   */
-  requiresAppsFeature?: boolean;
 }
 
 /** `source_ref` value for a built-in skill. */
@@ -299,7 +294,7 @@ You build interactive single-file HTML/JS apps for users from chat — dashboard
 4. \`archestra__validate_app\` — run static structural checks plus the live render diagnostics (\`archestra__get_app_diagnostics\` reads those render diagnostics on their own). Fix any errors with \`archestra__edit_app\` and re-validate until it passes.
 5. \`archestra__publish_app\` — only if the user wants others to run the app: promote it to a team or the whole organization (publishing is for sharing, not a required build step).
 
-Once the app passes validation (and any requested publish is done), the build is complete: stop calling app tools — do not re-read, re-validate, or re-check an app you have not changed — and close the loop with the user: report the app's name and standalone page link, and carry out whatever completion the user's request asked for.
+Once the app passes validation (and any requested publish is done), the build is complete: stop calling app tools — do not re-read, re-validate, or re-check an app you have not changed — and close the loop with the user: name the app and give its standalone page (/a/<id>) as an actual clickable link (a markdown link, never a bare path), say in plain product terms what it does, and carry out whatever completion the user's request asked for. Describe the app the way its user thinks about it, not how it is wired — keep build-time mechanics out of the summary unless the user has to act on one (e.g. "connect the GitHub server to enable search"). Be honest about what actually works — if a tool could not be assigned or a feature is not wired up, say so plainly instead of implying it works. Do not tack on a menu of extra features you could build next.
 
 ## SDK and authoring conventions
 ${APP_AUTHORING_CONTRACT}
@@ -339,6 +334,5 @@ export const BUILT_IN_SKILLS: BuiltInSkill[] = [
       "Build an interactive app for a user (dashboard, form, tracker, game, or custom UI): the staged scaffold → refine → edit → validate → publish flow and the window.archestra SDK, storage, tools, and CSP conventions.",
     content: BUILD_APP_SKILL,
     files: [],
-    requiresAppsFeature: true,
   },
 ];

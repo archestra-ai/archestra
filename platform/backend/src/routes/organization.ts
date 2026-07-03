@@ -138,7 +138,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateSecuritySettings,
         description:
-          "Update security settings (global tool policy, chat file uploads, tool auto-assignment)",
+          "Update security settings (default tool guardrails, chat file uploads)",
         tags: ["Organization"],
         body: UpdateSecuritySettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),

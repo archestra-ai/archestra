@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import {
   type CreateConnectionSetupBody,
   type CreateConnectionSetupResult,
@@ -75,20 +74,18 @@ export function isScriptClient(
 }
 
 /**
- * Whether skills can ride along in the setup command: feature on, caller is a
- * skill admin, and there is at least one skill to share. Also surfaces the
- * full skill list so the review step can name (and let the user deselect)
- * exactly what the command installs.
+ * Whether skills can ride along in the setup command: caller is a skill admin,
+ * and there is at least one skill to share. Also surfaces the full skill list
+ * so the review step can name (and let the user deselect) exactly what the
+ * command installs.
  */
 function useConnectSkills(): { eligible: boolean; skills: ConnectSkill[] } {
-  const skillsEnabled = useFeature("agentSkillsEnabled") === true;
   const { data: canAdminSkills } = useHasPermissions({ skill: ["admin"] });
   const { data: skills } = useAllSkills({
-    enabled: skillsEnabled && canAdminSkills === true,
+    enabled: canAdminSkills === true,
   });
   return {
-    eligible:
-      skillsEnabled && canAdminSkills === true && (skills ?? []).length > 0,
+    eligible: canAdminSkills === true && (skills ?? []).length > 0,
     skills: skills ?? [],
   };
 }

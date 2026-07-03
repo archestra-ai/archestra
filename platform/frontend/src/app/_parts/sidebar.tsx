@@ -230,14 +230,6 @@ const contentNavGroups: NavGroup[] = [
         url: "/agents",
         icon: Bot,
         customIsActive: (pathname: string) => pathname.startsWith("/agents"),
-        subItems: [
-          {
-            title: "Scheduled Tasks",
-            url: "/scheduled-tasks",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/scheduled-tasks"),
-          },
-        ],
       },
       {
         title: "Skills",
@@ -630,27 +622,18 @@ export function AppSidebar() {
   });
   const showConnect = canReadMcpGateway && canReadLlmProxy;
 
-  // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env var.
-  const skillsEnabled = useFeature("agentSkillsEnabled") === true;
-  // Projects are gated behind the ARCHESTRA_PROJECTS_ENABLED env var.
-  const projectsEnabled = useFeature("projectsEnabled") === true;
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
-  // Apps are gated behind the ARCHESTRA_APPS_ENABLED env var.
-  const appsEnabled = useFeature("appsEnabled") === true;
   // ARCHESTRA_BETA master switch — when on, the new connection page is the
   // default Connect destination.
   const betaEnabled = useFeature("betaEnabled") === true;
 
-  // Projects and Apps are each gated behind their own feature flags. Connect
-  // requires both MCP gateway and LLM proxy read permissions, and points at
-  // its beta route when ARCHESTRA_BETA is on.
+  // Connect requires both MCP gateway and LLM proxy read permissions, and
+  // points at its beta route when ARCHESTRA_BETA is on.
   const filteredChatsNavItems = React.useMemo(
     () =>
       chatsNavItems
         .filter((item) => {
-          if (item.title === "Projects") return projectsEnabled;
-          if (item.title === "Apps") return appsEnabled;
           if (item.title === "Connect") return showConnect;
           return true;
         })
@@ -660,42 +643,22 @@ export function AppSidebar() {
           }
           return item;
         }),
-    [projectsEnabled, appsEnabled, showConnect, betaEnabled],
+    [showConnect, betaEnabled],
   );
 
-  // Filter nav groups based on feature flags
+  // With ARCHESTRA_BETA on, some nav items point at their beta routes.
   const filteredNavGroups = React.useMemo(() => {
-    // With ARCHESTRA_BETA on, these nav items point at their beta routes.
     const betaNavUrls: Record<string, string> = {
       "MCP Registry": "/mcp/registry/beta",
     };
     return contentNavGroups.map((group) => ({
       ...group,
-      items: group.items
-        .filter((item) => {
-          // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env
-          // var. It's a top-level item now, so gate it here (not in subItems).
-          if (item.url === "/skills" && !skillsEnabled) return false;
-          return true;
-        })
-        .map((item) => {
-          const betaUrl = betaEnabled ? betaNavUrls[item.title] : undefined;
-          const resolved = betaUrl ? { ...item, url: betaUrl } : item;
-          return resolved.subItems
-            ? {
-                ...resolved,
-                subItems: resolved.subItems.filter((sub) => {
-                  // With projects on, schedules are managed per-project on the
-                  // project detail page (the per-project runs view), so the
-                  // standalone entry is hidden.
-                  if (sub.url === "/scheduled-tasks") return !projectsEnabled;
-                  return true;
-                }),
-              }
-            : resolved;
-        }),
+      items: group.items.map((item) => {
+        const betaUrl = betaEnabled ? betaNavUrls[item.title] : undefined;
+        return betaUrl ? { ...item, url: betaUrl } : item;
+      }),
     }));
-  }, [skillsEnabled, projectsEnabled, betaEnabled]);
+  }, [betaEnabled]);
 
   return (
     <Sidebar collapsible="icon">

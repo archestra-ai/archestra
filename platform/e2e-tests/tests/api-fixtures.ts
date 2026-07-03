@@ -999,13 +999,12 @@ const updateLlmSettings = async (
   });
 
 /**
- * Update security settings (global tool policy, chat file uploads)
+ * Update security settings (chat file uploads)
  * (authnz is handled by the authenticated session)
  */
 const updateSecuritySettings = async (
   request: APIRequestContext,
   updates: {
-    globalToolPolicy?: "permissive" | "restrictive";
     allowChatFileUploads?: boolean;
     allowToolAutoAssignment?: boolean;
   },

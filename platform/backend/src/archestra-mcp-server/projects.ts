@@ -1,6 +1,5 @@
 import { TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME } from "@archestra/shared";
 import { z } from "zod";
-import config from "@/config";
 import logger from "@/logging";
 import { projectService } from "@/services/project";
 import { ApiError } from "@/types";
@@ -48,9 +47,6 @@ const registry = defineArchestraTools([
       .strict(),
     outputSchema: CreateProjectFromConversationOutputSchema,
     async handler({ args, context }) {
-      if (!config.projects.enabled) {
-        return errorResult("The projects feature is not enabled.");
-      }
       if (
         !context.conversationId ||
         !context.userId ||

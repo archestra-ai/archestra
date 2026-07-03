@@ -530,6 +530,34 @@ export const createFastifyInstance = () =>
         });
       }
 
+      // Fastify's own typed errors (unsupported media type, malformed
+      // content-type, …) carry the intended 4xx status. Without this branch
+      // they fall through to the generic handler below, which miscodes a
+      // client mistake as a 500 and captures it as a server exception.
+      const errorStatusCode = (error as { statusCode?: unknown }).statusCode;
+      if (
+        !(error instanceof ApiError) &&
+        typeof errorStatusCode === "number" &&
+        errorStatusCode >= 400 &&
+        errorStatusCode < 500
+      ) {
+        const coerced = new ApiError(
+          errorStatusCode,
+          error.message || "Bad Request",
+        );
+        this.log.info(
+          {
+            ...requestContext,
+            error: coerced.message,
+            statusCode: coerced.statusCode,
+          },
+          "HTTP 40x request error occurred",
+        );
+        return reply.status(coerced.statusCode).send({
+          error: { message: coerced.message, type: coerced.type },
+        });
+      }
+
       // Handle ApiError objects
       if (error instanceof ApiError) {
         const { statusCode, message, type, internalCode } = error;
@@ -542,11 +570,16 @@ export const createFastifyInstance = () =>
 
         if (statusCode >= 500) {
           this.log.error(logPayload, "HTTP 50x request error occurred");
-          captureServerException(request, error, {
-            error_type: "api_error",
-            status_code: statusCode,
-            ...(internalCode && { internal_code: internalCode }),
-          });
+          // 502/504 report an upstream's failure (a user-configured provider
+          // or external server), not a crash of ours — log them, but keep
+          // them out of exception tracking.
+          if (statusCode !== 502 && statusCode !== 504) {
+            captureServerException(request, error, {
+              error_type: "api_error",
+              status_code: statusCode,
+              ...(internalCode && { internal_code: internalCode }),
+            });
+          }
         } else if (statusCode >= 400) {
           this.log.info(logPayload, "HTTP 40x request error occurred");
         } else {

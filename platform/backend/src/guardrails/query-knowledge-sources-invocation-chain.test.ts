@@ -63,7 +63,6 @@ describe("guardrails: KB query -> subsequent restricted tool invocation is block
       agent.organizationId,
       undefined,
       false,
-      "restrictive",
       { teamIds: [] },
     );
 
@@ -75,7 +74,6 @@ describe("guardrails: KB query -> subsequent restricted tool invocation is block
       [{ toolCallName: "exfiltrate_data", toolInput: {} }],
       { teamIds: [] },
       trustEval.contextIsTrusted,
-      "restrictive",
     );
 
     expect(invocationEval.isAllowed).toBe(false);

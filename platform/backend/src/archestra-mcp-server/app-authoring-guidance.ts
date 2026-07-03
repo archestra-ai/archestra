@@ -1,5 +1,18 @@
 import { APP_PLATFORM_CSP_RESOURCE_DOMAINS } from "@/services/apps/app-ui-policy";
 
+// The escalation pointer appended to the app-authoring tool descriptions
+// (scaffold_app / refine_app / edit_app), in one place so the three cannot
+// drift. Names what the inline SDK summary omits so the model knows when to
+// load the full Build App skill.
+export const BUILD_APP_SKILL_POINTER =
+  'For tool-calling apps (the assign→preview→diagnostics build loop), the CDN allowlist, or platform theming, load the "Build App" skill (in your available skills) for the full authoring playbook.';
+
+// The recurring "no render has happened yet, and that is fine" directive shared
+// by validate_app / get_app_diagnostics result text, so the guidance stays
+// identical wherever the model reads it.
+export const NO_RENDER_PROCEED =
+  "This is the normal state right after authoring: a render is captured only when a viewer opens the app (inline in chat or at its standalone page) — re-checking here does not trigger one, so do not poll. A clean validate_app static pass is enough to proceed; runtime diagnostics arrive on their own on the next render.";
+
 // Authoring conventions for MCP Apps, kept in one place and embedded into the
 // Build App built-in skill (built-in-skills.ts) so the per-tool descriptions can
 // stay short. The CDN allowlist is derived from the policy that enforces it
@@ -16,7 +29,7 @@ TOOLS-ONLY DATA RULE: ALL external data must come through assigned MCP tools —
 // Authoring-loop guidance, honest about preview_app_tool's human-approval gate
 // and that render diagnostics only exist once a browser has rendered the app.
 /** @public — embedded into the Build App built-in skill (built-in-skills.ts). */
-export const APP_BUILD_LOOP_GUIDANCE = `Tool-calling apps follow a fixed order: assign the tool (search_tools to find it, then the tools param on scaffold_app for the initial set; replace that set at any time afterward with set_app_tools — edit_app and refine_app never touch assignments), then — interactively — call preview_app_tool with the app's id to observe the tool's real output shape before writing code that parses it (it needs human approval, and you cannot preview a tool that is not assigned yet — for a brand-new app, scaffold it first with a minimal scaffold; for one that already exists, assign the tool with set_app_tools first). If that approval is not granted, code defensively against the tool's documented schema instead. After an edit whose result was shown in chat, call get_app_diagnostics to read the diagnostics from the most recent render of the current version (a render happens when the app is shown inline in chat or at its run page — never because a tool was called). no_render_observed is the normal state when nobody is viewing the app: do not call get_app_diagnostics again to wait for a render — proceed on a clean validate_app static pass, and any runtime errors will instead arrive on the user's next message. To share an already-built app so others can run it — at any time, not only right after building — call publish_app to a team or the whole org (it changes the app's scope; team and org targets are role-gated).`;
+export const APP_BUILD_LOOP_GUIDANCE = `Tool-calling apps follow a fixed order: assign the tool (search_tools to find it, then the tools param on scaffold_app for the initial set; replace that set at any time afterward with set_app_tools — edit_app and refine_app never touch assignments), then — interactively — call preview_app_tool with the app's id to observe the tool's real output shape before writing code that parses it (it needs human approval, and you cannot preview a tool that is not assigned yet — for a brand-new app, scaffold it first with a minimal scaffold; for one that already exists, assign the tool with set_app_tools first). If that approval is not granted, code defensively against the tool's documented schema instead. After an edit whose result was shown in chat, call get_app_diagnostics to read the diagnostics from the most recent render of the current version (a render happens when the app is shown inline in chat or at its standalone page — never because a tool was called). no_render_observed is the normal state when nobody is viewing the app: do not call get_app_diagnostics again to wait for a render — proceed on a clean validate_app static pass, and any runtime errors will instead arrive on the user's next message. To share an already-built app so others can run it — at any time, not only right after building — call publish_app to a team or the whole org (it changes the app's scope; team and org targets are role-gated).`;
 
 // Condensed window.archestra surface carried inline in the scaffold_app (and
 // refine_app) result so the authoring model has the SDK contract — and the real

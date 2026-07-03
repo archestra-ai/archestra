@@ -10,9 +10,8 @@ share_backend = true
 # access-request / kanban apps wire its tools. One shared instance is safe across concurrent lanes.
 fixture_mcp = true
 
-# Archestra built-in app authoring tools, beyond the base sandbox set. The bench force-enables
-# ARCHESTRA_APPS_ENABLED for every env (see build_backend_env), so the platform assigns these to every
-# agent at creation time; listing them here marks them allowed/required so this env's surface
+# Archestra built-in app authoring tools, beyond the base sandbox set. The platform assigns these to
+# every agent at creation time; listing them here marks them allowed/required so this env's surface
 # assertion treats them as expected rather than a leak.
 tools = ["scaffold_app", "refine_app", "read_app", "edit_app", "validate_app", "list_apps", "render_app", "publish_app"]
 

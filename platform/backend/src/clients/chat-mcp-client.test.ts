@@ -610,7 +610,6 @@ describe("executeMcpTool error handling", () => {
     organizationId: "00000000-0000-4000-8000-000000000003",
     userIsAgentAdmin: false,
     mcpGwToken: null,
-    globalToolPolicy: "permissive" as const,
     considerContextUntrusted: false,
   };
 
@@ -790,7 +789,6 @@ describe("executeMcpTool error handling", () => {
     const result = await toolBuilderTest.executeMcpTool({
       ...baseCtx,
       agentId: agent.id,
-      globalToolPolicy: "restrictive",
     });
 
     expect(result.unsafeContextBoundary).toMatchObject({
@@ -932,7 +930,7 @@ describe("chat-mcp-client tool caching", () => {
     makeToolPolicy,
     makeConversation,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
     const agent = await makeAgent({
@@ -2490,12 +2488,6 @@ describe("throwIfApprovalRequired", () => {
   const { resolveApprovalPolicyTarget, throwIfApprovalRequired } =
     toolBuilderTest;
 
-  test("does not throw when globalToolPolicy is permissive", async () => {
-    await expect(
-      throwIfApprovalRequired("some-tool", {}, "permissive"),
-    ).resolves.toBeUndefined();
-  });
-
   test("does not throw when tool has no require_approval policy", async ({
     makeTool,
     makeToolPolicy,
@@ -2507,7 +2499,7 @@ describe("throwIfApprovalRequired", () => {
     });
 
     await expect(
-      throwIfApprovalRequired("allowed-tool", {}, "restrictive"),
+      throwIfApprovalRequired("allowed-tool", {}),
     ).resolves.toBeUndefined();
   });
 
@@ -2522,7 +2514,7 @@ describe("throwIfApprovalRequired", () => {
     });
 
     await expect(
-      throwIfApprovalRequired("restricted-tool", {}, "restrictive"),
+      throwIfApprovalRequired("restricted-tool", {}),
     ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
   });
 
@@ -2539,20 +2531,16 @@ describe("throwIfApprovalRequired", () => {
     });
 
     await expect(
-      throwIfApprovalRequired(
-        getArchestraToolFullName("run_tool"),
-        {
-          tool_name: tool.name,
-          tool_args: { destination: "external" },
-        },
-        "restrictive",
-      ),
+      throwIfApprovalRequired(getArchestraToolFullName("run_tool"), {
+        tool_name: tool.name,
+        tool_args: { destination: "external" },
+      }),
     ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
   });
 
   test("does not throw when tool is not found in DB", async () => {
     await expect(
-      throwIfApprovalRequired("nonexistent-tool", {}, "restrictive"),
+      throwIfApprovalRequired("nonexistent-tool", {}),
     ).resolves.toBeUndefined();
   });
 

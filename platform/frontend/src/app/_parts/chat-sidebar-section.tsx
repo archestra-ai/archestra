@@ -74,7 +74,6 @@ import {
 } from "@/lib/chat/chat-utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
-import { useFeature } from "@/lib/config/config.query";
 import type { Once } from "@/lib/hooks/use-once";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { usePinProject, useProjects } from "@/lib/projects/projects.query";
@@ -150,6 +149,9 @@ export function ChatSidebarSection({
   const { data: canCreateProject } = useHasPermissions({
     project: ["create"],
   });
+  const { data: canReadProjects } = useHasPermissions({
+    project: ["read"],
+  });
   const [createProjectConv, setCreateProjectConv] = useState<{
     id: string;
     title: string;
@@ -169,24 +171,21 @@ export function ChatSidebarSection({
     (c) => !c.pinnedAt && !isScheduledRunConversation(c),
   );
 
-  const projectsEnabled = useFeature("projectsEnabled") === true;
-  const { data: projectsData } = useProjects({ enabled: projectsEnabled });
+  // /api/projects requires project:read; skip the fetch for roles without it
+  // so the sidebar doesn't 403 (and toast) on every chat page.
+  const { data: projectsData } = useProjects({
+    enabled: canReadProjects === true,
+  });
   const pinProjectMutation = usePinProject();
-  const pinnedProjects = projectsEnabled
-    ? (projectsData ?? []).filter((p) => p.pinnedAt)
-    : [];
+  const pinnedProjects = (projectsData ?? []).filter((p) => p.pinnedAt);
   // Pinned apps join the sidebar's Pinned section exactly like pinned projects.
-  const appsEnabled = useFeature("appsEnabled") === true;
-  const { data: appsData } = useApps(
-    { limit: 100, offset: 0 },
-    { enabled: appsEnabled },
-  );
+  // /api/apps is access-filtered (returns the caller's accessible apps), so it
+  // needs no permission gate.
+  const { data: appsData } = useApps({ limit: 100, offset: 0 });
   const pinAppMutation = usePinApp();
   const openAppMutation = useOpenAppInChat();
   const openExternalAppMutation = useOpenExternalAppInChat();
-  const pinnedApps = appsEnabled
-    ? (appsData?.data ?? []).filter((a) => a.pinnedAt)
-    : [];
+  const pinnedApps = (appsData?.data ?? []).filter((a) => a.pinnedAt);
   const pinnedItems = buildPinnedSidebarItems({
     chats: conversations.filter((c) => !isScheduledRunConversation(c)),
     projects: pinnedProjects,
@@ -338,7 +337,6 @@ export function ChatSidebarSection({
     const isMenuOpen = openMenuId === conv.id;
     const isPinned = !!conv.pinnedAt;
     const showCreateProject = canCreateProjectFromChat({
-      projectsEnabled,
       hasCreatePermission: canCreateProject === true,
       conversation: conv,
     });
